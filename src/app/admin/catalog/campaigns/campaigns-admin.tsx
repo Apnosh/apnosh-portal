@@ -25,11 +25,17 @@ import {
   type DbCadence, type DbCampaign, type DbCardType, type DbShelf,
 } from '@/lib/campaigns/data/db-campaigns'
 import type { FunnelStage } from '@/lib/campaigns/data/create-catalog'
-import { STAGE_TAG_LABEL } from '@/lib/campaigns/data/create-catalog'
+import { STAGE_TAG_LABEL, CREATE_CATALOG } from '@/lib/campaigns/data/create-catalog'
 import { PRICED_CATALOG, type PricedService } from '@/lib/campaigns/data/priced-catalog'
 import { cadenceOf, plainNameOf } from '@/lib/campaigns/catalog'
-import { whatYouGetForServices } from '@/lib/campaigns/builder/what-you-get'
-import { requirementsForServices } from '@/lib/campaigns/data/campaign-requirements'
+import { whatYouGetForServices, whatYouGet } from '@/lib/campaigns/builder/what-you-get'
+import { requirementsForServices, requirementsFor } from '@/lib/campaigns/data/campaign-requirements'
+import { shapeFor } from '@/lib/campaigns/builder/compose-plan'
+import { analyticsForStages } from '@/lib/campaigns/data/stage-analytics'
+import { ProductPagePreview } from '../product-page-preview'
+
+/** A campaign's cadence chip, worded like the store, from its compose-plan duration. */
+const DUR_CADENCE: Record<string, string> = { setup: 'Setup', once: 'One-time', ongoing: 'Recurring', short: 'Multi-week' }
 
 type Faq = { q: string; a: string }
 type FormState = {
@@ -296,6 +302,26 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
     }
   }, [dbForm])
 
+  // Analytics the new campaign is built to lift — derived from its stages, same rule as the store.
+  const dbAnalytics = useMemo(() => (dbForm ? analyticsForStages(dbForm.id || null, dbForm.stages) : []), [dbForm])
+
+  // A built-in campaign's REAL derived page facts (stages, price, what-you-get, requirements,
+  // analytics, cadence) — the same derivations the store renders, so the faithful preview of a
+  // built-in like "gbp" matches its live product page. Words come from the edit form (below).
+  const builtinFacts = useMemo(() => {
+    if (!editId) return null
+    const stages = CREATE_CATALOG.find((c) => c.id === editId)?.stages ?? []
+    const shape = shapeFor(editId)
+    return {
+      stages,
+      price: priceLabelForServices(shape?.services ?? []) ?? '',
+      rows: whatYouGet(editId)[0]?.rows ?? [],
+      requirements: requirementsFor(editId),
+      analytics: analyticsForStages(editId, stages),
+      cadence: shape ? DUR_CADENCE[shape.dur] : undefined,
+    }
+  }, [editId])
+
   const inputCls = 'w-full text-[13.5px] text-ink rounded-lg border border-ink-6 bg-white px-3 py-2 placeholder:text-ink-4 focus:outline-none focus:border-brand'
   const chipCls = (on: boolean) => 'text-[12px] font-medium rounded-full px-3 py-1.5 border ' + (on ? 'bg-brand text-white border-brand' : 'bg-white text-ink-2 border-ink-6 hover:border-ink-4')
 
@@ -537,31 +563,29 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
             <p className="text-[11px] text-ink-4 mt-1">Owners can toggle these on the product page. Recurring services only, like the built-in add-ons.</p>
           </div>
 
-          {/* PREVIEW — the real derived page facts for the current picks. */}
+          {/* PREVIEW — the faithful product page, exactly how the owner will see it. Words come from
+              the fields; price / what you get / what we need / analytics all derive from the picks. */}
           <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
-            <div className="flex items-baseline justify-between mb-2">
-              <div className="text-[12px] font-bold uppercase tracking-wide text-brand-dark">Preview, derived from your picks</div>
-              <div className="text-[15px] font-semibold text-ink">{preview?.price ?? 'Pick a service to see the price'}</div>
+            <div className="flex items-baseline justify-between mb-3">
+              <div className="text-[12px] font-bold uppercase tracking-wide text-brand-dark">Live preview · how the customer sees it</div>
+              <div className="text-[13px] font-medium text-ink-3">Updates as you edit</div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <div className="text-[12px] font-semibold text-ink mb-1">What the owner gets</div>
-                {preview && preview.rows.length ? (
-                  <ul className="space-y-1">
-                    {preview.rows.map((r) => <li key={r} className="text-[12.5px] text-ink-2">• {r}</li>)}
-                  </ul>
-                ) : <p className="text-[12px] text-ink-4">Nothing yet. Pick at least one service.</p>}
-              </div>
-              <div>
-                <div className="text-[12px] font-semibold text-ink mb-1">What we will need from them</div>
-                {preview && preview.requirements.length ? (
-                  <ul className="space-y-1">
-                    {preview.requirements.map((r) => <li key={r} className="text-[12.5px] text-ink-2">• {r}</li>)}
-                  </ul>
-                ) : <p className="text-[12px] text-ink-4">Nothing. These services need nothing from the owner up front.</p>}
-              </div>
+            <div className="max-w-[420px] mx-auto">
+              <ProductPagePreview
+                eyebrow={dbForm.title}
+                headline={dbForm.promise}
+                description={dbForm.description}
+                why={dbForm.why}
+                stages={dbForm.stages}
+                cadenceLabel={CAD_LABEL[dbForm.cad]}
+                priceLabel={preview?.price ?? ''}
+                whatYouGet={preview?.rows ?? []}
+                requirements={preview?.requirements ?? []}
+                analytics={dbAnalytics}
+                heroImage={dbForm.heroImage || null}
+              />
             </div>
-            <p className="text-[11px] text-ink-4 mt-2">This is exactly what the store page derives. It updates as you change the services.</p>
+            <p className="text-[11px] text-ink-4 mt-3 text-center">This is exactly what the store page shows. Pick services to fill price, what you get, and what we need.</p>
           </div>
 
           {/* Hero image */}
@@ -655,6 +679,33 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
           <p className="text-[12px] text-ink-3 -mt-2">
             The gray ghost text is the code default. Leave a field empty to keep it. Clear a field to go back to it.
           </p>
+
+          {/* Faithful product-page preview — words from the form (falling back to the code default),
+              the rest derived exactly like the live store. */}
+          {builtinFacts && (
+            <div className="rounded-xl border border-brand/30 bg-brand/5 p-4">
+              <div className="flex items-baseline justify-between mb-3">
+                <div className="text-[12px] font-bold uppercase tracking-wide text-brand-dark">Live preview · how the customer sees it</div>
+                <div className="text-[13px] font-medium text-ink-3">Updates as you edit</div>
+              </div>
+              <div className="max-w-[420px] mx-auto">
+                <ProductPagePreview
+                  eyebrow={form.title || base.title}
+                  headline={form.promise || base.promise}
+                  description={form.description || base.description}
+                  why={form.why || base.why}
+                  stages={builtinFacts.stages}
+                  cadenceLabel={builtinFacts.cadence}
+                  priceLabel={builtinFacts.price}
+                  whatYouGet={builtinFacts.rows}
+                  requirements={builtinFacts.requirements}
+                  analytics={builtinFacts.analytics}
+                  heroImage={(form.heroImage || base.heroImage) || null}
+                />
+              </div>
+              <p className="text-[11px] text-ink-4 mt-3 text-center">The words update live. Price, what you get, and analytics come from this campaign&apos;s services.</p>
+            </div>
+          )}
 
           {/* Hero image */}
           <div>
