@@ -4292,6 +4292,12 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
   const toggleRush = (id) => setRushed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const rushFeeTotal = items.reduce((sum, it) => { const r = itemRush(it.itemId); return rushed.has(it.itemId) && r ? sum + r.fee : sum; }, 0);
   const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
+  // Service fee: a flat 10% of the one-time subtotal. Taxes depend on the client's location, so
+  // they're shown as "calculated at checkout" (no invented rate). Both are display only for now —
+  // like rush, they're shown but not yet folded into what checkout actually charges.
+  const SERVICE_FEE_RATE = 0.1;
+  const serviceFee = Math.round(totals.oneTime * SERVICE_FEE_RATE);
+  const totalWithFee = { oneTime: totals.oneTime + serviceFee, perMonth: totals.perMonth };
   const blocked = planProBlocked(items, tier);
   const empty = items.length === 0;
 
@@ -4354,9 +4360,21 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
                 </div>
               );
             })}
+            {serviceFee > 0 && (
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>Service fee (10%)</span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink }}>{`$${serviceFee.toLocaleString()}`}</span>
+              </div>
+            )}
+            {totalWithFee.oneTime > 0 && (
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>Taxes</span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub }}>Calculated at checkout</span>
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "12px 0" }}>
               <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3 }}>{planMoneyLabel(totals, anyCreative)}</span>
+              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
             </div>
           </div>
           {/* What happens next — every line true to the real rail: one campaign, delivery-gated billing. */}
@@ -4403,6 +4421,12 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
                 <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>Items ({items.length})</span>
                 <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{totals.oneTime > 0 ? `${anyCreative ? "From " : ""}$${totals.oneTime.toLocaleString()}` : "Free"}</span>
               </div>
+              {serviceFee > 0 && (
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>Service fee (10%)</span>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{`$${serviceFee.toLocaleString()}`}</span>
+                </div>
+              )}
               {totals.perMonth > 0 && (
                 <>
                   <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
@@ -4412,10 +4436,19 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
                   <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Billed monthly once your services start.</div>
                 </>
               )}
+              {totalWithFee.oneTime > 0 && (
+                <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>Taxes</span>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, whiteSpace: "nowrap" }}>Calculated at checkout</span>
+                </div>
+              )}
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, borderTop: `1px solid ${TOKENS.line}`, marginTop: 12, paddingTop: 11 }}>
                 <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.ink }}>Order total</span>
-                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3, whiteSpace: "nowrap" }}>{planMoneyLabel(totals, anyCreative)}</span>
+                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3, whiteSpace: "nowrap" }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
               </div>
+              {totalWithFee.oneTime > 0 && (
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint, marginTop: 4 }}>Plus taxes, calculated at checkout based on your location.</div>
+              )}
               {/* Rush selected — shown, not folded into the billed total yet (team confirms first). */}
               {rushFeeTotal > 0 && (
                 <>
@@ -4452,10 +4485,10 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
         <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
             <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{planMoneyLabel(totals, anyCreative)}</span>
+            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
           </div>
           {/* Honest: tapping Check out only opens the last look; work starts on Confirm there. */}
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Nothing starts or bills yet. Check out gives you one last look first.</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Includes a 10% service fee. Plus taxes at checkout. Nothing starts or bills yet.</div>
           <button onClick={startCheckout} disabled={blocked} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: blocked ? "default" : "pointer", background: blocked ? TOKENS.dash : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? "none" : "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>Check out</button>
           <button onClick={onBack} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Keep shopping</button>
         </div>
