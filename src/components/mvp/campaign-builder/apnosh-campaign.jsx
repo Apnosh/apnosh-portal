@@ -3064,9 +3064,13 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   // A base group (framed by version for gbp) + one titled group per selected add-on service.
   const getSections = (() => {
     const secs = whatYouGet(itemId, { version: doerCfg ? gbpLane : null, optionServiceIds: selected });
+    // Admin can override the base "what you get" list (content.whatYouGet); the add-on groups
+    // (secs[1..], from toggled optional services) still append below it.
+    const base = (content && Array.isArray(content.whatYouGet) && content.whatYouGet.length) ? content.whatYouGet : null;
+    if (base) secs[0] = { ...(secs[0] || {}), rows: base };
     // Honest fallback: a card that derives no base rows keeps a plain by-type promise so the
     // sell page is never empty (the option groups, if any, still carry real bullets).
-    if (secs[0] && secs[0].rows.length === 0) secs[0] = { ...secs[0], rows: DETAIL_GET[p.type] || DETAIL_GET.plan };
+    else if (secs[0] && secs[0].rows.length === 0) secs[0] = { ...secs[0], rows: DETAIL_GET[p.type] || DETAIL_GET.plan };
     return secs;
   })();
 

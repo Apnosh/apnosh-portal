@@ -42,6 +42,8 @@ export interface ContentOverride {
   lanes?: CampaignLane[]
   /** Edited "what we'll need from you" list. Absent = the list derived from services. */
   requirements?: string[]
+  /** Edited "what you get" base list. Absent = the list derived from services. */
+  whatYouGet?: string[]
 }
 
 /** Trim, drop empties + dupes, cap — the store contract for a plain string list. */
@@ -108,5 +110,6 @@ export function contentFor(itemId: string, overrides?: ContentOverrideMap | null
   if (Array.isArray(o.stages) && o.stages.length) merged.stages = o.stages
   if (Array.isArray(o.lanes) && o.lanes.length) merged.lanes = o.lanes
   if (Array.isArray(o.requirements) && o.requirements.length) merged.requirements = o.requirements
+  if (Array.isArray(o.whatYouGet) && o.whatYouGet.length) merged.whatYouGet = o.whatYouGet
   return merged
 }

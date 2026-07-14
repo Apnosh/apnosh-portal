@@ -41,7 +41,7 @@ const DUR_CADENCE: Record<string, string> = { setup: 'Setup', once: 'One-time', 
 type Faq = { q: string; a: string }
 type FormState = {
   title: string; tagline: string; description: string; promise: string; why: string;
-  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]
+  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]; whatYouGet: string[]
 }
 
 type TextKey = 'title' | 'tagline' | 'description' | 'promise' | 'why' | 'expectation' | 'bestFor'
@@ -64,6 +64,7 @@ function formFromOverride(o: ContentOverride | undefined): FormState {
     stages: [...(o?.stages ?? [])],
     lanes: (o?.lanes ?? []).map((l) => ({ ...l })),
     requirements: [...(o?.requirements ?? [])],
+    whatYouGet: [...(o?.whatYouGet ?? [])],
   }
 }
 
@@ -83,7 +84,7 @@ type DbForm = FormState & {
 function emptyDbForm(): DbForm {
   return {
     id: '', title: '', tagline: '', description: '', promise: '', why: '',
-    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [],
+    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [], whatYouGet: [],
     type: 'task', cad: 'once', shelf: 'aware', stages: [],
     serviceIds: [], addonServiceIds: [], status: 'draft',
   }
@@ -95,7 +96,7 @@ function dbFormFrom(c: DbCampaign): DbForm {
     promise: c.promise, why: c.why, expectation: c.expectation,
     heroImage: c.heroImage ?? '', bestFor: c.bestFor ?? '',
     faq: (c.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
-    lanes: [], requirements: [],
+    lanes: [], requirements: [], whatYouGet: [],
     type: c.type, cad: c.cad, shelf: c.shelf, stages: [...c.stages],
     serviceIds: [...c.serviceIds], addonServiceIds: [...c.addonServiceIds],
     status: c.status,
@@ -370,8 +371,14 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const addReq = () => set({ requirements: [...reqList, ''] })
   const delReq = (i: number) => set({ requirements: reqList.filter((_, j) => j !== i) })
 
+  // ── "what you get": the saved override, else seeded from the derived list ──
+  const getList: string[] = form ? (form.whatYouGet.length ? form.whatYouGet : (builtinFacts?.rows ?? [])) : []
+  const setGet = (i: number, v: string) => set({ whatYouGet: getList.map((r, j) => (j === i ? v : r)) })
+  const addGet = () => set({ whatYouGet: [...getList, ''] })
+  const delGet = (i: number) => set({ whatYouGet: getList.filter((_, j) => j !== i) })
+
   // ── page-builder: map a clicked preview section to its left-hand editor panel + scroll to it ──
-  const EDITABLE_PANELS = ['hero', 'description', 'why', 'lanes', 'requirements']
+  const EDITABLE_PANELS = ['hero', 'description', 'why', 'lanes', 'requirements', 'get']
   const panelOf = (section: string | null) => (section && EDITABLE_PANELS.includes(section) ? section : section ? 'derived' : null)
   const activePanel = panelOf(activeSection)
   const gotoSection = (key: string) => {
@@ -381,7 +388,6 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const panelCls = (id: string) => 'rounded-xl border p-4 lg:p-5 scroll-mt-24 transition ' + (activePanel === id ? 'border-brand ring-4 ring-brand/10 bg-white' : 'border-ink-6 bg-white')
   const DERIVED_NOTE: Record<string, string> = {
     timeline: 'The delivery dates come from how long this campaign’s services take. Change the services to change the dates.',
-    get: 'What you get is built from the services this campaign includes.',
     analytics: 'The tracked metrics come from the funnel stages this campaign moves.',
     footer: 'The price is the total of the services this campaign includes.',
   }
@@ -930,12 +936,34 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                 </div>
               </div>
 
+              {/* What you get — an editable list */}
+              <div id="sec-get" className={panelCls('get')}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[13.5px] font-semibold text-ink">What you get</span>
+                  <button type="button" onClick={addGet} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
+                </div>
+                <div className="space-y-1.5">
+                  {getList.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2e9a78" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M20 6L9 17l-5-5" /></svg>
+                      <input type="text" value={r} onChange={(e) => setGet(i, e.target.value)} placeholder="e.g. We fix all 6 parts of your profile" className={inputCls} />
+                      <button type="button" onClick={() => delGet(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                    </div>
+                  ))}
+                  {getList.length === 0 && <p className="text-[12.5px] text-ink-4">Nothing listed. Add what the customer gets.</p>}
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  {form.whatYouGet.length > 0 && <button type="button" onClick={() => set({ whatYouGet: [] })} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
+                  <span className="text-[11px] text-ink-4">Empty keeps the list derived from the services. Add-ons still show below it.</span>
+                </div>
+              </div>
+
               {/* Derived sections — what each non-editable part comes from */}
               <div id="sec-derived" className={panelCls('derived')}>
                 <div className="text-[13.5px] font-semibold text-ink mb-1">Set by the campaign&apos;s services</div>
                 {activeSection && DERIVED_NOTE[activeSection]
                   ? <p className="text-[12.5px] text-ink-3 leading-relaxed">{DERIVED_NOTE[activeSection]}</p>
-                  : <p className="text-[12.5px] text-ink-4 leading-relaxed">Click the timeline, &ldquo;what you get,&rdquo; analytics, or the price on the page to see where each one comes from.</p>}
+                  : <p className="text-[12.5px] text-ink-4 leading-relaxed">Click the timeline, analytics, or the price on the page to see where each one comes from.</p>}
               </div>
 
               {/* More details: tagline, expectation, best for, FAQ */}
@@ -985,7 +1013,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   stages={form.stages.length ? form.stages : builtinFacts.stages}
                   cadenceLabel={builtinFacts.cadence}
                   priceLabel={builtinFacts.price}
-                  whatYouGet={builtinFacts.rows}
+                  whatYouGet={form.whatYouGet.length ? form.whatYouGet : builtinFacts.rows}
                   requirements={form.requirements.length ? form.requirements : builtinFacts.requirements}
                   analytics={builtinFacts.analytics}
                   heroImage={(form.heroImage || base.heroImage) || null}

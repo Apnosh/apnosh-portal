@@ -39,6 +39,7 @@ export interface ContentOverrideRow {
   stages?: unknown
   lanes?: unknown
   requirements?: unknown
+  whats_included?: unknown
   updated_at?: string | null
   updated_by?: string | null
 }
@@ -70,6 +71,8 @@ export function rowToOverride(row: ContentOverrideRow): ContentOverride {
   if (lanes.length) o.lanes = lanes
   const requirements = cleanStringList(row.requirements)
   if (requirements.length) o.requirements = requirements
+  const whatYouGet = cleanStringList(row.whats_included)
+  if (whatYouGet.length) o.whatYouGet = whatYouGet
   return o
 }
 
