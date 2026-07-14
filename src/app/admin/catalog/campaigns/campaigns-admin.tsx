@@ -115,6 +115,17 @@ const SECTION_LABEL: Record<string, string> = {
   winback: 'Win back', advocate: 'Advocates', anticipation: 'Anticipation',
 }
 
+/** Built-in campaigns grouped by their primary funnel stage — the same order the owner sees
+ *  everywhere (the home funnel), so the list reads like the customer journey. */
+const STAGE_GROUPS: { stage: FunnelStage; label: string }[] = [
+  { stage: 'aware', label: 'Get discovered' },
+  { stage: 'interest', label: 'Create interest' },
+  { stage: 'actions', label: 'Make it easy to order' },
+  { stage: 'orders', label: 'Fill your seats' },
+  { stage: 'back', label: 'Bring guests back' },
+]
+const primaryStage = (id: string): FunnelStage => CREATE_CATALOG.find((c) => c.id === id)?.stages[0] ?? 'aware'
+
 /** One service's real price, worded like the store ("$195 + $115/mo", "$85/mo", "$70 each"). */
 function servicePriceLabel(s: PricedService): string {
   const parts: string[] = []
@@ -135,6 +146,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   // page-builder: which preview section the owner clicked, so its editor panel highlights + scrolls
   const [activeSection, setActiveSection] = useState<string | null>(null)
   const [laneTab, setLaneTab] = useState(0)
+  const [q, setQ] = useState('') // search filter for the campaign lists
   const [busy, setBusy] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -394,6 +406,9 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
     )
   }
 
+  const norm = q.trim().toLowerCase()
+  const matchText = (...parts: (string | undefined)[]) => !norm || parts.some((p) => (p ?? '').toLowerCase().includes(norm))
+
   return (
     <div className="max-w-[980px] mx-auto px-4 lg:px-6 pt-6 pb-24 space-y-5">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -410,13 +425,23 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
         </div>
       </div>
 
-      {!editId && !dbForm && (
+      {!editId && !dbForm && (() => {
+        const filteredDb = campaigns.filter((c) => matchText(c.title, c.id))
+        const editedCount = ids.filter((id) => !!overrides[id] && Object.keys(overrides[id]).length > 0).length
+        return (
         <>
+          {/* Search across both lists */}
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-4" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+            <input type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search campaigns by name…" className="w-full text-[13.5px] text-ink rounded-lg border border-ink-6 bg-white pl-9 pr-8 py-2.5 placeholder:text-ink-4 focus:outline-none focus:border-brand" />
+            {q && <button onClick={() => setQ('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-4 hover:text-ink text-[15px]">✕</button>}
+          </div>
+
           {/* Phase C2: admin-created campaigns — create, edit, publish state at a glance. */}
           <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
             <div className="flex items-center justify-between px-3 py-2.5 border-b border-ink-6 bg-bg-2/40">
               <div>
-                <div className="text-[13px] font-semibold text-ink">Your campaigns</div>
+                <div className="text-[13px] font-semibold text-ink">Your campaigns{filteredDb.length ? ` · ${filteredDb.length}` : ''}</div>
                 <div className="text-[11px] text-ink-4">Built from real services. Price, deliverables, and timeline derive from what you pick.</div>
               </div>
               <button onClick={openDbCreate} className="text-[12.5px] font-semibold rounded-lg px-3 py-2 bg-brand text-white shrink-0">New campaign</button>
@@ -424,7 +449,10 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
             {campaigns.length === 0 && (
               <p className="text-[12.5px] text-ink-4 px-3 py-3">None yet. Create one and it appears on the owner store when you publish it.</p>
             )}
-            {campaigns.map((c) => (
+            {campaigns.length > 0 && filteredDb.length === 0 && (
+              <p className="text-[12.5px] text-ink-4 px-3 py-3">No matches in your campaigns.</p>
+            )}
+            {filteredDb.map((c) => (
               <button key={c.id} onClick={() => openDbEdit(c)} className="w-full text-left flex items-center gap-3 px-3 py-2.5 border-b border-ink-6 last:border-0 hover:bg-bg-2/50">
                 {c.heroImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -447,34 +475,50 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
             ))}
           </div>
 
-          {/* Phase C1: the built-in campaigns (content overrides only; never deletable). */}
+          {/* Phase C1: built-in campaigns, grouped by funnel stage (the customer journey). */}
           <div className="bg-white rounded-xl border border-ink-6 overflow-hidden">
             <div className="px-3 py-2.5 border-b border-ink-6 bg-bg-2/40">
-              <div className="text-[13px] font-semibold text-ink">Built-in campaigns</div>
-              <div className="text-[11px] text-ink-4">Edit the words and photo. Empty fields keep the code default.</div>
+              <div className="text-[13px] font-semibold text-ink">Built-in campaigns{editedCount ? ` · ${editedCount} edited` : ''}</div>
+              <div className="text-[11px] text-ink-4">Grouped by the stage of the funnel they move. Edit the words and photo; empty fields keep the default.</div>
             </div>
-            {ids.map((id) => {
-              const merged = contentFor(id, overrides)!
-              const edited = !!overrides[id] && Object.keys(overrides[id]).length > 0
-              return (
-                <button key={id} onClick={() => open(id)} className="w-full text-left flex items-center gap-3 px-3 py-2.5 border-b border-ink-6 last:border-0 hover:bg-bg-2/50">
-                  {merged.heroImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={merged.heroImage} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" />
-                  ) : (
-                    <div className="w-9 h-9 rounded-lg bg-bg-2 shrink-0" />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13.5px] font-medium text-ink truncate">{merged.title}</div>
-                    <div className="text-[11px] text-ink-4 truncate"><span className="font-mono">{id}</span> · {merged.tagline}</div>
+            {(() => {
+              const rendered = STAGE_GROUPS.map((g) => {
+                const groupIds = ids.filter((id) => primaryStage(id) === g.stage && matchText(contentFor(id, overrides)!.title, contentFor(id, overrides)!.tagline, id))
+                if (!groupIds.length) return null
+                return (
+                  <div key={g.stage}>
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-bg-2/40 border-b border-ink-6">
+                      <span className="text-[10.5px] font-bold uppercase tracking-[0.06em] text-ink-3">{g.label}</span>
+                      <span className="text-[10.5px] font-medium text-ink-4">{groupIds.length}</span>
+                    </div>
+                    {groupIds.map((id) => {
+                      const merged = contentFor(id, overrides)!
+                      const edited = !!overrides[id] && Object.keys(overrides[id]).length > 0
+                      return (
+                        <button key={id} onClick={() => open(id)} className="w-full text-left flex items-center gap-3 px-3 py-2.5 border-b border-ink-6 hover:bg-bg-2/50">
+                          {merged.heroImage ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={merged.heroImage} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                          ) : (
+                            <div className="w-9 h-9 rounded-lg bg-bg-2 shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[13.5px] font-medium text-ink truncate">{merged.title}</div>
+                            <div className="text-[11px] text-ink-4 truncate"><span className="font-mono">{id}</span> · {merged.tagline}</div>
+                          </div>
+                          {edited && <span className="text-[10px] font-bold uppercase tracking-wide text-brand-dark bg-brand/10 rounded px-1.5 py-0.5 shrink-0">Edited</span>}
+                        </button>
+                      )
+                    })}
                   </div>
-                  {edited && <span className="text-[10px] font-bold uppercase tracking-wide text-brand-dark bg-brand/10 rounded px-1.5 py-0.5 shrink-0">Edited</span>}
-                </button>
-              )
-            })}
+                )
+              }).filter(Boolean)
+              return rendered.length ? rendered : <p className="text-[12.5px] text-ink-4 px-3 py-3">No campaigns match &ldquo;{q}&rdquo;.</p>
+            })()}
           </div>
         </>
-      )}
+        )
+      })()}
 
       {/* ── Phase C2: create / edit an admin campaign ── */}
       {dbForm && (
