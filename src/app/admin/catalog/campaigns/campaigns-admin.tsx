@@ -365,20 +365,30 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const addLane = () => { const arr = [...laneList, { label: 'New way', price: 'Free', pro: false, detail: '' }]; set({ lanes: arr }); setLaneTab(arr.length - 1) }
   const deleteLane = (i: number) => { const arr = laneList.filter((_, j) => j !== i); set({ lanes: arr }); setLaneTab(Math.max(0, i - 1)) }
 
-  // ── "what we'll need from you": the saved override, else seeded from the derived list ──
-  const reqList: string[] = form ? (form.requirements.length ? form.requirements : (builtinFacts?.requirements ?? [])) : []
-  const setReq = (i: number, v: string) => set({ requirements: reqList.map((r, j) => (j === i ? v : r)) })
-  const addReq = () => set({ requirements: [...reqList, ''] })
-  const delReq = (i: number) => set({ requirements: reqList.filter((_, j) => j !== i) })
-
-  // ── "what you get": the saved override, else seeded from the derived list ──
-  const getList: string[] = form ? (form.whatYouGet.length ? form.whatYouGet : (builtinFacts?.rows ?? [])) : []
-  const setGet = (i: number, v: string) => set({ whatYouGet: getList.map((r, j) => (j === i ? v : r)) })
-  const addGet = () => set({ whatYouGet: [...getList, ''] })
-  const delGet = (i: number) => set({ whatYouGet: getList.filter((_, j) => j !== i) })
+  // ── per-tab lists: when the campaign has lanes, "What you get" / "When you'll have it" /
+  //    "What we'll need" are edited on the SELECTED lane, so each tab holds its own version.
+  //    A lane-less campaign edits the shared campaign fields instead. ──
+  const hasLanes = laneList.length > 0
+  const activeLane: CampaignLane | undefined = hasLanes ? laneList[laneIdx] : undefined
+  const mkLaneList = (laneField: 'whatYouGet' | 'requirements' | 'timeline', formField: 'whatYouGet' | 'requirements' | null, seed: string[]) => {
+    const laneVal = activeLane?.[laneField] as string[] | undefined
+    const formVal: string[] = formField && form ? form[formField] : []
+    const custom = hasLanes ? !!(laneVal && laneVal.length) : formVal.length > 0
+    const cur = hasLanes ? (laneVal && laneVal.length ? laneVal : seed) : (formVal.length ? formVal : seed)
+    const commit = (arr: string[]) => { if (hasLanes) setLane(laneIdx, { [laneField]: arr } as Partial<CampaignLane>); else if (formField) set({ [formField]: arr } as Partial<FormState>) }
+    return { custom, cur, setItem: (i: number, v: string) => commit(cur.map((x, j) => (j === i ? v : x))), add: () => commit([...cur, '']), del: (i: number) => commit(cur.filter((_, j) => j !== i)), reset: () => commit([]) }
+  }
+  const getEd = mkLaneList('whatYouGet', 'whatYouGet', builtinFacts?.rows ?? [])
+  const reqEd = mkLaneList('requirements', 'requirements', builtinFacts?.requirements ?? [])
+  const tlEd = mkLaneList('timeline', null, (builtinFacts?.timeline ?? []).map((s) => s.text))
+  // preview lists follow the selected tab; the timeline keeps its dated default unless a tab overrides it
+  const previewGet = getEd.cur
+  const previewReq = reqEd.cur
+  const previewTimeline = hasLanes && activeLane?.timeline?.length ? activeLane.timeline.map((t) => ({ text: t })) : (builtinFacts?.timeline ?? [])
+  const laneNote = hasLanes && activeLane ? `For the “${activeLane.label || 'Untitled'}” tab` : ''
 
   // ── page-builder: map a clicked preview section to its left-hand editor panel + scroll to it ──
-  const EDITABLE_PANELS = ['hero', 'description', 'why', 'lanes', 'requirements', 'get']
+  const EDITABLE_PANELS = ['hero', 'description', 'why', 'lanes', 'requirements', 'get', 'timeline']
   const panelOf = (section: string | null) => (section && EDITABLE_PANELS.includes(section) ? section : section ? 'derived' : null)
   const activePanel = panelOf(activeSection)
   const gotoSection = (key: string) => {
@@ -387,7 +397,6 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   }
   const panelCls = (id: string) => 'rounded-xl border p-4 lg:p-5 scroll-mt-24 transition ' + (activePanel === id ? 'border-brand ring-4 ring-brand/10 bg-white' : 'border-ink-6 bg-white')
   const DERIVED_NOTE: Record<string, string> = {
-    timeline: 'The delivery dates come from how long this campaign’s services take. Change the services to change the dates.',
     analytics: 'The tracked metrics come from the funnel stages this campaign moves.',
     footer: 'The price is the total of the services this campaign includes.',
   }
@@ -915,47 +924,84 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
               </div>
 
               {/* What we'll need from you — an editable list */}
-              {/* What you get — an editable list (first, matching the page order) */}
+              {/* What you get — per-tab list when the campaign has lanes */}
               <div id="sec-get" className={panelCls('get')}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[13.5px] font-semibold text-ink">What you get</span>
-                  <button type="button" onClick={addGet} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13.5px] font-semibold text-ink">What you get</span>
+                    {laneNote && <span className="text-[10px] font-bold uppercase tracking-wide text-brand-dark bg-brand/10 rounded px-1.5 py-0.5">{laneNote}</span>}
+                  </div>
+                  <button type="button" onClick={getEd.add} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
                 </div>
                 <div className="space-y-1.5">
-                  {getList.map((r, i) => (
+                  {getEd.cur.map((r, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2e9a78" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M20 6L9 17l-5-5" /></svg>
-                      <input type="text" value={r} onChange={(e) => setGet(i, e.target.value)} placeholder="e.g. We fix all 6 parts of your profile" className={inputCls} />
-                      <button type="button" onClick={() => delGet(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                      <input type="text" value={r} onChange={(e) => getEd.setItem(i, e.target.value)} placeholder="e.g. We fix all 6 parts of your profile" className={inputCls} />
+                      <button type="button" onClick={() => getEd.del(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
                     </div>
                   ))}
-                  {getList.length === 0 && <p className="text-[12.5px] text-ink-4">Nothing listed. Add what the customer gets.</p>}
+                  {getEd.cur.length === 0 && <p className="text-[12.5px] text-ink-4">Nothing listed. Add what the customer gets.</p>}
                 </div>
                 <div className="mt-2 flex items-center gap-3">
-                  {form.whatYouGet.length > 0 && <button type="button" onClick={() => set({ whatYouGet: [] })} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
-                  <span className="text-[11px] text-ink-4">Empty keeps the list derived from the services. Add-ons still show below it.</span>
+                  {getEd.custom && <button type="button" onClick={getEd.reset} className="text-[12px] text-ink-3 hover:text-ink">{hasLanes ? 'Use the default' : 'Reset to built-in'}</button>}
+                  <span className="text-[11px] text-ink-4">{hasLanes ? 'This tab’s list. Empty uses the default. Add-ons still show below it.' : 'Empty keeps the list derived from the services. Add-ons still show below it.'}</span>
                 </div>
               </div>
 
-              {/* What we'll need from you — an editable list */}
+              {/* When you'll have it — per-tab timing lines when the campaign has lanes, else derived */}
+              <div id="sec-timeline" className={panelCls('timeline')}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13.5px] font-semibold text-ink">When you&apos;ll have it</span>
+                    {laneNote && <span className="text-[10px] font-bold uppercase tracking-wide text-brand-dark bg-brand/10 rounded px-1.5 py-0.5">{laneNote}</span>}
+                  </div>
+                  {hasLanes && <button type="button" onClick={tlEd.add} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>}
+                </div>
+                {hasLanes ? (
+                  <>
+                    <div className="space-y-1.5">
+                      {tlEd.cur.map((r, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" />
+                          <input type="text" value={r} onChange={(e) => tlEd.setItem(i, e.target.value)} placeholder="e.g. Most of your profile is fixed in about a week" className={inputCls} />
+                          <button type="button" onClick={() => tlEd.del(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                        </div>
+                      ))}
+                      {tlEd.cur.length === 0 && <p className="text-[12.5px] text-ink-4">No timing lines. Add one, or leave empty for the auto dates.</p>}
+                    </div>
+                    <div className="mt-2 flex items-center gap-3">
+                      {tlEd.custom && <button type="button" onClick={tlEd.reset} className="text-[12px] text-ink-3 hover:text-ink">Use auto dates</button>}
+                      <span className="text-[11px] text-ink-4">This tab’s timing. Empty uses the automatic dates from the services.</span>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-[12.5px] text-ink-4 leading-relaxed">The delivery dates come from how long this campaign’s services take.</p>
+                )}
+              </div>
+
+              {/* What we'll need from you — per-tab list when the campaign has lanes */}
               <div id="sec-requirements" className={panelCls('requirements')}>
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[13.5px] font-semibold text-ink">What we&apos;ll need from you</span>
-                  <button type="button" onClick={addReq} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13.5px] font-semibold text-ink">What we&apos;ll need from you</span>
+                    {laneNote && <span className="text-[10px] font-bold uppercase tracking-wide text-brand-dark bg-brand/10 rounded px-1.5 py-0.5">{laneNote}</span>}
+                  </div>
+                  <button type="button" onClick={reqEd.add} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
                 </div>
                 <div className="space-y-1.5">
-                  {reqList.map((r, i) => (
+                  {reqEd.cur.map((r, i) => (
                     <div key={i} className="flex items-center gap-2">
                       <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" />
-                      <input type="text" value={r} onChange={(e) => setReq(i, e.target.value)} placeholder="e.g. Connect your Google profile" className={inputCls} />
-                      <button type="button" onClick={() => delReq(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                      <input type="text" value={r} onChange={(e) => reqEd.setItem(i, e.target.value)} placeholder="e.g. Connect your Google profile" className={inputCls} />
+                      <button type="button" onClick={() => reqEd.del(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
                     </div>
                   ))}
-                  {reqList.length === 0 && <p className="text-[12.5px] text-ink-4">Nothing needed from the owner. Add a line if there is.</p>}
+                  {reqEd.cur.length === 0 && <p className="text-[12.5px] text-ink-4">Nothing needed from the owner. Add a line if there is.</p>}
                 </div>
                 <div className="mt-2 flex items-center gap-3">
-                  {form.requirements.length > 0 && <button type="button" onClick={() => set({ requirements: [] })} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
-                  <span className="text-[11px] text-ink-4">Empty keeps the list derived from the services.</span>
+                  {reqEd.custom && <button type="button" onClick={reqEd.reset} className="text-[12px] text-ink-3 hover:text-ink">{hasLanes ? 'Use the default' : 'Reset to built-in'}</button>}
+                  <span className="text-[11px] text-ink-4">{hasLanes ? 'This tab’s list. Empty uses the default.' : 'Empty keeps the list derived from the services.'}</span>
                 </div>
               </div>
 
@@ -1014,15 +1060,15 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   stages={form.stages.length ? form.stages : builtinFacts.stages}
                   cadenceLabel={builtinFacts.cadence}
                   priceLabel={builtinFacts.price}
-                  whatYouGet={form.whatYouGet.length ? form.whatYouGet : builtinFacts.rows}
-                  requirements={form.requirements.length ? form.requirements : builtinFacts.requirements}
+                  whatYouGet={previewGet}
+                  requirements={previewReq}
                   analytics={builtinFacts.analytics}
                   heroImage={(form.heroImage || base.heroImage) || null}
                   googleTile={builtinFacts.googleTile}
                   lanes={laneList.length ? laneList.map((l) => ({ label: l.label || 'Untitled', price: l.price, pro: l.pro })) : builtinFacts.lanes}
                   selectedLane={laneList.length ? laneIdx : undefined}
                   laneDetail={laneList.length ? (laneList[laneIdx]?.detail || undefined) : builtinFacts.laneDetail}
-                  timeline={builtinFacts.timeline}
+                  timeline={previewTimeline}
                   interactive
                   active={activeSection}
                   onSection={gotoSection}
