@@ -915,28 +915,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
               </div>
 
               {/* What we'll need from you — an editable list */}
-              <div id="sec-requirements" className={panelCls('requirements')}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[13.5px] font-semibold text-ink">What we&apos;ll need from you</span>
-                  <button type="button" onClick={addReq} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
-                </div>
-                <div className="space-y-1.5">
-                  {reqList.map((r, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" />
-                      <input type="text" value={r} onChange={(e) => setReq(i, e.target.value)} placeholder="e.g. Connect your Google profile" className={inputCls} />
-                      <button type="button" onClick={() => delReq(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
-                    </div>
-                  ))}
-                  {reqList.length === 0 && <p className="text-[12.5px] text-ink-4">Nothing needed from the owner. Add a line if there is.</p>}
-                </div>
-                <div className="mt-2 flex items-center gap-3">
-                  {form.requirements.length > 0 && <button type="button" onClick={() => set({ requirements: [] })} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
-                  <span className="text-[11px] text-ink-4">Empty keeps the list derived from the services.</span>
-                </div>
-              </div>
-
-              {/* What you get — an editable list */}
+              {/* What you get — an editable list (first, matching the page order) */}
               <div id="sec-get" className={panelCls('get')}>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[13.5px] font-semibold text-ink">What you get</span>
@@ -955,6 +934,28 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                 <div className="mt-2 flex items-center gap-3">
                   {form.whatYouGet.length > 0 && <button type="button" onClick={() => set({ whatYouGet: [] })} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
                   <span className="text-[11px] text-ink-4">Empty keeps the list derived from the services. Add-ons still show below it.</span>
+                </div>
+              </div>
+
+              {/* What we'll need from you — an editable list */}
+              <div id="sec-requirements" className={panelCls('requirements')}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[13.5px] font-semibold text-ink">What we&apos;ll need from you</span>
+                  <button type="button" onClick={addReq} className="text-[12.5px] text-brand-dark font-semibold hover:underline">+ Add</button>
+                </div>
+                <div className="space-y-1.5">
+                  {reqList.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-brand shrink-0" />
+                      <input type="text" value={r} onChange={(e) => setReq(i, e.target.value)} placeholder="e.g. Connect your Google profile" className={inputCls} />
+                      <button type="button" onClick={() => delReq(i)} className="text-ink-4 text-[13px] px-1 shrink-0" title="Remove">✕</button>
+                    </div>
+                  ))}
+                  {reqList.length === 0 && <p className="text-[12.5px] text-ink-4">Nothing needed from the owner. Add a line if there is.</p>}
+                </div>
+                <div className="mt-2 flex items-center gap-3">
+                  {form.requirements.length > 0 && <button type="button" onClick={() => set({ requirements: [] })} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
+                  <span className="text-[11px] text-ink-4">Empty keeps the list derived from the services.</span>
                 </div>
               </div>
 
