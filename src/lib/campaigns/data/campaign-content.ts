@@ -50,6 +50,8 @@ export interface CampaignContent {
   lanes?: CampaignLane[]
   /** Admin-edited "what we'll need from you" list. Absent = derived from services. */
   requirements?: string[]
+  /** Admin-edited "what you get" base list. Absent = derived from services. */
+  whatYouGet?: string[]
 }
 
 export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
