@@ -7,7 +7,7 @@
  * table stays one clean row per service. plain_name lives on the row (future store/admin field)
  * but is NOT part of PricedService, so it does not affect service parity.
  */
-import type { PricedService, PricePoint, GoalPlay, ServiceFit, CardLane, CatalogSection, Handler } from './priced-catalog'
+import type { PricedService, PricePoint, GoalPlay, ServiceFit, CardLane, CardLaneAddOn, CatalogSection, Handler } from './priced-catalog'
 
 export type CatalogStatus = 'active' | 'draft' | 'archived' | 'coming_soon'
 
@@ -29,6 +29,8 @@ export interface CatalogRow {
   pieces: { label: string; qty: number }[] | null
   deliverables: { summary: string; included: string[] } | null
   lanes: CardLane[] | null
+  analytics: string[] | null
+  add_ons: CardLaneAddOn[] | null
   status: CatalogStatus
   sort_order: number
 }
@@ -53,6 +55,8 @@ export function serviceToRow(s: PricedService, sortOrder: number, plainName?: st
     pieces: s.pieces ?? null,
     deliverables: s.deliverables ?? null,
     lanes: s.lanes ?? null,
+    analytics: s.analytics ?? null,
+    add_ons: s.addOns ?? null,
     status: 'active',
     sort_order: sortOrder,
   }
@@ -91,5 +95,7 @@ export function rowToService(row: CatalogRow): PricedService {
   if (row.pieces != null) s.pieces = row.pieces
   if (row.deliverables != null) s.deliverables = row.deliverables
   if (row.lanes != null) s.lanes = row.lanes
+  if (row.analytics != null) s.analytics = row.analytics
+  if (row.add_ons != null) s.addOns = row.add_ons
   return s
 }

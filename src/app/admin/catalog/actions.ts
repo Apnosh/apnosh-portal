@@ -7,7 +7,7 @@
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { rowToService, renderGeneratedSnapshot, type CatalogRow } from '@/lib/campaigns/data/catalog-db-shape'
-import type { GoalPlay, PricePoint, CardLane } from '@/lib/campaigns/data/priced-catalog'
+import type { GoalPlay, PricePoint, CardLane, CardLaneAddOn } from '@/lib/campaigns/data/priced-catalog'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -33,9 +33,11 @@ export interface ServicePatch {
   deliverables?: { summary: string; included: string[] } | null
   goal_plays?: GoalPlay[] | null // which campaigns/goals this item belongs to (the plan recipe)
   lanes?: CardLane[] | null // per-card delivery lanes (Fiverr-style)
+  analytics?: string[] | null // customer-facing "Analytics to track"
+  add_ons?: CardLaneAddOn[] | null // card-level add-ons
 }
 
-const SERVICE_FIELDS = ['name', 'plain_name', 'description', 'status', 'section', 'handler', 'handler_why', 'essential', 'prices', 'deliverables', 'goal_plays', 'lanes'] as const
+const SERVICE_FIELDS = ['name', 'plain_name', 'description', 'status', 'section', 'handler', 'handler_why', 'essential', 'prices', 'deliverables', 'goal_plays', 'lanes', 'analytics', 'add_ons'] as const
 
 /** A brand-new catalog card, authored from scratch in the admin builder. */
 export interface NewService {
@@ -51,6 +53,8 @@ export interface NewService {
   deliverables: { summary: string; included: string[] } | null
   goal_plays: GoalPlay[] | null
   lanes: CardLane[] | null
+  analytics: string[] | null
+  add_ons: CardLaneAddOn[] | null
   status: 'active' | 'draft' | 'archived' | 'coming_soon'
 }
 
@@ -85,6 +89,8 @@ export async function createService(row: NewService): Promise<{ ok: boolean; err
     goal_plays: row.goal_plays,
     deliverables: row.deliverables,
     lanes: row.lanes,
+    analytics: row.analytics,
+    add_ons: row.add_ons,
     status: row.status,
     sort_order: sortOrder,
     updated_at: new Date().toISOString(),
