@@ -23,6 +23,12 @@ export interface CampaignLane {
   pro?: boolean
   /** The detail line shown under the tabs when this lane is selected. */
   detail?: string
+  /** Per-tab "What you get". Absent = the campaign default / derived list. */
+  whatYouGet?: string[]
+  /** Per-tab "When you'll have it" (plain lines). Absent = the derived dated timeline. */
+  timeline?: string[]
+  /** Per-tab "What we'll need from you". Absent = the campaign default / derived list. */
+  requirements?: string[]
 }
 
 /** Sparse edited fields for one campaign. Absent/empty = use the code default. */
@@ -71,12 +77,16 @@ export function cleanLanes(v: unknown): CampaignLane[] {
     const r = raw as Record<string, unknown>
     const label = typeof r.label === 'string' ? r.label.trim() : ''
     if (!label) continue
-    out.push({
+    const lane: CampaignLane = {
       label,
       price: typeof r.price === 'string' && r.price.trim() ? r.price.trim() : 'Free',
       pro: !!r.pro,
       detail: typeof r.detail === 'string' && r.detail.trim() ? r.detail.trim() : undefined,
-    })
+    }
+    const wig = cleanStringList(r.whatYouGet); if (wig.length) lane.whatYouGet = wig
+    const tl = cleanStringList(r.timeline); if (tl.length) lane.timeline = tl
+    const req = cleanStringList(r.requirements); if (req.length) lane.requirements = req
+    out.push(lane)
     if (out.length >= 4) break
   }
   return out
