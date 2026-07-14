@@ -4185,65 +4185,59 @@ export function PlanBar({ items, onOpen }) {
  *  renders (doerDisplay, plainNameOf, optionDelta), so they can never drift. Tapping
  *  the card body or Edit re-opens the PDP with this saved config; re-adding replaces
  *  it (the cart is keyed by itemId). Remove slides the card out. */
-function PlanItemCard({ it, tier, leaving, onOpen, onRemove }) {
+function PlanItemCard({ it, tier, leaving, onOpen, onRemove, rush, rushed, onToggleRush }) {
   const p = catGet(it.itemId) || { title: it.itemId, type: "task" };
   const money = planItemMoney(it);
   const versioned = doerSlotFor(it.itemId) && it.doer;
   const d = versioned ? doerDisplay(it.doer, tier) : null;
   const opts = it.options.map((id) => serviceById(id)).filter(Boolean);
-  const lineL = { fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink, lineHeight: 1.4, minWidth: 0 };
-  const lineR = { fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap", flexShrink: 0 };
+  // small subtitle: chosen version + add-on count, no prices (the price shows once, on the right)
+  const bits = [];
+  if (d) bits.push(d.title);
+  if (opts.length) bits.push(`${opts.length} add-on${opts.length === 1 ? "" : "s"}`);
+  const del = itemDelivery(it);
+  const canRush = !!rush && del.days != null;
+  const arrival = canRush && rushed ? `Ready by around ${etaDateLabel(Math.max(1, del.days - rush.days))}` : del.text;
   return (
-    <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, marginTop: 10, overflow: "hidden", boxShadow: "0 1px 2px rgba(20,40,30,0.03)", transition: "transform 240ms ease, opacity 240ms ease", transform: leaving ? "translateX(72%)" : "none", opacity: leaving ? 0 : 1 }}>
-      <button onClick={onOpen} className="apnpress" style={{ width: "100%", display: "block", background: "none", border: "none", padding: "13px 14px 12px", cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ width: 48, height: 48, borderRadius: 13, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <Art id={it.itemId} size={34} />
+    <div style={{ position: "relative", background: "#fff", border: `1px solid ${rushed ? TOKENS.mint : TOKENS.line}`, borderRadius: 16, marginTop: 10, boxShadow: "0 1px 2px rgba(20,40,30,0.03)", transition: "transform 240ms ease, opacity 240ms ease", transform: leaving ? "translateX(72%)" : "none", opacity: leaving ? 0 : 1 }}>
+      {/* the whole card is click-to-edit */}
+      <button onClick={onOpen} className="apnpress" style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 12, background: "none", border: "none", padding: "13px 40px 13px 13px", cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
+        <span style={{ width: 46, height: 46, borderRadius: 12, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <Art id={it.itemId} size={32} />
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
+            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25, minWidth: 0 }}>{p.title}</span>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.ink, whiteSpace: "nowrap", flexShrink: 0 }}>{planMoneyLabel(money, isCreativeCard(p))}</span>
           </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: "block", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25 }}>{p.title}</span>
-            {/* Per-item price summary — planItemMoney, the same math the PDP buy footer shows. */}
-            <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 3 }}>{planMoneyLabel(money, isCreativeCard(p))}</span>
-            {/* Per-item delivery — this item's own turnaround, Amazon-style. */}
-            <span style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 4 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub }}>{itemDeliveryLabel(it)}</span>
-            </span>
+          {bits.length > 0 && <span style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 2 }}>{bits.join(" · ")}</span>}
+          {/* arrival — last */}
+          <span style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 6 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={rushed ? TOKENS.mintDark : TOKENS.sub} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: rushed ? 600 : 400, color: rushed ? TOKENS.mintDark : TOKENS.sub }}>{arrival}{rushed ? ` · +$${rush.fee}` : ""}</span>
           </span>
         </span>
-        {(d || opts.length > 0) && (
-          <span style={{ display: "block", marginTop: 11, paddingTop: 10, borderTop: `1px solid ${TOKENS.line}` }}>
-            {/* The chosen version, labeled and priced exactly like the PDP's version picker. */}
-            {d && (
-              <span style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                <span style={lineL}>{d.title}</span>
-                <span style={lineR}>{d.price || "Included in Pro"}</span>
-              </span>
-            )}
-            {/* Every selected add-on: the PDP's plain name + its cadence-aware price delta. */}
-            {opts.map((s, i) => (
-              <span key={s.id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: d || i > 0 ? 7 : 0 }}>
-                <span style={lineL}>{plainNameOf(s)}</span>
-                <span style={lineR}>{optionDelta(s)}</span>
-              </span>
-            ))}
-          </span>
-        )}
       </button>
-      <div style={{ display: "flex", borderTop: `1px solid ${TOKENS.line}` }}>
-        <button onClick={onOpen} className="apnpress" style={{ flex: 1, background: "none", border: "none", padding: "10px 0", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Edit</button>
-        <span aria-hidden style={{ width: 1, background: TOKENS.line }} />
-        <button onClick={onRemove} aria-label={`Remove ${p.title}`} className="apnpress" style={{ flex: 1, background: "none", border: "none", padding: "10px 0", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: "#7c837e", WebkitTapHighlightColor: "transparent" }}>Remove</button>
-      </div>
+      {/* get it faster — a real per-item control, outside the edit button */}
+      {canRush && (
+        <button onClick={onToggleRush} className="apnpress" style={{ display: "block", width: "100%", textAlign: "left", background: rushed ? "rgba(74,189,152,0.08)" : "none", border: "none", borderTop: `1px solid ${TOKENS.line}`, padding: "9px 13px", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>
+          {rushed ? "✓ Getting it faster — tap to undo" : `Get it faster · about ${rush.days} day${rush.days === 1 ? "" : "s"} sooner for +$${rush.fee}`}
+        </button>
+      )}
+      {/* simple remove — top-right X */}
+      <button onClick={onRemove} aria-label={`Remove ${p.title}`} className="apnpress" style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: 13, border: "none", background: "rgba(20,35,28,0.05)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c837e" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      </button>
     </div>
   );
 }
 
 /** One item's own delivery window, from its real service turnarounds (gbp-setup + its add-on
- *  services), as the max window incl. the worst external gate. Self-serve lanes are owner-paced. */
-function itemDeliveryLabel(it) {
+ *  services), as the max window incl. the worst external gate. Returns a label + the day count
+ *  (null when there's no hard date) so the cart can show a rushed date. */
+function itemDelivery(it) {
   const lane = doerSlotFor(it.itemId) ? gbpLaneOf(it.doer) : null;
-  if (lane === "diy" || lane === "ai") return "You do it, at your own pace";
+  if (lane === "diy" || lane === "ai") return { text: "You do it, at your own pace", days: null };
   let workMax = 0, gate = null, recurring = false;
   const svcs = it.itemId === "gbp" ? ["gbp-setup", ...it.options] : [...it.options];
   for (const id of svcs) {
@@ -4253,9 +4247,9 @@ function itemDeliveryLabel(it) {
     else if (t.class === "creative") workMax = Math.max(workMax, t.business.max);
     else if (t.class === "recurring") recurring = true;
   }
-  if (workMax > 0) return `Ready by around ${etaDateLabel(workMax + (gate ? gate.addDays.max : 0))}`;
-  if (recurring) return "Starts within about a week, then monthly";
-  return "About 1 to 2 weeks";
+  if (workMax > 0) { const days = workMax + (gate ? gate.addDays.max : 0); return { text: `Ready by around ${etaDateLabel(days)}`, days }; }
+  if (recurring) return { text: "Starts within about a week, then monthly", days: null };
+  return { text: "About 1 to 2 weeks", days: null };
 }
 
 /** The whole plan's delivery as a critical PATH (services run in parallel, so the max window,
@@ -4289,9 +4283,14 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
   const [error, setError] = useState(null);
   const [droppedNote, setDroppedNote] = useState(null);
   const [leaving, setLeaving] = useState(() => new Set());
-  const [rushOpen, setRushOpen] = useState(false);
+  const [rushed, setRushed] = useState(() => new Set());
   const totals = planTotals(items);
   const delivery = planDelivery(items);
+  // per-item rush: read the campaign's configurable rush option; selection is local (display only,
+  // not billed yet — the fee shows but does not change what checkout charges).
+  const itemRush = (id) => (contentFor(id, CONTENT_OVERRIDES) || {}).rush || null;
+  const toggleRush = (id) => setRushed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const rushFeeTotal = items.reduce((sum, it) => { const r = itemRush(it.itemId); return rushed.has(it.itemId) && r ? sum + r.fee : sum; }, 0);
   const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
   const blocked = planProBlocked(items, tier);
   const empty = items.length === 0;
@@ -4395,7 +4394,7 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
         ) : (
           <>
             {items.map((it) => (
-              <PlanItemCard key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
+              <PlanItemCard key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} rush={itemRush(it.itemId)} rushed={rushed.has(it.itemId)} onToggleRush={() => toggleRush(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
             ))}
             {/* Order summary — Amazon-style: items count, price lines, total, estimated delivery + rush. */}
             <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, padding: "14px 16px 13px", marginTop: 16 }}>
@@ -4417,25 +4416,26 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
                 <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.ink }}>Order total</span>
                 <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3, whiteSpace: "nowrap" }}>{planMoneyLabel(totals, anyCreative)}</span>
               </div>
-              {/* Estimated delivery — the plan's critical-path date + the honest rush ask. */}
+              {/* Rush selected — shown, not folded into the billed total yet (team confirms first). */}
+              {rushFeeTotal > 0 && (
+                <>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, marginTop: 8 }}>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.mintDark }}>Rush selected</span>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.mintDark, whiteSpace: "nowrap" }}>{`+$${rushFeeTotal.toLocaleString()}`}</span>
+                  </div>
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Faster delivery isn&apos;t charged automatically — your team confirms the rush first.</div>
+                </>
+              )}
+              {/* Estimated delivery — the plan's critical-path date. */}
               {(delivery.readyBy || delivery.doneForYou) && (
-                <div style={{ borderTop: `1px solid ${TOKENS.line}`, marginTop: 12, paddingTop: 11 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M5 18a2 2 0 1 0 4 0M15 18a2 2 0 1 0 4 0" /><path d="M3 6h11v9H3zM14 9h4l3 3v3h-3" /></svg>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.4 }}>
-                        {delivery.readyBy ? <>Estimated delivery <span style={{ fontWeight: 700 }}>by around {delivery.readyBy}</span></> : "Delivery about 1 to 2 weeks after you confirm"}
-                      </div>
-                      {delivery.recurring && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 2 }}>Monthly pieces start within about a week, then keep running.</div>}
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
-                        <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>These are estimates.</span>
-                        <span style={{ color: TOKENS.dash }}>·</span>
-                        <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
-                      </div>
-                      {rushOpen && (
-                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 7 }}>Rush timing depends on the work. Confirm your plan, then tell your team you need it sooner and they will confirm what is possible. No rush fee is added automatically.</div>
-                      )}
+                <div style={{ borderTop: `1px solid ${TOKENS.line}`, marginTop: 12, paddingTop: 11, display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}><path d="M5 18a2 2 0 1 0 4 0M15 18a2 2 0 1 0 4 0" /><path d="M3 6h11v9H3zM14 9h4l3 3v3h-3" /></svg>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.4 }}>
+                      {delivery.readyBy ? <>Estimated delivery <span style={{ fontWeight: 700 }}>by around {delivery.readyBy}</span></> : "Delivery about 1 to 2 weeks after you confirm"}
                     </div>
+                    {delivery.recurring && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginTop: 2 }}>Monthly pieces start within about a week, then keep running.</div>}
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint, marginTop: 5 }}>These are estimates. Want a piece sooner? Use &ldquo;Get it faster&rdquo; on the item.</div>
                   </div>
                 </div>
               )}

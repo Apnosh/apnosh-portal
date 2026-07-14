@@ -14,6 +14,24 @@
 import { campaignContent, type CampaignContent } from './campaign-content'
 import type { FunnelStage } from './create-catalog'
 
+/** A campaign's rush option: a flat fee to deliver `days` sooner. Draft/display only for now. */
+export interface CampaignRush {
+  /** Flat rush fee added to the item. */
+  fee: number
+  /** How many business days sooner the rushed delivery lands. */
+  days: number
+}
+
+/** Keep a well-formed rush setting (positive fee + positive days), else undefined. */
+export function cleanRush(v: unknown): CampaignRush | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const r = v as Record<string, unknown>
+  const fee = Math.max(0, Math.round(Number(r.fee) || 0))
+  const days = Math.max(0, Math.round(Number(r.days) || 0))
+  if (fee <= 0 || days <= 0) return undefined
+  return { fee, days }
+}
+
 /** One "how it's done" lane (a tab in the product-page picker). Display/draft only for now. */
 export interface CampaignLane {
   label: string
@@ -50,6 +68,8 @@ export interface ContentOverride {
   requirements?: string[]
   /** Edited "what you get" base list. Absent = the list derived from services. */
   whatYouGet?: string[]
+  /** A configurable rush option (flat fee to deliver sooner). Absent = no rush offered. */
+  rush?: CampaignRush
 }
 
 /** Trim, drop empties + dupes, cap — the store contract for a plain string list. */
@@ -121,5 +141,6 @@ export function contentFor(itemId: string, overrides?: ContentOverrideMap | null
   if (Array.isArray(o.lanes) && o.lanes.length) merged.lanes = o.lanes
   if (Array.isArray(o.requirements) && o.requirements.length) merged.requirements = o.requirements
   if (Array.isArray(o.whatYouGet) && o.whatYouGet.length) merged.whatYouGet = o.whatYouGet
+  const rush = cleanRush(o.rush); if (rush) merged.rush = rush
   return merged
 }
