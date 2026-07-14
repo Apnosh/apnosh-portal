@@ -387,8 +387,8 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           )}
 
         </aside>
-        <div className="space-y-5 order-2 lg:order-1">
-          <section className={panel} onMouseEnter={() => setHl('hero')} onMouseLeave={() => setHl(null)}>
+        <div className="flex flex-col gap-5 order-2 lg:order-1">
+          <section className={panel + ' order-1'} onMouseEnter={() => setHl('hero')} onMouseLeave={() => setHl(null)}>
           <div className={panelHead}>The basics</div>
           {/* identity */}
           <label className="block"><span className={lbl}>Card name</span><input className={field} value={name} onChange={(e) => onName(e.target.value)} placeholder="e.g. Menu photo refresh" /></label>
@@ -418,7 +418,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </section>
 
           {/* pricing */}
-          <section className={panel} onMouseEnter={() => setHl('footer')} onMouseLeave={() => setHl(null)}>
+          <section className={panel + ' order-4'} onMouseEnter={() => setHl('footer')} onMouseLeave={() => setHl(null)}>
           <div>
             <div className="flex items-center justify-between"><span className={panelHead}>Price</span><button onClick={addPrice} className="text-[12.5px] text-brand font-semibold">+ Add a price</button></div>
             <div className="space-y-2 mt-1.5">
@@ -449,7 +449,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </section>
 
           {/* what's included */}
-          <section className={panel} onMouseEnter={() => setHl('get')} onMouseLeave={() => setHl(null)}>
+          <section className={panel + ' order-3'} onMouseEnter={() => setHl('get')} onMouseLeave={() => setHl(null)}>
           <div>
             <span className={panelHead}>What&apos;s included</span>
             <input className={field + ' mt-1'} value={delivSummary} onChange={(e) => setDelivSummary(e.target.value)} placeholder="One-line summary of what this is" />
@@ -468,10 +468,10 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
 
           </section>
 
-          {/* campaign recipe (goal_plays) */}
-          <section className={panel}>
+          {/* campaign recipe (goal_plays) — internal, not on the customer page, so it sits last */}
+          <section className={panel + ' order-5'}>
           <div>
-            <span className={panelHead}>In these campaigns</span>
+            <span className={panelHead}>In these campaigns <span className="text-[10px] font-medium text-ink-4 normal-case tracking-normal">· internal, not shown to customers</span></span>
             <p className="text-[11px] text-ink-4 mt-0.5 mb-2">Which goals this card is part of, and how it ranks. This is what auto-builds a restaurant&apos;s plan — no AI needed. Optional.</p>
             <div className="space-y-2">
               {plays.map((p, i) => (
@@ -501,7 +501,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </section>
 
           {/* who can do it — per-card lanes (Fiverr-style) */}
-          <section className={panel} onMouseEnter={() => setHl('lanes')} onMouseLeave={() => setHl(null)}>
+          <section className={panel + ' order-2'} onMouseEnter={() => setHl('lanes')} onMouseLeave={() => setHl(null)}>
           <div>
             <div className="flex items-center justify-between">
               <span className={panelHead}>Who can do it</span>
