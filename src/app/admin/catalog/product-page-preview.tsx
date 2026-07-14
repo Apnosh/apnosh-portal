@@ -5,7 +5,12 @@
  * facts they are about to publish, so "how the customer sees it" matches the real store
  * section-by-section: hero (chips, eyebrow, headline, product tile), the sell copy, how
  * it's done, what we'll need, what you get, analytics to track, and the buy footer.
+ *
+ * In `interactive` mode each section is clickable and hover-highlights, so the campaign
+ * editor can work like a page builder: click a section on the page to jump to its editor.
  */
+import { useState } from 'react'
+import type { CSSProperties, HTMLAttributes } from 'react'
 import type { FunnelStage } from '@/lib/campaigns/data/create-catalog'
 import { STAGE_TAG_LABEL } from '@/lib/campaigns/data/create-catalog'
 import type { TimelineStep } from '@/lib/campaigns/data/campaign-timeline'
@@ -50,6 +55,10 @@ export interface ProductPagePreviewProps {
   laneDetail?: string
   /** When set, render the "When you'll have it" section with computed dates. */
   timeline?: TimelineStep[]
+  /** Page-builder mode: sections become clickable + hover-highlight. */
+  interactive?: boolean
+  active?: string | null
+  onSection?: (key: string) => void
 }
 
 /** today + n business-ish days → "Mon, Jul 20". Runs at render (app runtime, not a workflow). */
@@ -89,16 +98,32 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
     priceLabel, whatYouGet, requirements, analytics, heroImage,
     howItsDone = 'The Apnosh team does this for you.',
     googleTile, businessName, rating, lanes, selectedLane, laneDetail, timeline,
+    interactive, active, onSection,
   } = props
+  const [hover, setHover] = useState<string | null>(null)
   const selLane = selectedLane ?? (lanes ? lanes.length - 1 : 0)
   const inc = whatYouGet.filter((x) => x && x.trim()).slice(0, 6)
   const reqs = requirements.filter((x) => x && x.trim())
   const metrics = analytics.filter((x) => x && x.trim())
 
+  // Section wrapper props: adds click + hover-highlight in interactive mode, merged onto the
+  // section's own style so layout is untouched when interactive is off.
+  const si = (key: string, base: CSSProperties = {}): HTMLAttributes<HTMLElement> & { style: CSSProperties } => {
+    if (!interactive) return { style: base }
+    const on = active === key
+    const hot = hover === key
+    return {
+      onClick: (e) => { e.stopPropagation(); onSection?.(key) },
+      onMouseEnter: () => setHover(key),
+      onMouseLeave: () => setHover((h) => (h === key ? null : h)),
+      style: { ...base, cursor: 'pointer', outline: on ? `2px solid ${PV.mint}` : hot ? `2px dashed ${PV.mint}` : undefined, outlineOffset: '-3px', borderRadius: 10, transition: 'outline 0.1s' },
+    }
+  }
+
   return (
     <div style={{ borderRadius: 22, overflow: 'hidden', background: '#fff', border: `1px solid ${PV.line}`, boxShadow: '0 10px 34px rgba(20,45,33,0.10)', fontFamily: PV.body }}>
       {/* HERO */}
-      <div style={{ background: PV.heroGrad, padding: '14px 20px 26px', position: 'relative', overflow: 'hidden' }}>
+      <div {...si('hero', { background: PV.heroGrad, padding: '14px 20px 26px', position: 'relative', overflow: 'hidden' })}>
         <div aria-hidden style={{ position: 'absolute', top: -80, right: -60, width: 240, height: 240, borderRadius: '50%', background: 'radial-gradient(circle, rgba(74,189,152,0.22), rgba(74,189,152,0))', pointerEvents: 'none' }} />
         <div style={{ position: 'relative' }}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -126,12 +151,12 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
       {/* SELL */}
       {(description?.trim() || why?.trim()) && (
         <div style={{ padding: '16px 20px 0' }}>
-          {description?.trim() && <p style={{ margin: 0, fontFamily: PV.body, fontSize: 14.5, color: '#4c554f', lineHeight: 1.55 }}>{description.trim()}</p>}
-          {why?.trim() && <p style={{ margin: '10px 0 0', fontFamily: PV.body, fontSize: 13.5, color: PV.sub, lineHeight: 1.55 }}>{why.trim()}</p>}
+          {description?.trim() && <p {...si('description', { margin: 0, fontFamily: PV.body, fontSize: 14.5, color: '#4c554f', lineHeight: 1.55 })}>{description.trim()}</p>}
+          {why?.trim() && <p {...si('why', { margin: '10px 0 0', fontFamily: PV.body, fontSize: 13.5, color: PV.sub, lineHeight: 1.55 })}>{why.trim()}</p>}
         </div>
       )}
       {/* HOW IT'S DONE — 3-lane picker when lanes are given, else the single quiet line */}
-      <div style={{ padding: '22px 20px 0' }}>
+      <div {...si('lanes', { padding: '22px 20px 0' })}>
         {lanes && lanes.length > 0 ? (
           <>
             <BlockLabel>Choose how it&apos;s done</BlockLabel>
@@ -160,7 +185,7 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
       </div>
       {/* WHEN YOU'LL HAVE IT */}
       {timeline && timeline.length > 0 && (
-        <div style={{ padding: '20px 20px 0' }}>
+        <div {...si('timeline', { padding: '20px 20px 0' })}>
           <BlockLabel>When you&apos;ll have it</BlockLabel>
           <div style={{ background: '#f7f9f8', borderRadius: 14, padding: '13px 15px' }}>
             {timeline.map((s, i) => (
@@ -184,7 +209,7 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
       )}
       {/* WHAT WE'LL NEED FROM YOU */}
       {reqs.length > 0 && (
-        <div style={{ padding: '20px 20px 0' }}>
+        <div {...si('requirements', { padding: '20px 20px 0' })}>
           <BlockLabel>What we&apos;ll need from you</BlockLabel>
           <div style={{ background: '#f7f9f8', borderRadius: 14, padding: '13px 15px' }}>
             {reqs.map((r, i) => (
@@ -198,7 +223,7 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
       )}
       {/* WHAT YOU GET */}
       {inc.length > 0 && (
-        <div style={{ padding: '18px 20px 0' }}>
+        <div {...si('get', { padding: '18px 20px 0' })}>
           <BlockLabel>What you get</BlockLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {inc.map((it, i) => (
@@ -213,7 +238,7 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
       )}
       {/* ANALYTICS TO TRACK */}
       {metrics.length > 0 && (
-        <div style={{ padding: '28px 20px 0' }}>
+        <div {...si('analytics', { padding: '28px 20px 0' })}>
           <BlockLabel hint="Watch these grow">Analytics to track</BlockLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {metrics.map((a, i) => (
@@ -229,7 +254,7 @@ export function ProductPagePreview(props: ProductPagePreviewProps) {
         </div>
       )}
       {/* BUY FOOTER */}
-      <div style={{ marginTop: 24, background: '#fff', borderTop: `1px solid ${PV.line}`, boxShadow: '0 -10px 28px rgba(20,40,30,0.10)', padding: '11px 18px 14px' }}>
+      <div {...si('footer', { marginTop: 24, background: '#fff', borderTop: `1px solid ${PV.line}`, boxShadow: '0 -10px 28px rgba(20,40,30,0.10)', padding: '11px 18px 14px' })}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
           <span style={{ fontFamily: PV.body, fontSize: 12.5, fontWeight: 600, color: PV.sub }}>Your total</span>
           <span style={{ fontFamily: PV.head, fontSize: 21, fontWeight: 700, color: PV.ink, letterSpacing: '-0.4px' }}>{priceLabel || 'Free'}</span>
