@@ -45,4 +45,10 @@ create index if not exists idx_campaign_payments_client on campaign_payments(cli
 create index if not exists idx_campaign_payments_campaign on campaign_payments(campaign_id);
 create index if not exists idx_campaign_payments_status on campaign_payments(status);
 
+-- RLS on, admin-only policy (matches campaign_charges / creator_payouts). All checkout reads/writes
+-- go through the service-role client, which bypasses RLS, so this only locks the table away from the
+-- public/authenticated API — payment rows are never directly readable by a client.
+alter table campaign_payments enable row level security;
+create policy campaign_payments_admin on campaign_payments for all using (is_admin()) with check (is_admin());
+
 comment on table campaign_payments is 'Charge-at-checkout record for the campaign cart: one Stripe PaymentIntent per placed order, with the exact billed amounts (cents) and a draft snapshot for recovery. One-time charge only; monthly services billed separately.';
