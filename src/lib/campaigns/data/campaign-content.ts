@@ -19,6 +19,7 @@
  */
 
 import type { CreateCatalogId, FunnelStage } from './create-catalog'
+import type { CampaignLane } from './content-overrides'
 
 export interface CampaignContent {
   id: CreateCatalogId
@@ -45,6 +46,8 @@ export interface CampaignContent {
   /** Admin-overridable product-page funnel chips. Absent = use the card's built-in stages
    *  (ITEM_STAGES). Display-only: it re-tags the PDP, not the deeper funnel/plan logic. */
   stages?: FunnelStage[]
+  /** Admin-edited "how it's done" lanes. Draft/display only; not wired to billing. */
+  lanes?: CampaignLane[]
 }
 
 export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {

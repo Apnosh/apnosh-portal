@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CAMPAIGN_CONTENT, type CampaignContent } from '@/lib/campaigns/data/campaign-content'
-import { contentFor, type ContentOverride, type ContentOverrideMap } from '@/lib/campaigns/data/content-overrides'
+import { contentFor, type ContentOverride, type ContentOverrideMap, type CampaignLane } from '@/lib/campaigns/data/content-overrides'
 import {
   DB_CADENCES, DB_CARD_TYPES, DB_SHELVES, DB_STAGES,
   isBuiltinCampaignId, isValidCampaignSlug, slugFromTitle,
@@ -41,10 +41,11 @@ const DUR_CADENCE: Record<string, string> = { setup: 'Setup', once: 'One-time', 
 type Faq = { q: string; a: string }
 type FormState = {
   title: string; tagline: string; description: string; promise: string; why: string;
-  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]
+  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]
 }
 
-const FIELDS: { key: keyof Omit<FormState, 'faq' | 'heroImage'>; label: string; hint: string; rows?: number }[] = [
+type TextKey = 'title' | 'tagline' | 'description' | 'promise' | 'why' | 'expectation' | 'bestFor'
+const FIELDS: { key: TextKey; label: string; hint: string; rows?: number }[] = [
   { key: 'title', label: 'Title', hint: 'The card and product page title.' },
   { key: 'tagline', label: 'Tagline', hint: 'The one-line card subtitle.' },
   { key: 'promise', label: 'Promise', hint: 'The one-line headline under the title.' },
@@ -61,6 +62,7 @@ function formFromOverride(o: ContentOverride | undefined): FormState {
     heroImage: o?.heroImage ?? '', bestFor: o?.bestFor ?? '',
     faq: (o?.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
     stages: [...(o?.stages ?? [])],
+    lanes: (o?.lanes ?? []).map((l) => ({ ...l })),
   }
 }
 
@@ -80,7 +82,7 @@ type DbForm = FormState & {
 function emptyDbForm(): DbForm {
   return {
     id: '', title: '', tagline: '', description: '', promise: '', why: '',
-    expectation: '', heroImage: '', bestFor: '', faq: [],
+    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [],
     type: 'task', cad: 'once', shelf: 'aware', stages: [],
     serviceIds: [], addonServiceIds: [], status: 'draft',
   }
@@ -92,6 +94,7 @@ function dbFormFrom(c: DbCampaign): DbForm {
     promise: c.promise, why: c.why, expectation: c.expectation,
     heroImage: c.heroImage ?? '', bestFor: c.bestFor ?? '',
     faq: (c.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
+    lanes: [],
     type: c.type, cad: c.cad, shelf: c.shelf, stages: [...c.stages],
     serviceIds: [...c.serviceIds], addonServiceIds: [...c.addonServiceIds],
     status: c.status,
@@ -130,6 +133,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const [form, setForm] = useState<FormState | null>(null)
   // page-builder: which preview section the owner clicked, so its editor panel highlights + scrolls
   const [activeSection, setActiveSection] = useState<string | null>(null)
+  const [laneTab, setLaneTab] = useState(0)
   const [busy, setBusy] = useState(false)
   const [drafting, setDrafting] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -338,8 +342,17 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const inputCls = 'w-full text-[13.5px] text-ink rounded-lg border border-ink-6 bg-white px-3 py-2 placeholder:text-ink-4 focus:outline-none focus:border-brand'
   const chipCls = (on: boolean) => 'text-[12px] font-medium rounded-full px-3 py-1.5 border ' + (on ? 'bg-brand text-white border-brand' : 'bg-white text-ink-2 border-ink-6 hover:border-ink-4')
 
+  // ── the lanes being edited: the saved override, else seeded from the card's built-in lanes ──
+  const laneList: CampaignLane[] = form
+    ? (form.lanes.length ? form.lanes : (builtinFacts?.lanes ?? []).map((l) => ({ label: l.label, price: l.price, pro: !!l.pro, detail: '' })))
+    : []
+  const laneIdx = Math.min(laneTab, Math.max(0, laneList.length - 1))
+  const setLane = (i: number, patch: Partial<CampaignLane>) => set({ lanes: laneList.map((l, j) => (j === i ? { ...l, ...patch } : l)) })
+  const addLane = () => { const arr = [...laneList, { label: 'New way', price: 'Free', pro: false, detail: '' }]; set({ lanes: arr }); setLaneTab(arr.length - 1) }
+  const deleteLane = (i: number) => { const arr = laneList.filter((_, j) => j !== i); set({ lanes: arr }); setLaneTab(Math.max(0, i - 1)) }
+
   // ── page-builder: map a clicked preview section to its left-hand editor panel + scroll to it ──
-  const EDITABLE_PANELS = ['hero', 'description', 'why']
+  const EDITABLE_PANELS = ['hero', 'description', 'why', 'lanes']
   const panelOf = (section: string | null) => (section && EDITABLE_PANELS.includes(section) ? section : section ? 'derived' : null)
   const activePanel = panelOf(activeSection)
   const gotoSection = (key: string) => {
@@ -348,7 +361,6 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   }
   const panelCls = (id: string) => 'rounded-xl border p-4 lg:p-5 scroll-mt-24 transition ' + (activePanel === id ? 'border-brand ring-4 ring-brand/10 bg-white' : 'border-ink-6 bg-white')
   const DERIVED_NOTE: Record<string, string> = {
-    lanes: 'The three ways it can be done (I’ll do it / Apnosh AI / Apnosh) and their prices are built in. Not editable here yet.',
     timeline: 'The delivery dates come from how long this campaign’s services take. Change the services to change the dates.',
     requirements: 'What we need from the owner is derived from the services this campaign includes.',
     get: 'What you get is built from the services this campaign includes.',
@@ -356,7 +368,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
     footer: 'The price is the total of the services this campaign includes.',
   }
   // one content-field editor (label, reset-to-default, ghost default), reused across panels
-  const renderField = (key: keyof Omit<FormState, 'faq' | 'heroImage'>) => {
+  const renderField = (key: TextKey) => {
     if (!form || !base) return null
     const meta = FIELDS.find((f) => f.key === key)!
     const defaultVal = (base[key] ?? '') as string
@@ -800,12 +812,58 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                 {renderField('why')}
               </div>
 
+              {/* How it's done — a tabbed lane editor (edit each tab, switch, add, delete) */}
+              <div id="sec-lanes" className={panelCls('lanes')}>
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <span className="text-[13.5px] font-semibold text-ink">How it&apos;s done</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">Draft · not on the store yet</span>
+                </div>
+                {/* the lane tabs */}
+                <div className="flex items-center gap-1.5 flex-wrap mb-3">
+                  {laneList.map((l, i) => (
+                    <button key={i} type="button" onClick={() => setLaneTab(i)}
+                      className={'text-[12.5px] font-medium rounded-lg px-3 py-1.5 border transition ' + (i === laneIdx ? 'bg-brand text-white border-brand' : 'bg-white text-ink-2 border-ink-6 hover:border-ink-4')}>
+                      {l.label || 'Untitled'}
+                    </button>
+                  ))}
+                  <button type="button" onClick={addLane} className="text-[12.5px] font-semibold rounded-lg px-2.5 py-1.5 text-brand-dark border border-dashed border-brand/40 hover:bg-brand/5">+ Add</button>
+                </div>
+                {/* the selected lane's fields */}
+                {laneList[laneIdx] ? (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[12px] font-semibold text-ink block mb-1.5">Tab label</label>
+                      <input type="text" value={laneList[laneIdx].label} onChange={(e) => setLane(laneIdx, { label: e.target.value })} placeholder="e.g. Apnosh does it" className={inputCls} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[12px] font-semibold text-ink block mb-1.5">Price</label>
+                        <input type="text" value={laneList[laneIdx].price} onChange={(e) => setLane(laneIdx, { price: e.target.value })} placeholder="$100 · Free · Included" className={inputCls} />
+                      </div>
+                      <label className="flex items-end gap-2 pb-2.5 cursor-pointer">
+                        <input type="checkbox" checked={!!laneList[laneIdx].pro} onChange={(e) => setLane(laneIdx, { pro: e.target.checked })} />
+                        <span className="text-[12.5px] text-ink">Show PRO badge</span>
+                      </label>
+                    </div>
+                    <div>
+                      <label className="text-[12px] font-semibold text-ink block mb-1.5">Description</label>
+                      <textarea rows={2} value={laneList[laneIdx].detail ?? ''} onChange={(e) => setLane(laneIdx, { detail: e.target.value })} placeholder="The line shown under the tabs when this one is picked." className={inputCls} />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <button type="button" onClick={() => deleteLane(laneIdx)} disabled={laneList.length <= 1} className="text-[12px] font-medium text-red-700 hover:underline disabled:opacity-40 disabled:no-underline">Delete this tab</button>
+                      {form.lanes.length > 0 && <button type="button" onClick={() => { set({ lanes: [] }); setLaneTab(0) }} className="text-[12px] text-ink-3 hover:text-ink">Reset to built-in</button>}
+                    </div>
+                  </div>
+                ) : <p className="text-[12.5px] text-ink-4">No lanes. Add one to offer a way to get it done.</p>}
+                <p className="text-[11px] text-ink-4 mt-3">Saved with the campaign. These don&apos;t change what the store charges yet.</p>
+              </div>
+
               {/* Derived sections — what each non-editable part comes from */}
               <div id="sec-derived" className={panelCls('derived')}>
                 <div className="text-[13.5px] font-semibold text-ink mb-1">Set by the campaign&apos;s services</div>
                 {activeSection && DERIVED_NOTE[activeSection]
                   ? <p className="text-[12.5px] text-ink-3 leading-relaxed">{DERIVED_NOTE[activeSection]}</p>
-                  : <p className="text-[12.5px] text-ink-4 leading-relaxed">Click the lanes, timeline, &ldquo;what you get,&rdquo; analytics, or the price on the page to see where each one comes from.</p>}
+                  : <p className="text-[12.5px] text-ink-4 leading-relaxed">Click the timeline, &ldquo;what you get,&rdquo; analytics, or the price on the page to see where each one comes from.</p>}
               </div>
 
               {/* More details: tagline, expectation, best for, FAQ */}
@@ -860,8 +918,9 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   analytics={builtinFacts.analytics}
                   heroImage={(form.heroImage || base.heroImage) || null}
                   googleTile={builtinFacts.googleTile}
-                  lanes={builtinFacts.lanes}
-                  laneDetail={builtinFacts.laneDetail}
+                  lanes={form.lanes.length ? form.lanes.map((l) => ({ label: l.label || 'Untitled', price: l.price, pro: l.pro })) : builtinFacts.lanes}
+                  selectedLane={form.lanes.length ? laneIdx : undefined}
+                  laneDetail={form.lanes.length ? (form.lanes[laneIdx]?.detail || undefined) : builtinFacts.laneDetail}
                   timeline={builtinFacts.timeline}
                   interactive
                   active={activeSection}

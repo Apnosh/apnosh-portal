@@ -14,6 +14,17 @@
 import { campaignContent, type CampaignContent } from './campaign-content'
 import type { FunnelStage } from './create-catalog'
 
+/** One "how it's done" lane (a tab in the product-page picker). Display/draft only for now. */
+export interface CampaignLane {
+  label: string
+  /** Free-text price shown under the tab: "$100", "Free", "Included". */
+  price: string
+  /** Pro badge on the tab. */
+  pro?: boolean
+  /** The detail line shown under the tabs when this lane is selected. */
+  detail?: string
+}
+
 /** Sparse edited fields for one campaign. Absent/empty = use the code default. */
 export interface ContentOverride {
   title?: string
@@ -27,6 +38,28 @@ export interface ContentOverride {
   faq?: { q: string; a: string }[]
   /** Re-tagged product-page funnel chips. Absent = the card's built-in stages. */
   stages?: FunnelStage[]
+  /** Edited "how it's done" lanes. Absent = the card's built-in lanes. Draft/display only. */
+  lanes?: CampaignLane[]
+}
+
+/** Keep only well-formed lanes (a real label), trimmed, capped — the store contract. */
+export function cleanLanes(v: unknown): CampaignLane[] {
+  if (!Array.isArray(v)) return []
+  const out: CampaignLane[] = []
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object') continue
+    const r = raw as Record<string, unknown>
+    const label = typeof r.label === 'string' ? r.label.trim() : ''
+    if (!label) continue
+    out.push({
+      label,
+      price: typeof r.price === 'string' && r.price.trim() ? r.price.trim() : 'Free',
+      pro: !!r.pro,
+      detail: typeof r.detail === 'string' && r.detail.trim() ? r.detail.trim() : undefined,
+    })
+    if (out.length >= 4) break
+  }
+  return out
 }
 
 /** item_id -> its edited fields. Only edited campaigns appear at all. */
@@ -55,5 +88,6 @@ export function contentFor(itemId: string, overrides?: ContentOverrideMap | null
     if (faq.length) merged.faq = faq
   }
   if (Array.isArray(o.stages) && o.stages.length) merged.stages = o.stages
+  if (Array.isArray(o.lanes) && o.lanes.length) merged.lanes = o.lanes
   return merged
 }
