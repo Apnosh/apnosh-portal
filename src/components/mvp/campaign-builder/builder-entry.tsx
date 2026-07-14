@@ -25,6 +25,7 @@ import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
 import CampaignPlanFlow from '@/components/campaigns/plan-flow/campaign-plan-flow'
 import PlanAnalyzing from '@/components/campaigns/plan-flow/plan-analyzing'
 import OrderConfirmed from '@/components/campaigns/plan-flow/order-confirmed'
+import CampaignCheckout from './campaign-checkout'
 // apnosh-campaign is intentionally .jsx (untyped design code). TS infers a
 // narrow props type from its defaults, so re-type it to the real prop surface.
 import ApnoshCampaignRaw from './apnosh-campaign'
@@ -132,6 +133,8 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   const [analyzing, setAnalyzing] = useState(false)
   // After approve+ship: the "you're all set" confirmation screen (holds the new campaign id + its draft).
   const [confirmed, setConfirmed] = useState<{ id: string; draft: CampaignDraft; receipt: CampaignReceipt } | null>(null)
+  // The cart checkout page (charge-at-checkout): holds the pre-merged draft while the owner pays.
+  const [checkout, setCheckout] = useState<{ draft: CampaignDraft } | null>(null)
 
   // Real signals for the product page's "why this, for you" line. Same instant-first
   // pattern as the rec cache: last bundle renders immediately from localStorage, a
@@ -412,20 +415,15 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
     }
   }
 
-  // The plan (cart) checkout: the store hands up ONE pre-merged draft (composePlanCampaign)
-  // and it ships through the SAME rail as Buy now. On success the plan clears and the owner
-  // lands on the new campaign's "Get it ready" page — the same post-ship destination Buy
-  // now hands off to. On failure nothing shipped and the plan is untouched; retry is safe.
+  // The plan (cart) checkout: the store hands up ONE pre-merged draft (composePlanCampaign) and we
+  // open the real checkout page (full bill + card). The charge happens there; on a successful
+  // charge the campaign ships (saveAndShip, inside CampaignCheckout), the plan clears, and the
+  // owner lands on the new campaign's "Get it ready" page. Returning true just means the checkout
+  // page opened — the store covers itself while it's up.
   const onCheckout = async (draft: CampaignDraft): Promise<boolean> => {
     if (!client?.id) return false
-    try {
-      const id = await saveAndShip({ clientId: client.id, draft })
-      clearPlan()
-      router.push(`/dashboard/campaigns/${id}/ready`)
-      return true
-    } catch {
-      return false
-    }
+    setCheckout({ draft })
+    return true
   }
 
   // From the "you're all set" screen: head to the canonical "Get it ready" needs page, or skip to the campaign.
@@ -495,6 +493,15 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
           doneSetupIds={profile?.doneSetup ?? []}
           onSetup={goToSetup}
           onSkip={goToCampaign}
+        />
+      )}
+      {checkout && client?.id && (
+        <CampaignCheckout
+          clientId={client.id}
+          draft={checkout.draft}
+          restaurant={client.name || 'your restaurant'}
+          onSuccess={(id) => { clearPlan(); setCheckout(null); router.push(`/dashboard/campaigns/${id}/ready`) }}
+          onCancel={() => setCheckout(null)}
         />
       )}
     </>

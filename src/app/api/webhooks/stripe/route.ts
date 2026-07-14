@@ -151,6 +151,12 @@ async function dispatch(event: Stripe.Event, supabase: AdminClient) {
     case 'payment_method.attached':
       return handlePaymentMethodAttached(supabase, event.data.object as Stripe.PaymentMethod)
 
+    // --- Campaign checkout (charge-at-checkout) ---
+    case 'payment_intent.succeeded':
+      return handleCampaignPaymentSucceeded(supabase, event.data.object as Stripe.PaymentIntent)
+    case 'payment_intent.payment_failed':
+      return handleCampaignPaymentFailed(supabase, event.data.object as Stripe.PaymentIntent)
+
     // --- Legacy (orders self-serve flow) ---
     case 'checkout.session.completed':
       return handleCheckoutComplete(supabase, event.data.object as Stripe.Checkout.Session)
@@ -667,6 +673,40 @@ async function handlePaymentMethodAttached(
       payment_method_last4: card?.last4 ?? null,
     })
     .eq('stripe_customer_id', customerId)
+}
+
+// ============================================================
+// Campaign checkout (charge-at-checkout) — PaymentIntent backstop
+// ============================================================
+// The happy path is reconciled synchronously by /api/checkout/complete (verify → ship → link).
+// These handlers are a safety net for the paid-but-tab-closed edge: they only advance a row that
+// is STILL pending, so they never clobber a completed+linked payment. An unshipped paid row keeps
+// its draft snapshot for recovery.
+
+async function handleCampaignPaymentSucceeded(
+  supabase: AdminClient,
+  pi: Stripe.PaymentIntent,
+) {
+  if (pi.metadata?.kind !== 'campaign_checkout') return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('campaign_payments')
+    .update({ status: 'paid', paid_at: unixToIso(pi.created) })
+    .eq('stripe_payment_intent_id', pi.id)
+    .eq('status', 'pending')
+}
+
+async function handleCampaignPaymentFailed(
+  supabase: AdminClient,
+  pi: Stripe.PaymentIntent,
+) {
+  if (pi.metadata?.kind !== 'campaign_checkout') return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('campaign_payments')
+    .update({ status: 'failed' })
+    .eq('stripe_payment_intent_id', pi.id)
+    .eq('status', 'pending')
 }
 
 // ============================================================

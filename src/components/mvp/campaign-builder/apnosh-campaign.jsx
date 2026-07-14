@@ -4377,18 +4377,18 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
               <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
             </div>
           </div>
-          {/* What happens next — every line true to the real rail: one campaign, delivery-gated billing. */}
+          {/* What happens next — true to the real rail: one campaign, charge-at-checkout on the next step. */}
           <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "13px 15px" }}>
-            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, marginBottom: 6 }}>What happens when you confirm</div>
+            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, marginBottom: 6 }}>What happens next</div>
             <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#3f7d6a", lineHeight: 1.55 }}>
-              Everything here starts as one campaign, so you track it all in one place. The work begins right away. You pay for each piece only when it is delivered.{totals.perMonth > 0 ? " Monthly items keep running until you stop them." : ""}
+              Everything here becomes one campaign, so you track it all in one place. Next you&apos;ll add your card and pay the total above, then your team starts right away.{totals.perMonth > 0 ? " Monthly items are billed separately each month until you stop them." : ""}
             </div>
           </div>
         </div>
         <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
           {error && <div role="alert" style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: "#b3462e", textAlign: "center", marginBottom: 8 }}>{error}</div>}
           <button onClick={confirmShip} disabled={busy} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: busy ? "default" : "pointer", background: busy ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
-            {busy ? "Starting your plan…" : "Confirm and start"}
+            {busy ? "Opening checkout…" : "Continue to payment"}
           </button>
           <button onClick={() => { setStage("list"); setError(null); }} disabled={busy} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Go back</button>
         </div>
@@ -4487,8 +4487,8 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
             <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
             <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
           </div>
-          {/* Honest: tapping Check out only opens the last look; work starts on Confirm there. */}
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Includes a 10% service fee. Plus taxes at checkout. Nothing starts or bills yet.</div>
+          {/* Honest: Check out opens the review, then a real payment page; nothing bills until you pay there. */}
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Includes a 10% service fee, plus tax. You&apos;ll review your order and pay next.</div>
           <button onClick={startCheckout} disabled={blocked} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: blocked ? "default" : "pointer", background: blocked ? TOKENS.dash : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? "none" : "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>Check out</button>
           <button onClick={onBack} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Keep shopping</button>
         </div>
