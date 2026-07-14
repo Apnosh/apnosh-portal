@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CAMPAIGN_CONTENT, type CampaignContent } from '@/lib/campaigns/data/campaign-content'
-import { contentFor, type ContentOverride, type ContentOverrideMap, type CampaignLane } from '@/lib/campaigns/data/content-overrides'
+import { contentFor, type ContentOverride, type ContentOverrideMap, type CampaignLane, type CampaignRush } from '@/lib/campaigns/data/content-overrides'
 import {
   DB_CADENCES, DB_CARD_TYPES, DB_SHELVES, DB_STAGES,
   isBuiltinCampaignId, isValidCampaignSlug, slugFromTitle,
@@ -41,7 +41,7 @@ const DUR_CADENCE: Record<string, string> = { setup: 'Setup', once: 'One-time', 
 type Faq = { q: string; a: string }
 type FormState = {
   title: string; tagline: string; description: string; promise: string; why: string;
-  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]; whatYouGet: string[]
+  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]; whatYouGet: string[]; rush: CampaignRush | null
 }
 
 type TextKey = 'title' | 'tagline' | 'description' | 'promise' | 'why' | 'expectation' | 'bestFor'
@@ -65,6 +65,7 @@ function formFromOverride(o: ContentOverride | undefined): FormState {
     lanes: (o?.lanes ?? []).map((l) => ({ ...l })),
     requirements: [...(o?.requirements ?? [])],
     whatYouGet: [...(o?.whatYouGet ?? [])],
+    rush: o?.rush ? { ...o.rush } : null,
   }
 }
 
@@ -84,7 +85,7 @@ type DbForm = FormState & {
 function emptyDbForm(): DbForm {
   return {
     id: '', title: '', tagline: '', description: '', promise: '', why: '',
-    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [], whatYouGet: [],
+    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [], whatYouGet: [], rush: null,
     type: 'task', cad: 'once', shelf: 'aware', stages: [],
     serviceIds: [], addonServiceIds: [], status: 'draft',
   }
@@ -96,7 +97,7 @@ function dbFormFrom(c: DbCampaign): DbForm {
     promise: c.promise, why: c.why, expectation: c.expectation,
     heroImage: c.heroImage ?? '', bestFor: c.bestFor ?? '',
     faq: (c.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
-    lanes: [], requirements: [], whatYouGet: [],
+    lanes: [], requirements: [], whatYouGet: [], rush: null,
     type: c.type, cad: c.cad, shelf: c.shelf, stages: [...c.stages],
     serviceIds: [...c.serviceIds], addonServiceIds: [...c.addonServiceIds],
     status: c.status,
@@ -1074,6 +1075,35 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                 {activeSection && DERIVED_NOTE[activeSection]
                   ? <p className="text-[12.5px] text-ink-3 leading-relaxed">{DERIVED_NOTE[activeSection]}</p>
                   : <p className="text-[12.5px] text-ink-4 leading-relaxed">Click the timeline, analytics, or the price on the page to see where each one comes from.</p>}
+              </div>
+
+              {/* Rush option — a flat fee to deliver sooner, offered in the cart as "Get it faster" */}
+              <div className="rounded-xl border border-ink-6 bg-white p-4 lg:p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13.5px] font-semibold text-ink">Rush option</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-amber-700 bg-amber-100 rounded px-1.5 py-0.5">Draft · not billed yet</span>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                    <input type="checkbox" checked={!!form.rush} onChange={(e) => set({ rush: e.target.checked ? (form.rush ?? { fee: 50, days: 3 }) : null })} />
+                    <span className="text-[12.5px] text-ink">Offer it</span>
+                  </label>
+                </div>
+                {form.rush ? (
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <label className="text-[12px] font-semibold text-ink block mb-1.5">Rush fee ($)</label>
+                      <input type="number" min={0} value={form.rush.fee} onChange={(e) => set({ rush: { fee: Math.max(0, Number(e.target.value) || 0), days: form.rush?.days ?? 3 } })} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className="text-[12px] font-semibold text-ink block mb-1.5">Days faster</label>
+                      <input type="number" min={1} value={form.rush.days} onChange={(e) => set({ rush: { fee: form.rush?.fee ?? 0, days: Math.max(1, Number(e.target.value) || 1) } })} className={inputCls} />
+                    </div>
+                    <p className="col-span-2 text-[11px] text-ink-4">Shown in the cart as &ldquo;Get it faster&rdquo;: +${form.rush.fee || 0}, delivered about {form.rush.days || 0} day{(form.rush.days || 0) === 1 ? '' : 's'} sooner. Not charged yet.</p>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-ink-4 mt-2">Off. Turn it on to let owners pay a flat fee for faster delivery.</p>
+                )}
               </div>
 
               {/* More details: tagline, expectation, best for, FAQ */}

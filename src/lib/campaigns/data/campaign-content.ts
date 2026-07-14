@@ -19,7 +19,7 @@
  */
 
 import type { CreateCatalogId, FunnelStage } from './create-catalog'
-import type { CampaignLane } from './content-overrides'
+import type { CampaignLane, CampaignRush } from './content-overrides'
 
 export interface CampaignContent {
   id: CreateCatalogId
@@ -52,6 +52,8 @@ export interface CampaignContent {
   requirements?: string[]
   /** Admin-edited "what you get" base list. Absent = derived from services. */
   whatYouGet?: string[]
+  /** A configurable rush option (flat fee to deliver sooner). Absent = no rush offered. */
+  rush?: CampaignRush
 }
 
 export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
