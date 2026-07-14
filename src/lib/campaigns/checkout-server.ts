@@ -8,6 +8,7 @@
  * insufficient, tax is 0 and checkout still works (subtotal + service fee only).
  */
 import 'server-only'
+import type Stripe from 'stripe'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { stripe, getOrCreateStripeCustomerForClient } from '@/lib/stripe'
 
@@ -84,6 +85,28 @@ export async function computeTaxCents(opts: {
     return { taxCents: calc.tax_amount_exclusive ?? 0, calculationId: calc.id }
   } catch {
     return { taxCents: 0, calculationId: null }
+  }
+}
+
+/** The customer's card on file (default payment method, else the most recent card), or null.
+ *  Reads Stripe directly so it never depends on webhook-mirror timing. */
+export async function getSavedCard(customerId: string): Promise<{ id: string; brand: string; last4: string } | null> {
+  try {
+    const cust = (await stripe.customers.retrieve(customerId)) as Stripe.Customer
+    if (cust.deleted) return null
+    const def = cust.invoice_settings?.default_payment_method
+    const defId = typeof def === 'string' ? def : def?.id
+    let pm: Stripe.PaymentMethod | null = null
+    if (defId) {
+      pm = await stripe.paymentMethods.retrieve(defId)
+    } else {
+      const list = await stripe.paymentMethods.list({ customer: customerId, type: 'card', limit: 1 })
+      pm = list.data[0] ?? null
+    }
+    if (pm?.card) return { id: pm.id, brand: pm.card.brand, last4: pm.card.last4 }
+    return null
+  } catch {
+    return null
   }
 }
 

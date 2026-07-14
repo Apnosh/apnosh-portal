@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
 import { checkoutBill } from '@/lib/campaigns/checkout-bill'
-import { ensureCheckoutCustomer, computeTaxCents, paymentsTable } from '@/lib/campaigns/checkout-server'
+import { ensureCheckoutCustomer, computeTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
 import type { CampaignDraft } from '@/lib/campaigns/types'
 
 function denied(reason: string | undefined) {
@@ -74,6 +74,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Checkout is not set up yet (payments table missing). Apply migration 215 and try again.' }, { status: 500 })
     }
 
+    // A card already on file → the pay page offers a one-tap "Pay with •••• last4".
+    const savedCard = await getSavedCard(cust.customerId)
+
     return NextResponse.json({
       paymentIntentId: pi.id,
       clientSecret: pi.client_secret,
@@ -85,6 +88,7 @@ export async function POST(req: NextRequest) {
         totalCents,
       },
       monthlyCents: bill.perMonthCents,
+      savedCard,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })

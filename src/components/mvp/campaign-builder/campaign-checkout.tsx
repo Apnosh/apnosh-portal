@@ -31,6 +31,7 @@ function fmt(cents: number): string {
 }
 
 interface Breakdown { subtotalCents: number; serviceFeeCents: number; taxCents: number; totalCents: number }
+interface SavedCard { brand: string; last4: string }
 interface PrepareResult {
   free?: boolean
   paymentIntentId?: string
@@ -38,6 +39,7 @@ interface PrepareResult {
   publishableKey?: string | null
   breakdown: Breakdown
   monthlyCents?: number
+  savedCard?: SavedCard | null
 }
 
 export interface CampaignCheckoutProps {
@@ -103,6 +105,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, onSucces
               paymentIntentId={prep.paymentIntentId!}
               initialBreakdown={prep.breakdown}
               monthlyCents={prep.monthlyCents ?? 0}
+              savedCard={prep.savedCard ?? null}
               onSuccess={onSuccess}
             />
           </Elements>
@@ -170,28 +173,35 @@ function BillCard({ b, monthlyCents, taxPending }: { b: Breakdown; monthlyCents:
   )
 }
 
-function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdown, monthlyCents, onSuccess }: {
+const CARD_BRANDS: Record<string, string> = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex', discover: 'Discover', diners: 'Diners', jcb: 'JCB', unionpay: 'UnionPay' }
+const brandLabel = (b: string) => CARD_BRANDS[b?.toLowerCase()] ?? (b ? b[0].toUpperCase() + b.slice(1) : 'Card')
+
+function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdown, monthlyCents, savedCard, onSuccess }: {
   clientId: string
   draft: CampaignDraft
   restaurant?: string
   paymentIntentId: string
   initialBreakdown: Breakdown
   monthlyCents: number
+  savedCard: SavedCard | null
   onSuccess: (campaignId: string) => void
 }) {
   const stripe = useStripe()
   const elements = useElements()
   const [bill, setBill] = useState<Breakdown>(initialBreakdown)
   const [taxPending, setTaxPending] = useState(initialBreakdown.taxCents === 0)
+  // 'saved' = one-tap card on file; 'new' = enter a card. Default to the saved card when there is one.
+  const [mode, setMode] = useState<'saved' | 'new'>(savedCard ? 'saved' : 'new')
   const [busy, setBusy] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Once the campaign has shipped, a retry must NOT ship again — only re-link the payment.
+  // A retry after a partial failure must never double-charge or double-ship: these gate each stage.
+  const paidRef = useRef(false)
   const shippedIdRef = useRef<string | null>(null)
   const billing = useRef<{ name?: string; address?: Record<string, unknown> }>({})
   const taxSeq = useRef(0)
 
-  // Recompute tax + update the charge when the billing address is complete.
+  // Recompute tax + update the charge when the billing address is complete (new-card path).
   const onAddress = async (e: StripeAddressElementChangeEvent) => {
     billing.current = { name: e.value.name, address: e.value.address as unknown as Record<string, unknown> }
     if (!e.complete) return
@@ -207,40 +217,17 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
     } catch { /* keep the last shown total; the charge uses the server's authoritative amount */ }
   }
 
-  const placeOrder = async () => {
-    if (!stripe || !elements || busy) return
-    setBusy(true); setError(null)
-
-    // If we already shipped on a prior attempt, skip straight to linking + finishing.
+  // Ship the campaign (once) + link the payment, then hand off. Shared by both charge paths.
+  const finishOrder = async () => {
     if (!shippedIdRef.current) {
-      setStatus('Charging your card…')
-      const { error: submitErr } = await elements.submit()
-      if (submitErr) { setError(submitErr.message || 'Please check your card details.'); setBusy(false); setStatus(null); return }
-      const { error: payErr, paymentIntent } = await stripe.confirmPayment({
-        elements,
-        redirect: 'if_required',
-        confirmParams: {
-          return_url: `${window.location.origin}/dashboard/campaigns`,
-          payment_method_data: { billing_details: { name: billing.current.name, address: billing.current.address as never } },
-        },
-      })
-      if (payErr) { setError(payErr.message || 'That payment didn’t go through. You were not charged.'); setBusy(false); setStatus(null); return }
-      if (!paymentIntent || paymentIntent.status !== 'succeeded') {
-        setError('Payment didn’t complete. You were not charged.'); setBusy(false); setStatus(null); return
-      }
-
-      // Paid. Now place the order (create + ship the campaign) through the normal rail.
       setStatus('Placing your order…')
       try {
-        const id = await saveAndShip({ clientId, draft })
-        shippedIdRef.current = id
+        shippedIdRef.current = await saveAndShip({ clientId, draft })
       } catch {
         setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return
       }
     }
-
-    // Link the payment to the campaign + commit tax (best-effort; the order is already placed).
     setStatus('Finishing up…')
     try {
       await fetch('/api/checkout/complete', {
@@ -252,21 +239,88 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
     onSuccess(shippedIdRef.current!)
   }
 
+  const placeOrder = async () => {
+    if (!stripe || busy) return
+    setBusy(true); setError(null)
+
+    // Already paid on a prior attempt → don't charge again, just finish placing the order.
+    if (paidRef.current || shippedIdRef.current) { await finishOrder(); return }
+
+    if (mode === 'saved') {
+      setStatus('Charging your card…')
+      try {
+        const res = await fetch('/api/checkout/confirm-saved', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paymentIntentId }),
+        })
+        const j = (await res.json().catch(() => ({}))) as { status?: string; clientSecret?: string; error?: string }
+        if (j.status === 'requires_action' && j.clientSecret) {
+          const { error: naErr, paymentIntent } = await stripe.handleNextAction({ clientSecret: j.clientSecret })
+          if (naErr || paymentIntent?.status !== 'succeeded') { setError(naErr?.message || 'We couldn’t verify that card. Try a different card.'); setBusy(false); setStatus(null); return }
+        } else if (j.status !== 'succeeded') {
+          setError(j.error || 'That card was declined. Try a different card.'); setBusy(false); setStatus(null); return
+        }
+      } catch {
+        setError('Payment didn’t go through. You were not charged.'); setBusy(false); setStatus(null); return
+      }
+      paidRef.current = true
+      await finishOrder(); return
+    }
+
+    // New-card path (Stripe Payment Element).
+    if (!elements) { setBusy(false); return }
+    setStatus('Charging your card…')
+    const { error: submitErr } = await elements.submit()
+    if (submitErr) { setError(submitErr.message || 'Please check your card details.'); setBusy(false); setStatus(null); return }
+    const { error: payErr, paymentIntent } = await stripe.confirmPayment({
+      elements,
+      redirect: 'if_required',
+      confirmParams: {
+        return_url: `${window.location.origin}/dashboard/campaigns`,
+        payment_method_data: { billing_details: { name: billing.current.name, address: billing.current.address as never } },
+      },
+    })
+    if (payErr) { setError(payErr.message || 'That payment didn’t go through. You were not charged.'); setBusy(false); setStatus(null); return }
+    if (!paymentIntent || paymentIntent.status !== 'succeeded') { setError('Payment didn’t complete. You were not charged.'); setBusy(false); setStatus(null); return }
+    paidRef.current = true
+    await finishOrder()
+  }
+
   return (
     <>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 16px' }}>
         {restaurant && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10 }}>Placing your order for <span style={{ fontWeight: 600, color: INK }}>{restaurant}</span></div>}
-        <BillCard b={bill} monthlyCents={monthlyCents} taxPending={taxPending} />
+        <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} />
 
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: INK, margin: '2px 0 8px' }}>Billing address</div>
-        <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 16, padding: '14px 14px 6px', marginBottom: 16 }}>
-          <AddressElement options={{ mode: 'billing' }} onChange={onAddress} />
-        </div>
+        {mode === 'saved' && savedCard ? (
+          <>
+            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: INK, margin: '2px 0 8px' }}>Payment</div>
+            <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 16, padding: '14px 15px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 11 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(74,189,152,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={MINT_DARK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><path d="M2 10h20" /></svg>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: 600, color: INK }}>{brandLabel(savedCard.brand)} ·· {savedCard.last4}</div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB }}>Card on file</div>
+              </div>
+            </div>
+            <button onClick={() => { setMode('new'); setError(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: MINT_DARK, padding: 0, marginBottom: 14 }}>Use a different card</button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: INK, margin: '2px 0 8px' }}>Billing address</div>
+            <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 16, padding: '14px 14px 6px', marginBottom: 16 }}>
+              <AddressElement options={{ mode: 'billing' }} onChange={onAddress} />
+            </div>
 
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: INK, margin: '2px 0 8px' }}>Card</div>
-        <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 16, padding: '14px', marginBottom: 12 }}>
-          <PaymentElement options={{ fields: { billingDetails: { name: 'never', address: 'never' } } }} />
-        </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '2px 0 8px' }}>
+              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: INK }}>Card</span>
+              {savedCard && <button onClick={() => { setMode('saved'); setError(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: MINT_DARK, padding: 0 }}>Use card on file</button>}
+            </div>
+            <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 16, padding: '14px', marginBottom: 12 }}>
+              <PaymentElement options={{ fields: { billingDetails: { name: 'never', address: 'never' } } }} />
+            </div>
+          </>
+        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={SUB} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
