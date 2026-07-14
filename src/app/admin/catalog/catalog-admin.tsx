@@ -417,8 +417,8 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
 
           </section>
 
-          {/* pricing */}
-          <section className={panel + ' order-4'} onMouseEnter={() => setHl('footer')} onMouseLeave={() => setHl(null)}>
+          {/* pricing — sits right under 'Who can do it' since each lane carries a price */}
+          <section className={panel + ' order-3'} onMouseEnter={() => setHl('footer')} onMouseLeave={() => setHl(null)}>
           <div>
             <div className="flex items-center justify-between"><span className={panelHead}>Price</span><button onClick={addPrice} className="text-[12.5px] text-brand font-semibold">+ Add a price</button></div>
             <div className="space-y-2 mt-1.5">
@@ -449,7 +449,7 @@ function EditDrawer({ mode, row, existingIds, usage, preview, onClose, onSaved, 
           </section>
 
           {/* what's included */}
-          <section className={panel + ' order-3'} onMouseEnter={() => setHl('get')} onMouseLeave={() => setHl(null)}>
+          <section className={panel + ' order-4'} onMouseEnter={() => setHl('get')} onMouseLeave={() => setHl(null)}>
           <div>
             <span className={panelHead}>What&apos;s included</span>
             <input className={field + ' mt-1'} value={delivSummary} onChange={(e) => setDelivSummary(e.target.value)} placeholder="One-line summary of what this is" />
