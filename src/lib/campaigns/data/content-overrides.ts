@@ -12,6 +12,7 @@
  */
 
 import { campaignContent, type CampaignContent } from './campaign-content'
+import type { FunnelStage } from './create-catalog'
 
 /** Sparse edited fields for one campaign. Absent/empty = use the code default. */
 export interface ContentOverride {
@@ -24,6 +25,8 @@ export interface ContentOverride {
   heroImage?: string
   bestFor?: string
   faq?: { q: string; a: string }[]
+  /** Re-tagged product-page funnel chips. Absent = the card's built-in stages. */
+  stages?: FunnelStage[]
 }
 
 /** item_id -> its edited fields. Only edited campaigns appear at all. */
@@ -51,5 +54,6 @@ export function contentFor(itemId: string, overrides?: ContentOverrideMap | null
     const faq = o.faq.filter((f) => f && filled(f.q) && filled(f.a)).map((f) => ({ q: f.q.trim(), a: f.a.trim() }))
     if (faq.length) merged.faq = faq
   }
+  if (Array.isArray(o.stages) && o.stages.length) merged.stages = o.stages
   return merged
 }

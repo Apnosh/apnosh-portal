@@ -18,7 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
-import { rowToOverride, type ContentOverrideRow } from '@/lib/campaigns/content-overrides-server'
+import { rowToOverride, cleanStages, type ContentOverrideRow } from '@/lib/campaigns/content-overrides-server'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -76,6 +76,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .filter((f) => f && typeof f.q === 'string' && f.q.trim() && typeof f.a === 'string' && f.a.trim())
     .map((f) => ({ q: (f.q as string).trim(), a: (f.a as string).trim() }))
 
+  const stages = cleanStages(b.stages)
   const row = {
     title: clean(b.title),
     tagline: clean(b.tagline),
@@ -86,6 +87,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     hero_image: clean(b.heroImage),
     best_for: clean(b.bestFor),
     faq: faq.length ? faq : null,
+    stages: stages.length ? stages : null,
   }
 
   // Same copy rule the code records live under: no em dashes reach the store.
@@ -105,11 +107,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ override: {}, deleted: true })
   }
 
-  const { data, error } = await admin
-    .from('catalog_content_overrides')
-    .upsert({ item_id: id, ...row, updated_at: new Date().toISOString(), updated_by: auth.userId })
-    .select('*')
-    .maybeSingle()
+  const payload = { item_id: id, ...row, updated_at: new Date().toISOString(), updated_by: auth.userId }
+  let { data, error } = await admin.from('catalog_content_overrides').upsert(payload).select('*').maybeSingle()
+  // If migration 210 (the `stages` column) is not applied yet, save everything else so the CMS
+  // still works — the tags just won't persist until the owner runs the migration.
+  if (error && (error.code === '42703' || /column .*stages|stages.* does not exist/i.test(error.message || ''))) {
+    const { stages: _stages, ...noStages } = payload
+    void _stages
+    ;({ data, error } = await admin.from('catalog_content_overrides').upsert(noStages).select('*').maybeSingle())
+  }
   if (error) {
     if (tableMissing(error)) return NextResponse.json({ error: SETUP_MSG }, { status: 500 })
     return NextResponse.json({ error: error.message }, { status: 500 })

@@ -18,7 +18,7 @@
  * version exists. CLIENT-SAFE: pure data, no server-only.
  */
 
-import type { CreateCatalogId } from './create-catalog'
+import type { CreateCatalogId, FunnelStage } from './create-catalog'
 
 export interface CampaignContent {
   id: CreateCatalogId
@@ -42,6 +42,9 @@ export interface CampaignContent {
   bestFor?: string
   /** Optional owner FAQ (a later content pass). */
   faq?: { q: string; a: string }[]
+  /** Admin-overridable product-page funnel chips. Absent = use the card's built-in stages
+   *  (ITEM_STAGES). Display-only: it re-tags the PDP, not the deeper funnel/plan logic. */
+  stages?: FunnelStage[]
 }
 
 export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {

@@ -2320,11 +2320,12 @@ const STAGE_ANALYTICS = {
 const ITEM_ANALYTICS = {
   gbp: ["Google search views", "Google map views", "Direction requests", "Calls", "Website clicks"],
 };
-function analyticsToTrack(p) {
+function analyticsToTrack(p, stagesOverride) {
   const id = p && p.id;
   if (id && ITEM_ANALYTICS[id]) return ITEM_ANALYTICS[id];
+  const stages = (Array.isArray(stagesOverride) && stagesOverride.length) ? stagesOverride : (ITEM_STAGES[id] || []);
   const out = [];
-  for (const s of ITEM_STAGES[id] || []) for (const m of STAGE_ANALYTICS[s] || []) if (!out.includes(m)) out.push(m);
+  for (const s of stages) for (const m of STAGE_ANALYTICS[s] || []) if (!out.includes(m)) out.push(m);
   return out.slice(0, 6);
 }
 
@@ -2981,6 +2982,9 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   // no per-card copy lives in this JSX. An empty override field falls back to the code record.
   const content = contentFor(itemId, CONTENT_OVERRIDES);
   const copy = content ? { promise: content.promise, why: content.why, expect: content.expectation } : { promise: p.sub, why: p.sub, expect: "" };
+  // Admin can re-tag the product-page funnel chips (content.stages override); else the card's
+  // built-in ITEM_STAGES. Display-only: drives the chip row + which analytics show, not the plan.
+  const effStages = (content && Array.isArray(content.stages) && content.stages.length) ? content.stages : (ITEM_STAGES[itemId] || []);
   const doerCfg = doerSlotFor(itemId);
   const [doer, setDoer] = useState(initialDoer || (doerCfg ? doerCfg.v : null));
   // Personalized only from THIS client's real signals; otherwise the authored fallback.
@@ -3110,7 +3114,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   // Add-ons are paused for now (owner) — the bottom section shows the Insights
   // metrics this campaign is built to lift instead ("Analytics to track").
   const showAddOns = false;
-  const analytics = analyticsToTrack(p);
+  const analytics = analyticsToTrack(p, effStages);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -3126,7 +3130,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
           <div className="apnrise" style={{ position: "relative", marginTop: 14 }}>
             {/* Chips: the funnel stage(s) this moves + the cadence. */}
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-              {(ITEM_STAGES[p.id] || []).map((s) => (
+              {effStages.map((s) => (
                 <span key={s} style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: TOKENS.mintDark, background: "rgba(74,189,152,0.14)", borderRadius: 8, padding: "4px 9px" }}>{STAGE_TAG_LABEL[s] || s}</span>
               ))}
               <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: "#7c837e", background: "rgba(20,30,26,0.05)", borderRadius: 8, padding: "4px 9px" }}>{CADENCE_TAG[p.cad] || "Plan"}</span>

@@ -17,6 +17,9 @@ import type { GoalKey } from '../types'
  */
 export type FunnelStage = 'aware' | 'interest' | 'actions' | 'orders' | 'back'
 
+/** All funnel stages in funnel order — the closed set for tag pickers + validators. */
+export const FUNNEL_STAGES: readonly FunnelStage[] = ['aware', 'interest', 'actions', 'orders', 'back']
+
 /** Owner-facing tag words — the home-funnel stage labels (short form for chips). */
 export const STAGE_TAG_LABEL: Record<FunnelStage, string> = {
   aware: 'Awareness',

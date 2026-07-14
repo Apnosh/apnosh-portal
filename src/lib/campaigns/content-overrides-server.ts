@@ -15,7 +15,14 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CAMPAIGN_CONTENT, type CampaignContent } from './data/campaign-content'
 import { contentFor, type ContentOverride, type ContentOverrideMap } from './data/content-overrides'
-import type { CreateCatalogId } from './data/create-catalog'
+import { FUNNEL_STAGES, type CreateCatalogId, type FunnelStage } from './data/create-catalog'
+
+/** Keep only real funnel-stage ids, in order, no dupes — the store contract for chips. */
+export function cleanStages(v: unknown): FunnelStage[] {
+  if (!Array.isArray(v)) return []
+  const set = new Set(v.filter((s): s is FunnelStage => typeof s === 'string' && (FUNNEL_STAGES as string[]).includes(s)))
+  return FUNNEL_STAGES.filter((s) => set.has(s))
+}
 
 /** The raw catalog_content_overrides row shape (all content columns nullable). */
 export interface ContentOverrideRow {
@@ -29,6 +36,7 @@ export interface ContentOverrideRow {
   hero_image: string | null
   best_for: string | null
   faq: unknown
+  stages?: unknown
   updated_at?: string | null
   updated_by?: string | null
 }
@@ -54,6 +62,8 @@ export function rowToOverride(row: ContentOverrideRow): ContentOverride {
       .map((f) => ({ q: (f.q as string).trim(), a: (f.a as string).trim() }))
     if (faq.length) o.faq = faq
   }
+  const stages = cleanStages(row.stages)
+  if (stages.length) o.stages = stages
   return o
 }
 
