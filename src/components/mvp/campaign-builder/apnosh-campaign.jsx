@@ -4234,6 +4234,36 @@ function PlanItemCard({ it, tier, leaving, onOpen, onRemove }) {
   );
 }
 
+/** The whole plan's delivery estimate as a critical PATH (services run in parallel, so the
+ *  max window, never a sum). Real turnarounds only (gbp-setup + each item's add-on services);
+ *  items with no dated data fall to an honest word range. Self-serve lanes are owner-paced. */
+function planDelivery(items) {
+  let workMax = 0, gate = null, anyRecurring = false, anyDoneForYou = false, anySelfServe = false;
+  for (const it of items) {
+    const lane = doerSlotFor(it.itemId) ? gbpLaneOf(it.doer) : null;
+    if (lane === "diy" || lane === "ai") { anySelfServe = true; continue; }
+    anyDoneForYou = true;
+    const svcs = it.itemId === "gbp" ? ["gbp-setup", ...it.options] : [...it.options];
+    for (const id of svcs) {
+      const t = SERVICE_TURNAROUND[id];
+      if (!t) continue;
+      if (t.class === "setup") { workMax = Math.max(workMax, t.business.max); if (t.gate && t.gate.addDays && (!gate || t.gate.addDays.max > gate.addDays.max)) gate = t.gate; }
+      else if (t.class === "creative") workMax = Math.max(workMax, t.business.max);
+      else if (t.class === "recurring") anyRecurring = true;
+    }
+  }
+  const steps = [];
+  if (!anyDoneForYou && anySelfServe) return { steps: [{ text: "Start today and go at your own pace." }], dated: false };
+  if (workMax > 0) {
+    steps.push({ text: "Most of your plan is done", when: etaDateLabel(workMax), sub: "The team starts right after you confirm." });
+    if (gate) steps.push({ text: "Fully live, once outside checks finish", when: etaDateLabel(workMax + gate.addDays.max), sub: gate.note });
+  } else {
+    steps.push({ text: "Your plan comes together over about 1 to 2 weeks after you approve." });
+  }
+  if (anyRecurring) steps.push({ text: "Your monthly pieces start within about a week, then keep running." });
+  return { steps, dated: workMax > 0 };
+}
+
 /** The plan view (route {name:"plan"}): the collected items, the running total, and the
  *  checkout moment. Checkout composes the WHOLE plan as ONE campaign (plan-checkout.ts)
  *  and ships it through the same rail Buy now uses. Exported for the render smoke. */
@@ -4244,7 +4274,9 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
   const [error, setError] = useState(null);
   const [droppedNote, setDroppedNote] = useState(null);
   const [leaving, setLeaving] = useState(() => new Set());
+  const [rushOpen, setRushOpen] = useState(false);
   const totals = planTotals(items);
+  const delivery = planDelivery(items);
   const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
   const blocked = planProBlocked(items, tier);
   const empty = items.length === 0;
@@ -4334,14 +4366,14 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-      {header("Your plan", onBack)}
+      {header(empty ? "Your cart" : `Your cart · ${items.length} ${items.length === 1 ? "item" : "items"}`, onBack)}
       <div style={{ flex: 1, overflowY: "auto", padding: "0 18px 16px" }}>
         {droppedNote && (
           <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "11px 13px", margin: "4px 0 10px", fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.5 }}>{droppedNote}</div>
         )}
         {empty ? (
           <div style={{ textAlign: "center", padding: "64px 20px" }}>
-            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, marginBottom: 6 }}>Your plan is empty.</div>
+            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 600, color: TOKENS.ink, marginBottom: 6 }}>Your cart is empty.</div>
             <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, marginBottom: 22 }}>Anything you add shows up here.</div>
             <button onClick={onBack} className="apnpress" style={{ height: 46, padding: "0 26px", borderRadius: 23, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, boxShadow: "0 8px 22px rgba(74,189,152,0.38)", WebkitTapHighlightColor: "transparent" }}>Back to the store</button>
           </div>
@@ -4350,6 +4382,33 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
             {items.map((it) => (
               <PlanItemCard key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
             ))}
+            {/* When you'll have it — the plan's critical-path delivery estimate + an honest rush ask. */}
+            <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, padding: "14px 16px 13px", marginTop: 16 }}>
+              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, marginBottom: 11 }}>When you&apos;ll have it</div>
+              <div style={{ background: "#f7f9f8", borderRadius: 14, padding: "13px 15px" }}>
+                {delivery.steps.map((s, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, marginTop: i === 0 ? 0 : 12 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 4, background: TOKENS.mint, flexShrink: 0, marginTop: 6 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.4 }}>{s.text}{s.when ? <> by around <span style={{ fontWeight: 700 }}>{s.when}</span></> : null}</div>
+                      {s.sub && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, lineHeight: 1.45, marginTop: 2 }}>{s.sub}</div>}
+                    </div>
+                  </div>
+                ))}
+                {delivery.dated && (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 13, paddingTop: 11, borderTop: `1px solid ${TOKENS.line}` }}>
+                      <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>These are estimates.</span>
+                      <span style={{ color: TOKENS.dash }}>·</span>
+                      <button onClick={() => setRushOpen((v) => !v)} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.mintDark, WebkitTapHighlightColor: "transparent" }}>Need it faster?</button>
+                    </div>
+                    {rushOpen && (
+                      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.5, marginTop: 8 }}>Rush timing depends on the work. Confirm your plan, then tell your team you need it sooner and they will confirm what is possible. No rush fee is added automatically.</div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
             {/* Price details — the order-summary card. Every number comes from planTotals
                 (the PDP-exact math), never recomputed here. */}
             <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, padding: "14px 16px 13px", marginTop: 16 }}>
