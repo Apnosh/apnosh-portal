@@ -32,6 +32,7 @@ import { whatYouGetForServices, whatYouGet } from '@/lib/campaigns/builder/what-
 import { requirementsForServices, requirementsFor } from '@/lib/campaigns/data/campaign-requirements'
 import { shapeFor } from '@/lib/campaigns/builder/compose-plan'
 import { analyticsForStages } from '@/lib/campaigns/data/stage-analytics'
+import { campaignTimelineSteps } from '@/lib/campaigns/data/campaign-timeline'
 import { ProductPagePreview } from '../product-page-preview'
 
 /** A campaign's cadence chip, worded like the store, from its compose-plan duration. */
@@ -312,13 +313,22 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
     if (!editId) return null
     const stages = CREATE_CATALOG.find((c) => c.id === editId)?.stages ?? []
     const shape = shapeFor(editId)
+    const price = priceLabelForServices(shape?.services ?? []) ?? ''
+    // gbp is the one card with the 3-lane "how it's done" picker + a Google-listing product shot.
+    const isGbp = editId === 'gbp'
     return {
       stages,
-      price: priceLabelForServices(shape?.services ?? []) ?? '',
+      price,
       rows: whatYouGet(editId)[0]?.rows ?? [],
       requirements: requirementsFor(editId),
       analytics: analyticsForStages(editId, stages),
       cadence: shape ? DUR_CADENCE[shape.dur] : undefined,
+      googleTile: isGbp,
+      lanes: isGbp
+        ? [{ label: "I'll do it", price: 'Free' }, { label: 'Apnosh AI', price: 'Included', pro: true }, { label: 'Apnosh', price: price || '$100' }]
+        : undefined,
+      laneDetail: isGbp ? 'We fix it all for you.' : undefined,
+      timeline: campaignTimelineSteps(editId, shape?.services ?? []),
     }
   }, [editId])
 
@@ -583,6 +593,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                 requirements={preview?.requirements ?? []}
                 analytics={dbAnalytics}
                 heroImage={dbForm.heroImage || null}
+                timeline={campaignTimelineSteps(dbForm.id || null, dbForm.serviceIds)}
               />
             </div>
             <p className="text-[11px] text-ink-4 mt-3 text-center">This is exactly what the store page shows. Pick services to fill price, what you get, and what we need.</p>
@@ -701,6 +712,10 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   requirements={builtinFacts.requirements}
                   analytics={builtinFacts.analytics}
                   heroImage={(form.heroImage || base.heroImage) || null}
+                  googleTile={builtinFacts.googleTile}
+                  lanes={builtinFacts.lanes}
+                  laneDetail={builtinFacts.laneDetail}
+                  timeline={builtinFacts.timeline}
                 />
               </div>
               <p className="text-[11px] text-ink-4 mt-3 text-center">The words update live. Price, what you get, and analytics come from this campaign&apos;s services.</p>
