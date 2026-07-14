@@ -1019,9 +1019,9 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   analytics={builtinFacts.analytics}
                   heroImage={(form.heroImage || base.heroImage) || null}
                   googleTile={builtinFacts.googleTile}
-                  lanes={form.lanes.length ? form.lanes.map((l) => ({ label: l.label || 'Untitled', price: l.price, pro: l.pro })) : builtinFacts.lanes}
-                  selectedLane={form.lanes.length ? laneIdx : undefined}
-                  laneDetail={form.lanes.length ? (form.lanes[laneIdx]?.detail || undefined) : builtinFacts.laneDetail}
+                  lanes={laneList.length ? laneList.map((l) => ({ label: l.label || 'Untitled', price: l.price, pro: l.pro })) : builtinFacts.lanes}
+                  selectedLane={laneList.length ? laneIdx : undefined}
+                  laneDetail={laneList.length ? (laneList[laneIdx]?.detail || undefined) : builtinFacts.laneDetail}
                   timeline={builtinFacts.timeline}
                   interactive
                   active={activeSection}
