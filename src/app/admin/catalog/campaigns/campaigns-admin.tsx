@@ -17,7 +17,8 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { CAMPAIGN_CONTENT, type CampaignContent } from '@/lib/campaigns/data/campaign-content'
-import { contentFor, type ContentOverride, type ContentOverrideMap, type CampaignLane, type CampaignRush } from '@/lib/campaigns/data/content-overrides'
+import { contentFor, type ContentOverride, type ContentOverrideMap, type CampaignLane, type CampaignRush, type CampaignNeedsConfig, type CustomNeed, type NeedInputType, type NeedOverride } from '@/lib/campaigns/data/content-overrides'
+import { campaignAutoNeeds } from '@/lib/campaigns/data/campaign-needs'
 import {
   DB_CADENCES, DB_CARD_TYPES, DB_SHELVES, DB_STAGES,
   isBuiltinCampaignId, isValidCampaignSlug, slugFromTitle,
@@ -41,7 +42,7 @@ const DUR_CADENCE: Record<string, string> = { setup: 'Setup', once: 'One-time', 
 type Faq = { q: string; a: string }
 type FormState = {
   title: string; tagline: string; description: string; promise: string; why: string;
-  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]; whatYouGet: string[]; rush: CampaignRush | null
+  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]; whatYouGet: string[]; rush: CampaignRush | null; needs: CampaignNeedsConfig | null
 }
 
 type TextKey = 'title' | 'tagline' | 'description' | 'promise' | 'why' | 'expectation' | 'bestFor'
@@ -66,6 +67,7 @@ function formFromOverride(o: ContentOverride | undefined): FormState {
     requirements: [...(o?.requirements ?? [])],
     whatYouGet: [...(o?.whatYouGet ?? [])],
     rush: o?.rush ? { ...o.rush } : null,
+    needs: o?.needs ? { overrides: { ...(o.needs.overrides ?? {}) }, custom: (o.needs.custom ?? []).map((c) => ({ ...c })) } : null,
   }
 }
 
@@ -85,7 +87,7 @@ type DbForm = FormState & {
 function emptyDbForm(): DbForm {
   return {
     id: '', title: '', tagline: '', description: '', promise: '', why: '',
-    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [], whatYouGet: [], rush: null,
+    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [], whatYouGet: [], rush: null, needs: null,
     type: 'task', cad: 'once', shelf: 'aware', stages: [],
     serviceIds: [], addonServiceIds: [], status: 'draft',
   }
@@ -97,7 +99,7 @@ function dbFormFrom(c: DbCampaign): DbForm {
     promise: c.promise, why: c.why, expectation: c.expectation,
     heroImage: c.heroImage ?? '', bestFor: c.bestFor ?? '',
     faq: (c.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
-    lanes: [], requirements: [], whatYouGet: [], rush: null,
+    lanes: [], requirements: [], whatYouGet: [], rush: null, needs: null,
     type: c.type, cad: c.cad, shelf: c.shelf, stages: [...c.stages],
     serviceIds: [...c.serviceIds], addonServiceIds: [...c.addonServiceIds],
     status: c.status,
@@ -166,6 +168,30 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
   const open = (id: string) => { setDbForm(null); setEditId(id); setForm(formFromOverride(overrides[id])) }
   const close = () => { setEditId(null); setForm(null) }
   const set = (patch: Partial<FormState>) => setForm((f) => (f ? { ...f, ...patch } : f))
+
+  // ── post-checkout "needs from you" config editors ──
+  const setNeeds = (n: CampaignNeedsConfig) => {
+    const has = (n.overrides && Object.keys(n.overrides).length) || (n.custom && n.custom.length)
+    set({ needs: has ? n : null })
+  }
+  const setNeedOverride = (id: string, val: NeedOverride, def: NeedOverride) => {
+    const cur = form?.needs ?? { overrides: {}, custom: [] }
+    const ov = { ...(cur.overrides ?? {}) }
+    if (val === def) delete ov[id]; else ov[id] = val
+    setNeeds({ ...cur, overrides: ov })
+  }
+  const addCustomNeed = () => {
+    const cur = form?.needs ?? { overrides: {}, custom: [] }
+    setNeeds({ ...cur, custom: [...(cur.custom ?? []), { id: `custom-${Date.now().toString(36)}`, title: '', inputType: 'text', required: false }] })
+  }
+  const updateCustomNeed = (i: number, patch: Partial<CustomNeed>) => {
+    const cur = form?.needs ?? { overrides: {}, custom: [] }
+    setNeeds({ ...cur, custom: (cur.custom ?? []).map((c, j) => (j === i ? { ...c, ...patch } : c)) })
+  }
+  const removeCustomNeed = (i: number) => {
+    const cur = form?.needs ?? { overrides: {}, custom: [] }
+    setNeeds({ ...cur, custom: (cur.custom ?? []).filter((_, j) => j !== i) })
+  }
 
   const openDbCreate = () => { close(); setDbMode('create'); setSlugTouched(false); setDbForm(emptyDbForm()) }
   const openDbEdit = (c: DbCampaign) => { close(); setDbMode('edit'); setSlugTouched(true); setDbForm(dbFormFrom(c)) }
@@ -1105,6 +1131,70 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   <p className="text-[11px] text-ink-4 mt-2">Off. Turn it on to let owners pay a flat fee for faster delivery.</p>
                 )}
               </div>
+
+              {/* What we need from them AFTER checkout — drives the buyer's post-order "needs from you" page */}
+              {editId && (
+                <div className="rounded-xl border border-ink-6 bg-white p-4 lg:p-5">
+                  <div className="text-[13.5px] font-semibold text-ink">What we need from them (after checkout)</div>
+                  <p className="text-[11px] text-ink-4 mt-1 mb-3">Controls the buyer&rsquo;s post-order setup page. Changes apply to all orders of this campaign, live too.</p>
+
+                  {/* Auto-detected asks for THIS campaign, each Required / Optional / Off */}
+                  {(() => { const auto = campaignAutoNeeds(editId); return auto.length ? (
+                    <div className="space-y-2">
+                      <div className="text-[11px] font-bold uppercase tracking-wide text-ink-4">Auto-detected for this campaign</div>
+                      {auto.map((n) => {
+                        const def: NeedOverride = n.defaultOptional ? 'optional' : 'required'
+                        const cur: NeedOverride = form.needs?.overrides?.[n.id] ?? def
+                        return (
+                          <div key={n.id} className="flex items-center justify-between gap-3 py-1.5 border-b border-ink-6 last:border-0">
+                            <div className="min-w-0">
+                              <div className="text-[13px] text-ink truncate">{n.title}</div>
+                              <div className="text-[10.5px] text-ink-4">{n.group}{cur !== def ? ' · changed' : ''}</div>
+                            </div>
+                            <div className="flex shrink-0 rounded-lg border border-ink-6 overflow-hidden">
+                              {(['required', 'optional', 'off'] as NeedOverride[]).map((v) => (
+                                <button key={v} type="button" onClick={() => setNeedOverride(n.id, v, def)}
+                                  className={`px-2.5 py-1 text-[11px] font-semibold ${cur === v ? (v === 'off' ? 'bg-ink text-white' : 'bg-emerald-100 text-emerald-700') : 'text-ink-4 hover:bg-ink-3'}`}>
+                                  {v === 'required' ? 'Required' : v === 'optional' ? 'Optional' : 'Off'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : <p className="text-[11.5px] text-ink-4">This campaign auto-detects nothing to ask for. Add your own below.</p> })()}
+
+                  {/* Custom asks the owner writes themselves */}
+                  <div className="mt-4 space-y-2.5">
+                    <div className="text-[11px] font-bold uppercase tracking-wide text-ink-4">Your own asks</div>
+                    {(form.needs?.custom ?? []).map((c, i) => (
+                      <div key={c.id} className="rounded-lg border border-ink-6 p-3 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <input value={c.title} placeholder="The question, e.g. What is your busiest day?" onChange={(e) => updateCustomNeed(i, { title: e.target.value })} className={inputCls} />
+                          <button type="button" onClick={() => removeCustomNeed(i)} className="shrink-0 text-[12px] font-semibold text-red-600 px-1">Remove</button>
+                        </div>
+                        <input value={c.why ?? ''} placeholder="Help text (optional) — why you're asking" onChange={(e) => updateCustomNeed(i, { why: e.target.value })} className={inputCls} />
+                        {c.inputType === 'select' && (
+                          <input value={(c.options ?? []).join(', ')} placeholder="Choices, comma-separated — e.g. Yes, No, Maybe" onChange={(e) => updateCustomNeed(i, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} className={inputCls} />
+                        )}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <select value={c.inputType} onChange={(e) => updateCustomNeed(i, { inputType: e.target.value as NeedInputType })} className="text-[12px] rounded-lg border border-ink-6 px-2 py-1.5 bg-white">
+                            <option value="text">Short text</option>
+                            <option value="textarea">Long text</option>
+                            <option value="select">Choice</option>
+                            <option value="date">Date</option>
+                          </select>
+                          <label className="flex items-center gap-1.5 cursor-pointer text-[12px] text-ink">
+                            <input type="checkbox" checked={!!c.required} onChange={(e) => updateCustomNeed(i, { required: e.target.checked })} /> Required
+                          </label>
+                        </div>
+                      </div>
+                    ))}
+                    <button type="button" onClick={addCustomNeed} className="text-[12.5px] font-semibold text-emerald-700">+ Add your own ask</button>
+                  </div>
+                </div>
+              )}
 
               {/* More details: tagline, expectation, best for, FAQ */}
               <div className="rounded-xl border border-ink-6 bg-white p-4 lg:p-5 space-y-3.5">

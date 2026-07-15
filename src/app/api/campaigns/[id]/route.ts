@@ -83,7 +83,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Deliberately NOT here (owner-forgery-proof, like wrapUpSentAt): gbpFixedAt — the self-serve
     // Google-profile task's completion stamp is written only by POST /api/campaigns/:id/gbp-fixed,
     // which re-runs the diagnosis server-side and stamps only on a fresh all-good read.
-    for (const k of ['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'setupSkipped']) {
+    // Known keys, plus owner-defined custom asks (id `custom-<slug>` from the campaign builder).
+    // Custom keys still pass the same string + 2000-char cap, so nothing unbounded/injected accretes.
+    const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'setupSkipped'])
+    for (const k of Object.keys(e as Record<string, unknown>)) {
+      if (!KNOWN.has(k) && !/^custom-[a-z0-9-]{1,60}$/.test(k)) continue
       const v = (e as Record<string, unknown>)[k]
       if (v === undefined) continue
       if (typeof v !== 'string') return NextResponse.json({ error: `execution.${k} must be a string` }, { status: 400 })

@@ -179,6 +179,9 @@ export interface CampaignDraft {
   planned?: boolean
   /** This campaign's goal (may differ from the business's default). */
   goalKey?: GoalKey
+  /** The catalog campaign id this was built from (e.g. 'gbp', 'reviewsplan'), so the post-checkout
+   *  readiness page can apply the owner's per-campaign "needs from you" config. */
+  sourceCatalogId?: string
   /** Anchored to a moment/date from the calendar, e.g. "July 4". */
   occasion?: string
   /** The date the campaign builds toward (ISO), from the calendar. */

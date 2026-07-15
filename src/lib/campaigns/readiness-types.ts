@@ -6,8 +6,8 @@
 import type { CampaignExecution } from './view'
 
 /** The section a need falls under, so the page groups by what it is (not input-vs-action). */
-export type NeedGroup = 'Scheduling' | 'Access' | 'Shoot' | 'Content' | 'Info' | 'Links' | 'Anything else'
-export const GROUP_ORDER: NeedGroup[] = ['Scheduling', 'Access', 'Shoot', 'Content', 'Info', 'Links', 'Anything else']
+export type NeedGroup = 'Scheduling' | 'Access' | 'Shoot' | 'Content' | 'Info' | 'Links' | 'From you' | 'Anything else'
+export const GROUP_ORDER: NeedGroup[] = ['Scheduling', 'Access', 'Shoot', 'Content', 'Info', 'Links', 'From you', 'Anything else']
 
 export interface ReadinessItem {
   id: string
@@ -24,8 +24,8 @@ export interface ReadinessItem {
   /** True when the owner has deferred this action; it drops out of the required count but stays
    *  visible to undo. */
   skipped?: boolean
-  // input
-  field?: keyof CampaignExecution | 'go_live'
+  // input — a CampaignExecution key, 'go_live', or an owner custom-ask id ('custom-…').
+  field?: keyof CampaignExecution | 'go_live' | string
   inputType?: 'text' | 'textarea' | 'select' | 'date'
   /** For inputType 'select' — the choices (e.g. Yes / Ask first / No). */
   options?: string[]

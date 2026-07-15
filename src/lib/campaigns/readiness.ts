@@ -11,6 +11,7 @@ import { getCampaign, getCampaignProgress } from './server'
 import { listWorkOrdersForCampaign } from './work-orders'
 import { deriveSchedule } from './schedule'
 import { deriveServiceNeeds } from './service-needs'
+import { cleanNeeds, type CampaignNeedsConfig } from './data/content-overrides'
 
 // Types + GROUP_ORDER live in the client-safe readiness-types.ts (this module is 'server-only').
 import type { ReadinessItem, ReadinessReport } from './readiness-types'
@@ -24,10 +25,12 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   const exec = campaign.execution ?? {}
   const detailHref = `/dashboard/campaigns/${campaignId}`
 
-  const [bizRes, orders, progress] = await Promise.all([
+  const [bizRes, orders, progress, catRes] = await Promise.all([
     admin.from('businesses').select('hours, phone, website_url, address, brand_voice_words, brand_tone, brand_colors').eq('client_id', clientId).maybeSingle(),
     listWorkOrdersForCampaign(campaignId),
     getCampaignProgress(campaignId),
+    // Which catalog product this order came from, so we can apply the owner's per-campaign needs config.
+    admin.from('campaigns').select('source_catalog_id').eq('id', campaignId).maybeSingle(),
   ])
   const biz = bizRes.data as Record<string, unknown> | null
 
@@ -113,6 +116,17 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   const contactThin = !(biz?.hours && (biz?.phone || biz?.website_url))
   if (contactThin) items.push({ id: 'contact', kind: 'action', group: 'Info', title: 'Add your hours + link', why: 'So the content can point people where + when to find you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
 
+  // ── owner's per-campaign "needs from you" config (LIVE): resolve the catalog product this order
+  // came from, then apply Required/Optional/Off overrides to the auto asks + append custom asks. ──
+  const catalogId = (catRes.data as { source_catalog_id?: string | null } | null)?.source_catalog_id || null
+  if (catalogId) {
+    try {
+      const { data: ovRow } = await admin.from('catalog_content_overrides').select('needs').eq('item_id', catalogId).maybeSingle()
+      const needs = cleanNeeds((ovRow as { needs?: unknown } | null)?.needs)
+      if (needs) applyNeedsConfig(items, needs, exec as unknown as Record<string, string>)
+    } catch { /* smart defaults on any failure */ }
+  }
+
   // Setup actions the owner chose to defer ("Skip for now") drop out of the required count, so they can
   // finish their part without connecting accounts right now — each stays visible to undo. The in-campaign
   // work actions (approve concepts / review pieces) are the real work and are never skippable.
@@ -127,4 +141,27 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
 
   const required = items.filter((i) => !i.optional && !i.skipped)
   return { campaignName: campaign.draft.name, items, done: required.filter((i) => i.done).length, total: required.length, doneSetupIds: Array.from(doneSetup) }
+}
+
+/** Apply the owner's per-campaign needs config: Required/Optional/Off overrides on the auto-detected
+ *  asks (by id), plus their own custom asks appended. Mutates `items` in place. */
+function applyNeedsConfig(items: ReadinessItem[], needs: CampaignNeedsConfig, exec: Record<string, string>): void {
+  if (needs.overrides) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const ov = needs.overrides[items[i].id]
+      if (!ov) continue
+      if (ov === 'off') items.splice(i, 1)
+      else if (ov === 'required') items[i].optional = false
+      else if (ov === 'optional') items[i].optional = true
+    }
+  }
+  for (const c of needs.custom ?? []) {
+    if (items.some((it) => it.id === c.id)) continue
+    const value = exec[c.id] ?? ''
+    items.push({
+      id: c.id, kind: 'input', group: 'From you', field: c.id, inputType: c.inputType,
+      options: c.options, title: c.title, why: c.why ?? '',
+      value, done: value.trim().length > 0, optional: !c.required,
+    })
+  }
 }

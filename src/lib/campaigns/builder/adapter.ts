@@ -135,6 +135,7 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
     items,
     planned: true,
     goalKey,
+    sourceCatalogId: itemId,
     targetDate: spec.date || undefined,
     occasion,
     context: spec.days || spec.shift || spec.audienceChoice || undefined,

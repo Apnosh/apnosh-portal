@@ -19,7 +19,7 @@
  */
 
 import type { CreateCatalogId, FunnelStage } from './create-catalog'
-import type { CampaignLane, CampaignRush } from './content-overrides'
+import type { CampaignLane, CampaignRush, CampaignNeedsConfig } from './content-overrides'
 
 export interface CampaignContent {
   id: CreateCatalogId
@@ -54,6 +54,8 @@ export interface CampaignContent {
   whatYouGet?: string[]
   /** A configurable rush option (flat fee to deliver sooner). Absent = no rush offered. */
   rush?: CampaignRush
+  /** Owner config for the post-checkout "needs from you" step (from the override overlay). */
+  needs?: CampaignNeedsConfig
 }
 
 export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
