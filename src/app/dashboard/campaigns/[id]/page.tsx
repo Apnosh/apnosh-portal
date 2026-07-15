@@ -27,13 +27,14 @@ import HonestBillBar from '@/components/campaigns/honest-bill-bar'
 import CampaignNowCard from '@/components/campaigns/campaign-now-card'
 import CampaignResults, { hasResults } from '@/components/campaigns/campaign-results'
 import CampaignWork from '@/components/campaigns/tracker/campaign-work'
+import { ProductionSummary, ProductionGuide } from '@/components/campaigns/tracker/production-guide'
 import CampaignTeamCard from '@/components/campaigns/campaign-team-card'
 import ContactSupport from '@/components/campaigns/contact-support'
 import { fmtShort } from '@/components/campaigns/tracker/piece-tracker'
 import ActivityFeed from '@/components/campaigns/tracker/activity-feed'
 import type { CampaignOutcomes } from '@/lib/campaigns/outcomes/verdict'
 import type { TrackerPiece, ActivityEvent } from '@/lib/campaigns/tracker/types'
-import type { ReadinessReport } from '@/lib/campaigns/readiness-types'
+import { setupOwed, type ReadinessReport } from '@/lib/campaigns/readiness-types'
 import { C, DISPLAY, GRAD, SHADOW_CARD, EYEBROW } from '@/components/campaigns/ui'
 import MotionStyles from '@/components/campaigns/motion-styles'
 
@@ -398,6 +399,14 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
           )}
           {/* the ONE home for outcomes — the real target of "See every piece" */}
           <div id="campaign-results"><CampaignResults outcomes={outcomes} pieces={pieces} /></div>
+          {/* One-look status above the timeline: what's happening now, what's next, when it goes live */}
+          <ProductionSummary
+            phase={st.phase}
+            goLive={sv.goLive}
+            whenLine={sv.whenLine}
+            progress={progress ? { live: progress.live, total: progress.total } : null}
+            awaitingYou={readiness ? setupOwed(readiness).length : 0}
+          />
           {/* THE HERO: the timeline, with the pulsing needs-you button right under it */}
           <CampaignWork
             pieces={pieces}
@@ -417,6 +426,13 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
             onFinishSetup={() => router.push(`/dashboard/campaigns/${camp.draft.id}/ready`)}
             onRequestChange={() => router.push('/dashboard/messages?to=strategist')}
           />
+          {/* Below the timeline: what to expect for this campaign shape + a clear line to the team */}
+          {st.phase !== 'done' && (
+            <ProductionGuide
+              hasContent={pieces.length > 0 || (brief?.contentBeats?.length ?? 0) > 0}
+              onMessage={() => router.push('/dashboard/messages?to=strategist')}
+            />
+          )}
           {/* who handles everything: Apnosh runs setup, matched creators make the creative — changeable */}
           <CampaignTeamCard camp={camp} onChoose={onChooseCreator} onOpenTeam={() => router.push(`/dashboard/campaigns/${camp.draft.id}/team`)} />
           {/* the order receipt, its own page */}
