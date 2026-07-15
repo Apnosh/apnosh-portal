@@ -32,9 +32,12 @@ export async function POST(req: NextRequest) {
   if (!card) return NextResponse.json({ error: 'No card on file. Enter a card instead.' }, { status: 400 })
 
   try {
+    // On-session: the customer IS present at checkout (they tapped Place order). Confirming
+    // off_session would conflict with the PaymentIntent's setup_future_usage (card-saving), and
+    // Stripe rejects that combination. On-session also lets us run 3-D Secure via the browser
+    // (requires_action → handleNextAction) instead of failing.
     const pi = await stripe.paymentIntents.confirm(paymentIntentId, {
       payment_method: card.id,
-      off_session: true,
     })
     if (pi.status === 'succeeded') return NextResponse.json({ status: 'succeeded' })
     if (pi.status === 'requires_action') {
