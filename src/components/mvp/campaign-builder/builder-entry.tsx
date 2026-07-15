@@ -21,7 +21,6 @@ import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
 import type { Diagnosis } from '@/lib/campaigns/planning/types'
 import { summarize, type LineItem, type CampaignDraft, type PieceProducer, type CampaignReceipt } from '@/lib/campaigns/types'
 import { saveAndShip } from '@/lib/campaigns/builder/ship'
-import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
 import CampaignPlanFlow from '@/components/campaigns/plan-flow/campaign-plan-flow'
 import PlanAnalyzing from '@/components/campaigns/plan-flow/plan-analyzing'
 import OrderConfirmed from '@/components/campaigns/plan-flow/order-confirmed'
@@ -500,7 +499,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
           clientId={client.id}
           draft={checkout.draft}
           restaurant={client.name || 'your restaurant'}
-          onSuccess={(id) => { clearPlan(); setCheckout(null); router.push(`/dashboard/campaigns/${id}/ready`) }}
+          onSuccess={(id, dest) => { setCheckout(null); router.push(dest === 'campaign' ? `/dashboard/campaigns/${id}` : `/dashboard/campaigns/${id}/ready`) }}
           onCancel={() => setCheckout(null)}
         />
       )}

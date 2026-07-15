@@ -17,12 +17,16 @@ import { useEffect, useRef, useState } from 'react'
 import { loadStripe, type StripeAddressElementChangeEvent } from '@stripe/stripe-js'
 import { Elements, AddressElement, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { saveAndShip } from '@/lib/campaigns/builder/ship'
-import type { CampaignDraft } from '@/lib/campaigns/types'
+import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
+import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
+import { summarize, type CampaignDraft } from '@/lib/campaigns/types'
 
 const MINT = '#4abd98'
 const MINT_DARK = '#3f7d6a'
+const MINT_TINT = '#e6f5ef'
 const INK = '#14231c'
 const SUB = '#6b746e'
+const FAINT = '#9aa39d'
 const LINE = 'rgba(20,35,28,0.10)'
 const BG = '#fbfcfb'
 
@@ -46,7 +50,8 @@ export interface CampaignCheckoutProps {
   clientId: string
   draft: CampaignDraft
   restaurant?: string
-  onSuccess: (campaignId: string) => void
+  /** Called when the owner LEAVES the confirmation screen — to the setup page or the campaign. */
+  onSuccess: (campaignId: string, dest: 'setup' | 'campaign') => void
   onCancel: () => void
 }
 
@@ -63,7 +68,13 @@ function stripePromiseFor(key: string) {
 export default function CampaignCheckout({ clientId, draft, restaurant, onSuccess, onCancel }: CampaignCheckoutProps) {
   const [prep, setPrep] = useState<PrepareResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Set once the order is placed (paid + shipped) — flips the whole overlay to the confirmation.
+  const [placed, setPlaced] = useState<{ campaignId: string; breakdown: Breakdown } | null>(null)
   const started = useRef(false)
+
+  // The cart is done the moment the order is placed, so empty it right away (before the owner
+  // navigates off the confirmation) — reopening the store must not re-checkout the same plan.
+  const onPlaced = (campaignId: string, breakdown: Breakdown) => { clearPlan(); setPlaced({ campaignId, breakdown }) }
 
   useEffect(() => {
     if (started.current) return
@@ -89,29 +100,41 @@ export default function CampaignCheckout({ clientId, draft, restaurant, onSucces
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: BG, display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', height: '100%' }}>
-        <Header onBack={onCancel} />
-        {error && !prep && <ErrorBox message={error} onBack={onCancel} />}
-        {!error && !prep && <Loading />}
-        {prep?.free && <FreeCheckout clientId={clientId} draft={draft} monthlyCents={prep.monthlyCents ?? 0} onSuccess={onSuccess} />}
-        {prep && !prep.free && prep.clientSecret && prep.publishableKey && (
-          <Elements
-            stripe={stripePromiseFor(prep.publishableKey)}
-            options={{ clientSecret: prep.clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: MINT, fontFamily: 'Inter, sans-serif', borderRadius: '12px' } } }}
-          >
-            <PayForm
-              clientId={clientId}
-              draft={draft}
-              restaurant={restaurant}
-              paymentIntentId={prep.paymentIntentId!}
-              initialBreakdown={prep.breakdown}
-              monthlyCents={prep.monthlyCents ?? 0}
-              savedCard={prep.savedCard ?? null}
-              onSuccess={onSuccess}
-            />
-          </Elements>
-        )}
-        {prep && !prep.free && (!prep.clientSecret || !prep.publishableKey) && (
-          <ErrorBox message="Payments aren’t configured yet (missing Stripe keys). Add the Stripe keys and try again." onBack={onCancel} />
+        {placed ? (
+          <Confirmation
+            restaurant={restaurant}
+            draft={draft}
+            breakdown={placed.breakdown}
+            onSetup={() => onSuccess(placed.campaignId, 'setup')}
+            onViewCampaign={() => onSuccess(placed.campaignId, 'campaign')}
+          />
+        ) : (
+          <>
+            <Header onBack={onCancel} />
+            {error && !prep && <ErrorBox message={error} onBack={onCancel} />}
+            {!error && !prep && <Loading />}
+            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} monthlyCents={prep.monthlyCents ?? 0} onPlaced={onPlaced} />}
+            {prep && !prep.free && prep.clientSecret && prep.publishableKey && (
+              <Elements
+                stripe={stripePromiseFor(prep.publishableKey)}
+                options={{ clientSecret: prep.clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: MINT, fontFamily: 'Inter, sans-serif', borderRadius: '12px' } } }}
+              >
+                <PayForm
+                  clientId={clientId}
+                  draft={draft}
+                  restaurant={restaurant}
+                  paymentIntentId={prep.paymentIntentId!}
+                  initialBreakdown={prep.breakdown}
+                  monthlyCents={prep.monthlyCents ?? 0}
+                  savedCard={prep.savedCard ?? null}
+                  onPlaced={onPlaced}
+                />
+              </Elements>
+            )}
+            {prep && !prep.free && (!prep.clientSecret || !prep.publishableKey) && (
+              <ErrorBox message="Payments aren’t configured yet (missing Stripe keys). Add the Stripe keys and try again." onBack={onCancel} />
+            )}
+          </>
         )}
       </div>
     </div>
@@ -176,7 +199,7 @@ function BillCard({ b, monthlyCents, taxPending }: { b: Breakdown; monthlyCents:
 const CARD_BRANDS: Record<string, string> = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex', discover: 'Discover', diners: 'Diners', jcb: 'JCB', unionpay: 'UnionPay' }
 const brandLabel = (b: string) => CARD_BRANDS[b?.toLowerCase()] ?? (b ? b[0].toUpperCase() + b.slice(1) : 'Card')
 
-function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdown, monthlyCents, savedCard, onSuccess }: {
+function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdown, monthlyCents, savedCard, onPlaced }: {
   clientId: string
   draft: CampaignDraft
   restaurant?: string
@@ -184,7 +207,7 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
   initialBreakdown: Breakdown
   monthlyCents: number
   savedCard: SavedCard | null
-  onSuccess: (campaignId: string) => void
+  onPlaced: (campaignId: string, breakdown: Breakdown) => void
 }) {
   const stripe = useStripe()
   const elements = useElements()
@@ -236,7 +259,7 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
         body: JSON.stringify({ paymentIntentId, campaignId: shippedIdRef.current }),
       })
     } catch { /* order is shipped + paid; the webhook backstop reconciles the link */ }
-    onSuccess(shippedIdRef.current!)
+    onPlaced(shippedIdRef.current!, bill)
   }
 
   const placeOrder = async () => {
@@ -343,7 +366,7 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
   )
 }
 
-function FreeCheckout({ clientId, draft, monthlyCents, onSuccess }: { clientId: string; draft: CampaignDraft; monthlyCents: number; onSuccess: (id: string) => void }) {
+function FreeCheckout({ clientId, draft, monthlyCents, onPlaced }: { clientId: string; draft: CampaignDraft; monthlyCents: number; onPlaced: (id: string, breakdown: Breakdown) => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const place = async () => {
@@ -351,7 +374,7 @@ function FreeCheckout({ clientId, draft, monthlyCents, onSuccess }: { clientId: 
     setBusy(true); setError(null)
     try {
       const id = await saveAndShip({ clientId, draft })
-      onSuccess(id)
+      onPlaced(id, { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 })
     } catch {
       setError('That didn’t go through. Nothing was ordered. Try again.'); setBusy(false)
     }
@@ -371,5 +394,103 @@ function FreeCheckout({ clientId, draft, monthlyCents, onSuccess }: { clientId: 
         <button onClick={place} disabled={busy} style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy ? 'default' : 'pointer', background: busy ? MINT_DARK : MINT, color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: '0 8px 22px rgba(74,189,152,0.42)' }}>{busy ? 'Placing your order…' : 'Place order'}</button>
       </div>
     </>
+  )
+}
+
+/**
+ * Confirmation — the "Order confirmed" screen after the charge + ship succeed (Amazon-style): a
+ * success moment, a plain-language timeline (placed → we get to work → goes live), a receipt of
+ * what was actually paid, and the handoff into the "A few things from you" setup page. The go-live
+ * estimate is the real one (goLivePhraseFor over the ordered items), not an invented date.
+ */
+function Confirmation({ restaurant, draft, breakdown, onSetup, onViewCampaign }: {
+  restaurant?: string
+  draft: CampaignDraft
+  breakdown: Breakdown
+  onSetup: () => void
+  onViewCampaign: () => void
+}) {
+  const today = new Date().toISOString().slice(0, 10)
+  const billSum = summarize(draft.items)
+  const monthlyCents = Math.round(billSum.perMonth * 100)
+  const goLive = goLivePhraseFor(draft, { creatives: [], services: draft.items, bill: billSum }, today)
+  const goLiveShort = goLive.replace(/^Live in /, '').replace(/^Starts in /, '')
+  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const free = breakdown.totalCents <= 0
+
+  const steps: { state: 'done' | 'active' | 'todo'; title: string; sub: string }[] = [
+    { state: 'done', title: 'Order placed', sub: todayLabel },
+    { state: 'active', title: 'We get to work', sub: 'Your team starts right away' },
+    { state: 'todo', title: 'Goes live', sub: goLiveShort || 'We confirm the date once we start' },
+  ]
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '28px 18px 16px' }}>
+        {/* success moment */}
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <div style={{ width: 62, height: 62, margin: '0 auto 12px', borderRadius: '50%', background: `linear-gradient(135deg, ${MINT}, ${MINT_DARK})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 12px 30px -8px rgba(74,189,152,0.55)' }}>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+          </div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 24, fontWeight: 700, color: INK, letterSpacing: -0.4 }}>Order confirmed</div>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: SUB, marginTop: 4 }}>{restaurant ? `${restaurant}’s campaign is on the way.` : 'Your campaign is on the way.'}</div>
+        </div>
+
+        {/* timeline */}
+        <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '16px 16px 6px', marginBottom: 14 }}>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 12 }}>What happens next</div>
+          {steps.map((s, i) => (
+            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ width: 22, height: 22, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: s.state === 'todo' ? '#fff' : MINT, border: s.state === 'todo' ? `2px solid ${LINE}` : 'none' }}>
+                  {s.state === 'done' && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+                  {s.state === 'active' && <div style={{ width: 8, height: 8, borderRadius: 4, background: '#fff' }} />}
+                </div>
+                {i < steps.length - 1 && <div style={{ width: 2, flex: 1, minHeight: 18, background: LINE, margin: '2px 0' }} />}
+              </div>
+              <div style={{ flex: 1, minWidth: 0, paddingBottom: 14 }}>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 600, color: INK }}>{s.title}</div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: s.state === 'todo' ? FAINT : SUB, marginTop: 1 }}>{s.sub}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* what you paid */}
+        <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '14px 16px', marginBottom: 14 }}>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 8 }}>{free ? 'Order summary' : 'Paid today'}</div>
+          {free ? (
+            <BillRow label="Total" value="Free" strong />
+          ) : (
+            <>
+              <BillRow label="Subtotal" value={fmt(breakdown.subtotalCents)} />
+              {breakdown.serviceFeeCents > 0 && <BillRow label="Service fee (10%)" value={fmt(breakdown.serviceFeeCents)} />}
+              {breakdown.taxCents > 0 && <BillRow label="Tax" value={fmt(breakdown.taxCents)} />}
+              <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}><BillRow label="Total paid" value={fmt(breakdown.totalCents)} strong /></div>
+            </>
+          )}
+          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>Plus {fmt(monthlyCents)}/mo in monthly services once they start — billed separately.</div>}
+        </div>
+
+        {/* needs-you handoff */}
+        <div style={{ background: MINT_TINT, borderRadius: 16, padding: '13px 15px', display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+          <div style={{ width: 32, height: 32, borderRadius: 9, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={MINT_DARK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: 600, color: INK }}>A few things from you help us start faster</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#3f7d6a', marginTop: 2, lineHeight: 1.5 }}>Your go-live date, the best time to film, and the dishes to feature. Takes a minute, and you can do it later too.</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ flexShrink: 0, background: '#fff', borderTop: `1px solid ${LINE}`, boxShadow: '0 -10px 28px rgba(20,40,30,0.10)', padding: '11px 18px calc(12px + env(safe-area-inset-bottom))' }}>
+        <button onClick={onSetup} style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: 'pointer', background: MINT, color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 8px 22px rgba(74,189,152,0.42)' }}>
+          A few things from you
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+        </button>
+        <button onClick={onViewCampaign} style={{ display: 'block', width: '100%', height: 44, marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: 600, color: SUB }}>View campaign</button>
+      </div>
+    </div>
   )
 }
