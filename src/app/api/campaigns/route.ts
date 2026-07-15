@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { listCampaigns, createCampaign, getCampaignProgressBatch } from '@/lib/campaigns/server'
 import { getCampaignChargesBatch } from '@/lib/campaigns/work-orders'
+import { getCampaignPaymentsBatch } from '@/lib/campaigns/campaign-payments-server'
 import type { CampaignDraft } from '@/lib/campaigns/types'
 
 function denied(reason: string | undefined) {
@@ -23,11 +24,13 @@ export async function GET(req: NextRequest) {
   // view shows what a stopped campaign actually billed, not just live ones.
   // Best-effort: null (not {}) on failure so the client renders "unknown", not "$0".
   const launchedIds = campaigns.filter((c) => c.status !== 'draft').map((c) => c.draft.id).filter((x): x is string => !!x)
-  const [progress, charges] = await Promise.all([
+  const [progress, charges, payments] = await Promise.all([
     getCampaignProgressBatch(shippedIds).catch(() => ({})),
     getCampaignChargesBatch(launchedIds).catch(() => null),
+    // Upfront charge-at-checkout receipts per launched campaign ({} on failure).
+    getCampaignPaymentsBatch(launchedIds).catch(() => ({})),
   ])
-  return NextResponse.json({ campaigns, progress, charges })
+  return NextResponse.json({ campaigns, progress, charges, payments })
 }
 
 // POST /api/campaigns — create a campaign from a built CampaignDraft.

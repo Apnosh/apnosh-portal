@@ -13,17 +13,34 @@ import { summarize, lineTotal, type LineItem } from '@/lib/campaigns/types'
 import { AUDIENCES, CHANNELS } from '@/lib/campaigns/data/campaign-templates'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 
+/** The upfront charge-at-checkout receipt (cents), when the order was paid at checkout. */
+export interface OrderPayment {
+  totalCents: number
+  subtotalCents: number
+  serviceFeeCents: number
+  taxCents: number
+  paidAt: string | null
+}
+
 function lineMoney(it: LineItem): string {
   const t = money(lineTotal(it))
   if (it.cadence.kind === 'recurring') return `${t}/${it.cadence.every === 'weekly' ? 'wk' : 'mo'}`
   return t
 }
 
-export default function OrderSummary({ camp }: { camp: SavedCampaign }) {
+const dollars = (cents: number) => money(cents / 100)
+function paidDate(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+export default function OrderSummary({ camp, payment }: { camp: SavedCampaign; payment?: OrderPayment | null }) {
   const items = camp.draft.items.filter((i) => i.included && !i.optOut)
   const plays = playsFrom(items)
   const bill = summarize(camp.draft.items)
   const brief = camp.draft.brief
+  // Legacy fallback total (used only when there's no upfront payment on file).
   const totals: string[] = []
   if (bill.oneTimeOnDelivery > 0) totals.push(`$${bill.oneTimeOnDelivery.toLocaleString()} on delivery`)
   if (bill.perMonth > 0) totals.push(`$${bill.perMonth.toLocaleString()}/mo`)
@@ -55,13 +72,33 @@ export default function OrderSummary({ camp }: { camp: SavedCampaign }) {
           </div>
         ))}
 
-      {/* the receipt total */}
-      {totals.length > 0 && (
+      {/* the receipt total — paid upfront at checkout when we have that record, else the legacy line */}
+      {payment ? (
+        <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 10, marginTop: 2 }}>
+          <MoneyRow k="Items" v={dollars(payment.subtotalCents)} />
+          {payment.serviceFeeCents > 0 && <MoneyRow k="Service fee (10%)" v={dollars(payment.serviceFeeCents)} />}
+          {payment.taxCents > 0 && <MoneyRow k="Tax" v={dollars(payment.taxCents)} />}
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 6, paddingTop: 8, borderTop: `1px solid ${C.line}`, fontSize: 13, fontWeight: 700, color: C.ink }}>
+            <span>Paid{paidDate(payment.paidAt) ? ` · ${paidDate(payment.paidAt)}` : ''}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{dollars(payment.totalCents)}</span>
+          </div>
+          {bill.perMonth > 0 && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8 }}>Plus ${bill.perMonth.toLocaleString()}/mo in monthly services, billed each month.</div>}
+        </div>
+      ) : totals.length > 0 ? (
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, borderTop: `1px solid ${C.line}`, paddingTop: 10, fontSize: 13, fontWeight: 700, color: C.ink }}>
           <span>Total</span>
           <span style={{ fontVariantNumeric: 'tabular-nums' }}>{totals.join(' · ')}</span>
         </div>
-      )}
+      ) : null}
+    </div>
+  )
+}
+
+function MoneyRow({ k, v }: { k: string; v: string }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '4px 0', fontSize: 12.5 }}>
+      <span style={{ color: C.mute }}>{k}</span>
+      <span style={{ color: C.ink2, fontVariantNumeric: 'tabular-nums' }}>{v}</span>
     </div>
   )
 }

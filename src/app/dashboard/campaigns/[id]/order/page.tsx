@@ -10,13 +10,14 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ChevronLeft, Loader2, MessageCircle } from 'lucide-react'
 import { C, DISPLAY } from '@/components/campaigns/ui'
-import OrderSummary from '@/components/campaigns/campaign-order'
+import OrderSummary, { type OrderPayment } from '@/components/campaigns/campaign-order'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 
 export default function OrderPage() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [camp, setCamp] = useState<SavedCampaign | null>(null)
+  const [payment, setPayment] = useState<OrderPayment | null>(null)
   const [error, setError] = useState(false)
 
   const load = useCallback(async () => {
@@ -25,6 +26,7 @@ export default function OrderPage() {
       if (!r.ok) throw new Error()
       const j = await r.json()
       setCamp(j.campaign as SavedCampaign)
+      setPayment((j.payment ?? null) as OrderPayment | null)
     } catch { setError(true) }
   }, [id])
   useEffect(() => { load() }, [load])
@@ -45,7 +47,7 @@ export default function OrderPage() {
               <>
                 <h1 style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, letterSpacing: '-.02em', margin: '0 0 2px', lineHeight: 1.15 }}>Your order</h1>
                 <p style={{ fontSize: 13, color: C.mute, margin: '0 0 14px' }}>{camp.draft.name}</p>
-                <OrderSummary camp={camp} />
+                <OrderSummary camp={camp} payment={payment} />
                 <button onClick={() => router.push('/dashboard/messages?to=strategist')} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 14, height: 44, padding: '0 14px', borderRadius: 10, border: `1px solid ${C.line}`, cursor: 'pointer', background: '#fff', color: C.greenDk, fontSize: 13, fontWeight: 600 }}>
                   <MessageCircle size={14} /> Request a change
                 </button>
