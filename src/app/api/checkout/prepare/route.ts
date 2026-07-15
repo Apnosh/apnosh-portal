@@ -50,7 +50,10 @@ export async function POST(req: NextRequest) {
       customer: cust.customerId,
       // Save the card on the customer so the next checkout can reuse it.
       setup_future_usage: 'off_session',
-      automatic_payment_methods: { enabled: true },
+      // Card-focused checkout: no redirect-based methods. This keeps a server-side saved-card
+      // confirm from requiring a return_url, and lets us reuse the card on file cleanly. Card
+      // 3-D Secure still works (it's an in-page step, not a redirect method).
+      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
       description: `Apnosh — ${draft.name || 'campaign'}`,
       metadata: { clientId, kind: 'campaign_checkout' },
     })
