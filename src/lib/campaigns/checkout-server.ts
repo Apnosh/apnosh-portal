@@ -27,13 +27,21 @@ function admin() {
 
 /** Ensure a Stripe customer exists for the client; returns its id (+ the billing email used). */
 export async function ensureCheckoutCustomer(clientId: string): Promise<{ customerId: string } | { error: string }> {
-  const { data: client } = await admin()
+  const a = admin()
+  const { data: client } = await a
     .from('clients')
     .select('id, name, email, phone, billing_email')
     .eq('id', clientId)
     .maybeSingle()
   if (!client) return { error: 'Client not found' }
-  const email = (client.billing_email as string | null) || (client.email as string | null)
+  // Prefer the client's own billing/email; many accounts keep their email only on the login record
+  // (client_users), so fall back to the owner's login email before giving up.
+  let email = (client.billing_email as string | null) || (client.email as string | null)
+  if (!email) {
+    const { data: users } = await a.from('client_users').select('email, role').eq('client_id', clientId)
+    const withEmail = (users ?? []).filter((u): u is { email: string; role: string } => typeof u?.email === 'string' && u.email.length > 0)
+    email = (withEmail.find((u) => u.role === 'owner')?.email) || withEmail[0]?.email || null
+  }
   if (!email) return { error: 'No billing email on file for this account.' }
   try {
     const customerId = await getOrCreateStripeCustomerForClient({
