@@ -4277,8 +4277,6 @@ function planDelivery(items) {
  *  checkout moment. Checkout composes the WHOLE plan as ONE campaign (plan-checkout.ts)
  *  and ships it through the same rail Buy now uses. Exported for the render smoke. */
 export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout }) {
-  const [stage, setStage] = useState("list");
-  const [composed, setComposed] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [droppedNote, setDroppedNote] = useState(null);
@@ -4309,10 +4307,11 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
     }, 240);
   };
 
-  // Compose the one-campaign draft NOW so anything stale is caught before the last look.
-  // Items that no longer price are removed OUT LOUD (the note below) — never silently billed.
-  const startCheckout = () => {
-    if (blocked || empty) return;
+  // Check out: compose the WHOLE plan as one campaign NOW (so anything stale is caught) and open
+  // the real checkout page (full bill + card). Items that no longer price are removed OUT LOUD (the
+  // note below) — never silently billed. No separate "review" step: the checkout page IS the review.
+  const startCheckout = async () => {
+    if (blocked || empty || busy) return;
     const res = composePlanCampaign(items);
     if (res.dropped.length) {
       const names = res.dropped.map((id) => (catGet(id) || { title: id }).title).join(", ");
@@ -4320,18 +4319,12 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
       setDroppedNote(`We took ${names} out of your plan. It can't be priced right now, so you were not charged for it.`);
     }
     if (!res.draft) return;
-    setComposed({ draft: res.draft, perItem: res.perItem });
     setError(null);
-    setStage("confirm");
-  };
-
-  const confirmShip = async () => {
-    if (busy || !composed) return;
     setBusy(true);
-    setError(null);
-    const ok = onCheckout ? await onCheckout(composed.draft) : false;
-    if (!ok) { setBusy(false); setError("That didn't go through. Nothing was ordered. Try again."); }
-    // On success the host clears the plan and navigates to the campaign's ready page.
+    const ok = onCheckout ? await onCheckout(res.draft) : false;
+    setBusy(false);
+    // On success the checkout page is now open; on failure nothing shipped and retry is safe.
+    if (!ok) setError("That didn't go through. Try again.");
   };
 
   const header = (title, backFn) => (
@@ -4342,59 +4335,6 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
       <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4, margin: 0 }}>{title}</h1>
     </div>
   );
-
-  if (stage === "confirm" && composed) {
-    const d = composed.draft;
-    return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-        {header("One last look", () => { setStage("list"); setError(null); })}
-        <div style={{ flex: 1, overflowY: "auto", padding: "4px 18px 16px" }}>
-          <div style={{ background: "#fff", borderRadius: 18, border: `1px solid ${TOKENS.line}`, padding: "4px 16px", marginBottom: 14 }}>
-            {composed.perItem.map(({ itemId }) => {
-              const it = items.find((x) => x.itemId === itemId) || { itemId, doer: null, options: [] };
-              const p = catGet(itemId) || { title: itemId };
-              return (
-                <div key={itemId} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
-                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>{p.title}</span>
-                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.ink, whiteSpace: "nowrap" }}>{planMoneyLabel(planItemMoney(it), isCreativeCard(catGet(itemId)))}</span>
-                </div>
-              );
-            })}
-            {serviceFee > 0 && (
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>Service fee (10%)</span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink }}>{`$${serviceFee.toLocaleString()}`}</span>
-              </div>
-            )}
-            {totalWithFee.oneTime > 0 && (
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>Taxes</span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub }}>Calculated at checkout</span>
-              </div>
-            )}
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "12px 0" }}>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
-            </div>
-          </div>
-          {/* What happens next — true to the real rail: one campaign, charge-at-checkout on the next step. */}
-          <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "13px 15px" }}>
-            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, marginBottom: 6 }}>What happens next</div>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#3f7d6a", lineHeight: 1.55 }}>
-              Everything here becomes one campaign, so you track it all in one place. Next you&apos;ll add your card and pay the total above, then your team starts right away.{totals.perMonth > 0 ? " Monthly items are billed separately each month until you stop them." : ""}
-            </div>
-          </div>
-        </div>
-        <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
-          {error && <div role="alert" style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: "#b3462e", textAlign: "center", marginBottom: 8 }}>{error}</div>}
-          <button onClick={confirmShip} disabled={busy} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: busy ? "default" : "pointer", background: busy ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
-            {busy ? "Opening checkout…" : "Continue to payment"}
-          </button>
-          <button onClick={() => { setStage("list"); setError(null); }} disabled={busy} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Go back</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -4487,8 +4427,8 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
             <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
             <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
           </div>
-          {/* Honest: Check out opens the review, then a real payment page; nothing bills until you pay there. */}
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Includes a 10% service fee, plus tax. You&apos;ll review your order and pay next.</div>
+          {/* Honest: Check out goes straight to the payment page; nothing bills until you pay there. */}
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Includes a 10% service fee, plus tax. You&apos;ll add your card and pay next.</div>
           <button onClick={startCheckout} disabled={blocked} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: blocked ? "default" : "pointer", background: blocked ? TOKENS.dash : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? "none" : "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>Check out</button>
           <button onClick={onBack} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Keep shopping</button>
         </div>
