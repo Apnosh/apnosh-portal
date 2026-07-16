@@ -108,6 +108,7 @@ export function CatalogAdmin({ rows: initial, preview = false, initialOpenId, us
           <div className="flex items-center gap-1 rounded-lg bg-bg-2 p-1 mr-1">
             <span className="text-[12.5px] font-semibold rounded-md px-3 py-1.5 bg-white text-ink shadow-sm">Services</span>
             <Link href="/admin/catalog/campaigns" className="text-[12.5px] font-medium rounded-md px-3 py-1.5 text-ink-3 hover:text-ink">Campaigns</Link>
+            <Link href="/admin/catalog/availability" className="text-[12.5px] font-medium rounded-md px-3 py-1.5 text-ink-3 hover:text-ink">Availability</Link>
           </div>
           <button onClick={startNew} disabled={preview} className="inline-flex items-center gap-1.5 text-[13px] font-semibold rounded-lg px-3.5 py-2 bg-brand text-white disabled:opacity-50">＋ New card</button>
           {dirty && <span className="text-[12px] text-amber-600 font-medium">Unpublished changes</span>}

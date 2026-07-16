@@ -470,6 +470,7 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
         <div className="flex items-center gap-1 rounded-lg bg-bg-2 p-1">
           <Link href="/admin/catalog" className="text-[12.5px] font-medium rounded-md px-3 py-1.5 text-ink-3 hover:text-ink">Services</Link>
           <span className="text-[12.5px] font-semibold rounded-md px-3 py-1.5 bg-white text-ink shadow-sm">Campaigns</span>
+          <Link href="/admin/catalog/availability" className="text-[12.5px] font-medium rounded-md px-3 py-1.5 text-ink-3 hover:text-ink">Availability</Link>
         </div>
       </div>
 
