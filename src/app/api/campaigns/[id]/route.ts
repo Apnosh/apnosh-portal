@@ -9,7 +9,7 @@ import { getCampaignPieces } from '@/lib/campaigns/tracker/pieces'
 import { getCampaignActivity } from '@/lib/campaigns/tracker/activity'
 import { getCampaignReadiness } from '@/lib/campaigns/readiness'
 import { getCampaignPayment } from '@/lib/campaigns/campaign-payments-server'
-import { getConfirmedBookingForCampaign } from '@/lib/campaigns/gates/booking-server'
+import { getBookingForCampaign } from '@/lib/campaigns/gates/booking-server'
 import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
 import { checkoutBill } from '@/lib/campaigns/checkout-bill'
 import { shipBillingGate, SHIP_NEEDS_PAYMENT } from '@/lib/campaigns/ship-guard'
@@ -47,8 +47,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     shipped ? getCampaignReadiness(id).catch(() => null) : Promise.resolve(null),
     // The upfront charge-at-checkout receipt (paid at order time), if any.
     shipped ? getCampaignPayment(id).catch(() => null) : Promise.resolve(null),
-    // The confirmed shoot booking (Checkout Gates), if this order picked a date at checkout.
-    shipped ? getConfirmedBookingForCampaign(id).catch(() => null) : Promise.resolve(null),
+    // The shoot booking (Checkout Gates): confirmed date, a needs_reschedule, or request-mode.
+    shipped ? getBookingForCampaign(id).catch(() => null) : Promise.resolve(null),
   ])
   return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking })
 }

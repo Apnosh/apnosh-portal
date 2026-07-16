@@ -29,6 +29,7 @@ import CampaignResults, { hasResults } from '@/components/campaigns/campaign-res
 import CampaignWork from '@/components/campaigns/tracker/campaign-work'
 import { ProductionSummary, ProductionGuide } from '@/components/campaigns/tracker/production-guide'
 import CampaignTeamCard from '@/components/campaigns/campaign-team-card'
+import BookingCard, { type CampaignBooking } from '@/components/campaigns/booking-card'
 import ContactSupport from '@/components/campaigns/contact-support'
 import { fmtShort } from '@/components/campaigns/tracker/piece-tracker'
 import ActivityFeed from '@/components/campaigns/tracker/activity-feed'
@@ -47,8 +48,8 @@ export default function CampaignDetailPage() {
   const [pieces, setPieces] = useState<TrackerPiece[]>([])
   const [activity, setActivity] = useState<ActivityEvent[]>([])
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null)
-  // The confirmed shoot booking (Checkout Gates) — a real, earned date, shown as such (not an estimate).
-  const [booking, setBooking] = useState<{ label: string; date: string } | null>(null)
+  // The shoot booking (Checkout Gates): confirmed date, needs_reschedule, or request-mode — never faked.
+  const [booking, setBooking] = useState<CampaignBooking | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Ship-only failure, shown inline over the footer (the footer's Ship button is the retry).
@@ -67,7 +68,7 @@ export default function CampaignDetailPage() {
       setPieces((j.pieces as TrackerPiece[]) ?? [])
       setActivity((j.activity as ActivityEvent[]) ?? [])
       setReadiness((j.readiness as ReadinessReport) ?? null)
-      setBooking((j.booking as { label: string; date: string }) ?? null)
+      setBooking((j.booking as CampaignBooking) ?? null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Load failed') }
   }, [id])
   useEffect(() => { load() }, [load])
@@ -219,7 +220,7 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
   pieces: TrackerPiece[]
   activity: ActivityEvent[]
   readiness: ReadinessReport | null
-  booking: { label: string; date: string } | null
+  booking: CampaignBooking | null
   onReload: () => Promise<void> | void
   onToggleOptOut: (id: string, r: OptOutReason) => void
   onToggleInclude: (id: string) => void
@@ -403,16 +404,9 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
           )}
           {/* the ONE home for outcomes — the real target of "See every piece" */}
           <div id="campaign-results"><CampaignResults outcomes={outcomes} pieces={pieces} /></div>
-          {/* Confirmed shoot date (Checkout Gates): a real booked date, shown as earned — never an estimate. */}
-          {booking && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '11px 14px', boxShadow: SHADOW_CARD }}>
-              <CalendarDays size={17} color={C.greenDk} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Shoot day · {booking.label}</div>
-                <div style={{ fontSize: 11.5, color: C.mute }}>Confirmed at checkout. Your team comes then.</div>
-              </div>
-            </div>
-          )}
+          {/* Shoot booking (Checkout Gates): confirmed date, a needs-reschedule prompt, or request-mode —
+              real state, with a live reschedule picker. Never a faked date. */}
+          {booking && <BookingCard clientId={camp.clientId} booking={booking} onReload={onReload} />}
           {/* One-look status above the timeline: what's happening now, what's next, when it goes live */}
           <ProductionSummary
             phase={st.phase}

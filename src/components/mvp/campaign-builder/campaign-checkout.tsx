@@ -247,6 +247,11 @@ function BookingGate({ clientId, paymentIntentId, draft, onBlockingChange }: {
       const m = open.length > 0 ? 'enforced' : 'request'
       setMode(m)
       onBlockingChange(m === 'enforced' && !hold)
+      // Request-mode: record an honest 'requested' booking bound to this PaymentIntent so the order is
+      // tracked and staff can schedule it later. Best-effort; the note shows regardless.
+      if (m === 'request') {
+        fetch('/api/gates/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, paymentIntentId, gateKind: 'shoot' }) }).catch(() => {})
+      }
     } catch {
       setMode('request'); onBlockingChange(false)
     } finally { setLoading(false) }

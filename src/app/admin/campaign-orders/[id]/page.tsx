@@ -20,8 +20,10 @@ import type { WorkOrderStep } from '@/lib/campaigns/data/service-playbooks'
 import type { ServiceWorkOrder } from '@/lib/campaigns/service-work-orders'
 import type { LineItem } from '@/lib/campaigns/types'
 import type { TrackerPiece } from '@/lib/campaigns/tracker/types'
+import { getBookingForCampaign } from '@/lib/campaigns/gates/booking-server'
 import ConfirmButton from './confirm-button'
 import LineStatusControl from './line-status-control'
+import AdminBookingControl from './booking-control'
 
 type OrderStatus = 'awaiting' | 'production' | 'live' | 'done'
 const STATUS_PILL: Record<OrderStatus, string> = {
@@ -147,6 +149,8 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
 
   const { campaign, clientName, progress, pieces, activity, readiness, threads, serviceWorkOrders } = detail
   const c = campaign
+  // The shoot booking (Checkout Gates), so the operator can move/assign it. Best-effort.
+  const booking = await getBookingForCampaign(id).catch(() => null)
   const items = (c.draft.items ?? []).filter((it) => it.included)
   const swoByLine = new Map<string, ServiceWorkOrder>()
   for (const w of serviceWorkOrders) if (w.lineItemId) swoByLine.set(w.lineItemId, w)
@@ -210,6 +214,10 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           </div>
         </div>
       </section>
+
+      {/* Shoot booking control (Checkout Gates): move a confirmed shoot, or assign a slot for a
+          needs-reschedule / request-mode order. Only shown when this order has a shoot booking. */}
+      {booking && <AdminBookingControl bookingId={booking.id} status={booking.status} label={booking.label} />}
 
       {/* Adaptive action band */}
       {actionKind === 'confirm' ? (
