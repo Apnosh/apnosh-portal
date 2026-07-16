@@ -19,11 +19,9 @@ import type { ContentOverrideMap } from '@/lib/campaigns/data/content-overrides'
 import { registerDbCampaigns, type DbCampaign } from '@/lib/campaigns/data/db-campaigns'
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
 import type { Diagnosis } from '@/lib/campaigns/planning/types'
-import { summarize, type LineItem, type CampaignDraft, type PieceProducer, type CampaignReceipt } from '@/lib/campaigns/types'
-import { saveAndShip } from '@/lib/campaigns/builder/ship'
+import { summarize, type LineItem, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
 import CampaignPlanFlow from '@/components/campaigns/plan-flow/campaign-plan-flow'
 import PlanAnalyzing from '@/components/campaigns/plan-flow/plan-analyzing'
-import OrderConfirmed from '@/components/campaigns/plan-flow/order-confirmed'
 import CampaignCheckout from './campaign-checkout'
 // apnosh-campaign is intentionally .jsx (untyped design code). TS infers a
 // narrow props type from its defaults, so re-type it to the real prop surface.
@@ -130,10 +128,9 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   // The "AI is analyzing your business" screen plays over the plan while the brain tailors it. It
   // reveals the plan (sets false) when the staged steps finish AND the plan-mix call has resolved.
   const [analyzing, setAnalyzing] = useState(false)
-  // After approve+ship: the "you're all set" confirmation screen (holds the new campaign id + its draft).
-  const [confirmed, setConfirmed] = useState<{ id: string; draft: CampaignDraft; receipt: CampaignReceipt } | null>(null)
-  // The cart checkout page (charge-at-checkout): holds the pre-merged draft while the owner pays.
-  const [checkout, setCheckout] = useState<{ draft: CampaignDraft } | null>(null)
+  // The checkout overlay (charge-at-checkout): holds the draft while the owner pays. Shared by the cart
+  // (pre-merged draft, no producer map) AND single-campaign Buy now (carries producerChoices + recall).
+  const [checkout, setCheckout] = useState<{ draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; recall?: { goalId: string; vals: Record<string, unknown> } | null } | null>(null)
 
   // Real signals for the product page's "why this, for you" line. Same instant-first
   // pattern as the rec cache: last bundle renders immediately from localStorage, a
@@ -395,23 +392,14 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   // PATCH rail lives in saveAndShip (ship.ts), shared with the plan (cart) checkout.
   // Owner-facing copy when the confirm fails partway: the campaign is at most a saved
   // draft (status never flipped), so nothing was ordered and tapping Confirm again is safe.
-  const onConfirm = async ({ draft, producerChoices, receipt }: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer>; receipt: CampaignReceipt }) => {
+  // Single-campaign "Buy now" now routes through the SAME upfront CampaignCheckout as the cart (owner
+  // decision B — one pay-first model). It carries the per-piece producer picks and the profile-recall
+  // payload; the checkout charges (or ships free), runs the pre-checkout shoot gate, and shows the one
+  // shared confirmation. Opening the overlay is instant, so no plan-flow busy spinner is needed.
+  const onConfirm = ({ draft, producerChoices }: { draft: CampaignDraft; producerChoices: Record<string, PieceProducer> }) => {
     if (!client?.id) return
-    setPlanBusy(true); setPlanError(null)
-    try {
-      const id = await saveAndShip({ clientId: client.id, draft, producerChoices })
-      // Remember durable answers on the profile (fill-when-empty, server-side; a
-      // failure costs nothing) — a cold client's first campaign teaches the brain
-      // what they're after and who they're for, instead of the answers evaporating
-      // with the draft and being re-asked forever.
-      if (plan?.itemId && plan?.vals) {
-        fetch('/api/campaigns/profile-recall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: client.id, goalId: plan.itemId, vals: plan.vals }) }).catch(() => {})
-      }
-      // Show the "you're all set" receipt (with a handoff to setup) instead of jumping straight in.
-      setConfirmed({ id, draft, receipt }); setPlanBusy(false)
-    } catch (e) {
-      setPlanError(e instanceof Error ? e.message : 'Something went wrong'); setPlanBusy(false)
-    }
+    setPlanError(null)
+    setCheckout({ draft, producerChoices, recall: plan?.itemId && plan?.vals ? { goalId: plan.itemId, vals: plan.vals } : null })
   }
 
   // The plan (cart) checkout: the store hands up ONE pre-merged draft (composePlanCampaign) and we
@@ -424,10 +412,6 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
     setCheckout({ draft })
     return true
   }
-
-  // From the "you're all set" screen: head to the canonical "Get it ready" needs page, or skip to the campaign.
-  const goToSetup = () => router.push(confirmed?.id ? `/dashboard/campaigns/${confirmed.id}/ready` : '/dashboard/campaigns')
-  const goToCampaign = () => router.push(confirmed?.id ? `/dashboard/campaigns/${confirmed.id}` : '/dashboard/campaigns')
 
   return (
     <>
@@ -483,23 +467,20 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
           onBack={() => { setPlan(null); setPlanError(null); setPlanOutcome(null); setPlanLead(null); setPlanReasons(null); setPlanDiagnosis(null); setPlanTailored(null) }}
         />
       )}
-      {confirmed && client?.id && (
-        <OrderConfirmed
-          restaurant={client.name || 'your restaurant'}
-          orderId={confirmed.id}
-          draft={confirmed.draft}
-          receipt={confirmed.receipt}
-          doneSetupIds={profile?.doneSetup ?? []}
-          onSetup={goToSetup}
-          onSkip={goToCampaign}
-        />
-      )}
       {checkout && client?.id && (
         <CampaignCheckout
           clientId={client.id}
           draft={checkout.draft}
+          producerChoices={checkout.producerChoices}
           restaurant={client.name || 'your restaurant'}
-          onSuccess={(id, dest) => { setCheckout(null); router.push(dest === 'campaign' ? `/dashboard/campaigns/${id}` : `/dashboard/campaigns/${id}/ready`) }}
+          onSuccess={(id, dest) => {
+            // Teach the brain from this first campaign's answers (single-campaign path only; fill-when-
+            // empty server-side, a failure costs nothing). Fires on success now that ship happens in checkout.
+            const rc = checkout.recall
+            if (rc && client?.id) fetch('/api/campaigns/profile-recall', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId: client.id, goalId: rc.goalId, vals: rc.vals }) }).catch(() => {})
+            setCheckout(null)
+            router.push(dest === 'campaign' ? `/dashboard/campaigns/${id}` : `/dashboard/campaigns/${id}/ready`)
+          }}
           onCancel={() => setCheckout(null)}
         />
       )}

@@ -12,6 +12,7 @@ import { getCampaignPayment } from '@/lib/campaigns/campaign-payments-server'
 import { getConfirmedBookingForCampaign } from '@/lib/campaigns/gates/booking-server'
 import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
 import { checkoutBill } from '@/lib/campaigns/checkout-bill'
+import { shipBillingGate, SHIP_NEEDS_PAYMENT } from '@/lib/campaigns/ship-guard'
 import { beatsFromLines } from '@/lib/campaigns/catalog'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
@@ -132,16 +133,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // one-shot mint/notify block below — the loser's guarded update matches zero rows.
   const wantsShip = body.fields?.status === 'shipped' && campaign.status !== 'shipped'
 
-  // ── G7: payment-aware ship. A BILLABLE draft (one-time bill > $0) shipped on the
-  // charge-at-checkout path must present a PaymentIntent whose charge actually succeeded and
-  // covers the bill — else we refuse (no shipped-but-unpaid billable order). The delivery-gated
-  // (buy-now) path bills per piece on delivery and carries NO paymentIntentId, so it is allowed
-  // through here (the honest legacy bypass); its pieces still bill via accrual, so no money is lost.
+  // ── G7 (hardened for the ONE pay-first model, owner decision B): payment-aware ship.
+  // Every billable campaign ships through the upfront checkout, which threads the paid PaymentIntent
+  // into this PATCH. shipBillingGate decides:
+  //   'allow'  → free/DIY $0 order, or a genuinely legacy pre-checkout campaign (dated carve-out)
+  //   'verify' → a PaymentIntent was presented → confirm the charge succeeded + covers the bill, or 402
+  //   'refuse' → a billable, non-legacy ship with NO payment → block (it must go through checkout)
   if (wantsShip) {
     const preTaxCents = checkoutBill({ items: campaign.draft.items }).preTaxCents
     const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
-    if (preTaxCents > 0 && paymentIntentId) {
-      const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId, clientId: campaign.clientId, campaignId: id, preTaxCents })
+    const gate = shipBillingGate({ preTaxCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt })
+    if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT }, { status: 402 })
+    if (gate === 'verify') {
+      const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId: paymentIntentId!, clientId: campaign.clientId, campaignId: id, preTaxCents })
       if (!verified.ok) return NextResponse.json({ error: verified.reason }, { status: 402 })
     }
   }

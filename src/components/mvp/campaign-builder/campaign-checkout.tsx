@@ -19,7 +19,7 @@ import { Elements, AddressElement, PaymentElement, useStripe, useElements } from
 import { saveAndShip } from '@/lib/campaigns/builder/ship'
 import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
 import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
-import { summarize, type CampaignDraft } from '@/lib/campaigns/types'
+import { summarize, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
 import { draftHasPreCheckoutBooking } from '@/lib/campaigns/gates/derive'
 
 const MINT = '#4abd98'
@@ -51,6 +51,9 @@ export interface CampaignCheckoutProps {
   clientId: string
   draft: CampaignDraft
   restaurant?: string
+  /** Per-piece producer picks (single-campaign "Buy now" carries these; the cart pre-merges them onto
+   *  line items and passes none). Applied via a PATCH before ship, same as the old direct rail. */
+  producerChoices?: Record<string, PieceProducer>
   /** Called when the owner LEAVES the confirmation screen — to the setup page or the campaign. */
   onSuccess: (campaignId: string, dest: 'setup' | 'campaign') => void
   onCancel: () => void
@@ -66,7 +69,7 @@ function stripePromiseFor(key: string) {
   return _stripePromise
 }
 
-export default function CampaignCheckout({ clientId, draft, restaurant, onSuccess, onCancel }: CampaignCheckoutProps) {
+export default function CampaignCheckout({ clientId, draft, restaurant, producerChoices, onSuccess, onCancel }: CampaignCheckoutProps) {
   const [prep, setPrep] = useState<PrepareResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Set once the order is placed (paid + shipped) — flips the whole overlay to the confirmation.
@@ -114,7 +117,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, onSucces
             <Header onBack={onCancel} />
             {error && !prep && <ErrorBox message={error} onBack={onCancel} />}
             {!error && !prep && <Loading />}
-            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} monthlyCents={prep.monthlyCents ?? 0} onPlaced={onPlaced} />}
+            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} monthlyCents={prep.monthlyCents ?? 0} onPlaced={onPlaced} />}
             {prep && !prep.free && prep.clientSecret && prep.publishableKey && (
               <Elements
                 stripe={stripePromiseFor(prep.publishableKey)}
@@ -124,6 +127,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, onSucces
                   clientId={clientId}
                   draft={draft}
                   restaurant={restaurant}
+                  producerChoices={producerChoices}
                   paymentIntentId={prep.paymentIntentId!}
                   initialBreakdown={prep.breakdown}
                   monthlyCents={prep.monthlyCents ?? 0}
@@ -333,10 +337,11 @@ function BookingGate({ clientId, paymentIntentId, draft, onBlockingChange }: {
   )
 }
 
-function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdown, monthlyCents, savedCard, onPlaced }: {
+function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId, initialBreakdown, monthlyCents, savedCard, onPlaced }: {
   clientId: string
   draft: CampaignDraft
   restaurant?: string
+  producerChoices?: Record<string, PieceProducer>
   paymentIntentId: string
   initialBreakdown: Breakdown
   monthlyCents: number
@@ -382,7 +387,7 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
     if (!shippedIdRef.current) {
       setStatus('Placing your order…')
       try {
-        shippedIdRef.current = await saveAndShip({ clientId, draft, paymentIntentId })
+        shippedIdRef.current = await saveAndShip({ clientId, draft, producerChoices, paymentIntentId })
       } catch {
         setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return
@@ -506,14 +511,14 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
   )
 }
 
-function FreeCheckout({ clientId, draft, monthlyCents, onPlaced }: { clientId: string; draft: CampaignDraft; monthlyCents: number; onPlaced: (id: string, breakdown: Breakdown) => void }) {
+function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, onPlaced }: { clientId: string; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; monthlyCents: number; onPlaced: (id: string, breakdown: Breakdown) => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const place = async () => {
     if (busy) return
     setBusy(true); setError(null)
     try {
-      const id = await saveAndShip({ clientId, draft })
+      const id = await saveAndShip({ clientId, draft, producerChoices })
       onPlaced(id, { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 })
     } catch {
       setError('That didn’t go through. Nothing was ordered. Try again.'); setBusy(false)
