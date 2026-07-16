@@ -131,6 +131,9 @@ export interface ContentOverride {
   needs?: CampaignNeedsConfig
   /** Owner config for pre-checkout gates (shoot on/off/required + custom agreement/input). Absent = smart defaults. */
   gates?: CampaignGatesConfig
+  /** Admin override for whether this card is buyable ('live'), shown-but-disabled ('coming_soon'),
+   *  or removed ('hidden'). Absent = the code default in catalog-availability.ts. */
+  visibility?: 'live' | 'coming_soon' | 'hidden'
 }
 
 /** Trim, drop empties + dupes, cap — the store contract for a plain string list. */

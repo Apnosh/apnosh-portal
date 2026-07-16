@@ -9,6 +9,7 @@ import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { contentFor } from "@/lib/campaigns/data/content-overrides";
+import { isBuyable, isHidden, comingSoonReason } from "@/lib/campaigns/data/catalog-availability";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
 import { whyFor } from "@/lib/campaigns/data/why-for";
 import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
@@ -2183,6 +2184,22 @@ export const catGet = (id) => {
     sub: typeof o.tagline === "string" && o.tagline.trim() ? o.tagline.trim() : p.sub,
   };
 };
+// Availability (the honesty gate): resolve the buyable state for a card id, honoring any admin
+// CMS override (CONTENT_OVERRIDES[id].visibility) on top of the code default in catalog-availability.
+// buyableId → can be added/bought/shipped; comingSoonId → visible but disabled; hiddenId → dropped
+// from the browse. These read the SAME resolver the server guard uses, so the store can never offer
+// a buy the server would reject.
+const buyableId = (id) => isBuyable(id, CONTENT_OVERRIDES);
+const hiddenId = (id) => isHidden(id, CONTENT_OVERRIDES);
+const soonReason = (id) => comingSoonReason(id, CONTENT_OVERRIDES);
+// Drop hidden ids and push coming-soon ids to the END of a shelf's id list (bookmarked cards still
+// render, with a badge, but never crowd out what the owner can actually buy).
+const orderIds = (ids) => {
+  const vis = (ids || []).filter((id) => !hiddenId(id));
+  const live = vis.filter((id) => buyableId(id));
+  const soon = vis.filter((id) => !buyableId(id));
+  return [...live, ...soon];
+};
 // Every card now has its own bespoke builder + price (promoevent got its own
 // free-event madlib + playbook). Identity map, kept as a single seam in case a
 // future card needs to borrow another's builder.
@@ -2358,10 +2375,20 @@ function planTags(p) {
   return t;
 }
 
-function PlanCardV({ p, onOpen, full }) {
+// A small "Soon" ribbon for a bookmarked (coming-soon) card. Honest by construction: the card still
+// opens (the owner can read what it will do), but its buy footer is disabled downstream.
+function SoonBadge() {
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+    <span style={{ position: "absolute", top: 8, left: 8, zIndex: 2, background: "rgba(20,30,26,0.72)", color: "#fff", fontFamily: "Inter, sans-serif", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", borderRadius: 6, padding: "2.5px 6px", backdropFilter: "blur(2px)" }}>Soon</span>
+  );
+}
+
+function PlanCardV({ p, onOpen, full }) {
+  const soon = !buyableId(p.id);
+  return (
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)", opacity: soon ? 0.82 : 1 }}>
       <div style={{ position: "relative", height: 90, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+        {soon && <SoonBadge />}
         <div style={{ position: "absolute", width: 110, height: 110, borderRadius: 55, background: "rgba(255,255,255,0.12)", bottom: -36, right: -24 }} />
         <div style={{ position: "absolute", width: 60, height: 60, borderRadius: 30, background: "rgba(0,0,0,0.05)", bottom: -22, left: -16 }} />
         <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={62} /></div>
@@ -2377,11 +2404,12 @@ function PlanCardV({ p, onOpen, full }) {
 }
 
 function PlanCardH({ p, onOpen }) {
+  const soon = !buyableId(p.id);
   return (
-    <button onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 15, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: "0 1px 2px rgba(20,30,26,0.03)" }}>
-      <div style={{ width: 50, height: 50, borderRadius: 13, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Art id={p.id} size={34} /></div>
+    <button onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 15, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: "0 1px 2px rgba(20,30,26,0.03)", opacity: soon ? 0.82 : 1 }}>
+      <div style={{ position: "relative", width: 50, height: 50, borderRadius: 13, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{soon && <SoonBadge />}<Art id={p.id} size={34} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 2 }}>{p.title}</div>
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 2 }}>{p.title}{soon && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, color: TOKENS.faint, marginLeft: 6 }}>Coming soon</span>}</div>
         <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sub}</div>
         <div style={{ display: "flex", gap: 5 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
@@ -2395,9 +2423,11 @@ function PlanCardBig({ p, onOpen, full }) {
   // Title/sub are clamped to fixed 2-line blocks and the tag area to a fixed band so
   // every card in the row lands at the same height regardless of copy length.
   const clamp2 = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
+  const soon = !buyableId(p.id);
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)", opacity: soon ? 0.82 : 1 }}>
       <div style={{ position: "relative", height: 96, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
+        {soon && <SoonBadge />}
         <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.12)", bottom: -40, right: -26 }} />
         <div style={{ position: "absolute", width: 70, height: 70, borderRadius: 35, background: "rgba(0,0,0,0.05)", bottom: -24, left: -18 }} />
         <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={64} /></div>
@@ -2412,7 +2442,8 @@ function PlanCardBig({ p, onOpen, full }) {
 }
 
 function CategoryRow({ row, onOpen, onSeeAll }) {
-  const items = row.ids.map(catGet).filter(Boolean);
+  // Drop hidden ids and float coming-soon cards to the end, so a shelf leads with what's buyable.
+  const items = orderIds(row.ids).map(catGet).filter(Boolean);
   const big = row.big;
   return (
     <div style={{ marginBottom: big ? 26 : 22 }}>
@@ -2516,10 +2547,11 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
   const query = q.trim().toLowerCase();
   // Search over the resolved cards (catGet) so an admin-edited title both matches and
   // renders — DB campaigns included, same match fields.
-  const results = query ? [...CATALOG, ...DB_CARDS].map((x) => catGet(x.id)).filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
+  const results = query ? [...CATALOG, ...DB_CARDS].map((x) => catGet(x.id)).filter((p) => p && !hiddenId(p.id) && (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
   // AI recommendations (fetched by the wrapper): drive the featured card + the
-  // "Suggested for you" row when present; otherwise the static defaults show.
-  const recList = (recommended || []).filter((r) => r && catGet(r.id));
+  // "Suggested for you" row when present; otherwise the static defaults show. Only BUYABLE cards can
+  // be recommended — a coming-soon card must never headline the store as a top pick (honesty gate).
+  const recList = (recommended || []).filter((r) => r && catGet(r.id) && buyableId(r.id));
   const recFeatured = recList[0] ? { item: catGet(recList[0].id), reason: recList[0].reason } : null;
   const recRowIds = recList.slice(recFeatured ? 1 : 0).map((r) => r.id);
   // DB campaigns join their chosen shelf before the suggested-row swap.
@@ -2559,12 +2591,12 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
             <>
               {!featHidden && (recFeatured
                 ? <RecFeatured item={recFeatured.item} reason={recFeatured.reason} onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />
-                : <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />)}
+                : (buyableId("promoevent") ? <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} /> : null))}
               {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
             </>
           ) : (() => {
             const row = rowWithDb(ROWS.find((r) => r.id === lens));
-            const items = row ? row.ids.map(catGet).filter(Boolean) : [];
+            const items = row ? orderIds(row.ids).map(catGet).filter(Boolean) : [];
             return (
               <div style={{ padding: "0 20px 6px" }}>
                 <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: TOKENS.ink, marginBottom: 3 }}>{row ? row.title : ""}</div>
@@ -3084,6 +3116,10 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const totalPerMonth = base.perMonth + optM.perMonth;
   const creative = p.type === "content" || p.id === "shoot";
   const totalLabel = (totalOneTime === 0 && totalPerMonth === 0) ? "Free" : `${creative && totalOneTime > 0 ? "From " : ""}${moneyLabel(totalOneTime, totalPerMonth)}`;
+  // The honesty gate: a bookmarked (coming-soon) card still opens so the owner can read what it will
+  // do, but it cannot be added/bought. The footer swaps to a disabled "Coming soon" with the reason.
+  const soon = !buyableId(itemId);
+  const soonMsg = soonReason(itemId);
 
   const [added, setAdded] = useState(false);
   const [rushOpen, setRushOpen] = useState(false);
@@ -3418,17 +3454,30 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             behind it. "Add to plan" is the filled primary (collect-only local draft, ships/bills
             nothing); "Buy now instead" the quiet secondary into Continue; AI keeps its Pro path. ── */}
       <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 9 }}>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
-          </div>
-          {/* After adding, the button STAYS confirmed and becomes the door to the plan —
-              the add never again looks like nothing happened. Changing the config re-arms it. */}
-          <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan
-          </button>
-          {upsellAi && (
-            <a href="/dashboard/billing" className="apnpress" style={{ display: "block", textAlign: "center", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 10 }}>Upgrade to Pro to use Apnosh AI</a>
+          {soon ? (
+            // BOOKMARKED: no price quote, no buy. A plain "coming soon" with the honest reason, and a
+            // disabled button — we never sell what we cannot deliver yet.
+            <>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.45, marginBottom: 10 }}>{soonMsg || "Coming soon."}</div>
+              <button disabled aria-disabled="true" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "default", background: "#eef0ef", color: "#9aa3a0", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9aa3a0" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>Coming soon
+              </button>
+            </>
+          ) : (
+            <>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 9 }}>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
+                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
+              </div>
+              {/* After adding, the button STAYS confirmed and becomes the door to the plan —
+                  the add never again looks like nothing happened. Changing the config re-arms it. */}
+              <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan
+              </button>
+              {upsellAi && (
+                <a href="/dashboard/billing" className="apnpress" style={{ display: "block", textAlign: "center", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 10 }}>Upgrade to Pro to use Apnosh AI</a>
+              )}
+            </>
           )}
         </div>
     </div>

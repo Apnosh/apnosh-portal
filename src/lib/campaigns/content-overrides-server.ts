@@ -44,6 +44,7 @@ export interface ContentOverrideRow {
   rush?: unknown
   needs?: unknown
   gates?: unknown
+  visibility?: unknown
   updated_at?: string | null
   updated_by?: string | null
 }
@@ -83,6 +84,7 @@ export function rowToOverride(row: ContentOverrideRow): ContentOverride {
   if (needs) o.needs = needs
   const gates = cleanGatesConfig(row.gates)
   if (gates) o.gates = gates
+  if (row.visibility === 'live' || row.visibility === 'coming_soon' || row.visibility === 'hidden') o.visibility = row.visibility
   return o
 }
 
