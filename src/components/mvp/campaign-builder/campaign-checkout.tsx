@@ -20,7 +20,7 @@ import { saveAndShip } from '@/lib/campaigns/builder/ship'
 import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
 import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
 import { summarize, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
-import { draftHasPreCheckoutBooking } from '@/lib/campaigns/gates/derive'
+import type { ResolvedGates, CustomGate } from '@/lib/campaigns/gates/config'
 
 const MINT = '#4abd98'
 const MINT_DARK = '#3f7d6a'
@@ -45,6 +45,7 @@ interface PrepareResult {
   breakdown: Breakdown
   monthlyCents?: number
   savedCard?: SavedCard | null
+  gates?: ResolvedGates
 }
 
 export interface CampaignCheckoutProps {
@@ -117,7 +118,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
             <Header onBack={onCancel} />
             {error && !prep && <ErrorBox message={error} onBack={onCancel} />}
             {!error && !prep && <Loading />}
-            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} monthlyCents={prep.monthlyCents ?? 0} onPlaced={onPlaced} />}
+            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} monthlyCents={prep.monthlyCents ?? 0} gates={prep.gates} onPlaced={onPlaced} />}
             {prep && !prep.free && prep.clientSecret && prep.publishableKey && (
               <Elements
                 stripe={stripePromiseFor(prep.publishableKey)}
@@ -132,6 +133,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
                   initialBreakdown={prep.breakdown}
                   monthlyCents={prep.monthlyCents ?? 0}
                   savedCard={prep.savedCard ?? null}
+                  gates={prep.gates}
                   onPlaced={onPlaced}
                 />
               </Elements>
@@ -222,13 +224,17 @@ const fmtTime12 = (hhmm: string) => {
  * ("we'll reach out to schedule") — never a fake slot, and never a silent block. `onBlockingChange`
  * tells the pay button whether it must wait for a held slot.
  */
-function BookingGate({ clientId, paymentIntentId, draft, onBlockingChange }: {
+function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange }: {
   clientId: string
   paymentIntentId: string
-  draft: CampaignDraft
+  /** The server-resolved booking gate for this order (respects the admin's per-campaign config), or
+   *  null when none applies (not a shoot, or the admin turned the gate off). */
+  booking: { gateKind: string; required: boolean } | null
   onBlockingChange: (blocking: boolean) => void
 }) {
-  const needs = draftHasPreCheckoutBooking(draft)
+  const needs = !!booking
+  const gateKind = booking?.gateKind ?? 'shoot'
+  const required = booking?.required ?? true
   const [loading, setLoading] = useState(needs)
   const [mode, setMode] = useState<'enforced' | 'request' | 'none'>(needs ? 'enforced' : 'none')
   const [slots, setSlots] = useState<Slot[]>([])
@@ -240,17 +246,18 @@ function BookingGate({ clientId, paymentIntentId, draft, onBlockingChange }: {
   const loadAvailability = async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/gates/availability?gateKind=shoot')
+      const res = await fetch(`/api/gates/availability?gateKind=${encodeURIComponent(gateKind)}`)
       const j = (await res.json().catch(() => ({}))) as AvailabilityResp
       const open = Array.isArray(j.slots) ? j.slots : []
       setSlots(open); setTz(j.timezone ?? null)
       const m = open.length > 0 ? 'enforced' : 'request'
       setMode(m)
-      onBlockingChange(m === 'enforced' && !hold)
+      // Only a REQUIRED booking blocks the pay button; an optional gate never blocks.
+      onBlockingChange(required && m === 'enforced' && !hold)
       // Request-mode: record an honest 'requested' booking bound to this PaymentIntent so the order is
       // tracked and staff can schedule it later. Best-effort; the note shows regardless.
       if (m === 'request') {
-        fetch('/api/gates/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, paymentIntentId, gateKind: 'shoot' }) }).catch(() => {})
+        fetch('/api/gates/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, paymentIntentId, gateKind }) }).catch(() => {})
       }
     } catch {
       setMode('request'); onBlockingChange(false)
@@ -268,7 +275,7 @@ function BookingGate({ clientId, paymentIntentId, draft, onBlockingChange }: {
     try {
       const res = await fetch('/api/gates/hold', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, paymentIntentId, gateKind: 'shoot', date: s.date, start: s.start }),
+        body: JSON.stringify({ clientId, paymentIntentId, gateKind, date: s.date, start: s.start }),
       })
       const j = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -309,7 +316,7 @@ function BookingGate({ clientId, paymentIntentId, draft, onBlockingChange }: {
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: INK }}>{fmtDayShort(hold.date)} · {fmtTime12(hold.start)}</div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB }}>Held for 30 min{hold.timezone ? ` · ${hold.timezone}` : ''}. Confirmed when you pay.</div>
           </div>
-          <button onClick={() => { setHold(null); onBlockingChange(true) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: MINT_DARK, padding: 0 }}>Change</button>
+          <button onClick={() => { setHold(null); onBlockingChange(required) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: MINT_DARK, padding: 0 }}>Change</button>
         </div>
       )}
 
@@ -342,7 +349,73 @@ function BookingGate({ clientId, paymentIntentId, draft, onBlockingChange }: {
   )
 }
 
-function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId, initialBreakdown, monthlyCents, savedCard, onPlaced }: {
+/**
+ * CustomGates — the generalized pre-checkout gates an admin authored for this campaign (Phase 4a):
+ * AGREEMENT gates (check to acknowledge) and INPUT gates (answer a question) that must be cleared
+ * before paying. Reports every answer up so the order records them; required-but-unanswered gates
+ * keep the pay button blocked.
+ */
+function CustomGates({ gates, answers, onChange }: {
+  gates: CustomGate[]
+  answers: Record<string, string>
+  onChange: (id: string, value: string) => void
+}) {
+  if (!gates.length) return null
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '13px 16px 15px', marginBottom: 16 }}>
+      <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 8 }}>Before you order</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {gates.map((g) => (
+          <div key={g.id}>
+            {g.kind === 'agreement' ? (
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer' }}>
+                <input type="checkbox" checked={answers[g.id] === 'agreed'} onChange={(e) => onChange(g.id, e.target.checked ? 'agreed' : '')} style={{ marginTop: 2, width: 16, height: 16, accentColor: MINT }} />
+                <span>
+                  <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: INK }}>{g.title}{g.required ? '' : ' (optional)'}</span>
+                  {g.why && <span style={{ display: 'block', fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 2 }}>{g.why}</span>}
+                </span>
+              </label>
+            ) : (
+              <div>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: INK, marginBottom: 4 }}>{g.title}{g.required ? '' : ' (optional)'}</div>
+                {g.why && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginBottom: 6 }}>{g.why}</div>}
+                {g.inputType === 'select' && g.options?.length ? (
+                  <select value={answers[g.id] ?? ''} onChange={(e) => onChange(g.id, e.target.value)} style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, borderRadius: 12, border: `1px solid ${LINE}`, padding: '10px 11px', background: '#fff' }}>
+                    <option value="">Choose…</option>
+                    {g.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : g.inputType === 'textarea' ? (
+                  <textarea value={answers[g.id] ?? ''} onChange={(e) => onChange(g.id, e.target.value)} rows={3} style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, borderRadius: 12, border: `1px solid ${LINE}`, padding: '10px 11px', resize: 'vertical' }} />
+                ) : (
+                  <input value={answers[g.id] ?? ''} onChange={(e) => onChange(g.id, e.target.value)} style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, borderRadius: 12, border: `1px solid ${LINE}`, padding: '10px 11px' }} />
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/** True while any REQUIRED custom gate is still unanswered (agreement unchecked / input empty). */
+function customGatesBlocking(gates: CustomGate[], answers: Record<string, string>): boolean {
+  return gates.some((g) => g.required && !(answers[g.id] ?? '').trim())
+}
+
+/** The execution patch that records the answered custom gates (keyed gate-<id>), so they reach the team. */
+function gateExecutionPatch(gates: CustomGate[], answers: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const g of gates) {
+    const v = (answers[g.id] ?? '').trim()
+    if (!v) continue
+    const key = g.id.startsWith('gate-') ? g.id : `gate-${g.id}`
+    out[key] = g.kind === 'agreement' ? `Agreed: ${g.title}` : v
+  }
+  return out
+}
+
+function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId, initialBreakdown, monthlyCents, savedCard, gates, onPlaced }: {
   clientId: string
   draft: CampaignDraft
   restaurant?: string
@@ -351,6 +424,7 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   initialBreakdown: Breakdown
   monthlyCents: number
   savedCard: SavedCard | null
+  gates?: ResolvedGates
   onPlaced: (campaignId: string, breakdown: Breakdown) => void
 }) {
   const stripe = useStripe()
@@ -367,9 +441,13 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   const shippedIdRef = useRef<string | null>(null)
   const billing = useRef<{ name?: string; address?: Record<string, unknown> }>({})
   const taxSeq = useRef(0)
-  // Pre-checkout booking gate: blocks payment until a shoot-bearing order has a held slot. Starts
-  // true when the draft needs a shoot, so the button waits until availability resolves.
-  const [gateBlocking, setGateBlocking] = useState(draftHasPreCheckoutBooking(draft))
+  // Pre-checkout gates (Phase 4a): the booking gate (shoot) blocks until a slot is held; custom
+  // agreement/input gates block until answered. `bookingBlocking` starts true when a required booking
+  // gate applies, so the button waits until availability resolves.
+  const customGates = gates?.custom ?? []
+  const [bookingBlocking, setBookingBlocking] = useState(!!gates?.booking?.required)
+  const [gateAnswers, setGateAnswers] = useState<Record<string, string>>({})
+  const gateBlocking = bookingBlocking || customGatesBlocking(customGates, gateAnswers)
 
   // Recompute tax + update the charge when the billing address is complete (new-card path).
   const onAddress = async (e: StripeAddressElementChangeEvent) => {
@@ -396,6 +474,11 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
       } catch {
         setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return
+      }
+      // Record the answered custom gates onto the campaign so the team sees them. Best-effort.
+      const patch = gateExecutionPatch(customGates, gateAnswers)
+      if (Object.keys(patch).length) {
+        fetch(`/api/campaigns/${shippedIdRef.current}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { execution: patch } }) }).catch(() => {})
       }
     }
     setStatus('Finishing up…')
@@ -461,7 +544,8 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
     <>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 16px' }}>
         {restaurant && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10 }}>Placing your order for <span style={{ fontWeight: 600, color: INK }}>{restaurant}</span></div>}
-        <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} draft={draft} onBlockingChange={setGateBlocking} />
+        <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} booking={gates?.booking ?? null} onBlockingChange={setBookingBlocking} />
+        <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
         <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} />
 
         {mode === 'saved' && savedCard ? (
@@ -516,14 +600,19 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   )
 }
 
-function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, onPlaced }: { clientId: string; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; monthlyCents: number; onPlaced: (id: string, breakdown: Breakdown) => void }) {
+function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, gates, onPlaced }: { clientId: string; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; monthlyCents: number; gates?: ResolvedGates; onPlaced: (id: string, breakdown: Breakdown) => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const customGates = gates?.custom ?? []
+  const [gateAnswers, setGateAnswers] = useState<Record<string, string>>({})
+  const blocked = customGatesBlocking(customGates, gateAnswers)
   const place = async () => {
-    if (busy) return
+    if (busy || blocked) return
     setBusy(true); setError(null)
     try {
       const id = await saveAndShip({ clientId, draft, producerChoices })
+      const patch = gateExecutionPatch(customGates, gateAnswers)
+      if (Object.keys(patch).length) fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { execution: patch } }) }).catch(() => {})
       onPlaced(id, { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 })
     } catch {
       setError('That didn’t go through. Nothing was ordered. Try again.'); setBusy(false)
@@ -537,11 +626,12 @@ function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, onPlaced
           <BillRow label="Total due today" value="Free" strong />
           {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{fmt(monthlyCents)}/mo in monthly services starts once set up — billed separately.</div>}
         </div>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: SUB, lineHeight: 1.5 }}>Everything in this plan is on you to run, so there’s nothing to pay now. Placing the order starts your campaign.</div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: SUB, lineHeight: 1.5, marginBottom: 16 }}>Everything in this plan is on you to run, so there’s nothing to pay now. Placing the order starts your campaign.</div>
+        <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
       </div>
       <div style={{ flexShrink: 0, background: '#fff', borderTop: `1px solid ${LINE}`, boxShadow: '0 -10px 28px rgba(20,40,30,0.10)', padding: '11px 18px calc(12px + env(safe-area-inset-bottom))' }}>
         {error && <div role="alert" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#b3462e', textAlign: 'center', marginBottom: 8 }}>{error}</div>}
-        <button onClick={place} disabled={busy} style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy ? 'default' : 'pointer', background: busy ? MINT_DARK : MINT, color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: '0 8px 22px rgba(74,189,152,0.42)' }}>{busy ? 'Placing your order…' : 'Place order'}</button>
+        <button onClick={place} disabled={busy || blocked} style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || blocked ? 'default' : 'pointer', background: busy ? MINT_DARK : (blocked ? FAINT : MINT), color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? 'none' : '0 8px 22px rgba(74,189,152,0.42)' }}>{busy ? 'Placing your order…' : blocked ? 'Answer the questions above' : 'Place order'}</button>
       </div>
     </>
   )

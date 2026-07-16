@@ -23,6 +23,8 @@ import {
   type DbCadence, type DbCampaign, type DbCardType, type DbShelf,
 } from './data/db-campaigns'
 import type { FunnelStage } from './data/create-catalog'
+import { cleanGatesConfig } from './gates/config'
+import { cleanNeeds } from './data/content-overrides'
 import { serviceById } from './catalog'
 
 /** The raw catalog_campaigns row shape (content columns nullable; arrays may be null). */
@@ -44,6 +46,8 @@ export interface CatalogCampaignRow {
   service_ids: string[] | null
   addon_service_ids: string[] | null
   status: string | null
+  gates?: unknown
+  needs?: unknown
   created_at?: string | null
   updated_at?: string | null
   updated_by?: string | null
@@ -90,6 +94,8 @@ export function rowToDbCampaign(row: CatalogCampaignRow): DbCampaign | null {
     serviceIds,
     addonServiceIds,
     status: row.status === 'live' ? 'live' : 'draft',
+    ...(cleanGatesConfig(row.gates) ? { gates: cleanGatesConfig(row.gates) } : {}),
+    ...(cleanNeeds(row.needs) ? { needs: cleanNeeds(row.needs) } : {}),
   }
 }
 

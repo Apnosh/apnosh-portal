@@ -19,6 +19,7 @@ import Link from 'next/link'
 import { CAMPAIGN_CONTENT, type CampaignContent } from '@/lib/campaigns/data/campaign-content'
 import { contentFor, type ContentOverride, type ContentOverrideMap, type CampaignLane, type CampaignRush, type CampaignNeedsConfig, type CustomNeed, type NeedInputType, type NeedOverride } from '@/lib/campaigns/data/content-overrides'
 import { campaignAutoNeeds } from '@/lib/campaigns/data/campaign-needs'
+import type { CampaignGatesConfig, CustomGate, ShootGateMode } from '@/lib/campaigns/gates/config'
 import {
   DB_CADENCES, DB_CARD_TYPES, DB_SHELVES, DB_STAGES,
   isBuiltinCampaignId, isValidCampaignSlug, slugFromTitle,
@@ -42,7 +43,7 @@ const DUR_CADENCE: Record<string, string> = { setup: 'Setup', once: 'One-time', 
 type Faq = { q: string; a: string }
 type FormState = {
   title: string; tagline: string; description: string; promise: string; why: string;
-  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]; whatYouGet: string[]; rush: CampaignRush | null; needs: CampaignNeedsConfig | null
+  expectation: string; heroImage: string; bestFor: string; faq: Faq[]; stages: FunnelStage[]; lanes: CampaignLane[]; requirements: string[]; whatYouGet: string[]; rush: CampaignRush | null; needs: CampaignNeedsConfig | null; gates: CampaignGatesConfig | null
 }
 
 type TextKey = 'title' | 'tagline' | 'description' | 'promise' | 'why' | 'expectation' | 'bestFor'
@@ -68,6 +69,7 @@ function formFromOverride(o: ContentOverride | undefined): FormState {
     whatYouGet: [...(o?.whatYouGet ?? [])],
     rush: o?.rush ? { ...o.rush } : null,
     needs: o?.needs ? { overrides: { ...(o.needs.overrides ?? {}) }, custom: (o.needs.custom ?? []).map((c) => ({ ...c })) } : null,
+    gates: o?.gates ? { ...o.gates, custom: (o.gates.custom ?? []).map((g) => ({ ...g })) } : null,
   }
 }
 
@@ -87,7 +89,7 @@ type DbForm = FormState & {
 function emptyDbForm(): DbForm {
   return {
     id: '', title: '', tagline: '', description: '', promise: '', why: '',
-    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [], whatYouGet: [], rush: null, needs: null,
+    expectation: '', heroImage: '', bestFor: '', faq: [], lanes: [], requirements: [], whatYouGet: [], rush: null, needs: null, gates: null,
     type: 'task', cad: 'once', shelf: 'aware', stages: [],
     serviceIds: [], addonServiceIds: [], status: 'draft',
   }
@@ -99,7 +101,9 @@ function dbFormFrom(c: DbCampaign): DbForm {
     promise: c.promise, why: c.why, expectation: c.expectation,
     heroImage: c.heroImage ?? '', bestFor: c.bestFor ?? '',
     faq: (c.faq ?? []).map((f) => ({ q: f.q, a: f.a })),
-    lanes: [], requirements: [], whatYouGet: [], rush: null, needs: null,
+    lanes: [], requirements: [], whatYouGet: [], rush: null,
+    needs: c.needs ? { overrides: { ...(c.needs.overrides ?? {}) }, custom: (c.needs.custom ?? []).map((n) => ({ ...n })) } : null,
+    gates: c.gates ? { ...c.gates, custom: (c.gates.custom ?? []).map((g) => ({ ...g })) } : null,
     type: c.type, cad: c.cad, shelf: c.shelf, stages: [...c.stages],
     serviceIds: [...c.serviceIds], addonServiceIds: [...c.addonServiceIds],
     status: c.status,
@@ -142,6 +146,112 @@ function servicePriceLabel(s: PricedService): string {
 }
 
 const isRecurringCapable = (s: PricedService): boolean => cadenceOf(s).cadence.kind === 'recurring'
+
+/* ── Checkout-gates editor (Phase 4a) ─────────────────────────────────────────
+   Controlled: works for a built-in override OR a DB campaign. Turn the auto shoot
+   booking gate off/required/optional (the DIY-reel-beat over-trigger fix), and add
+   custom agreement/input gates the client must clear before paying. */
+const SHOOT_MODES: { value: ShootGateMode; label: string; hint: string }[] = [
+  { value: 'auto', label: 'Auto', hint: 'Ask for a shoot date only when the plan has a shoot (default).' },
+  { value: 'off', label: 'Off', hint: 'Never ask for a shoot date, even if the plan looks like it needs one.' },
+  { value: 'required', label: 'Always', hint: 'Always require a shoot date before checkout.' },
+  { value: 'optional', label: 'Optional', hint: 'Offer a shoot date, but don’t block checkout on it.' },
+]
+
+/** Controlled custom-asks editor for the post-checkout "needs from you" (G10: enables it on DB
+ *  campaigns, which had no needs editor). Custom asks only; auto-detected asks still apply live. */
+function CustomNeedsEditor({ value, onChange }: { value: CampaignNeedsConfig | null; onChange: (v: CampaignNeedsConfig | null) => void }) {
+  const custom = value?.custom ?? []
+  const commit = (next: CustomNeed[]) => onChange(next.length ? { ...(value ?? {}), custom: next } : (value?.overrides && Object.keys(value.overrides).length ? { overrides: value.overrides } : null))
+  const add = () => commit([...custom, { id: `custom-${Date.now().toString(36)}`, title: '', inputType: 'text', required: false }])
+  const upd = (i: number, patch: Partial<CustomNeed>) => commit(custom.map((c, j) => (j === i ? { ...c, ...patch } : c)))
+  const rm = (i: number) => commit(custom.filter((_, j) => j !== i))
+  return (
+    <div className="space-y-2.5">
+      {custom.length === 0 && <div className="text-[11.5px] text-ink-4">Ask for anything extra you need after checkout (a link, a preference, a file location).</div>}
+      {custom.map((c, i) => (
+        <div key={c.id} className="rounded-lg border border-ink-6 p-2.5 space-y-2">
+          <div className="flex items-center gap-2">
+            <input value={c.title} onChange={(e) => upd(i, { title: e.target.value })} placeholder="What we need from you…" className="flex-1 text-[13px] rounded border border-ink-6 px-2 py-1.5" />
+            <label className="flex items-center gap-1 text-[12px] text-ink-3"><input type="checkbox" checked={!!c.required} onChange={(e) => upd(i, { required: e.target.checked })} /> Required</label>
+            <button onClick={() => rm(i)} className="text-[12px] text-red-600">Remove</button>
+          </div>
+          <div className="flex items-center gap-2">
+            <select value={c.inputType} onChange={(e) => upd(i, { inputType: e.target.value as NeedInputType })} className="text-[12.5px] rounded border border-ink-6 px-2 py-1.5 bg-white">
+              <option value="text">Short text</option>
+              <option value="textarea">Long text</option>
+              <option value="select">Choices</option>
+              <option value="date">Date</option>
+            </select>
+            {c.inputType === 'select' && <input value={(c.options ?? []).join(', ')} onChange={(e) => upd(i, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} placeholder="Option A, Option B" className="flex-1 text-[12.5px] rounded border border-ink-6 px-2 py-1.5" />}
+          </div>
+        </div>
+      ))}
+      <button onClick={add} className="text-[12.5px] font-semibold text-emerald-700">+ Add your own ask</button>
+    </div>
+  )
+}
+
+function GatesEditor({ value, onChange }: { value: CampaignGatesConfig | null; onChange: (v: CampaignGatesConfig | null) => void }) {
+  const shoot: ShootGateMode = value?.shoot ?? 'auto'
+  const custom = value?.custom ?? []
+  const commit = (next: CampaignGatesConfig) => {
+    const has = (next.shoot && next.shoot !== 'auto') || (next.custom && next.custom.length)
+    onChange(has ? next : null)
+  }
+  const setShoot = (m: ShootGateMode) => commit({ shoot: m === 'auto' ? undefined : m, custom })
+  const addGate = (kind: 'agreement' | 'input') => commit({ shoot: value?.shoot, custom: [...custom, { id: `gate-${Date.now().toString(36)}`, kind, title: '', required: true, ...(kind === 'input' ? { inputType: 'text' as const } : {}) }] })
+  const updateGate = (i: number, patch: Partial<CustomGate>) => commit({ shoot: value?.shoot, custom: custom.map((g, j) => (j === i ? { ...g, ...patch } : g)) })
+  const removeGate = (i: number) => commit({ shoot: value?.shoot, custom: custom.filter((_, j) => j !== i) })
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <div className="text-[12px] font-semibold text-ink-3 uppercase tracking-wide mb-1.5">Shoot date at checkout</div>
+        <div className="flex flex-wrap gap-1.5">
+          {SHOOT_MODES.map((m) => (
+            <button key={m.value} onClick={() => setShoot(m.value)} title={m.hint} className={'text-[12.5px] font-medium rounded-lg px-3 py-1.5 border ' + (shoot === m.value ? 'bg-ink text-white border-ink' : 'bg-white text-ink-3 border-ink-6 hover:text-ink')}>{m.label}</button>
+          ))}
+        </div>
+        <div className="text-[11.5px] text-ink-4 mt-1.5">{SHOOT_MODES.find((m) => m.value === shoot)?.hint}</div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="text-[12px] font-semibold text-ink-3 uppercase tracking-wide">Before-you-pay gates</div>
+          <div className="flex gap-2">
+            <button onClick={() => addGate('agreement')} className="text-[12px] font-semibold text-brand">＋ Agreement</button>
+            <button onClick={() => addGate('input')} className="text-[12px] font-semibold text-brand">＋ Question</button>
+          </div>
+        </div>
+        {custom.length === 0 && <div className="text-[11.5px] text-ink-4">None. Add an agreement (checkbox) or a question the client must answer before paying.</div>}
+        <div className="space-y-2.5">
+          {custom.map((g, i) => (
+            <div key={g.id} className="rounded-lg border border-ink-6 p-2.5 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold rounded px-1.5 py-0.5 bg-bg-2 text-ink-3">{g.kind === 'agreement' ? 'Agreement' : 'Question'}</span>
+                <input value={g.title} onChange={(e) => updateGate(i, { title: e.target.value })} placeholder={g.kind === 'agreement' ? 'I agree to…' : 'What we need to know…'} className="flex-1 text-[13px] rounded border border-ink-6 px-2 py-1.5" />
+                <label className="flex items-center gap-1 text-[12px] text-ink-3"><input type="checkbox" checked={g.required} onChange={(e) => updateGate(i, { required: e.target.checked })} /> Required</label>
+                <button onClick={() => removeGate(i)} className="text-[12px] text-red-600">Remove</button>
+              </div>
+              <input value={g.why ?? ''} onChange={(e) => updateGate(i, { why: e.target.value })} placeholder="Why (optional helper text)" className="w-full text-[12.5px] rounded border border-ink-6 px-2 py-1.5" />
+              {g.kind === 'input' && (
+                <div className="flex items-center gap-2">
+                  <select value={g.inputType ?? 'text'} onChange={(e) => updateGate(i, { inputType: e.target.value as CustomGate['inputType'] })} className="text-[12.5px] rounded border border-ink-6 px-2 py-1.5 bg-white">
+                    <option value="text">Short text</option>
+                    <option value="textarea">Long text</option>
+                    <option value="select">Choices</option>
+                  </select>
+                  {g.inputType === 'select' && <input value={(g.options ?? []).join(', ')} onChange={(e) => updateGate(i, { options: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} placeholder="Option A, Option B" className="flex-1 text-[12.5px] rounded border border-ink-6 px-2 py-1.5" />}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { initialOverrides: ContentOverrideMap; initialCampaigns: DbCampaign[] }) {
   const [overrides, setOverrides] = useState<ContentOverrideMap>(initialOverrides)
@@ -815,6 +925,24 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
               ))}
             </div>
           </div>
+
+          {/* Checkout gates (Phase 4a) */}
+          <div className="rounded-xl border border-ink-6 p-4 space-y-3">
+            <div>
+              <div className="text-[13.5px] font-semibold text-ink">Checkout gates</div>
+              <div className="text-[12px] text-ink-3 mt-0.5">What must be settled before the client can pay.</div>
+            </div>
+            <GatesEditor value={dbForm.gates} onChange={(v) => setDb({ gates: v })} />
+          </div>
+
+          {/* Needs from you (G10: now available for DB campaigns) */}
+          <div className="rounded-xl border border-ink-6 p-4 space-y-3">
+            <div>
+              <div className="text-[13.5px] font-semibold text-ink">What we need from you (after checkout)</div>
+              <div className="text-[12px] text-ink-3 mt-0.5">Service-driven asks apply automatically; add your own here.</div>
+            </div>
+            <CustomNeedsEditor value={dbForm.needs} onChange={(v) => setDb({ needs: v })} />
+          </div>
         </div>
       )}
 
@@ -1196,6 +1324,15 @@ export function CampaignsContentAdmin({ initialOverrides, initialCampaigns }: { 
                   </div>
                 </div>
               )}
+
+              {/* Checkout gates (Phase 4a): shoot-date requirement + custom before-you-pay gates. */}
+              <div className="rounded-xl border border-ink-6 bg-white p-4 lg:p-5 space-y-3">
+                <div>
+                  <div className="text-[13.5px] font-semibold text-ink">Checkout gates</div>
+                  <div className="text-[12px] text-ink-3 mt-0.5">What must be settled before the client can pay.</div>
+                </div>
+                <GatesEditor value={form.gates} onChange={(v) => set({ gates: v })} />
+              </div>
 
               {/* More details: tagline, expectation, best for, FAQ */}
               <div className="rounded-xl border border-ink-6 bg-white p-4 lg:p-5 space-y-3.5">

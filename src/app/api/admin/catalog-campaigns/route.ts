@@ -51,11 +51,16 @@ export async function POST(req: NextRequest) {
   if ('error' in payload) return NextResponse.json({ error: payload.error }, { status: 400 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('catalog_campaigns')
-    .insert({ id, ...payload, updated_at: new Date().toISOString(), updated_by: auth.userId })
-    .select('*')
-    .maybeSingle()
+  const full = { id, ...payload, updated_at: new Date().toISOString(), updated_by: auth.userId }
+  let { data, error } = await admin.from('catalog_campaigns').insert(full).select('*').maybeSingle()
+  // gates (218) / needs (220) columns may not be applied yet — save the rest so the CMS still works.
+  // A missing column surfaces as 42703 (Postgres) or PGRST204 ("Could not find the 'X' column … in
+  // the schema cache") depending on the path — catch both.
+  if (error && (error.code === '42703' || error.code === 'PGRST204' || /could not find the '?(gates|needs)'? column|(gates|needs).* does not exist/i.test(error.message || ''))) {
+    const { gates: _g, needs: _n, ...rest } = full
+    void _g; void _n
+    ;({ data, error } = await admin.from('catalog_campaigns').insert(rest).select('*').maybeSingle())
+  }
   if (error) {
     if (error.code === '23505') return NextResponse.json({ error: `a campaign with the id "${id}" already exists` }, { status: 409 })
     if (tableMissing(error)) return NextResponse.json({ error: SETUP_MSG }, { status: 500 })

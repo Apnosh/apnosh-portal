@@ -121,8 +121,14 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   const catalogId = (catRes.data as { source_catalog_id?: string | null } | null)?.source_catalog_id || null
   if (catalogId) {
     try {
+      // Built-in campaigns store needs on catalog_content_overrides; admin-created DB campaigns on
+      // catalog_campaigns (migration 220, G10). Check the override first, then the DB campaign.
       const { data: ovRow } = await admin.from('catalog_content_overrides').select('needs').eq('item_id', catalogId).maybeSingle()
-      const needs = cleanNeeds((ovRow as { needs?: unknown } | null)?.needs)
+      let needs = cleanNeeds((ovRow as { needs?: unknown } | null)?.needs)
+      if (!needs) {
+        const { data: dbRow } = await admin.from('catalog_campaigns').select('needs').eq('id', catalogId).maybeSingle()
+        needs = cleanNeeds((dbRow as { needs?: unknown } | null)?.needs)
+      }
       if (needs) applyNeedsConfig(items, needs, exec as unknown as Record<string, string>)
     } catch { /* smart defaults on any failure */ }
   }

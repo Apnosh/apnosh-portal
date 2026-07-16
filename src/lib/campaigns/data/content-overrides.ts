@@ -13,6 +13,7 @@
 
 import { campaignContent, type CampaignContent } from './campaign-content'
 import type { FunnelStage } from './create-catalog'
+import type { CampaignGatesConfig } from '../gates/config'
 
 /** A campaign's rush option: a flat fee to deliver `days` sooner. Draft/display only for now. */
 export interface CampaignRush {
@@ -128,6 +129,8 @@ export interface ContentOverride {
   rush?: CampaignRush
   /** Owner config for the post-checkout "needs from you" step. Absent = smart defaults. */
   needs?: CampaignNeedsConfig
+  /** Owner config for pre-checkout gates (shoot on/off/required + custom agreement/input). Absent = smart defaults. */
+  gates?: CampaignGatesConfig
 }
 
 /** Trim, drop empties + dupes, cap — the store contract for a plain string list. */

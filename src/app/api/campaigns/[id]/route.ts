@@ -93,7 +93,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Custom keys still pass the same string + 2000-char cap, so nothing unbounded/injected accretes.
     const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'setupSkipped'])
     for (const k of Object.keys(e as Record<string, unknown>)) {
-      if (!KNOWN.has(k) && !/^custom-[a-z0-9-]{1,60}$/.test(k)) continue
+      // Known keys, owner custom asks (custom-<slug>), and checkout gate answers (gate-<slug>, Phase 4a).
+      if (!KNOWN.has(k) && !/^(custom|gate)-[a-z0-9-]{1,60}$/.test(k)) continue
       const v = (e as Record<string, unknown>)[k]
       if (v === undefined) continue
       if (typeof v !== 'string') return NextResponse.json({ error: `execution.${k} must be a string` }, { status: 400 })

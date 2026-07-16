@@ -64,12 +64,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if ('error' in payload) return NextResponse.json({ error: payload.error }, { status: 400 })
 
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('catalog_campaigns')
-    .update({ ...payload, updated_at: new Date().toISOString(), updated_by: auth.userId })
-    .eq('id', id)
-    .select('*')
-    .maybeSingle()
+  const full = { ...payload, updated_at: new Date().toISOString(), updated_by: auth.userId }
+  let { data, error } = await admin.from('catalog_campaigns').update(full).eq('id', id).select('*').maybeSingle()
+  // gates (218) / needs (220) columns may not be applied yet — save the rest so the CMS still works.
+  // A missing column surfaces as 42703 or PGRST204 ("Could not find the 'X' column …") — catch both.
+  if (error && (error.code === '42703' || error.code === 'PGRST204' || /could not find the '?(gates|needs)'? column|(gates|needs).* does not exist/i.test(error.message || ''))) {
+    const { gates: _g, needs: _n, ...rest } = full
+    void _g; void _n
+    ;({ data, error } = await admin.from('catalog_campaigns').update(rest).eq('id', id).select('*').maybeSingle())
+  }
   if (error) {
     if (tableMissing(error)) return NextResponse.json({ error: SETUP_MSG }, { status: 500 })
     return NextResponse.json({ error: error.message }, { status: 500 })

@@ -22,6 +22,8 @@
  */
 
 import type { FunnelStage } from './create-catalog'
+import type { CampaignGatesConfig } from '../gates/config'
+import type { CampaignNeedsConfig } from './content-overrides'
 import { CAMPAIGN_CONTENT, registerDynamicCampaignContent, type CampaignContent } from './campaign-content'
 import type { CreateCatalogId } from './create-catalog'
 import { ITEM_SHAPE, registerDynamicShape, type Dur, type ItemShape } from '../builder/compose-plan'
@@ -63,6 +65,10 @@ export interface DbCampaign {
   serviceIds: string[]
   addonServiceIds: string[]
   status: 'draft' | 'live'
+  /** Owner config for pre-checkout gates (Phase 4a). Absent = smart defaults. */
+  gates?: CampaignGatesConfig
+  /** Owner config for the post-checkout "needs from you" step (G10). Absent = smart defaults. */
+  needs?: CampaignNeedsConfig
 }
 
 /** Slug rule for a DB campaign id: lowercase kebab, 2-60 chars. */

@@ -3,6 +3,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
 import { checkoutBill } from '@/lib/campaigns/checkout-bill'
 import { ensureCheckoutCustomer, computeTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
+import { resolveGatesForDraft } from '@/lib/campaigns/gates/config-server'
 import type { CampaignDraft } from '@/lib/campaigns/types'
 
 function denied(reason: string | undefined) {
@@ -28,12 +29,17 @@ export async function POST(req: NextRequest) {
   if (!access.authorized) return denied(access.reason)
 
   const bill = checkoutBill(draft)
+  // Pre-checkout gates (Phase 4a): resolve the shoot booking gate (admin can turn it off/required/
+  // optional per campaign) + any admin agreement/input gates. Never throws.
+  const gates = await resolveGatesForDraft(draft).catch(() => ({ booking: null, custom: [] }))
+
   // Free order (owner-run/DIY lanes): nothing to charge. The client ships via the normal rail.
   if (bill.preTaxCents <= 0) {
     return NextResponse.json({
       free: true,
       breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
       monthlyCents: bill.perMonthCents,
+      gates,
     })
   }
 
@@ -92,6 +98,7 @@ export async function POST(req: NextRequest) {
       },
       monthlyCents: bill.perMonthCents,
       savedCard,
+      gates,
     })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })
