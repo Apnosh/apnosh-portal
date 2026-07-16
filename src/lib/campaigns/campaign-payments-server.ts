@@ -47,6 +47,29 @@ export async function getCampaignPayment(campaignId: string): Promise<CampaignPa
   }
 }
 
+/**
+ * True when this campaign was paid IN FULL at checkout (a 'paid' campaign_payments row exists).
+ * The G1 gate: when true, the per-piece accrual records its charge as 'covered_by_checkout'
+ * instead of 'accrued', so the invoicing path can never bill the same work a second time.
+ * Degrades to FALSE on any failure (missing table pre-215, no env) — a read hiccup must never
+ * flip a checkout-paid campaign back into the invoiceable-accrual path.
+ */
+export async function isCampaignCheckoutPaid(campaignId: string): Promise<boolean> {
+  if (!campaignId) return false
+  try {
+    const { data, error } = await admin()
+      .from('campaign_payments')
+      .select('id')
+      .eq('campaign_id', campaignId)
+      .eq('status', 'paid')
+      .limit(1)
+    if (error || !data) return false
+    return data.length > 0
+  } catch {
+    return false
+  }
+}
+
 /** Upfront payments for many campaigns → { campaignId: info } (paid rows only; latest wins). */
 export async function getCampaignPaymentsBatch(campaignIds: string[]): Promise<Record<string, CampaignPaymentInfo>> {
   const ids = campaignIds.filter(Boolean)

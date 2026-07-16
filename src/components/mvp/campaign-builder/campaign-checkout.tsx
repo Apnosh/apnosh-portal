@@ -245,7 +245,7 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
     if (!shippedIdRef.current) {
       setStatus('Placing your order…')
       try {
-        shippedIdRef.current = await saveAndShip({ clientId, draft })
+        shippedIdRef.current = await saveAndShip({ clientId, draft, paymentIntentId })
       } catch {
         setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return

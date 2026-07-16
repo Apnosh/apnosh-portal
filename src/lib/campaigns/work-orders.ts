@@ -10,6 +10,7 @@ import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 import { creatorById, rankCreators, type Disc } from './creators'
 import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
 import { feePercentForCreator, assignVendorsToOrderRows, notifyVendorsOfNewWork, notifyVendorOfWork, bestVendorForDiscipline, creatorNamesByIds } from './vendor-supply'
+import { isCampaignCheckoutPaid } from './campaign-payments-server'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
 
 export type { WorkOrderStatus }
@@ -741,12 +742,17 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
   // Pre-migration 180 (amount_cents + campaign_charges absent) → silent no-op, never
   // a dead-letter. select('*') omits a missing column, so the key is absent here.
   if (!('amount_cents' in o)) return false
+  // G1 double-billing gate: if this campaign was paid IN FULL at checkout, the piece is
+  // already covered — record the charge for the ledger but as 'covered_by_checkout', so
+  // the invoicing path (which claims only 'accrued' rows) can never bill it a second time.
+  const campaignId = (o.campaign_id as string | null) ?? null
+  const covered = campaignId ? await isCampaignCheckoutPaid(campaignId) : false
   const row = buildChargeRow({
     id: o.id as string,
     client_id: o.client_id as string,
-    campaign_id: (o.campaign_id as string | null) ?? null,
+    campaign_id: campaignId,
     amount_cents: (o.amount_cents as number) ?? 0,
-  })
+  }, covered ? 'covered_by_checkout' : 'accrued')
   // An approved creator piece with no price is a data-integrity signal (an order
   // minted before pricing existed, or an unpriced content type) — never record a
   // phantom $0 charge; flag it for staff to price + accrue by hand.
@@ -762,6 +768,13 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
   const { error: insErr } = await admin.from('campaign_charges').insert(row)
   if (insErr) {
     if (insErr.code === '23505') return true   // unique violation → already accrued (idempotent)
+    // Pre-migration 217: the covered marker isn't in the status CHECK yet. NEVER fall back to
+    // 'accrued' (that re-opens the double-bill) — skip the ledger row entirely. No money is at
+    // risk (the checkout charge already collected it); the row is only a record we can backfill.
+    if (row.status === 'covered_by_checkout' && insErr.code === '23514') {
+      console.warn(`accrueCharge: skipped covered_by_checkout ledger row (apply migration 217) order=${row.work_order_id}`)
+      return true
+    }
     // A real failure must never silently lose money — dead-letter it so a human
     // can accrue the charge before Phase 3b's invoicing runs.
     await notifyStaffForClient(row.client_id, ['strategist'], {
@@ -807,17 +820,26 @@ export async function accrueChargeForPublishedDraft(draftId: string): Promise<bo
   const piece = planCampaignPieces(campaign, new Date().toISOString()).find((p) => p.key === pieceKey)
   if (!piece) return false                             // piece left the plan — reconcile flags that path
   if ((piece.priceCents ?? 0) <= 0) return false       // DIY/free by design → nothing to bill, no dead-letter
+  // G1 double-billing gate (team/AI lane): a checkout-paid campaign's pieces are already
+  // covered — record the ledger row as 'covered_by_checkout', never invoiceable.
+  const covered = await isCampaignCheckoutPaid(campaignId)
   const { error: insErr } = await admin.from('campaign_charges').insert({
     client_id: d.client_id as string,
     campaign_id: campaignId,
     content_draft_id: draftId,
     source: 'team',
     amount_cents: piece.priceCents,
-    status: 'accrued',
+    status: covered ? 'covered_by_checkout' : 'accrued',
   })
   if (insErr) {
     if (insErr.code === '23505') return true           // already accrued (idempotent)
     if (insErr.code === '42P01') return false          // pre-180 → silent no-op
+    // Pre-migration 217: covered marker not in the CHECK yet. Never fall back to 'accrued'
+    // (re-opens the double-bill) — skip the ledger row; the checkout charge already collected it.
+    if (covered && insErr.code === '23514') {
+      console.warn(`accrueChargeForPublishedDraft: skipped covered_by_checkout ledger row (apply migration 217) draft=${draftId}`)
+      return true
+    }
     await notifyStaffForClient(d.client_id as string, ['strategist'], {
       kind: 'client_signoff',
       title: 'Published piece charge failed to record',

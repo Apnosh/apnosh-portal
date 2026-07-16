@@ -141,3 +141,65 @@ export function paymentsTable() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return admin().from('campaign_payments') as any
 }
+
+/**
+ * G7 — payment-aware ship. Before a BILLABLE campaign ships on the charge-at-checkout path,
+ * confirm the charge really succeeded, then bind the payment row to the campaign so /checkout/complete
+ * (and the webhook backstop) are idempotent.
+ *
+ * Checks, in order: the PaymentIntent has a payment row → the row belongs to THIS client → the charge
+ * is captured (row already 'paid', else the live PI is 'succeeded') → the amount paid covers the bill.
+ * On success, links campaign_id + marks paid/shipped (first-write-wins). Returns a discriminated result;
+ * the caller turns `!ok` into a 402 and NEVER ships. Degrades honestly: a missing table / unreadable
+ * row / Stripe error is a verification FAILURE (we never ship a billable order we can't prove was paid).
+ */
+export async function verifyAndLinkCheckoutPayment(opts: {
+  paymentIntentId: string
+  clientId: string
+  campaignId: string
+  preTaxCents: number
+}): Promise<{ ok: true } | { ok: false; reason: string }> {
+  let row: { client_id?: string; status?: string; campaign_id?: string | null; subtotal_cents?: number; service_fee_cents?: number } | null = null
+  try {
+    const { data } = await paymentsTable()
+      .select('client_id, status, campaign_id, subtotal_cents, service_fee_cents')
+      .eq('stripe_payment_intent_id', opts.paymentIntentId)
+      .maybeSingle()
+    row = data
+  } catch {
+    return { ok: false, reason: 'Could not verify your payment. Please try again.' }
+  }
+  if (!row) return { ok: false, reason: 'No payment on file for this order.' }
+  if (row.client_id !== opts.clientId) return { ok: false, reason: 'This payment belongs to a different account.' }
+
+  // Captured? Trust a 'paid' row (webhook/complete already reconciled). Otherwise ask Stripe directly,
+  // because the ship can land before the webhook flips the row (the card cleared client-side first).
+  let paid = row.status === 'paid'
+  if (!paid) {
+    try {
+      const pi = await stripe.paymentIntents.retrieve(opts.paymentIntentId)
+      paid = pi.status === 'succeeded'
+    } catch {
+      return { ok: false, reason: 'Could not verify your payment. Please try again.' }
+    }
+  }
+  if (!paid) return { ok: false, reason: 'Your payment has not completed yet.' }
+
+  // The amount actually billed must cover this campaign's pre-tax bill (recomputed from its
+  // line items). Both were computed server-side from the same draft, so this is defense-in-depth
+  // against a swapped/stale PaymentIntent, never expected to trip on the happy path.
+  const paidPreTax = (row.subtotal_cents ?? 0) + (row.service_fee_cents ?? 0)
+  if (paidPreTax < opts.preTaxCents) return { ok: false, reason: 'The amount paid does not cover this order.' }
+
+  // Bind the payment to the campaign (idempotent with /checkout/complete + the webhook backstop).
+  const nowISO = new Date().toISOString()
+  try {
+    await paymentsTable()
+      .update({ status: 'paid', campaign_id: opts.campaignId, paid_at: nowISO, shipped_at: nowISO })
+      .eq('stripe_payment_intent_id', opts.paymentIntentId)
+      .is('campaign_id', null)
+  } catch {
+    /* the charge is verified paid; a link hiccup is reconciled by /complete + the webhook */
+  }
+  return { ok: true }
+}

@@ -549,26 +549,34 @@ export function reconcileProductionPlan(
 /** The campaign_charges insert payload for an accepted creator piece. Pure so the
  *  pricing/shape is unit-testable; the DB insert + idempotency live in
  *  accrueChargeForApprovedOrder. */
+/** The billing status a fresh charge is recorded under. 'accrued' is the normal
+ *  delivery-gated owner charge (later invoiced). 'covered_by_checkout' (G1) is a
+ *  ledger-only marker for a piece whose campaign was already paid IN FULL upfront —
+ *  it records the work + its worth but is NEVER invoiced (the invoicing path claims
+ *  only 'accrued' rows). */
+export type ChargeStatus = 'accrued' | 'covered_by_checkout'
+
 export interface ChargeRow {
   client_id: string
   campaign_id: string | null
   work_order_id: string
   source: 'creator'
   amount_cents: number
-  status: 'accrued'
+  status: ChargeStatus
 }
 
 /** Map an approved creator order to the owner charge it accrues. The amount is the
  *  price locked on the order at ship (never recomputed, so a later catalog price
- *  change can't move what the owner was quoted). */
-export function buildChargeRow(o: { id: string; client_id: string; campaign_id: string | null; amount_cents: number }): ChargeRow {
+ *  change can't move what the owner was quoted). `status` defaults to 'accrued'; the
+ *  caller passes 'covered_by_checkout' when the campaign was paid upfront (G1). */
+export function buildChargeRow(o: { id: string; client_id: string; campaign_id: string | null; amount_cents: number }, status: ChargeStatus = 'accrued'): ChargeRow {
   return {
     client_id: o.client_id,
     campaign_id: o.campaign_id ?? null,
     work_order_id: o.id,
     source: 'creator',
     amount_cents: Math.max(0, Math.round(o.amount_cents || 0)),
-    status: 'accrued',
+    status,
   }
 }
 

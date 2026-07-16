@@ -9,6 +9,8 @@ import { getCampaignPieces } from '@/lib/campaigns/tracker/pieces'
 import { getCampaignActivity } from '@/lib/campaigns/tracker/activity'
 import { getCampaignReadiness } from '@/lib/campaigns/readiness'
 import { getCampaignPayment } from '@/lib/campaigns/campaign-payments-server'
+import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
+import { checkoutBill } from '@/lib/campaigns/checkout-bill'
 import { beatsFromLines } from '@/lib/campaigns/catalog'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
@@ -126,6 +128,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // concurrent ship PATCHes (double-tap, retry, two tabs) can never both run the
   // one-shot mint/notify block below — the loser's guarded update matches zero rows.
   const wantsShip = body.fields?.status === 'shipped' && campaign.status !== 'shipped'
+
+  // ── G7: payment-aware ship. A BILLABLE draft (one-time bill > $0) shipped on the
+  // charge-at-checkout path must present a PaymentIntent whose charge actually succeeded and
+  // covers the bill — else we refuse (no shipped-but-unpaid billable order). The delivery-gated
+  // (buy-now) path bills per piece on delivery and carries NO paymentIntentId, so it is allowed
+  // through here (the honest legacy bypass); its pieces still bill via accrual, so no money is lost.
+  if (wantsShip) {
+    const preTaxCents = checkoutBill({ items: campaign.draft.items }).preTaxCents
+    const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
+    if (preTaxCents > 0 && paymentIntentId) {
+      const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId, clientId: campaign.clientId, campaignId: id, preTaxCents })
+      if (!verified.ok) return NextResponse.json({ error: verified.reason }, { status: 402 })
+    }
+  }
+
   let justShipped = false
   try {
     if (Array.isArray(body.items)) await replaceLineItems(id, campaign.clientId, body.items as LineItem[])
