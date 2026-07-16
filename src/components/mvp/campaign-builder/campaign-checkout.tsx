@@ -198,7 +198,7 @@ function BillCard({ b, monthlyCents, taxPending }: { b: Breakdown; monthlyCents:
       <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}>
         <BillRow label="Total due today" value={fmt(b.totalCents)} strong />
       </div>
-      {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Monthly services are billed separately once they start.</div>}
+      {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Monthly services bill {fmt(monthlyCents)}/mo to this card once they go live — separate from today&rsquo;s total. Cancel anytime.</div>}
     </div>
   )
 }
@@ -447,7 +447,11 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   const customGates = gates?.custom ?? []
   const [bookingBlocking, setBookingBlocking] = useState(!!gates?.booking?.required)
   const [gateAnswers, setGateAnswers] = useState<Record<string, string>>({})
-  const gateBlocking = bookingBlocking || customGatesBlocking(customGates, gateAnswers)
+  // Monthly consent (G4): a plan with recurring services starts a real subscription from this card at
+  // checkout, so the client must explicitly agree to the $X/mo before we place the order.
+  const needsMonthlyConsent = monthlyCents > 0
+  const [monthlyConsent, setMonthlyConsent] = useState(false)
+  const gateBlocking = bookingBlocking || customGatesBlocking(customGates, gateAnswers) || (needsMonthlyConsent && !monthlyConsent)
 
   // Recompute tax + update the charge when the billing address is complete (new-card path).
   const onAddress = async (e: StripeAddressElementChangeEvent) => {
@@ -492,10 +496,15 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
     onPlaced(shippedIdRef.current!, bill)
   }
 
+  const blockReason = bookingBlocking ? 'Pick a shoot time first'
+    : customGatesBlocking(customGates, gateAnswers) ? 'Answer the questions above'
+    : (needsMonthlyConsent && !monthlyConsent) ? 'Agree to the monthly charge'
+    : null
+
   const placeOrder = async () => {
     if (!stripe || busy) return
-    // A shoot-bearing order must have a held slot before we charge (the booking is firm at checkout).
-    if (gateBlocking) { setError('Pick a shoot time to continue.'); return }
+    // Pre-pay gates: a held shoot slot, answered custom gates, and monthly consent must all clear.
+    if (gateBlocking) { setError(blockReason ? `${blockReason} to continue.` : 'Complete the steps above to continue.'); return }
     setBusy(true); setError(null)
 
     // Already paid on a prior attempt → don't charge again, just finish placing the order.
@@ -547,6 +556,14 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
         <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} booking={gates?.booking ?? null} onBlockingChange={setBookingBlocking} />
         <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
         <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} />
+        {needsMonthlyConsent && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 14, padding: '12px 14px', marginBottom: 16 }}>
+            <input type="checkbox" checked={monthlyConsent} onChange={(e) => setMonthlyConsent(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: MINT, flexShrink: 0 }} />
+            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: INK, lineHeight: 1.5 }}>
+              I agree to <b style={{ fontWeight: 700 }}>{fmt(monthlyCents)}/mo</b> for monthly services, billed to this card each month once they go live. Cancel anytime.
+            </span>
+          </label>
+        )}
 
         {mode === 'saved' && savedCard ? (
           <>
@@ -592,7 +609,7 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
           disabled={busy || !stripe || gateBlocking}
           style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || !stripe || gateBlocking ? 'default' : 'pointer', background: busy ? MINT_DARK : (gateBlocking ? FAINT : MINT), color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: gateBlocking ? 'none' : '0 8px 22px rgba(74,189,152,0.42)' }}
         >
-          {busy ? (status ?? 'Working…') : gateBlocking ? 'Pick a shoot time first' : `Place order · ${fmt(bill.totalCents)}`}
+          {busy ? (status ?? 'Working…') : gateBlocking ? (blockReason ?? 'Complete the steps above') : `Place order · ${fmt(bill.totalCents)}`}
         </button>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>Your card is charged now. Your campaign starts right after.</div>
       </div>

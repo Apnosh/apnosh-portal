@@ -3,6 +3,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
 import { paymentsTable } from '@/lib/campaigns/checkout-server'
 import { confirmBookingForPayment } from '@/lib/campaigns/gates/booking-server'
+import { ensureCampaignSubscription } from '@/lib/campaigns/campaign-subscription-server'
 
 function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
@@ -31,9 +32,11 @@ export async function POST(req: NextRequest) {
   if (!access.authorized) return denied(access.reason)
 
   // Already reconciled — hand back the same campaign, no double work. Still confirm the shoot booking
-  // (idempotent) in case a prior attempt linked the campaign but hadn't confirmed the hold yet.
+  // AND ensure the monthly subscription (both idempotent) in case a prior attempt linked the campaign
+  // but hadn't finished those steps.
   if (row.status === 'paid' && row.campaign_id) {
     await confirmBookingForPayment(paymentIntentId, row.campaign_id as string).catch(() => false)
+    await ensureCampaignSubscription(paymentIntentId, row.campaign_id as string).catch(() => null)
     return NextResponse.json({ ok: true, campaignId: row.campaign_id })
   }
 
@@ -77,7 +80,12 @@ export async function POST(req: NextRequest) {
   // booking, seeds the real shoot date into the campaign + its shoot work orders. Best-effort: a
   // non-shoot order is a clean no-op, and a hiccup here never unships a paid order.
   const boundCampaignId = campaignId ?? (row.campaign_id as string | null)
-  if (boundCampaignId) await confirmBookingForPayment(paymentIntentId, boundCampaignId).catch(() => false)
+  if (boundCampaignId) {
+    await confirmBookingForPayment(paymentIntentId, boundCampaignId).catch(() => false)
+    // Start the monthly subscription from the saved card (G4). Best-effort + idempotent: a failure
+    // records itself + pages staff and NEVER unwinds the paid one-time order.
+    await ensureCampaignSubscription(paymentIntentId, boundCampaignId).catch(() => null)
+  }
 
   return NextResponse.json({ ok: true, campaignId: boundCampaignId ?? null })
 }

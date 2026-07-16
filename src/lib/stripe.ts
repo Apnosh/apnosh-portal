@@ -242,6 +242,52 @@ export async function startMonthlyRetainer(opts: {
 }
 
 /**
+ * Start a monthly subscription for a CHARGE-AT-CHECKOUT campaign (G4) — the recurring half of an order
+ * whose one-time bill was just paid. Unlike startMonthlyRetainer (send_invoice, admin retainers), this
+ * AUTO-CHARGES the saved card (collection_method 'charge_automatically') from the moment it starts,
+ * matching what the client agreed to at checkout ("$X/mo, billed monthly").
+ *
+ * Inline price_data + product_data so no pre-created Stripe Price/Product is needed. Idempotent via the
+ * caller's idempotencyKey (one subscription per campaign). TEST MODE is enforced by the key the `stripe`
+ * client is built with — this helper never selects keys.
+ */
+export async function startCampaignSubscription(opts: {
+  customerId: string
+  clientId: string
+  campaignId: string
+  amountCents: number
+  productId: string
+  defaultPaymentMethodId?: string
+  planName?: string
+  idempotencyKey: string
+}): Promise<Stripe.Subscription> {
+  const params: Stripe.SubscriptionCreateParams = {
+    customer: opts.customerId,
+    collection_method: 'charge_automatically',
+    ...(opts.defaultPaymentMethodId ? { default_payment_method: opts.defaultPaymentMethodId } : {}),
+    items: [
+      {
+        // Inline price against the shared monthly product (the API needs a product id for recurring
+        // price_data). The invoice line description names the campaign, so it reads clearly.
+        price_data: {
+          product: opts.productId,
+          currency: 'usd',
+          unit_amount: opts.amountCents,
+          recurring: { interval: 'month' },
+        },
+      },
+    ],
+    description: `Monthly services — ${opts.planName ?? 'Apnosh campaign'}`,
+    metadata: {
+      client_id: opts.clientId,
+      campaign_id: opts.campaignId,
+      kind: 'campaign_subscription',
+    },
+  }
+  return await stripe.subscriptions.create(params, { idempotencyKey: opts.idempotencyKey })
+}
+
+/**
  * Get or create a Stripe Customer for a business.
  * Stores the stripe_customer_id on the business record.
  */
