@@ -91,6 +91,14 @@ export function deriveServiceNeeds(
     push({ id: 'blackoutDates', kind: 'input', group: 'Scheduling', field: 'blackoutDates', inputType: 'text', title: 'Any busy dates to avoid', why: 'Holidays or private events we should plan around.', placeholder: 'Optional', value: exec.blackoutDates ?? '', done: !!exec.blackoutDates, optional: true })
   }
 
+  // ── client footage (the "Edit my footage" card) ──
+  // `edit` is content-only (no service line, so the service loop above never fires), but its whole
+  // premise is "send us your clips and we cut them". Without an intake the team has nothing to edit,
+  // so this asks the owner to upload their footage right after checkout. Required: no footage, no reel.
+  if (campaign.draft.sourceCatalogId === 'edit') {
+    push({ id: 'footage', kind: 'input', group: 'Content', field: 'footageUrls', inputType: 'upload', title: 'Upload your clips and photos', why: 'Send us the footage. We cut and polish it into your reel and edited shots.', value: exec.footageUrls ?? '', done: !!(exec.footageUrls && exec.footageUrls.trim()) })
+  }
+
   // ── menu source ──
   if ([...ids].some((id) => MENU_SERVICES.has(id))) {
     push({ id: 'menu-source', kind: 'input', group: 'Content', field: 'menuSource', inputType: 'text', title: 'Send us your current menu', why: 'So the content and page show the right items and prices.', placeholder: hasMenuItems ? 'We have one on file — add a link if it changed' : 'Link to your menu, or where to find it', value: exec.menuSource ?? '', done: !!exec.menuSource || hasMenuItems, optional: hasMenuItems })

@@ -10,9 +10,11 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Check, Sparkles, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, Sparkles, Loader2, Upload, X } from 'lucide-react'
 import { C, DISPLAY, GRAD } from '@/components/campaigns/ui'
 import { GROUP_ORDER, type ReadinessReport, type ReadinessItem } from '@/lib/campaigns/readiness-types'
+import { createClient } from '@/lib/supabase/client'
+import { useClient } from '@/lib/client-context'
 
 // Calm, optional identity — this step never blocks; it only helps the plan come out better.
 const HERO_BG = '#eef4f0'
@@ -169,9 +171,65 @@ function InputCard({ item, value, saving, onChange, onSave }: { item: ReadinessI
         <input type="date" value={value} min={todayISO} onChange={(e) => onChange(e.target.value)} onBlur={(e) => { if (e.target.value !== (item.value ?? '')) onSave(e.target.value) }} style={field} />
       ) : item.inputType === 'textarea' ? (
         <textarea value={value} placeholder={item.placeholder} onChange={(e) => onChange(e.target.value)} onBlur={(e) => { if (e.target.value !== (item.value ?? '')) onSave(e.target.value) }} rows={2} style={field} />
+      ) : item.inputType === 'upload' ? (
+        <FootageUpload value={value} onSave={(v) => { onChange(v); onSave(v) }} />
       ) : (
         <input value={value} placeholder={item.placeholder} onChange={(e) => onChange(e.target.value)} onBlur={(e) => { if (e.target.value !== (item.value ?? '')) onSave(e.target.value) }} style={field} />
       )}
+    </div>
+  )
+}
+
+/** Footage / photo uploader for the "Edit my footage" intake. Reuses the SAME storage rail as the
+ *  dashboard assets page (client-assets bucket, per-client path), then persists the public URLs as a
+ *  comma-joined string on execution.footageUrls through the standard readiness save. No new backend. */
+function FootageUpload({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const { client } = useClient()
+  const supabase = createClient()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+  const urls = value.split(',').map((u) => u.trim()).filter(Boolean)
+  const nameOf = (u: string) => { try { return decodeURIComponent(u.split('/').pop() || u).replace(/^\d+-[a-z0-9]+\./, 'file.') } catch { return 'file' } }
+
+  async function upload(files: FileList | null) {
+    if (!files || !files.length || !client?.id) return
+    setBusy(true); setErr(null)
+    const next = [...urls]
+    let failed = 0
+    for (const file of Array.from(files)) {
+      const ext = file.name.split('.').pop() || 'bin'
+      // Runs only from the file-input onChange (an event), never during render — a unique storage key.
+      // eslint-disable-next-line react-hooks/purity
+      const path = `${client.id}/footage/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+      const { error } = await supabase.storage.from('client-assets').upload(path, file, { upsert: false, contentType: file.type })
+      if (error) { failed++; continue }
+      const { data } = supabase.storage.from('client-assets').getPublicUrl(path)
+      if (data?.publicUrl) next.push(data.publicUrl)
+    }
+    if (failed) setErr(`${failed} file${failed > 1 ? 's' : ''} couldn't upload. Try again.`)
+    setBusy(false)
+    onSave(next.join(','))
+  }
+
+  return (
+    <div>
+      {urls.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+          {urls.map((u, i) => (
+            <div key={u} style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.bg, border: `1px solid ${C.line}`, borderRadius: 9, padding: '6px 9px' }}>
+              <Check size={13} color={C.greenDk} strokeWidth={3} />
+              <a href={u} target="_blank" rel="noopener noreferrer" style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.ink, textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nameOf(u)}</a>
+              <button aria-label="Remove" onClick={() => onSave(urls.filter((_, j) => j !== i).join(','))} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, display: 'flex' }}><X size={13} color={C.faint} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      <input ref={inputRef} type="file" multiple accept="image/*,video/*" onChange={(e) => { upload(e.target.files); if (inputRef.current) inputRef.current.value = '' }} style={{ display: 'none' }} />
+      <button onClick={() => inputRef.current?.click()} disabled={busy} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', border: `1.5px dashed ${C.line}`, borderRadius: 10, padding: '11px', background: '#fff', color: C.greenDk, fontWeight: 600, fontSize: 13, cursor: busy ? 'default' : 'pointer' }}>
+        {busy ? <><Loader2 size={14} className="animate-spin" /> Uploading…</> : <><Upload size={14} /> {urls.length ? 'Add more clips or photos' : 'Upload clips and photos'}</>}
+      </button>
+      {err && <div style={{ fontSize: 11.5, color: '#c0392b', marginTop: 6 }}>{err}</div>}
     </div>
   )
 }

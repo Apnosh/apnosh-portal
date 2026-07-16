@@ -26,7 +26,7 @@ export interface ReadinessItem {
   skipped?: boolean
   // input — a CampaignExecution key, 'go_live', or an owner custom-ask id ('custom-…').
   field?: keyof CampaignExecution | 'go_live' | string
-  inputType?: 'text' | 'textarea' | 'select' | 'date'
+  inputType?: 'text' | 'textarea' | 'select' | 'date' | 'upload'
   /** For inputType 'select' — the choices (e.g. Yes / Ask first / No). */
   options?: string[]
   /** Where the value saves. Default 'execution'; 'target_date' for the go-live date. */

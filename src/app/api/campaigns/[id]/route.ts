@@ -91,14 +91,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // which re-runs the diagnosis server-side and stamps only on a fresh all-good read.
     // Known keys, plus owner-defined custom asks (id `custom-<slug>` from the campaign builder).
     // Custom keys still pass the same string + 2000-char cap, so nothing unbounded/injected accretes.
-    const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'setupSkipped'])
+    const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'footageUrls', 'setupSkipped'])
+    // footageUrls holds a comma-joined list of uploaded-clip URLs, so it gets a larger cap than the
+    // free-text intake fields (which stay tight to keep injected text out of the creative-brief AI).
+    const capFor = (k: string) => (k === 'footageUrls' ? 8000 : 2000)
     for (const k of Object.keys(e as Record<string, unknown>)) {
       // Known keys, owner custom asks (custom-<slug>), and checkout gate answers (gate-<slug>, Phase 4a).
       if (!KNOWN.has(k) && !/^(custom|gate)-[a-z0-9-]{1,60}$/.test(k)) continue
       const v = (e as Record<string, unknown>)[k]
       if (v === undefined) continue
       if (typeof v !== 'string') return NextResponse.json({ error: `execution.${k} must be a string` }, { status: 400 })
-      if (v.length > 2000) return NextResponse.json({ error: `execution.${k} is too long (2000 max)` }, { status: 400 })
+      if (v.length > capFor(k)) return NextResponse.json({ error: `execution.${k} is too long (${capFor(k)} max)` }, { status: 400 })
       clean[k] = v
     }
     body.fields.execution = clean
@@ -173,6 +176,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const cur = (campaign.execution ?? {}) as Record<string, string>
     const changed = ['featuring', 'offerText', 'mustSay', 'avoid'].some((k) => k in delta && (delta[k] ?? '') !== (cur[k] ?? ''))
     if (changed) await clearCampaignBriefCache(id).catch(() => {})
+    // "Edit my footage" handoff: when the owner uploads their clips on /ready, put the links onto every
+    // content draft's brief so the editing team actually sees what to cut. Best-effort + idempotent (it
+    // strips any prior footage line before re-adding), never blocks the save.
+    if ('footageUrls' in delta) {
+      const urls = (delta.footageUrls ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+      ;(async () => {
+        const { createAdminClient } = await import('@/lib/supabase/admin')
+        const admin = createAdminClient()
+        const { data: drafts } = await admin.from('content_drafts').select('id, media_brief').eq('campaign_id', id).neq('status', 'published')
+        const line = urls.length ? `Client footage to edit: ${urls.join(' ')}` : null
+        for (const d of drafts ?? []) {
+          const mb = (d.media_brief && typeof d.media_brief === 'object' && !Array.isArray(d.media_brief)) ? (d.media_brief as Record<string, unknown>) : {}
+          const instr = (Array.isArray(mb.instructions) ? (mb.instructions as unknown[]).filter((x): x is string => typeof x === 'string') : []).filter((x) => !/^Client footage to edit:/.test(x))
+          if (line) instr.push(line)
+          await admin.from('content_drafts').update({ media_brief: { ...mb, instructions: instr } }).eq('id', d.id)
+        }
+      })().catch(() => {})
+    }
   }
   // The owner shipping a team-run campaign is the handoff signal: tell the staff
   // assigned to this client so the "your team is preparing each piece" promise is

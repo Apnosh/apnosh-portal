@@ -77,6 +77,10 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
       occasion: (c.occasion as string) ?? undefined,
       targetDate: (c.target_date as string) ?? undefined,
       context: (c.context as string) ?? undefined,
+      // The catalog card this campaign was built from — written on create (server.ts) but never
+      // hydrated back until now. Service-needs reads it (e.g. the `edit` card's footage-upload ask),
+      // so without this the ask never fires on the readiness path.
+      sourceCatalogId: (c.source_catalog_id as string) ?? undefined,
       brief: brief ?? undefined,
     },
     phase: (c.phase as SavedCampaign['phase']) ?? 'build',

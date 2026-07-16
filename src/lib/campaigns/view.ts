@@ -73,6 +73,7 @@ export interface CampaignExecution {
   setupNotes?: string    // anything else that helps the team
   vendorInfo?: string    // ordering / POS / booking system (from a pos-vendor service)
   menuSource?: string    // where to find the current menu (from a menu service)
+  footageUrls?: string   // comma-joined public URLs of client-uploaded clips/photos (the "edit my footage" card)
   setupSkipped?: string  // comma-separated readiness action ids the owner deferred ("Skip for now")
   /** ISO stamp: the /dashboard/google-profile walkthrough came back ALL-GOOD on a fresh read
    *  (the self-serve gbp version's completion). Server-written ONLY, by POST
