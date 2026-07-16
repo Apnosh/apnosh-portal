@@ -327,6 +327,741 @@ export const SERVICE_PLAYBOOKS: Record<string, ServicePlaybook> = {
       metricLabel: 'Google profile actions',
     },
   },
+
+  // ── "Fix your website and menu" (site-menu). A one-time tune-up: rebuild the online menu, fix
+  //    speed and correctness, make ordering obvious. Ends with a real live link + before/after
+  //    page-speed proof. Scope stays clear of neighbors: listings live in listings-sync, the Google
+  //    order button in google-food-order, ongoing site changes in website-care. ──
+  'site-menu': {
+    serviceId: 'site-menu',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Get access and your current menu',
+        lead: 'Collect site access and the facts only the owner has, before any work starts.',
+        actions: [
+          'Get access to the website (CMS login or the developer to contact)',
+          'Get the current menu with prices (link or file)',
+          'Get the logo, brand colors, and any key photos',
+          'Get the ordering and reservation links',
+          'Confirm the top pages and the main thing a guest should do',
+          'Note anything already broken the owner knows about',
+        ],
+        actor: 'client',
+        needsInput: 'menu-source',
+        proof: 'note',
+      },
+      {
+        id: 'baseline',
+        label: 'Capture the before picture',
+        lead: 'Record the starting state so the lift can be proven later.',
+        actions: [
+          'Run a page-speed test on the homepage and menu page and save the scores',
+          'Screenshot the current menu and key pages',
+          'Note broken links, wrong hours, and missing prices',
+          'Open the site on a real phone and note what breaks',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'menu-rebuild',
+        label: 'Rebuild the online menu',
+        lead: 'Put a fast, correct, readable menu on the site.',
+        actions: [
+          'Enter every section, item, description, and price',
+          'Match the item names to how guests actually search',
+          'Mark dietary, spicy, and most-popular items',
+          'Make sure the menu loads fast and reads well on a phone',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'site-fix',
+        label: 'Fix speed, correctness, and ordering',
+        lead: 'Make the site fast, right, and easy to order from.',
+        actions: [
+          'Fix the hours, address, and phone everywhere they show',
+          'Compress images and remove what slows the page',
+          'Make the order and reserve buttons obvious and working',
+          'Fix broken links and mobile layout issues',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'signoff',
+        label: 'Owner signs off on the changes',
+        lead: 'Get a quick yes before it goes live.',
+        actions: [
+          'Show the owner the new menu and key pages',
+          'Confirm the hours, prices, and links are right',
+          'Get a yes, or make the changes they ask for',
+        ],
+        actor: 'client',
+        proof: 'note',
+      },
+      {
+        id: 'qa-deliver',
+        label: 'Check on a real phone and deliver',
+        lead: 'Prove it works on a phone, then hand it over with the proof.',
+        actions: [
+          'Open the live site and menu on a real phone',
+          'Re-run the page-speed test and record the new scores',
+          'Confirm the order and reserve buttons work end to end',
+          'Deliver the live link plus the before-and-after speed screenshots',
+          'Add a plain note on what changed and what to watch',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your updated site and menu',
+      metricLabel: 'Website visits and menu views',
+    },
+  },
+
+  // ── "Get listed everywhere" (listings-sync). Claim and standardize the business across Yelp,
+  //    Apple Maps, Facebook, Bing, and more, then clean up duplicates. Listing propagation is a
+  //    real external wait (up to a week), carried as the gate. ──
+  'listings-sync': {
+    serviceId: 'listings-sync',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Gather the exact business facts',
+        lead: 'Collect the one true set of facts every listing must match.',
+        actions: [
+          'Get the exact business name, address, phone, and hours',
+          'Get the menu and website links',
+          'List the platforms to cover (Yelp, Apple Maps, Facebook, Bing, and others)',
+          'Get login access, or confirm we can claim each one',
+        ],
+        actor: 'client',
+        needsInput: 'listing-access',
+        proof: 'note',
+      },
+      {
+        id: 'audit',
+        label: 'Find every listing and what is wrong',
+        lead: 'See the full picture before changing anything.',
+        actions: [
+          'Search each platform for existing and duplicate listings',
+          'Record wrong hours, addresses, phones, and categories',
+          'Note duplicates and old-address listings to merge or remove',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'claim',
+        label: 'Claim and standardize each listing',
+        lead: 'One exact set of info, pushed everywhere.',
+        actions: [
+          'Claim or get access to each listing',
+          'Set one exact name, address, phone, and hours across all',
+          'Set the right category and add the menu and website links',
+        ],
+        actor: 'ops',
+        gateKind: 'listing-propagation',
+        proof: 'screenshot',
+      },
+      {
+        id: 'dedupe',
+        label: 'Merge or remove duplicates',
+        lead: 'Leave one clean listing per platform.',
+        actions: [
+          'Merge duplicates where the platform allows',
+          'Request removal of old or wrong-address listings',
+          'Confirm one clean listing per platform',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'signoff',
+        label: 'Owner signs off on the standard info',
+        lead: 'Get a yes on the info before it spreads everywhere.',
+        actions: [
+          'Show the owner the standard name, address, phone, and hours being pushed',
+          'Confirm the menu and website links are right',
+          'Get a yes, or make the changes they ask for',
+        ],
+        actor: 'client',
+        proof: 'note',
+      },
+      {
+        id: 'qa-deliver',
+        label: 'Confirm live and deliver the links',
+        lead: 'Prove each listing is right, then hand over the list.',
+        actions: [
+          'Check each platform shows the right name, hours, and menu link',
+          'Confirm the map pin sits on the real front door',
+          'Deliver a list of every live listing link',
+          'Add a plain note that some platforms take up to a week to fully update',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your synced listings',
+      metricLabel: 'Listing views and clicks',
+    },
+  },
+
+  // ── "Show up in local search" (local-seo). RECURRING: one work order = one month's cycle of
+  //    citation work + on-page local signals + a tracked report. Keeps the profile ranking the
+  //    setup hands off to. ──
+  'local-seo': {
+    serviceId: 'local-seo',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Get your targets and access',
+        lead: 'Collect the terms, area, and access the work needs.',
+        actions: [
+          'Get the business name, address, phone, and categories',
+          'Get the service area and neighborhoods to target',
+          'Get the top dishes and the search terms guests use',
+          'Confirm Google profile access',
+        ],
+        actor: 'client',
+        needsInput: 'gbp-access',
+        proof: 'note',
+      },
+      {
+        id: 'baseline',
+        label: 'Record the starting local rank',
+        lead: 'Capture the before picture so movement is provable.',
+        actions: [
+          'Record current local pack rankings for the main terms',
+          'Note current citations and name-address-phone consistency',
+          'Screenshot the starting map visibility',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'citations',
+        label: 'Build and fix citations',
+        lead: 'Make the business findable and consistent across the web.',
+        actions: [
+          'Submit or fix citations on the major directories',
+          'Make name, address, and phone identical everywhere',
+          'Add the right categories and service areas',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'onpage',
+        label: 'Strengthen local signals',
+        lead: 'Tune the site and profile for the target searches.',
+        actions: [
+          'Optimize the site and Google profile for the target terms',
+          'Add location and dish keywords naturally, no stuffing',
+          'Build or update the location and menu pages',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'report',
+        label: 'Track and report the month',
+        lead: 'Record the movement so the trend is visible.',
+        actions: [
+          'Re-check the local rankings and record the movement',
+          'Note the new citations live this month',
+          'Pass the numbers to the Monthly report service',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your local search presence',
+      metricLabel: 'Local search rank and map views',
+    },
+  },
+
+  // ── "Tune up your delivery apps" (delivery-opt). Fix menu, photos, hours, and promos on the
+  //    delivery marketplaces. The POS/ordering vendor controls go-live timing, carried as the gate. ──
+  'delivery-opt': {
+    serviceId: 'delivery-opt',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Get your delivery apps and access',
+        lead: 'Collect which apps to fix and how to reach them.',
+        actions: [
+          'Get which delivery apps you sell on (DoorDash, Uber Eats, Grubhub)',
+          'Get login access or the store IDs for each',
+          'Get the current menu with prices',
+          'Note any items that should not be on delivery',
+        ],
+        actor: 'client',
+        needsInput: 'pos-vendor',
+        proof: 'note',
+      },
+      {
+        id: 'audit',
+        label: 'Review each delivery page',
+        lead: 'See what is weak on each app before fixing.',
+        actions: [
+          'Screenshot the current menu, photos, and hours on each app',
+          'Note missing photos, weak descriptions, and wrong prices',
+          'Check ratings and the common complaints',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'optimize',
+        label: 'Fix the menu and photos',
+        lead: 'Make each page sell better from the same traffic.',
+        actions: [
+          'Rewrite item names and descriptions to sell',
+          'Upload strong photos to the top items',
+          'Fix prices, modifiers, and hours',
+          'Set up any promos or featured items',
+        ],
+        actor: 'ops',
+        gateKind: 'pos-vendor',
+        needsInput: 'pos-vendor',
+        proof: 'screenshot',
+      },
+      {
+        id: 'signoff',
+        label: 'Owner signs off on the pages',
+        lead: 'Get a yes on prices and promos before they go live.',
+        actions: [
+          'Show the owner the updated pages and any promo',
+          'Confirm the prices and items are right',
+          'Get a yes, or make the changes they ask for',
+        ],
+        actor: 'client',
+        proof: 'note',
+      },
+      {
+        id: 'qa-deliver',
+        label: 'Confirm live and deliver',
+        lead: 'Prove each page is right on a phone, then hand over the links.',
+        actions: [
+          'Open each delivery page on a real phone',
+          'Confirm menu, photos, hours, and promos render right',
+          'Deliver links to each updated page plus before-and-after screenshots',
+          'Add a plain note that ranking gains build over a few weeks',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your delivery app pages',
+      metricLabel: 'Delivery orders and menu views',
+    },
+  },
+
+  // ── "Get known on Nextdoor" (nextdoor-local). MANUAL by design — there is no Nextdoor posting
+  //    API, so a real person stands up the page and posts to the neighborhood feed by hand. One
+  //    work order = one month's cycle. ──
+  'nextdoor-local': {
+    serviceId: 'nextdoor-local',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Get your page and neighborhoods',
+        lead: 'Collect the page, the area, and what to post.',
+        actions: [
+          'Confirm the business Nextdoor page, or that we should create one',
+          'Get the neighborhoods to reach',
+          'Get the story, offers, and events to post about',
+          'Get photos and the logo',
+        ],
+        actor: 'client',
+        proof: 'note',
+      },
+      {
+        id: 'setup',
+        label: 'Stand up the Nextdoor business page',
+        lead: 'Create or claim the page and fill it out.',
+        actions: [
+          'Create or claim the Nextdoor business page',
+          'Fill the profile, hours, and links',
+          'Add the logo and photos',
+          'Verify the address and neighborhoods',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'plan',
+        label: 'Plan the month of neighborhood posts',
+        lead: 'Decide what to post from real menu, events, and offers.',
+        actions: [
+          'Pick post topics from the real menu, events, and offers',
+          'Write posts in a friendly, neighborly voice',
+          'No stock filler',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'publish',
+        label: 'Post to the neighborhood feed by hand',
+        lead: 'Publish and reply on the live feed.',
+        actions: [
+          'Publish the planned posts by hand across the month',
+          'Reply to neighbor comments and questions',
+          'Confirm each post is live on the feed',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+      {
+        id: 'report',
+        label: 'Track the month',
+        lead: 'Record reach so the trend is visible.',
+        actions: [
+          'Record post reach and engagement',
+          'Note new followers and messages',
+          'Pass the numbers to the Monthly report service',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your Nextdoor page',
+      metricLabel: 'Neighborhood reach and followers',
+    },
+  },
+
+  // ── "Reply to reviews" (review-responses). RECURRING: one work order = one month of drafted
+  //    replies. The owner approves every reply before it posts (a real consent gate), then we post
+  //    the approved ones to the live Google listing. ──
+  'review-responses': {
+    serviceId: 'review-responses',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Get access and your voice',
+        lead: 'Collect access and the brand voice before drafting.',
+        actions: [
+          'Owner adds Apnosh as a Manager on the Google profile',
+          'Get the brand voice and any lines to always use or avoid',
+          'Confirm who signs off on replies',
+        ],
+        actor: 'client',
+        needsInput: 'gbp-access',
+        proof: 'note',
+      },
+      {
+        id: 'pull',
+        label: 'Pull the reviews to answer',
+        lead: 'Gather this month\'s unanswered reviews.',
+        actions: [
+          'Pull all new and unanswered reviews this month',
+          'Sort by rating and urgency',
+          'Flag anything that needs the owner directly',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'draft',
+        label: 'Draft a reply to every review',
+        lead: 'Write a personal reply to each one in brand voice.',
+        actions: [
+          'Write a personal reply to each review in the owner\'s voice',
+          'Thank the good ones by name and detail',
+          'Answer the critical ones with care and a fix, never defensive',
+          'No copy-paste replies',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'approve',
+        label: 'Owner approves the replies',
+        lead: 'Get a yes on every reply before it posts.',
+        actions: [
+          'Show the owner every drafted reply',
+          'Make any changes they ask for',
+          'Get a yes to post',
+        ],
+        actor: 'client',
+        proof: 'note',
+      },
+      {
+        id: 'publish',
+        label: 'Post the approved replies',
+        lead: 'Put the approved replies on the live listing.',
+        actions: [
+          'Post each approved reply to the live listing',
+          'Confirm each reply shows publicly',
+          'Record which reviews were answered',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your answered reviews',
+      metricLabel: 'Review replies and rating',
+    },
+  },
+
+  // ── "Smooth out ordering" (google-food-order). Wire the Order Online + Reserve a Table links on
+  //    the Google profile to the owner's real provider, tested on a phone. The POS/reservation
+  //    vendor controls timing, carried as the gate. ──
+  'google-food-order': {
+    serviceId: 'google-food-order',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Get your ordering system and links',
+        lead: 'Collect the provider and links the buttons point to.',
+        actions: [
+          'Get which ordering or reservation system you use (Toast, Square, OpenTable, and others)',
+          'Get the ordering and reservation links',
+          'Confirm Google profile access',
+          'Confirm the preferred provider for the button',
+        ],
+        actor: 'client',
+        needsInput: 'pos-vendor',
+        proof: 'note',
+      },
+      {
+        id: 'baseline',
+        label: 'Record the starting state',
+        lead: 'Capture what the profile shows today.',
+        actions: [
+          'Screenshot the current Google profile buttons',
+          'Note whether Order and Reserve are present and where they point',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'wire',
+        label: 'Wire the order and reserve links',
+        lead: 'Point the buttons at the owner\'s real provider.',
+        actions: [
+          'Add or fix the Order Online link to the owner\'s chosen provider',
+          'Add or fix the Reserve a Table link',
+          'Set the preferred provider so Google shows the right one',
+          'UTM-tag the links for the owner\'s own analytics',
+        ],
+        actor: 'ops',
+        gateKind: 'pos-vendor',
+        needsInput: 'pos-vendor',
+        proof: 'screenshot',
+      },
+      {
+        id: 'signoff',
+        label: 'Owner signs off on the targets',
+        lead: 'Get a yes on where the buttons point.',
+        actions: [
+          'Show the owner where the Order and Reserve buttons point',
+          'Confirm the provider and links are right',
+          'Get a yes, or make the changes they ask for',
+        ],
+        actor: 'client',
+        proof: 'note',
+      },
+      {
+        id: 'qa-deliver',
+        label: 'Test on a real phone and deliver',
+        lead: 'Prove the buttons work on a phone, then hand over the proof.',
+        actions: [
+          'Open the profile on a real phone in Search and Maps',
+          'Tap Order and Reserve and confirm they route right',
+          'Walk the order path far enough to confirm it works',
+          'Deliver the live profile link plus screenshots',
+          'Add a plain note that provider changes can take a few days to show',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your Google order and reserve buttons',
+      metricLabel: 'Orders and reservations from Google',
+    },
+  },
+
+  // ── "Book a shoot" (photo-library). An on-site pro shoot → an edited photo library plus a reel
+  //    the owner keeps. The shoot date is locked BEFORE checkout by the pre-checkout booking gate
+  //    (gates/derive.ts), so this playbook confirms it and runs the shoot; it never invents a slot. ──
+  'photo-library': {
+    serviceId: 'photo-library',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Confirm the shoot details',
+        lead: 'Lock the date, contact, and dishes before the shoot.',
+        actions: [
+          'Confirm the booked shoot date, time, and address',
+          'Get the on-site contact name and role',
+          'Get the list of dishes and any hero plates to feature',
+          'Confirm it is OK to film and tag staff',
+          'Note parking, entry, and the best light',
+        ],
+        actor: 'client',
+        needsInput: 'onSiteContact',
+        proof: 'note',
+      },
+      {
+        id: 'prep',
+        label: 'Plan the shoot',
+        lead: 'Build the shot list and confirm logistics.',
+        actions: [
+          'Build a shot list from the dishes and the brand look',
+          'Confirm gear, timing, and who plates the food',
+          'Confirm the styling and props',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'shoot',
+        label: 'Run the on-site shoot',
+        lead: 'Capture the dishes and the space per the shot list.',
+        actions: [
+          'Arrive on time and set up',
+          'Shoot each dish and the space per the shot list',
+          'Capture extra angles and detail shots',
+          'Back up the files on site',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'edit',
+        label: 'Cull and edit the library',
+        lead: 'Turn the raw files into a finished library and reel.',
+        actions: [
+          'Cull to the best frames',
+          'Color-correct and retouch each selected photo',
+          'Cut a short reel from the footage',
+          'Export web and print sizes',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'signoff',
+        label: 'Owner previews the gallery',
+        lead: 'Get a yes on the edit before final delivery.',
+        actions: [
+          'Share a preview gallery with the owner',
+          'Take any swap or re-edit requests',
+          'Get a yes',
+        ],
+        actor: 'client',
+        proof: 'note',
+      },
+      {
+        id: 'deliver',
+        label: 'Deliver the library and reel',
+        lead: 'Hand over the files the owner keeps, with usage notes.',
+        actions: [
+          'Deliver a link to the full edited photo library the owner keeps',
+          'Deliver the reel file',
+          'Include usage notes for menu, Google, delivery, and social',
+          'Confirm the owner can download everything',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your photo library and reel',
+      metricLabel: 'Photos used across your channels',
+    },
+  },
+
+  // ── "Run local ads" (paid-ads). RECURRING management of paid campaigns. Ad SPEND is billed by the
+  //    platform at cost, separate from the management fee — stated plainly, never hidden. No content
+  //    is invented here; the creative rides from the campaign's own pieces. ──
+  'paid-ads': {
+    serviceId: 'paid-ads',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Get ad access and your budget',
+        lead: 'Collect account access, budget, and the goal before launch.',
+        actions: [
+          'Grant access to the ad accounts (Meta Business, Google Ads), or let us create them',
+          'Get the monthly ad budget',
+          'Get the goal, the offer, and the area to target',
+          'Confirm billing is set on the ad account (spend is paid to the platform at cost)',
+        ],
+        actor: 'client',
+        needsInput: 'ad-access',
+        proof: 'note',
+      },
+      {
+        id: 'setup',
+        label: 'Stand up the campaigns',
+        lead: 'Build the accounts, audiences, and ad sets.',
+        actions: [
+          'Set up or connect the ad accounts and the pixel or tag',
+          'Build the audiences and the target area',
+          'Create the ad sets for the goal and budget',
+          'Load the creative and copy',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'qa-review',
+        label: 'Human review before launch',
+        lead: 'A person checks targeting, billing, and tracking before spend starts.',
+        actions: [
+          'Check targeting, budget caps, and billing',
+          'Check the creative, links, and tracking',
+          'Confirm the offer and landing page work',
+        ],
+        actor: 'ops',
+        proof: 'note',
+      },
+      {
+        id: 'launch',
+        label: 'Launch and confirm live',
+        lead: 'Put the ads live and confirm they deliver.',
+        actions: [
+          'Launch the campaigns',
+          'Confirm ads are delivering and tracked',
+          'Screenshot the live campaigns',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+      {
+        id: 'optimize-report',
+        label: 'Tune and report the month',
+        lead: 'Watch the spend, tune the ads, and report the results.',
+        actions: [
+          'Watch spend and results and tune the ads',
+          'Pause what is not working and scale what is',
+          'Record spend, reach, and results',
+          'Pass the numbers to the Monthly report service',
+          'Note that ad spend is billed by the platform at cost, separate from the fee',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your live ad campaigns',
+      metricLabel: 'Ad reach, clicks, and cost per result',
+    },
+  },
 }
 
 export function playbookFor(serviceId: string): ServicePlaybook | undefined {
