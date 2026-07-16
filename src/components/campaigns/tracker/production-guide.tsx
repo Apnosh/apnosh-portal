@@ -6,7 +6,7 @@
  * status the detail page already has (phase, go-live estimate, progress), no new data. Honest: dates
  * are estimates ("your team confirms"), and it never claims a result that hasn't happened.
  */
-import { Sparkles, CalendarClock, ArrowRight, MessageCircle, ChevronDown, Eye, CheckCircle2 } from 'lucide-react'
+import { Sparkles, CalendarClock, ArrowRight, MessageCircle, ChevronDown, Eye, CheckCircle2, Check } from 'lucide-react'
 import { C, DISPLAY } from '@/components/campaigns/ui'
 import type { GoLiveEstimate } from '@/lib/campaigns/aggregate-golive'
 import type { ShippedPhase } from '@/lib/campaigns/view'
@@ -15,6 +15,42 @@ function estLine(goLive: GoLiveEstimate, whenLine: string | null | undefined): s
   if (whenLine) return whenLine
   if (goLive.phrase) return goLive.hasGoLive ? `Live in about ${goLive.phrase}` : `Starts in about ${goLive.phrase}`
   return 'Your team confirms the date'
+}
+
+/** The at-a-glance horizontal track: four milestones, the line filled up to where the campaign is
+ *  now. Purely a picture of the same phase the spine below reads from — no new claims. */
+function ProductionRail({ phase }: { phase: ShippedPhase }) {
+  const stages = ['Ordered', 'Setup', 'Making', 'Live']
+  // how far the line is filled: setup=1, production=2, live=3 (Live is the active dot), done=4 (all solid)
+  const cur = phase === 'setup' ? 1 : phase === 'production' ? 2 : phase === 'live' ? 3 : 4
+  return (
+    <div style={{ display: 'flex', marginBottom: 16 }}>
+      {stages.map((label, i) => {
+        const done = i < cur
+        const isCur = i === cur
+        return (
+          <div key={label} style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            {/* connector to the next dot — green once this leg is behind us */}
+            {i < stages.length - 1 && (
+              <div style={{ position: 'absolute', top: 10, left: '50%', width: '100%', height: 2, background: done ? C.green : C.line }} />
+            )}
+            <div
+              className={isCur ? 'cw-breathe' : undefined}
+              style={{
+                position: 'relative', zIndex: 1, width: 22, height: 22, borderRadius: 99, display: 'grid', placeItems: 'center', boxSizing: 'border-box',
+                background: done ? C.green : isCur ? C.greenSoft : '#fff',
+                border: done ? 'none' : `2px solid ${isCur ? C.green : C.line}`,
+                color: done ? '#fff' : isCur ? C.greenDk : C.faint,
+              }}
+            >
+              {done ? <Check size={12} strokeWidth={3} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: isCur ? C.greenDk : C.faint }} />}
+            </div>
+            <div style={{ fontSize: 10.5, fontWeight: isCur ? 700 : 600, color: done || isCur ? C.ink : C.mute, marginTop: 5, whiteSpace: 'nowrap' }}>{label}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 /** The one-look status: a chip, what's happening now, what's next, and the estimated go-live. */
@@ -39,6 +75,7 @@ export function ProductionSummary({ phase, goLive, whenLine, progress, awaitingY
 
   return (
     <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 18, padding: 16, marginTop: 24 }}>
+      <ProductionRail phase={phase} />
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: chipBg, color: chipFg, borderRadius: 99, padding: '3px 10px', fontSize: 11, fontWeight: 700 }}>
         <span style={{ width: 6, height: 6, borderRadius: 99, background: chipFg }} /> {s.chip}
       </span>
