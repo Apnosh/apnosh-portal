@@ -1068,6 +1068,35 @@ export function playbookFor(serviceId: string): ServicePlaybook | undefined {
   return SERVICE_PLAYBOOKS[serviceId]
 }
 
+/**
+ * The deliver-with-proof HONESTY GATE, as one pure, testable decision. A service can only be marked
+ * delivered when (a) a real proof link exists and (b) — on the transition into delivered — every step
+ * is actually done, so an order can never be handed over half-worked or without evidence. The admin
+ * PATCH route calls this against the FINAL row state (not just the UI), so no request can bypass it,
+ * and it is generic over the steps jsonb, so it covers every authored playbook the same way.
+ *
+ * `checkSteps` is false when the row is already delivered (a re-save of a closed record only needs the
+ * proof invariant, never re-validates the checklist). Returns { ok } or { ok:false, reason } with an
+ * owner-facing message. Client-safe + pure (no I/O), so both the route and its tests use one truth.
+ */
+export function deliverGuard(
+  steps: Array<{ id?: string; status?: string; label?: string }> | null | undefined,
+  proofUrl: string | null | undefined,
+  opts?: { checkSteps?: boolean },
+): { ok: true } | { ok: false; reason: string } {
+  if (!proofUrl || !String(proofUrl).trim()) {
+    return { ok: false, reason: 'A proof link is required before a service can be marked delivered.' }
+  }
+  if (opts?.checkSteps !== false) {
+    const open = (steps ?? []).filter((s) => s?.status !== 'done')
+    if (open.length > 0) {
+      const names = open.map((s) => s.label ?? s.id ?? 'a step').slice(0, 3).join(', ')
+      return { ok: false, reason: `Not everything is done yet: ${names}${open.length > 3 ? '…' : ''}.` }
+    }
+  }
+  return { ok: true }
+}
+
 /** Instantiate a service's playbook into the runtime step list stored on the work order. Returns []
  *  for a service with no authored playbook yet (the work order still exists; it just has no checklist
  *  until a playbook is authored — honest, never a fake step). */
