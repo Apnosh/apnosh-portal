@@ -205,7 +205,16 @@ export async function refreshGoogleToken(refreshToken: string): Promise<GoogleTo
 
   const data = await res.json()
   if (!res.ok) {
-    throw new Error(data.error_description || data.error || 'Failed to refresh Google token')
+    // Surface Google's real OAuth error CODE, not just the vague description. The code is
+    // what tells failure modes apart when a connection dies: `invalid_grant` = the refresh
+    // token expired or was revoked (e.g. an unpublished "Testing" consent screen's 7-day
+    // limit, or a user revoke); `unauthorized_client`/`invalid_client` = the token was
+    // minted under a DIFFERENT OAuth client than the one refreshing it (env/client drift —
+    // e.g. connected from localhost/preview, refreshed by prod). Both previously stored the
+    // same opaque "Unauthorized", making the two indistinguishable in the connection health log.
+    const code = data.error || 'unknown_error'
+    const desc = data.error_description ? `: ${data.error_description}` : ''
+    throw new Error(`${code}${desc} (HTTP ${res.status})`)
   }
   return data as GoogleTokens
 }
