@@ -9,6 +9,7 @@ import { getCampaignPieces } from '@/lib/campaigns/tracker/pieces'
 import { getCampaignActivity } from '@/lib/campaigns/tracker/activity'
 import { getCampaignReadiness } from '@/lib/campaigns/readiness'
 import { getCampaignPayment } from '@/lib/campaigns/campaign-payments-server'
+import { getConfirmedBookingForCampaign } from '@/lib/campaigns/gates/booking-server'
 import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
 import { checkoutBill } from '@/lib/campaigns/checkout-bill'
 import { beatsFromLines } from '@/lib/campaigns/catalog'
@@ -36,7 +37,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const shippedTeamRun = shipped && campaign!.draft.path !== 'diy'
   // Outcomes apply to any shipped campaign with published pieces (team or DIY); progress/
   // charges are team-run only. Each read is best-effort so one failure never blanks the page.
-  const [progress, charges, outcomes, pieces, activity, readiness, payment] = await Promise.all([
+  const [progress, charges, outcomes, pieces, activity, readiness, payment, booking] = await Promise.all([
     shippedTeamRun ? getCampaignProgress(id).catch(() => null) : Promise.resolve(null),
     shippedTeamRun ? getCampaignCharges(id).catch(() => null) : Promise.resolve(null),
     shipped ? getCampaignOutcomes(id).catch(() => null) : Promise.resolve(null),
@@ -45,8 +46,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     shipped ? getCampaignReadiness(id).catch(() => null) : Promise.resolve(null),
     // The upfront charge-at-checkout receipt (paid at order time), if any.
     shipped ? getCampaignPayment(id).catch(() => null) : Promise.resolve(null),
+    // The confirmed shoot booking (Checkout Gates), if this order picked a date at checkout.
+    shipped ? getConfirmedBookingForCampaign(id).catch(() => null) : Promise.resolve(null),
   ])
-  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment })
+  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking })
 }
 
 // PATCH /api/campaigns/:id — { items?: LineItem[], fields?: {...} }.

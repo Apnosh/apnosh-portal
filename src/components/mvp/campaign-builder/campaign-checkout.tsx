@@ -20,6 +20,7 @@ import { saveAndShip } from '@/lib/campaigns/builder/ship'
 import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
 import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
 import { summarize, type CampaignDraft } from '@/lib/campaigns/types'
+import { draftHasPreCheckoutBooking } from '@/lib/campaigns/gates/derive'
 
 const MINT = '#4abd98'
 const MINT_DARK = '#3f7d6a'
@@ -199,6 +200,139 @@ function BillCard({ b, monthlyCents, taxPending }: { b: Breakdown; monthlyCents:
 const CARD_BRANDS: Record<string, string> = { visa: 'Visa', mastercard: 'Mastercard', amex: 'Amex', discover: 'Discover', diners: 'Diners', jcb: 'JCB', unionpay: 'UnionPay' }
 const brandLabel = (b: string) => CARD_BRANDS[b?.toLowerCase()] ?? (b ? b[0].toUpperCase() + b.slice(1) : 'Card')
 
+// ── Pre-checkout booking gate (Checkout Gates, Phase 2) ──────────────────────────────
+interface Slot { ruleId: string; date: string; start: string; end: string; timezone: string; remaining: number }
+interface AvailabilityResp { available: boolean; reason?: string; timezone: string | null; slots: Slot[] }
+interface Hold { bookingId: string; date: string; start: string; end: string; timezone: string }
+
+const fmtDayShort = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+const fmtTime12 = (hhmm: string) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm); if (!m) return hhmm
+  const h = Number(m[1]); const ap = h < 12 ? 'AM' : 'PM'; const h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${m[2]} ${ap}`
+}
+
+/**
+ * When the cart includes an on-site shoot, the client must pick a REAL open slot before paying (the
+ * booking is firm at checkout). If nothing is published yet, we degrade honestly to request-mode
+ * ("we'll reach out to schedule") — never a fake slot, and never a silent block. `onBlockingChange`
+ * tells the pay button whether it must wait for a held slot.
+ */
+function BookingGate({ clientId, paymentIntentId, draft, onBlockingChange }: {
+  clientId: string
+  paymentIntentId: string
+  draft: CampaignDraft
+  onBlockingChange: (blocking: boolean) => void
+}) {
+  const needs = draftHasPreCheckoutBooking(draft)
+  const [loading, setLoading] = useState(needs)
+  const [mode, setMode] = useState<'enforced' | 'request' | 'none'>(needs ? 'enforced' : 'none')
+  const [slots, setSlots] = useState<Slot[]>([])
+  const [tz, setTz] = useState<string | null>(null)
+  const [hold, setHold] = useState<Hold | null>(null)
+  const [picking, setPicking] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const loadAvailability = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/gates/availability?gateKind=shoot')
+      const j = (await res.json().catch(() => ({}))) as AvailabilityResp
+      const open = Array.isArray(j.slots) ? j.slots : []
+      setSlots(open); setTz(j.timezone ?? null)
+      const m = open.length > 0 ? 'enforced' : 'request'
+      setMode(m)
+      onBlockingChange(m === 'enforced' && !hold)
+    } catch {
+      setMode('request'); onBlockingChange(false)
+    } finally { setLoading(false) }
+  }
+
+  useEffect(() => {
+    if (!needs) { onBlockingChange(false); return }
+    loadAvailability()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needs, paymentIntentId])
+
+  const pick = async (s: Slot) => {
+    setPicking(`${s.date}T${s.start}`); setErr(null)
+    try {
+      const res = await fetch('/api/gates/hold', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, paymentIntentId, gateKind: 'shoot', date: s.date, start: s.start }),
+      })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setErr(j.error || 'Could not hold that time.')
+        if (j.code === 'slot_taken') await loadAvailability()   // someone grabbed it — refresh
+        return
+      }
+      const h: Hold = { bookingId: j.bookingId, date: j.slot.date, start: j.slot.start, end: j.slot.end, timezone: j.slot.timezone }
+      setHold(h); onBlockingChange(false)
+    } catch {
+      setErr('Could not hold that time. Try again.')
+    } finally { setPicking(null) }
+  }
+
+  if (mode === 'none') return null
+
+  const byDay = new Map<string, Slot[]>()
+  for (const s of slots) { const a = byDay.get(s.date) ?? []; a.push(s); byDay.set(s.date, a) }
+
+  return (
+    <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '13px 16px 15px', marginBottom: 16 }}>
+      <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 4 }}>Book your shoot</div>
+
+      {loading && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB }}>Checking open shoot times…</div>}
+
+      {!loading && mode === 'request' && (
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, lineHeight: 1.5 }}>
+          Your team will reach out to schedule the shoot after you order. No open times are posted right now, so we set the date together.
+        </div>
+      )}
+
+      {!loading && mode === 'enforced' && hold && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: MINT_TINT, borderRadius: 12, padding: '11px 13px' }}>
+          <div style={{ width: 30, height: 30, borderRadius: 8, background: MINT, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: INK }}>{fmtDayShort(hold.date)} · {fmtTime12(hold.start)}</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB }}>Held for 30 min{hold.timezone ? ` · ${hold.timezone}` : ''}. Confirmed when you pay.</div>
+          </div>
+          <button onClick={() => { setHold(null); onBlockingChange(true) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: MINT_DARK, padding: 0 }}>Change</button>
+        </div>
+      )}
+
+      {!loading && mode === 'enforced' && !hold && (
+        <>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10, lineHeight: 1.5 }}>Pick a time for your on-site shoot. This locks your date now, so there&apos;s no back-and-forth later.</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 260, overflowY: 'auto' }}>
+            {[...byDay.entries()].map(([day, daySlots]) => (
+              <div key={day}>
+                <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700, color: INK, marginBottom: 6 }}>{fmtDayShort(day)}</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                  {daySlots.map((s) => {
+                    const key = `${s.date}T${s.start}`
+                    return (
+                      <button key={key} onClick={() => pick(s)} disabled={!!picking} style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: INK, background: '#fff', border: `1px solid ${LINE}`, borderRadius: 10, padding: '7px 11px', cursor: picking ? 'default' : 'pointer', opacity: picking && picking !== key ? 0.5 : 1 }}>
+                        {picking === key ? 'Holding…' : fmtTime12(s.start)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          {tz && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: FAINT, marginTop: 8 }}>Times shown in {tz}.</div>}
+        </>
+      )}
+
+      {err && <div role="alert" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: '#b3462e', marginTop: 8 }}>{err}</div>}
+    </div>
+  )
+}
+
 function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdown, monthlyCents, savedCard, onPlaced }: {
   clientId: string
   draft: CampaignDraft
@@ -223,6 +357,9 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
   const shippedIdRef = useRef<string | null>(null)
   const billing = useRef<{ name?: string; address?: Record<string, unknown> }>({})
   const taxSeq = useRef(0)
+  // Pre-checkout booking gate: blocks payment until a shoot-bearing order has a held slot. Starts
+  // true when the draft needs a shoot, so the button waits until availability resolves.
+  const [gateBlocking, setGateBlocking] = useState(draftHasPreCheckoutBooking(draft))
 
   // Recompute tax + update the charge when the billing address is complete (new-card path).
   const onAddress = async (e: StripeAddressElementChangeEvent) => {
@@ -264,6 +401,8 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
 
   const placeOrder = async () => {
     if (!stripe || busy) return
+    // A shoot-bearing order must have a held slot before we charge (the booking is firm at checkout).
+    if (gateBlocking) { setError('Pick a shoot time to continue.'); return }
     setBusy(true); setError(null)
 
     // Already paid on a prior attempt → don't charge again, just finish placing the order.
@@ -312,6 +451,7 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
     <>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 16px' }}>
         {restaurant && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10 }}>Placing your order for <span style={{ fontWeight: 600, color: INK }}>{restaurant}</span></div>}
+        <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} draft={draft} onBlockingChange={setGateBlocking} />
         <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} />
 
         {mode === 'saved' && savedCard ? (
@@ -355,10 +495,10 @@ function PayForm({ clientId, draft, restaurant, paymentIntentId, initialBreakdow
         {error && <div role="alert" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#b3462e', textAlign: 'center', marginBottom: 8, lineHeight: 1.4 }}>{error}</div>}
         <button
           onClick={placeOrder}
-          disabled={busy || !stripe}
-          style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || !stripe ? 'default' : 'pointer', background: busy ? MINT_DARK : MINT, color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: '0 8px 22px rgba(74,189,152,0.42)' }}
+          disabled={busy || !stripe || gateBlocking}
+          style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || !stripe || gateBlocking ? 'default' : 'pointer', background: busy ? MINT_DARK : (gateBlocking ? FAINT : MINT), color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: gateBlocking ? 'none' : '0 8px 22px rgba(74,189,152,0.42)' }}
         >
-          {busy ? (status ?? 'Working…') : `Place order · ${fmt(bill.totalCents)}`}
+          {busy ? (status ?? 'Working…') : gateBlocking ? 'Pick a shoot time first' : `Place order · ${fmt(bill.totalCents)}`}
         </button>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>Your card is charged now. Your campaign starts right after.</div>
       </div>

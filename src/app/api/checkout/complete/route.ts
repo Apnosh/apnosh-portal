@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
 import { paymentsTable } from '@/lib/campaigns/checkout-server'
+import { confirmBookingForPayment } from '@/lib/campaigns/gates/booking-server'
 
 function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
@@ -29,8 +30,10 @@ export async function POST(req: NextRequest) {
   const access = await checkClientAccess(row.client_id as string)
   if (!access.authorized) return denied(access.reason)
 
-  // Already reconciled — hand back the same campaign, no double work.
+  // Already reconciled — hand back the same campaign, no double work. Still confirm the shoot booking
+  // (idempotent) in case a prior attempt linked the campaign but hadn't confirmed the hold yet.
   if (row.status === 'paid' && row.campaign_id) {
+    await confirmBookingForPayment(paymentIntentId, row.campaign_id as string).catch(() => false)
     return NextResponse.json({ ok: true, campaignId: row.campaign_id })
   }
 
@@ -70,5 +73,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, campaignId: campaignId ?? row.campaign_id ?? null })
+  // Confirm the shoot booking (if any) and bind it to the campaign — flips the 30-min hold to a firm
+  // booking, seeds the real shoot date into the campaign + its shoot work orders. Best-effort: a
+  // non-shoot order is a clean no-op, and a hiccup here never unships a paid order.
+  const boundCampaignId = campaignId ?? (row.campaign_id as string | null)
+  if (boundCampaignId) await confirmBookingForPayment(paymentIntentId, boundCampaignId).catch(() => false)
+
+  return NextResponse.json({ ok: true, campaignId: boundCampaignId ?? null })
 }

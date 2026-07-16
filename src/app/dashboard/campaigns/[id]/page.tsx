@@ -47,6 +47,8 @@ export default function CampaignDetailPage() {
   const [pieces, setPieces] = useState<TrackerPiece[]>([])
   const [activity, setActivity] = useState<ActivityEvent[]>([])
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null)
+  // The confirmed shoot booking (Checkout Gates) — a real, earned date, shown as such (not an estimate).
+  const [booking, setBooking] = useState<{ label: string; date: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Ship-only failure, shown inline over the footer (the footer's Ship button is the retry).
@@ -65,6 +67,7 @@ export default function CampaignDetailPage() {
       setPieces((j.pieces as TrackerPiece[]) ?? [])
       setActivity((j.activity as ActivityEvent[]) ?? [])
       setReadiness((j.readiness as ReadinessReport) ?? null)
+      setBooking((j.booking as { label: string; date: string }) ?? null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Load failed') }
   }, [id])
   useEffect(() => { load() }, [load])
@@ -183,7 +186,7 @@ export default function CampaignDetailPage() {
                 <div className="cw-skel" style={{ width: '100%', height: 280, borderRadius: 18 }} />
               </div>
             )
-            : <Detail camp={camp} progress={progress} outcomes={outcomes} pieces={pieces} activity={activity} readiness={readiness} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />}
+            : <Detail camp={camp} progress={progress} outcomes={outcomes} pieces={pieces} activity={activity} readiness={readiness} booking={booking} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />}
         </div>
 
         {/* Footer only while a draft: bill + Save/Ship. Once shipped, the header pill + Now card carry the
@@ -209,13 +212,14 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
+function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   outcomes: CampaignOutcomes | null
   pieces: TrackerPiece[]
   activity: ActivityEvent[]
   readiness: ReadinessReport | null
+  booking: { label: string; date: string } | null
   onReload: () => Promise<void> | void
   onToggleOptOut: (id: string, r: OptOutReason) => void
   onToggleInclude: (id: string) => void
@@ -399,6 +403,16 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
           )}
           {/* the ONE home for outcomes — the real target of "See every piece" */}
           <div id="campaign-results"><CampaignResults outcomes={outcomes} pieces={pieces} /></div>
+          {/* Confirmed shoot date (Checkout Gates): a real booked date, shown as earned — never an estimate. */}
+          {booking && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '11px 14px', boxShadow: SHADOW_CARD }}>
+              <CalendarDays size={17} color={C.greenDk} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Shoot day · {booking.label}</div>
+                <div style={{ fontSize: 11.5, color: C.mute }}>Confirmed at checkout. Your team comes then.</div>
+              </div>
+            </div>
+          )}
           {/* One-look status above the timeline: what's happening now, what's next, when it goes live */}
           <ProductionSummary
             phase={st.phase}
