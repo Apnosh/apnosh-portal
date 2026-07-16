@@ -17,6 +17,8 @@ import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
 import type { WhySignals } from '@/lib/campaigns/data/why-for'
 import type { ContentOverrideMap } from '@/lib/campaigns/data/content-overrides'
 import { registerDbCampaigns, type DbCampaign } from '@/lib/campaigns/data/db-campaigns'
+import { registerLiveServices } from '@/lib/campaigns/catalog'
+import type { PricedService } from '@/lib/campaigns/data/priced-catalog'
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
 import type { Diagnosis } from '@/lib/campaigns/planning/types'
 import { summarize, type LineItem, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
@@ -173,13 +175,19 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
     // store only ever renders cards that are fully wired.
     setDbCampaigns(registerDbCampaigns(list as DbCampaign[]))
   }
+  // Live catalog (Phase 4b / G3): overlay the DB-live service prices onto serviceById BEFORE the
+  // owner composes, so an admin price/service edit reaches the store with no deploy. The committed
+  // snapshot is the seed + fallback (registerLiveServices is a no-op for a missing/empty list), and
+  // parity guarantees live == snapshot for unedited services, so this never moves an unedited price.
+  const applyLiveServices = (list: unknown) => { if (Array.isArray(list)) registerLiveServices(list as PricedService[]) }
   useEffect(() => {
     let cancelled = false
     const cacheKey = 'apnosh-content-ov-v2'
-    let cached: { overrides?: ContentOverrideMap; campaigns?: DbCampaign[]; ts?: number } | null = null
+    let cached: { overrides?: ContentOverrideMap; campaigns?: DbCampaign[]; services?: PricedService[]; ts?: number } | null = null
     try { cached = JSON.parse(localStorage.getItem(cacheKey) ?? 'null') } catch { cached = null }
     if (cached?.overrides) setContentOverrides(cached.overrides)
     if (cached?.campaigns) applyDbCampaigns(cached.campaigns)
+    if (cached?.services) applyLiveServices(cached.services)
     const fresh = typeof cached?.ts === 'number' && Date.now() - cached.ts < 30 * 60 * 1000
     if (fresh) return
     fetch('/api/dashboard/catalog-content')
@@ -188,7 +196,8 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         if (cancelled || !j || typeof j.overrides !== 'object' || j.overrides === null) return
         setContentOverrides(j.overrides as ContentOverrideMap)
         applyDbCampaigns(j.campaigns)
-        try { localStorage.setItem(cacheKey, JSON.stringify({ overrides: j.overrides, campaigns: Array.isArray(j.campaigns) ? j.campaigns : [], ts: Date.now() })) } catch { /* storage full/private — fine */ }
+        applyLiveServices(j.services)
+        try { localStorage.setItem(cacheKey, JSON.stringify({ overrides: j.overrides, campaigns: Array.isArray(j.campaigns) ? j.campaigns : [], services: Array.isArray(j.services) ? j.services : [], ts: Date.now() })) } catch { /* storage full/private — fine */ }
       })
       .catch(() => { /* code content shows; nothing is ever faked */ })
     return () => { cancelled = true }
