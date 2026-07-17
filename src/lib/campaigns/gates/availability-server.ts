@@ -119,6 +119,9 @@ export interface OpenSlotsResult {
   timezone: string | null
   rule: { id: string; label: string | null; gateKind: string } | null
   slots: OpenSlot[]
+  /** How far out booking opens (days) — disclosed to the owner so a plan-ahead date
+   *  beyond it gets an honest "not on this list yet" instead of a silent mismatch. */
+  horizonDays?: number
 }
 
 /**
@@ -136,5 +139,6 @@ export async function getOpenSlots(gateKind = 'shoot', nowISO = new Date().toISO
     timezone: rule.timezone,
     rule: { id: rule.id, label: rule.label, gateKind: rule.gateKind },
     slots,
+    horizonDays: rule.horizonDays,
   }
 }

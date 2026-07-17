@@ -258,12 +258,15 @@ const fmtTime12 = (hhmm: string) => {
  * ("we'll reach out to schedule") — never a fake slot, and never a silent block. `onBlockingChange`
  * tells the pay button whether it must wait for a held slot.
  */
-function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange, onHold }: {
+function BookingGate({ clientId, paymentIntentId, booking, targetDate, onBlockingChange, onHold }: {
   clientId: string
   paymentIntentId: string
   /** The server-resolved booking gate for this order (respects the admin's per-campaign config), or
    *  null when none applies (not a shoot, or the admin turned the gate off). */
   booking: { gateKind: string; required: boolean } | null
+  /** The date the owner TYPED into the plan (draft.targetDate) — reconciled honestly against the
+   *  booking horizon instead of silently offering unrelated slots. */
+  targetDate?: string | null
   onBlockingChange: (blocking: boolean) => void
   /** Reports the currently held slot up (so the confirmation can replay it). */
   onHold?: (h: Hold | null) => void
@@ -273,8 +276,12 @@ function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange, onH
   const required = booking?.required ?? true
   const [loading, setLoading] = useState(needs)
   const [mode, setMode] = useState<'enforced' | 'request' | 'none'>(needs ? 'enforced' : 'none')
+  // True when the OWNER chose request-mode ("ask for another time") — different copy than
+  // the no-availability fallback, and pay is never locked behind unsuitable slots.
+  const [userRequested, setUserRequested] = useState(false)
   const [slots, setSlots] = useState<Slot[]>([])
   const [tz, setTz] = useState<string | null>(null)
+  const [horizonDays, setHorizonDays] = useState<number | null>(null)
   const [hold, setHold] = useState<Hold | null>(null)
   const [picking, setPicking] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -283,9 +290,10 @@ function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange, onH
     setLoading(true)
     try {
       const res = await fetch(`/api/gates/availability?gateKind=${encodeURIComponent(gateKind)}`)
-      const j = (await res.json().catch(() => ({}))) as AvailabilityResp
+      const j = (await res.json().catch(() => ({}))) as AvailabilityResp & { horizonDays?: number }
       const open = Array.isArray(j.slots) ? j.slots : []
       setSlots(open); setTz(j.timezone ?? null)
+      setHorizonDays(typeof j.horizonDays === 'number' && j.horizonDays > 0 ? j.horizonDays : null)
       const m = open.length > 0 ? 'enforced' : 'request'
       setMode(m)
       // Only a REQUIRED booking blocks the pay button; an optional gate never blocks.
@@ -299,6 +307,25 @@ function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange, onH
       setMode('request'); onBlockingChange(false)
     } finally { setLoading(false) }
   }
+
+  // The escape hatch: none of the posted slots work (wrong shift, wrong week, a date past
+  // the horizon). Records an honest 'requested' booking and UNLOCKS pay — payment is never
+  // held hostage by an unsuitable calendar.
+  const askAnotherTime = () => {
+    setUserRequested(true)
+    setMode('request')
+    setHold(null); onHold?.(null)
+    onBlockingChange(false)
+    fetch('/api/gates/request', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId, paymentIntentId, gateKind }) }).catch(() => {})
+  }
+
+  // The typed plan date vs the booking horizon, reconciled OUT LOUD: a January shoot typed
+  // into an order sentence must never silently meet an August-only slot list.
+  const targetPastHorizon = (() => {
+    if (!targetDate || !horizonDays) return false
+    const t = Date.parse(`${targetDate}T00:00:00Z`)
+    return Number.isFinite(t) && t > Date.now() + horizonDays * 86400000
+  })()
 
   useEffect(() => {
     if (!needs) { onBlockingChange(false); return }
@@ -339,7 +366,9 @@ function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange, onH
 
       {!loading && mode === 'request' && (
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, lineHeight: 1.5 }}>
-          Your team will reach out to schedule the shoot after you order. No open times are posted right now, so we set the date together.
+          {userRequested
+            ? 'Got it. You can pay now, and your team will reach out to set a shoot time that works for you.'
+            : 'Your team will reach out to schedule the shoot after you order. No open times are posted right now, so we set the date together.'}
         </div>
       )}
 
@@ -359,6 +388,12 @@ function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange, onH
       {!loading && mode === 'enforced' && !hold && (
         <>
           <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10, lineHeight: 1.5 }}>Pick a time for your on-site shoot. This locks your date now, so there&apos;s no back-and-forth later.</div>
+          {/* The typed plan date vs the horizon, out loud — never a silent August-for-January swap. */}
+          {targetPastHorizon && (
+            <div style={{ background: '#fdf6e9', border: '1px solid #f0dfb8', borderRadius: 12, padding: '10px 12px', marginBottom: 10, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#854f0b', lineHeight: 1.5 }}>
+              You planned around {fmtDayShort(targetDate!)}. Booking here only opens {horizonDays} days out, so that date is not on this list yet. Tap &quot;Ask for another time&quot; below and your team will set your date with you.
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 260, overflowY: 'auto' }}>
             {[...byDay.entries()].map(([day, daySlots]) => (
               <div key={day}>
@@ -376,7 +411,11 @@ function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange, onH
               </div>
             ))}
           </div>
-          {tz && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: FAINT, marginTop: 8 }}>Times shown in {tz}.</div>}
+          {tz && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: FAINT, marginTop: 8 }}>Times shown in {tz}.{horizonDays ? ` Booking opens up to ${horizonDays} days out.` : ''}</div>}
+          {/* The escape hatch: pay is never locked behind unsuitable slots. */}
+          <button onClick={askAnotherTime} style={{ display: 'block', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 10, fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 700, color: MINT_DARK }}>
+            None of these work? Ask for another time
+          </button>
         </>
       )}
 
@@ -635,7 +674,7 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
     <>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 16px' }}>
         {restaurant && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10 }}>Placing your order for <span style={{ fontWeight: 600, color: INK }}>{restaurant}</span></div>}
-        <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} booking={gates?.booking ?? null} onBlockingChange={setBookingBlocking} onHold={setHeldSlot} />
+        <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} booking={gates?.booking ?? null} targetDate={draft.targetDate ?? null} onBlockingChange={setBookingBlocking} onHold={setHeldSlot} />
         <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
         <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} costNotes={costNotes} setupOnly={setupOnly} adSpendMinCents={adSpendMinCents} />
         {needsMonthlyConsent && (

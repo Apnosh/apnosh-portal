@@ -20,7 +20,10 @@ import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data
 import { shipBillingGate } from '@/lib/campaigns/ship-guard'
 import { withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from '@/lib/campaigns/builder/item-prices'
 import { selectHomeOrders, HOME_ORDERS_CAP } from '@/lib/campaigns/home-cards'
-import { campaignCardVM, type CampCard } from '@/lib/campaigns/view'
+import { campaignCardVM, shippedStatus, canWrap, type CampCard, type CampaignProgress } from '@/lib/campaigns/view'
+import { monthsElapsed, cycleShortfall, cycleTitle } from '@/lib/campaigns/recurring-cycles-core'
+import { SERVICE_CHANNELS } from '@/lib/campaigns/data/service-channels'
+import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
 import { SERVICE_PLAYBOOKS, playbookNeedKeys } from '@/lib/campaigns/data/service-playbooks'
 import { assetGatesForDraft, resolveGates } from '@/lib/campaigns/gates/config'
 import { goalSlugForChip, budgetCapForChip } from '@/lib/goals/defaults'
@@ -938,6 +941,69 @@ s.group('Dark shelves collapse into ONE honest Coming soon section')
   s.eq('the suggested row is never collapsed', sugg.liveRows.length, 1)
   const hiddenAll = collapseDarkShelves([{ id: 'x', ids: ['a'] }], { buyable: () => false, hidden: () => true })
   s.eq('a fully-hidden row simply drops (no ghost shelf)', hiddenAll.liveRows.length + hiddenAll.soonIds.length, 0)
+}
+
+// ── Owner-sim fix, Phase 6: recurring truth ──
+s.group('Recurring truth: real work, not a calendar; never wrapped while billing')
+{
+  const prog = (over: Partial<CampaignProgress>): CampaignProgress =>
+    ({ total: 0, live: 0, queued: 0, awaitingYou: 0, inProgress: 0, nextDueISO: null, ...over })
+  // shippedStatus reads the recurring work orders, not a timer.
+  const active = shippedStatus(prog({ recurringTotal: 2, recurringActive: 1 }), false)
+  s.eq('recurring work in motion → Live with the honest count', active.blurb, 'Live · 1 of 2 monthly services in motion')
+  const idle = shippedStatus(prog({ recurringTotal: 2, recurringActive: 0 }), false)
+  s.eq('nothing started → In production, plainly (no timer lie)', idle.blurb, 'In production · your team is setting up your monthly services')
+  const mixed = shippedStatus(prog({ total: 3, live: 3, recurringTotal: 1, recurringActive: 1 }), false)
+  s.eq('all pieces out + monthly still running → LIVE, never Done', mixed.phase, 'live')
+  s.eq('and the card says the monthly keeps going', mixed.blurb, 'Live · all pieces out, monthly services keep running')
+  // canWrap: the completion sweep's predicate.
+  s.eq('open subscription blocks the wrap', canWrap(prog({ total: 3, live: 3 }), true), false)
+  s.eq('recurring work blocks the wrap', canWrap(prog({ total: 3, live: 3, recurringTotal: 1 }), false), false)
+  s.eq('unfinished pieces block the wrap', canWrap(prog({ total: 3, live: 2 }), false), false)
+  s.eq('finished + no subscription + no recurring → wraps', canWrap(prog({ total: 3, live: 3 }), false), true)
+  s.eq('services-only (total 0) never wraps', canWrap(prog({}), false), false)
+  // Month-2 mint math.
+  s.eq('day 0 → month 1 (minted at ship, nothing owed)', monthsElapsed('2026-07-01T00:00:00Z', '2026-07-01T12:00:00Z'), 1)
+  s.eq('day 31 → month 2', monthsElapsed('2026-07-01T00:00:00Z', '2026-08-01T00:00:00Z'), 2)
+  s.eq('day 65 → month 3', monthsElapsed('2026-07-01T00:00:00Z', '2026-09-04T00:00:00Z'), 3)
+  s.eq('a bad start date never goes negative', monthsElapsed('garbage', '2026-07-01T00:00:00Z'), 1)
+  s.eq('month 2 with 1 cycle minted → 1 owed', cycleShortfall(2, 1), 1)
+  s.eq('caught up → 0 owed (idempotent)', cycleShortfall(2, 2), 0)
+  s.eq('cycle titles read plainly', cycleTitle('Reply to reviews', 2), 'Month 2: Reply to reviews')
+}
+
+// ── Owner-sim fix, Phase 6: booking + schedule + delivery + TikTok ──
+s.group('Booking feeds the schedule: nothing posts before the shoot that makes it')
+{
+  const input = { targetDate: '2026-08-15', contentBeats: beatsN(3) }
+  const plain = deriveSchedule(input, SHIP)
+  const clamped = deriveSchedule(input, SHIP, { notBeforeISO: '2026-08-20' })
+  s.check('without a booking, dates are unchanged (back-compat)', plain.firstPostISO === '2026-08-15')
+  s.eq('with a booked shoot, no post lands before shoot + edit window', clamped.firstPostISO, '2026-08-23')
+  s.check('no draft is due before the shoot itself', clamped.beats.every((b) => b.draftReadyISO >= '2026-08-20'))
+  s.check('beats stay ordered after the clamp', isMonotonic(clamped.beats.map((b) => b.postISO)))
+  // The shoot-place question rides the gate rail whenever a booking gate applies.
+  const shootDraft = { items: lines(['reel']), brief: { contentBeats: beatsN(1).map((b) => ({ ...b, type: 'reel' })) } as never, sourceCatalogId: 'reel', sourceCatalogIds: ['reel'] }
+  const g = resolveGates(shootDraft)
+  s.check('a shoot order asks WHERE the shoot happens (required)', g.custom.some((c) => c.id === 'shoot-place' && c.required))
+  const noShoot = resolveGates({ items: [], brief: undefined, sourceCatalogId: 'gpost', sourceCatalogIds: ['gpost'] })
+  s.check('a no-shoot order never asks for a place', !noShoot.custom.some((c) => c.id === 'shoot-place'))
+}
+
+s.group('Delivery setup-only + TikTok off the sell surfaces')
+{
+  const full = draftFromBuilder({ itemId: 'delivery', status: 'approve', vals: {} })
+  const fullBill = summarize(full.items)
+  s.check('sanity: the full delivery card carries a monthly', fullBill.perMonth > 0)
+  const setup = draftFromBuilder({ itemId: 'delivery', status: 'approve', vals: { options: 'setup-only' } })
+  const setupBill = summarize(setup.items)
+  s.eq('setup-only bills NO monthly', setupBill.perMonth, 0)
+  s.eq('the one-time fix is unchanged', setupBill.oneTimeOnDelivery, fullBill.oneTimeOnDelivery)
+  s.check('the monthly line is opted out, not deleted (visible + reversible)',
+    setup.items.some((it) => it.serviceId === 'delivery-opt' && it.cadence.kind !== 'one-time' && it.optOut === 'have-it'))
+  // TikTok is unsellable until the rail exists — no sell surface may promise it.
+  const surfaces = JSON.stringify({ t: CAMPAIGN_TEMPLATES, c: SERVICE_CHANNELS, cc: CAMPAIGN_CONTENT })
+  s.check('no sell surface mentions TikTok', !/tiktok/i.test(surfaces))
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

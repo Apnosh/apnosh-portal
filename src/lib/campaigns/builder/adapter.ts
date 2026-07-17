@@ -118,7 +118,20 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
   const leadSvc = leadMove ? serviceById(leadMove.serviceId) : undefined
   const leadLine = leadSvc ? serviceToLine(leadSvc, 'li-lead') : undefined
   const withServices = svcLines.length ? [...svcLines, ...baseItems] : baseItems
-  const items = moveLines.length ? [...moveLines, ...withServices] : (leadLine ? [leadLine, ...withServices] : withServices)
+  let items = moveLines.length ? [...moveLines, ...withServices] : (leadLine ? [leadLine, ...withServices] : withServices)
+  // "Setup only" (the delivery card): the owner declined the monthly care, so the recurring
+  // delivery-opt line opts out — it bills nothing and mints no work, while the one-time fix
+  // stays. Carried as the 'setup-only' sentinel in spec.options (not a serviceId, so the
+  // service merge above already ignored it). Sim break #9: a one-time fix must never weld a
+  // $245/mo subscription on.
+  const setupOnly = (spec.options ?? '').split(',').map((s) => s.trim()).includes('setup-only')
+  if (setupOnly) {
+    items = items.map((it): LineItem => (
+      it.serviceId === 'delivery-opt' && it.cadence.kind !== 'one-time'
+        ? { ...it, optOut: 'have-it' }
+        : it
+    ))
+  }
   const bill = summarize(items)
   const path: BuildPath = 'strategist'  // owner approves, Apnosh builds
 

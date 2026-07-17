@@ -249,6 +249,9 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
   const sched = deriveSchedule(
     { targetDate: campaign.draft.targetDate, occasion: campaign.draft.occasion, contentBeats: beats },
     shipISO,
+    // The booked shoot (held at checkout / confirmed on pay) clamps the calendar: no
+    // piece is ever dated before the shoot that produces its footage.
+    { notBeforeISO: campaign.execution?.shootDateISO ?? null },
   )
   const shipDay = (shipISO || '').slice(0, 10)
   const choices = campaign.producerChoices ?? {}

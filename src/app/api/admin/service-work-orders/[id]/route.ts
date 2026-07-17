@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // the honesty guarantee against proof that already exists.
   const { data: row, error: readErr } = await svc
     .from('service_work_orders')
-    .select('campaign_id, client_id, title, steps, status, proof_url, started_at, updated_at')
+    .select('campaign_id, client_id, service_id, title, steps, status, proof_url, started_at, updated_at')
     .eq('id', id)
     .maybeSingle()
   if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
@@ -162,6 +162,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       body: 'Your team finished it. The proof is on your campaign page.',
       link: row.campaign_id ? `/dashboard/campaigns/${row.campaign_id}` : '/dashboard/campaigns',
     }).catch(() => ({ notified: 0 }))
+
+    // OWNERSHIP (sim crack #26): a delivered photo/video service lands in the owner's own
+    // Photos & files library, not just a proof row on a feed. The deliverable link becomes
+    // an asset they can open and download. Best-effort; never blocks the delivery.
+    const PHOTO_SERVICES = new Set(['photo-library', 'menu-photo-refresh'])
+    if (finalProof && PHOTO_SERVICES.has((row.service_id as string) ?? '')) {
+      try {
+        const isImage = /\.(jpe?g|png|webp|gif|heic)(\?|$)/i.test(finalProof)
+        await svc.from('assets').insert({
+          client_id: row.client_id,
+          name: `${(row.title as string) || 'Your photos'} (delivered by your team)`,
+          type: isImage ? 'image' : 'file',
+          file_url: finalProof,
+          tags: ['delivered', 'apnosh'],
+          uploaded_by_client: false,
+        })
+      } catch { /* the proof still lives on the work order */ }
+    }
   }
 
   if (row.campaign_id) revalidatePath(`/admin/campaign-orders/${row.campaign_id}`)

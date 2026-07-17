@@ -42,7 +42,7 @@ export interface CreatorBrief {
 
 interface SpecMeta { platform: string; aspectRatio: string; sizeOrLength: string; format: string; stepsLabel: string; deliverables: string[] }
 const SPECS: Record<string, SpecMeta> = {
-  reel: { platform: 'Instagram Reels + TikTok', aspectRatio: '9:16 vertical', sizeOrLength: '15–30 seconds', format: 'Short-form video', stepsLabel: 'Shot list', deliverables: ['1 edited 9:16 video, 15–30s, with captions', '3–5 raw clips', '1 cover frame'] },
+  reel: { platform: 'Instagram Reels', aspectRatio: '9:16 vertical', sizeOrLength: '15–30 seconds', format: 'Short-form video', stepsLabel: 'Shot list', deliverables: ['1 edited 9:16 video, 15–30s, with captions', '3–5 raw clips', '1 cover frame'] },
   story: { platform: 'Instagram Stories', aspectRatio: '9:16 vertical', sizeOrLength: 'Under 15 seconds', format: 'Story', stepsLabel: 'Shot list', deliverables: ['1–3 story frames (9:16)', 'raw clips'] },
   photo: { platform: 'Instagram + delivery apps', aspectRatio: '4:5 and 1:1', sizeOrLength: 'High-res, ≥2000px', format: 'Photo set', stepsLabel: 'Styling notes', deliverables: ['5 edited high-res photos', 'natural + styled options', 'one 1:1 crop of each'] },
   post: { platform: 'Instagram + Google', aspectRatio: '1:1 square', sizeOrLength: '1080×1080', format: 'Graphic', stepsLabel: 'Layout notes', deliverables: ['1 square graphic (1080×1080)', '1 story-size 9:16 variant'] },

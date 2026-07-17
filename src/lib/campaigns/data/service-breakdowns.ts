@@ -108,7 +108,7 @@ export const BREAKDOWNS: Record<string, ProcessStep[]> = {
     S('On-site shoot', 'apnosh', 'A videographer batches the whole month in a single on-location visit.'),
     S('Edit', 'apnosh', 'AI-assisted editing with a human finish — pacing, cuts, music, brand look.'),
     S('Captions & copy', 'ai', 'AI drafts captions and hooks in your voice; a human reviews.'),
-    S('Schedule & publish', 'apnosh', 'Post all 8 to Instagram + TikTok at the right times.'),
+    S('Schedule & publish', 'apnosh', 'Post all 8 to Instagram at the right times.'),
     S('One revision', 'apnosh', 'You get a round of changes before anything is final.'),
     S('Performance read', 'apnosh', 'Check reach and follows; feed what worked into next month.'),
   ],
@@ -326,7 +326,7 @@ export const BREAKDOWNS: Record<string, ProcessStep[]> = {
     S('Concept & hook', 'apnosh', 'Nail the angle that stops the scroll.'),
     S('Shoot footage', 'you', 'Grab clips on your phone, or we shoot it — your call.'),
     S('Edit & caption', 'ai', 'AI-assisted edit and caption in your voice; a human finishes.'),
-    S('Publish', 'apnosh', 'Posted to Instagram + TikTok at the right time.'),
+    S('Publish', 'apnosh', 'Posted to Instagram at the right time.'),
   ],
   'content-photo': [
     S('Style & shoot', 'apnosh', 'A styled photo of the dish or moment.'),

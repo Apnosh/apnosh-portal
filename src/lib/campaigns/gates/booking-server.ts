@@ -166,7 +166,9 @@ export async function confirmBookingForPayment(paymentIntentId: string, campaign
       const { data: camp } = await admin.from('campaigns').select('execution, target_date').eq('id', campaignId).maybeSingle()
       const exec = ((camp?.execution as Record<string, unknown>) ?? {})
       await admin.from('campaigns')
-        .update({ execution: { ...exec, shootTimes: label }, ...(camp?.target_date ? {} : { target_date: dateISO }), updated_at: new Date().toISOString() })
+        // shootDateISO is machine-readable (deriveSchedule's not-before clamp); shootTimes is
+        // the owner-facing label. Both merge, never clobbering other execution keys.
+        .update({ execution: { ...exec, shootTimes: label, shootDateISO: dateISO }, ...(camp?.target_date ? {} : { target_date: dateISO }), updated_at: new Date().toISOString() })
         .eq('id', campaignId)
       // Point every shoot service work order at the real date (best-effort; table may be absent pre-190).
       await setShootWorkOrderDates(admin, campaignId, dateISO)

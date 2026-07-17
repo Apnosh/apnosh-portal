@@ -163,5 +163,16 @@ export function resolveGates(draft: Pick<CampaignDraft, 'items' | 'brief' | 'sou
   }
   const adminCustom = (config?.custom ?? []).filter((g) => g.kind === 'agreement' || g.kind === 'input')
   const assets = assetGatesForDraft(draft, facts).filter((a) => !adminCustom.some((c) => c.id === a.id))
-  return { booking, custom: [...assets, ...adminCustom] }
+  const custom = [...assets, ...adminCustom]
+  // An on-site shoot needs a PLACE: the booking rail never asked where the crew goes (an
+  // on-site shoot could be booked and paid with no address on file at all). One required
+  // question, answered at checkout, riding the same gate-answer rail onto the campaign.
+  if (booking && !custom.some((c) => c.id === 'shoot-place')) {
+    custom.unshift({
+      id: 'shoot-place', kind: 'input', inputType: 'text', required: true,
+      title: 'Where does the shoot happen?',
+      why: 'The address our crew should go to. If it is your restaurant, write "our restaurant" and the address.',
+    })
+  }
+  return { booking, custom }
 }

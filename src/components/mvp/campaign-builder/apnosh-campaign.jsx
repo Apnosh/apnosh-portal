@@ -332,7 +332,7 @@ const GOAL = {
 const DIRECT = [
   { id: "post", title: "A social media post", sub: "One post for Instagram or Facebook.", icon: "post" },
   { id: "graphic", title: "A designed graphic", sub: "A flyer or graphic to share or print.", icon: "graphic" },
-  { id: "reel", title: "A short reel", sub: "A quick video for Instagram or TikTok.", icon: "reel" },
+  { id: "reel", title: "A short reel", sub: "A quick video for Instagram.", icon: "reel" },
   { id: "offer", title: "A special offer", sub: "A coupon or limited-time deal.", icon: "offer" },
   { id: "reply", title: "An auto-reply", sub: "Reply to messages or reviews for you.", icon: "reply" },
 ];
@@ -2111,7 +2111,7 @@ const CATALOG = [
   { id: "catering", type: "plan", icon: "people", title: "Promote your catering", sub: "1 styled photo, 1 post, 1 outreach email to nearby offices", cad: "once" },
   { id: "reviewsplan", type: "plan", icon: "chat", title: "Boost reviews and rating", sub: "Review-request system set up, plus the first asks", cad: "setup" },
 
-  { id: "reel", type: "content", icon: "video", title: "A short video", sub: "A reel for Instagram and TikTok", cad: "once", hot: true },
+  { id: "reel", type: "content", icon: "video", title: "A short video", sub: "A reel for Instagram", cad: "once", hot: true },
   { id: "story", type: "content", icon: "story", title: "A story", sub: "A quick post to stay top of mind", cad: "once" },
   { id: "graphic", type: "content", icon: "image", title: "A social media post", sub: "A designed post: graphic, carousel, or photo", cad: "once" },
   { id: "dish", type: "content", icon: "image", title: "Feature a dish", sub: "Show off one of your best plates", cad: "once", hot: true },
@@ -3162,6 +3162,12 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   });
   const [openOpt, setOpenOpt] = useState(null);
   const toggleOpt = (id) => setSelected((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+  // Delivery setup-only (sim break #9): the one-time fix must never weld the monthly
+  // subscription on. The checkbox defaults ON; unchecking rides the 'setup-only' sentinel
+  // through options → spec → the adapter, which opts the monthly line out (bills nothing,
+  // mints nothing). Re-opening from the cart restores the choice.
+  const isDelivery = itemId === "delivery";
+  const [monthlyCare, setMonthlyCare] = useState(() => !(Array.isArray(initialOptions) && initialOptions.includes("setup-only")));
   const pro = isProTier(tier);
   // The gbp AI lane, if this card has one — the zone-4 "Add Apnosh AI" row selects THIS version so
   // the account upgrade and the picked version stay one state (never two conflicting truths).
@@ -3190,7 +3196,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const base = laneFree ? { oneTime: 0, perMonth: 0 } : baseP;
   const optM = optionsMoney(selected);
   const totalOneTime = base.oneTime + optM.oneTime;
-  const totalPerMonth = base.perMonth + optM.perMonth;
+  const totalPerMonth = (isDelivery && !monthlyCare ? 0 : base.perMonth) + optM.perMonth;
   const creative = p.type === "content" || p.id === "shoot";
   // "Your total" folds the 10% checkout service fee into the one-time amount and says so —
   // the buy box's number IS the charged number (pre-tax), never a cart surprise.
@@ -3227,14 +3233,15 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const [added, setAdded] = useState(false);
   const [rushOpen, setRushOpen] = useState(false);
   // Section 1 handoffs: version + options ride into the passthrough exactly as `doer` does today.
+  const chosenOptions = isDelivery && !monthlyCare ? [...selected, "setup-only"] : selected;
   const buildPreset = () => {
     const pr = {};
     if (doerCfg && doer) pr.doer = doer;
-    if (selected.length) pr.options = selected;
+    if (chosenOptions.length) pr.options = chosenOptions;
     return Object.keys(pr).length ? pr : null;
   };
   const onAddToPlan = () => {
-    addToPlan({ itemId, doer: doerCfg ? doer : null, options: selected });
+    addToPlan({ itemId, doer: doerCfg ? doer : null, options: chosenOptions });
     setAdded(true);
     // Owner: adding IS the final step for these catalog campaigns — collect it
     // into the plan and close back to the store (the persistent plan bar shows
@@ -3589,6 +3596,15 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             </>
           ) : (
             <>
+              {/* Setup-only choice (delivery): the monthly is opt-outable BEFORE money moves. */}
+              {isDelivery && baseP.perMonth > 0 && (
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 9, cursor: "pointer", marginBottom: 10 }}>
+                  <input type="checkbox" checked={monthlyCare} onChange={(e) => setMonthlyCare(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: TOKENS.mint, flexShrink: 0 }} />
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.ink, lineHeight: 1.45 }}>
+                    <b style={{ fontWeight: 700 }}>Keep the monthly care</b> (${baseP.perMonth.toLocaleString()}/mo). Promos and rankings managed each month. Uncheck for the one-time fix only.
+                  </span>
+                </label>
+              )}
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: costNotes.length ? 4 : 9 }}>
                 <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
                 <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>

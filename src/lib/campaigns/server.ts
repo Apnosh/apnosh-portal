@@ -387,7 +387,7 @@ export async function getCampaignProgressBatch(campaignIds: string[]): Promise<R
 /** Pure bucketing of a campaign's content_drafts (team lane) + creator_work_orders
  *  (creator lane) + service_work_orders (service lane, migration 190). */
 function computeProgress(drafts: Record<string, unknown>[], orders: Record<string, unknown>[], serviceOrders: Record<string, unknown>[] = []): CampaignProgress | null {
-  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0, dropped = 0, servicesAwaitingYou = 0
+  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0, dropped = 0, servicesAwaitingYou = 0, recurringTotal = 0, recurringActive = 0
   let nextDueISO: string | null = null
   const bumpDue = (raw: string | null) => {
     const dt = (raw ?? '').slice(0, 10)
@@ -460,7 +460,15 @@ function computeProgress(drafts: Record<string, unknown>[], orders: Record<strin
   // ongoing cycle can never hold a campaign out of 'done' forever. 'cancelled'
   // (a stopped campaign's void) is not work anymore.
   for (const w of serviceOrders ?? []) {
-    if (turnaroundFor((w.service_id as string) ?? '')?.class === 'recurring') continue
+    if (turnaroundFor((w.service_id as string) ?? '')?.class === 'recurring') {
+      // Monthly programs stay out of total/live (no finish line) but their REAL state is
+      // counted, so the owner card reads from the work, never a calendar timer.
+      const rs = (w.status as string) ?? ''
+      if (rs === 'cancelled') continue
+      recurringTotal++
+      if (rs !== 'queued') recurringActive++
+      continue
+    }
     const s = (w.status as string) ?? ''
     if (s === 'cancelled') continue
     total++
@@ -470,6 +478,6 @@ function computeProgress(drafts: Record<string, unknown>[], orders: Record<strin
     bumpDue(w.due_date as string | null)
   }
 
-  if (!total && !dropped) return null
-  return { total, live, queued, awaitingYou, inProgress, nextDueISO, dropped, servicesAwaitingYou }
+  if (!total && !dropped && !recurringTotal) return null
+  return { total, live, queued, awaitingYou, inProgress, nextDueISO, dropped, servicesAwaitingYou, recurringTotal, recurringActive }
 }

@@ -96,7 +96,7 @@ export interface ContentMeta {
 }
 
 export const CONTENT_META: Record<string, ContentMeta> = {
-  reel:  { price: 120, stage: 'awareness', unit: 'reel',  label: 'Short-form video', plain: 'A reel',  does: 'A short video for IG + TikTok',
+  reel:  { price: 120, stage: 'awareness', unit: 'reel',  label: 'Short-form video', plain: 'A reel',  does: 'A short video for Instagram',
     why: 'Short-form video is the top discovery surface for new diners — a strong reel reaches well past your followers.',
     market: { low: 120, high: 1500, label: 'pro per-reel rates' }, metric: { label: 'Reach & profile visits', expect: 'Discovery beyond your current followers' }, handler: 'hybrid' },
   photo: { price: 65,  stage: 'awareness', unit: 'photo', label: 'Photo',            plain: 'A photo', does: 'A styled photo of your food',

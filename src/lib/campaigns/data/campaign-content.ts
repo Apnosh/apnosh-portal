@@ -122,9 +122,9 @@ export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
   reel: {
     id: 'reel',
     title: "A short video",
-    tagline: "A reel for Instagram and TikTok",
-    description: "One short vertical video of your food, shot and cut for Instagram and TikTok.",
-    promise: "A short video of your food, made for Instagram and TikTok.",
+    tagline: "A reel for Instagram",
+    description: "One short vertical video of your food, shot and cut for Instagram.",
+    promise: "A short video of your food, made for Instagram.",
     why: "Short video is the easiest way for new people to see your food.",
     expectation: "One reel is one at-bat. Posting steadily is what adds up.",
     heroImage: null,

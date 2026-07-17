@@ -202,6 +202,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    // The slot HELD at checkout feeds the content schedule (deriveSchedule's not-before
+    // clamp): the mint below must never date a piece before the shoot that produces it.
+    // Best-effort; confirmBookingForPayment re-stamps the confirmed date after pay.
+    const shipPI = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : null
+    if (shipPI && !campaign.execution?.shootDateISO) {
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/admin')
+        const a = createAdminClient()
+        const { data: bk } = await a
+          .from('bookings')
+          .select('slot_date, status')
+          .eq('stripe_payment_intent_id', shipPI)
+          .in('status', ['held', 'confirmed'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        const slotDate = (bk as { slot_date?: string | null } | null)?.slot_date
+        if (slotDate) {
+          campaign.execution = { ...(campaign.execution ?? {}), shootDateISO: slotDate }
+          await updateCampaignFields(id, { execution: campaign.execution as Record<string, unknown> }).catch(() => {})
+        }
+      } catch { /* schedule falls back to the unclamped dates */ }
+    }
     // Lock estimate-mode dates at ship: with no target date or occasion,
     // deriveSchedule re-anchors to "now" on every call, so the dates the owner
     // approved would drift forward by the review→ship gap. Persist the anchor as
