@@ -9,6 +9,7 @@
  * off (the DIY-reel-beat over-trigger) simply skips it; the order still ships.
  */
 import { draftNeedsShoot } from './derive'
+import { draftSourceCatalogIds } from '../data/catalog-availability'
 import type { CampaignDraft } from '../types'
 
 /** How the auto shoot booking gate is treated for this campaign. */
@@ -25,6 +26,14 @@ export interface CustomGate {
   inputType?: 'text' | 'textarea' | 'select'
   /** input+select only. */
   options?: string[]
+  /** select gates only (asset checks): choosing this option BLOCKS the purchase — the store
+   *  must never sell work the buyer cannot receive. */
+  blockOn?: string
+  /** Owner-facing reason shown when blocked. Plain words; always paired with a reroute. */
+  blockMessage?: string
+  /** The honest detour when blocked (never a dead end). */
+  rerouteHref?: string
+  rerouteLabel?: string
 }
 
 export interface CampaignGatesConfig {
@@ -84,18 +93,75 @@ export function cleanGatesConfig(v: unknown): CampaignGatesConfig | undefined {
   return out.shoot || out.custom ? out : undefined
 }
 
+/** What we already know about the buyer, so asset gates never re-ask what's on file. */
+export interface AssetFacts {
+  /** The business has a website on file — skip the "do you have a website?" check. */
+  hasWebsite?: boolean
+  /** A Google Business Profile connection is active — skip the listing question. */
+  gbpConnected?: boolean
+}
+
+/**
+ * Pre-checkout ASSET checks (smart defaults) — the store must never sell work the buyer cannot
+ * receive, and never checked before ($814 of Aisha's money went to repairing a website she does
+ * not have; Maria hit a dead end on a Google profile that does not exist).
+ *
+ *  - 'website' (site tune-up): needs an existing site. "No website yet" BLOCKS with a reroute.
+ *  - 'friction' (ordering buttons): needs a working online-ordering page. Same block + reroute.
+ *  - 'gbp': NEVER blocks — the team playbook claims or creates the listing. The answer just
+ *    routes the work (claim vs create) and saves days.
+ */
+export function assetGatesForDraft(draft: Pick<CampaignDraft, 'sourceCatalogId' | 'sourceCatalogIds'>, facts: AssetFacts = {}): CustomGate[] {
+  const ids = new Set(draftSourceCatalogIds(draft))
+  const out: CustomGate[] = []
+  if (ids.has('website') && !facts.hasWebsite) {
+    out.push({
+      id: 'asset-website', kind: 'input', inputType: 'select', required: true,
+      title: 'Do you have a website?',
+      why: 'This fixes a website you already have. It cannot build a new one.',
+      options: ['Yes, I have a website', 'No website yet'],
+      blockOn: 'No website yet',
+      blockMessage: 'This fix needs a website that already exists, so we did not charge you. Ask your team about getting a site first.',
+      rerouteHref: '/dashboard/messages?to=strategist', rerouteLabel: 'Ask about a new site',
+    })
+  }
+  if (ids.has('friction')) {
+    out.push({
+      id: 'asset-ordering', kind: 'input', inputType: 'select', required: true,
+      title: 'Do you take online orders today?',
+      why: 'This wires your Google buttons to your ordering page. It needs one that already works.',
+      options: ['Yes, we take online orders', 'No online ordering yet'],
+      blockOn: 'No online ordering yet',
+      blockMessage: 'This needs an online ordering page that already works, so we did not charge you. Ask your team about setting up ordering first.',
+      rerouteHref: '/dashboard/messages?to=strategist', rerouteLabel: 'Ask about online ordering',
+    })
+  }
+  if (ids.has('gbp') && !facts.gbpConnected) {
+    out.push({
+      id: 'asset-gbp', kind: 'input', inputType: 'select', required: true,
+      title: 'Where is your Google listing today?',
+      why: 'Any answer works. If there is no listing, or you cannot get in, your team claims or creates it for you.',
+      options: ['I have it and can log in', 'There is a listing but I cannot get in', 'No listing yet', 'Not sure'],
+    })
+  }
+  return out
+}
+
 /**
  * Resolve the enforceable pre-checkout gates for a composed draft under a campaign's config.
  * Booking: present iff the draft needs a shoot AND config didn't turn it off — OR config forces it
- * ('required'). 'optional' keeps the gate but doesn't block. Custom: the config's agreement/input gates.
+ * ('required'). 'optional' keeps the gate but doesn't block. Custom: the smart-default asset checks
+ * (skipping what `facts` already knows) followed by the config's agreement/input gates; an admin
+ * gate with the same id replaces the default.
  */
-export function resolveGates(draft: Pick<CampaignDraft, 'items' | 'brief'>, config?: CampaignGatesConfig | null): ResolvedGates {
+export function resolveGates(draft: Pick<CampaignDraft, 'items' | 'brief' | 'sourceCatalogId' | 'sourceCatalogIds'>, config?: CampaignGatesConfig | null, facts: AssetFacts = {}): ResolvedGates {
   const mode: ShootGateMode = config?.shoot ?? 'auto'
   let booking: ResolvedGates['booking'] = null
   if (mode !== 'off') {
     const auto = draftNeedsShoot(draft)
     if (auto || mode === 'required') booking = { gateKind: 'shoot', required: mode !== 'optional' }
   }
-  const custom = (config?.custom ?? []).filter((g) => g.kind === 'agreement' || g.kind === 'input')
-  return { booking, custom }
+  const adminCustom = (config?.custom ?? []).filter((g) => g.kind === 'agreement' || g.kind === 'input')
+  const assets = assetGatesForDraft(draft, facts).filter((a) => !adminCustom.some((c) => c.id === a.id))
+  return { booking, custom: [...assets, ...adminCustom] }
 }

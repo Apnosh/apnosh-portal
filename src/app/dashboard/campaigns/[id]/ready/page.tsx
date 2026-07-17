@@ -96,9 +96,9 @@ export default function ReadyPage() {
   const footer = (
     <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: '#fff' }}>
       <button onClick={back} style={{ width: '100%', height: 48, borderRadius: 13, border: 'none', cursor: 'pointer', background: GRAD, color: '#fff', fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        {sharedCount > 0 ? <>Done — back to your campaign <ChevronRight size={18} /></> : <>My team can start — back to campaign <ChevronRight size={18} /></>}
+        {sharedCount > 0 ? <>Done. Back to your campaign <ChevronRight size={18} /></> : <>Back to your campaign <ChevronRight size={18} /></>}
       </button>
-      <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 8 }}>Everything saves as you go. Your team starts either way — come back anytime.</div>
+      <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 8 }}>Everything saves as you go. Come back anytime.</div>
     </div>
   )
 
@@ -108,7 +108,7 @@ export default function ReadyPage() {
       <div style={{ textAlign: 'center', padding: '44px 14px 0' }}>
         <div style={{ width: 60, height: 60, margin: '0 auto 14px', borderRadius: '50%', background: GRAD, display: 'grid', placeItems: 'center' }}><Check size={30} color="#fff" strokeWidth={3} /></div>
         <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.ink }}>You&rsquo;re all set</div>
-        <div style={{ fontSize: 13.5, color: C.mute, margin: '6px auto 0', lineHeight: 1.55, maxWidth: 300 }}>Nothing needed from you for this one — your team has what it needs to get started. We&rsquo;ll only reach out if something comes up.</div>
+        <div style={{ fontSize: 13.5, color: C.mute, margin: '6px auto 0', lineHeight: 1.55, maxWidth: 300 }}>Nothing needed from you for this one. Your team has what it needs to get started. We only reach out if something comes up.</div>
       </div>,
       footer,
     )
@@ -122,7 +122,7 @@ export default function ReadyPage() {
           <span style={{ width: 30, height: 30, borderRadius: 9, background: '#fff', display: 'grid', placeItems: 'center', flexShrink: 0 }}><Sparkles size={16} color={C.greenDk} /></span>
           <h1 style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: C.ink, margin: 0 }}>A few things that help</h1>
         </div>
-        <p style={{ fontSize: 12.5, color: C.mute, margin: 0, lineHeight: 1.5 }}>All optional. The more you share, the better it comes out — but your team starts right away either way. Skip anything.</p>
+        <p style={{ fontSize: 12.5, color: C.mute, margin: 0, lineHeight: 1.5 }}>Your team starts what it can right away. Some things here they cannot start without. The rest just make the work better.</p>
         {sharedCount > 0 && <p style={{ fontSize: 11.5, color: C.greenDk, margin: '10px 0 0', fontWeight: 600 }}>{sharedCount} shared — thank you</p>}
       </div>
 

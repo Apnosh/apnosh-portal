@@ -21,6 +21,8 @@ import { shipBillingGate } from '@/lib/campaigns/ship-guard'
 import { withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from '@/lib/campaigns/builder/item-prices'
 import { selectHomeOrders, HOME_ORDERS_CAP } from '@/lib/campaigns/home-cards'
 import { campaignCardVM, type CampCard } from '@/lib/campaigns/view'
+import { SERVICE_PLAYBOOKS, playbookNeedKeys } from '@/lib/campaigns/data/service-playbooks'
+import { assetGatesForDraft, resolveGates } from '@/lib/campaigns/gates/config'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -805,6 +807,51 @@ s.group('Day-0 Home: orders-in-progress selection (shipped only, urgent first, c
   s.eq('fresh shipped campaign, setup unfinished → Needs you', vm.pill, 'Needs you')
   s.eq('its blurb is the honest next step', vm.blurb, 'Finish setup so your team can start')
   s.eq('and it is selected for Home, ranked first', selectHomeOrders([card('z-live', 'live', 'Live'), vm])[0].key, vm.key)
+}
+
+// ── Owner-sim fix, Phase 3: the intake rail consumes playbook needsInput ──
+s.group('Intake rail: playbook needsInput keys reach the owner (recurring included)')
+{
+  s.eq('gbp-setup declares its intake keys', JSON.stringify(playbookNeedKeys('gbp-setup')), JSON.stringify(['gbp-access', 'gbp-photos']))
+  s.eq('review-responses (RECURRING, previously skipped) declares gbp-access', JSON.stringify(playbookNeedKeys('review-responses')), JSON.stringify(['gbp-access']))
+  s.eq('paid-ads (RECURRING) declares ad-access', JSON.stringify(playbookNeedKeys('paid-ads')), JSON.stringify(['ad-access']))
+  s.eq('delivery-opt declares pos-vendor (rendered as delivery logins)', playbookNeedKeys('delivery-opt').includes('pos-vendor'), true)
+  s.eq('unknown service → no keys, no fake asks', playbookNeedKeys('nope').length, 0)
+  // Drift guard: every needsInput key any playbook declares has a consumer in service-needs.ts.
+  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact'])
+  const declared = new Set(Object.keys(SERVICE_PLAYBOOKS).flatMap((id) => playbookNeedKeys(id)))
+  const orphans = [...declared].filter((k) => !HANDLED.has(k))
+  s.check(`every declared needsInput key has an owner-facing ask (orphans: ${orphans.join(',') || 'none'})`, orphans.length === 0)
+}
+
+// ── Owner-sim fix, Phase 3: pre-checkout asset checks ──
+s.group('Asset gates: the store checks the buyer can RECEIVE the work')
+{
+  const draftFor = (ids: string[]) => ({ sourceCatalogId: ids[0], sourceCatalogIds: ids })
+  const web = assetGatesForDraft(draftFor(['website']))
+  s.eq('website cart asks "Do you have a website?"', web[0]?.title, 'Do you have a website?')
+  s.eq('answering "No website yet" blocks the purchase', web[0]?.blockOn, 'No website yet')
+  s.check('the block carries an honest reroute, never a dead end', !!web[0]?.blockMessage && !!web[0]?.rerouteHref)
+  s.eq('a buyer with a website on file is never re-asked', assetGatesForDraft(draftFor(['website']), { hasWebsite: true }).length, 0)
+
+  const ord = assetGatesForDraft(draftFor(['friction']))
+  s.eq('friction cart asks about an ordering system', ord[0]?.title, 'Do you take online orders today?')
+  s.eq('no ordering page blocks with a reroute', ord[0]?.blockOn, 'No online ordering yet')
+
+  const gbp = assetGatesForDraft(draftFor(['gbp']))
+  s.eq('gbp cart asks where the listing stands', gbp[0]?.title, 'Where is your Google listing today?')
+  s.check('the gbp gate NEVER blocks (claim-or-create is part of the product)', !gbp[0]?.blockOn)
+  s.check('"No listing yet" is a valid, sellable answer', (gbp[0]?.options ?? []).includes('No listing yet'))
+  s.eq('a connected gbp buyer is never re-asked', assetGatesForDraft(draftFor(['gbp']), { gbpConnected: true }).length, 0)
+
+  const mixed = assetGatesForDraft(draftFor(['website', 'friction', 'gbp']))
+  s.eq('a merged cart carries every relevant check', mixed.length, 3)
+  s.eq('a cart with none of these carries no asset gates', assetGatesForDraft(draftFor(['dish', 'reel'])).length, 0)
+
+  // resolveGates merges assets with admin config; an admin gate with the same id wins.
+  const resolved = resolveGates({ items: [], brief: undefined, ...draftFor(['website']) }, { custom: [{ id: 'asset-website', kind: 'input', title: 'Admin version', required: true, inputType: 'text' }] })
+  s.eq('an admin-authored gate with the same id replaces the default', resolved.custom.length, 1)
+  s.eq('and it is the admin version', resolved.custom[0].title, 'Admin version')
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

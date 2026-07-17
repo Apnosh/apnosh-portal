@@ -416,10 +416,22 @@ function CustomGates({ gates, answers, onChange }: {
                 <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: INK, marginBottom: 4 }}>{g.title}{g.required ? '' : ' (optional)'}</div>
                 {g.why && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginBottom: 6 }}>{g.why}</div>}
                 {g.inputType === 'select' && g.options?.length ? (
-                  <select value={answers[g.id] ?? ''} onChange={(e) => onChange(g.id, e.target.value)} style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, borderRadius: 12, border: `1px solid ${LINE}`, padding: '10px 11px', background: '#fff' }}>
-                    <option value="">Choose…</option>
-                    {g.options.map((o) => <option key={o} value={o}>{o}</option>)}
-                  </select>
+                  <>
+                    <select value={answers[g.id] ?? ''} onChange={(e) => onChange(g.id, e.target.value)} style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, borderRadius: 12, border: `1px solid ${LINE}`, padding: '10px 11px', background: '#fff' }}>
+                      <option value="">Choose…</option>
+                      {g.options.map((o) => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                    {/* Asset check answered with the blocking option: say why, and give the honest
+                        detour. The pay button stays locked; nothing is ever charged on this answer. */}
+                    {g.blockOn && (answers[g.id] ?? '') === g.blockOn && (
+                      <div style={{ background: '#fdf6e9', border: '1px solid #f0dfb8', borderRadius: 12, padding: '10px 12px', marginTop: 8, fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#854f0b', lineHeight: 1.5 }}>
+                        {g.blockMessage || 'This order cannot go through with that answer.'}
+                        {g.rerouteHref && (
+                          <a href={g.rerouteHref} style={{ display: 'inline-block', marginLeft: 6, fontWeight: 700, color: '#854f0b' }}>{g.rerouteLabel || 'Talk to your team'}</a>
+                        )}
+                      </div>
+                    )}
+                  </>
                 ) : g.inputType === 'textarea' ? (
                   <textarea value={answers[g.id] ?? ''} onChange={(e) => onChange(g.id, e.target.value)} rows={3} style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, borderRadius: 12, border: `1px solid ${LINE}`, padding: '10px 11px', resize: 'vertical' }} />
                 ) : (
@@ -434,9 +446,15 @@ function CustomGates({ gates, answers, onChange }: {
   )
 }
 
-/** True while any REQUIRED custom gate is still unanswered (agreement unchecked / input empty). */
+/** True while any REQUIRED custom gate is still unanswered (agreement unchecked / input empty),
+ *  or an asset check was answered with its blocking option (work the buyer cannot receive). */
 function customGatesBlocking(gates: CustomGate[], answers: Record<string, string>): boolean {
-  return gates.some((g) => g.required && !(answers[g.id] ?? '').trim())
+  return gates.some((g) => (g.required && !(answers[g.id] ?? '').trim()) || blockedGate([g], answers) !== null)
+}
+
+/** The first asset gate answered with its blocking option, if any. */
+function blockedGate(gates: CustomGate[], answers: Record<string, string>): CustomGate | null {
+  return gates.find((g) => g.blockOn && (answers[g.id] ?? '') === g.blockOn) ?? null
 }
 
 /** The execution patch that records the answered custom gates (keyed gate-<id>), so they reach the team. */
@@ -543,6 +561,7 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   }
 
   const blockReason = bookingBlocking ? 'Pick a shoot time first'
+    : blockedGate(customGates, gateAnswers) ? 'This cannot be ordered yet'
     : customGatesBlocking(customGates, gateAnswers) ? 'Answer the questions above'
     : (needsMonthlyConsent && !monthlyConsent) ? 'Agree to the monthly charge'
     : null
@@ -719,7 +738,7 @@ function FreeCheckout({ clientId, draft, producerChoices, gates, onPlaced }: { c
       </div>
       <div style={{ flexShrink: 0, background: '#fff', borderTop: `1px solid ${LINE}`, boxShadow: '0 -10px 28px rgba(20,40,30,0.10)', padding: '11px 18px calc(12px + env(safe-area-inset-bottom))' }}>
         {error && <div role="alert" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#b3462e', textAlign: 'center', marginBottom: 8 }}>{error}</div>}
-        <button onClick={place} disabled={busy || blocked} style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || blocked ? 'default' : 'pointer', background: busy ? MINT_DARK : (blocked ? FAINT : MINT), color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? 'none' : '0 8px 22px rgba(74,189,152,0.42)' }}>{busy ? 'Placing your order…' : blocked ? 'Answer the questions above' : 'Place order'}</button>
+        <button onClick={place} disabled={busy || blocked} style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || blocked ? 'default' : 'pointer', background: busy ? MINT_DARK : (blocked ? FAINT : MINT), color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? 'none' : '0 8px 22px rgba(74,189,152,0.42)' }}>{busy ? 'Placing your order…' : blocked ? (blockedGate(customGates, gateAnswers) ? 'This cannot be ordered yet' : 'Answer the questions above') : 'Place order'}</button>
       </div>
     </>
   )

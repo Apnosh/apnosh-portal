@@ -74,6 +74,14 @@ export interface CampaignExecution {
   vendorInfo?: string    // ordering / POS / booking system (from a pos-vendor service)
   menuSource?: string    // where to find the current menu (from a menu service)
   footageUrls?: string   // comma-joined public URLs of client-uploaded clips/photos (the "edit my footage" card)
+  // Intake-rail fields (playbook needsInput consumers, service-needs.ts). Operational only,
+  // never fed to AI prompts:
+  deliveryAccess?: string // delivery apps + login email / store IDs (delivery-opt)
+  siteAccess?: string     // website tool or the person who manages the site (site-menu)
+  adAccess?: string       // existing Meta/Google ad accounts, or 'none' (paid-ads)
+  adTargeting?: string    // the area + people the ads should reach (paid-ads)
+  brandVoice?: string     // how replies/content should sound; words to use and avoid (review-responses)
+  photoUrls?: string      // comma-joined URLs of owner-uploaded photos (gbp-setup photo set)
   setupSkipped?: string  // comma-separated readiness action ids the owner deferred ("Skip for now")
   /** ISO stamp: the /dashboard/google-profile walkthrough came back ALL-GOOD on a fresh read
    *  (the self-serve gbp version's completion). Server-written ONLY, by POST

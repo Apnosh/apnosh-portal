@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   const bill = checkoutBill(draft)
   // Pre-checkout gates (Phase 4a): resolve the shoot booking gate (admin can turn it off/required/
   // optional per campaign) + any admin agreement/input gates. Never throws.
-  const gates = await resolveGatesForDraft(draft).catch(() => ({ booking: null, custom: [] }))
+  const gates = await resolveGatesForDraft(draft, { clientId }).catch(() => ({ booking: null, custom: [] }))
 
   // Free order (owner-run/DIY lanes): nothing to charge NOW and nothing monthly. The client ships
   // via the normal rail. A monthly-only cart is NOT free — it must take a card + consent below so

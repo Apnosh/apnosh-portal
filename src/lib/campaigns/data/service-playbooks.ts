@@ -1097,6 +1097,18 @@ export function deliverGuard(
   return { ok: true }
 }
 
+/** Every needsInput key a service's playbook declares, deduped in step order. This is the intake
+ *  rail's source: the team's checklist opens with things only the owner can give (Manager access,
+ *  logins, photos, brand voice), and before this helper NOTHING consumed those keys — /ready said
+ *  "all set" while the first step sat waiting on the owner. Pure + client-safe. */
+export function playbookNeedKeys(serviceId: string): string[] {
+  const pb = SERVICE_PLAYBOOKS[serviceId]
+  if (!pb) return []
+  const out: string[] = []
+  for (const st of pb.steps) if (st.needsInput && !out.includes(st.needsInput)) out.push(st.needsInput)
+  return out
+}
+
 /** Instantiate a service's playbook into the runtime step list stored on the work order. Returns []
  *  for a service with no authored playbook yet (the work order still exists; it just has no checklist
  *  until a playbook is authored — honest, never a fake step). */

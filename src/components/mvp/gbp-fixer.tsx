@@ -408,6 +408,13 @@ function NotConnected() {
       >
         Connect Google
       </Link>
+      {/* The claim-or-create escape: an owner with NO listing (or no login) is not stuck here.
+          The team playbook covers claiming or creating the listing — say so, with a real door. */}
+      <div style={{ fontSize: 12.5, color: C.mute, marginTop: 14, lineHeight: 1.5 }}>
+        No listing yet, or you cannot get in? That is fine.{' '}
+        <Link href="/dashboard/messages?to=strategist" style={{ color: C.greenDk, fontWeight: 700, textDecoration: 'none' }}>Tell your team</Link>
+        {' '}and they claim or create it for you.
+      </div>
     </div>
   )
 }
