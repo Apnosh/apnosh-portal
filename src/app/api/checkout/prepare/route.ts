@@ -4,7 +4,15 @@ import { stripe } from '@/lib/stripe'
 import { checkoutBill } from '@/lib/campaigns/checkout-bill'
 import { ensureCheckoutCustomer, computeTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
 import { resolveGatesForDraft } from '@/lib/campaigns/gates/config-server'
+import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
+import { getContentOverrides } from '@/lib/campaigns/content-overrides-server'
+import { shapeFor } from '@/lib/campaigns/builder/compose-plan'
 import type { CampaignDraft } from '@/lib/campaigns/types'
+
+/** Plain owner-facing name for a catalog id (falls back to the id itself). */
+function cardName(id: string): string {
+  return shapeFor(id)?.title ?? id
+}
 
 function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
@@ -27,6 +35,21 @@ export async function POST(req: NextRequest) {
   }
   const access = await checkClientAccess(clientId)
   if (!access.authorized) return denied(access.reason)
+
+  // Availability guard — BEFORE any money moves (and before the free path ships). Every source
+  // catalog id in the cart must be live: a coming-soon item can never ride behind a live first
+  // item into a charge. Same override map + resolver the store and POST /api/campaigns use.
+  const sourceIds = draftSourceCatalogIds(draft)
+  if (sourceIds.length) {
+    const overrides = await getContentOverrides().catch(() => ({}))
+    const blocked = unbuyableCatalogIds(sourceIds, overrides)
+    if (blocked.length) {
+      const names = blocked.map((id) => `"${cardName(id)}"`).join(' and ')
+      return NextResponse.json({
+        error: `${names} ${blocked.length === 1 ? "isn't" : "aren't"} available to buy yet, so we didn't charge you. Remove ${blocked.length === 1 ? 'it' : 'them'} from your plan and try again.`,
+      }, { status: 409 })
+    }
+  }
 
   const bill = checkoutBill(draft)
   // Pre-checkout gates (Phase 4a): resolve the shoot booking gate (admin can turn it off/required/

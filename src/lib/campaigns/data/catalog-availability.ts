@@ -106,6 +106,22 @@ export function isHidden(id: string, overrides?: VisibilityOverrideMap): boolean
   return availabilityFor(id, overrides) === 'hidden'
 }
 
+/** EVERY catalog id a composed draft came from: the full merged-cart list when present, else the
+ *  single legacy id. The one helper both server guards (checkout/prepare + POST /api/campaigns)
+ *  use, so they can never drift on which ids get vetted. */
+export function draftSourceCatalogIds(draft: { sourceCatalogId?: string; sourceCatalogIds?: unknown }): string[] {
+  const arr = Array.isArray(draft.sourceCatalogIds)
+    ? draft.sourceCatalogIds.filter((x): x is string => typeof x === 'string')
+    : []
+  const ids = arr.length ? arr : (draft.sourceCatalogId ? [draft.sourceCatalogId] : [])
+  return [...new Set(ids.map((x) => x.trim()).filter(Boolean))]
+}
+
+/** The subset of ids that are NOT buyable right now (coming soon or hidden). */
+export function unbuyableCatalogIds(ids: readonly string[], overrides?: VisibilityOverrideMap): string[] {
+  return ids.filter((id) => availabilityFor(id, overrides) !== 'live')
+}
+
 /** The owner-facing "why it's coming soon" line for a bookmarked card, or null when it is live/hidden
  *  or has no authored reason. */
 export function comingSoonReason(id: string, overrides?: VisibilityOverrideMap): string | null {

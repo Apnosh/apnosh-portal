@@ -16,6 +16,7 @@ import type { SavedCampaign } from '@/lib/campaigns/view'
 import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { composePlanCampaign } from '@/lib/campaigns/builder/plan-checkout'
 import { draftNeedsShoot, requiredBookingGates } from '@/lib/campaigns/gates/derive'
+import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -704,6 +705,22 @@ s.group('Shoot gate: owner-footage (edit) skips it; team-shot content keeps it')
   const reachDraft = draftFromBuilder({ itemId: 'reach', status: 'approve', vals: {} })
   s.check('reach keeps its shoot gate', draftNeedsShoot(reachDraft))
   s.check('a plain reel piece keeps its shoot gate', draftNeedsShoot(draftFromBuilder({ itemId: 'reel', status: 'approve', vals: {} })))
+}
+
+// ── Q. Availability guard vets EVERY cart item (never just the first) ──
+s.group('Availability: merged carts carry all source ids; coming-soon ids get flagged')
+{
+  const cart = composePlanCampaign([
+    { itemId: 'dish', doer: null, options: [] },
+    { itemId: 'giftcard', doer: null, options: [] },
+  ])
+  s.check('merged draft keeps the legacy first-item sourceCatalogId', cart.draft?.sourceCatalogId === 'dish')
+  s.check('merged draft carries EVERY source id', JSON.stringify(cart.draft?.sourceCatalogIds) === JSON.stringify(['dish', 'giftcard']))
+  const ids = draftSourceCatalogIds(cart.draft!)
+  s.check('draftSourceCatalogIds reads the full list', JSON.stringify(ids) === JSON.stringify(['dish', 'giftcard']))
+  s.check('the coming-soon item is flagged even behind a live first item', JSON.stringify(unbuyableCatalogIds(ids)) === JSON.stringify(['giftcard']))
+  s.check('a legacy draft (single sourceCatalogId) still resolves', JSON.stringify(draftSourceCatalogIds({ sourceCatalogId: 'giftcard' })) === JSON.stringify(['giftcard']))
+  s.eq('an all-live cart is clean', unbuyableCatalogIds(['dish', 'edit', 'reach']).length, 0)
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

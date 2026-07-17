@@ -637,8 +637,10 @@ function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, gates, o
       const patch = gateExecutionPatch(customGates, gateAnswers)
       if (Object.keys(patch).length) fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { execution: patch } }) }).catch(() => {})
       onPlaced(id, { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 })
-    } catch {
-      setError('That didn’t go through. Nothing was ordered. Try again.'); setBusy(false)
+    } catch (e) {
+      // Surface the server's own reason when it has one (e.g. a coming-soon 409), never a mystery.
+      const msg = e instanceof Error && e.message ? e.message : ''
+      setError(msg || 'That didn’t go through. Nothing was ordered. Try again.'); setBusy(false)
     }
   }
   return (

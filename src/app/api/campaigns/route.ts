@@ -4,7 +4,8 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { listCampaigns, createCampaign, getCampaignProgressBatch } from '@/lib/campaigns/server'
 import { getCampaignChargesBatch } from '@/lib/campaigns/work-orders'
 import { getCampaignPaymentsBatch } from '@/lib/campaigns/campaign-payments-server'
-import { availabilityFor } from '@/lib/campaigns/data/catalog-availability'
+import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
+import { shapeFor } from '@/lib/campaigns/builder/compose-plan'
 import { getContentOverrides } from '@/lib/campaigns/content-overrides-server'
 import type { CampaignDraft } from '@/lib/campaigns/types'
 
@@ -45,13 +46,16 @@ export async function POST(req: NextRequest) {
   if (!access.authorized) return denied(access.reason)
   // Honesty backstop (Phase 1): never let a bookmarked ("coming soon") or hidden campaign be
   // ordered, no matter how the request was crafted. The store already disables the buy footer for
-  // these; this is the server-side guarantee. Admin CMS overrides (visibility) are honored via the
-  // same override map the store reads; a fetch failure falls back to the code default, best-effort.
-  const source = (draft.sourceCatalogId ?? '').trim()
-  if (source) {
+  // these; this is the server-side guarantee. Checks EVERY source id a merged cart carries (not
+  // just the first) with the same resolver + override map the store and /api/checkout/prepare
+  // read; a fetch failure falls back to the code default, best-effort.
+  const sourceIds = draftSourceCatalogIds(draft)
+  if (sourceIds.length) {
     const overrides = await getContentOverrides().catch(() => ({}))
-    if (availabilityFor(source, overrides) !== 'live') {
-      return NextResponse.json({ error: 'This campaign is coming soon and cannot be ordered yet.' }, { status: 409 })
+    const blocked = unbuyableCatalogIds(sourceIds, overrides)
+    if (blocked.length) {
+      const names = blocked.map((id) => `"${shapeFor(id)?.title ?? id}"`).join(' and ')
+      return NextResponse.json({ error: `${names} ${blocked.length === 1 ? 'is' : 'are'} coming soon and cannot be ordered yet.` }, { status: 409 })
     }
   }
   const supa = await createClient()

@@ -182,6 +182,10 @@ export interface CampaignDraft {
   /** The catalog campaign id this was built from (e.g. 'gbp', 'reviewsplan'), so the post-checkout
    *  readiness page can apply the owner's per-campaign "needs from you" config. */
   sourceCatalogId?: string
+  /** EVERY catalog id a merged cart draft came from (sourceCatalogId keeps the first, for
+   *  compatibility). The availability guards check all of them, so a coming-soon item can never
+   *  ride into a charge behind a live first item. */
+  sourceCatalogIds?: string[]
   /** Anchored to a moment/date from the calendar, e.g. "July 4". */
   occasion?: string
   /** The date the campaign builds toward (ISO), from the calendar. */
