@@ -80,7 +80,12 @@ export function deriveServiceNeeds(
   }
 
   // ── shoot needs: shared by every on-site shoot service + any content that needs filming ──
-  const beatTypes = new Set((campaign.draft.brief?.contentBeats ?? []).map((b) => (b as { type?: string }).type))
+  // Beats whose footage the OWNER supplies (footageSource 'owner', the 'edit' card) never imply a
+  // team shoot — their intake is the footage upload below, not shoot scheduling.
+  const beatTypes = new Set(
+    (campaign.draft.brief?.contentBeats ?? [])
+      .filter((b) => (b as { footageSource?: string }).footageSource !== 'owner')
+      .map((b) => (b as { type?: string }).type))
   const shootFromBeats = ['reel', 'video', 'photo'].some((tp) => beatTypes.has(tp))
   const shootFromServices = [...ids].some((id) => { const t = turnaroundFor(id); return t?.class === 'creative' && !!t.needsShoot })
   if (shootFromBeats || shootFromServices) {

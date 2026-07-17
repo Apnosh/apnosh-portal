@@ -64,6 +64,10 @@ export interface ItemShape {
   /** When the picked date is a moment the campaign builds TOWARD (a launch, an event),
    *  name it so deriveSchedule runs BACKWARD — teasers land before, the launch piece on the day. */
   occasionName?: string
+  /** The OWNER supplies the footage (the 'edit my footage' promise: send us your clips and
+   *  photos, we cut and polish). Every beat this item seeds is stamped footageSource:'owner',
+   *  so its reel/photo pieces never imply an on-site team shoot (no shoot gate, no slot). */
+  ownerFootage?: boolean
 }
 
 export const GOAL_META: Record<Goal, { goalKey: GoalKey; category: CampaignCategory; kpi: string; objective: string; expect: string; audiences: string[] }> = {
@@ -97,7 +101,7 @@ export const ITEM_SHAPE: Record<string, ItemShape> = {
   dish: { title: 'Feature a dish', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['photo', 'social', 'Hero photo of the dish'], ['post', 'social', 'Dish feature post']] },
   // Production-only (2026-07-09, the "Just need content" shelf): the owner already has
   // footage/photos — we cut and polish. No campaign frame, no outcome tracking.
-  edit: { title: 'Edit my footage', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['reel', 'reels', 'Reel cut from your footage'], ['photo', 'social', 'Photos edited from your shots']] },
+  edit: { title: 'Edit my footage', kind: 'piece', goal: 'acquire', dur: 'once', ownerFootage: true, seed: [['reel', 'reels', 'Reel cut from your footage'], ['photo', 'social', 'Photos edited from your shots']] },
   gpost: { title: 'A Google Business post', kind: 'piece', goal: 'acquire', dur: 'once', seed: [['post', 'gbp', 'Google Business post']] },
 
   // Events (build toward a date — verbatim seed + occasionName)
@@ -826,7 +830,7 @@ export function composePlanForGoal(itemId: string, spec: Record<string, string>)
     if (boostIdx < 0) boostIdx = 0
   }
 
-  const contentPlan: ContentBeatSpec[] = beats.map(([type, channel, label, week, because, serviceId], i) => ({ week: week ?? (i + 1), type, channel, label, ...(i === boostIdx ? { boost: true } : {}), ...(because ? { because } : {}), ...(serviceId ? { serviceId } : {}) }))
+  const contentPlan: ContentBeatSpec[] = beats.map(([type, channel, label, week, because, serviceId], i) => ({ week: week ?? (i + 1), type, channel, label, ...(i === boostIdx ? { boost: true } : {}), ...(because ? { because } : {}), ...(serviceId ? { serviceId } : {}), ...(shape.ownerFootage ? { footageSource: 'owner' as const } : {}) }))
   const channels = Array.from(new Set([...beats.map(([, ch]) => ch), ...(managedAds ? ['ads'] : [])]))
   // Geo comes from the owner's real profile (their neighborhood) when we have it, else a radius;
   // it drives the "near me" framing + the ad targeting, so the brief reads like their actual area.

@@ -13,6 +13,9 @@ import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
 import { summarize } from '@/lib/campaigns/types'
 import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem, PieceBrief, PieceProducer } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
+import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
+import { composePlanCampaign } from '@/lib/campaigns/builder/plan-checkout'
+import { draftNeedsShoot, requiredBookingGates } from '@/lib/campaigns/gates/derive'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -677,6 +680,30 @@ s.group('Per-piece service resolves (team/creator/diy/ai); brief campaigns keep 
   s.check('a piece set to a creator routes to a creator', byType.get('reel')?.producer === 'creator' && !!byType.get('reel')?.creatorId)
   s.eq('a brief-campaign creative keeps its base price (no batching surcharge)', byType.get('reel')?.priceCents, CONTENT_META.reel.price * 100)
   s.check('a brief campaign stamps no shoot day on its pieces', planCampaignPieces(camp, SHIP).every((p) => p.shootDayId === null))
+}
+
+// ── P. Checkout shoot gate derives from INTENT: owner-supplied footage never books a crew ──
+s.group('Shoot gate: owner-footage (edit) skips it; team-shot content keeps it')
+{
+  // 'edit' promises "send us your clips and photos, we cut and polish" — its seeded reel/photo
+  // beats are stamped footageSource:'owner', so checkout must NOT demand an on-site shoot slot.
+  const editDraft = draftFromBuilder({ itemId: 'edit', status: 'approve', vals: {} })
+  s.check('edit beats are stamped owner-footage', (editDraft.brief?.contentBeats ?? []).length > 0 && (editDraft.brief?.contentBeats ?? []).every((b) => b.footageSource === 'owner'))
+  s.check('edit alone ⇒ NO shoot gate at checkout', !draftNeedsShoot(editDraft))
+  s.eq('edit alone ⇒ no pre-checkout booking gates', requiredBookingGates(editDraft).length, 0)
+
+  // A merged cart of edit + dish: dish's hero photo is team-shot, so the gate STILL fires.
+  const merged = composePlanCampaign([
+    { itemId: 'edit', doer: null, options: [] },
+    { itemId: 'dish', doer: null, options: [] },
+  ])
+  s.check('edit + dish cart composes', !!merged.draft && merged.dropped.length === 0)
+  s.check('edit + dish cart ⇒ shoot gate still fires (dish is team-shot)', !!merged.draft && draftNeedsShoot(merged.draft))
+
+  // reach's discovery reel is team-shot — its gate is untouched.
+  const reachDraft = draftFromBuilder({ itemId: 'reach', status: 'approve', vals: {} })
+  s.check('reach keeps its shoot gate', draftNeedsShoot(reachDraft))
+  s.check('a plain reel piece keeps its shoot gate', draftNeedsShoot(draftFromBuilder({ itemId: 'reel', status: 'approve', vals: {} })))
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

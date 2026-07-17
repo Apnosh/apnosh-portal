@@ -16,9 +16,14 @@ const SHOOT_BEAT_TYPES = new Set(['reel', 'video', 'photo'])
 
 /** True when this draft involves an on-site shoot the team will run — either a needsShoot service or a
  *  shoot-bearing content beat. Mirrors deriveServiceNeeds' shoot predicate exactly. Owner-run ('diy')
- *  and opted-out lines never imply team shoot work. */
+ *  and opted-out lines never imply team shoot work — and neither do beats whose footage the OWNER
+ *  supplies (footageSource 'owner', the 'edit my footage' card: they send clips, we cut; the team
+ *  never films). Intent-driven, so a merged cart still gates on any OTHER item's team-shot beat. */
 export function draftNeedsShoot(draft: Pick<CampaignDraft, 'items' | 'brief'>): boolean {
-  const beatTypes = new Set((draft.brief?.contentBeats ?? []).map((b) => (b as { type?: string }).type))
+  const beatTypes = new Set(
+    (draft.brief?.contentBeats ?? [])
+      .filter((b) => (b as { footageSource?: string }).footageSource !== 'owner')
+      .map((b) => (b as { type?: string }).type))
   const shootFromBeats = [...SHOOT_BEAT_TYPES].some((t) => beatTypes.has(t))
   const shootFromServices = (draft.items ?? []).some((it) => {
     if (!it.included || it.optOut || it.producer === 'diy' || isContent(it.serviceId)) return false

@@ -11,6 +11,8 @@
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { draftNeedsShoot, requiredBookingGates } from '@/lib/campaigns/gates/derive'
+import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
+import { composePlanCampaign } from '@/lib/campaigns/builder/plan-checkout'
 import { holdBooking, confirmBookingForPayment, getConfirmedBookingForCampaign } from '@/lib/campaigns/gates/booking-server'
 import { computeOpenSlots } from '@/lib/campaigns/gates/availability'
 import type { AvailabilityRule } from '@/lib/campaigns/gates/types'
@@ -46,6 +48,19 @@ async function main() {
   s.check('non-shoot service (gbp-setup) ⇒ no shoot', !draftNeedsShoot(draft({ items: [line('gbp-setup')] })))
   s.check('opted-out shoot line ⇒ no shoot', !draftNeedsShoot(draft({ items: [line('video-engine', { optOut: 'diy' })] })))
   s.check('diy-producer shoot line ⇒ no shoot', !draftNeedsShoot(draft({ items: [line('video-engine', { producer: 'diy' })] })))
+
+  // Owner-supplied footage (the 'edit my footage' card): the owner sends clips, the team never
+  // films — so its reel/photo beats must NOT trip the shoot gate. Intent-driven via the real
+  // composer (never a special-cased card id): edit alone = no gate; merged with a team-shot item
+  // (dish) the gate still fires; reach's team-shot reel keeps its gate.
+  s.group('derive — owner-footage (edit) skips the shoot gate')
+  const editDraft = draftFromBuilder({ itemId: 'edit', status: 'approve', vals: {} })
+  s.check('edit beats are stamped owner-footage', (editDraft.brief?.contentBeats ?? []).length > 0 && (editDraft.brief?.contentBeats ?? []).every((b) => b.footageSource === 'owner'))
+  s.check('edit alone ⇒ NO shoot gate', !draftNeedsShoot(editDraft))
+  s.eq('edit alone ⇒ no pre-checkout booking gates', requiredBookingGates(editDraft).length, 0)
+  const mergedCart = composePlanCampaign([{ itemId: 'edit', doer: null, options: [] }, { itemId: 'dish', doer: null, options: [] }])
+  s.check('edit + dish cart ⇒ shoot gate still fires (dish is team-shot)', !!mergedCart.draft && draftNeedsShoot(mergedCart.draft))
+  s.check('reach keeps its shoot gate', draftNeedsShoot(draftFromBuilder({ itemId: 'reach', status: 'approve', vals: {} })))
 
   s.group('derive — gate shape')
   const gates = requiredBookingGates(draft({ items: [line('video-engine')] }))
