@@ -24,6 +24,8 @@ import { campaignCardVM, type CampCard } from '@/lib/campaigns/view'
 import { SERVICE_PLAYBOOKS, playbookNeedKeys } from '@/lib/campaigns/data/service-playbooks'
 import { assetGatesForDraft, resolveGates } from '@/lib/campaigns/gates/config'
 import { goalSlugForChip, budgetCapForChip } from '@/lib/goals/defaults'
+import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY } from '@/lib/campaigns/data/live-alternatives'
+import { isBuyable, BUILTIN_AVAILABILITY } from '@/lib/campaigns/data/catalog-availability'
 import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { fitsBudget, isSellable, filterRecsByFacts, deliveryLedShape } from '@/lib/campaigns/planning/rank-facts'
 import { ITEM_PRICES } from '@/lib/campaigns/builder/item-prices'
@@ -899,6 +901,43 @@ s.group('Ranker facts: never recommend what they cannot buy or afford')
   s.eq('ghost kitchens are delivery-led', deliveryLedShape('delivery_only', null), true)
   s.eq('ghost footprint is delivery-led', deliveryLedShape(null, 'ghost'), true)
   s.eq('a casual dine-in shape is not', deliveryLedShape('casual', 'single_neighborhood'), false)
+}
+
+// ── Owner-sim fix, Phase 5: coming-soon detours + dark shelves ──
+s.group('Live alternatives: a coming-soon page is never a dead end')
+{
+  const cat = liveAlternativesFor('catering')
+  s.eq('catering unbundles its two ready pieces FIRST', JSON.stringify(cat.slice(0, 2)), JSON.stringify(['dish', 'graphic']))
+  s.check('every unbundled id is genuinely live (drift guard)',
+    Object.values(UNBUNDLED_TODAY).flatMap((u) => u.ids).every((id) => isBuyable(id)))
+  const soonIds = Object.keys(BUILTIN_AVAILABILITY).filter((id) => id !== 'reviews')   // 'reviews' is a plan-time alias, not a card
+  const bad: string[] = []
+  for (const id of soonIds) {
+    const alts = liveAlternativesFor(id)
+    if (!alts.length) bad.push(`${id}:empty`)
+    if (alts.includes(id)) bad.push(`${id}:self`)
+    if (alts.some((a) => !isBuyable(a))) bad.push(`${id}:dark-alt`)
+  }
+  s.check(`every coming-soon card gets live-only detours (bad: ${bad.join(',') || 'none'})`, bad.length === 0)
+  s.check('the dark orders shelf routes to live plays', liveAlternativesForStage('orders').length > 0 && liveAlternativesForStage('orders').every((id) => isBuyable(id)))
+  s.check('the dark back shelf routes to live plays', liveAlternativesForStage('back').length > 0 && liveAlternativesForStage('back').every((id) => isBuyable(id)))
+}
+
+s.group('Dark shelves collapse into ONE honest Coming soon section')
+{
+  const rows = [
+    { id: 'aware', ids: ['gbp', 'listings', 'creator'] },                       // has live → stays
+    { id: 'orders', ids: ['promoevent', 'launch', 'ticket', 'catering', 'giftcard', 'slowoffer'] },  // all dark → folds
+    { id: 'back', ids: ['welcome', 'news', 'birthday', 'winback'] },            // all dark → folds
+  ]
+  const { liveRows, soonIds } = collapseDarkShelves(rows, { buyable: (id) => isBuyable(id), hidden: () => false })
+  s.eq('the shelf with live cards survives', JSON.stringify(liveRows.map((r) => r.id)), JSON.stringify(['aware']))
+  s.eq('both all-dark shelves fold into one deduped set', soonIds.length, 10)
+  s.check('every folded id is unbuyable (nothing live gets buried)', soonIds.every((id) => !isBuyable(id)))
+  const sugg = collapseDarkShelves([{ id: 'suggested', ids: ['welcome'] }], { buyable: () => false, hidden: () => false })
+  s.eq('the suggested row is never collapsed', sugg.liveRows.length, 1)
+  const hiddenAll = collapseDarkShelves([{ id: 'x', ids: ['a'] }], { buyable: () => false, hidden: () => true })
+  s.eq('a fully-hidden row simply drops (no ghost shelf)', hiddenAll.liveRows.length + hiddenAll.soonIds.length, 0)
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

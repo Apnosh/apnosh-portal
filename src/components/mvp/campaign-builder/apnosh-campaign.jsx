@@ -10,6 +10,7 @@ import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-tu
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { contentFor } from "@/lib/campaigns/data/content-overrides";
 import { isBuyable, isHidden, comingSoonReason } from "@/lib/campaigns/data/catalog-availability";
+import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY } from "@/lib/campaigns/data/live-alternatives";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
 import { whyFor } from "@/lib/campaigns/data/why-for";
 import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
@@ -2276,7 +2277,10 @@ const FEATURED = {
 };
 
 const ROWS = [
-  { id: "suggested", title: "Suggested for you", note: "Based on your menu and what's coming up", big: true, ids: ["nights", "reach", "gpost", "reviewsreply", "dish", "winback", "slowoffer"] },
+  // The static fallback set is honest now: it says it is NOT personalized (the AI row swaps in
+  // "Picked for your goals and reviews" when real recs land), and it holds only LIVE staples —
+  // the old set claimed "Based on your menu" while being hardcoded and mostly coming soon.
+  { id: "suggested", title: "Suggested for you", note: "Popular first steps. Not personalized yet", big: true, ids: ["gbp", "dish", "reel", "gpost", "reviewsreply", "delivery", "website"] },
   // TWO LAYERS, ONE SYSTEM: section headers say what the campaigns DO (verb-first,
   // across-the-counter words); the funnel-stage words the Home dashboard teaches
   // (Awareness → Interest → Customer actions → Orders → Retention) live as TAGS on
@@ -2563,9 +2567,16 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
   const recRowIds = recList.slice(recFeatured ? 1 : 0).map((r) => r.id);
   // DB campaigns join their chosen shelf before the suggested-row swap.
   const baseRows = ROWS.map(rowWithDb);
-  const rows = recRowIds.length
+  const allRows = recRowIds.length
     ? baseRows.map((row) => (row.id === "suggested" ? { ...row, ids: recRowIds, note: "Picked for your goals and reviews" } : row))
     : baseRows;
+  // ONE honest "Coming soon" section instead of shelves that are 100% dark: a shelf with
+  // nothing buyable stops pretending to be a shopping aisle (13 dark cards across two
+  // shelves was the sim's walk-away for the highest-budget owners).
+  const { liveRows, soonIds } = collapseDarkShelves(allRows, { buyable: buyableId, hidden: hiddenId });
+  const rows = soonIds.length
+    ? [...liveRows, { id: "__soon", title: "Coming soon", note: "We only sell what really works today. These are on the way", ids: soonIds }]
+    : liveRows;
   return (
     <div style={{ paddingBottom: 26 }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
@@ -2585,7 +2596,30 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {results.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
           </div>
-          {results.length === 0 && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.faint, padding: "10px 0" }}>Nothing matches yet. Try a word like video, email, or reviews, or describe it with Something else.</div>}
+          {/* Zero LIVE answers: say so out loud and route to the nearest live plays — a search
+              that only finds grey cards (or nothing) must never read as a working aisle. */}
+          {(() => {
+            const liveResults = results.filter((p) => buyableId(p.id));
+            if (liveResults.length > 0) return null;
+            const detourIds = results.length
+              ? liveAlternativesFor(results[0].id, CONTENT_OVERRIDES, 4)
+              : liveAlternativesForStage("aware", CONTENT_OVERRIDES, 4);
+            return (
+              <div style={{ padding: "10px 0 0" }}>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, marginBottom: 12 }}>
+                  {results.length ? "Everything matching that is still being built. We only sell what really works." : "Nothing matches that yet. Try a word like video, photo, or reviews."}
+                </div>
+                {detourIds.length > 0 && (
+                  <>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.faint, marginBottom: 10 }}>What you can do today</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {detourIds.map((id) => { const p = catGet(id); return p ? <PlanCardV key={id} p={p} onOpen={onOpen} full /> : null; })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <>
@@ -2604,10 +2638,23 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
           ) : (() => {
             const row = rowWithDb(ROWS.find((r) => r.id === lens));
             const items = row ? orderIds(row.ids).map(catGet).filter(Boolean) : [];
+            const liveCount = items.filter((p) => buyableId(p.id)).length;
+            // A shelf with ZERO live plays says so and routes to the nearest live plays —
+            // never a wall of grey cards pretending to be a store.
+            const detourIds = liveCount === 0 ? liveAlternativesForStage(lens, CONTENT_OVERRIDES) : [];
             return (
               <div style={{ padding: "0 20px 6px" }}>
                 <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: TOKENS.ink, marginBottom: 3 }}>{row ? row.title : ""}</div>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 14 }}>{items.length} {items.length === 1 ? "play" : "plays"} for this goal</div>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 14 }}>{liveCount === 0 && items.length > 0 ? "Nothing here is ready to buy yet" : `${liveCount} of ${items.length} ready to buy`}</div>
+                {liveCount === 0 && detourIds.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "11px 13px", marginBottom: 12, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.5 }}>Everything on this shelf is still being built. We only sell what really works. Here is what you can do today.</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {detourIds.map((id) => { const p = catGet(id); return p ? <PlanCardV key={id} p={p} onOpen={onOpen} full /> : null; })}
+                    </div>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.faint, margin: "16px 0 0" }}>Coming soon on this shelf</div>
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   {items.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
                 </div>
@@ -2631,7 +2678,11 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
 }
 
 function CategoryAll({ rowId, onBack, onOpen }) {
-  const row = rowWithDb(ROWS.find((r) => r.id === rowId)) || { title: "Plans", ids: [] };
+  // '__soon' is the synthetic collapsed shelf (every all-dark row folded into one honest
+  // section) — recompute its ids the same way the browse does, so see-all matches.
+  const row = rowId === "__soon"
+    ? { title: "Coming soon", ids: collapseDarkShelves(ROWS.map(rowWithDb), { buyable: buyableId, hidden: hiddenId }).soonIds }
+    : rowWithDb(ROWS.find((r) => r.id === rowId)) || { title: "Plans", ids: [] };
   const items = row.ids.map(catGet).filter(Boolean);
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -3153,6 +3204,25 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   // do, but it cannot be added/bought. The footer swaps to a disabled "Coming soon" with the reason.
   const soon = !buyableId(itemId);
   const soonMsg = soonReason(itemId);
+  // Coming-soon detours: the unbundle note (a bundle blocked by one unbuilt step still has
+  // ready pieces) + live alternatives for the same goal, so this page is never a dead end.
+  const unbundle = soon ? UNBUNDLED_TODAY[itemId] : null;
+  const altIds = soon ? liveAlternativesFor(itemId, CONTENT_OVERRIDES) : [];
+  // "Tell me when it's ready": persisted server-side (catalog_interest + a staff page);
+  // localStorage only remembers that THIS device already asked.
+  const [notifyState, setNotifyState] = useState(() => {
+    try { return typeof window !== "undefined" && localStorage.getItem(`apnosh:notify:${itemId}`) ? "saved" : "idle"; } catch { return "idle"; }
+  });
+  const askNotify = async () => {
+    if (notifyState === "saving" || notifyState === "saved") return;
+    setNotifyState("saving");
+    try {
+      const res = await fetch("/api/catalog/interest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId }) });
+      if (!res.ok) throw new Error();
+      try { localStorage.setItem(`apnosh:notify:${itemId}`, "1"); } catch { /* fine */ }
+      setNotifyState("saved");
+    } catch { setNotifyState("error"); }
+  };
 
   const [added, setAdded] = useState(false);
   const [rushOpen, setRushOpen] = useState(false);
@@ -3488,12 +3558,33 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             nothing); "Buy now instead" the quiet secondary into Continue; AI keeps its Pro path. ── */}
       <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
           {soon ? (
-            // BOOKMARKED: no price quote, no buy. A plain "coming soon" with the honest reason, and a
-            // disabled button — we never sell what we cannot deliver yet.
+            // BOOKMARKED: no price quote, no buy — but never a dead end. The honest reason, the
+            // unbundle note (ready pieces of a blocked bundle), live detours for the same goal,
+            // and a real "tell me when it's ready" that a human sees.
             <>
-              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.45, marginBottom: 10 }}>{soonMsg || "Coming soon."}</div>
-              <button disabled aria-disabled="true" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "default", background: "#eef0ef", color: "#9aa3a0", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9aa3a0" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>Coming soon
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.45, marginBottom: 8 }}>{soonMsg || "Coming soon."}</div>
+              {unbundle && (
+                <div style={{ background: TOKENS.mintTint, borderRadius: 12, padding: "9px 12px", marginBottom: 10, fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.mintDark, lineHeight: 1.5 }}>{unbundle.note}</div>
+              )}
+              {altIds.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.faint, marginBottom: 7 }}>What you can do today</div>
+                  <div className="apnosh-row" style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                    {altIds.map((aid) => { const a = catGet(aid); if (!a) return null; return (
+                      <button key={aid} onClick={() => onOpenCard(aid)} className="apnpress" style={{ flexShrink: 0, textAlign: "left", background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "9px 12px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.ink }}>{a.title}</div>
+                        {feeIncludedLabel(aid) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.mintDark, fontWeight: 600, marginTop: 1 }}>{feeIncludedLabel(aid)}</div>}
+                      </button>
+                    ); })}
+                  </div>
+                </div>
+              )}
+              <button onClick={askNotify} disabled={notifyState === "saved" || notifyState === "saving"} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: notifyState === "saved" || notifyState === "saving" ? "default" : "pointer", background: notifyState === "saved" ? "#eef7f3" : TOKENS.ink, color: notifyState === "saved" ? TOKENS.mintDark : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                {notifyState === "saved" ? (
+                  <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>We will tell you when it is ready</>
+                ) : notifyState === "saving" ? "Saving…" : notifyState === "error" ? "That did not save. Tap to try again" : (
+                  <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>Tell me when it&rsquo;s ready</>
+                )}
               </button>
             </>
           ) : (

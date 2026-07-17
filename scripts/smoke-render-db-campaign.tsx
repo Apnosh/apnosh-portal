@@ -46,15 +46,23 @@ console.log('\n== 1) BROWSE: the card appears on its chosen shelf ==')
 const browse = renderToString(React.createElement(Any, { restaurant: 'Smoke Test Cafe', dbCampaigns: [FAKE] }))
 ok(browse.includes('Get on the food blogs'), 'card title renders in the store browse')
 ok(browse.includes('Local writers and neighbors hear about you'), 'card tagline renders')
-// Shelf proof: the card markup sits after the "Fill your seats" (orders) row header and
-// before the next row header ("Bring guests back"), i.e. inside its chosen shelf row.
+// Shelf proof: the LIVE DB card keeps its "Fill your seats" (orders) shelf alive; the
+// all-dark "Bring guests back" shelf no longer renders as an aisle — it folds into the
+// one honest "Coming soon" section (owner-sim Phase 5). The card sits inside its row,
+// before the next surviving header ("Full campaigns").
 const ordersIdx = browse.indexOf('Fill your seats')
-const nextRowIdx = browse.indexOf('Bring guests back')
+// 'Full campaigns' also appears earlier as a lens-chip label — look for the ROW header
+// after the orders row so the structural check reads the shelves, not the chip bar.
+const nextRowIdx = browse.indexOf('Full campaigns', ordersIdx)
 const cardIdx = browse.indexOf('Get on the food blogs')
-ok(ordersIdx >= 0 && nextRowIdx > ordersIdx, 'the orders + retention shelf headers render')
+ok(ordersIdx >= 0 && nextRowIdx > ordersIdx, 'the orders shelf survives (it holds the live DB card)')
 ok(cardIdx > ordersIdx && cardIdx < nextRowIdx, 'the DB card sits INSIDE its chosen shelf row (orders), not elsewhere')
 ok(browse.indexOf('Get on the food blogs', cardIdx + 1) === -1, 'the card appears exactly once (one shelf)')
-ok(browse.includes(`$${price.oneTime.toLocaleString()}`) && browse.includes(`$${price.perMonth.toLocaleString()}/mo`), `the card price tags carry the real derived price (Setup $${price.oneTime} + $${price.perMonth}/mo)`)
+ok(!browse.includes('Bring guests back'), 'an ALL-dark shelf header no longer renders as a shopping aisle')
+ok(browse.includes('We only sell what really works today. These are on the way'), 'the dark shelves fold into one honest Coming soon section')
+// Prices display fee-included (owner-sim Phase 1): the shown number IS the charged number.
+const feeOneTime = Math.round(price.oneTime * 1.1)
+ok(browse.includes(`Setup $${feeOneTime.toLocaleString()}, fee included`) && browse.includes(`$${price.perMonth.toLocaleString()}/mo`), `the card price tags carry the fee-included derived price (Setup $${feeOneTime}, fee included + $${price.perMonth}/mo)`)
 ok(browse.includes('Awareness') && browse.includes('Interest'), 'its funnel-stage tags render in Home words')
 
 console.log('\n== 2) PDP: the uniform product page renders every section ==')
@@ -70,11 +78,12 @@ ok(pdp.includes('What we&#x27;ll need from you') || pdp.includes("What we'll nee
 ok(pdp.includes('Send us your current menu'), 'a REAL derived requirement renders (site-menu ask)')
 ok(pdp.includes('What you get'), 'the what-you-get section renders')
 ok(pdp.includes('Get in the news') && pdp.includes('Show up for neighbors') && pdp.includes('Fix your site &amp; menu'), 'what-you-get rows are the real service plain names')
-ok(pdp.includes('Add ons'), 'the add-ons section renders (a real add-on exists)')
-ok(pdp.includes('Keep Google fresh'), 'the add-on renders by its real plain name (gbp-posts)')
-const total = `$${price.oneTime.toLocaleString()} + $${price.perMonth.toLocaleString()}/mo`
-ok(pdp.includes(total), `the buy footer total is the real derived price (${total})`)
-ok(pdp.includes('Buy now instead'), 'the buy path CTA renders')
+// Add-ons are paused (owner decision, see the PDP comment) and the Buy-now secondary was
+// replaced by the Add-to-plan primary in the cart redesign — assert the CURRENT contract.
+ok(!pdp.includes('>Add ons<'), 'the add-ons section stays paused (owner decision)')
+const total = `$${feeOneTime.toLocaleString()} + $${price.perMonth.toLocaleString()}/mo, fee included`
+ok(pdp.includes(total), `the buy footer total is the fee-included derived price (${total})`)
+ok(pdp.includes('Add to plan'), 'the buy path CTA renders (Add to plan)')
 ok(pdp.includes('starts within') || pdp.includes('The work is done'), 'the timeline derives from SERVICE_TURNAROUND (setup/recurring lines)')
 
 console.log('\n' + '='.repeat(52))
