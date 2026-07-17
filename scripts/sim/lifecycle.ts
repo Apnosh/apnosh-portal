@@ -19,6 +19,8 @@ import { draftNeedsShoot, requiredBookingGates } from '@/lib/campaigns/gates/der
 import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
 import { shipBillingGate } from '@/lib/campaigns/ship-guard'
 import { withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from '@/lib/campaigns/builder/item-prices'
+import { selectHomeOrders, HOME_ORDERS_CAP } from '@/lib/campaigns/home-cards'
+import { campaignCardVM, type CampCard } from '@/lib/campaigns/view'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -773,6 +775,36 @@ s.group('Money display: fee folded into shown prices; pass-through notes in plai
   s.eq('the named $500/mo minimum totals into one real number', passthroughMonthlyMinimumCents([adsNote]), 50000)
   s.eq('a no-minimum note contributes 0 (never invented)', passthroughMonthlyMinimumCents(['sponsored-listing spend billed at cost']), 0)
   s.eq('minimums sum across notes', passthroughMonthlyMinimumCents([adsNote, 'boost billed at cost, $100/mo minimum']), 60000)
+}
+
+// ── Owner-sim fix, Phase 2: Day-0 Home shows orders in progress with REAL status ──
+s.group('Day-0 Home: orders-in-progress selection (shipped only, urgent first, capped)')
+{
+  const card = (key: string, kind: CampCard['kind'], pill: string, review = false): CampCard =>
+    ({ key, kind, title: key, pill, pillIcon: 'dot', blurb: '', cost: null, recurring: false, perf: null, review, href: `/x/${key}` })
+  const mixed = [
+    card('a-live', 'live', 'Live'),
+    card('b-draft', 'draft', 'Draft'),
+    card('c-prod', 'live', 'In production'),
+    card('d-done', 'done', 'Done'),
+    card('e-needs', 'live', 'Needs you', true),
+  ]
+  const picked = selectHomeOrders(mixed)
+  s.eq('drafts and done campaigns never show on Home', picked.every((c) => c.kind === 'live'), true)
+  s.eq('needs-you comes first, then production, then live', JSON.stringify(picked.map((c) => c.key)), JSON.stringify(['e-needs', 'c-prod', 'a-live']))
+  const many = Array.from({ length: 6 }, (_, i) => card(`l${i}`, 'live', 'Live'))
+  s.eq('capped so Home stays a glance', selectHomeOrders(many).length, HOME_ORDERS_CAP)
+  s.eq('no shipped orders → empty (the section hides, no fake state)', selectHomeOrders([card('x', 'draft', 'Draft')]).length, 0)
+
+  // Integration: a real shipped campaign through campaignCardVM rides into the selection
+  // with the honest status (the exact card Home now renders). A fresh ship with unfinished
+  // owner setup truthfully reads "Needs you" — and that urgency puts it FIRST on Home.
+  const shipped = campaignFor({ name: 'home vm', content: ['post'] })
+  shipped.status = 'shipped'
+  const vm = campaignCardVM(shipped, { total: 2, live: 0, queued: 0, awaitingYou: 0, inProgress: 2, nextDueISO: null })
+  s.eq('fresh shipped campaign, setup unfinished → Needs you', vm.pill, 'Needs you')
+  s.eq('its blurb is the honest next step', vm.blurb, 'Finish setup so your team can start')
+  s.eq('and it is selected for Home, ranked first', selectHomeOrders([card('z-live', 'live', 'Live'), vm])[0].key, vm.key)
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')
