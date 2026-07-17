@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
-import { priceLabel, ITEM_PRICES } from "@/lib/campaigns/builder/item-prices";
+import { priceLabel, ITEM_PRICES, priceNotes, passthroughNotesForServices } from "@/lib/campaigns/builder/item-prices";
 import { isProTier } from "@/lib/entitlements";
 import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
@@ -2367,6 +2367,11 @@ function planTags(p) {
       priceSaysCadence = p.cad === "once";
     }
   }
+  // Pass-through costs (Fix: honest ad spend): a card whose services bill real extra costs
+  // (paid-ads' "ad spend billed at cost, $500/mo minimum") flags it right on the shelf. The
+  // pill is short; the product page and checkout bill quote the full catalog note verbatim.
+  const costNotes = priceNotes(buildIdFor(p.id));
+  if (costNotes.length) t.push({ label: /ad|sponsor/i.test(costNotes.join(" ")) ? "+ ad spend" : "+ extra costs", accent: true });
   // Skip the cadence chip when the price chip already says it ("$165/mo" + "Recurring"
   // was double-telling); keep it for the cadences a price can't express (auto/setup/group).
   if (!priceSaysCadence) t.push({ label: CADENCE_TAG[p.cad] || "Plan" });
@@ -3116,6 +3121,10 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const totalPerMonth = base.perMonth + optM.perMonth;
   const creative = p.type === "content" || p.id === "shoot";
   const totalLabel = (totalOneTime === 0 && totalPerMonth === 0) ? "Free" : `${creative && totalOneTime > 0 ? "From " : ""}${moneyLabel(totalOneTime, totalPerMonth)}`;
+  // Pass-through costs, quoted verbatim from the catalog so the price area never hides real
+  // extra spend (e.g. paid-ads' "ad spend billed at cost, $500/mo minimum"). Free owner-run
+  // lanes bill nothing, so they carry no note; selected add-on services bring their own.
+  const costNotes = laneFree ? passthroughNotesForServices(selected) : [...new Set([...priceNotes(buildIdFor(p.id)), ...passthroughNotesForServices(selected)])];
   // The honesty gate: a bookmarked (coming-soon) card still opens so the owner can read what it will
   // do, but it cannot be added/bought. The footer swaps to a disabled "Coming soon" with the reason.
   const soon = !buyableId(itemId);
@@ -3465,10 +3474,14 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             </>
           ) : (
             <>
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 9 }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: costNotes.length ? 4 : 9 }}>
                 <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
                 <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
               </div>
+              {costNotes.map((n) => (
+                <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "right", marginBottom: 4 }}>Plus {n}</div>
+              ))}
+              {costNotes.length > 0 && <div style={{ marginBottom: 5 }} />}
               {/* After adding, the button STAYS confirmed and becomes the door to the plan —
                   the add never again looks like nothing happened. Changing the config re-arms it. */}
               <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
@@ -3853,6 +3866,9 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
         {itemId === "gbp" && (gbpLaneOf(vals.doer) === "diy" || gbpLaneOf(vals.doer) === "ai")
           ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
           : priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You see the full price and pay once at checkout.</div>}
+        {priceNotes(itemId).map((n) => (
+          <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.85)", textAlign: "center", marginTop: -4, marginBottom: 10 }}>Plus {n}</div>
+        ))}
         {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
           return m.warn
             ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: "8px 12px", textAlign: "center", marginBottom: 10 }}>{m.text}</div>

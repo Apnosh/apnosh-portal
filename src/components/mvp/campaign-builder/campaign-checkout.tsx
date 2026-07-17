@@ -18,6 +18,7 @@ import { loadStripe, type StripeAddressElementChangeEvent } from '@stripe/stripe
 import { Elements, AddressElement, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { saveAndShip } from '@/lib/campaigns/builder/ship'
 import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
+import { passthroughNotesForLines } from '@/lib/campaigns/builder/item-prices'
 import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
 import { summarize, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
 import type { ResolvedGates, CustomGate } from '@/lib/campaigns/gates/config'
@@ -187,7 +188,7 @@ function BillRow({ label, value, strong, muted }: { label: string; value: string
   )
 }
 
-function BillCard({ b, monthlyCents, taxPending }: { b: Breakdown; monthlyCents: number; taxPending: boolean }) {
+function BillCard({ b, monthlyCents, taxPending, costNotes }: { b: Breakdown; monthlyCents: number; taxPending: boolean; costNotes?: string[] }) {
   return (
     <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '13px 16px 15px', marginBottom: 16 }}>
       <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>Order summary</div>
@@ -195,6 +196,11 @@ function BillCard({ b, monthlyCents, taxPending }: { b: Breakdown; monthlyCents:
       <BillRow label="Service fee (10%)" value={fmt(b.serviceFeeCents)} />
       <BillRow label="Tax" value={taxPending ? 'Enter address' : fmt(b.taxCents)} muted={taxPending} />
       {monthlyCents > 0 && <BillRow label="Monthly services" value={`${fmt(monthlyCents)}/mo`} muted />}
+      {/* Pass-through costs (billed at cost), quoted verbatim from the catalog — the consent
+          below must be informed, so real extra spend is on the bill, not in fine print. */}
+      {(costNotes ?? []).map((n) => (
+        <div key={n} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, padding: '2px 0 4px' }}>Plus {n}</div>
+      ))}
       <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}>
         <BillRow label="Total due today" value={fmt(b.totalCents)} strong />
       </div>
@@ -555,7 +561,7 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
         {restaurant && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10 }}>Placing your order for <span style={{ fontWeight: 600, color: INK }}>{restaurant}</span></div>}
         <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} booking={gates?.booking ?? null} onBlockingChange={setBookingBlocking} />
         <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
-        <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} />
+        <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} costNotes={passthroughNotesForLines(draft.items)} />
         {needsMonthlyConsent && (
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 14, padding: '12px 14px', marginBottom: 16 }}>
             <input type="checkbox" checked={monthlyConsent} onChange={(e) => setMonthlyConsent(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: MINT, flexShrink: 0 }} />
