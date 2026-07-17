@@ -108,6 +108,79 @@ export async function ensureCampaignSubscription(paymentIntentId: string, campai
   }
 }
 
+export interface CancelSubsResult {
+  /** Subscriptions we canceled with Stripe right now. */
+  canceled: number
+  /** Rows that were already canceled (or gone at Stripe) — nothing to do. */
+  alreadyCanceled: number
+  /** Rows we could NOT cancel (Stripe unreachable / key missing). Staff is paged for each. */
+  failed: number
+}
+
+/**
+ * Cancel every Stripe subscription linked to a campaign — the money half of an explicit STOP
+ * (/api/campaigns/[id]/stop). The settlement tells the owner monthly billing ends now, so this
+ * cancels IMMEDIATELY (stripe.subscriptions.cancel), not at period end.
+ *
+ * Contract (mirrors ensureCampaignSubscription):
+ *  - Idempotent: an already-canceled or Stripe-missing subscription counts as done, never an error.
+ *  - Degrade-safe: missing table/columns (pre-215/221) or no rows → zeros, no throw.
+ *  - Never blocks the stop: a real cancel failure (Stripe down, key missing) records
+ *    subscription_status='cancel_failed' + pages staff — the sweep and settlement still land.
+ *  - Cancels ALL linked payment rows (a campaign can, in principle, carry more than one).
+ *  - Audit: the row keeps its stripe_subscription_id; subscription_status flips to 'canceled'.
+ *
+ * NOTE: this runs ONLY on an explicit owner stop. A campaign whose work is complete ("Done") keeps
+ * status 'shipped', so ongoing monthly services (e.g. review replies) keep billing as agreed.
+ */
+export async function cancelCampaignSubscriptions(campaignId: string): Promise<CancelSubsResult> {
+  const result: CancelSubsResult = { canceled: 0, alreadyCanceled: 0, failed: 0 }
+  const a = admin()
+  let rows: Array<Record<string, unknown>> = []
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (a.from('campaign_payments') as any)
+      .select('stripe_payment_intent_id, stripe_subscription_id, subscription_status, client_id, monthly_cents')
+      .eq('campaign_id', campaignId)
+      .not('stripe_subscription_id', 'is', null)
+    if (error || !Array.isArray(data)) return result   // pre-215/221 or read failure — nothing recorded to cancel
+    rows = data
+  } catch {
+    return result
+  }
+
+  for (const row of rows) {
+    const subId = typeof row.stripe_subscription_id === 'string' ? row.stripe_subscription_id : ''
+    const piId = String(row.stripe_payment_intent_id ?? '')
+    if (!subId) continue
+    if (row.subscription_status === 'canceled') { result.alreadyCanceled++; continue }
+    try {
+      await stripe.subscriptions.cancel(subId)
+      result.canceled++
+      await stampSub(a, piId, { subscription_status: 'canceled' })
+    } catch (e) {
+      // Already canceled / gone at Stripe = done (idempotent). Anything else is a real failure.
+      const code = (e as { code?: string; message?: string })?.code
+      const msg = e instanceof Error ? e.message : ''
+      if (code === 'resource_missing' || /already.*cancel|canceled subscription/i.test(msg)) {
+        result.alreadyCanceled++
+        await stampSub(a, piId, { subscription_status: 'canceled' })
+      } else {
+        result.failed++
+        await stampSub(a, piId, { subscription_status: 'cancel_failed' })
+        // Never silently keep charging a stopped campaign: page staff to cancel by hand.
+        await notifyStaffForClient(String(row.client_id ?? ''), ['strategist'], {
+          kind: 'payment',
+          title: 'Monthly subscription needs a manual cancel',
+          body: `A stopped campaign's $${Math.round(Number(row.monthly_cents ?? 0) / 100)}/mo subscription (${subId}) did not cancel automatically (${msg || 'unknown error'}). Cancel it in Stripe now.`,
+          link: `/admin/campaign-orders?focus=${campaignId}`,
+        }).catch(() => ({ notified: 0 }))
+      }
+    }
+  }
+  return result
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function stampSub(a: any, paymentIntentId: string, patch: Record<string, unknown>): Promise<void> {
   try {
