@@ -23,6 +23,10 @@ import { selectHomeOrders, HOME_ORDERS_CAP } from '@/lib/campaigns/home-cards'
 import { campaignCardVM, type CampCard } from '@/lib/campaigns/view'
 import { SERVICE_PLAYBOOKS, playbookNeedKeys } from '@/lib/campaigns/data/service-playbooks'
 import { assetGatesForDraft, resolveGates } from '@/lib/campaigns/gates/config'
+import { goalSlugForChip, budgetCapForChip } from '@/lib/goals/defaults'
+import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
+import { fitsBudget, isSellable, filterRecsByFacts, deliveryLedShape } from '@/lib/campaigns/planning/rank-facts'
+import { ITEM_PRICES } from '@/lib/campaigns/builder/item-prices'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -852,6 +856,49 @@ s.group('Asset gates: the store checks the buyer can RECEIVE the work')
   const resolved = resolveGates({ items: [], brief: undefined, ...draftFor(['website']) }, { custom: [{ id: 'asset-website', kind: 'input', title: 'Admin version', required: true, inputType: 'text' }] })
   s.eq('an admin-authored gate with the same id replaces the default', resolved.custom.length, 1)
   s.eq('and it is the admin version', resolved.custom[0].title, 'Admin version')
+}
+
+// ── Owner-sim fix, Phase 4: onboarding answers reach the product ──
+s.group('Goal chips: every chip maps to a real goal slug (the #1 priority is finally read)')
+{
+  const unmapped = GOAL_CHIPS.filter((c) => goalSlugForChip(c) == null)
+  s.check(`every GOAL_CHIP maps to a slug (unmapped: ${unmapped.join(',') || 'none'})`, unmapped.length === 0)
+  s.eq('the new regulars chip maps', goalSlugForChip('Turn first-timers into regulars'), 'regulars_more_often')
+  s.eq('the new catering chip maps', goalSlugForChip('Grow catering orders'), 'grow_catering')
+  s.eq('the new photos chip maps', goalSlugForChip('Better photos of my food'), 'be_known_for')
+  s.eq('the new younger-crowd chip maps', goalSlugForChip('Reach a younger crowd'), 'be_known_for')
+  s.eq('slow days chip → fill_slow_times', goalSlugForChip('More customers on slow days'), 'fill_slow_times')
+  s.eq('an unknown chip maps to null (shape defaults stand)', goalSlugForChip('Something else entirely'), null)
+}
+
+s.group('Budget chips: one question feeds the guard + the ranker')
+{
+  const known = BUDGET_CHIPS.filter((c) => c !== 'Not sure yet')
+  s.check('every dollar chip maps to a cap', known.every((c) => (budgetCapForChip(c) ?? 0) > 0))
+  s.eq('Under $200/mo → 200', budgetCapForChip('Under $200/mo'), 200)
+  s.eq('$500 to $1,000/mo → 1000 (top of range, never under-sold)', budgetCapForChip('$500 to $1,000/mo'), 1000)
+  s.eq('"Not sure yet" asserts NO cap', budgetCapForChip('Not sure yet'), null)
+  s.eq('unknown text asserts NO cap', budgetCapForChip('whatever'), null)
+}
+
+s.group('Ranker facts: never recommend what they cannot buy or afford')
+{
+  const deliveryMo = ITEM_PRICES['delivery']?.perMonth ?? 0
+  s.check('sanity: the delivery card has a real monthly price', deliveryMo > 0)
+  s.eq('a monthly card over the budget does not fit', fitsBudget('delivery', deliveryMo - 1), false)
+  s.eq('a monthly card at the budget fits', fitsBudget('delivery', deliveryMo), true)
+  s.eq('no budget known → everything fits (never worse than before)', fitsBudget('delivery', null), true)
+  const oneTimeId = Object.keys(ITEM_PRICES).find((id) => ITEM_PRICES[id].oneTime > 0 && ITEM_PRICES[id].perMonth === 0)
+  if (oneTimeId) s.eq('a one-time card always fits a monthly budget', fitsBudget(oneTimeId, 100), true)
+  s.eq('unknown availability → sellable (no filtering)', isSellable('delivery', {}), true)
+  s.eq('a coming-soon id is not sellable', isSellable('giftcard', { buyable: new Set(['dish']) }), false)
+  const recs = [{ id: 'dish' }, { id: 'giftcard' }, { id: 'delivery' }]
+  s.eq('filterRecsByFacts drops unbuyable + over-budget, order preserved',
+    JSON.stringify(filterRecsByFacts(recs, { buyable: new Set(['dish', 'delivery']), budgetMonthly: 50 }).map((r) => r.id)),
+    JSON.stringify(['dish']))
+  s.eq('ghost kitchens are delivery-led', deliveryLedShape('delivery_only', null), true)
+  s.eq('ghost footprint is delivery-led', deliveryLedShape(null, 'ghost'), true)
+  s.eq('a casual dine-in shape is not', deliveryLedShape('casual', 'single_neighborhood'), false)
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

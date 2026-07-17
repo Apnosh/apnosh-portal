@@ -208,6 +208,46 @@ export async function completeOnboardingCRM(
     console.error('[completeOnboardingCRM] Profile upsert failed:', profileErr)
   }
 
+  // ── Write the answers where the PRODUCT reads them ────────────────────────────
+  // The creator briefs and the AI review replies read businesses.brand_voice_words /
+  // brand_tone / brand_do_nots / category, and the budget guard + recommender read
+  // businesses.monthly_budget. Onboarding used to write brand answers only to
+  // client_profiles, so a vegan cafe got briefed as a generic "restaurant" with no
+  // voice and no avoid-list, and budget was never captured at all.
+  try {
+    const { budgetCapForChip } = await import('@/lib/goals/defaults')
+    const tones = (data.tones as string[]) || []
+    const avoidTones = (data.avoid_tones as string[]) || []
+    const avoidList = (data.avoid_list as string[]) || []
+    const EMOJI_RULE: Record<string, string> = {
+      heavy: 'Emojis: use them freely',
+      moderate: 'Emojis: a few, tastefully',
+      light: 'Emojis: rarely',
+      none: 'Emojis: never use them',
+    }
+    const doNots = [
+      avoidTones.length ? `Avoid these tones: ${avoidTones.join(', ')}` : '',
+      avoidList.length ? `Never post about: ${avoidList.join(', ')}` : '',
+      EMOJI_RULE[(data.emoji_usage as string) || ''] ?? '',
+    ].filter(Boolean).join('. ')
+    const cuisineRaw = (data.cuisine as string) || ''
+    const cuisine = /other/i.test(cuisineRaw) ? ((data.cuisine_other as string) || '') : cuisineRaw
+    const bizPatch: Record<string, unknown> = {}
+    if (tones.length) bizPatch.brand_voice_words = tones
+    const toneStr = (data.custom_tone as string) || tones.join(', ')
+    if (toneStr) bizPatch.brand_tone = toneStr
+    if (doNots) bizPatch.brand_do_nots = doNots
+    if (cuisine.trim()) bizPatch.category = cuisine.trim()
+    const cap = budgetCapForChip(data.marketing_budget as string)
+    if (cap != null) bizPatch.monthly_budget = cap
+    if (Object.keys(bizPatch).length) {
+      const { error: bizErr } = await supabase.from('businesses').update(bizPatch).eq('id', businessId)
+      if (bizErr) console.error('[completeOnboardingCRM] businesses brand/budget write failed:', bizErr.message)
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] brand/budget wiring threw:', e)
+  }
+
   // 2b. Route onboarding answers into the AI-readable layer
   //     (client_knowledge_facts + client_brands). Best-effort: a hiccup
   //     here must not fail onboarding completion.
@@ -371,7 +411,7 @@ export async function completeOnboardingCRM(
     const isFoodBusiness =
       typeof data.biz_type === 'string' &&
       (FOOD_BIZ_TYPES as readonly string[]).includes(data.biz_type)
-    const { inferShapeFromOnboarding, defaultGoalsForShape } = await import('@/lib/goals/defaults')
+    const { inferShapeFromOnboarding, defaultGoalsForShape, goalSlugForChip } = await import('@/lib/goals/defaults')
     const { data: clientRow } = await supabase
       .from('clients')
       .select('shape_captured_at')
@@ -402,15 +442,22 @@ export async function completeOnboardingCRM(
       if (shapeErr) console.error('[completeOnboardingCRM] shape seed error:', shapeErr.message)
       else console.log(`[completeOnboardingCRM] Seeded shape: ${shape.footprint}/${shape.concept}`)
 
-      // Default goals derived from the inferred shape — only when the client
-      // has no active goals yet (so a strategist's picks are never clobbered).
+      // Goals — only when the client has no active goals yet (so a strategist's
+      // picks are never clobbered). The owner's OWN "#1 priority" chip is priority 1
+      // ("This shapes your whole strategy" is finally true); the shape defaults
+      // only fill the remaining slots. Previously the chip was captured and thrown
+      // away, so the recommender ran on a guess from their price range.
       const { count } = await supabase
         .from('client_goals')
         .select('id', { count: 'exact', head: true })
         .eq('client_id', clientId)
         .eq('status', 'active')
       if (!count) {
-        const slugs = defaultGoalsForShape({ footprint: shape.footprint, concept: shape.concept })
+        const chipSlug = goalSlugForChip(data.primary_goal as string)
+        const shapeSlugs = defaultGoalsForShape({ footprint: shape.footprint, concept: shape.concept })
+        const slugs = chipSlug
+          ? [chipSlug, ...shapeSlugs.filter((s) => s !== chipSlug)]
+          : shapeSlugs
         const goalRows = slugs.slice(0, 3).map((slug, i) => ({
           client_id: clientId,
           goal_slug: slug,

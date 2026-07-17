@@ -10,9 +10,37 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getMarketingCalendar, daysUntil } from '@/lib/dashboard/marketing-calendar'
 import { assemblePlanningContext, fallbackPlanningContext } from '@/lib/campaigns/planning/context'
 import { recommendCreateItems, rulesRecommend, type ActivePlans } from '@/lib/campaigns/planning/recommend-create-items'
+import { deliveryLedShape, type RankerFacts } from '@/lib/campaigns/planning/rank-facts'
 import type { PlanRequest, UpcomingMoment } from '@/lib/campaigns/planning/types'
 import { listCampaigns } from '@/lib/campaigns/server'
+import { CREATE_CATALOG } from '@/lib/campaigns/data/create-catalog'
+import { isBuyable } from '@/lib/campaigns/data/catalog-availability'
+import { getContentOverrides } from '@/lib/campaigns/content-overrides-server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import type { GoalKey } from '@/lib/campaigns/types'
+
+/** The blindness fixes (sim crack #16): what's buyable, what fits the budget, and the shape. */
+async function assembleRankerFacts(clientId: string): Promise<RankerFacts> {
+  const facts: RankerFacts = {}
+  // Availability: only ids the store can sell right now (same override map the store uses).
+  try {
+    const overrides = await getContentOverrides()
+    facts.buyable = new Set(CREATE_CATALOG.map((c) => c.id).filter((id) => isBuyable(id, overrides)))
+  } catch { /* unknown availability = no filtering (never worse than before) */ }
+  // Budget + shape from the client's own records. Best-effort.
+  try {
+    const admin = createAdminClient()
+    const [bizRes, clientRes] = await Promise.all([
+      admin.from('businesses').select('monthly_budget').eq('client_id', clientId).maybeSingle(),
+      admin.from('clients').select('shape_concept, shape_footprint').eq('id', clientId).maybeSingle(),
+    ])
+    const mb = Number((bizRes.data as { monthly_budget?: number | string | null } | null)?.monthly_budget)
+    if (Number.isFinite(mb) && mb > 0) facts.budgetMonthly = Math.round(mb)
+    const c = clientRes.data as { shape_concept?: string | null; shape_footprint?: string | null } | null
+    if (deliveryLedShape(c?.shape_concept, c?.shape_footprint)) facts.deliveryLed = true
+  } catch { /* no budget/shape facts */ }
+  return facts
+}
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -44,11 +72,13 @@ export async function GET(req: NextRequest) {
     names: shipped.map((c) => c.draft.name).filter((n): n is string => !!n),
   }
 
+  const facts = await assembleRankerFacts(clientId).catch(() => ({} as RankerFacts))
+
   try {
     const ctx = await assemblePlanningContext(clientId, request)
-    const { recommended, source } = await recommendCreateItems(ctx, moment, active)
+    const { recommended, source } = await recommendCreateItems(ctx, moment, active, facts)
     return NextResponse.json({ recommended, source })
   } catch {
-    return NextResponse.json({ recommended: rulesRecommend(fallbackPlanningContext(clientId, request), moment, active), source: 'rules' })
+    return NextResponse.json({ recommended: rulesRecommend(fallbackPlanningContext(clientId, request), moment, active, facts), source: 'rules' })
   }
 }

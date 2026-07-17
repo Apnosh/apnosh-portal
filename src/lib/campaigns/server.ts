@@ -175,10 +175,20 @@ export async function getCampaign(id: string): Promise<SavedCampaign | null> {
 
 export async function createCampaign(clientId: string, createdBy: string | null, draft: CampaignDraft): Promise<string> {
   const admin = createAdminClient()
+  // Honor the owner's onboarding approval preference ("I want to see everything" →
+  // approve-first). Previously every campaign defaulted to hands-off with auto-signed
+  // concepts, so the choice was collected and ignored. Best-effort; the owner can still
+  // change it per campaign on the detail page.
+  let creativeControl: string | null = null
+  try {
+    const { data: prof } = await admin.from('client_profiles').select('approval_type').eq('client_id', clientId).maybeSingle()
+    if ((prof as { approval_type?: string | null } | null)?.approval_type === 'full') creativeControl = 'approve_concept'
+  } catch { /* default stands */ }
   const { data: c, error } = await admin
     .from('campaigns')
     .insert({
       client_id: clientId,
+      ...(creativeControl ? { creative_control: creativeControl } : {}),
       name: draft.name,
       intent: draft.intent,
       path: draft.path,

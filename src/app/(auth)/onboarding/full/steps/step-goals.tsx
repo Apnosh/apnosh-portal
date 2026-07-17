@@ -1,7 +1,7 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
-import { type OnboardingData, GOAL_CHIPS, SUCCESS_CHIPS, TIMELINE_CHIPS } from '../data'
+import { type OnboardingData, GOAL_CHIPS, SUCCESS_CHIPS, TIMELINE_CHIPS, BUDGET_CHIPS } from '../data'
 import { Question, SingleChipGroup, ChipGroup, Input, FieldLabel } from '../ui'
 
 interface Props {
@@ -67,6 +67,18 @@ export default function StepGoals({ data, update, nav }: Props) {
           options={TIMELINE_CHIPS}
           selected={data.timeline}
           onSelect={(v) => update('timeline', v)}
+        />
+      </div>
+
+      {/* The one budget question. Feeds the over-budget guard and the store's picks,
+          so nothing over their number ever gets recommended or sneaks into a cart. */}
+      <div className="mt-5">
+        <FieldLabel>About how much can you spend on marketing each month?</FieldLabel>
+        <p className="text-[12px] mb-2" style={{ color: '#999' }}>We only suggest things that fit your number. You can change it anytime.</p>
+        <SingleChipGroup
+          options={BUDGET_CHIPS}
+          selected={data.marketing_budget}
+          onSelect={(v) => update('marketing_budget', v)}
         />
       </div>
       {nav}
