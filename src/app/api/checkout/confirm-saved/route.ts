@@ -31,6 +31,26 @@ export async function POST(req: NextRequest) {
   const card = await getSavedCard(row.stripe_customer_id as string)
   if (!card) return NextResponse.json({ error: 'No card on file. Enter a card instead.' }, { status: 400 })
 
+  // Monthly-only checkout (SetupIntent — no charge today): confirm the card on file so the
+  // subscription can start from it after ship. Same requires_action handling as a charge.
+  if (paymentIntentId.startsWith('seti_')) {
+    try {
+      const si = await stripe.setupIntents.confirm(paymentIntentId, { payment_method: card.id })
+      if (si.status === 'succeeded') return NextResponse.json({ status: 'succeeded' })
+      if (si.status === 'requires_action') {
+        return NextResponse.json({ status: 'requires_action', clientSecret: si.client_secret })
+      }
+      return NextResponse.json({ status: si.status, error: 'That card could not be set up. Try another card.' }, { status: 402 })
+    } catch (e) {
+      const err = e as { code?: string; raw?: { setup_intent?: { client_secret?: string } }; message?: string }
+      const secret = err?.raw?.setup_intent?.client_secret
+      if (err?.code === 'authentication_required' && secret) {
+        return NextResponse.json({ status: 'requires_action', clientSecret: secret })
+      }
+      return NextResponse.json({ status: 'failed', error: err?.message || 'That card was declined. Try another card.' }, { status: 402 })
+    }
+  }
+
   try {
     // On-session: the customer IS present at checkout (they tapped Place order). Confirming
     // off_session would conflict with the PaymentIntent's setup_future_usage (card-saving), and

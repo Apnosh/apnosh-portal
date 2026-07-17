@@ -56,18 +56,62 @@ export async function POST(req: NextRequest) {
   // optional per campaign) + any admin agreement/input gates. Never throws.
   const gates = await resolveGatesForDraft(draft).catch(() => ({ booking: null, custom: [] }))
 
-  // Free order (owner-run/DIY lanes): nothing to charge. The client ships via the normal rail.
-  if (bill.preTaxCents <= 0) {
+  // Free order (owner-run/DIY lanes): nothing to charge NOW and nothing monthly. The client ships
+  // via the normal rail. A monthly-only cart is NOT free — it must take a card + consent below so
+  // the subscription really starts (previously it rode this path and never billed).
+  if (bill.preTaxCents <= 0 && bill.perMonthCents <= 0) {
     return NextResponse.json({
       free: true,
       breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
-      monthlyCents: bill.perMonthCents,
+      monthlyCents: 0,
       gates,
     })
   }
 
   const cust = await ensureCheckoutCustomer(clientId)
   if ('error' in cust) return NextResponse.json({ error: cust.error }, { status: 500 })
+
+  // Monthly-only cart ($0 one-time, $X/mo): collect the card with a SetupIntent (no charge today);
+  // the subscription starts from that saved card right after ship, exactly like a paid order.
+  if (bill.preTaxCents <= 0) {
+    try {
+      const si = await stripe.setupIntents.create({
+        customer: cust.customerId,
+        usage: 'off_session',
+        automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+        description: `Apnosh — ${draft.name || 'campaign'} (monthly services)`,
+        metadata: { clientId, kind: 'campaign_checkout_setup' },
+      })
+      const { error: insErr } = await paymentsTable().insert({
+        client_id: clientId,
+        stripe_payment_intent_id: si.id,
+        stripe_customer_id: cust.customerId,
+        subtotal_cents: 0,
+        service_fee_cents: 0,
+        tax_cents: 0,
+        total_cents: 0,
+        status: 'pending',
+        draft,
+      })
+      if (insErr) {
+        await stripe.setupIntents.cancel(si.id).catch(() => {})
+        return NextResponse.json({ error: 'Checkout is not set up yet (payments table missing). Apply migration 215 and try again.' }, { status: 500 })
+      }
+      const savedCard = await getSavedCard(cust.customerId)
+      return NextResponse.json({
+        setupOnly: true,
+        paymentIntentId: si.id,
+        clientSecret: si.client_secret,
+        publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
+        breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
+        monthlyCents: bill.perMonthCents,
+        savedCard,
+        gates,
+      })
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })
+    }
+  }
 
   try {
     const tax = await computeTaxCents({ preTaxCents: bill.preTaxCents, customerId: cust.customerId })

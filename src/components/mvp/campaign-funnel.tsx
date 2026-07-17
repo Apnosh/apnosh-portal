@@ -64,6 +64,15 @@ export interface CampaignFunnelProps {
       adding plays (more reach / conversion) visibly enlarges the whole thing. */
   refReach?: number
   height?: number
+  /** How the numbers are framed:
+      'projected' (default) — the demo/mock: computed counts + Revenue + ROI show plainly;
+      'example'   — a real pre-purchase campaign: projections show, labeled an example;
+      'gathering' — a SHIPPED real campaign: NO computed counts/Revenue/ROI (they would be
+      fabricated); the header says "Still gathering" until real numbers exist. */
+  moneyMode?: 'projected' | 'example' | 'gathering'
+  /** The owner's real average spend per visit (from Insights), used for projected
+      revenue when known; null falls back to the generic example figure. */
+  spendPerHead?: number | null
 }
 
 const DEFAULT_STAGES: FunnelStage[] = [
@@ -134,7 +143,7 @@ const CAP: Record<string, number> = { clicked: 0.85, reserved: 0.6, turnedup: 0.
 const SPEND_PER_HEAD = 38
 
 /* Recompute the whole funnel from the chosen pieces. */
-function computeLive(template: FunnelStage[], selected: Record<string, string[]>, pieces: Record<string, Piece[]>, currency: string) {
+function computeLive(template: FunnelStage[], selected: Record<string, string[]>, pieces: Record<string, Piece[]>, currency: string, moneyMode: 'projected' | 'example' | 'gathering' = 'projected', spendPerHead?: number | null) {
   const sel = (k: string) => selected[k] ?? []
   const piece = (k: string, id: string) => (pieces[k] ?? []).find((p) => p.id === id)
   const rate = (k: string) => {
@@ -160,7 +169,20 @@ function computeLive(template: FunnelStage[], selected: Record<string, string[]>
 
   let cost = 0
   for (const k of Object.keys(pieces)) for (const id of sel(k)) { const p = piece(k, id); cost += (p?.cost ?? 0) + (p?.extras?.reduce((s, e) => s + e.amount, 0) ?? 0) }
-  const revenue = c3 * SPEND_PER_HEAD
+
+  // A SHIPPED real campaign shows NO computed counts or money — they would be fabricated.
+  // The header says "Still gathering"; the canvas draws the plan's shape without numbers.
+  if (moneyMode === 'gathering') {
+    return {
+      stages: stages.map((st) => ({ ...st, conv: undefined, warn: undefined })),
+      stats: [] as { value: string; label: string }[],
+      roi: null as string | null,
+      hideNumbers: true,
+    }
+  }
+
+  const perHead = spendPerHead && spendPerHead > 0 ? spendPerHead : SPEND_PER_HEAD
+  const revenue = c3 * perHead
   const money = (n: number) => currency + (n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n))
   const stats = [
     { value: c0.toLocaleString(), label: 'Reached' },
@@ -168,8 +190,8 @@ function computeLive(template: FunnelStage[], selected: Record<string, string[]>
     { value: c3.toLocaleString(), label: 'Turned up' },
     { value: money(revenue), label: 'Revenue' },
   ]
-  const roi = cost > 0 ? `${Math.round(revenue / cost)}×` : 'free'
-  return { stages, stats, roi }
+  const roi: string | null = cost > 0 ? `${Math.round(revenue / cost)}×` : 'free'
+  return { stages, stats, roi, hideNumbers: false }
 }
 
 /* A person flowing DOWN the funnel. `lane` is a fixed horizontal position in
@@ -190,6 +212,8 @@ export default function CampaignFunnel({
   readOnly = false,
   refReach = 1800,
   height = 620,
+  moneyMode = 'projected',
+  spendPerHead = null,
 }: CampaignFunnelProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
@@ -215,7 +239,7 @@ export default function CampaignFunnel({
 
   /* the funnel counts, conversions, revenue + ROI all derive from the chosen
      pieces, so building a stage visibly moves the whole funnel */
-  const { stages, stats, roi } = useMemo(() => computeLive(template, selected, pieces, currency), [template, selected, pieces, currency])
+  const { stages, stats, roi, hideNumbers } = useMemo(() => computeLive(template, selected, pieces, currency, moneyMode, spendPerHead), [template, selected, pieces, currency, moneyMode, spendPerHead])
 
   const geom = useRef({ W: 400 })
 
@@ -418,7 +442,8 @@ export default function CampaignFunnel({
       ctx.fillText(fit(ctx, s.label, W - labelX - 14), labelX, oy - 14)
       ctx.fillStyle = i === concernStage ? CONCERN : amber ? C.amberInk : C.greenInk
       ctx.font = `600 30px ${DISPLAY}`
-      ctx.fillText(s.count.toLocaleString(), labelX, oy + 11)
+      // A shipped campaign draws NO invented counts — the shape is the plan, the numbers wait.
+      ctx.fillText(hideNumbers ? '—' : s.count.toLocaleString(), labelX, oy + 11)
       if (s.sub) {
         ctx.fillStyle = C.faint
         ctx.font = '500 10px Inter, sans-serif'
@@ -452,7 +477,7 @@ export default function CampaignFunnel({
         }
       }
     }
-  }, [layout, stages, height, spreadAt, rAt, centerXAt])
+  }, [layout, stages, height, spreadAt, rAt, centerXAt, hideNumbers])
 
   const resize = useCallback(() => {
     const cv = canvasRef.current
@@ -576,19 +601,34 @@ export default function CampaignFunnel({
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>{campaignName}</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,.72)', marginTop: 2 }}>{kicker}</div>
           </div>
-          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 21, lineHeight: 1, color: '#f0c977' }}>{roi}</div>
-            <div style={{ fontSize: 8.5, letterSpacing: '.14em', color: 'rgba(255,255,255,.6)', marginTop: 2 }}>ROI</div>
-          </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', marginTop: 15, background: 'rgba(255,255,255,.09)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, overflow: 'hidden', backdropFilter: 'blur(6px)' }}>
-          {stats.map((s, i) => (
-            <div key={s.label} style={{ padding: '9px 6px', textAlign: 'center', borderLeft: i ? '1px solid rgba(255,255,255,.12)' : 'none' }}>
-              <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 8.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.6)', marginTop: 4 }}>{s.label}</div>
+          {roi != null && (
+            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+              <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 21, lineHeight: 1, color: '#f0c977' }}>{roi}</div>
+              <div style={{ fontSize: 8.5, letterSpacing: '.14em', color: 'rgba(255,255,255,.6)', marginTop: 2 }}>{moneyMode === 'example' ? 'ROI · EXAMPLE' : 'ROI'}</div>
             </div>
-          ))}
+          )}
         </div>
+        {stats.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${stats.length},1fr)`, marginTop: 15, background: 'rgba(255,255,255,.09)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, overflow: 'hidden', backdropFilter: 'blur(6px)' }}>
+            {stats.map((s, i) => (
+              <div key={s.label} style={{ padding: '9px 6px', textAlign: 'center', borderLeft: i ? '1px solid rgba(255,255,255,.12)' : 'none' }}>
+                <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, lineHeight: 1 }}>{s.value}</div>
+                <div style={{ fontSize: 8.5, letterSpacing: '.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,.6)', marginTop: 4 }}>{s.label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {moneyMode === 'example' && (
+          <div style={{ marginTop: 8, fontSize: 11, color: 'rgba(255,255,255,.78)', lineHeight: 1.4 }}>
+            These numbers are an example, not your numbers.{spendPerHead && spendPerHead > 0 ? ` Revenue uses your average check ($${spendPerHead}).` : ''}
+          </div>
+        )}
+        {moneyMode === 'gathering' && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 15, background: 'rgba(255,255,255,.09)', border: '1px solid rgba(255,255,255,.14)', borderRadius: 12, padding: '10px 12px' }}>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 14 }}>Still gathering</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,.72)' }}>Real numbers show here once they come in. Nothing here is made up.</div>
+          </div>
+        )}
       </div>
 
       <div style={{ padding: '12px 18px 0', fontSize: 12.5, color: C.mute, lineHeight: 1.5 }}>{intro}</div>
@@ -608,6 +648,7 @@ export default function CampaignFunnel({
           selected={selected[stages[openStage].key] ?? []}
           readOnly={readOnly}
           currency={currency}
+          hideCount={hideNumbers}
           onToggle={(id) => setSelected((prev) => {
             const key = stages[openStage].key
             const cur = prev[key] ?? []
@@ -623,7 +664,7 @@ export default function CampaignFunnel({
 /* The builder sheet for one funnel stage — add/remove the marketing pieces
    that drive it, the same "pick your plays" concept as the campaign builder.
    Plays + prices come from the real catalog; read-only when the plan is locked. */
-function StageBuilder({ stage, pieces, selected, onToggle, onClose, readOnly = false, currency = '£' }: { stage: FunnelStage; pieces: Piece[]; selected: string[]; onToggle: (id: string) => void; onClose: () => void; readOnly?: boolean; currency?: string }) {
+function StageBuilder({ stage, pieces, selected, onToggle, onClose, readOnly = false, currency = '£', hideCount = false }: { stage: FunnelStage; pieces: Piece[]; selected: string[]; onToggle: (id: string) => void; onClose: () => void; readOnly?: boolean; currency?: string; hideCount?: boolean }) {
   const list = readOnly ? pieces.filter((p) => selected.includes(p.id)) : pieces
   const amber = stage.tone === 'amber'
   /* honest price label: "/mo" for a subscription, "/ea" for a per-unit charge,
@@ -641,7 +682,7 @@ function StageBuilder({ stage, pieces, selected, onToggle, onClose, readOnly = f
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 6, background: '#fff', borderTopLeftRadius: 18, borderTopRightRadius: 18, boxShadow: '0 -10px 34px rgba(0,0,0,.16)', maxHeight: '82%', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '13px 16px 11px', borderBottom: `0.5px solid ${C.line}`, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: amber ? C.amberDk : C.greenDk }}>{stage.label} · {stage.count.toLocaleString()}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: amber ? C.amberDk : C.greenDk }}>{hideCount ? stage.label : `${stage.label} · ${stage.count.toLocaleString()}`}</div>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, marginTop: 3 }}>{readOnly ? 'What drove this stage' : BUILDER_Q[stage.key]}</div>
           </div>
           <button onClick={onClose} aria-label="Close" style={{ width: 30, height: 30, borderRadius: 99, border: 'none', background: C.bg, color: C.mute, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><X size={16} /></button>

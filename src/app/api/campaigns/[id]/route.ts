@@ -144,9 +144,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   //   'verify' → a PaymentIntent was presented → confirm the charge succeeded + covers the bill, or 402
   //   'refuse' → a billable, non-legacy ship with NO payment → block (it must go through checkout)
   if (wantsShip) {
-    const preTaxCents = checkoutBill({ items: campaign.draft.items }).preTaxCents
+    const { preTaxCents, perMonthCents } = checkoutBill({ items: campaign.draft.items })
     const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
-    const gate = shipBillingGate({ preTaxCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt })
+    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt })
     if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT }, { status: 402 })
     if (gate === 'verify') {
       const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId: paymentIntentId!, clientId: campaign.clientId, campaignId: id, preTaxCents })

@@ -18,8 +18,9 @@ import { loadStripe, type StripeAddressElementChangeEvent } from '@stripe/stripe
 import { Elements, AddressElement, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { saveAndShip } from '@/lib/campaigns/builder/ship'
 import { clearPlan } from '@/lib/campaigns/builder/plan-draft'
-import { passthroughNotesForLines } from '@/lib/campaigns/builder/item-prices'
+import { passthroughNotesForLines, plainCostNote, passthroughMonthlyMinimumCents } from '@/lib/campaigns/builder/item-prices'
 import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
+import { draftNeedsShoot } from '@/lib/campaigns/gates/derive'
 import { summarize, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
 import type { ResolvedGates, CustomGate } from '@/lib/campaigns/gates/config'
 
@@ -40,6 +41,8 @@ interface Breakdown { subtotalCents: number; serviceFeeCents: number; taxCents: 
 interface SavedCard { brand: string; last4: string }
 interface PrepareResult {
   free?: boolean
+  /** Monthly-only cart: a SetupIntent saves the card (no charge today); the subscription bills it. */
+  setupOnly?: boolean
   paymentIntentId?: string
   clientSecret?: string
   publishableKey?: string | null
@@ -75,12 +78,12 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
   const [prep, setPrep] = useState<PrepareResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Set once the order is placed (paid + shipped) — flips the whole overlay to the confirmation.
-  const [placed, setPlaced] = useState<{ campaignId: string; breakdown: Breakdown } | null>(null)
+  const [placed, setPlaced] = useState<{ campaignId: string; breakdown: Breakdown; bookedSlot: Hold | null } | null>(null)
   const started = useRef(false)
 
   // The cart is done the moment the order is placed, so empty it right away (before the owner
   // navigates off the confirmation) — reopening the store must not re-checkout the same plan.
-  const onPlaced = (campaignId: string, breakdown: Breakdown) => { clearPlan(); setPlaced({ campaignId, breakdown }) }
+  const onPlaced = (campaignId: string, breakdown: Breakdown, bookedSlot: Hold | null = null) => { clearPlan(); setPlaced({ campaignId, breakdown, bookedSlot }) }
 
   useEffect(() => {
     if (started.current) return
@@ -111,6 +114,8 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
             restaurant={restaurant}
             draft={draft}
             breakdown={placed.breakdown}
+            setupOnly={!!prep?.setupOnly}
+            bookedSlot={placed.bookedSlot}
             onSetup={() => onSuccess(placed.campaignId, 'setup')}
             onViewCampaign={() => onSuccess(placed.campaignId, 'campaign')}
           />
@@ -119,7 +124,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
             <Header onBack={onCancel} />
             {error && !prep && <ErrorBox message={error} onBack={onCancel} />}
             {!error && !prep && <Loading />}
-            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} monthlyCents={prep.monthlyCents ?? 0} gates={prep.gates} onPlaced={onPlaced} />}
+            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} onPlaced={onPlaced} />}
             {prep && !prep.free && prep.clientSecret && prep.publishableKey && (
               <Elements
                 stripe={stripePromiseFor(prep.publishableKey)}
@@ -133,6 +138,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
                   paymentIntentId={prep.paymentIntentId!}
                   initialBreakdown={prep.breakdown}
                   monthlyCents={prep.monthlyCents ?? 0}
+                  setupOnly={!!prep.setupOnly}
                   savedCard={prep.savedCard ?? null}
                   gates={prep.gates}
                   onPlaced={onPlaced}
@@ -188,7 +194,28 @@ function BillRow({ label, value, strong, muted }: { label: string; value: string
   )
 }
 
-function BillCard({ b, monthlyCents, taxPending, costNotes }: { b: Breakdown; monthlyCents: number; taxPending: boolean; costNotes?: string[] }) {
+function BillCard({ b, monthlyCents, taxPending, costNotes, setupOnly, adSpendMinCents = 0 }: { b: Breakdown; monthlyCents: number; taxPending: boolean; costNotes?: string[]; setupOnly?: boolean; adSpendMinCents?: number }) {
+  // ONE real monthly total including known ad-spend minimums — never a surprise later.
+  const adTotalLine = monthlyCents > 0 && adSpendMinCents > 0
+    ? <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, fontWeight: 600, color: INK, marginTop: 6 }}>With ad spend, about {fmt(monthlyCents + adSpendMinCents)}+/mo.</div>
+    : null
+  if (setupOnly) {
+    // Monthly-only order: no one-time charge, the subscription bills the card starting today.
+    return (
+      <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '13px 16px 15px', marginBottom: 16 }}>
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>Order summary</div>
+        <BillRow label="Monthly services" value={`${fmt(monthlyCents)}/mo`} />
+        {(costNotes ?? []).map((n) => (
+          <div key={n} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, padding: '2px 0 4px' }}>Plus {n}</div>
+        ))}
+        <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}>
+          <BillRow label="First month, billed today" value={fmt(monthlyCents)} strong />
+        </div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Your card is billed {fmt(monthlyCents)} each month starting today. Cancel anytime.</div>
+        {adTotalLine}
+      </div>
+    )
+  }
   return (
     <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '13px 16px 15px', marginBottom: 16 }}>
       <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>Order summary</div>
@@ -196,7 +223,7 @@ function BillCard({ b, monthlyCents, taxPending, costNotes }: { b: Breakdown; mo
       <BillRow label="Service fee (10%)" value={fmt(b.serviceFeeCents)} />
       <BillRow label="Tax" value={taxPending ? 'Enter address' : fmt(b.taxCents)} muted={taxPending} />
       {monthlyCents > 0 && <BillRow label="Monthly services" value={`${fmt(monthlyCents)}/mo`} muted />}
-      {/* Pass-through costs (billed at cost), quoted verbatim from the catalog — the consent
+      {/* Pass-through costs in plain words, from the catalog's own notes — the consent
           below must be informed, so real extra spend is on the bill, not in fine print. */}
       {(costNotes ?? []).map((n) => (
         <div key={n} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, padding: '2px 0 4px' }}>Plus {n}</div>
@@ -205,6 +232,7 @@ function BillCard({ b, monthlyCents, taxPending, costNotes }: { b: Breakdown; mo
         <BillRow label="Total due today" value={fmt(b.totalCents)} strong />
       </div>
       {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Monthly services bill {fmt(monthlyCents)}/mo to this card starting today, as a separate charge. Cancel anytime.</div>}
+      {adTotalLine}
     </div>
   )
 }
@@ -230,13 +258,15 @@ const fmtTime12 = (hhmm: string) => {
  * ("we'll reach out to schedule") — never a fake slot, and never a silent block. `onBlockingChange`
  * tells the pay button whether it must wait for a held slot.
  */
-function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange }: {
+function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange, onHold }: {
   clientId: string
   paymentIntentId: string
   /** The server-resolved booking gate for this order (respects the admin's per-campaign config), or
    *  null when none applies (not a shoot, or the admin turned the gate off). */
   booking: { gateKind: string; required: boolean } | null
   onBlockingChange: (blocking: boolean) => void
+  /** Reports the currently held slot up (so the confirmation can replay it). */
+  onHold?: (h: Hold | null) => void
 }) {
   const needs = !!booking
   const gateKind = booking?.gateKind ?? 'shoot'
@@ -290,7 +320,7 @@ function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange }: {
         return
       }
       const h: Hold = { bookingId: j.bookingId, date: j.slot.date, start: j.slot.start, end: j.slot.end, timezone: j.slot.timezone }
-      setHold(h); onBlockingChange(false)
+      setHold(h); onBlockingChange(false); onHold?.(h)
     } catch {
       setErr('Could not hold that time. Try again.')
     } finally { setPicking(null) }
@@ -322,7 +352,7 @@ function BookingGate({ clientId, paymentIntentId, booking, onBlockingChange }: {
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, fontWeight: 600, color: INK }}>{fmtDayShort(hold.date)} · {fmtTime12(hold.start)}</div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB }}>Held for 30 min{hold.timezone ? ` · ${hold.timezone}` : ''}. Confirmed when you pay.</div>
           </div>
-          <button onClick={() => { setHold(null); onBlockingChange(required) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: MINT_DARK, padding: 0 }}>Change</button>
+          <button onClick={() => { setHold(null); onBlockingChange(required); onHold?.(null) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 600, color: MINT_DARK, padding: 0 }}>Change</button>
         </div>
       )}
 
@@ -421,7 +451,7 @@ function gateExecutionPatch(gates: CustomGate[], answers: Record<string, string>
   return out
 }
 
-function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId, initialBreakdown, monthlyCents, savedCard, gates, onPlaced }: {
+function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId, initialBreakdown, monthlyCents, setupOnly, savedCard, gates, onPlaced }: {
   clientId: string
   draft: CampaignDraft
   restaurant?: string
@@ -429,14 +459,16 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   paymentIntentId: string
   initialBreakdown: Breakdown
   monthlyCents: number
+  /** Monthly-only order: the clientSecret is a SetupIntent (save the card, no charge today). */
+  setupOnly?: boolean
   savedCard: SavedCard | null
   gates?: ResolvedGates
-  onPlaced: (campaignId: string, breakdown: Breakdown) => void
+  onPlaced: (campaignId: string, breakdown: Breakdown, bookedSlot?: Hold | null) => void
 }) {
   const stripe = useStripe()
   const elements = useElements()
   const [bill, setBill] = useState<Breakdown>(initialBreakdown)
-  const [taxPending, setTaxPending] = useState(initialBreakdown.taxCents === 0)
+  const [taxPending, setTaxPending] = useState(!setupOnly && initialBreakdown.taxCents === 0)
   // 'saved' = one-tap card on file; 'new' = enter a card. Default to the saved card when there is one.
   const [mode, setMode] = useState<'saved' | 'new'>(savedCard ? 'saved' : 'new')
   const [busy, setBusy] = useState(false)
@@ -453,16 +485,24 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   const customGates = gates?.custom ?? []
   const [bookingBlocking, setBookingBlocking] = useState(!!gates?.booking?.required)
   const [gateAnswers, setGateAnswers] = useState<Record<string, string>>({})
+  // The shoot slot currently held (if any), so the confirmation can replay exactly what was booked.
+  const [heldSlot, setHeldSlot] = useState<Hold | null>(null)
   // Monthly consent (G4): a plan with recurring services starts a real subscription from this card at
   // checkout, so the client must explicitly agree to the $X/mo before we place the order.
   const needsMonthlyConsent = monthlyCents > 0
   const [monthlyConsent, setMonthlyConsent] = useState(false)
+  // Pass-through costs in plain words + the real monthly total including known ad-spend minimums,
+  // shown ON the bill and INSIDE the consent so the agreed number is the real number.
+  const rawCostNotes = passthroughNotesForLines(draft.items)
+  const costNotes = rawCostNotes.map(plainCostNote)
+  const adSpendMinCents = passthroughMonthlyMinimumCents(rawCostNotes)
   const gateBlocking = bookingBlocking || customGatesBlocking(customGates, gateAnswers) || (needsMonthlyConsent && !monthlyConsent)
 
   // Recompute tax + update the charge when the billing address is complete (new-card path).
+  // A setup-only (monthly-only) order charges nothing today, so there is no tax to compute.
   const onAddress = async (e: StripeAddressElementChangeEvent) => {
     billing.current = { name: e.value.name, address: e.value.address as unknown as Record<string, unknown> }
-    if (!e.complete) return
+    if (!e.complete || setupOnly) return
     const seq = ++taxSeq.current
     try {
       const res = await fetch('/api/checkout/tax', {
@@ -499,7 +539,7 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
         body: JSON.stringify({ paymentIntentId, campaignId: shippedIdRef.current }),
       })
     } catch { /* order is shipped + paid; the webhook backstop reconciles the link */ }
-    onPlaced(shippedIdRef.current!, bill)
+    onPlaced(shippedIdRef.current!, bill, heldSlot)
   }
 
   const blockReason = bookingBlocking ? 'Pick a shoot time first'
@@ -517,15 +557,16 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
     if (paidRef.current || shippedIdRef.current) { await finishOrder(); return }
 
     if (mode === 'saved') {
-      setStatus('Charging your card…')
+      setStatus(setupOnly ? 'Setting up your card…' : 'Charging your card…')
       try {
         const res = await fetch('/api/checkout/confirm-saved', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paymentIntentId }),
         })
         const j = (await res.json().catch(() => ({}))) as { status?: string; clientSecret?: string; error?: string }
         if (j.status === 'requires_action' && j.clientSecret) {
-          const { error: naErr, paymentIntent } = await stripe.handleNextAction({ clientSecret: j.clientSecret })
-          if (naErr || paymentIntent?.status !== 'succeeded') { setError(naErr?.message || 'We couldn’t verify that card. Try a different card.'); setBusy(false); setStatus(null); return }
+          const { error: naErr, paymentIntent, setupIntent } = await stripe.handleNextAction({ clientSecret: j.clientSecret })
+          const done = setupOnly ? setupIntent?.status === 'succeeded' : paymentIntent?.status === 'succeeded'
+          if (naErr || !done) { setError(naErr?.message || 'We couldn’t verify that card. Try a different card.'); setBusy(false); setStatus(null); return }
         } else if (j.status !== 'succeeded') {
           setError(j.error || 'That card was declined. Try a different card.'); setBusy(false); setStatus(null); return
         }
@@ -538,9 +579,25 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
 
     // New-card path (Stripe Payment Element).
     if (!elements) { setBusy(false); return }
-    setStatus('Charging your card…')
+    setStatus(setupOnly ? 'Setting up your card…' : 'Charging your card…')
     const { error: submitErr } = await elements.submit()
     if (submitErr) { setError(submitErr.message || 'Please check your card details.'); setBusy(false); setStatus(null); return }
+    if (setupOnly) {
+      // Monthly-only order: SAVE the card (SetupIntent). No charge today — the subscription
+      // bills this card right after the order ships.
+      const { error: setupErr, setupIntent } = await stripe.confirmSetup({
+        elements,
+        redirect: 'if_required',
+        confirmParams: {
+          return_url: `${window.location.origin}/dashboard/campaigns`,
+          payment_method_data: { billing_details: { name: billing.current.name, address: billing.current.address as never } },
+        },
+      })
+      if (setupErr) { setError(setupErr.message || 'We couldn’t save that card. You were not charged.'); setBusy(false); setStatus(null); return }
+      if (!setupIntent || setupIntent.status !== 'succeeded') { setError('Card setup didn’t complete. You were not charged.'); setBusy(false); setStatus(null); return }
+      paidRef.current = true
+      await finishOrder(); return
+    }
     const { error: payErr, paymentIntent } = await stripe.confirmPayment({
       elements,
       redirect: 'if_required',
@@ -559,14 +616,19 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
     <>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 16px' }}>
         {restaurant && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10 }}>Placing your order for <span style={{ fontWeight: 600, color: INK }}>{restaurant}</span></div>}
-        <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} booking={gates?.booking ?? null} onBlockingChange={setBookingBlocking} />
+        <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} booking={gates?.booking ?? null} onBlockingChange={setBookingBlocking} onHold={setHeldSlot} />
         <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
-        <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} costNotes={passthroughNotesForLines(draft.items)} />
+        <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} costNotes={costNotes} setupOnly={setupOnly} adSpendMinCents={adSpendMinCents} />
         {needsMonthlyConsent && (
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 14, padding: '12px 14px', marginBottom: 16 }}>
             <input type="checkbox" checked={monthlyConsent} onChange={(e) => setMonthlyConsent(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: MINT, flexShrink: 0 }} />
             <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: INK, lineHeight: 1.5 }}>
               I agree to <b style={{ fontWeight: 700 }}>{fmt(monthlyCents)}/mo</b> for monthly services starting today, billed to this card each month. Cancel anytime.
+              {adSpendMinCents > 0 && (
+                <span style={{ display: 'block', color: SUB, marginTop: 3 }}>
+                  Ad money is extra, paid at cost. With ad spend, plan on about <b style={{ fontWeight: 700, color: INK }}>{fmt(monthlyCents + adSpendMinCents)}+/mo</b>.
+                </span>
+              )}
             </span>
           </label>
         )}
@@ -615,15 +677,15 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
           disabled={busy || !stripe || gateBlocking}
           style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || !stripe || gateBlocking ? 'default' : 'pointer', background: busy ? MINT_DARK : (gateBlocking ? FAINT : MINT), color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: gateBlocking ? 'none' : '0 8px 22px rgba(74,189,152,0.42)' }}
         >
-          {busy ? (status ?? 'Working…') : gateBlocking ? (blockReason ?? 'Complete the steps above') : `Place order · ${fmt(bill.totalCents)}`}
+          {busy ? (status ?? 'Working…') : gateBlocking ? (blockReason ?? 'Complete the steps above') : setupOnly ? `Place order · ${fmt(monthlyCents)}/mo` : `Place order · ${fmt(bill.totalCents)}`}
         </button>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>Your card is charged now. Your campaign starts right after.</div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>{setupOnly ? 'Your monthly services bill to this card starting today. Your campaign starts right after.' : 'Your card is charged now. Your campaign starts right after.'}</div>
       </div>
     </>
   )
 }
 
-function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, gates, onPlaced }: { clientId: string; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; monthlyCents: number; gates?: ResolvedGates; onPlaced: (id: string, breakdown: Breakdown) => void }) {
+function FreeCheckout({ clientId, draft, producerChoices, gates, onPlaced }: { clientId: string; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; gates?: ResolvedGates; onPlaced: (id: string, breakdown: Breakdown) => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const customGates = gates?.custom ?? []
@@ -649,8 +711,8 @@ function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, gates, o
         <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>Order summary</div>
           <BillRow label="Total due today" value="Free" strong />
-          {/* Free order: no card is charged here, so no subscription starts automatically. Say so. */}
-          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{fmt(monthlyCents)}/mo in monthly services. We set up billing with you before they start.</div>}
+          {/* The free path only fires when there is NO monthly bill (a monthly-only cart goes
+              through the card + consent path instead), so this bill is genuinely $0. */}
         </div>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: SUB, lineHeight: 1.5, marginBottom: 16 }}>Everything in this plan is on you to run, so there’s nothing to pay now. Placing the order starts your campaign.</div>
         <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
@@ -669,10 +731,14 @@ function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, gates, o
  * what was actually paid, and the handoff into the "A few things from you" setup page. The go-live
  * estimate is the real one (goLivePhraseFor over the ordered items), not an invented date.
  */
-function Confirmation({ restaurant, draft, breakdown, onSetup, onViewCampaign }: {
+function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSlot, onSetup, onViewCampaign }: {
   restaurant?: string
   draft: CampaignDraft
   breakdown: Breakdown
+  /** Monthly-only order: nothing paid today, the subscription bills the saved card. */
+  setupOnly?: boolean
+  /** The shoot slot locked at checkout (if any) — replayed here so the owner sees what they booked. */
+  bookedSlot?: Hold | null
   onSetup: () => void
   onViewCampaign: () => void
 }) {
@@ -682,10 +748,17 @@ function Confirmation({ restaurant, draft, breakdown, onSetup, onViewCampaign }:
   const goLive = goLivePhraseFor(draft, { creatives: [], services: draft.items, bill: billSum }, today)
   const goLiveShort = goLive.replace(/^Live in /, '').replace(/^Starts in /, '')
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  const free = breakdown.totalCents <= 0
+  const free = breakdown.totalCents <= 0 && !setupOnly
+  // The "help us start faster" blurb reflects what THIS order actually needs: no "best time to
+  // film" on an order with no filming, and a booked slot means the film time is already set.
+  const needsFilm = draftNeedsShoot(draft) && !bookedSlot
+  const setupBlurb = needsFilm
+    ? 'Your go-live date, the best time to film, and the dishes to feature. Takes a minute, and you can do it later too.'
+    : 'Your go-live date and a few quick details. Takes a minute, and you can do it later too.'
 
   const steps: { state: 'done' | 'active' | 'todo'; title: string; sub: string }[] = [
     { state: 'done', title: 'Order placed', sub: todayLabel },
+    ...(bookedSlot ? [{ state: 'done' as const, title: 'Shoot booked', sub: `${fmtDayShort(bookedSlot.date)} · ${fmtTime12(bookedSlot.start)}${bookedSlot.timezone ? ` (${bookedSlot.timezone})` : ''}` }] : []),
     { state: 'active', title: 'We get to work', sub: 'Your team starts right away' },
     { state: 'todo', title: 'Goes live', sub: goLiveShort || 'We confirm the date once we start' },
   ]
@@ -724,8 +797,13 @@ function Confirmation({ restaurant, draft, breakdown, onSetup, onViewCampaign }:
 
         {/* what you paid */}
         <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '14px 16px', marginBottom: 14 }}>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 8 }}>{free ? 'Order summary' : 'Paid today'}</div>
-          {free ? (
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 8 }}>{free || setupOnly ? 'Order summary' : 'Paid today'}</div>
+          {setupOnly ? (
+            <>
+              <BillRow label="Monthly services" value={`${fmt(monthlyCents)}/mo`} />
+              <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}><BillRow label="First month, billed today" value={fmt(monthlyCents)} strong /></div>
+            </>
+          ) : free ? (
             <BillRow label="Total" value="Free" strong />
           ) : (
             <>
@@ -735,9 +813,9 @@ function Confirmation({ restaurant, draft, breakdown, onSetup, onViewCampaign }:
               <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}><BillRow label="Total paid" value={fmt(breakdown.totalCents)} strong /></div>
             </>
           )}
-          {/* Paid order: the subscription starts from this card today (G4). A free order takes no
-              card, so billing gets set up separately — the copy stays honest on both paths. */}
-          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{free ? `Plus ${fmt(monthlyCents)}/mo in monthly services. We set up billing with you before they start.` : `Plus ${fmt(monthlyCents)}/mo in monthly services, billed to this card starting today.`}</div>}
+          {/* Every path with a monthly took a card + consent at checkout (paid orders save the card
+              on the charge; monthly-only orders save it on a SetupIntent) — say exactly what bills. */}
+          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{setupOnly ? 'Billed to your card each month starting today. Cancel anytime.' : `Plus ${fmt(monthlyCents)}/mo in monthly services, billed to this card starting today.`}</div>}
         </div>
 
         {/* needs-you handoff */}
@@ -747,7 +825,7 @@ function Confirmation({ restaurant, draft, breakdown, onSetup, onViewCampaign }:
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: 600, color: INK }}>A few things from you help us start faster</div>
-            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#3f7d6a', marginTop: 2, lineHeight: 1.5 }}>Your go-live date, the best time to film, and the dishes to feature. Takes a minute, and you can do it later too.</div>
+            <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#3f7d6a', marginTop: 2, lineHeight: 1.5 }}>{setupBlurb}</div>
           </div>
         </div>
       </div>

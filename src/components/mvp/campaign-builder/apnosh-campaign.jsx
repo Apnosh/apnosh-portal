@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
-import { priceLabel, ITEM_PRICES, priceNotes, passthroughNotesForServices } from "@/lib/campaigns/builder/item-prices";
+import { priceLabel, ITEM_PRICES, priceNotes, passthroughNotesForServices, withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from "@/lib/campaigns/builder/item-prices";
 import { isProTier } from "@/lib/entitlements";
 import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
@@ -2354,17 +2354,19 @@ function planTags(p) {
   const pr = ITEM_PRICES[buildIdFor(p.id)];
   const creative = p.type === "content" || p.id === "shoot";
   let priceSaysCadence = false;
+  // One-time amounts show WITH the 10% checkout service fee folded in ("fee included"), so the
+  // number on the shelf is the number the card is charged (pre-tax) — never a cart surprise.
+  const oneTimeShown = pr ? withServiceFee(pr.oneTime) : 0;
   if (pr && (pr.oneTime > 0 || pr.perMonth > 0)) {
     if (pr.oneTime > 0 && pr.perMonth > 0) {
-      t.push({ label: `Setup $${pr.oneTime.toLocaleString()}`, accent: true });
+      t.push({ label: `Setup $${oneTimeShown.toLocaleString()}, fee included`, accent: true });
       t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
       priceSaysCadence = p.cad === "recurring";
     } else if (pr.perMonth > 0) {
       t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
       priceSaysCadence = p.cad === "recurring";
     } else {
-      t.push({ label: creative ? `Starting $${pr.oneTime.toLocaleString()}` : `$${pr.oneTime.toLocaleString()} one time`, accent: true });
-      priceSaysCadence = p.cad === "once";
+      t.push({ label: creative ? `Starting $${oneTimeShown.toLocaleString()}, fee included` : `$${oneTimeShown.toLocaleString()}, fee included`, accent: true });
     }
   }
   // Pass-through costs (Fix: honest ad spend): a card whose services bill real extra costs
@@ -2568,7 +2570,7 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
     <div style={{ paddingBottom: 26 }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
       <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
-      <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, lineHeight: 1.4 }}>You see the full price before you pay. Pay once at checkout and your team gets started.</div></div>
+      <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, lineHeight: 1.4 }}>You see the full price before you pay. Your card is only charged at checkout.</div></div>
       {!query && recsLoading && !recFeatured && (
         <div style={{ padding: "0 20px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, background: TOKENS.mintTint, border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "9px 13px" }}>
@@ -2806,6 +2808,18 @@ function doerTab(opt, tier) {
   return { lane, short: "Apnosh", price: m ? `$${m[1]}` : null, pro: false, detail: "We fix it all for you." };
 }
 
+/** Fee-included price label for a catalog id — the number the card is actually charged
+ *  (pre-tax). One-time amounts fold in the 10% service fee; monthly amounts have no fee. */
+function feeIncludedLabel(id) {
+  const pr = ITEM_PRICES[id];
+  if (!pr) return priceLabel(id);
+  const one = withServiceFee(pr.oneTime);
+  if (pr.oneTime > 0 && pr.perMonth > 0) return `$${one.toLocaleString()} + $${pr.perMonth.toLocaleString()}/mo, fee included`;
+  if (pr.perMonth > 0) return `$${pr.perMonth.toLocaleString()}/mo`;
+  if (pr.oneTime > 0) return `$${one.toLocaleString()}, fee included`;
+  return priceLabel(id);
+}
+
 /** The CTA's price label. Reuses ITEM_PRICES/priceLabel; the only extra rule mirrors
  *  planTags exactly: creative work prices as a floor ("Starting $X"). Either owner-run gbp
  *  lane (diy or ai) reads Free, matching the madlib's own free line. */
@@ -2814,7 +2828,14 @@ function pdpPrice(p, doer) {
   if (lane === "diy" || lane === "ai") return "Free";
   const pr = ITEM_PRICES[buildIdFor(p.id)];
   const creative = p.type === "content" || p.id === "shoot";
-  if (creative && pr && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${pr.oneTime.toLocaleString()}`;
+  // One-time amounts show WITH the 10% service fee folded in, so the buy box's number is the
+  // charged number (pre-tax) — same rule as the shelf pills.
+  if (!pr) return priceLabel(buildIdFor(p.id));
+  const oneShown = withServiceFee(pr.oneTime);
+  if (creative && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${oneShown.toLocaleString()}, fee included`;
+  if (pr.perMonth > 0 && pr.oneTime > 0) return `$${oneShown.toLocaleString()} + $${pr.perMonth.toLocaleString()}/mo, fee included`;
+  if (pr.perMonth > 0) return `$${pr.perMonth.toLocaleString()}/mo`;
+  if (pr.oneTime > 0) return `$${oneShown.toLocaleString()}, fee included`;
   return priceLabel(buildIdFor(p.id));
 }
 
@@ -3120,7 +3141,10 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const totalOneTime = base.oneTime + optM.oneTime;
   const totalPerMonth = base.perMonth + optM.perMonth;
   const creative = p.type === "content" || p.id === "shoot";
-  const totalLabel = (totalOneTime === 0 && totalPerMonth === 0) ? "Free" : `${creative && totalOneTime > 0 ? "From " : ""}${moneyLabel(totalOneTime, totalPerMonth)}`;
+  // "Your total" folds the 10% checkout service fee into the one-time amount and says so —
+  // the buy box's number IS the charged number (pre-tax), never a cart surprise.
+  const feeOneTime = withServiceFee(totalOneTime);
+  const totalLabel = (totalOneTime === 0 && totalPerMonth === 0) ? "Free" : `${creative && totalOneTime > 0 ? "From " : ""}${moneyLabel(feeOneTime, totalPerMonth)}${totalOneTime > 0 ? ", fee included" : ""}`;
   // Pass-through costs, quoted verbatim from the catalog so the price area never hides real
   // extra spend (e.g. paid-ads' "ad spend billed at cost, $500/mo minimum"). Free owner-run
   // lanes bill nothing, so they carry no note; selected add-on services bring their own.
@@ -3479,7 +3503,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
                 <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
               </div>
               {costNotes.map((n) => (
-                <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "right", marginBottom: 4 }}>Plus {n}</div>
+                <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "right", marginBottom: 4 }}>Plus {plainCostNote(n)}</div>
               ))}
               {costNotes.length > 0 && <div style={{ marginBottom: 5 }} />}
               {/* After adding, the button STAYS confirmed and becomes the door to the plan —
@@ -3865,9 +3889,11 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
         {itemId === "gbp" && (gbpLaneOf(vals.doer) === "diy" || gbpLaneOf(vals.doer) === "ai")
           ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
-          : priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You see the full price and pay once at checkout.</div>}
+          : feeIncludedLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>{(ITEM_PRICES[itemId]?.perMonth > 0)
+              ? <>About {feeIncludedLabel(itemId)}. You add your card at checkout. Cancel monthly services anytime.</>
+              : <>About {feeIncludedLabel(itemId)}. You pay once at checkout.</>}</div>}
         {priceNotes(itemId).map((n) => (
-          <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.85)", textAlign: "center", marginTop: -4, marginBottom: 10 }}>Plus {n}</div>
+          <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.85)", textAlign: "center", marginTop: -4, marginBottom: 10 }}>Plus {plainCostNote(n)}</div>
         ))}
         {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
           return m.warn
@@ -4355,6 +4381,10 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
   const toggleRush = (id) => setRushed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const rushFeeTotal = items.reduce((sum, it) => { const r = itemRush(it.itemId); return rushed.has(it.itemId) && r ? sum + r.fee : sum; }, 0);
   const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
+  // Pass-through costs (ad spend etc.) belong ON the order summary — the one place owners do
+  // their math — in plain words, with one real total when a minimum is named.
+  const cartCostNotes = [...new Set(items.flatMap((it) => priceNotes(it.itemId)))];
+  const cartAdMin = Math.round(passthroughMonthlyMinimumCents(cartCostNotes) / 100);
   // Service fee: a flat 10% of the one-time subtotal. Taxes depend on the client's location, so
   // they're shown as "calculated at checkout" (no invented rate). Both are display only for now —
   // like rush, they're shown but not yet folded into what checkout actually charges.
@@ -4438,7 +4468,13 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
                     <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>Monthly services</span>
                     <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{`$${totals.perMonth.toLocaleString()}/mo`}</span>
                   </div>
-                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Billed monthly once your services start.</div>
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Billed monthly to your card starting at checkout. Cancel anytime.</div>
+                  {cartCostNotes.map((n) => (
+                    <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Plus {plainCostNote(n)}</div>
+                  ))}
+                  {cartAdMin > 0 && (
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 600, color: TOKENS.ink, marginTop: 3 }}>With ad spend, about ${(totals.perMonth + cartAdMin).toLocaleString()}+/mo.</div>
+                  )}
                 </>
               )}
               {totalWithFee.oneTime > 0 && (

@@ -23,7 +23,7 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
   // Check if businesses already has a linked client
   const { data: biz, error: bizErr } = await supabase
     .from('businesses')
-    .select('id, name, client_id, industry, city, state, website_url, phone')
+    .select('id, name, client_id, industry, city, state, website_url, phone, owner_id')
     .eq('id', businessId)
     .single()
 
@@ -38,25 +38,38 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
     return biz.client_id
   }
 
-  // Check if a client with this name already exists (case-insensitive) — link to it
-  const { data: existingClient } = await supabase
-    .from('clients')
-    .select('id')
-    .ilike('name', biz.name || 'My Business')
-    .maybeSingle()
+  // Reuse an existing client ONLY when it already belongs to this business's OWNER
+  // (a client_users row links the owner's auth user to it). Never link by name alone:
+  // two different owners with the same restaurant name must never share campaigns,
+  // connections, or billing (cross-tenant data mixing).
+  if (biz.owner_id) {
+    const { data: myLinks } = await supabase
+      .from('client_users')
+      .select('client_id')
+      .eq('auth_user_id', biz.owner_id)
+    const myClientIds = (myLinks ?? []).map((l) => l.client_id).filter((x): x is string => !!x)
+    if (myClientIds.length) {
+      const { data: existingClient } = await supabase
+        .from('clients')
+        .select('id')
+        .in('id', myClientIds)
+        .ilike('name', biz.name || 'My Business')
+        .maybeSingle()
 
-  if (existingClient) {
-    console.log('[ensureClient] Found existing client by name, linking:', existingClient.id)
-    const { error: updateErr } = await supabase
-      .from('businesses')
-      .update({ client_id: existingClient.id })
-      .eq('id', businessId)
+      if (existingClient) {
+        console.log('[ensureClient] Owner already has this client, linking:', existingClient.id)
+        const { error: updateErr } = await supabase
+          .from('businesses')
+          .update({ client_id: existingClient.id })
+          .eq('id', businessId)
 
-    if (updateErr) {
-      console.error('[ensureClient] Failed to link business to existing client:', updateErr.message)
-      return null
+        if (updateErr) {
+          console.error('[ensureClient] Failed to link business to existing client:', updateErr.message)
+          return null
+        }
+        return existingClient.id
+      }
     }
-    return existingClient.id
   }
 
   // Create a new clients row from business data

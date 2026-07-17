@@ -81,11 +81,17 @@ export async function ensureCampaignSubscription(paymentIntentId: string, campai
     return { ok: false, status: 'failed', error: 'no product' }
   }
 
-  // The card used at checkout (setup_future_usage saved it) → the subscription's default PM.
+  // The card used at checkout → the subscription's default PM. A paid order saved it on the
+  // PaymentIntent (setup_future_usage); a monthly-only order saved it on a SetupIntent (seti_...).
   let pmId: string | undefined
   try {
-    const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
-    pmId = typeof pi.payment_method === 'string' ? pi.payment_method : pi.payment_method?.id
+    if (paymentIntentId.startsWith('seti_')) {
+      const si = await stripe.setupIntents.retrieve(paymentIntentId)
+      pmId = typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id
+    } else {
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
+      pmId = typeof pi.payment_method === 'string' ? pi.payment_method : pi.payment_method?.id
+    }
   } catch { /* fall back to the customer's default PM */ }
 
   try {

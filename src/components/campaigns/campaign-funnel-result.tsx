@@ -11,7 +11,7 @@
  * a rebuild, so a line the funnel doesn't surface (foundation setup, an
  * untouched stage) is preserved. A shipped campaign is read-only.
  */
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import CampaignFunnel from '@/components/mvp/campaign-funnel'
 import { FUNNEL_TEMPLATE, itemsForSelection, type FunnelData } from '@/lib/campaigns/funnel-plays'
 
@@ -19,9 +19,19 @@ type Props = Pick<FunnelData, 'campaignId' | 'campaignName' | 'kicker' | 'editab
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error'
 
-export default function CampaignFunnelResult({ campaignId, campaignName, kicker, editable, pieces, initialSelected, initialItems }: Props) {
+export default function CampaignFunnelResult({ campaignId, campaignName, kicker, editable, pieces, initialSelected, initialItems, clientId }: Props & { clientId?: string }) {
   const [save, setSave] = useState<SaveState>('idle')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The owner's real average check, if they set it in Insights (same localStorage key the
+  // Insights funnel uses) — projections use their number instead of the generic example.
+  const [avgCheck, setAvgCheck] = useState<number | null>(null)
+  useEffect(() => {
+    if (!clientId) return
+    try {
+      const t = localStorage.getItem(`apnosh.funnel.ticket.${clientId}`)
+      if (t != null && t !== '') setAvgCheck(Number(t) || null)
+    } catch { /* no storage — the generic example stands */ }
+  }, [clientId])
 
   const persist = useCallback((selected: Record<string, string[]>) => {
     if (!editable) return
@@ -43,8 +53,8 @@ export default function CampaignFunnelResult({ campaignId, campaignName, kicker,
   }, [editable, initialItems, initialSelected, campaignId])
 
   const intro = editable
-    ? 'Each stage is a magnet. Add the plays that drive it and watch the projected funnel — and your real plan — respond live. Numbers are a projection, not measured results.'
-    : 'This campaign has shipped. Below is the plan that ran and its projected shape — a projection from the plays, not measured results yet.'
+    ? 'Each stage is a magnet. Add the plays that drive it and watch the example funnel, and your real plan, respond live. The numbers are an example, not your numbers.'
+    : 'This campaign has shipped. This is the plan that ran, stage by stage. Real numbers show as they come in.'
 
   return (
     <div>
@@ -57,6 +67,8 @@ export default function CampaignFunnelResult({ campaignId, campaignName, kicker,
         pieces={pieces}
         initialSelected={initialSelected}
         readOnly={!editable}
+        moneyMode={editable ? 'example' : 'gathering'}
+        spendPerHead={avgCheck}
         onChange={persist}
       />
       {editable && <SaveNote state={save} />}

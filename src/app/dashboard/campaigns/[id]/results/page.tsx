@@ -57,6 +57,7 @@ export default function CampaignResultsPage() {
               pieces={data.pieces}
               initialSelected={data.initialSelected}
               initialItems={data.initialItems}
+              clientId={camp?.clientId}
             />
           )}
         </div>

@@ -7,6 +7,7 @@
  */
 import 'server-only'
 import { turnaroundFor } from './data/service-turnaround'
+import { draftSourceCatalogIds } from './data/catalog-availability'
 import type { SavedCampaign, CampaignExecution } from './view'
 import type { ReadinessItem } from './readiness-types'
 
@@ -100,7 +101,9 @@ export function deriveServiceNeeds(
   // `edit` is content-only (no service line, so the service loop above never fires), but its whole
   // premise is "send us your clips and we cut them". Without an intake the team has nothing to edit,
   // so this asks the owner to upload their footage right after checkout. Required: no footage, no reel.
-  if (campaign.draft.sourceCatalogId === 'edit') {
+  // Checks EVERY source id, not just the first: a merged cart stores the primary in sourceCatalogId
+  // and the full set in sourceCatalogIds, and the edit item can sit in any cart position.
+  if (draftSourceCatalogIds(campaign.draft).includes('edit')) {
     push({ id: 'footage', kind: 'input', group: 'Content', field: 'footageUrls', inputType: 'upload', title: 'Upload your clips and photos', why: 'Send us the footage. We cut and polish it into your reel and edited shots.', value: exec.footageUrls ?? '', done: !!(exec.footageUrls && exec.footageUrls.trim()) })
   }
 

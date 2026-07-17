@@ -86,14 +86,10 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
     const authPath = OAUTH_PATHS[name]
     console.log('[connect] Platform:', name, 'authPath:', authPath, 'clientId:', clientId)
     if (!authPath || !clientId) {
-      if (!authPath) {
-        // No OAuth available (Google Business, Yelp) — just toggle visual state
-        const connected = { ...data.connected }
-        connected[name] = !connected[name]
-        update('connected', connected)
-      } else {
-        console.error('[connect] clientId is null — cannot start OAuth')
-      }
+      // No OAuth for this platform here: do NOTHING. Coming soon means coming soon —
+      // flipping a green "Connected" chip with no real connection behind it made owners
+      // believe their reviews were syncing when nothing was.
+      if (authPath) console.error('[connect] clientId is null — cannot start OAuth')
       return
     }
 
@@ -112,9 +108,11 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
       <Question title="Connect your accounts" subtitle="Link the platforms you want us to manage" />
       <div className="mt-4 space-y-2">
         {PLATFORMS.map((p) => {
-          const isConn = !!data.connected[p.name]
-          const isConnecting = connectingPlatform === p.name
           const hasOAuth = !!OAUTH_PATHS[p.name]
+          // A platform with no OAuth can never really be connected here — ignore any stale
+          // persisted flag from the old fake toggle so "Connected" is never a lie.
+          const isConn = !!data.connected[p.name] && hasOAuth
+          const isConnecting = connectingPlatform === p.name
 
           return (
             <div
@@ -146,7 +144,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
                 <span className="text-xs font-medium rounded-[20px] px-3 py-1 whitespace-nowrap text-gray-400 border border-gray-200">
                   Connecting...
                 </span>
-              ) : (
+              ) : hasOAuth ? (
                 <button
                   type="button"
                   onClick={() => connectPlatform(p.name)}
@@ -154,8 +152,15 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
                   className="text-xs font-semibold rounded-[20px] px-3.5 py-1 whitespace-nowrap transition-colors disabled:opacity-50"
                   style={{ color: '#4abd98', border: '1.5px solid #4abd98' }}
                 >
-                  {hasOAuth ? 'Connect' : 'Coming soon'}
+                  Connect
                 </button>
+              ) : (
+                <span
+                  className="text-xs font-medium rounded-[20px] px-3 py-1 whitespace-nowrap"
+                  style={{ color: '#999', border: '1px solid #e0e0e0' }}
+                >
+                  Coming soon
+                </span>
               )}
             </div>
           )

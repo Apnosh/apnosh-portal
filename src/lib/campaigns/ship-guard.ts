@@ -25,16 +25,23 @@ export type ShipGate = 'allow' | 'verify' | 'refuse'
 
 /**
  * Decide how the ship route must treat a billable ship:
- *  - 'allow'   — no upfront charge required (a free/DIY $0 order, or a legacy pre-checkout campaign)
- *  - 'verify'  — a PaymentIntent was presented; the route must confirm the charge succeeded + covers the bill
+ *  - 'allow'   — no upfront charge required (a truly $0 order, or a legacy pre-checkout campaign)
+ *  - 'verify'  — a PaymentIntent/SetupIntent was presented; the route must confirm it succeeded + covers the bill
  *  - 'refuse'  — a billable, non-legacy ship with no payment → block (must go through checkout)
+ *
+ * "Billable" counts BOTH the one-time bill and the monthly bill: a monthly-only cart ($0 today,
+ * $X/mo) must still go through checkout so a card is on file and the subscription really starts —
+ * previously it rode the free path and never billed at all.
  */
 export function shipBillingGate(opts: {
   preTaxCents: number
+  /** Recurring monthly total in cents (0 when the plan has no monthly services). */
+  perMonthCents?: number
   hasPaymentIntent: boolean
   createdAtISO?: string | null
 }): ShipGate {
-  if (opts.preTaxCents <= 0) return 'allow'          // nothing billable — free/DIY lanes ship freely
+  const billable = opts.preTaxCents > 0 || (opts.perMonthCents ?? 0) > 0
+  if (!billable) return 'allow'                      // nothing billable — free/DIY lanes ship freely
   if (opts.hasPaymentIntent) return 'verify'         // upfront-checkout order — verify the charge
   // Billable, no payment presented: allow ONLY genuinely legacy (pre-checkout) campaigns.
   const created = opts.createdAtISO ? Date.parse(opts.createdAtISO) : NaN

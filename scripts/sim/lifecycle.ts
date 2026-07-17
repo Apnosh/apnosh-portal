@@ -17,6 +17,8 @@ import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { composePlanCampaign } from '@/lib/campaigns/builder/plan-checkout'
 import { draftNeedsShoot, requiredBookingGates } from '@/lib/campaigns/gates/derive'
 import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
+import { shipBillingGate } from '@/lib/campaigns/ship-guard'
+import { withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from '@/lib/campaigns/builder/item-prices'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -721,6 +723,56 @@ s.group('Availability: merged carts carry all source ids; coming-soon ids get fl
   s.check('the coming-soon item is flagged even behind a live first item', JSON.stringify(unbuyableCatalogIds(ids)) === JSON.stringify(['giftcard']))
   s.check('a legacy draft (single sourceCatalogId) still resolves', JSON.stringify(draftSourceCatalogIds({ sourceCatalogId: 'giftcard' })) === JSON.stringify(['giftcard']))
   s.eq('an all-live cart is clean', unbuyableCatalogIds(['dish', 'edit', 'reach']).length, 0)
+}
+
+// ── Owner-sim fix 1a: the edit-footage ask keys off EVERY source id, any cart position ──
+s.group('Edit-footage intake: edit fires in ANY cart position (readiness keys off sourceCatalogIds)')
+{
+  const editSecond = composePlanCampaign([
+    { itemId: 'dish', doer: null, options: [] },
+    { itemId: 'edit', doer: null, options: [] },
+  ])
+  const ids2 = draftSourceCatalogIds(editSecond.draft!)
+  s.check('edit-second cart composes', !!editSecond.draft)
+  s.check('legacy sourceCatalogId is the FIRST item (not edit)', editSecond.draft?.sourceCatalogId === 'dish')
+  s.check('the full id list still carries edit (what the footage ask now reads)', ids2.includes('edit'))
+  const editFirst = composePlanCampaign([
+    { itemId: 'edit', doer: null, options: [] },
+    { itemId: 'dish', doer: null, options: [] },
+  ])
+  s.check('edit-first cart carries edit too (no regression)', draftSourceCatalogIds(editFirst.draft!).includes('edit'))
+  const noEdit = composePlanCampaign([{ itemId: 'dish', doer: null, options: [] }])
+  s.check('a cart with no edit never implies a footage ask', !draftSourceCatalogIds(noEdit.draft!).includes('edit'))
+}
+
+// ── Owner-sim fix 1b: a monthly-only cart is BILLABLE (never the free path) ──
+s.group('Ship gate: monthly-only carts must pay (card + consent), never the free path')
+{
+  const MODERN = '2026-07-16T00:00:00Z'
+  s.eq('monthly-only, no intent → REFUSE (must go through checkout)',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false, createdAtISO: MODERN }), 'refuse')
+  s.eq('monthly-only, SetupIntent presented → verify',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: true, createdAtISO: MODERN }), 'verify')
+  s.eq('truly free ($0 one-time, $0 monthly) still ships freely',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 0, hasPaymentIntent: false, createdAtISO: MODERN }), 'allow')
+  s.eq('legacy pre-checkout campaign keeps its carve-out',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false, createdAtISO: '2026-07-01T00:00:00Z' }), 'allow')
+  s.eq('omitted perMonthCents behaves as before (back-compat)',
+    shipBillingGate({ preTaxCents: 0, hasPaymentIntent: false, createdAtISO: MODERN }), 'allow')
+}
+
+// ── Owner-sim fixes 1f + 1i: fee-included display + plain-words pass-through ──
+s.group('Money display: fee folded into shown prices; pass-through notes in plain words')
+{
+  s.eq('withServiceFee folds the 10% checkout fee in', withServiceFee(100), 110)
+  s.eq('withServiceFee rounds honestly', withServiceFee(1235), 1359)
+  s.eq('$0 stays $0', withServiceFee(0), 0)
+  const adsNote = 'ad spend billed at cost, $500/mo minimum'
+  s.eq('plain words replace "billed at cost"', plainCostNote(adsNote), 'ad spend paid at cost (no markup), $500/mo minimum')
+  s.eq('a note with no dollar amount says the owner sets it', plainCostNote('sponsored-listing spend billed at cost'), 'sponsored-listing spend paid at cost (no markup). You set the amount')
+  s.eq('the named $500/mo minimum totals into one real number', passthroughMonthlyMinimumCents([adsNote]), 50000)
+  s.eq('a no-minimum note contributes 0 (never invented)', passthroughMonthlyMinimumCents(['sponsored-listing spend billed at cost']), 0)
+  s.eq('minimums sum across notes', passthroughMonthlyMinimumCents([adsNote, 'boost billed at cost, $100/mo minimum']), 60000)
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

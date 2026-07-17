@@ -40,15 +40,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, campaignId: row.campaign_id })
   }
 
-  // Confirm the charge really succeeded before we mark anything paid.
-  let pi
+  // Confirm the charge (or, for a monthly-only order, the card setup) really succeeded before we
+  // mark anything paid. Monthly-only checkouts key the row to a SetupIntent (seti_...): no charge
+  // today, but the card must be verified so the subscription can start from it.
   try {
-    pi = await stripe.paymentIntents.retrieve(paymentIntentId)
+    if (paymentIntentId.startsWith('seti_')) {
+      const si = await stripe.setupIntents.retrieve(paymentIntentId)
+      if (si.status !== 'succeeded') {
+        return NextResponse.json({ ok: false, error: 'Card setup has not completed.' }, { status: 402 })
+      }
+    } else {
+      const pi = await stripe.paymentIntents.retrieve(paymentIntentId)
+      if (pi.status !== 'succeeded') {
+        return NextResponse.json({ ok: false, error: 'Payment has not completed.' }, { status: 402 })
+      }
+    }
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not verify payment.' }, { status: 502 })
-  }
-  if (pi.status !== 'succeeded') {
-    return NextResponse.json({ ok: false, error: 'Payment has not completed.' }, { status: 402 })
   }
 
   const nowISO = new Date().toISOString()

@@ -174,11 +174,18 @@ export async function verifyAndLinkCheckoutPayment(opts: {
 
   // Captured? Trust a 'paid' row (webhook/complete already reconciled). Otherwise ask Stripe directly,
   // because the ship can land before the webhook flips the row (the card cleared client-side first).
+  // A monthly-only order keys its row to a SetupIntent (seti_...): "paid" there means the card
+  // setup succeeded — the subscription bills it right after ship.
   let paid = row.status === 'paid'
   if (!paid) {
     try {
-      const pi = await stripe.paymentIntents.retrieve(opts.paymentIntentId)
-      paid = pi.status === 'succeeded'
+      if (opts.paymentIntentId.startsWith('seti_')) {
+        const si = await stripe.setupIntents.retrieve(opts.paymentIntentId)
+        paid = si.status === 'succeeded'
+      } else {
+        const pi = await stripe.paymentIntents.retrieve(opts.paymentIntentId)
+        paid = pi.status === 'succeeded'
+      }
     } catch {
       return { ok: false, reason: 'Could not verify your payment. Please try again.' }
     }
