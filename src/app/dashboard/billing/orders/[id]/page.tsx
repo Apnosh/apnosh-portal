@@ -22,6 +22,9 @@ export default function OrderReceiptPage() {
   const router = useRouter()
   const { client } = useClient()
   const [camp, setCamp] = useState<SavedCampaign | null>(null)
+  // A paid checkout record for this campaign — flips the receipt's billing note to the
+  // pay-first truth ("Paid at checkout") instead of the legacy pay-on-delivery wording.
+  const [paidUpfront, setPaidUpfront] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -31,7 +34,7 @@ export default function OrderReceiptPage() {
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!live) return
-        if (j?.campaign) setCamp(j.campaign as SavedCampaign)
+        if (j?.campaign) { setCamp(j.campaign as SavedCampaign); setPaidUpfront(!!j.payment) }
         else setError('We could not find this order.')
         setLoading(false)
       })
@@ -57,6 +60,7 @@ export default function OrderReceiptPage() {
               draft={camp.draft}
               receipt={receipt}
               dateISO={camp.shippedAt ?? camp.createdAt ?? today}
+              paidUpfront={paidUpfront}
             />
             <button onClick={() => router.push(`/dashboard/campaigns/${id}`)} style={{ width: '100%', height: 48, marginTop: 18, borderRadius: 13, border: `1px solid ${C.line}`, background: '#fff', color: C.ink, fontSize: 14.5, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
               <ExternalLink size={16} /> View campaign

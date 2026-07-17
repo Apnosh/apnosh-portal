@@ -1505,7 +1505,7 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.greenDk, margin: '11px 2px 0' }}><Check size={13} /> Fits your {money(monthlyCap)}/mo budget{firstMonth < monthlyCap ? `, ${money(monthlyCap - firstMonth)} to spare` : ''}.</div>
       ))}
       <div style={{ background: C.greenSoft, borderRadius: 12, padding: '11px 13px', margin: '12px 0', fontSize: 12, color: C.greenDk, lineHeight: 1.5 }}>
-        <b style={{ fontWeight: 700 }}>Paid at checkout.</b> You pay the one-time total when you place the order.{bill.perMonth > 0 ? ' Monthly items bill separately while the campaign runs — pause anytime.' : ''}
+        <b style={{ fontWeight: 700 }}>Paid at checkout.</b> You pay the one-time total when you place the order.{bill.perMonth > 0 ? ' Monthly items bill each month starting the day you order. Cancel anytime.' : ''}
       </div>
       {(() => {
         const posts = [...sched.beats].sort((a, b) => a.postISO.localeCompare(b.postISO))

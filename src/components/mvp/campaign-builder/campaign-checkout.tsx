@@ -198,7 +198,7 @@ function BillCard({ b, monthlyCents, taxPending }: { b: Breakdown; monthlyCents:
       <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}>
         <BillRow label="Total due today" value={fmt(b.totalCents)} strong />
       </div>
-      {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Monthly services bill {fmt(monthlyCents)}/mo to this card once they go live — separate from today&rsquo;s total. Cancel anytime.</div>}
+      {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Monthly services bill {fmt(monthlyCents)}/mo to this card starting today, as a separate charge. Cancel anytime.</div>}
     </div>
   )
 }
@@ -560,7 +560,7 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 14, padding: '12px 14px', marginBottom: 16 }}>
             <input type="checkbox" checked={monthlyConsent} onChange={(e) => setMonthlyConsent(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: MINT, flexShrink: 0 }} />
             <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: INK, lineHeight: 1.5 }}>
-              I agree to <b style={{ fontWeight: 700 }}>{fmt(monthlyCents)}/mo</b> for monthly services, billed to this card each month once they go live. Cancel anytime.
+              I agree to <b style={{ fontWeight: 700 }}>{fmt(monthlyCents)}/mo</b> for monthly services starting today, billed to this card each month. Cancel anytime.
             </span>
           </label>
         )}
@@ -641,7 +641,8 @@ function FreeCheckout({ clientId, draft, producerChoices, monthlyCents, gates, o
         <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '14px 16px', marginBottom: 16 }}>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>Order summary</div>
           <BillRow label="Total due today" value="Free" strong />
-          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{fmt(monthlyCents)}/mo in monthly services starts once set up — billed separately.</div>}
+          {/* Free order: no card is charged here, so no subscription starts automatically. Say so. */}
+          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{fmt(monthlyCents)}/mo in monthly services. We set up billing with you before they start.</div>}
         </div>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: SUB, lineHeight: 1.5, marginBottom: 16 }}>Everything in this plan is on you to run, so there’s nothing to pay now. Placing the order starts your campaign.</div>
         <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
@@ -726,7 +727,9 @@ function Confirmation({ restaurant, draft, breakdown, onSetup, onViewCampaign }:
               <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}><BillRow label="Total paid" value={fmt(breakdown.totalCents)} strong /></div>
             </>
           )}
-          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>Plus {fmt(monthlyCents)}/mo in monthly services once they start — billed separately.</div>}
+          {/* Paid order: the subscription starts from this card today (G4). A free order takes no
+              card, so billing gets set up separately — the copy stays honest on both paths. */}
+          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{free ? `Plus ${fmt(monthlyCents)}/mo in monthly services. We set up billing with you before they start.` : `Plus ${fmt(monthlyCents)}/mo in monthly services, billed to this card starting today.`}</div>}
         </div>
 
         {/* needs-you handoff */}
