@@ -19,6 +19,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getConnector } from '@/lib/integrations/registry'
 import type { ConnectionRow } from '@/lib/integrations/types'
 import { logEvent } from '@/lib/events/log'
+import { serviceAccountEnabled } from '@/lib/google-service-account'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -28,7 +29,7 @@ const CRON_SECRET = process.env.CRON_SECRET
 interface RefreshOutcome {
   connectionId: string
   channel: string
-  status: 'rotated' | 'noop' | 'error' | 'reauth_required' | 'unsupported'
+  status: 'rotated' | 'noop' | 'error' | 'reauth_required' | 'unsupported' | 'sa_managed'
   error?: string
 }
 
@@ -55,6 +56,17 @@ export async function GET(req: Request) {
   const outcomes: RefreshOutcome[] = []
 
   for (const row of (rows ?? []) as ConnectionRow[]) {
+    /* GA + Search Console read through the keyless service account when it
+       is configured — the stored OAuth token is a legacy fallback, not the
+       pipe. Failing to refresh that fallback must never paint a healthy
+       connection red (it also made the daily sync skip the row entirely).
+       These rows belong to connection-health, which probes the real data
+       path the product actually uses. */
+    if (serviceAccountEnabled() && (row.channel === 'google_analytics' || row.channel === 'google_search_console')) {
+      outcomes.push({ connectionId: row.id, channel: row.channel, status: 'sa_managed' })
+      continue
+    }
+
     const connector = getConnector(row.channel)
     if (!connector?.refresh) {
       outcomes.push({ connectionId: row.id, channel: row.channel, status: 'unsupported' })
