@@ -32,6 +32,13 @@ export interface SavedCampaign {
   creativeControl: 'handoff' | 'approve_concept' | 'owner_directs'
   /** Owner execution inputs from the "Get it ready" screen; feed the brief. */
   execution: CampaignExecution
+  /** Amazon-style cancellation REQUEST (not a guaranteed stop). 'requested' = the
+   *  owner asked and a human is reviewing; 'declined' = review said no, it keeps
+   *  running. An APPROVED request shows as status 'stopped'. undefined = the
+   *  columns don't exist yet (pre-migration) — treated as "no request". */
+  cancelState?: 'requested' | 'declined' | null
+  cancelRequestedAt?: string | null
+  cancelReason?: string | null
 }
 
 /** Owner-facing rollup of what a campaign has accrued to bill — one charge per

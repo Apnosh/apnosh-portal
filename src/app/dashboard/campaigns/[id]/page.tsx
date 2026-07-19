@@ -9,7 +9,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Loader2, Trash2, Rocket, Check, CalendarDays, Users, FileText, Ban, Filter } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Trash2, Rocket, Check, CalendarDays, Users, FileText, Ban } from 'lucide-react'
 import { playsFrom } from '@/lib/campaigns/plays'
 import { summarize, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
@@ -467,10 +467,9 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
           <CampaignTeamCard camp={camp} onChoose={onChooseCreator} onOpenTeam={() => router.push(`/dashboard/campaigns/${camp.draft.id}/team`)} />
           {/* the order receipt, its own page */}
           <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <LinkRow Icon={Filter} label="See it as a funnel" sub="Your plan, stage by stage. Real numbers as they come in." onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/results`)} />
-            <LinkRow Icon={FileText} label="View order details" sub="Everything you ordered, with prices" onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/order`)} />
-            {/* terminal stop — quiet by design; the confirm dialog carries the consequences */}
-            {!stopped && <LinkRow Icon={Ban} label="Stop this campaign" sub="Nothing new starts or posts. In-flight work finishes and bills." onClick={onStop} />}
+            {/* Order details is the home for everything money + canceling — the
+                cancel-an-order request lives on that page now, not here. */}
+            <LinkRow Icon={FileText} label="View order details" sub="Everything you ordered, prices, and canceling" onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/order`)} />
           </div>
           {/* the running log of real, timestamped production events */}
           <ActivityFeed events={activity} />
@@ -480,9 +479,6 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
       ) : (
         <>
           {playsBlock}
-          <div style={{ marginTop: 12 }}>
-            <LinkRow Icon={Filter} label="See it as a funnel" sub="Add plays stage by stage and watch it respond" onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/results`)} />
-          </div>
           <CreativeControl value={camp.creativeControl} onChange={onSetCreativeControl} />
           {creatorsBlock}
           {recommended.length > 0 && (

@@ -95,6 +95,11 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
     producerChoices: (c.producer_choices as Record<string, PieceProducer> | null) ?? {},
     creativeControl: (c.creative_control as SavedCampaign['creativeControl']) ?? 'handoff',
     execution: (c.execution as SavedCampaign['execution']) ?? {},
+    // Cancellation-request fields (migration 225). undefined when the columns
+    // don't exist yet, so a pre-migration deploy reads as "no request".
+    cancelState: 'cancel_state' in c ? ((c.cancel_state as SavedCampaign['cancelState']) ?? null) : undefined,
+    cancelRequestedAt: 'cancel_requested_at' in c ? ((c.cancel_requested_at as string) ?? null) : undefined,
+    cancelReason: 'cancel_reason' in c ? ((c.cancel_reason as string) ?? null) : undefined,
   }
 }
 

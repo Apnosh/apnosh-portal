@@ -24,6 +24,7 @@ import { getBookingForCampaign } from '@/lib/campaigns/gates/booking-server'
 import ConfirmButton from './confirm-button'
 import LineStatusControl from './line-status-control'
 import AdminBookingControl from './booking-control'
+import CancelRequestControl from './cancel-request-control'
 
 type OrderStatus = 'awaiting' | 'production' | 'live' | 'done'
 const STATUS_PILL: Record<OrderStatus, string> = {
@@ -214,6 +215,22 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
           </div>
         </div>
       </section>
+
+      {/* Owner asked to cancel (Amazon-style request). Leads the cockpit so an
+          operator resolves it before other work. Approve = the real terminal
+          stop; decline = it keeps running. */}
+      {c.cancelState === 'requested' && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 space-y-2">
+          <div className="flex items-start gap-2.5">
+            <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="text-sm font-semibold text-red-900">Owner asked to cancel this order</div>
+              <div className="text-xs text-red-800">{c.cancelReason ? `"${c.cancelReason}"` : 'No reason given.'} Approving stops it now and cancels monthly billing; declining keeps it running. The owner is told either way.</div>
+            </div>
+          </div>
+          <CancelRequestControl id={c.draft.id} />
+        </div>
+      )}
 
       {/* Shoot booking control (Checkout Gates): move a confirmed shoot, or assign a slot for a
           needs-reschedule / request-mode order. Only shown when this order has a shoot booking. */}
