@@ -6,10 +6,16 @@
  * status the detail page already has (phase, go-live estimate, progress), no new data. Honest: dates
  * are estimates ("your team confirms"), and it never claims a result that hasn't happened.
  */
-import { Package, CalendarClock, ArrowRight, MessageCircle, ChevronDown, CheckCircle2, Check } from 'lucide-react'
+import { useState } from 'react'
+import { Package, CalendarClock, ArrowRight, MessageCircle, ChevronDown, CheckCircle2, Check, TrendingUp } from 'lucide-react'
 import { C, DISPLAY } from '@/components/campaigns/ui'
 import type { GoLiveEstimate } from '@/lib/campaigns/aggregate-golive'
 import type { ShippedPhase } from '@/lib/campaigns/view'
+
+/** One ordered item, as shown in Campaign details: its owner-facing name plus
+ *  the honest plan fields (what it does, why, when to expect it, the number it
+ *  moves). All already live on the line item — nothing new or invented. */
+export interface DetailItem { name: string; does?: string; why?: string; eta?: string; metric?: string }
 
 function estLine(goLive: GoLiveEstimate, whenLine: string | null | undefined): string {
   if (whenLine) return whenLine
@@ -97,7 +103,8 @@ export function ProductionSummary({ phase, goLive, whenLine, progress, awaitingY
 /** Below the timeline: what this order includes + a clear way to reach the team.
  *  `items` are the ordered line items by their owner-facing names, e.g.
  *  "Polish your Google Business Profile". */
-export function ProductionGuide({ items, onMessage }: { items: string[]; onMessage: () => void }) {
+export function ProductionGuide({ items, onMessage }: { items: DetailItem[]; onMessage: () => void }) {
+  const [openIdx, setOpenIdx] = useState<number>(-1)
   const faqs = [
     { q: 'What if I want a change?', a: 'Message your team any time and tell us what to tweak — we’ll adjust before it goes out.' },
     { q: 'How will I know when it’s live?', a: 'This page updates on its own, and we’ll give you a heads-up. You don’t have to check back.' },
@@ -106,20 +113,50 @@ export function ProductionGuide({ items, onMessage }: { items: string[]; onMessa
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
-      {/* Campaign details — exactly what this order includes, by name */}
+      {/* Campaign details — every ordered item as its own tappable block that
+          opens to show what it does, why, when to expect it, and the number it moves */}
       <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: 16 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
           <Package size={15} color={C.greenDk} />
           <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>Campaign details</div>
         </div>
         {items.length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            {items.map((name, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
-                <CheckCircle2 size={14} color={C.green} style={{ flexShrink: 0, marginTop: 1 }} />
-                <span>{name}</span>
-              </div>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {items.map((it, i) => {
+              const open = openIdx === i
+              const hasMore = !!(it.why || it.eta || it.metric)
+              return (
+                <div key={i} style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: 'hidden', background: open ? '#fbfdfc' : '#fff' }}>
+                  <button
+                    onClick={() => setOpenIdx(open ? -1 : i)}
+                    aria-expanded={open}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '11px 12px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <CheckCircle2 size={15} color={C.green} style={{ flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>{it.name}</div>
+                      {it.does && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.does}</div>}
+                    </div>
+                    {hasMore && <ChevronDown size={16} color={C.faint} style={{ flexShrink: 0, transition: 'transform .2s', transform: open ? 'rotate(180deg)' : 'none' }} />}
+                  </button>
+                  {open && hasMore && (
+                    <div style={{ padding: '2px 12px 13px 37px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {it.why && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5 }}>{it.why}</div>}
+                      {it.eta && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: C.mute }}>
+                          <CalendarClock size={13} color={C.faint} style={{ flexShrink: 0 }} /> <span><span style={{ color: C.ink, fontWeight: 600 }}>When:</span> {it.eta}</span>
+                        </div>
+                      )}
+                      {it.metric && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: C.mute }}>
+                          <TrendingUp size={13} color={C.green} style={{ flexShrink: 0 }} /> <span>{it.metric}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         ) : (
           <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>Your team is getting everything set up.</div>

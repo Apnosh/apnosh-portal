@@ -459,10 +459,21 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
           {/* who handles everything: Apnosh runs setup, matched creators make the creative — changeable.
               Sits ABOVE the what-to-expect + Questions block: who's doing it reads first. */}
           <CampaignTeamCard camp={camp} onChoose={onChooseCreator} onOpenTeam={() => router.push(`/dashboard/campaigns/${camp.draft.id}/team`)} />
-          {/* Below the timeline: the ordered items by name (Campaign details) + a clear line to the team */}
+          {/* Below the timeline: the ordered items as tappable Campaign-details blocks + a clear line to the team */}
           {st.phase !== 'done' && (
             <ProductionGuide
-              items={Array.from(new Set((camp.draft.items ?? []).filter((it) => it.included && !it.optOut).map((it) => it.plain || it.name).filter(Boolean)))}
+              items={(() => {
+                const seen = new Set<string>()
+                const out: { name: string; does?: string; why?: string; eta?: string; metric?: string }[] = []
+                for (const it of (camp.draft.items ?? [])) {
+                  if (!it.included || it.optOut) continue
+                  const name = it.plain || it.name
+                  if (!name || seen.has(name)) continue
+                  seen.add(name)
+                  out.push({ name, does: it.does || undefined, why: it.why || undefined, eta: it.eta || undefined, metric: it.metric?.expect || undefined })
+                }
+                return out
+              })()}
               onMessage={() => router.push('/dashboard/messages?to=strategist')}
             />
           )}
