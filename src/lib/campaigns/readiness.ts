@@ -111,10 +111,10 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   if (awaiting > 0) items.push({ id: 'review', kind: 'action', group: 'Anything else', title: `Review ${awaiting} piece${awaiting > 1 ? 's' : ''}`, why: 'Pieces are ready for your approval before they post.', actionLabel: 'Review', href: detailHref, done: false })
   if (usesSocial && !socialConnected && !doneSetup.has('channel-connect') && !items.some((i) => i.id === 'gbp-access')) items.push({ id: 'connect', kind: 'action', group: 'Access', title: 'Connect Instagram', why: 'So this campaign can actually post to your feed.', actionLabel: 'Connect', href: '/dashboard/connected-accounts', done: false })
 
-  const brandThin = !((Array.isArray(biz?.brand_voice_words) && (biz!.brand_voice_words as unknown[]).length) || biz?.brand_tone || Object.keys((biz?.brand_colors as object) ?? {}).length)
-  if (brandThin) items.push({ id: 'brand', kind: 'action', group: 'Content', title: 'Add your brand details', why: 'Your voice + colors so the content matches you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
-  const contactThin = !(biz?.hours && (biz?.phone || biz?.website_url))
-  if (contactThin) items.push({ id: 'contact', kind: 'action', group: 'Info', title: 'Add your hours + link', why: 'So the content can point people where + when to find you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
+  // NOTE: general profile completeness ("Add your brand details", "Add your hours + link")
+  // was removed from a campaign's "needs you" on purpose. Those are not required to fulfill
+  // THIS campaign — they belong on /dashboard/business-info, not mixed into the order's asks.
+  // Keep this list to what the team actually needs to deliver what was bought.
 
   // ── owner's per-campaign "needs from you" config (LIVE): resolve the catalog product this order
   // came from, then apply Required/Optional/Off overrides to the auto asks + append custom asks. ──
