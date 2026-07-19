@@ -180,9 +180,15 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
   // business facts on file — the route invents nothing, and a failure just leaves
   // the deterministic line. Shared by the view lane and the AI walkthrough.
   const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({})
+  // True while the AI advice is still loading. The UI shows a brief "reading your
+  // profile" line during this window instead of the deterministic sentence, so the
+  // owner never sees an old line flash and then swap — only the accurate AI advice
+  // (or, if the AI call fails, the deterministic line stands in once loading ends).
+  const [adviceLoading, setAdviceLoading] = useState(false)
   const isPro = isProTier(client?.tier)
   useEffect(() => {
     setAiAdvice({})
+    setAdviceLoading(false)
     if (!isPro || !client?.id || !diag || !diag.connected || diag.readFailed) return
     const readable = (diag.sections ?? [])
       .filter((s) => s.status !== 'unknown' && (s.current ?? '').trim())
@@ -190,6 +196,7 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
     if (readable.length === 0) return
     let alive = true
     const ctrl = new AbortController()
+    setAdviceLoading(true)
     fetch('/api/dashboard/gbp-advice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -201,6 +208,7 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
         if (alive && j?.advice && typeof j.advice === 'object') setAiAdvice(j.advice)
       })
       .catch(() => {})
+      .finally(() => { if (alive) setAdviceLoading(false) })
     return () => { alive = false; ctrl.abort() }
     // Refetch only when the underlying listing changes (checkedAt moves on a re-diagnose).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -383,6 +391,7 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
             clientId={client?.id ?? ''}
             isPro={isPro}
             aiAdvice={aiAdvice}
+            adviceLoading={adviceLoading}
             onSilentRefresh={recheck}
           />
         ) : effectiveMode === 'ai' ? (
@@ -390,6 +399,7 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
             diag={diag}
             clientId={client?.id ?? ''}
             aiAdvice={aiAdvice}
+            adviceLoading={adviceLoading}
             taskDone={taskDone}
             rechecking={rechecking}
             recheckFailed={recheckFailed}
@@ -777,11 +787,13 @@ function summaryOutcome(section: GbpDiagnosisSection, outcomes: Record<string, P
  * first screen without localStorage, open a part's editor, or inject a save
  * note); the live page never passes them.
  */
-export function AiReview({ diag, clientId, aiAdvice = {}, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
+export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
   diag: GbpDiagnosis
   clientId: string
   /** Apnosh AI advice keyed by section (loaded by the parent GbpFixer). */
   aiAdvice?: Record<string, string>
+  /** True while that advice is still loading (drives the "reading" placeholder). */
+  adviceLoading?: boolean
   taskDone?: boolean
   rechecking?: boolean
   recheckFailed?: boolean
@@ -892,6 +904,7 @@ export function AiReview({ diag, clientId, aiAdvice = {}, taskDone, rechecking, 
           key={sections[phase.index].key}
           section={sections[phase.index]}
           aiAdvice={aiAdvice[sections[phase.index].key]}
+          adviceLoading={adviceLoading}
           chapter={chapterOf(sections[phase.index].key)}
           index={phase.index}
           total={total}
@@ -1380,6 +1393,24 @@ const fieldLabelStyle: CSSProperties = { display: 'block', fontSize: 12, fontWei
 const textInputStyle: CSSProperties = { width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, background: C.bg, padding: '10px 12px', fontSize: 13.5, color: C.ink, font: 'inherit' }
 const timeInputStyle: CSSProperties = { flex: 1, minWidth: 0, boxSizing: 'border-box', borderRadius: 9, border: `0.5px solid ${C.line}`, background: C.bg, padding: '7px 9px', fontSize: 13, color: C.ink, font: 'inherit' }
 
+/** The "Apnosh AI says" block, shared by both lanes. Shows the AI-written advice
+ *  when it has loaded; while it is still loading it shows a brief neutral line
+ *  (NOT the deterministic sentence) so the owner never sees an old line flash and
+ *  then swap. Renders nothing when there is neither advice nor a load in flight. */
+function ApnoshAdvice({ text, loading, style }: { text?: string; loading?: boolean; style?: CSSProperties }) {
+  if (!text && !loading) return null
+  return (
+    <div style={{ background: C.greenSoft, borderRadius: 11, padding: '10px 12px', ...style }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}>
+        <Sparkles size={12} /> Apnosh AI says
+      </div>
+      {text
+        ? <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{text}</div>
+        : <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>Reading your profile…</div>}
+    </div>
+  )
+}
+
 /**
  * One part per screen: the chapter eyebrow + progress, name + status chip,
  * what Google shows now, the engine's "Apnosh AI says" recommendation, why
@@ -1390,11 +1421,13 @@ const timeInputStyle: CSSProperties = { flex: 1, minWidth: 0, boxSizing: 'border
  * ("Finish" on the last part) moves on; a part the owner did not fix records
  * as skipped, a part Google accepted a save for records as updated.
  */
-function AiPart({ section, aiAdvice, chapter, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
+function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
   section: GbpDiagnosisSection
   /** Apnosh AI's tailored advice for this part, once it loads (falls back to
-   *  the deterministic `section.advice`). */
+   *  the deterministic `section.advice` only after loading ends). */
   aiAdvice?: string
+  /** True while advice is still loading (shows the "reading" placeholder). */
+  adviceLoading?: boolean
   /** The chapter this part belongs to (the uppercase eyebrow). */
   chapter: string | null
   index: number
@@ -1527,18 +1560,15 @@ function AiPart({ section, aiAdvice, chapter, index, total, clientId, onBack, on
                 : <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>}
             </div>
 
-            {/* Apnosh AI's recommendation for this part. The AI-written advice
-                shows when it has loaded; until then (and if the call fails) the
-                deterministic sentence stands in. Both are grounded in the real
-                read — never invented here. Hidden only when the engine sent none. */}
-            {(aiAdvice || section.advice) && (
-              <div style={{ background: C.greenSoft, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}>
-                  <Sparkles size={12} /> Apnosh AI says
-                </div>
-                <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{aiAdvice || section.advice}</div>
-              </div>
-            )}
+            {/* Apnosh AI's recommendation for this part. While the AI advice loads
+                the block shows a brief "reading your profile" line, then the AI
+                advice; only if the AI call ends without advice does the
+                deterministic sentence stand in. Grounded in the real read. */}
+            <ApnoshAdvice
+              text={aiAdvice ?? (adviceLoading ? undefined : section.advice)}
+              loading={!aiAdvice && !!adviceLoading}
+              style={{ marginBottom: 10 }}
+            />
 
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>Why it matters</div>
             <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: 0 }}>{section.why}</p>
@@ -2374,14 +2404,16 @@ const GOOGLE_EDIT_GENERIC = 'https://business.google.com'
  * here on any tier; the builder with all of that runs only on the campaign
  * AI lane. Exported for the render smoke.
  */
-export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {}, onSilentRefresh, initialEditKey }: {
+export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {}, adviceLoading = false, onSilentRefresh, initialEditKey }: {
   diag: GbpDiagnosis
   clientId?: string
   /** Pro unlocks the inline editors on the save-rail sections. */
   isPro?: boolean
   /** Apnosh AI advice keyed by section (loaded by the parent). Falls back to the
-   *  deterministic `section.advice` for any section not yet returned. */
+   *  deterministic `section.advice` only after loading ends. */
   aiAdvice?: Record<string, string>
+  /** True while that advice is still loading (drives the "reading" placeholder). */
+  adviceLoading?: boolean
   /** One silent diagnosis re-fetch after a save Google accepted. */
   onSilentRefresh?: () => void
   /** TEST SEAM (render smoke only): open this section's editor on first render. */
@@ -2426,6 +2458,7 @@ export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {
               clientId={clientId}
               isPro={isPro}
               aiAdvice={aiAdvice[s.key]}
+              adviceLoading={adviceLoading}
               onSilentRefresh={onSilentRefresh}
               initialEditing={initialEditKey === s.key}
             />
@@ -2449,13 +2482,15 @@ export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {
  *  section for non-Pro, keeps the Edit-on-Google link (the part's own
  *  editor page when Google has one; the generic business.google.com home
  *  when it does not). */
-function ViewerSection({ section, clientId, isPro, aiAdvice, onSilentRefresh, initialEditing }: {
+function ViewerSection({ section, clientId, isPro, aiAdvice, adviceLoading, onSilentRefresh, initialEditing }: {
   section: GbpDiagnosisSection
   clientId: string
   isPro: boolean
   /** Apnosh AI's tailored advice for this section, once it loads. Falls back to
-   *  the deterministic `section.advice` until then (and if the AI call fails). */
+   *  the deterministic `section.advice` only after loading ends. */
   aiAdvice?: string
+  /** True while advice is still loading (shows the "reading" placeholder). */
+  adviceLoading?: boolean
   onSilentRefresh?: () => void
   /** TEST SEAM (render smoke only): open this section's editor on first render. */
   initialEditing?: boolean
@@ -2483,6 +2518,46 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, onSilentRefresh, in
   })
 
   const openEditor = () => { setNote(null); setEditing(true); setEditSession((n) => n + 1) }
+
+  // Menu publish: Google's food menu is the one part the save rail can't write,
+  // but we already hold the owner's menu (menu_items). For Pro owners with saved
+  // items, offer a one-tap "put my menu on Google" that fills the Google food menu
+  // from the saved menu (honest: read-back-proven server side; nothing invented).
+  const isMenu = section.key === 'menu'
+  const [menuCount, setMenuCount] = useState<number | null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [publishNote, setPublishNote] = useState<{ tone: 'ok' | 'error' | 'pending'; text: string } | null>(null)
+  useEffect(() => {
+    if (!isMenu || !isPro || !clientId) return
+    let alive = true
+    fetch(`/api/dashboard/gbp-menu-publish?clientId=${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { portalItems?: number } | null) => { if (alive && typeof j?.portalItems === 'number') setMenuCount(j.portalItems) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [isMenu, isPro, clientId])
+  const publishMenu = async () => {
+    if (publishing) return
+    setPublishing(true); setPublishNote(null)
+    try {
+      const r = await fetch('/api/dashboard/gbp-menu-publish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }),
+      })
+      const j = await r.json().catch(() => ({})) as { ok?: boolean; itemCount?: number; error?: string }
+      if (r.ok && j.ok) {
+        setPublishNote({ tone: 'ok', text: `Added ${j.itemCount} ${j.itemCount === 1 ? 'item' : 'items'} to your Google menu.` })
+        onSilentRefresh?.()
+      } else if (r.status === 202) {
+        setPublishNote({ tone: 'pending', text: j.error || 'Google took the menu but has not shown it back yet. Check again in a few minutes.' })
+      } else {
+        setPublishNote({ tone: 'error', text: j.error || 'The menu did not save. Try again in a minute.' })
+      }
+    } catch {
+      setPublishNote({ tone: 'error', text: 'The menu did not save. Try again in a minute.' })
+    } finally {
+      setPublishing(false)
+    }
+  }
 
   return (
     <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '15px 14px', marginBottom: 10, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
@@ -2517,19 +2592,42 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, onSilentRefresh, in
               : <PartDetail detail={detail} summary={current} />}
           </div>
           {/* Apnosh AI advice: what to do next and why, tailored to this part.
-              The deterministic sentence shows first; the AI-written version swaps
-              in when it loads. Hidden on parts we could not read. */}
-          {section.status !== 'unknown' && (aiAdvice || section.advice) && (
-            <div style={{ background: C.greenSoft, borderRadius: 11, padding: '10px 12px', marginTop: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: C.greenDk, marginBottom: 4 }}>
-                <Sparkles size={12} /> Apnosh AI says
-              </div>
-              <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{aiAdvice || section.advice}</div>
-            </div>
+              While it loads, a brief "reading" line shows (never the old sentence);
+              then the AI advice, or the deterministic line only if the AI returns
+              nothing. Hidden on parts we could not read. */}
+          {section.status !== 'unknown' && (
+            <ApnoshAdvice
+              text={aiAdvice ?? (adviceLoading ? undefined : section.advice)}
+              loading={!aiAdvice && !!adviceLoading}
+              style={{ marginTop: 10 }}
+            />
           )}
           {/* The honest save outcome (Saved on proof, the pending line, or an
               error) stays on screen after the editor closes. */}
           {note && <SaveNoteLine note={note} />}
+          {/* Menu: put the owner's saved menu on Google in one tap (Pro, and only
+              when there are saved items to publish). Sits above the Edit-on-Google
+              link, which stays as the manual fallback. */}
+          {isMenu && isPro && (menuCount ?? 0) > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => { void publishMenu() }}
+                disabled={publishing}
+                className="mvp-row"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 44, borderRadius: 12, border: 'none', background: C.green, color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: publishing ? 'default' : 'pointer', opacity: publishing ? 0.7 : 1, font: 'inherit' }}
+              >
+                {publishing
+                  ? <><Loader2 size={15} className="mvp-spin" /> Putting it on Google&hellip;</>
+                  : <><Sparkles size={15} /> Put my menu on Google ({menuCount})</>}
+              </button>
+              {publishNote && (
+                <div style={{ fontSize: 12.5, lineHeight: 1.45, marginTop: 8, color: publishNote.tone === 'error' ? C.red : publishNote.tone === 'ok' ? C.greenDk : C.mute }}>
+                  {publishNote.text}
+                </div>
+              )}
+            </>
+          )}
           {canEditHere ? (
             <button type="button" onClick={openEditor} style={{ ...smallEditBtnStyle, marginTop: 10 }}>
               <Pencil size={12} /> Edit
