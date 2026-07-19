@@ -229,6 +229,14 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
       .catch(() => { markingRef.current = false })
   }, [campaignId, diag, loadError, taskDone])
 
+  // The parts still keeping the campaign's Google-profile task OPEN. Finishing the
+  // walkthrough is not the same as the profile being complete: the task only completes
+  // when a fresh read comes back with every part good. Naming the stragglers here means
+  // the owner is told WHY it stayed open instead of being left to guess.
+  const taskBlocking = (!campaignId || taskDone || !diag || loadError || !diag.connected || diag.readFailed)
+    ? []
+    : (diag.sections ?? []).filter((s) => s.status !== 'good').map((s) => ({ key: s.key, label: s.label }))
+
   // Description draft (the only section with a built AI draft).
   const [drafting, setDrafting] = useState(false)
   const [draft, setDraft] = useState<string | null>(null)
@@ -401,6 +409,8 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
             aiAdvice={aiAdvice}
             adviceLoading={adviceLoading}
             taskDone={taskDone}
+            taskBlocking={taskBlocking}
+            hasCampaignTask={!!campaignId}
             rechecking={rechecking}
             recheckFailed={recheckFailed}
             onRecheck={recheck}
@@ -787,7 +797,7 @@ function summaryOutcome(section: GbpDiagnosisSection, outcomes: Record<string, P
  * first screen without localStorage, open a part's editor, or inject a save
  * note); the live page never passes them.
  */
-export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
+export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false, taskDone, taskBlocking = [], hasCampaignTask = false, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
   diag: GbpDiagnosis
   clientId: string
   /** Apnosh AI advice keyed by section (loaded by the parent GbpFixer). */
@@ -795,6 +805,10 @@ export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false,
   /** True while that advice is still loading (drives the "reading" placeholder). */
   adviceLoading?: boolean
   taskDone?: boolean
+  /** Parts still keeping the campaign's Google-profile task open (empty when done). */
+  taskBlocking?: Array<{ key: string; label: string }>
+  /** True when this run is attached to a campaign that carries the profile task. */
+  hasCampaignTask?: boolean
   rechecking?: boolean
   recheckFailed?: boolean
   onRecheck?: () => void
@@ -929,6 +943,8 @@ export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false,
           allGood={allGood}
           score={diag.score}
           taskDone={taskDone}
+          taskBlocking={taskBlocking}
+          hasCampaignTask={hasCampaignTask}
           rechecking={rechecking}
           recheckFailed={recheckFailed}
           onRecheck={onRecheck}
@@ -2688,13 +2704,17 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, adviceLoading, onSi
  *  its outcome grouped under its chapter, a fresh re-check (which is what
  *  can complete the campaign task), the honest delay note, and the
  *  Keep-it-strong cards (reviews / post / Q and A). */
-function AiSummary({ sections, outcomes, allGood, score, taskDone, rechecking, recheckFailed, onRecheck, onOpenQanda, onOpenPost, onBack }: {
+function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking = [], hasCampaignTask = false, rechecking, recheckFailed, onRecheck, onOpenQanda, onOpenPost, onBack }: {
   sections: GbpDiagnosisSection[]
   outcomes: Record<string, PartOutcome>
   allGood: boolean
   /** The diagnosis's existing listing-health score; null = could not score honestly. */
   score: number | null
   taskDone?: boolean
+  /** Parts still keeping the campaign's profile task open. */
+  taskBlocking?: Array<{ key: string; label: string }>
+  /** True when this run is attached to a campaign that carries the profile task. */
+  hasCampaignTask?: boolean
   rechecking?: boolean
   recheckFailed?: boolean
   onRecheck?: () => void
@@ -2772,6 +2792,30 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, rechecking, r
         </div>
       ) : (
         <>
+          {/* Why the campaign task did NOT finish. Going through the walkthrough is not the
+              same as the profile being complete: the task only closes when a fresh read comes
+              back with every part good. Name the stragglers instead of leaving the owner to
+              wonder why the campaign still says it is in production. */}
+          {hasCampaignTask && taskBlocking.length > 0 && (
+            <div style={{ background: C.amber ? `${C.amber}14` : C.bg, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px', marginBottom: 12 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>
+                Your campaign task is still open
+              </div>
+              <div style={{ fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
+                It finishes on its own once every part is good. {taskBlocking.length === 1 ? 'One part is' : `${taskBlocking.length} parts are`} not there yet:
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
+                {taskBlocking.map((b) => (
+                  <span key={b.key} style={{ fontSize: 12, fontWeight: 700, color: C.ink, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '4px 10px' }}>
+                    {b.label}
+                  </span>
+                ))}
+              </div>
+              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>
+                Fix those above, then tap Check again below. Nothing else is needed from you.
+              </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={onRecheck}

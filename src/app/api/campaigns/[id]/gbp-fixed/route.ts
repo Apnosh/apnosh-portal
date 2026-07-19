@@ -31,9 +31,13 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const access = await checkClientAccess(campaign.clientId)
   if (!access.authorized) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
-  // Only a campaign that actually carries the owner-run walkthrough has this task.
-  const diyGbp = (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'gbp-setup' && it.producer === 'diy')
-  if (!diyGbp) return NextResponse.json({ error: 'this campaign has no self-serve Google profile task' }, { status: 400 })
+  // The campaign must actually carry the Google-profile work. Producer is deliberately
+  // NOT part of this test: the stamp means "we re-read the live profile and it checked out
+  // all good", which is equally true whichever lane did the work (self-serve, Apnosh AI, or
+  // the team) — and an item can carry no producer at all. Gating on producer === 'diy' meant
+  // AI-lane and producer-less campaigns could never complete even with a perfect profile.
+  const hasGbp = (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'gbp-setup')
+  if (!hasGbp) return NextResponse.json({ error: 'this campaign has no Google profile task' }, { status: 400 })
 
   // Already stamped: return the ORIGINAL completion time unchanged.
   const existing = campaign.execution?.gbpFixedAt
@@ -41,10 +45,20 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   // The honesty gate, enforced HERE: a fresh server-side read of the live profile
   // must be fully successful (connected, nothing unreadable) and every section good.
+  // On refusal we name the parts that are not good yet, so the owner is told WHY the
+  // task stayed open instead of being left to guess (the UI renders these).
   const diag = await diagnoseGbp(campaign.clientId).catch(() => null)
-  const allGood = !!diag && diag.connected && !diag.readFailed
-    && diag.sections.length > 0 && diag.sections.every((s) => s.status === 'good')
-  if (!allGood) return NextResponse.json({ error: 'the profile did not check out all good on a fresh read' }, { status: 409 })
+  const readable = !!diag && diag.connected && !diag.readFailed && diag.sections.length > 0
+  const blocking = readable ? diag!.sections.filter((s) => s.status !== 'good') : []
+  const allGood = readable && blocking.length === 0
+  if (!allGood) {
+    return NextResponse.json({
+      error: readable
+        ? 'the profile did not check out all good on a fresh read'
+        : 'we could not read your Google profile just now',
+      blocking: blocking.map((s) => ({ key: s.key, label: s.label, status: s.status, current: s.current })),
+    }, { status: 409 })
+  }
 
   // Race-proof claim (the wrap-up stamp pattern): merge into the stored execution
   // jsonb, guarded on the key still being absent so only the first stamp wins.
