@@ -13,7 +13,7 @@
 
 import Link from 'next/link'
 import {
-  Store, Palette, Plug, Image as ImageIcon, Target,
+  Store, Palette, Plug, Image as ImageIcon, Target, MapPin,
   Headset, HelpCircle,
   CreditCard, FileText, Settings,
   ChevronRight, LogOut,
@@ -42,8 +42,10 @@ const GROUPS: { title: string; rows: Row[] }[] = [
       { label: 'Business info & hours', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store },
       { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette },
       { label: 'Connected accounts', sub: 'Instagram, Google, Yelp', href: '/dashboard/connected-accounts', Icon: Plug },
-      // 'Fix your Google profile' moved out of settings: it is now a campaign deliverable
-      // (the gbp card's free self-serve version links to /dashboard/google-profile?campaignId=).
+      // Google Business Profile: an always-on entry to the in-portal viewer/editor
+      // (no campaignId → 'view' lane; Pro owners edit here and it writes back to Google).
+      // It is also still reachable as a campaign deliverable via ?campaignId=.
+      { label: 'Google Business Profile', sub: 'See and fix what Google shows', href: '/dashboard/google-profile', Icon: MapPin },
       { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon },
       { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target },
     ],
