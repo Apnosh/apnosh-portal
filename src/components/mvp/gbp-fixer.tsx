@@ -174,6 +174,38 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
   const [taskDone, setTaskDone] = useState(false)
   const markingRef = useRef(false)
 
+  // Apnosh AI advice, keyed by section. The deterministic `section.advice` shows
+  // instantly in every lane; this richer, tailored advice swaps in once it loads
+  // (best-effort, Pro-gated). Grounded strictly in the sections we read + the
+  // business facts on file — the route invents nothing, and a failure just leaves
+  // the deterministic line. Shared by the view lane and the AI walkthrough.
+  const [aiAdvice, setAiAdvice] = useState<Record<string, string>>({})
+  const isPro = isProTier(client?.tier)
+  useEffect(() => {
+    setAiAdvice({})
+    if (!isPro || !client?.id || !diag || !diag.connected || diag.readFailed) return
+    const readable = (diag.sections ?? [])
+      .filter((s) => s.status !== 'unknown' && (s.current ?? '').trim())
+      .map((s) => ({ key: s.key, label: s.label, status: s.status, current: s.current, why: s.why }))
+    if (readable.length === 0) return
+    let alive = true
+    const ctrl = new AbortController()
+    fetch('/api/dashboard/gbp-advice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: client.id, sections: readable }),
+      signal: ctrl.signal,
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { advice?: Record<string, string> } | null) => {
+        if (alive && j?.advice && typeof j.advice === 'object') setAiAdvice(j.advice)
+      })
+      .catch(() => {})
+    return () => { alive = false; ctrl.abort() }
+    // Refetch only when the underlying listing changes (checkedAt moves on a re-diagnose).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client?.id, isPro, diag?.checkedAt])
+
   useEffect(() => {
     if (!campaignId || markingRef.current || taskDone) return
     // HONESTY GATE: only a fully successful read where every section is good may complete
@@ -349,13 +381,15 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
           <ProfileViewer
             diag={diag}
             clientId={client?.id ?? ''}
-            isPro={isProTier(client?.tier)}
+            isPro={isPro}
+            aiAdvice={aiAdvice}
             onSilentRefresh={recheck}
           />
         ) : effectiveMode === 'ai' ? (
           <AiReview
             diag={diag}
             clientId={client?.id ?? ''}
+            aiAdvice={aiAdvice}
             taskDone={taskDone}
             rechecking={rechecking}
             recheckFailed={recheckFailed}
@@ -736,9 +770,11 @@ function summaryOutcome(section: GbpDiagnosisSection, outcomes: Record<string, P
  * first screen without localStorage, open a part's editor, or inject a save
  * note); the live page never passes them.
  */
-export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
+export function AiReview({ diag, clientId, aiAdvice = {}, taskDone, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
   diag: GbpDiagnosis
   clientId: string
+  /** Apnosh AI advice keyed by section (loaded by the parent GbpFixer). */
+  aiAdvice?: Record<string, string>
   taskDone?: boolean
   rechecking?: boolean
   recheckFailed?: boolean
@@ -848,6 +884,7 @@ export function AiReview({ diag, clientId, taskDone, rechecking, recheckFailed, 
         <AiPart
           key={sections[phase.index].key}
           section={sections[phase.index]}
+          aiAdvice={aiAdvice[sections[phase.index].key]}
           chapter={chapterOf(sections[phase.index].key)}
           index={phase.index}
           total={total}
@@ -1346,8 +1383,11 @@ const timeInputStyle: CSSProperties = { flex: 1, minWidth: 0, boxSizing: 'border
  * ("Finish" on the last part) moves on; a part the owner did not fix records
  * as skipped, a part Google accepted a save for records as updated.
  */
-function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
+function AiPart({ section, aiAdvice, chapter, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
   section: GbpDiagnosisSection
+  /** Apnosh AI's tailored advice for this part, once it loads (falls back to
+   *  the deterministic `section.advice`). */
+  aiAdvice?: string
   /** The chapter this part belongs to (the uppercase eyebrow). */
   chapter: string | null
   index: number
@@ -1480,14 +1520,16 @@ function AiPart({ section, chapter, index, total, clientId, onBack, onDone, onSa
                 : <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>}
             </div>
 
-            {/* The engine's deterministic recommendation for this part. Hidden
-                when the engine sent none (older cache) — never invented here. */}
-            {section.advice && (
+            {/* Apnosh AI's recommendation for this part. The AI-written advice
+                shows when it has loaded; until then (and if the call fails) the
+                deterministic sentence stands in. Both are grounded in the real
+                read — never invented here. Hidden only when the engine sent none. */}
+            {(aiAdvice || section.advice) && (
               <div style={{ background: C.greenSoft, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3 }}>
                   <Sparkles size={12} /> Apnosh AI says
                 </div>
-                <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{section.advice}</div>
+                <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{aiAdvice || section.advice}</div>
               </div>
             )}
 
@@ -2325,11 +2367,14 @@ const GOOGLE_EDIT_GENERIC = 'https://business.google.com'
  * here on any tier; the builder with all of that runs only on the campaign
  * AI lane. Exported for the render smoke.
  */
-export function ProfileViewer({ diag, clientId = '', isPro = false, onSilentRefresh, initialEditKey }: {
+export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {}, onSilentRefresh, initialEditKey }: {
   diag: GbpDiagnosis
   clientId?: string
   /** Pro unlocks the inline editors on the save-rail sections. */
   isPro?: boolean
+  /** Apnosh AI advice keyed by section (loaded by the parent). Falls back to the
+   *  deterministic `section.advice` for any section not yet returned. */
+  aiAdvice?: Record<string, string>
   /** One silent diagnosis re-fetch after a save Google accepted. */
   onSilentRefresh?: () => void
   /** TEST SEAM (render smoke only): open this section's editor on first render. */
@@ -2373,6 +2418,7 @@ export function ProfileViewer({ diag, clientId = '', isPro = false, onSilentRefr
               section={s}
               clientId={clientId}
               isPro={isPro}
+              aiAdvice={aiAdvice[s.key]}
               onSilentRefresh={onSilentRefresh}
               initialEditing={initialEditKey === s.key}
             />
@@ -2396,10 +2442,13 @@ export function ProfileViewer({ diag, clientId = '', isPro = false, onSilentRefr
  *  section for non-Pro, keeps the Edit-on-Google link (the part's own
  *  editor page when Google has one; the generic business.google.com home
  *  when it does not). */
-function ViewerSection({ section, clientId, isPro, onSilentRefresh, initialEditing }: {
+function ViewerSection({ section, clientId, isPro, aiAdvice, onSilentRefresh, initialEditing }: {
   section: GbpDiagnosisSection
   clientId: string
   isPro: boolean
+  /** Apnosh AI's tailored advice for this section, once it loads. Falls back to
+   *  the deterministic `section.advice` until then (and if the AI call fails). */
+  aiAdvice?: string
   onSilentRefresh?: () => void
   /** TEST SEAM (render smoke only): open this section's editor on first render. */
   initialEditing?: boolean
@@ -2460,6 +2509,17 @@ function ViewerSection({ section, clientId, isPro, onSilentRefresh, initialEditi
               ? <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{current}</div>
               : <PartDetail detail={detail} summary={current} />}
           </div>
+          {/* Apnosh AI advice: what to do next and why, tailored to this part.
+              The deterministic sentence shows first; the AI-written version swaps
+              in when it loads. Hidden on parts we could not read. */}
+          {section.status !== 'unknown' && (aiAdvice || section.advice) && (
+            <div style={{ background: C.greenSoft, borderRadius: 11, padding: '10px 12px', marginTop: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: C.greenDk, marginBottom: 4 }}>
+                <Sparkles size={12} /> Apnosh AI says
+              </div>
+              <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5 }}>{aiAdvice || section.advice}</div>
+            </div>
+          )}
           {/* The honest save outcome (Saved on proof, the pending line, or an
               error) stays on screen after the editor closes. */}
           {note && <SaveNoteLine note={note} />}
