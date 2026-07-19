@@ -97,8 +97,10 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
     items.push({ id: 'avoid', kind: 'input', group: 'Content', field: 'avoid', inputType: 'textarea', title: 'Anything to avoid?', why: 'Words, claims, or looks to keep out.', placeholder: 'Optional', value: exec.avoid ?? '', done: !!exec.avoid, optional: true })
   }
 
-  // ── scheduling: set the go-live date right here (replaces the old "go set a date" hop) ──
-  items.push({ id: 'go_live', kind: 'input', group: 'Scheduling', field: 'go_live', inputType: 'date', saveTo: 'target_date', title: 'When do you want to go live?', why: 'Pick a target so the team has runway to produce.', value: campaign.draft.targetDate ?? '', done: scheduleSet })
+  // ── scheduling: only CONTENT campaigns have a "go live" the owner schedules. A pure
+  // service fix (Google-profile polish, listings sync) is done when it is done — there is
+  // no launch date to pick, so asking one just confuses. ──
+  if (hasContentWork) items.push({ id: 'go_live', kind: 'input', group: 'Scheduling', field: 'go_live', inputType: 'date', saveTo: 'target_date', title: 'When do you want to go live?', why: 'Pick a target so the team has runway to produce.', value: campaign.draft.targetDate ?? '', done: scheduleSet })
 
   // ── service-driven needs: only what THIS campaign's services require ──
   for (const n of deriveServiceNeeds(campaign, { doneSetup, hasMenuItems, hasAddress, hasPaymentMethod, exec })) {
@@ -109,7 +111,10 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   // ── computed actions (only when needed) ───────────────────────────────────────
   if (pendingConcepts > 0) items.push({ id: 'concepts', kind: 'action', group: 'Anything else', title: `Approve ${pendingConcepts} concept${pendingConcepts > 1 ? 's' : ''}`, why: 'The creators are waiting on your OK before they produce.', actionLabel: 'Review', href: detailHref, done: false })
   if (awaiting > 0) items.push({ id: 'review', kind: 'action', group: 'Anything else', title: `Review ${awaiting} piece${awaiting > 1 ? 's' : ''}`, why: 'Pieces are ready for your approval before they post.', actionLabel: 'Review', href: detailHref, done: false })
-  if (usesSocial && !socialConnected && !doneSetup.has('channel-connect') && !items.some((i) => i.id === 'gbp-access')) items.push({ id: 'connect', kind: 'action', group: 'Access', title: 'Connect Instagram', why: 'So this campaign can actually post to your feed.', actionLabel: 'Connect', href: '/dashboard/connected-accounts', done: false })
+  // "Connect Instagram" only matters when we are actually making something to post to
+  // your feed. A service fix can carry leftover social channel tags on its brief, so gate
+  // on real content work — not just the tag.
+  if (usesSocial && hasContentWork && !socialConnected && !doneSetup.has('channel-connect') && !items.some((i) => i.id === 'gbp-access')) items.push({ id: 'connect', kind: 'action', group: 'Access', title: 'Connect Instagram', why: 'So this campaign can actually post to your feed.', actionLabel: 'Connect', href: '/dashboard/connected-accounts', done: false })
 
   // NOTE: general profile completeness ("Add your brand details", "Add your hours + link")
   // was removed from a campaign's "needs you" on purpose. Those are not required to fulfill
