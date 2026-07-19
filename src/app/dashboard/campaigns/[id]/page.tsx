@@ -459,10 +459,10 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
           {/* who handles everything: Apnosh runs setup, matched creators make the creative — changeable.
               Sits ABOVE the what-to-expect + Questions block: who's doing it reads first. */}
           <CampaignTeamCard camp={camp} onChoose={onChooseCreator} onOpenTeam={() => router.push(`/dashboard/campaigns/${camp.draft.id}/team`)} />
-          {/* Below the timeline: what to expect for this campaign shape + a clear line to the team */}
+          {/* Below the timeline: the ordered items by name (Campaign details) + a clear line to the team */}
           {st.phase !== 'done' && (
             <ProductionGuide
-              hasContent={pieces.length > 0 || (brief?.contentBeats?.length ?? 0) > 0}
+              items={Array.from(new Set((camp.draft.items ?? []).filter((it) => it.included && !it.optOut).map((it) => it.plain || it.name).filter(Boolean)))}
               onMessage={() => router.push('/dashboard/messages?to=strategist')}
             />
           )}

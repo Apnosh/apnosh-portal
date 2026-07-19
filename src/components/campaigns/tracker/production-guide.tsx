@@ -6,7 +6,7 @@
  * status the detail page already has (phase, go-live estimate, progress), no new data. Honest: dates
  * are estimates ("your team confirms"), and it never claims a result that hasn't happened.
  */
-import { Sparkles, CalendarClock, ArrowRight, MessageCircle, ChevronDown, Eye, CheckCircle2, Check } from 'lucide-react'
+import { Package, CalendarClock, ArrowRight, MessageCircle, ChevronDown, CheckCircle2, Check } from 'lucide-react'
 import { C, DISPLAY } from '@/components/campaigns/ui'
 import type { GoLiveEstimate } from '@/lib/campaigns/aggregate-golive'
 import type { ShippedPhase } from '@/lib/campaigns/view'
@@ -94,19 +94,10 @@ export function ProductionSummary({ phase, goLive, whenLine, progress, awaitingY
   )
 }
 
-/** Below the timeline: what to expect (by campaign shape) + a clear way to reach the team. */
-export function ProductionGuide({ hasContent, onMessage }: { hasContent: boolean; onMessage: () => void }) {
-  const expect = hasContent
-    ? [
-        'You’ll get each piece to approve before anything posts.',
-        'Approved pieces post on their planned dates.',
-        'Once it’s live, you’ll get a recap of views and clicks.',
-      ]
-    : [
-        'We set everything up behind the scenes.',
-        'This page updates as each part goes live.',
-        'You’ll get a recap of the impact once it’s running.',
-      ]
+/** Below the timeline: what this order includes + a clear way to reach the team.
+ *  `items` are the ordered line items by their owner-facing names, e.g.
+ *  "Polish your Google Business Profile". */
+export function ProductionGuide({ items, onMessage }: { items: string[]; onMessage: () => void }) {
   const faqs = [
     { q: 'What if I want a change?', a: 'Message your team any time and tell us what to tweak — we’ll adjust before it goes out.' },
     { q: 'How will I know when it’s live?', a: 'This page updates on its own, and we’ll give you a heads-up. You don’t have to check back.' },
@@ -115,20 +106,24 @@ export function ProductionGuide({ hasContent, onMessage }: { hasContent: boolean
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 16 }}>
-      {/* What to expect */}
+      {/* Campaign details — exactly what this order includes, by name */}
       <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
-          <Sparkles size={15} color={C.greenDk} />
-          <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>What to expect</div>
+          <Package size={15} color={C.greenDk} />
+          <div style={{ fontSize: 14, fontWeight: 700, color: C.ink }}>Campaign details</div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-          {expect.map((e, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
-              {i === expect.length - 1 ? <Eye size={14} color={C.faint} style={{ flexShrink: 0, marginTop: 1 }} /> : <CheckCircle2 size={14} color={C.green} style={{ flexShrink: 0, marginTop: 1 }} />}
-              <span>{e}</span>
-            </div>
-          ))}
-        </div>
+        {items.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {items.map((name, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
+                <CheckCircle2 size={14} color={C.green} style={{ flexShrink: 0, marginTop: 1 }} />
+                <span>{name}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>Your team is getting everything set up.</div>
+        )}
       </div>
 
       {/* Help / questions */}
