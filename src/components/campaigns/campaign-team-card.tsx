@@ -6,17 +6,17 @@
  * team, matched to the campaign's style. (Honest v1: there is no per-creator marketplace yet, so no
  * invented individuals or ratings.) The header's Message link opens the full team page.
  */
-import { ChevronRight } from 'lucide-react'
+import { MessageCircle } from 'lucide-react'
 import { C, EYEBROW, GRAD, SHADOW_CARD } from '@/components/campaigns/ui'
 import { creativeRolesForCampaign, vibeForCampaign } from '@/lib/campaigns/creators'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 
 const DISC_WORK: Record<string, string> = { Video: 'Video & reels', Photo: 'Photos & shoots', Social: 'Social content', Design: 'Graphics & design' }
 
-export default function CampaignTeamCard({ camp, onOpenTeam }: {
+export default function CampaignTeamCard({ camp, onMessage }: {
   camp: SavedCampaign
-  onChoose: (discipline: string, creatorId: string) => void
-  onOpenTeam: () => void
+  /** Message the team directly (goes to Apnosh for now; per-creator later). */
+  onMessage: () => void
 }) {
   const items = camp.draft.items.filter((i) => i.included && !i.optOut)
   const vibe = vibeForCampaign(camp.draft.goalKey, camp.draft.occasion)
@@ -24,12 +24,7 @@ export default function CampaignTeamCard({ camp, onOpenTeam }: {
 
   return (
     <div style={{ marginTop: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 10 }}>
-        <div style={{ ...EYEBROW }}>Your team</div>
-        <button onClick={onOpenTeam} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: C.greenDk, padding: '12px 0 12px 12px', margin: '-12px 0' }}>
-          Message <ChevronRight size={14} />
-        </button>
-      </div>
+      <div style={{ ...EYEBROW, marginBottom: 10 }}>Your team</div>
 
       <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 18, boxShadow: SHADOW_CARD, padding: '6px 14px' }}>
         {/* setup + the run: Apnosh, by default */}
@@ -53,6 +48,13 @@ export default function CampaignTeamCard({ camp, onOpenTeam }: {
         ))}
       </div>
       {roles.length > 0 && <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>Made by your Apnosh creative team, matched to your campaign.</div>}
+
+      {/* Message the team directly — goes to Apnosh for now. When there are other
+          creators, each will get its own Send Message on its row. */}
+      <button onClick={onMessage} style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 46, borderRadius: 12, border: `1px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
+        <MessageCircle size={15} /> Send Message
+      </button>
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 7, textAlign: 'center', lineHeight: 1.45 }}>Goes straight to your Apnosh team.</div>
     </div>
   )
 }

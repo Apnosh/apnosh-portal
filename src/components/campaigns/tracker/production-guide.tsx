@@ -7,7 +7,7 @@
  * are estimates ("your team confirms"), and it never claims a result that hasn't happened.
  */
 import { useState } from 'react'
-import { Package, CalendarClock, ArrowRight, MessageCircle, ChevronDown, CheckCircle2, Check, TrendingUp } from 'lucide-react'
+import { Package, CalendarClock, ArrowRight, ChevronDown, CheckCircle2, Check, TrendingUp } from 'lucide-react'
 import { C, DISPLAY } from '@/components/campaigns/ui'
 import type { GoLiveEstimate } from '@/lib/campaigns/aggregate-golive'
 import type { ShippedPhase } from '@/lib/campaigns/view'
@@ -103,7 +103,7 @@ export function ProductionSummary({ phase, goLive, whenLine, progress, awaitingY
 /** Below the timeline: what this order includes + a clear way to reach the team.
  *  `items` are the ordered line items by their owner-facing names, e.g.
  *  "Polish your Google Business Profile". */
-export function ProductionGuide({ items, onMessage }: { items: DetailItem[]; onMessage: () => void }) {
+export function ProductionGuide({ items }: { items: DetailItem[] }) {
   const [openIdx, setOpenIdx] = useState<number>(-1)
   const faqs = [
     { q: 'What if I want a change?', a: 'Message your team any time and tell us what to tweak — we’ll adjust before it goes out.' },
@@ -165,12 +165,8 @@ export function ProductionGuide({ items, onMessage }: { items: DetailItem[]; onM
 
       {/* Help / questions */}
       <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 16, padding: 16 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, marginBottom: 3 }}>Questions?</div>
-        <div style={{ fontSize: 12, color: C.mute, marginBottom: 11 }}>Your team is one message away.</div>
-        <button onClick={onMessage} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 44, padding: '0 15px', borderRadius: 12, border: 'none', cursor: 'pointer', background: C.ink, color: '#fff', fontSize: 13.5, fontWeight: 600 }}>
-          <MessageCircle size={15} /> Message your team
-        </button>
-        <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}` }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, marginBottom: 3 }}>FAQ</div>
+        <div style={{ marginTop: 10, borderTop: `1px solid ${C.line}` }}>
           {faqs.map((f, i) => (
             <details key={i} className="cw-det" style={{ borderBottom: i < faqs.length - 1 ? `1px solid ${C.line}` : 'none' }}>
               <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '11px 0', fontSize: 13, fontWeight: 600, color: C.ink }}>
