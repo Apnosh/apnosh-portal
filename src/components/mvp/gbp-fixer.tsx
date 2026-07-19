@@ -1411,11 +1411,18 @@ function ApnoshAdvice({ text, loading, style }: { text?: string; loading?: boole
   )
 }
 
-/** "Put my menu on Google": fills Google's food menu from the owner's saved
- *  menu_items — the one section the save rail can't write in-app. Renders nothing
- *  until we confirm the owner actually has saved items to publish (so it never
- *  offers to publish an empty menu). The honest result comes from the route's
- *  server-side read-back. Shared by the viewer and the campaign AI builder. */
+/** The portal's real menu editor — the ONE place a menu is kept (it also feeds
+ *  the website and the AI advice). We edit here and push to Google, rather than
+ *  keep a second menu in the Google builder. */
+const PORTAL_MENU_HREF = '/dashboard/business-info/menu'
+
+/** The menu affordances for the GBP builder/viewer. Google put the food menu on a
+ *  retired API and the portal already owns the real menu editor, so instead of a
+ *  second editor here we: (1) let the owner open THAT editor ("Edit my menu"), and
+ *  (2) push the saved menu to Google in one tap ("Put my menu on Google"), with an
+ *  honest server-side read-back. The push button only appears once we confirm there
+ *  are saved items; the editor link always shows (labelled Add vs Edit). Shared by
+ *  the viewer and the campaign AI builder — it fully replaces the old Google link. */
 function PublishMenuButton({ clientId, onPublished }: { clientId: string; onPublished?: () => void }) {
   const [count, setCount] = useState<number | null>(null)
   const [publishing, setPublishing] = useState(false)
@@ -1429,7 +1436,7 @@ function PublishMenuButton({ clientId, onPublished }: { clientId: string; onPubl
       .catch(() => {})
     return () => { alive = false }
   }, [clientId])
-  if ((count ?? 0) <= 0) return null
+  const has = (count ?? 0) > 0
   const publish = async () => {
     if (publishing) return
     setPublishing(true); setNote(null)
@@ -1453,24 +1460,30 @@ function PublishMenuButton({ clientId, onPublished }: { clientId: string; onPubl
     }
   }
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => { void publish() }}
-        disabled={publishing}
-        className="mvp-row"
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: publishing ? 'default' : 'pointer', opacity: publishing ? 0.7 : 1, font: 'inherit' }}
-      >
-        {publishing
-          ? <><Loader2 size={16} className="mvp-spin" /> Putting it on Google&hellip;</>
-          : <><Sparkles size={16} /> Put my menu on Google ({count})</>}
-      </button>
+    <div style={{ marginTop: 14 }}>
+      {has && (
+        <button
+          type="button"
+          onClick={() => { void publish() }}
+          disabled={publishing}
+          className="mvp-row"
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: publishing ? 'default' : 'pointer', opacity: publishing ? 0.7 : 1, font: 'inherit' }}
+        >
+          {publishing
+            ? <><Loader2 size={16} className="mvp-spin" /> Putting it on Google&hellip;</>
+            : <><Sparkles size={16} /> Put my menu on Google ({count})</>}
+        </button>
+      )}
       {note && (
         <div style={{ fontSize: 12.5, lineHeight: 1.45, marginTop: 8, color: note.tone === 'error' ? C.red : note.tone === 'ok' ? C.greenDk : C.mute }}>
           {note.text}
         </div>
       )}
-    </>
+      {/* Always offer the real editor: add a menu if there is none, edit it if there is. */}
+      <Link href={PORTAL_MENU_HREF} style={{ ...smallEditLinkStyle, marginTop: has || note ? 12 : 0 }}>
+        {has ? 'Edit my menu' : 'Add my menu'} <ChevronRight size={13} />
+      </Link>
+    </div>
   )
 }
 
@@ -1612,7 +1625,8 @@ function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clien
                     <Pencil size={12} /> Edit anyway
                   </button>
                 )}
-                {!actionable && !editableKind && googleEditHref && (
+                {/* Menu routes to the portal editor via PublishMenuButton below, not to Google. */}
+                {!actionable && !editableKind && googleEditHref && section.key !== 'menu' && (
                   <a href={googleEditHref} target="_blank" rel="noopener noreferrer" style={smallEditLinkStyle}>
                     Edit on Google <ExternalLink size={11} />
                   </a>
@@ -1652,7 +1666,7 @@ function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clien
                 <Pencil size={15} /> Fix it now
               </button>
             )}
-            {actionable && !editableKind && googleEditHref && <GoogleEditBlock href={googleEditHref} />}
+            {actionable && !editableKind && googleEditHref && section.key !== 'menu' && <GoogleEditBlock href={googleEditHref} />}
 
             {note && <SaveNoteLine note={note} />}
 
@@ -2639,11 +2653,18 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, adviceLoading, onSi
           {/* The honest save outcome (Saved on proof, the pending line, or an
               error) stays on screen after the editor closes. */}
           {note && <SaveNoteLine note={note} />}
-          {/* Menu: put the owner's saved menu on Google in one tap (Pro; the
-              button hides itself when there are no saved items). Sits above the
-              Edit-on-Google link, which stays as the manual fallback. */}
-          {isMenu && isPro && <PublishMenuButton clientId={clientId} onPublished={onSilentRefresh} />}
-          {canEditHere ? (
+          {/* Menu: the owner edits it in the portal (single source of truth) and
+              pushes it to Google — both live inside PublishMenuButton, which fully
+              replaces the Google link for this section. */}
+          {isMenu ? (
+            isPro
+              ? <PublishMenuButton clientId={clientId} onPublished={onSilentRefresh} />
+              : (
+                <Link href={PORTAL_MENU_HREF} style={{ ...smallEditLinkStyle, marginTop: 10 }}>
+                  Edit my menu <ChevronRight size={13} />
+                </Link>
+              )
+          ) : canEditHere ? (
             <button type="button" onClick={openEditor} style={{ ...smallEditBtnStyle, marginTop: 10 }}>
               <Pencil size={12} /> Edit
             </button>
