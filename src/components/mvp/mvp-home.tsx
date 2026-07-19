@@ -153,6 +153,13 @@ const METRIC_STAGE: Record<string, { key: string; label: string }> = {
 // NOT rendered. Flip this to `true` to bring the whole old home back exactly as it was.
 const LEGACY_HOME = false
 
+// The funnel IS the entire home, per the owner. The body the 20-owner sim added
+// below it (connect prompt, suggestions, "Your orders", quick links — the
+// anti-blank-home and show-my-order fixes) is PARKED: kept in this file but not
+// rendered. Flip to `true` to bring that body back. Tradeoff of `false`: a brand
+// new owner with no Google data sees an empty home until the funnel has data.
+const SHOW_HOME_BODY = false
+
 export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
   // One theme provider wraps the whole Home tree, so the funnel and every card
   // below read the same light/dark skin and the one toggle flips all of it.
@@ -229,6 +236,10 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
           <HomeFunnelLive clientId={clientId} height={620} fill onVisibility={setFunnelVis} />
         </div>
 
+        {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
+            the owner. Flip the flag to bring back the connect prompt, suggestions,
+            orders, and quick links. */}
+        {SHOW_HOME_BODY && (<>
         {/* NO GOOGLE DATA — the funnel hid, so say so honestly and give the fix.
             Never a blank screen, never invented numbers. */}
         {funnelVis === 'empty' && (
@@ -331,6 +342,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             ))}
           </div>
         </div>
+        </>)}
 
         {LEGACY_HOME && (<>
         {/* SWIPEABLE METRIC CARDS — swipe left/right to change which graph
