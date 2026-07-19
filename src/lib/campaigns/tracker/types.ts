@@ -9,6 +9,10 @@ import type { Stage } from './stages'
 export interface TrackerPiece {
   id: string
   orderId: string | null            // the work order, when one backs this piece (drives approve/changes)
+  /** the stable campaign piece key this row was minted with (campaign_piece_key): a Content-Menu
+   *  line id ('L#0') or the legacy positional 'Video:0'. Lets the per-item detail page find THIS
+   *  line's pieces. Null on rows minted before the key existed. */
+  pieceKey: string | null
   label: string
   channel: string                   // discipline (Video/Photo/Social/Design)
   who: string                       // real creator name, or the literal "Your team"

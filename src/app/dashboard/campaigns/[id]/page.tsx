@@ -459,21 +459,14 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
           {/* who handles everything: Apnosh runs setup + makes the creative. The Send Message
               button lives on this card and goes straight to the team (Apnosh for now). */}
           <CampaignTeamCard camp={camp} onMessage={() => router.push('/dashboard/messages?to=strategist')} />
-          {/* Below the timeline: the ordered items as tappable Campaign-details blocks + a clear line to the team */}
+          {/* Below the timeline: the ordered items as tappable Campaign-details rows — each opens
+              that item's own detail page (one row per line item; two items can share a name) */}
           {st.phase !== 'done' && (
             <ProductionGuide
-              items={(() => {
-                const seen = new Set<string>()
-                const out: { name: string; does?: string; why?: string; eta?: string; metric?: string }[] = []
-                for (const it of (camp.draft.items ?? [])) {
-                  if (!it.included || it.optOut) continue
-                  const name = it.plain || it.name
-                  if (!name || seen.has(name)) continue
-                  seen.add(name)
-                  out.push({ name, does: it.does || undefined, why: it.why || undefined, eta: it.eta || undefined, metric: it.metric?.expect || undefined })
-                }
-                return out
-              })()}
+              items={(camp.draft.items ?? [])
+                .filter((it) => it.included && !it.optOut && (it.plain || it.name))
+                .map((it) => ({ id: it.id, name: it.plain || it.name, does: it.does || undefined }))}
+              onOpenItem={(itemId) => router.push(`/dashboard/campaigns/${camp.draft.id}/item/${itemId}`)}
             />
           )}
           {/* the order receipt, its own page */}

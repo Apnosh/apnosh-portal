@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
 import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges, campaignHasAccruedMoney, reconcileCampaignProduction } from '@/lib/campaigns/work-orders'
-import { mintServiceWorkOrders } from '@/lib/campaigns/service-work-orders'
+import { mintServiceWorkOrders, getServiceWorkOrders } from '@/lib/campaigns/service-work-orders'
+import type { ItemServiceOrder } from '@/lib/campaigns/tracker/item-status'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { getCampaignOutcomes } from '@/lib/campaigns/outcomes/read'
 import { getCampaignPieces } from '@/lib/campaigns/tracker/pieces'
@@ -38,7 +39,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const shippedTeamRun = shipped && campaign!.draft.path !== 'diy'
   // Outcomes apply to any shipped campaign with published pieces (team or DIY); progress/
   // charges are team-run only. Each read is best-effort so one failure never blanks the page.
-  const [progress, charges, outcomes, pieces, activity, readiness, payment, booking] = await Promise.all([
+  const [progress, charges, outcomes, pieces, activity, readiness, payment, booking, svcOrders] = await Promise.all([
     shippedTeamRun ? getCampaignProgress(id).catch(() => null) : Promise.resolve(null),
     shippedTeamRun ? getCampaignCharges(id).catch(() => null) : Promise.resolve(null),
     shipped ? getCampaignOutcomes(id).catch(() => null) : Promise.resolve(null),
@@ -49,8 +50,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     shipped ? getCampaignPayment(id).catch(() => null) : Promise.resolve(null),
     // The shoot booking (Checkout Gates): confirmed date, a needs_reschedule, or request-mode.
     shipped ? getBookingForCampaign(id).catch(() => null) : Promise.resolve(null),
+    // Per-service work-order state (slim, owner-safe) for the per-item detail page.
+    shippedTeamRun ? getServiceWorkOrders(id).catch(() => null) : Promise.resolve(null),
   ])
-  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking })
+  // Additive: only the owner-safe columns ride out — never steps, assignees, or internal notes.
+  const serviceOrders: ItemServiceOrder[] | null = svcOrders
+    ? svcOrders.map((o) => ({ lineItemId: o.lineItemId, serviceId: o.serviceId, status: o.status, dueDate: o.dueDate, deliveredAt: o.deliveredAt }))
+    : null
+  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking, serviceOrders })
 }
 
 // PATCH /api/campaigns/:id — { items?: LineItem[], fields?: {...} }.
