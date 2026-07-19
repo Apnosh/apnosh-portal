@@ -27,16 +27,18 @@ export default function CampaignTeamCard({ camp, onMessage }: {
       <div style={{ ...EYEBROW, marginBottom: 10 }}>Your team</div>
 
       <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 18, boxShadow: SHADOW_CARD, padding: '6px 14px' }}>
-        {/* setup + the run: Apnosh, by default */}
+        {/* setup + the run: Apnosh, by default — with its own Send Message right on the row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderBottom: roles.length ? `1px solid ${C.line}` : 'none' }}>
           <span style={{ width: 40, height: 40, borderRadius: 20, background: GRAD, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>◆</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>Apnosh</div>
             <div style={{ fontSize: 11.5, color: C.mute }}>Setup, posting, and the day-to-day</div>
           </div>
+          <RowMessage onMessage={onMessage} label="Apnosh" />
         </div>
 
-        {/* the creative crafts: made by the Apnosh creative team, matched to your style */}
+        {/* the creative crafts: made by the Apnosh creative team, matched to your style.
+            Each row messages Apnosh for now; per-creator when the marketplace exists. */}
         {roles.map(({ discipline }, i) => (
           <div key={discipline} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderBottom: i < roles.length - 1 ? `1px solid ${C.line}` : 'none' }}>
             <span style={{ width: 40, height: 40, borderRadius: 20, background: '#fff', border: `1px solid ${C.line}`, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>{discipline[0]}</span>
@@ -44,17 +46,21 @@ export default function CampaignTeamCard({ camp, onMessage }: {
               <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{DISC_WORK[discipline] ?? discipline}</div>
               <div style={{ fontSize: 11.5, color: C.mute }}>Apnosh creative team</div>
             </div>
+            <RowMessage onMessage={onMessage} label={DISC_WORK[discipline] ?? discipline} />
           </div>
         ))}
       </div>
       {roles.length > 0 && <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>Made by your Apnosh creative team, matched to your campaign.</div>}
-
-      {/* Message the team directly — goes to Apnosh for now. When there are other
-          creators, each will get its own Send Message on its row. */}
-      <button onClick={onMessage} style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, height: 46, borderRadius: 12, border: `1px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}>
-        <MessageCircle size={15} /> Send Message
-      </button>
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 7, textAlign: 'center', lineHeight: 1.45 }}>Goes straight to your Apnosh team.</div>
     </div>
+  )
+}
+
+/** The simple per-row Send Message action. Goes to Apnosh for now; when other
+ *  creators exist it will address each one directly. */
+function RowMessage({ onMessage, label }: { onMessage: () => void; label: string }) {
+  return (
+    <button onClick={onMessage} aria-label={`Message ${label}`} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 11px', borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+      <MessageCircle size={13} /> Message
+    </button>
   )
 }
