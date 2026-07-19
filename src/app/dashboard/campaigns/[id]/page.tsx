@@ -456,6 +456,9 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
             onFinishSetup={() => router.push(`/dashboard/campaigns/${camp.draft.id}/ready`)}
             onRequestChange={() => router.push('/dashboard/messages?to=strategist')}
           />
+          {/* who handles everything: Apnosh runs setup, matched creators make the creative — changeable.
+              Sits ABOVE the what-to-expect + Questions block: who's doing it reads first. */}
+          <CampaignTeamCard camp={camp} onChoose={onChooseCreator} onOpenTeam={() => router.push(`/dashboard/campaigns/${camp.draft.id}/team`)} />
           {/* Below the timeline: what to expect for this campaign shape + a clear line to the team */}
           {st.phase !== 'done' && (
             <ProductionGuide
@@ -463,8 +466,6 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
               onMessage={() => router.push('/dashboard/messages?to=strategist')}
             />
           )}
-          {/* who handles everything: Apnosh runs setup, matched creators make the creative — changeable */}
-          <CampaignTeamCard camp={camp} onChoose={onChooseCreator} onOpenTeam={() => router.push(`/dashboard/campaigns/${camp.draft.id}/team`)} />
           {/* the order receipt, its own page */}
           <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
             {/* Order details is the home for everything money + canceling — the
