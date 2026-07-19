@@ -19,7 +19,7 @@
  */
 
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-import { listGSCSites, listGA4Properties, listGBPAccounts, refreshGoogleToken } from './google'
+import { listGSCSites, listGA4Properties, listGBPAccounts, refreshGoogleToken, runGA4DailyReport, runGSCDailyQuery } from './google'
 import { serviceAccountEnabled, getServiceAccountToken, getServiceAccountEmail, GSC_SCOPE, GA_SCOPE } from './google-service-account'
 
 interface Connection {
@@ -176,13 +176,41 @@ async function probeOne(
 
   /* Service-account path for Search Console + GA4: no refresh, no expiry,
      no reconnect. (GBP still uses OAuth — service accounts aren't supported
-     there.) */
+     there.)
+
+     The probe here is a ONE-DAY DATA READ — the exact same call the daily
+     sync makes — not a list endpoint. The list endpoints (sites.list /
+     accountSummaries) can reject an impersonated token even while data
+     reads work fine, which painted false "error" badges and sent false
+     reconnect alerts on pipes that were delivering data every day. The
+     product's truth is the data path, so the probe reads the data path. */
   if (serviceAccountEnabled() && (conn.channel === 'google_search_console' || conn.channel === 'google_analytics')) {
-    const saToken = await getServiceAccountToken(conn.channel === 'google_search_console' ? GSC_SCOPE : GA_SCOPE)
+    const isGSC = conn.channel === 'google_search_console'
+    const saToken = await getServiceAccountToken(isGSC ? GSC_SCOPE : GA_SCOPE)
     if (!saToken) {
-      return { newState: 'error', errorMessage: 'service_account_unavailable: GOOGLE_SERVICE_ACCOUNT_JSON is missing or invalid.' }
+      return { newState: 'error', errorMessage: 'service_account_unavailable: keyless service-account auth could not mint a token (check the WIF env vars / Vercel OIDC, or GOOGLE_SERVICE_ACCOUNT_JSON).' }
     }
-    accessToken = saToken
+    try {
+      /* Probe a settled date (GSC lags 2-3 days). An empty result is still
+         a healthy 200 — the probe checks access, not data volume. */
+      const probeDate = isoDaysAgo(isGSC ? 4 : 2)
+      if (isGSC) await runGSCDailyQuery(conn.platform_account_id, saToken, probeDate)
+      else await runGA4DailyReport(conn.platform_account_id, saToken, probeDate)
+      return { newState: 'active' }
+    } catch (err) {
+      /* The read failed — but if rows landed recently the pipe is
+         demonstrably delivering (e.g. via the OAuth fallback), and
+         "connected" is the honest state. */
+      if (await dataLandedRecently(admin, conn)) return { newState: 'active' }
+      const msg = (err as Error).message
+      const grantHint = isGSC
+        ? `add ${getServiceAccountEmail()} as a Full user on ${conn.platform_url ?? conn.platform_account_id} in Search Console (Settings → Users and permissions)`
+        : `add ${getServiceAccountEmail()} as a Viewer on GA4 property ${conn.platform_account_id} (Admin → Property access management)`
+      return {
+        newState: 'error',
+        errorMessage: `data_read_failed: ${msg}. If this is a permissions problem, ${grantHint}; it then syncs automatically, no reconnect needed.`,
+      }
+    }
   } else if (!conn.token_expires_at || new Date(conn.token_expires_at).getTime() - Date.now() < 5 * 60 * 1000) {
     /* Refresh the OAuth token if needed (within 5 min of expiry). */
     if (!conn.refresh_token) {
@@ -263,6 +291,31 @@ async function probeOne(
   }
 
   return { newState: 'active' }
+}
+
+function isoDaysAgo(n: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() - n)
+  return d.toISOString().slice(0, 10)
+}
+
+/* Has a metric row landed inside the channel's healthy window? GSC data
+   lags 2-3 days by design, so its window is wider. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function dataLandedRecently(admin: any, conn: Connection): Promise<boolean> {
+  const isGSC = conn.channel === 'google_search_console'
+  const table = isGSC ? 'search_metrics' : 'website_metrics'
+  try {
+    const { data } = await admin
+      .from(table)
+      .select('date')
+      .eq('client_id', conn.client_id)
+      .gte('date', isoDaysAgo(isGSC ? 7 : 3))
+      .limit(1)
+    return !!(data && data.length)
+  } catch {
+    return false
+  }
 }
 
 function classifyProbeError(err: Error, conn: Connection): ProbeResult {
