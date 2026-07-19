@@ -1404,6 +1404,69 @@ function ApnoshAdvice({ text, loading, style }: { text?: string; loading?: boole
   )
 }
 
+/** "Put my menu on Google": fills Google's food menu from the owner's saved
+ *  menu_items — the one section the save rail can't write in-app. Renders nothing
+ *  until we confirm the owner actually has saved items to publish (so it never
+ *  offers to publish an empty menu). The honest result comes from the route's
+ *  server-side read-back. Shared by the viewer and the campaign AI builder. */
+function PublishMenuButton({ clientId, onPublished }: { clientId: string; onPublished?: () => void }) {
+  const [count, setCount] = useState<number | null>(null)
+  const [publishing, setPublishing] = useState(false)
+  const [note, setNote] = useState<{ tone: 'ok' | 'error' | 'pending'; text: string } | null>(null)
+  useEffect(() => {
+    if (!clientId) return
+    let alive = true
+    fetch(`/api/dashboard/gbp-menu-publish?clientId=${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { portalItems?: number } | null) => { if (alive && typeof j?.portalItems === 'number') setCount(j.portalItems) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [clientId])
+  if ((count ?? 0) <= 0) return null
+  const publish = async () => {
+    if (publishing) return
+    setPublishing(true); setNote(null)
+    try {
+      const r = await fetch('/api/dashboard/gbp-menu-publish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }),
+      })
+      const j = await r.json().catch(() => ({})) as { ok?: boolean; itemCount?: number; error?: string }
+      if (r.ok && j.ok) {
+        setNote({ tone: 'ok', text: `Added ${j.itemCount} ${j.itemCount === 1 ? 'item' : 'items'} to your Google menu.` })
+        onPublished?.()
+      } else if (r.status === 202) {
+        setNote({ tone: 'pending', text: j.error || 'Google took the menu but has not shown it back yet. Check again in a few minutes.' })
+      } else {
+        setNote({ tone: 'error', text: j.error || 'The menu did not save. Try again in a minute.' })
+      }
+    } catch {
+      setNote({ tone: 'error', text: 'The menu did not save. Try again in a minute.' })
+    } finally {
+      setPublishing(false)
+    }
+  }
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => { void publish() }}
+        disabled={publishing}
+        className="mvp-row"
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: publishing ? 'default' : 'pointer', opacity: publishing ? 0.7 : 1, font: 'inherit' }}
+      >
+        {publishing
+          ? <><Loader2 size={16} className="mvp-spin" /> Putting it on Google&hellip;</>
+          : <><Sparkles size={16} /> Put my menu on Google ({count})</>}
+      </button>
+      {note && (
+        <div style={{ fontSize: 12.5, lineHeight: 1.45, marginTop: 8, color: note.tone === 'error' ? C.red : note.tone === 'ok' ? C.greenDk : C.mute }}>
+          {note.text}
+        </div>
+      )}
+    </>
+  )
+}
+
 /**
  * One part per screen: the chapter eyebrow + progress, name + status chip,
  * what Google shows now, the engine's "Apnosh AI says" recommendation, why
@@ -1565,6 +1628,12 @@ function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clien
 
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>Why it matters</div>
             <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: 0 }}>{section.why}</p>
+
+            {/* Menu is the one part the save rail can't write, so the builder used
+                to offer only an Edit-on-Google link. For Pro owners with a saved
+                menu, put it on Google in one tap right here (the AI lane is
+                Pro-gated). The button hides itself when there is nothing to publish. */}
+            {section.key === 'menu' && <PublishMenuButton clientId={clientId} onPublished={onSilentRefresh} />}
 
             {actionable && editableKind && (
               <button
@@ -2512,45 +2581,10 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, adviceLoading, onSi
 
   const openEditor = () => { setNote(null); setEditing(true); setEditSession((n) => n + 1) }
 
-  // Menu publish: Google's food menu is the one part the save rail can't write,
-  // but we already hold the owner's menu (menu_items). For Pro owners with saved
-  // items, offer a one-tap "put my menu on Google" that fills the Google food menu
-  // from the saved menu (honest: read-back-proven server side; nothing invented).
+  // Menu: Google's food menu is the one part the save rail can't write, but we
+  // already hold the owner's menu (menu_items). For Pro owners the shared
+  // PublishMenuButton offers a one-tap "put my menu on Google".
   const isMenu = section.key === 'menu'
-  const [menuCount, setMenuCount] = useState<number | null>(null)
-  const [publishing, setPublishing] = useState(false)
-  const [publishNote, setPublishNote] = useState<{ tone: 'ok' | 'error' | 'pending'; text: string } | null>(null)
-  useEffect(() => {
-    if (!isMenu || !isPro || !clientId) return
-    let alive = true
-    fetch(`/api/dashboard/gbp-menu-publish?clientId=${clientId}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j: { portalItems?: number } | null) => { if (alive && typeof j?.portalItems === 'number') setMenuCount(j.portalItems) })
-      .catch(() => {})
-    return () => { alive = false }
-  }, [isMenu, isPro, clientId])
-  const publishMenu = async () => {
-    if (publishing) return
-    setPublishing(true); setPublishNote(null)
-    try {
-      const r = await fetch('/api/dashboard/gbp-menu-publish', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ clientId }),
-      })
-      const j = await r.json().catch(() => ({})) as { ok?: boolean; itemCount?: number; error?: string }
-      if (r.ok && j.ok) {
-        setPublishNote({ tone: 'ok', text: `Added ${j.itemCount} ${j.itemCount === 1 ? 'item' : 'items'} to your Google menu.` })
-        onSilentRefresh?.()
-      } else if (r.status === 202) {
-        setPublishNote({ tone: 'pending', text: j.error || 'Google took the menu but has not shown it back yet. Check again in a few minutes.' })
-      } else {
-        setPublishNote({ tone: 'error', text: j.error || 'The menu did not save. Try again in a minute.' })
-      }
-    } catch {
-      setPublishNote({ tone: 'error', text: 'The menu did not save. Try again in a minute.' })
-    } finally {
-      setPublishing(false)
-    }
-  }
 
   return (
     <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '15px 14px', marginBottom: 10, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
@@ -2598,29 +2632,10 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, adviceLoading, onSi
           {/* The honest save outcome (Saved on proof, the pending line, or an
               error) stays on screen after the editor closes. */}
           {note && <SaveNoteLine note={note} />}
-          {/* Menu: put the owner's saved menu on Google in one tap (Pro, and only
-              when there are saved items to publish). Sits above the Edit-on-Google
-              link, which stays as the manual fallback. */}
-          {isMenu && isPro && (menuCount ?? 0) > 0 && (
-            <>
-              <button
-                type="button"
-                onClick={() => { void publishMenu() }}
-                disabled={publishing}
-                className="mvp-row"
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 10, height: 44, borderRadius: 12, border: 'none', background: C.green, color: '#fff', fontSize: 14.5, fontWeight: 700, cursor: publishing ? 'default' : 'pointer', opacity: publishing ? 0.7 : 1, font: 'inherit' }}
-              >
-                {publishing
-                  ? <><Loader2 size={15} className="mvp-spin" /> Putting it on Google&hellip;</>
-                  : <><Sparkles size={15} /> Put my menu on Google ({menuCount})</>}
-              </button>
-              {publishNote && (
-                <div style={{ fontSize: 12.5, lineHeight: 1.45, marginTop: 8, color: publishNote.tone === 'error' ? C.red : publishNote.tone === 'ok' ? C.greenDk : C.mute }}>
-                  {publishNote.text}
-                </div>
-              )}
-            </>
-          )}
+          {/* Menu: put the owner's saved menu on Google in one tap (Pro; the
+              button hides itself when there are no saved items). Sits above the
+              Edit-on-Google link, which stays as the manual fallback. */}
+          {isMenu && isPro && <PublishMenuButton clientId={clientId} onPublished={onSilentRefresh} />}
           {canEditHere ? (
             <button type="button" onClick={openEditor} style={{ ...smallEditBtnStyle, marginTop: 10 }}>
               <Pencil size={12} /> Edit
