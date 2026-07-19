@@ -95,6 +95,49 @@ export function inferShapeFromOnboarding(data: {
  * Returns 3 default goals for a given shape, per docs/PRODUCT-SPEC.md
  * default-goals matrix. Owner can override during onboarding.
  */
+/**
+ * The onboarding "#1 priority" chip → a real GoalSlug, so the recommender runs on
+ * what the owner actually SAID, not a shape guess. Every GOAL_CHIPS value maps;
+ * an unknown/legacy chip returns null (shape defaults then stand).
+ */
+const CHIP_TO_SLUG: Record<string, GoalSlug> = {
+  'More customers on slow days': 'fill_slow_times',
+  'More foot traffic overall': 'more_foot_traffic',
+  'Build local awareness': 'be_known_for',
+  'Promote a specific offering': 'be_known_for',
+  'Grow social following': 'be_known_for',
+  'Improve online reputation': 'better_reputation',
+  'Launch something new': 'be_known_for',
+  'Stay top of mind': 'regulars_more_often',
+  'Compete with nearby businesses': 'more_foot_traffic',
+  'More bookings or orders': 'more_online_orders',
+  'Turn first-timers into regulars': 'regulars_more_often',
+  'Grow catering orders': 'grow_catering',
+  'Better photos of my food': 'be_known_for',
+  'Reach a younger crowd': 'be_known_for',
+}
+export function goalSlugForChip(chip: string | null | undefined): GoalSlug | null {
+  if (!chip) return null
+  return CHIP_TO_SLUG[chip.trim()] ?? null
+}
+
+/**
+ * The onboarding budget chip → a monthly cap in dollars for businesses.monthly_budget
+ * (the over-budget guard + recommender read it). 'Not sure yet' / unknown → null (no cap
+ * is asserted). The cap is the TOP of the chosen range so we never under-sell their pick.
+ */
+const BUDGET_TO_CAP: Record<string, number> = {
+  'Under $200/mo': 200,
+  '$200 to $500/mo': 500,
+  '$500 to $1,000/mo': 1000,
+  '$1,000 to $2,500/mo': 2500,
+  'Over $2,500/mo': 5000,
+}
+export function budgetCapForChip(chip: string | null | undefined): number | null {
+  if (!chip) return null
+  return BUDGET_TO_CAP[chip.trim()] ?? null
+}
+
 export function defaultGoalsForShape(shape: {
   footprint: Footprint | null
   concept: Concept | null

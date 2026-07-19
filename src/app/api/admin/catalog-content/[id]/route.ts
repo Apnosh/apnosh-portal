@@ -19,7 +19,8 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
 import { rowToOverride, cleanStages, type ContentOverrideRow } from '@/lib/campaigns/content-overrides-server'
-import { cleanLanes, cleanStringList, cleanRush } from '@/lib/campaigns/data/content-overrides'
+import { cleanLanes, cleanStringList, cleanRush, cleanNeeds } from '@/lib/campaigns/data/content-overrides'
+import { cleanGatesConfig } from '@/lib/campaigns/gates/config'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -82,6 +83,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const requirements = cleanStringList(b.requirements)
   const whatYouGet = cleanStringList(b.whatYouGet)
   const rush = cleanRush(b.rush)
+  const needs = cleanNeeds(b.needs)
+  const gates = cleanGatesConfig(b.gates)
   const row = {
     title: clean(b.title),
     tagline: clean(b.tagline),
@@ -97,6 +100,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     requirements: requirements.length ? requirements : null,
     whats_included: whatYouGet.length ? whatYouGet : null,
     rush: rush ?? null,
+    needs: needs ?? null,
+    gates: gates ?? null,
   }
 
   // Same copy rule the code records live under: no em dashes reach the store.
@@ -120,9 +125,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   let { data, error } = await admin.from('catalog_content_overrides').upsert(payload).select('*').maybeSingle()
   // If the draft columns (210 stages / 211 lanes) are not applied yet, save everything else so the
   // CMS still works — those fields just won't persist until the owner runs the migration.
-  if (error && (error.code === '42703' || /column .*(stages|lanes|requirements|whats_included|rush)|(stages|lanes|requirements|whats_included|rush).* does not exist/i.test(error.message || ''))) {
-    const { stages: _stages, lanes: _lanes, requirements: _reqs, whats_included: _wig, rush: _rush, ...rest } = payload
-    void _stages; void _lanes; void _reqs; void _wig; void _rush
+  if (error && (error.code === '42703' || error.code === 'PGRST204' || /could not find the '?(stages|lanes|requirements|whats_included|rush|needs|gates)'? column|(stages|lanes|requirements|whats_included|rush|needs|gates).* does not exist/i.test(error.message || ''))) {
+    const { stages: _stages, lanes: _lanes, requirements: _reqs, whats_included: _wig, rush: _rush, needs: _needs, gates: _gates, ...rest } = payload
+    void _stages; void _lanes; void _reqs; void _wig; void _rush; void _needs; void _gates
     ;({ data, error } = await admin.from('catalog_content_overrides').upsert(rest).select('*').maybeSingle())
   }
   if (error) {

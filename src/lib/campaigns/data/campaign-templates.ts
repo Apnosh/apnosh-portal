@@ -55,7 +55,7 @@ export interface SpecQuestion {
   placeholder?: string
 }
 
-export interface ContentBeatSpec { week: number; type: string; label: string; channel: string; boost?: boolean; because?: string; serviceId?: string }
+export interface ContentBeatSpec { week: number; type: string; label: string; channel: string; boost?: boolean; because?: string; serviceId?: string; footageSource?: 'owner' }
 
 export type CampaignCategory = 'demand' | 'capacity' | 'retain' | 'reputation'
 export const CATEGORY_META: Record<CampaignCategory, { label: string }> = {
@@ -111,7 +111,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     ],
     defaultAudienceIds: ['lapsed', 'new-locals'], defaultChannelIds: ['sms', 'reels', 'gbp', 'ads'],
     contentPlan: [
-      { week: 1, type: 'reel', label: 'Launch reel — the offer in 12 seconds', channel: 'Instagram · TikTok' },
+      { week: 1, type: 'reel', label: 'Launch reel — the offer in 12 seconds', channel: 'Instagram' },
       { week: 1, type: 'sms', label: 'Kickoff text to lapsed guests', channel: 'SMS' },
       { week: 1, type: 'post', label: 'Google post — the weekly deal', channel: 'Google' },
       { week: 2, type: 'sms', label: 'Weekly reminder text', channel: 'SMS' },
@@ -138,7 +138,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     ],
     defaultAudienceIds: ['regulars', 'new-locals'], defaultChannelIds: ['reels', 'email', 'social', 'gbp'],
     contentPlan: [
-      { week: 1, type: 'reel', label: 'Teaser reel — the new item, up close', channel: 'Instagram · TikTok' },
+      { week: 1, type: 'reel', label: 'Teaser reel — the new item, up close', channel: 'Instagram' },
       { week: 1, type: 'email', label: 'Announcement email to your list', channel: 'Email' },
       { week: 1, type: 'photo', label: 'Hero photo set', channel: 'Instagram · Google' },
       { week: 2, type: 'story', label: 'Behind-the-scenes story', channel: 'Instagram Story' },
@@ -165,7 +165,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     defaultAudienceIds: ['regulars', 'vips', 'new-locals'], defaultChannelIds: ['email', 'sms', 'reels', 'gbp'],
     contentPlan: [
       { week: 1, type: 'email', label: 'Save-the-date / invite email', channel: 'Email' },
-      { week: 1, type: 'reel', label: 'Teaser reel for the event', channel: 'Instagram · TikTok' },
+      { week: 1, type: 'reel', label: 'Teaser reel for the event', channel: 'Instagram' },
       { week: 1, type: 'post', label: 'Google event post', channel: 'Google' },
       { week: 2, type: 'sms', label: 'Reminder text — book now', channel: 'SMS' },
       { week: 2, type: 'story', label: 'Day-of countdown story', channel: 'Instagram Story' },
@@ -189,7 +189,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     ],
     defaultAudienceIds: ['regulars', 'new-locals', 'families'], defaultChannelIds: ['sms', 'reels', 'social', 'gbp'],
     contentPlan: [
-      { week: 1, type: 'reel', label: 'Launch reel — introduce the night', channel: 'Instagram · TikTok' },
+      { week: 1, type: 'reel', label: 'Launch reel — introduce the night', channel: 'Instagram' },
       { week: 1, type: 'post', label: 'Recurring Google + social post', channel: 'Google · Facebook' },
       { week: 2, type: 'sms', label: 'Weekly “tonight!” text', channel: 'SMS' },
       { week: 2, type: 'photo', label: 'Weekly recap photo', channel: 'Instagram' },
@@ -251,7 +251,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     ],
     defaultAudienceIds: ['new-locals'], defaultChannelIds: ['reels', 'gbp', 'ads', 'social'],
     contentPlan: [
-      { week: 1, type: 'reel', label: 'Signature-dish reel', channel: 'Instagram · TikTok' },
+      { week: 1, type: 'reel', label: 'Signature-dish reel', channel: 'Instagram' },
       { week: 1, type: 'post', label: 'Google post + local SEO', channel: 'Google' },
       { week: 2, type: 'reel', label: 'Atmosphere / story reel', channel: 'Instagram' },
       { week: 2, type: 'photo', label: 'Fresh photo set for listings', channel: 'Google · Yelp' },

@@ -102,7 +102,15 @@ export const GOAL_CHIPS = [
   'More customers on slow days', 'More foot traffic overall', 'Build local awareness',
   'Promote a specific offering', 'Grow social following', 'Improve online reputation',
   'Launch something new', 'Stay top of mind', 'Compete with nearby businesses',
-  'More bookings or orders',
+  'More bookings or orders', 'Turn first-timers into regulars', 'Grow catering orders',
+  'Better photos of my food', 'Reach a younger crowd',
+] as const
+
+// One budget question (the only money question in onboarding). Feeds
+// businesses.monthly_budget: the over-budget guard and the recommender read it.
+export const BUDGET_CHIPS = [
+  'Under $200/mo', '$200 to $500/mo', '$500 to $1,000/mo',
+  '$1,000 to $2,500/mo', 'Over $2,500/mo', 'Not sure yet',
 ] as const
 
 export const SUCCESS_CHIPS = [
@@ -402,6 +410,7 @@ export interface OnboardingData {
   goal_detail: string
   success_signs: string[]
   timeline: string
+  marketing_budget: string
   main_offerings: string
   upcoming: string
   tones: string[]
@@ -462,6 +471,7 @@ export const INITIAL_DATA: OnboardingData = {
   goal_detail: '',
   success_signs: [],
   timeline: '',
+  marketing_budget: '',
   main_offerings: '',
   upcoming: '',
   tones: [],

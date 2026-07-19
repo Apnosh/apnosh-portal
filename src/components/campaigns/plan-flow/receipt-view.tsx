@@ -76,7 +76,7 @@ export function goLivePhraseFor(draft: CampaignDraft, receipt: CampaignReceipt, 
   return go.phrase ? (go.hasGoLive ? `Live in ${go.phrase}` : `Starts in ${go.phrase}`) : 'We confirm dates once you start'
 }
 
-export default function CampaignReceiptView({ restaurant, orderId, draft, receipt, dateISO, doneSetupIds }: {
+export default function CampaignReceiptView({ restaurant, orderId, draft, receipt, dateISO, doneSetupIds, paidUpfront }: {
   restaurant: string
   orderId: string
   draft: CampaignDraft
@@ -85,6 +85,9 @@ export default function CampaignReceiptView({ restaurant, orderId, draft, receip
   dateISO?: string
   /** Setup serviceIds already in place — skipped in the go-live estimate (no re-quoting done setup). */
   doneSetupIds?: readonly string[]
+  /** True when this order was paid in full at checkout (a paid campaign_payments row exists).
+   *  Flips the billing note from the legacy pay-on-delivery wording to the pay-first truth. */
+  paidUpfront?: boolean
 }) {
   // Anchor everything (timeline + printed date) at the order date when given, so a historical receipt
   // reproduces the rollout as it was planned at ship — not a misleading "from now" estimate. The
@@ -104,12 +107,12 @@ export default function CampaignReceiptView({ restaurant, orderId, draft, receip
     const contentTotal = Math.max(0, bill.oneTimeOnDelivery - setupTotal)
     const groups = ([
       setupSvc.length ? { key: 'setup', Icon: Flag, fg: '#3f72c4', label: 'Setup', sub: 'One-time, to get you live', total: setupTotal, suffix: '' } : null,
-      (creatives.length || perOccSvc.length) ? { key: 'content', Icon: Sparkles, fg: C.greenDk, label: 'Content we make', sub: 'Charged as each piece ships', total: contentTotal, suffix: '' } : null,
+      (creatives.length || perOccSvc.length) ? { key: 'content', Icon: Sparkles, fg: C.greenDk, label: 'Content we make', sub: paidUpfront ? 'Paid at checkout' : 'Charged as each piece ships', total: contentTotal, suffix: '' } : null,
       monthlySvc.length ? { key: 'monthly', Icon: Repeat, fg: C.mute, label: 'Every month', sub: 'Ongoing, pause anytime', total: bill.perMonth, suffix: '/mo' } : null,
     ].filter(Boolean) as { key: string; Icon: LucideIcon; fg: string; label: string; sub: string; total: number; suffix: string }[])
     const timeline = buildTimeline(sched, go, today)
     return { bill, go, sched, creatives, setupSvc, monthlySvc, perOccSvc, groups, timeline }
-  }, [receipt, draft, today, doneSetupIds])
+  }, [receipt, draft, today, doneSetupIds, paidUpfront])
 
   const { bill, go, sched, creatives, setupSvc, monthlySvc, perOccSvc, groups, timeline } = m
   const orderNo = 'APN-' + String(orderId || printDate.replace(/-/g, '')).replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase()
@@ -191,7 +194,9 @@ export default function CampaignReceiptView({ restaurant, orderId, draft, receip
 
       {/* honest billing note */}
       <div style={{ background: C.greenSoft, borderRadius: 12, padding: '11px 13px', margin: '12px 0', fontSize: 12, color: C.greenDk, lineHeight: 1.5 }}>
-        <b style={{ fontWeight: 700 }}>Nothing upfront.</b> Each piece is charged only when it ships.{bill.perMonth > 0 ? ' Ads bill monthly while the campaign runs, pause anytime.' : ''}
+        {paidUpfront
+          ? <><b style={{ fontWeight: 700 }}>Paid at checkout.</b> You paid the one-time total when you placed the order.{bill.perMonth > 0 ? ' Monthly items bill each month, starting the day you ordered. Cancel anytime.' : ''}</>
+          : <><b style={{ fontWeight: 700 }}>Nothing upfront.</b> Each piece is charged only when it ships.{bill.perMonth > 0 ? ' Ads bill monthly while the campaign runs, pause anytime.' : ''}</>}
       </div>
 
       {/* timeline summary */}

@@ -96,6 +96,8 @@ export default function MvpOrders() {
   const [progress, setProgress] = useState<Record<string, CampaignProgress>>({})
   // null = the charges lookup failed — render "unknown", never a false "$0".
   const [charges, setCharges] = useState<Record<string, CampaignCharges> | null>({})
+  // Upfront charge-at-checkout receipts per campaign — when present, the row shows what was paid.
+  const [payments, setPayments] = useState<Record<string, { totalCents: number; paidAt: string | null }>>({})
   const [error, setError] = useState<string | null>(null)
 
   // per-card discard state (cart only)
@@ -127,6 +129,7 @@ export default function MvpOrders() {
         setSaved((j.campaigns ?? []) as SavedCampaign[])
         setProgress((j.progress ?? {}) as Record<string, CampaignProgress>)
         setCharges((j.charges ?? null) as Record<string, CampaignCharges> | null)
+        setPayments((j.payments ?? {}) as Record<string, { totalCents: number; paidAt: string | null }>)
       })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
@@ -349,6 +352,7 @@ export default function MvpOrders() {
                   const vm = vms.get(d.id)!
                   const goal = d.goalKey ? GOALS[d.goalKey] : null
                   const ch = charges?.[d.id]
+                  const pay = payments[d.id]
                   const b = bills.get(d.id)!
                   // A done-but-recurring campaign reads "Monthly program", not "Done" —
                   // its pieces finished, but the monthly services are still running.
@@ -366,8 +370,8 @@ export default function MvpOrders() {
                         </span>
                         <span style={{ textAlign: 'right', flexShrink: 0 }}>
                           {costLabel && <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, color: C.ink }}>{costLabel}</span>}
-                          <span style={{ display: 'block', fontSize: 11.5, color: !chUnknown && ch && ch.accruedCents > 0 ? C.greenDk : C.faint, marginTop: 2 }}>
-                            {chUnknown ? 'Billed total unavailable' : ch && ch.accruedCents > 0 ? `${dollars(ch.accruedCents)} billed so far` : 'Nothing billed yet'}
+                          <span style={{ display: 'block', fontSize: 11.5, color: pay || (!chUnknown && ch && ch.accruedCents > 0) ? C.greenDk : C.faint, marginTop: 2 }}>
+                            {pay ? `Paid ${dollars(pay.totalCents)}` : chUnknown ? 'Billed total unavailable' : ch && ch.accruedCents > 0 ? `${dollars(ch.accruedCents)} billed so far` : 'Nothing billed yet'}
                           </span>
                         </span>
                         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
@@ -394,6 +398,7 @@ export default function MvpOrders() {
                   const d = c.draft
                   const vm = vms.get(d.id)!
                   const ch = charges?.[d.id]
+                  const pay = payments[d.id]
                   const stopped = c.status === 'stopped'
                   // Stopped: updated_at carries the terminal stop flip — the honest stop date.
                   // Finished: there is no finish stamp, so show the ship date labeled as such.
@@ -411,8 +416,8 @@ export default function MvpOrders() {
                           <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 2 }}>{subLabel}</span>
                         </span>
                         <span style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, color: chUnknown ? C.faint : C.ink }}>{chUnknown ? '—' : ch && ch.accruedCents > 0 ? dollars(ch.accruedCents) : '$0'}</span>
-                          <span style={{ display: 'block', fontSize: 11, color: C.faint, marginTop: 2 }}>{chUnknown ? 'unknown' : 'billed'}</span>
+                          <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, color: pay || !chUnknown ? C.ink : C.faint }}>{pay ? dollars(pay.totalCents) : chUnknown ? '—' : ch && ch.accruedCents > 0 ? dollars(ch.accruedCents) : '$0'}</span>
+                          <span style={{ display: 'block', fontSize: 11, color: C.faint, marginTop: 2 }}>{pay ? 'paid' : chUnknown ? 'unknown' : 'billed'}</span>
                         </span>
                         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
                       </Link>

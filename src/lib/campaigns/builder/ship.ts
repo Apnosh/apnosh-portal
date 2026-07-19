@@ -11,10 +11,15 @@ import type { CampaignDraft, PieceProducer } from '../types'
 
 export const SHIP_FAIL = "That didn't go through. Nothing was ordered. Try again."
 
-export async function saveAndShip({ clientId, draft, producerChoices }: {
+export async function saveAndShip({ clientId, draft, producerChoices, paymentIntentId }: {
   clientId: string
   draft: CampaignDraft
   producerChoices?: Record<string, PieceProducer>
+  /** The charge-at-checkout PaymentIntent that paid for this billable order (G7). Present
+   *  only on the upfront-checkout path; the ship route verifies the charge succeeded before
+   *  it ships a billable draft. Absent on the delivery-gated (buy-now) path, which bills per
+   *  piece on delivery and needs no upfront payment. */
+  paymentIntentId?: string
 }): Promise<string> {
   const h = { 'Content-Type': 'application/json' }
   const res = await fetch('/api/campaigns', { method: 'POST', headers: h, body: JSON.stringify({ clientId, draft }) })
@@ -28,7 +33,11 @@ export async function saveAndShip({ clientId, draft, producerChoices }: {
     const pr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { producer_choices: producerChoices } }) }).catch(() => null)
     if (!pr || !pr.ok) throw new Error(SHIP_FAIL)
   }
-  const sr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => null)
+  // paymentIntentId rides at the TOP LEVEL of the PATCH body (not in `fields`, which is a
+  // strict write-whitelist) so the ship route can bind + verify the charge for a billable order.
+  const shipBody: Record<string, unknown> = { fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }
+  if (paymentIntentId) shipBody.paymentIntentId = paymentIntentId
+  const sr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify(shipBody) }).catch(() => null)
   if (!sr || !sr.ok) throw new Error(SHIP_FAIL)
   return id
 }

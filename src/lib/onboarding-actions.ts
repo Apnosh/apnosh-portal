@@ -23,7 +23,7 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
   // Check if businesses already has a linked client
   const { data: biz, error: bizErr } = await supabase
     .from('businesses')
-    .select('id, name, client_id, industry, city, state, website_url, phone')
+    .select('id, name, client_id, industry, city, state, website_url, phone, owner_id')
     .eq('id', businessId)
     .single()
 
@@ -38,25 +38,38 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
     return biz.client_id
   }
 
-  // Check if a client with this name already exists (case-insensitive) — link to it
-  const { data: existingClient } = await supabase
-    .from('clients')
-    .select('id')
-    .ilike('name', biz.name || 'My Business')
-    .maybeSingle()
+  // Reuse an existing client ONLY when it already belongs to this business's OWNER
+  // (a client_users row links the owner's auth user to it). Never link by name alone:
+  // two different owners with the same restaurant name must never share campaigns,
+  // connections, or billing (cross-tenant data mixing).
+  if (biz.owner_id) {
+    const { data: myLinks } = await supabase
+      .from('client_users')
+      .select('client_id')
+      .eq('auth_user_id', biz.owner_id)
+    const myClientIds = (myLinks ?? []).map((l) => l.client_id).filter((x): x is string => !!x)
+    if (myClientIds.length) {
+      const { data: existingClient } = await supabase
+        .from('clients')
+        .select('id')
+        .in('id', myClientIds)
+        .ilike('name', biz.name || 'My Business')
+        .maybeSingle()
 
-  if (existingClient) {
-    console.log('[ensureClient] Found existing client by name, linking:', existingClient.id)
-    const { error: updateErr } = await supabase
-      .from('businesses')
-      .update({ client_id: existingClient.id })
-      .eq('id', businessId)
+      if (existingClient) {
+        console.log('[ensureClient] Owner already has this client, linking:', existingClient.id)
+        const { error: updateErr } = await supabase
+          .from('businesses')
+          .update({ client_id: existingClient.id })
+          .eq('id', businessId)
 
-    if (updateErr) {
-      console.error('[ensureClient] Failed to link business to existing client:', updateErr.message)
-      return null
+        if (updateErr) {
+          console.error('[ensureClient] Failed to link business to existing client:', updateErr.message)
+          return null
+        }
+        return existingClient.id
+      }
     }
-    return existingClient.id
   }
 
   // Create a new clients row from business data
@@ -193,6 +206,46 @@ export async function completeOnboardingCRM(
 
   if (profileErr) {
     console.error('[completeOnboardingCRM] Profile upsert failed:', profileErr)
+  }
+
+  // ── Write the answers where the PRODUCT reads them ────────────────────────────
+  // The creator briefs and the AI review replies read businesses.brand_voice_words /
+  // brand_tone / brand_do_nots / category, and the budget guard + recommender read
+  // businesses.monthly_budget. Onboarding used to write brand answers only to
+  // client_profiles, so a vegan cafe got briefed as a generic "restaurant" with no
+  // voice and no avoid-list, and budget was never captured at all.
+  try {
+    const { budgetCapForChip } = await import('@/lib/goals/defaults')
+    const tones = (data.tones as string[]) || []
+    const avoidTones = (data.avoid_tones as string[]) || []
+    const avoidList = (data.avoid_list as string[]) || []
+    const EMOJI_RULE: Record<string, string> = {
+      heavy: 'Emojis: use them freely',
+      moderate: 'Emojis: a few, tastefully',
+      light: 'Emojis: rarely',
+      none: 'Emojis: never use them',
+    }
+    const doNots = [
+      avoidTones.length ? `Avoid these tones: ${avoidTones.join(', ')}` : '',
+      avoidList.length ? `Never post about: ${avoidList.join(', ')}` : '',
+      EMOJI_RULE[(data.emoji_usage as string) || ''] ?? '',
+    ].filter(Boolean).join('. ')
+    const cuisineRaw = (data.cuisine as string) || ''
+    const cuisine = /other/i.test(cuisineRaw) ? ((data.cuisine_other as string) || '') : cuisineRaw
+    const bizPatch: Record<string, unknown> = {}
+    if (tones.length) bizPatch.brand_voice_words = tones
+    const toneStr = (data.custom_tone as string) || tones.join(', ')
+    if (toneStr) bizPatch.brand_tone = toneStr
+    if (doNots) bizPatch.brand_do_nots = doNots
+    if (cuisine.trim()) bizPatch.category = cuisine.trim()
+    const cap = budgetCapForChip(data.marketing_budget as string)
+    if (cap != null) bizPatch.monthly_budget = cap
+    if (Object.keys(bizPatch).length) {
+      const { error: bizErr } = await supabase.from('businesses').update(bizPatch).eq('id', businessId)
+      if (bizErr) console.error('[completeOnboardingCRM] businesses brand/budget write failed:', bizErr.message)
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] brand/budget wiring threw:', e)
   }
 
   // 2b. Route onboarding answers into the AI-readable layer
@@ -358,7 +411,7 @@ export async function completeOnboardingCRM(
     const isFoodBusiness =
       typeof data.biz_type === 'string' &&
       (FOOD_BIZ_TYPES as readonly string[]).includes(data.biz_type)
-    const { inferShapeFromOnboarding, defaultGoalsForShape } = await import('@/lib/goals/defaults')
+    const { inferShapeFromOnboarding, defaultGoalsForShape, goalSlugForChip } = await import('@/lib/goals/defaults')
     const { data: clientRow } = await supabase
       .from('clients')
       .select('shape_captured_at')
@@ -389,15 +442,22 @@ export async function completeOnboardingCRM(
       if (shapeErr) console.error('[completeOnboardingCRM] shape seed error:', shapeErr.message)
       else console.log(`[completeOnboardingCRM] Seeded shape: ${shape.footprint}/${shape.concept}`)
 
-      // Default goals derived from the inferred shape — only when the client
-      // has no active goals yet (so a strategist's picks are never clobbered).
+      // Goals — only when the client has no active goals yet (so a strategist's
+      // picks are never clobbered). The owner's OWN "#1 priority" chip is priority 1
+      // ("This shapes your whole strategy" is finally true); the shape defaults
+      // only fill the remaining slots. Previously the chip was captured and thrown
+      // away, so the recommender ran on a guess from their price range.
       const { count } = await supabase
         .from('client_goals')
         .select('id', { count: 'exact', head: true })
         .eq('client_id', clientId)
         .eq('status', 'active')
       if (!count) {
-        const slugs = defaultGoalsForShape({ footprint: shape.footprint, concept: shape.concept })
+        const chipSlug = goalSlugForChip(data.primary_goal as string)
+        const shapeSlugs = defaultGoalsForShape({ footprint: shape.footprint, concept: shape.concept })
+        const slugs = chipSlug
+          ? [chipSlug, ...shapeSlugs.filter((s) => s !== chipSlug)]
+          : shapeSlugs
         const goalRows = slugs.slice(0, 3).map((slug, i) => ({
           client_id: clientId,
           goal_slug: slug,

@@ -38,10 +38,15 @@ export async function markInboxRead(itemId: string): Promise<{ ok: boolean; erro
 }
 
 /**
- * replyToReview — owner posts a reply to a customer review from the Inbox.
+ * replyToReview — owner SAVES a reply to a customer review from the Inbox.
  * Records the response on the review (response_text + responded_at) so it
- * shows as replied. (Pushing the reply to Google/Yelp is a follow-up; this
- * records the owner's reply and clears it from "needs a reply".)
+ * shows as replied. Posting publicly to Google goes through
+ * /api/dashboard/reviews/[id]/reply (the review page uses it for Google
+ * reviews); this action only records — callers must never say "Posted".
+ *
+ * Ownership: the review must belong to the caller's own client. Without
+ * this check, any logged-in user who learned a review UUID could write a
+ * reply onto another restaurant's review.
  */
 export async function replyToReview(reviewId: string, text: string): Promise<{ ok: boolean; error?: string }> {
   const body = text.trim()
@@ -52,6 +57,22 @@ export async function replyToReview(reviewId: string, text: string): Promise<{ o
   if (!user) return { ok: false, error: 'Not authenticated' }
 
   const admin = createAdminClient()
+
+  // Resolve the caller's client (owner via businesses, or a linked client_users row).
+  const [bizRes, cuRes] = await Promise.all([
+    admin.from('businesses').select('client_id').eq('owner_id', user.id).maybeSingle(),
+    admin.from('client_users').select('client_id').eq('auth_user_id', user.id).maybeSingle(),
+  ])
+  const myClientId = (bizRes.data?.client_id as string | null) ?? (cuRes.data?.client_id as string | null)
+  if (!myClientId) return { ok: false, error: 'No business found for this account' }
+
+  const { data: review } = await admin
+    .from('reviews')
+    .select('id, client_id')
+    .eq('id', reviewId)
+    .maybeSingle()
+  if (!review || review.client_id !== myClientId) return { ok: false, error: 'Review not found' }
+
   const { error } = await admin
     .from('reviews')
     .update({ response_text: body, responded_at: new Date().toISOString() })

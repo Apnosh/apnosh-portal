@@ -16,6 +16,8 @@ import {
   isBuiltinCampaignId, isValidCampaignSlug,
 } from '@/lib/campaigns/data/db-campaigns'
 import { serviceById, cadenceOf } from '@/lib/campaigns/catalog'
+import { cleanGatesConfig, type CampaignGatesConfig } from '@/lib/campaigns/gates/config'
+import { cleanNeeds, type CampaignNeedsConfig } from '@/lib/campaigns/data/content-overrides'
 
 export interface CampaignRowPayload {
   title: string
@@ -34,6 +36,8 @@ export interface CampaignRowPayload {
   service_ids: string[]
   addon_service_ids: string[]
   status: 'draft' | 'live'
+  gates: CampaignGatesConfig | null
+  needs: CampaignNeedsConfig | null
 }
 
 const clean = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
@@ -99,6 +103,8 @@ export function validateCampaignBody(body: unknown): CampaignRowPayload | { erro
     service_ids: serviceIds,
     addon_service_ids: addonServiceIds,
     status,
+    gates: cleanGatesConfig(b.gates) ?? null,
+    needs: cleanNeeds(b.needs) ?? null,
   }
 
   // Same copy rule the code records + C1 overrides live under: no em dashes reach the store.

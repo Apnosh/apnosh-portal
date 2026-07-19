@@ -96,7 +96,7 @@ export interface ContentMeta {
 }
 
 export const CONTENT_META: Record<string, ContentMeta> = {
-  reel:  { price: 120, stage: 'awareness', unit: 'reel',  label: 'Short-form video', plain: 'A reel',  does: 'A short video for IG + TikTok',
+  reel:  { price: 120, stage: 'awareness', unit: 'reel',  label: 'Short-form video', plain: 'A reel',  does: 'A short video for Instagram',
     why: 'Short-form video is the top discovery surface for new diners — a strong reel reaches well past your followers.',
     market: { low: 120, high: 1500, label: 'pro per-reel rates' }, metric: { label: 'Reach & profile visits', expect: 'Discovery beyond your current followers' }, handler: 'hybrid' },
   photo: { price: 65,  stage: 'awareness', unit: 'photo', label: 'Photo',            plain: 'A photo', does: 'A styled photo of your food',
@@ -302,8 +302,28 @@ export function campaignBill(items: LineItem[]): CampaignBill {
   return { ...base, oneTimeOnDelivery: base.oneTimeOnDelivery + visit, visitSurchargeDollars: visit }
 }
 
+/* ── Live-catalog overlay (Phase 4b / G3) ─────────────────────────────────────
+   Admin price/service edits reach the store with NO deploy: the client fetches the
+   DB-live catalog (getLiveCatalog, via /api/dashboard/catalog-content) and registers
+   it here, so serviceById returns the edited price the moment it lands. The committed
+   snapshot (PRICED_CATALOG) stays the seed + fallback — before any live catalog is
+   registered, and for any service the live read doesn't include, serviceById returns
+   the snapshot. Parity (verify-catalog-live-parity) proves live == snapshot for every
+   unedited service, so registering the live catalog can NEVER move an unedited price.
+   The catalog is GLOBAL (not per-tenant), so a single overlay is correct for everyone. */
+const LIVE_OVERLAY = new Map<string, PricedService>()
+
+/** Overlay the DB-live catalog onto serviceById. Idempotent; a later call refreshes prices. */
+export function registerLiveServices(list: PricedService[] | null | undefined): void {
+  if (!Array.isArray(list)) return
+  for (const s of list) if (s && typeof s.id === 'string') LIVE_OVERLAY.set(s.id, s)
+}
+
+/** Clear the overlay (tests). */
+export function clearLiveServices(): void { LIVE_OVERLAY.clear() }
+
 export function serviceById(id: string): PricedService | undefined {
-  return PRICED_CATALOG.find(s => s.id === id)
+  return LIVE_OVERLAY.get(id) ?? PRICED_CATALOG.find(s => s.id === id)
 }
 
 /** The owner-facing plain name for a service (falls back to the catalog name). */

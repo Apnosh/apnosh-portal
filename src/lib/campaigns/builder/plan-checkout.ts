@@ -124,6 +124,12 @@ export function composePlanCampaign(items: CartItem[], now: Date = new Date()): 
     budgetMonthly: bill.perMonth,
     items: lines,
     planned: true,
+    // The primary product this order came from (first cart item), so the post-checkout readiness
+    // page can apply the owner's per-campaign needs config. Best-effort for a bundled cart.
+    ...(perItem[0]?.itemId ? { sourceCatalogId: perItem[0].itemId } : {}),
+    // EVERY source id, so the server availability guards can vet the whole cart (a coming-soon
+    // item must never hide behind a live first item and get charged).
+    sourceCatalogIds: [...new Set(perItem.map((p) => p.itemId))],
     ...(anchor?.targetDate ? { targetDate: anchor.targetDate } : {}),
     ...(anchor?.occasion ? { occasion: anchor.occasion } : {}),
     ...(brief ? { brief } : {}),

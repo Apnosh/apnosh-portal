@@ -24,6 +24,7 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCampaignProgressBatch } from './server'
+import { canWrap } from './view'
 import { getCampaignOutcomes } from './outcomes/read'
 import { getCampaignCharges } from './work-orders'
 import { callStructuredOutput } from './planning/anthropic'
@@ -69,14 +70,27 @@ export async function sweepCampaignCompletions(): Promise<CompletionSweep> {
   if (!candidates.length) return { checked: 0, completed: 0, notified: 0 }
   const progress = await getCampaignProgressBatch(candidates.map((r) => r.id as string))
 
+  // A campaign is NEVER wrapped while its monthly subscription still bills (or is stuck
+  // mid-cancel) — "wrapped" plus a live $545/mo charge was the sim's trust-killer. Rows
+  // missing (pre-migration 215/221) simply mean no subscription is recorded.
+  const openSubs = new Set<string>()
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: subs } = await (admin.from('campaign_payments') as any)
+      .select('campaign_id, subscription_status')
+      .in('campaign_id', candidates.map((r) => r.id as string))
+      .in('subscription_status', ['active', 'cancel_failed'])
+    for (const s of (subs ?? []) as { campaign_id?: string }[]) if (s.campaign_id) openSubs.add(s.campaign_id)
+  } catch { /* table absent — nothing recorded to guard on */ }
+
   let completed = 0
   let notified = 0
   for (const r of candidates) {
     if (completed >= MAX_PER_TICK) break
     const p = progress[r.id as string]
-    // Done = every non-dropped piece is live (shippedStatus's predicate). total=0
-    // (services-only) can never complete — excluded, not stalled.
-    if (!p || p.total <= 0 || p.live < p.total) continue
+    // Done = every finite piece live, no recurring work, no open subscription (canWrap).
+    // total=0 (services-only) can never complete — excluded, not stalled.
+    if (!canWrap(p, openSubs.has(r.id as string))) continue
 
     // Race-proof claim: only one sweep wins the stamp; a lost claim just skips.
     const nowIso = new Date().toISOString()

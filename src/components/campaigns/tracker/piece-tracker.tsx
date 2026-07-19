@@ -239,8 +239,12 @@ export function PieceCompactRow({ p, rightOverride }: { p: TrackerPiece; rightOv
   const label = rightOverride ?? (p.stage === 'posted' || p.stage === 'gathering' ? (p.stageAtISO ? `Posted ${fmtShort(p.stageAtISO)}` : 'Posted') : p.stage === 'ready_for_you' ? 'Ready for you' : p.stage === 'scheduled' || p.stage === 'approved' ? (p.goLiveISO ? `Goes live ${fmtShort(p.goLiveISO)}` : 'Scheduled') : p.stage === 'dropped' ? (p.lane === 'creator' ? 'Needs a new maker' : 'Stopped') : 'In production')
   const vColor = p.readoutVerdict === 'working' ? C.green : p.readoutVerdict === 'drop' ? DROP : WATCH
   const ChannelIcon = DISC_ICON[p.channel] ?? Film
+  // "Ready for you" is a DOOR, not a label: the approve buttons live in the inbox, and this
+  // row used to say ready with nothing to tap (the sim's Omar found the inbox by luck).
+  const Row = p.stage === 'ready_for_you' ? 'a' : 'div'
+  const rowLink = p.stage === 'ready_for_you' ? { href: '/dashboard/inbox', style: { textDecoration: 'none' } } : {}
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.bg, border: 'none', borderRadius: 12, padding: '10px 12px', opacity: p.stage === 'dropped' ? 0.7 : 1 }}>
+    <Row {...rowLink} style={{ display: 'flex', alignItems: 'center', gap: 10, background: C.bg, border: 'none', borderRadius: 12, padding: '10px 12px', opacity: p.stage === 'dropped' ? 0.7 : 1, textDecoration: 'none', color: 'inherit', cursor: p.stage === 'ready_for_you' ? 'pointer' : undefined }}>
       <span style={{ display: 'grid', placeItems: 'center', width: 28, height: 28, borderRadius: 8, background: C.greenSoft, flexShrink: 0 }}><ChannelIcon size={14} color={C.greenDk} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.label}</div>
@@ -254,11 +258,11 @@ export function PieceCompactRow({ p, rightOverride }: { p: TrackerPiece; rightOv
         </div>
       ) : (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: p.stage === 'ready_for_you' ? C.amberFg : C.mute }}>{label}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: p.stage === 'ready_for_you' ? C.amberFg : C.mute }}>{p.stage === 'ready_for_you' ? 'Ready for you. Tap to approve' : label}</span>
           {p.postLink && (p.stage === 'posted' || p.stage === 'gathering') && <a href={p.postLink} target="_blank" rel="noopener noreferrer" style={{ color: C.greenDk }}><ExternalLink size={12} /></a>}
         </span>
       )}
-    </div>
+    </Row>
   )
 }
 

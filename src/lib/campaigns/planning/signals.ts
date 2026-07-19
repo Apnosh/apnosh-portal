@@ -62,6 +62,12 @@ async function presence(clientId: string): Promise<PresenceSignal[]> {
       out.push({ name: a.platform === 'yelp' ? 'Yelp' : 'Apple Maps', completeness, gaps })
     }
   } catch { /* skip channel */ }
+  // NOTHING connected is the BIGGEST gap, not "no gaps": without this, the zero-presence
+  // owner (the neediest one alive) read as fully covered and never got the Google-profile
+  // nudge. We assert only what is true — we cannot see a profile that is not connected.
+  if (!out.some((p) => p.name === 'Google Business Profile')) {
+    out.push({ name: 'Google Business Profile', completeness: 0, gaps: ['Not connected, so we cannot see or manage it'] })
+  }
   return out
 }
 

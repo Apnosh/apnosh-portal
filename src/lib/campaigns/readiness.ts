@@ -11,6 +11,7 @@ import { getCampaign, getCampaignProgress } from './server'
 import { listWorkOrdersForCampaign } from './work-orders'
 import { deriveSchedule } from './schedule'
 import { deriveServiceNeeds } from './service-needs'
+import { cleanNeeds, type CampaignNeedsConfig } from './data/content-overrides'
 
 // Types + GROUP_ORDER live in the client-safe readiness-types.ts (this module is 'server-only').
 import type { ReadinessItem, ReadinessReport } from './readiness-types'
@@ -24,10 +25,12 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   const exec = campaign.execution ?? {}
   const detailHref = `/dashboard/campaigns/${campaignId}`
 
-  const [bizRes, orders, progress] = await Promise.all([
+  const [bizRes, orders, progress, catRes] = await Promise.all([
     admin.from('businesses').select('hours, phone, website_url, address, brand_voice_words, brand_tone, brand_colors').eq('client_id', clientId).maybeSingle(),
     listWorkOrdersForCampaign(campaignId),
     getCampaignProgress(campaignId),
+    // Which catalog product this order came from, so we can apply the owner's per-campaign needs config.
+    admin.from('campaigns').select('source_catalog_id').eq('id', campaignId).maybeSingle(),
   ])
   const biz = bizRes.data as Record<string, unknown> | null
 
@@ -94,8 +97,10 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
     items.push({ id: 'avoid', kind: 'input', group: 'Content', field: 'avoid', inputType: 'textarea', title: 'Anything to avoid?', why: 'Words, claims, or looks to keep out.', placeholder: 'Optional', value: exec.avoid ?? '', done: !!exec.avoid, optional: true })
   }
 
-  // ── scheduling: set the go-live date right here (replaces the old "go set a date" hop) ──
-  items.push({ id: 'go_live', kind: 'input', group: 'Scheduling', field: 'go_live', inputType: 'date', saveTo: 'target_date', title: 'When do you want to go live?', why: 'Pick a target so the team has runway to produce.', value: campaign.draft.targetDate ?? '', done: scheduleSet })
+  // ── scheduling: only CONTENT campaigns have a "go live" the owner schedules. A pure
+  // service fix (Google-profile polish, listings sync) is done when it is done — there is
+  // no launch date to pick, so asking one just confuses. ──
+  if (hasContentWork) items.push({ id: 'go_live', kind: 'input', group: 'Scheduling', field: 'go_live', inputType: 'date', saveTo: 'target_date', title: 'When do you want to go live?', why: 'Pick a target so the team has runway to produce.', value: campaign.draft.targetDate ?? '', done: scheduleSet })
 
   // ── service-driven needs: only what THIS campaign's services require ──
   for (const n of deriveServiceNeeds(campaign, { doneSetup, hasMenuItems, hasAddress, hasPaymentMethod, exec })) {
@@ -106,12 +111,32 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   // ── computed actions (only when needed) ───────────────────────────────────────
   if (pendingConcepts > 0) items.push({ id: 'concepts', kind: 'action', group: 'Anything else', title: `Approve ${pendingConcepts} concept${pendingConcepts > 1 ? 's' : ''}`, why: 'The creators are waiting on your OK before they produce.', actionLabel: 'Review', href: detailHref, done: false })
   if (awaiting > 0) items.push({ id: 'review', kind: 'action', group: 'Anything else', title: `Review ${awaiting} piece${awaiting > 1 ? 's' : ''}`, why: 'Pieces are ready for your approval before they post.', actionLabel: 'Review', href: detailHref, done: false })
-  if (usesSocial && !socialConnected && !doneSetup.has('channel-connect') && !items.some((i) => i.id === 'gbp-access')) items.push({ id: 'connect', kind: 'action', group: 'Access', title: 'Connect Instagram', why: 'So this campaign can actually post to your feed.', actionLabel: 'Connect', href: '/dashboard/connected-accounts', done: false })
+  // "Connect Instagram" only matters when we are actually making something to post to
+  // your feed. A service fix can carry leftover social channel tags on its brief, so gate
+  // on real content work — not just the tag.
+  if (usesSocial && hasContentWork && !socialConnected && !doneSetup.has('channel-connect') && !items.some((i) => i.id === 'gbp-access')) items.push({ id: 'connect', kind: 'action', group: 'Access', title: 'Connect Instagram', why: 'So this campaign can actually post to your feed.', actionLabel: 'Connect', href: '/dashboard/connected-accounts', done: false })
 
-  const brandThin = !((Array.isArray(biz?.brand_voice_words) && (biz!.brand_voice_words as unknown[]).length) || biz?.brand_tone || Object.keys((biz?.brand_colors as object) ?? {}).length)
-  if (brandThin) items.push({ id: 'brand', kind: 'action', group: 'Content', title: 'Add your brand details', why: 'Your voice + colors so the content matches you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
-  const contactThin = !(biz?.hours && (biz?.phone || biz?.website_url))
-  if (contactThin) items.push({ id: 'contact', kind: 'action', group: 'Info', title: 'Add your hours + link', why: 'So the content can point people where + when to find you.', actionLabel: 'Add', href: '/dashboard/business-info', done: false })
+  // NOTE: general profile completeness ("Add your brand details", "Add your hours + link")
+  // was removed from a campaign's "needs you" on purpose. Those are not required to fulfill
+  // THIS campaign — they belong on /dashboard/business-info, not mixed into the order's asks.
+  // Keep this list to what the team actually needs to deliver what was bought.
+
+  // ── owner's per-campaign "needs from you" config (LIVE): resolve the catalog product this order
+  // came from, then apply Required/Optional/Off overrides to the auto asks + append custom asks. ──
+  const catalogId = (catRes.data as { source_catalog_id?: string | null } | null)?.source_catalog_id || null
+  if (catalogId) {
+    try {
+      // Built-in campaigns store needs on catalog_content_overrides; admin-created DB campaigns on
+      // catalog_campaigns (migration 220, G10). Check the override first, then the DB campaign.
+      const { data: ovRow } = await admin.from('catalog_content_overrides').select('needs').eq('item_id', catalogId).maybeSingle()
+      let needs = cleanNeeds((ovRow as { needs?: unknown } | null)?.needs)
+      if (!needs) {
+        const { data: dbRow } = await admin.from('catalog_campaigns').select('needs').eq('id', catalogId).maybeSingle()
+        needs = cleanNeeds((dbRow as { needs?: unknown } | null)?.needs)
+      }
+      if (needs) applyNeedsConfig(items, needs, exec as unknown as Record<string, string>)
+    } catch { /* smart defaults on any failure */ }
+  }
 
   // Setup actions the owner chose to defer ("Skip for now") drop out of the required count, so they can
   // finish their part without connecting accounts right now — each stays visible to undo. The in-campaign
@@ -127,4 +152,27 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
 
   const required = items.filter((i) => !i.optional && !i.skipped)
   return { campaignName: campaign.draft.name, items, done: required.filter((i) => i.done).length, total: required.length, doneSetupIds: Array.from(doneSetup) }
+}
+
+/** Apply the owner's per-campaign needs config: Required/Optional/Off overrides on the auto-detected
+ *  asks (by id), plus their own custom asks appended. Mutates `items` in place. */
+function applyNeedsConfig(items: ReadinessItem[], needs: CampaignNeedsConfig, exec: Record<string, string>): void {
+  if (needs.overrides) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      const ov = needs.overrides[items[i].id]
+      if (!ov) continue
+      if (ov === 'off') items.splice(i, 1)
+      else if (ov === 'required') items[i].optional = false
+      else if (ov === 'optional') items[i].optional = true
+    }
+  }
+  for (const c of needs.custom ?? []) {
+    if (items.some((it) => it.id === c.id)) continue
+    const value = exec[c.id] ?? ''
+    items.push({
+      id: c.id, kind: 'input', group: 'From you', field: c.id, inputType: c.inputType,
+      options: c.options, title: c.title, why: c.why ?? '',
+      value, done: value.trim().length > 0, optional: !c.required,
+    })
+  }
 }

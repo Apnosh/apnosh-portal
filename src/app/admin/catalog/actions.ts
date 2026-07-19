@@ -141,11 +141,15 @@ export async function publishCatalog(): Promise<{ ok: boolean; error?: string; c
   if (error) return { ok: false, error: error.message }
   const services = (data as CatalogRow[]).map(rowToService)
   if (!services.length) return { ok: false, error: 'No active services to publish' }
+  // Go live (Phase 4b / G3): the DB IS the live catalog source now. The store reads it fresh via
+  // /api/dashboard/catalog-content (loadCatalogFromDb, force-dynamic) and overlays it onto serviceById,
+  // so edits reach restaurants with NO deploy. Publishing just refreshes the admin view.
+  revalidatePath('/admin/catalog')
+  // Best-effort: refresh the committed seed snapshot in LOCAL DEV (it's the fallback + first-visit
+  // seed, and keeps the parity gate meaningful). On serverless the filesystem is read-only, so this
+  // no-ops — that's expected and NOT an error: the DB is already the live source.
   try {
     fs.writeFileSync(path.join(process.cwd(), 'src/lib/campaigns/data/catalog.generated.ts'), renderGeneratedSnapshot(services))
-  } catch (e) {
-    return { ok: false, error: 'Saved to the database, but writing the snapshot failed: ' + (e instanceof Error ? e.message : String(e)) }
-  }
-  revalidatePath('/admin/catalog')
+  } catch { /* read-only fs on serverless — the DB is live regardless */ }
   return { ok: true, count: services.length }
 }

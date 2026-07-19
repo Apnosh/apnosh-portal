@@ -52,9 +52,19 @@ const addDays = (d: Date, n: number): Date => new Date(d.getTime() + n * DAY)
 const fmtDay = (iso: string): string => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
 const fmtShort = (iso: string): string => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 
+/** Content shot at a booked on-site shoot needs the shoot to HAPPEN first, plus an edit
+ *  window, before anything it produces can post. */
+const CONTENT_AFTER_SHOOT_DAYS = 3
+
 export function deriveSchedule(
   input: { targetDate?: string | null; occasion?: string | null; contentBeats?: ContentBeat[] | null },
   fromISO: string,
+  opts?: {
+    /** The BOOKED shoot day (ISO). No beat may post before shoot + edit window, and no
+     *  draft may be due before the shoot itself — the plan can never show a photo posting
+     *  before the shoot that produces it. */
+    notBeforeISO?: string | null
+  },
 ): DerivedSchedule {
   const beats = (input.contentBeats ?? []).slice().sort((a, b) => (a.week || 1) - (b.week || 1))
   if (!beats.length) return { mode: 'none', anchorISO: null, anchorLabel: '', beats: [], firstPostISO: null, firstDraftISO: null, firstPostLabel: '', firstDraftLabel: '', tooSoon: false }
@@ -82,6 +92,10 @@ export function deriveSchedule(
     postFor = (b) => addDays(anchor, ((b.week || 1) - 1) * 7)
   }
 
+  // The booked shoot feeds the schedule: nothing posts before shoot + edit window.
+  const shootDay = parseDay(opts?.notBeforeISO)
+  const earliestPost = shootDay ? addDays(shootDay, CONTENT_AFTER_SHOOT_DAYS) : null
+
   const dated: DatedBeat[] = beats.map((b) => {
     // An owner-picked exact day wins over the week-derived date.
     let post = parseDay(b.dateISO) ?? postFor(b)
@@ -89,6 +103,8 @@ export function deriveSchedule(
     // push the earliest teasers into the past — clamp those to today so the plan
     // stays real. The tooSoon flag below still signals the squeeze.
     if (mode === 'event' && post.getTime() < today.getTime()) post = today
+    // Booked-shoot clamp: a piece cannot post before the footage exists.
+    if (earliestPost && post.getTime() < earliestPost.getTime()) post = earliestPost
     const postISO = toISODay(post)
     const draftReadyISO = toISODay(addDays(post, -REVIEW_LEAD_DAYS))
     let relLabel: string

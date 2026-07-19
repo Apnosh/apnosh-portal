@@ -32,6 +32,13 @@ export interface SavedCampaign {
   creativeControl: 'handoff' | 'approve_concept' | 'owner_directs'
   /** Owner execution inputs from the "Get it ready" screen; feed the brief. */
   execution: CampaignExecution
+  /** Amazon-style cancellation REQUEST (not a guaranteed stop). 'requested' = the
+   *  owner asked and a human is reviewing; 'declined' = review said no, it keeps
+   *  running. An APPROVED request shows as status 'stopped'. undefined = the
+   *  columns don't exist yet (pre-migration) — treated as "no request". */
+  cancelState?: 'requested' | 'declined' | null
+  cancelRequestedAt?: string | null
+  cancelReason?: string | null
 }
 
 /** Owner-facing rollup of what a campaign has accrued to bill — one charge per
@@ -73,6 +80,19 @@ export interface CampaignExecution {
   setupNotes?: string    // anything else that helps the team
   vendorInfo?: string    // ordering / POS / booking system (from a pos-vendor service)
   menuSource?: string    // where to find the current menu (from a menu service)
+  footageUrls?: string   // comma-joined public URLs of client-uploaded clips/photos (the "edit my footage" card)
+  // Intake-rail fields (playbook needsInput consumers, service-needs.ts). Operational only,
+  // never fed to AI prompts:
+  deliveryAccess?: string // delivery apps + login email / store IDs (delivery-opt)
+  siteAccess?: string     // website tool or the person who manages the site (site-menu)
+  adAccess?: string       // existing Meta/Google ad accounts, or 'none' (paid-ads)
+  adTargeting?: string    // the area + people the ads should reach (paid-ads)
+  brandVoice?: string     // how replies/content should sound; words to use and avoid (review-responses)
+  photoUrls?: string      // comma-joined URLs of owner-uploaded photos (gbp-setup photo set)
+  /** ISO day of the BOOKED on-site shoot. Server-written (ship route from the held slot;
+   *  confirmBookingForPayment on confirm) and NOT in the owner PATCH whitelist. Feeds
+   *  deriveSchedule so no piece is ever scheduled before the shoot that produces it. */
+  shootDateISO?: string
   setupSkipped?: string  // comma-separated readiness action ids the owner deferred ("Skip for now")
   /** ISO stamp: the /dashboard/google-profile walkthrough came back ALL-GOOD on a fresh read
    *  (the self-serve gbp version's completion). Server-written ONLY, by POST
@@ -96,6 +116,13 @@ export interface CampaignProgress {
   awaitingYou: number   // delivered creator work, or an approved draft holding for your sign-off
   inProgress: number    // being made (idea/draft/produced/etc.), incl. services being set up
   nextDueISO: string | null
+  /** Recurring-class service work orders (monthly cycles). Kept OUT of total/live (a monthly
+   *  program has no finish line) but counted here so the card can show the REAL state of the
+   *  monthly work instead of a calendar timer. */
+  recurringTotal?: number
+  /** Recurring orders a human has actually started or finished this cycle (claimed /
+   *  in_progress / blocked / ready / delivered — anything past 'queued'). */
+  recurringActive?: number
   dropped?: number      // killed pieces kept visible (team reject / creator decline) — not in total
   /** Service work blocked on the owner (blocked_client / ready_for_client). Kept
    *  SEPARATE from awaitingYou: the piece-worded surfaces (readiness copy, the
@@ -246,9 +273,16 @@ export function ownerRunWorkDone(s: SavedCampaign): boolean {
 export function shippedStatus(progress: CampaignProgress | null | undefined, hasContentPlanned: boolean, setupComplete = true, settingUp = false, ownerRunDone = false): { phase: ShippedPhase; label: string; blurb: string; live: number; total: number } {
   const p = progress ?? null
   const totalPieces = p?.total ?? 0
+  const recTotal = p?.recurringTotal ?? 0
+  const recActive = p?.recurringActive ?? 0
   // Once anything has actually posted, setup is moot — show the real state.
   if (p && p.total > 0) {
-    if (p.live >= p.total) return { phase: 'done', label: 'Done', blurb: 'Wrapped — full results inside', live: p.live, total: p.total }
+    if (p.live >= p.total) {
+      // Never "wrapped" while monthly work still runs alongside the finished pieces — the
+      // subscription keeps billing, so the card keeps saying so.
+      if (recTotal > 0) return { phase: 'live', label: 'Live', blurb: `Live · all pieces out, monthly services keep running`, live: p.live, total: p.total }
+      return { phase: 'done', label: 'Done', blurb: 'Wrapped — full results inside', live: p.live, total: p.total }
+    }
     if (p.live > 0) return { phase: 'live', label: 'Live', blurb: `Live · ${p.live} of ${p.total} out`, live: p.live, total: p.total }
   }
   // Nothing live yet: the owner's unfinished setup is the honest blocker, ahead of "in production".
@@ -259,10 +293,26 @@ export function shippedStatus(progress: CampaignProgress | null | undefined, has
   if (ownerRunDone && totalPieces === 0) return { phase: 'done', label: 'Done', blurb: 'Done · you finished it yourself', live: 0, total: 0 }
   if (totalPieces > 0) return { phase: 'production', label: 'In production', blurb: "In production · your team's on it", live: 0, total: totalPieces }
   if (hasContentPlanned) return { phase: 'production', label: 'In production', blurb: "In production · your team's on it", live: 0, total: 0 }
-  // Services-only: right after ship the team is still SETTING UP the services (per the turnaround
-  // estimates) — saying "running" then would be a lie. Past the window, it settles at Live.
+  // Recurring services: read the REAL work orders, not a calendar. Work started → Live with
+  // the honest count; nothing started → In production, plainly.
+  if (recTotal > 0) {
+    if (recActive > 0) return { phase: 'live', label: 'Live', blurb: `Live · ${recActive} of ${recTotal} monthly service${recTotal === 1 ? '' : 's'} in motion`, live: 0, total: 0 }
+    return { phase: 'production', label: 'In production', blurb: 'In production · your team is setting up your monthly services', live: 0, total: 0 }
+  }
+  // Services-only with NO minted work orders (legacy/pre-190): fall back to the calendar
+  // window — saying "running" right after ship would be a lie.
   if (settingUp) return { phase: 'production', label: 'In production', blurb: 'In production · your team is setting things up', live: 0, total: 0 }
   return { phase: 'live', label: 'Live', blurb: 'Live · running', live: 0, total: 0 }
+}
+
+/** A campaign may be declared WRAPPED only when every finite piece is out AND no monthly
+ *  subscription is still billing (active or stuck mid-cancel) AND no recurring work runs.
+ *  Pure — the completion sweep enforces it server-side; the sim proves it. */
+export function canWrap(progress: CampaignProgress | null | undefined, hasOpenSubscription: boolean): boolean {
+  if (hasOpenSubscription) return false
+  if (!progress || progress.total <= 0) return false
+  if ((progress.recurringTotal ?? 0) > 0) return false
+  return progress.live >= progress.total
 }
 
 export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | null): CampCard {

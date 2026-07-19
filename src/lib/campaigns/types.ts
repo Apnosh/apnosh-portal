@@ -179,6 +179,13 @@ export interface CampaignDraft {
   planned?: boolean
   /** This campaign's goal (may differ from the business's default). */
   goalKey?: GoalKey
+  /** The catalog campaign id this was built from (e.g. 'gbp', 'reviewsplan'), so the post-checkout
+   *  readiness page can apply the owner's per-campaign "needs from you" config. */
+  sourceCatalogId?: string
+  /** EVERY catalog id a merged cart draft came from (sourceCatalogId keeps the first, for
+   *  compatibility). The availability guards check all of them, so a coming-soon item can never
+   *  ride into a charge behind a live first item. */
+  sourceCatalogIds?: string[]
   /** Anchored to a moment/date from the calendar, e.g. "July 4". */
   occasion?: string
   /** The date the campaign builds toward (ISO), from the calendar. */
@@ -220,6 +227,9 @@ export interface ContentBeat {
   channel: string
   /** This piece gets a one-time paid boost (ad spend at cost, no monthly retainer). */
   boost?: boolean
+  /** The footage comes from the OWNER (the 'edit my footage' promise: they send clips, we cut).
+   *  A beat so marked never implies an on-site team shoot — no shoot gate, no shoot slot. */
+  footageSource?: 'owner'
   /** A plain owner-facing reason the situation-aware plan pass added/moved this piece. */
   because?: string
   /** The atom play's serviceId (dialed event goals only) — the key the plan UI uses to

@@ -48,7 +48,9 @@ export default function ReviewPage() {
   const [draftErr, setDraftErr] = useState<string | null>(null)
   const [posting, setPosting] = useState(false)
   const [postErr, setPostErr] = useState<string | null>(null)
-  const [posted, setPosted] = useState(false)
+  // 'google' = Google accepted the reply (it is really on the listing);
+  // 'saved'  = recorded here only (non-Google sources, or a reply from before this rail).
+  const [posted, setPosted] = useState<'google' | 'saved' | null>(null)
 
   useEffect(() => {
     let live = true
@@ -58,8 +60,9 @@ export default function ReviewPage() {
         if (!live) return
         setReview(j.review)
         if (j.review.responseText) {
-          // Already replied: show their posted reply, don't draft over it.
-          setText(j.review.responseText); setPosted(true)
+          // Already replied: show the saved reply, don't draft over it. We only claim
+          // "Posted to Google" for a reply THIS session pushed through the Google rail.
+          setText(j.review.responseText); setPosted('saved')
         } else {
           // Auto-draft a suggested reply on open, with the intent the rating implies.
           const t = j.review.rating && j.review.rating <= 3 ? 'winback' : 'thankful'
@@ -77,19 +80,35 @@ export default function ReviewPage() {
     try {
       const res = await fetch('/api/dashboard/reviews/draft', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reviewId: id, tone: useTone ?? tone }) })
       const j = await res.json().catch(() => ({}))
-      if (res.ok && j.reply) { setText(j.reply); setPosted(false) }
+      if (res.ok && j.reply) { setText(j.reply); setPosted(null) }
       else setDraftErr(j.error || 'Could not write a reply. Try again.')
     } catch { setDraftErr('Network problem. Try again.') }
     setDrafting(false)
   }
   const post = async () => {
-    if (!text.trim() || posting) return
+    if (!text.trim() || posting || !review) return
     setPostErr(null); setPosting(true)
-    try {
-      const res = await replyToReview(id, text.trim())
-      if (res.ok) setPosted(true)
-      else setPostErr(res.error || 'Could not post your reply. Try again.')
-    } catch { setPostErr('Could not post your reply. Try again.') }
+    if (review.source === 'google') {
+      // The real rail: the reply goes to Google via the GBP API. We only say
+      // "Posted to Google" when Google accepted it. On failure, the server has
+      // already paged the team, so the message below is true.
+      try {
+        const res = await fetch(`/api/dashboard/reviews/${id}/reply`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ replyText: text.trim() }),
+        })
+        const j = await res.json().catch(() => ({}))
+        if (res.ok && j.ok) setPosted('google')
+        else setPostErr('We could not post this to Google. Your team was told.')
+      } catch { setPostErr('We could not post this to Google. Your team was told.') }
+    } else {
+      // Non-Google sources have no public posting rail yet: the reply is saved here only.
+      try {
+        const res = await replyToReview(id, text.trim())
+        if (res.ok) setPosted('saved')
+        else setPostErr(res.error || 'Could not save your reply. Try again.')
+      } catch { setPostErr('Could not save your reply. Try again.') }
+    }
     setPosting(false)
   }
 
@@ -142,13 +161,13 @@ export default function ReviewPage() {
                 <span style={{ fontWeight: 700, fontSize: 13, color: C.ink2 }}>{posted ? 'Your reply' : 'Suggested reply'}</span>
               </div>
               {posted
-                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '4px 10px' }}><Check size={12} /> Posted</span>
+                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '4px 10px' }}><Check size={12} /> {posted === 'google' ? 'Posted to Google' : 'Saved'}</span>
                 : drafting ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.mute }}><Loader2 size={13} className="animate-spin" /> Writing…</span> : null}
             </div>
 
             <textarea
               value={text}
-              onChange={(e) => { setText(e.target.value); if (posted) setPosted(false) }}
+              onChange={(e) => { setText(e.target.value); if (posted) setPosted(null) }}
               placeholder={drafting ? 'Writing your reply…' : 'Your suggested reply will appear here. Edit it however you like.'}
               disabled={drafting}
               rows={7}
@@ -157,11 +176,15 @@ export default function ReviewPage() {
             {draftErr && <div style={{ fontSize: 12.5, color: '#c0564f', marginTop: 8 }}>{draftErr} <button onClick={() => draft()} style={{ border: 'none', background: 'none', color: C.greenDk, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', padding: 0 }}>Try again</button></div>}
 
             <button onClick={post} disabled={!text.trim() || posting} style={{ marginTop: 12, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none', background: text.trim() ? GRAD : '#e3e9e6', color: '#fff', borderRadius: 12, padding: '14px', fontWeight: 700, fontSize: 15, cursor: text.trim() && !posting ? 'pointer' : 'default' }}>
-              {posting ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}{posted ? 'Update reply' : 'Post reply'}
+              {posting ? <><Loader2 size={17} className="animate-spin" /> Posting…</> : <><Send size={17} />{posted ? 'Update reply' : 'Post reply'}</>}
             </button>
             {postErr && <div style={{ fontSize: 12.5, color: '#c0564f', textAlign: 'center', marginTop: 10 }}>{postErr}</div>}
             <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 10, lineHeight: 1.45 }}>
-              Your reply is recorded here. Posting it publicly to {sourceLabel(review.source)} is coming soon.
+              {review.source === 'google'
+                ? (posted === 'google'
+                    ? 'This reply is live on your Google listing. It can take a few minutes to show.'
+                    : 'This posts straight to your Google listing.')
+                : `Your reply is saved here. Posting it publicly to ${sourceLabel(review.source)} is not built yet.`}
             </div>
           </div>
         )}

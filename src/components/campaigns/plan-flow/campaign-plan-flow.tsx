@@ -731,7 +731,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
           {error && <div style={{ color: C.red, fontSize: 12, textAlign: 'center', marginBottom: 8 }}>{error}</div>}
           {step === 'review' && <div style={{ textAlign: 'center', fontSize: 11, color: C.faint, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><LockOpen size={11} /> Every piece gets a human check before it posts. Nothing&rsquo;s locked yet.</div>}
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 9 }}>
-            <span style={{ fontSize: 11, color: C.faint, lineHeight: 1.3 }}>{step === 'review' ? 'Your plan, charged as it ships' : 'Charged per piece, on delivery'}</span>
+            <span style={{ fontSize: 11, color: C.faint, lineHeight: 1.3 }}>{step === 'review' ? 'Your plan · paid at checkout' : 'Paid when you place the order'}</span>
             <span style={{ fontSize: 18, fontWeight: 700, color: C.ink, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>{money(bill.oneTimeOnDelivery)}{bill.perMonth > 0 ? <span style={{ fontSize: 13, fontWeight: 400, color: C.mute }}> · {money(bill.perMonth)}/mo</span> : null}</span>
           </div>
           {step === 'review' ? (
@@ -747,7 +747,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
               disabled={busy}
               style={{ ...ctaBtn, opacity: busy ? 0.7 : 1, ...(Math.round(overBudget) >= 1 && overOk ? { background: 'linear-gradient(135deg,#e0a13a,#b9760f)' } : {}) }}
             >
-              {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />} {Math.round(overBudget) >= 1 && overOk ? `Ship anyway, ${money(overBudget)} over budget` : 'Confirm & start campaign'}
+              {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />} {Math.round(overBudget) >= 1 && overOk ? `Continue, ${money(overBudget)} over budget` : 'Continue to checkout'}
             </button>
           )}
         </div>
@@ -1440,7 +1440,7 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
   const contentTotal = Math.max(0, bill.oneTimeOnDelivery - setupTotal)
   const priceGroups = ([
     setupSvc.length ? { key: 'setup', Icon: Flag, fg: '#3f72c4', label: 'Setup', sub: 'One-time, to get you live', total: setupTotal, suffix: '' } : null,
-    (creatives.length || perOccSvc.length) ? { key: 'content', Icon: Sparkles, fg: C.greenDk, label: 'Content we make', sub: 'Charged as each piece ships', total: contentTotal, suffix: '' } : null,
+    (creatives.length || perOccSvc.length) ? { key: 'content', Icon: Sparkles, fg: C.greenDk, label: 'Content we make', sub: 'Paid at checkout', total: contentTotal, suffix: '' } : null,
     monthlySvc.length ? { key: 'monthly', Icon: Repeat, fg: C.mute, label: 'Every month', sub: 'Ongoing, pause anytime', total: bill.perMonth, suffix: '/mo' } : null,
   ].filter(Boolean) as { key: string; Icon: LucideIcon; fg: string; label: string; sub: string; total: number; suffix: string }[])
   return (
@@ -1505,7 +1505,7 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: C.greenDk, margin: '11px 2px 0' }}><Check size={13} /> Fits your {money(monthlyCap)}/mo budget{firstMonth < monthlyCap ? `, ${money(monthlyCap - firstMonth)} to spare` : ''}.</div>
       ))}
       <div style={{ background: C.greenSoft, borderRadius: 12, padding: '11px 13px', margin: '12px 0', fontSize: 12, color: C.greenDk, lineHeight: 1.5 }}>
-        <b style={{ fontWeight: 700 }}>Nothing upfront.</b> Each piece is charged only when it ships.{bill.perMonth > 0 ? ' Ads bill monthly while the campaign runs — pause anytime.' : ''}
+        <b style={{ fontWeight: 700 }}>Paid at checkout.</b> You pay the one-time total when you place the order.{bill.perMonth > 0 ? ' Monthly items bill each month starting the day you order. Cancel anytime.' : ''}
       </div>
       {(() => {
         const posts = [...sched.beats].sort((a, b) => a.postISO.localeCompare(b.postISO))

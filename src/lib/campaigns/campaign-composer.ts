@@ -66,6 +66,8 @@ export function composeCampaign(t: CampaignTemplate, spec: Record<string, string
     ...(b.boost ? { boost: true } : {}),
     // The situation-aware plan pass's owner-facing reason for this piece, shown in the plan flow.
     ...(b.because ? { because: b.because } : {}),
+    // Owner-supplied footage (the 'edit' card): rides through so the shoot gates skip this piece.
+    ...(b.footageSource ? { footageSource: b.footageSource } : {}),
   }))
 
   // Deliverables (priced): one per content type, quantity = its occurrences;

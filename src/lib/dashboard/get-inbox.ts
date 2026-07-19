@@ -17,6 +17,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
+import { getCampaignReadiness } from '@/lib/campaigns/readiness'
+import { setupOwed } from '@/lib/campaigns/readiness-types'
 
 export type InboxItemKind = 'approval' | 'post_review' | 'review' | 'task' | 'connection'
 
@@ -351,6 +353,41 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
       unread: true,
     })
   }
+
+  /* Shipped campaigns whose team checklist is still waiting on the OWNER (the intake
+     rail): required setup asks the readiness report says are open. This is the sim's
+     biggest silent-stall family — the team's first step needed something only the owner
+     could give, and nothing ever told them. One row per campaign, straight to /ready. */
+  try {
+    const { data: shippedCamps } = await admin
+      .from('campaigns')
+      .select('id, shipped_at')
+      .eq('client_id', clientId)
+      .eq('status', 'shipped')
+      .order('shipped_at', { ascending: false })
+      .limit(4)
+    const reports = await Promise.all(
+      (shippedCamps ?? []).map(async (c) => ({ c, r: await getCampaignReadiness(c.id as string).catch(() => null) })),
+    )
+    for (const { c, r } of reports) {
+      if (!r) continue
+      const owed = setupOwed(r)
+      if (!owed.length) continue
+      items.push({
+        id: `setup-${c.id}`,
+        kind: 'task',
+        title: `${r.campaignName || 'Your campaign'} needs ${owed.length} thing${owed.length === 1 ? '' : 's'} from you`,
+        detail: owed.slice(0, 2).map((i) => i.title).join(' · ') + (owed.length > 2 ? ' · and more' : ''),
+        urgency: 'high',
+        href: `/dashboard/campaigns/${c.id}/ready`,
+        whenIso: (c.shipped_at as string) ?? new Date().toISOString(),
+        status: 'Needs you',
+        source: 'apnosh',
+        senderName: 'Your team',
+        unread: true,
+      })
+    }
+  } catch { /* best-effort: a readiness hiccup never empties the inbox */ }
 
   /* Apply read state — items whose id is in the user's read set get
      unread=false. Items default to unread=true at construction time. */

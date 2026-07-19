@@ -13,6 +13,25 @@ import { CAMPAIGN_TEMPLATES } from '@/lib/campaigns/data/campaign-templates'
 import { summarize } from '@/lib/campaigns/types'
 import type { CampaignBrief, CampaignDraft, ContentBeat, LineItem, PieceBrief, PieceProducer } from '@/lib/campaigns/types'
 import type { SavedCampaign } from '@/lib/campaigns/view'
+import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
+import { composePlanCampaign } from '@/lib/campaigns/builder/plan-checkout'
+import { draftNeedsShoot, requiredBookingGates } from '@/lib/campaigns/gates/derive'
+import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
+import { shipBillingGate } from '@/lib/campaigns/ship-guard'
+import { withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from '@/lib/campaigns/builder/item-prices'
+import { selectHomeOrders, HOME_ORDERS_CAP } from '@/lib/campaigns/home-cards'
+import { campaignCardVM, shippedStatus, canWrap, type CampCard, type CampaignProgress } from '@/lib/campaigns/view'
+import { monthsElapsed, cycleShortfall, cycleTitle } from '@/lib/campaigns/recurring-cycles-core'
+import { SERVICE_CHANNELS } from '@/lib/campaigns/data/service-channels'
+import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
+import { SERVICE_PLAYBOOKS, playbookNeedKeys } from '@/lib/campaigns/data/service-playbooks'
+import { assetGatesForDraft, resolveGates } from '@/lib/campaigns/gates/config'
+import { goalSlugForChip, budgetCapForChip } from '@/lib/goals/defaults'
+import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY } from '@/lib/campaigns/data/live-alternatives'
+import { isBuyable, BUILTIN_AVAILABILITY } from '@/lib/campaigns/data/catalog-availability'
+import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
+import { fitsBudget, isSellable, filterRecsByFacts, deliveryLedShape } from '@/lib/campaigns/planning/rank-facts'
+import { ITEM_PRICES } from '@/lib/campaigns/builder/item-prices'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -677,6 +696,314 @@ s.group('Per-piece service resolves (team/creator/diy/ai); brief campaigns keep 
   s.check('a piece set to a creator routes to a creator', byType.get('reel')?.producer === 'creator' && !!byType.get('reel')?.creatorId)
   s.eq('a brief-campaign creative keeps its base price (no batching surcharge)', byType.get('reel')?.priceCents, CONTENT_META.reel.price * 100)
   s.check('a brief campaign stamps no shoot day on its pieces', planCampaignPieces(camp, SHIP).every((p) => p.shootDayId === null))
+}
+
+// ── P. Checkout shoot gate derives from INTENT: owner-supplied footage never books a crew ──
+s.group('Shoot gate: owner-footage (edit) skips it; team-shot content keeps it')
+{
+  // 'edit' promises "send us your clips and photos, we cut and polish" — its seeded reel/photo
+  // beats are stamped footageSource:'owner', so checkout must NOT demand an on-site shoot slot.
+  const editDraft = draftFromBuilder({ itemId: 'edit', status: 'approve', vals: {} })
+  s.check('edit beats are stamped owner-footage', (editDraft.brief?.contentBeats ?? []).length > 0 && (editDraft.brief?.contentBeats ?? []).every((b) => b.footageSource === 'owner'))
+  s.check('edit alone ⇒ NO shoot gate at checkout', !draftNeedsShoot(editDraft))
+  s.eq('edit alone ⇒ no pre-checkout booking gates', requiredBookingGates(editDraft).length, 0)
+
+  // A merged cart of edit + dish: dish's hero photo is team-shot, so the gate STILL fires.
+  const merged = composePlanCampaign([
+    { itemId: 'edit', doer: null, options: [] },
+    { itemId: 'dish', doer: null, options: [] },
+  ])
+  s.check('edit + dish cart composes', !!merged.draft && merged.dropped.length === 0)
+  s.check('edit + dish cart ⇒ shoot gate still fires (dish is team-shot)', !!merged.draft && draftNeedsShoot(merged.draft))
+
+  // reach's discovery reel is team-shot — its gate is untouched.
+  const reachDraft = draftFromBuilder({ itemId: 'reach', status: 'approve', vals: {} })
+  s.check('reach keeps its shoot gate', draftNeedsShoot(reachDraft))
+  s.check('a plain reel piece keeps its shoot gate', draftNeedsShoot(draftFromBuilder({ itemId: 'reel', status: 'approve', vals: {} })))
+}
+
+// ── Q. Availability guard vets EVERY cart item (never just the first) ──
+s.group('Availability: merged carts carry all source ids; coming-soon ids get flagged')
+{
+  const cart = composePlanCampaign([
+    { itemId: 'dish', doer: null, options: [] },
+    { itemId: 'giftcard', doer: null, options: [] },
+  ])
+  s.check('merged draft keeps the legacy first-item sourceCatalogId', cart.draft?.sourceCatalogId === 'dish')
+  s.check('merged draft carries EVERY source id', JSON.stringify(cart.draft?.sourceCatalogIds) === JSON.stringify(['dish', 'giftcard']))
+  const ids = draftSourceCatalogIds(cart.draft!)
+  s.check('draftSourceCatalogIds reads the full list', JSON.stringify(ids) === JSON.stringify(['dish', 'giftcard']))
+  s.check('the coming-soon item is flagged even behind a live first item', JSON.stringify(unbuyableCatalogIds(ids)) === JSON.stringify(['giftcard']))
+  s.check('a legacy draft (single sourceCatalogId) still resolves', JSON.stringify(draftSourceCatalogIds({ sourceCatalogId: 'giftcard' })) === JSON.stringify(['giftcard']))
+  s.eq('an all-live cart is clean', unbuyableCatalogIds(['dish', 'edit', 'reach']).length, 0)
+}
+
+// ── Owner-sim fix 1a: the edit-footage ask keys off EVERY source id, any cart position ──
+s.group('Edit-footage intake: edit fires in ANY cart position (readiness keys off sourceCatalogIds)')
+{
+  const editSecond = composePlanCampaign([
+    { itemId: 'dish', doer: null, options: [] },
+    { itemId: 'edit', doer: null, options: [] },
+  ])
+  const ids2 = draftSourceCatalogIds(editSecond.draft!)
+  s.check('edit-second cart composes', !!editSecond.draft)
+  s.check('legacy sourceCatalogId is the FIRST item (not edit)', editSecond.draft?.sourceCatalogId === 'dish')
+  s.check('the full id list still carries edit (what the footage ask now reads)', ids2.includes('edit'))
+  const editFirst = composePlanCampaign([
+    { itemId: 'edit', doer: null, options: [] },
+    { itemId: 'dish', doer: null, options: [] },
+  ])
+  s.check('edit-first cart carries edit too (no regression)', draftSourceCatalogIds(editFirst.draft!).includes('edit'))
+  const noEdit = composePlanCampaign([{ itemId: 'dish', doer: null, options: [] }])
+  s.check('a cart with no edit never implies a footage ask', !draftSourceCatalogIds(noEdit.draft!).includes('edit'))
+}
+
+// ── Owner-sim fix 1b: a monthly-only cart is BILLABLE (never the free path) ──
+s.group('Ship gate: monthly-only carts must pay (card + consent), never the free path')
+{
+  const MODERN = '2026-07-16T00:00:00Z'
+  s.eq('monthly-only, no intent → REFUSE (must go through checkout)',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false, createdAtISO: MODERN }), 'refuse')
+  s.eq('monthly-only, SetupIntent presented → verify',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: true, createdAtISO: MODERN }), 'verify')
+  s.eq('truly free ($0 one-time, $0 monthly) still ships freely',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 0, hasPaymentIntent: false, createdAtISO: MODERN }), 'allow')
+  s.eq('legacy pre-checkout campaign keeps its carve-out',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false, createdAtISO: '2026-07-01T00:00:00Z' }), 'allow')
+  s.eq('omitted perMonthCents behaves as before (back-compat)',
+    shipBillingGate({ preTaxCents: 0, hasPaymentIntent: false, createdAtISO: MODERN }), 'allow')
+}
+
+// ── Owner-sim fixes 1f + 1i: fee-included display + plain-words pass-through ──
+s.group('Money display: fee folded into shown prices; pass-through notes in plain words')
+{
+  s.eq('withServiceFee folds the 10% checkout fee in', withServiceFee(100), 110)
+  s.eq('withServiceFee rounds honestly', withServiceFee(1235), 1359)
+  s.eq('$0 stays $0', withServiceFee(0), 0)
+  const adsNote = 'ad spend billed at cost, $500/mo minimum'
+  s.eq('plain words replace "billed at cost"', plainCostNote(adsNote), 'ad spend paid at cost (no markup), $500/mo minimum')
+  s.eq('a note with no dollar amount says the owner sets it', plainCostNote('sponsored-listing spend billed at cost'), 'sponsored-listing spend paid at cost (no markup). You set the amount')
+  s.eq('the named $500/mo minimum totals into one real number', passthroughMonthlyMinimumCents([adsNote]), 50000)
+  s.eq('a no-minimum note contributes 0 (never invented)', passthroughMonthlyMinimumCents(['sponsored-listing spend billed at cost']), 0)
+  s.eq('minimums sum across notes', passthroughMonthlyMinimumCents([adsNote, 'boost billed at cost, $100/mo minimum']), 60000)
+}
+
+// ── Owner-sim fix, Phase 2: Day-0 Home shows orders in progress with REAL status ──
+s.group('Day-0 Home: orders-in-progress selection (shipped only, urgent first, capped)')
+{
+  const card = (key: string, kind: CampCard['kind'], pill: string, review = false): CampCard =>
+    ({ key, kind, title: key, pill, pillIcon: 'dot', blurb: '', cost: null, recurring: false, perf: null, review, href: `/x/${key}` })
+  const mixed = [
+    card('a-live', 'live', 'Live'),
+    card('b-draft', 'draft', 'Draft'),
+    card('c-prod', 'live', 'In production'),
+    card('d-done', 'done', 'Done'),
+    card('e-needs', 'live', 'Needs you', true),
+  ]
+  const picked = selectHomeOrders(mixed)
+  s.eq('drafts and done campaigns never show on Home', picked.every((c) => c.kind === 'live'), true)
+  s.eq('needs-you comes first, then production, then live', JSON.stringify(picked.map((c) => c.key)), JSON.stringify(['e-needs', 'c-prod', 'a-live']))
+  const many = Array.from({ length: 6 }, (_, i) => card(`l${i}`, 'live', 'Live'))
+  s.eq('capped so Home stays a glance', selectHomeOrders(many).length, HOME_ORDERS_CAP)
+  s.eq('no shipped orders → empty (the section hides, no fake state)', selectHomeOrders([card('x', 'draft', 'Draft')]).length, 0)
+
+  // Integration: a real shipped campaign through campaignCardVM rides into the selection
+  // with the honest status (the exact card Home now renders). A fresh ship with unfinished
+  // owner setup truthfully reads "Needs you" — and that urgency puts it FIRST on Home.
+  const shipped = campaignFor({ name: 'home vm', content: ['post'] })
+  shipped.status = 'shipped'
+  const vm = campaignCardVM(shipped, { total: 2, live: 0, queued: 0, awaitingYou: 0, inProgress: 2, nextDueISO: null })
+  s.eq('fresh shipped campaign, setup unfinished → Needs you', vm.pill, 'Needs you')
+  s.eq('its blurb is the honest next step', vm.blurb, 'Finish setup so your team can start')
+  s.eq('and it is selected for Home, ranked first', selectHomeOrders([card('z-live', 'live', 'Live'), vm])[0].key, vm.key)
+}
+
+// ── Owner-sim fix, Phase 3: the intake rail consumes playbook needsInput ──
+s.group('Intake rail: playbook needsInput keys reach the owner (recurring included)')
+{
+  s.eq('gbp-setup declares its intake keys', JSON.stringify(playbookNeedKeys('gbp-setup')), JSON.stringify(['gbp-access', 'gbp-photos']))
+  s.eq('review-responses (RECURRING, previously skipped) declares gbp-access', JSON.stringify(playbookNeedKeys('review-responses')), JSON.stringify(['gbp-access']))
+  s.eq('paid-ads (RECURRING) declares ad-access', JSON.stringify(playbookNeedKeys('paid-ads')), JSON.stringify(['ad-access']))
+  s.eq('delivery-opt declares pos-vendor (rendered as delivery logins)', playbookNeedKeys('delivery-opt').includes('pos-vendor'), true)
+  s.eq('unknown service → no keys, no fake asks', playbookNeedKeys('nope').length, 0)
+  // Drift guard: every needsInput key any playbook declares has a consumer in service-needs.ts.
+  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact'])
+  const declared = new Set(Object.keys(SERVICE_PLAYBOOKS).flatMap((id) => playbookNeedKeys(id)))
+  const orphans = [...declared].filter((k) => !HANDLED.has(k))
+  s.check(`every declared needsInput key has an owner-facing ask (orphans: ${orphans.join(',') || 'none'})`, orphans.length === 0)
+}
+
+// ── Owner-sim fix, Phase 3: pre-checkout asset checks ──
+s.group('Asset gates: the store checks the buyer can RECEIVE the work')
+{
+  const draftFor = (ids: string[]) => ({ sourceCatalogId: ids[0], sourceCatalogIds: ids })
+  const web = assetGatesForDraft(draftFor(['website']))
+  s.eq('website cart asks "Do you have a website?"', web[0]?.title, 'Do you have a website?')
+  s.eq('answering "No website yet" blocks the purchase', web[0]?.blockOn, 'No website yet')
+  s.check('the block carries an honest reroute, never a dead end', !!web[0]?.blockMessage && !!web[0]?.rerouteHref)
+  s.eq('a buyer with a website on file is never re-asked', assetGatesForDraft(draftFor(['website']), { hasWebsite: true }).length, 0)
+
+  const ord = assetGatesForDraft(draftFor(['friction']))
+  s.eq('friction cart asks about an ordering system', ord[0]?.title, 'Do you take online orders today?')
+  s.eq('no ordering page blocks with a reroute', ord[0]?.blockOn, 'No online ordering yet')
+
+  const gbp = assetGatesForDraft(draftFor(['gbp']))
+  s.eq('gbp cart asks where the listing stands', gbp[0]?.title, 'Where is your Google listing today?')
+  s.check('the gbp gate NEVER blocks (claim-or-create is part of the product)', !gbp[0]?.blockOn)
+  s.check('"No listing yet" is a valid, sellable answer', (gbp[0]?.options ?? []).includes('No listing yet'))
+  s.eq('a connected gbp buyer is never re-asked', assetGatesForDraft(draftFor(['gbp']), { gbpConnected: true }).length, 0)
+
+  const mixed = assetGatesForDraft(draftFor(['website', 'friction', 'gbp']))
+  s.eq('a merged cart carries every relevant check', mixed.length, 3)
+  s.eq('a cart with none of these carries no asset gates', assetGatesForDraft(draftFor(['dish', 'reel'])).length, 0)
+
+  // resolveGates merges assets with admin config; an admin gate with the same id wins.
+  const resolved = resolveGates({ items: [], brief: undefined, ...draftFor(['website']) }, { custom: [{ id: 'asset-website', kind: 'input', title: 'Admin version', required: true, inputType: 'text' }] })
+  s.eq('an admin-authored gate with the same id replaces the default', resolved.custom.length, 1)
+  s.eq('and it is the admin version', resolved.custom[0].title, 'Admin version')
+}
+
+// ── Owner-sim fix, Phase 4: onboarding answers reach the product ──
+s.group('Goal chips: every chip maps to a real goal slug (the #1 priority is finally read)')
+{
+  const unmapped = GOAL_CHIPS.filter((c) => goalSlugForChip(c) == null)
+  s.check(`every GOAL_CHIP maps to a slug (unmapped: ${unmapped.join(',') || 'none'})`, unmapped.length === 0)
+  s.eq('the new regulars chip maps', goalSlugForChip('Turn first-timers into regulars'), 'regulars_more_often')
+  s.eq('the new catering chip maps', goalSlugForChip('Grow catering orders'), 'grow_catering')
+  s.eq('the new photos chip maps', goalSlugForChip('Better photos of my food'), 'be_known_for')
+  s.eq('the new younger-crowd chip maps', goalSlugForChip('Reach a younger crowd'), 'be_known_for')
+  s.eq('slow days chip → fill_slow_times', goalSlugForChip('More customers on slow days'), 'fill_slow_times')
+  s.eq('an unknown chip maps to null (shape defaults stand)', goalSlugForChip('Something else entirely'), null)
+}
+
+s.group('Budget chips: one question feeds the guard + the ranker')
+{
+  const known = BUDGET_CHIPS.filter((c) => c !== 'Not sure yet')
+  s.check('every dollar chip maps to a cap', known.every((c) => (budgetCapForChip(c) ?? 0) > 0))
+  s.eq('Under $200/mo → 200', budgetCapForChip('Under $200/mo'), 200)
+  s.eq('$500 to $1,000/mo → 1000 (top of range, never under-sold)', budgetCapForChip('$500 to $1,000/mo'), 1000)
+  s.eq('"Not sure yet" asserts NO cap', budgetCapForChip('Not sure yet'), null)
+  s.eq('unknown text asserts NO cap', budgetCapForChip('whatever'), null)
+}
+
+s.group('Ranker facts: never recommend what they cannot buy or afford')
+{
+  const deliveryMo = ITEM_PRICES['delivery']?.perMonth ?? 0
+  s.check('sanity: the delivery card has a real monthly price', deliveryMo > 0)
+  s.eq('a monthly card over the budget does not fit', fitsBudget('delivery', deliveryMo - 1), false)
+  s.eq('a monthly card at the budget fits', fitsBudget('delivery', deliveryMo), true)
+  s.eq('no budget known → everything fits (never worse than before)', fitsBudget('delivery', null), true)
+  const oneTimeId = Object.keys(ITEM_PRICES).find((id) => ITEM_PRICES[id].oneTime > 0 && ITEM_PRICES[id].perMonth === 0)
+  if (oneTimeId) s.eq('a one-time card always fits a monthly budget', fitsBudget(oneTimeId, 100), true)
+  s.eq('unknown availability → sellable (no filtering)', isSellable('delivery', {}), true)
+  s.eq('a coming-soon id is not sellable', isSellable('giftcard', { buyable: new Set(['dish']) }), false)
+  const recs = [{ id: 'dish' }, { id: 'giftcard' }, { id: 'delivery' }]
+  s.eq('filterRecsByFacts drops unbuyable + over-budget, order preserved',
+    JSON.stringify(filterRecsByFacts(recs, { buyable: new Set(['dish', 'delivery']), budgetMonthly: 50 }).map((r) => r.id)),
+    JSON.stringify(['dish']))
+  s.eq('ghost kitchens are delivery-led', deliveryLedShape('delivery_only', null), true)
+  s.eq('ghost footprint is delivery-led', deliveryLedShape(null, 'ghost'), true)
+  s.eq('a casual dine-in shape is not', deliveryLedShape('casual', 'single_neighborhood'), false)
+}
+
+// ── Owner-sim fix, Phase 5: coming-soon detours + dark shelves ──
+s.group('Live alternatives: a coming-soon page is never a dead end')
+{
+  const cat = liveAlternativesFor('catering')
+  s.eq('catering unbundles its two ready pieces FIRST', JSON.stringify(cat.slice(0, 2)), JSON.stringify(['dish', 'graphic']))
+  s.check('every unbundled id is genuinely live (drift guard)',
+    Object.values(UNBUNDLED_TODAY).flatMap((u) => u.ids).every((id) => isBuyable(id)))
+  const soonIds = Object.keys(BUILTIN_AVAILABILITY).filter((id) => id !== 'reviews')   // 'reviews' is a plan-time alias, not a card
+  const bad: string[] = []
+  for (const id of soonIds) {
+    const alts = liveAlternativesFor(id)
+    if (!alts.length) bad.push(`${id}:empty`)
+    if (alts.includes(id)) bad.push(`${id}:self`)
+    if (alts.some((a) => !isBuyable(a))) bad.push(`${id}:dark-alt`)
+  }
+  s.check(`every coming-soon card gets live-only detours (bad: ${bad.join(',') || 'none'})`, bad.length === 0)
+  s.check('the dark orders shelf routes to live plays', liveAlternativesForStage('orders').length > 0 && liveAlternativesForStage('orders').every((id) => isBuyable(id)))
+  s.check('the dark back shelf routes to live plays', liveAlternativesForStage('back').length > 0 && liveAlternativesForStage('back').every((id) => isBuyable(id)))
+}
+
+s.group('Dark shelves collapse into ONE honest Coming soon section')
+{
+  const rows = [
+    { id: 'aware', ids: ['gbp', 'listings', 'creator'] },                       // has live → stays
+    { id: 'orders', ids: ['promoevent', 'launch', 'ticket', 'catering', 'giftcard', 'slowoffer'] },  // all dark → folds
+    { id: 'back', ids: ['welcome', 'news', 'birthday', 'winback'] },            // all dark → folds
+  ]
+  const { liveRows, soonIds } = collapseDarkShelves(rows, { buyable: (id) => isBuyable(id), hidden: () => false })
+  s.eq('the shelf with live cards survives', JSON.stringify(liveRows.map((r) => r.id)), JSON.stringify(['aware']))
+  s.eq('both all-dark shelves fold into one deduped set', soonIds.length, 10)
+  s.check('every folded id is unbuyable (nothing live gets buried)', soonIds.every((id) => !isBuyable(id)))
+  const sugg = collapseDarkShelves([{ id: 'suggested', ids: ['welcome'] }], { buyable: () => false, hidden: () => false })
+  s.eq('the suggested row is never collapsed', sugg.liveRows.length, 1)
+  const hiddenAll = collapseDarkShelves([{ id: 'x', ids: ['a'] }], { buyable: () => false, hidden: () => true })
+  s.eq('a fully-hidden row simply drops (no ghost shelf)', hiddenAll.liveRows.length + hiddenAll.soonIds.length, 0)
+}
+
+// ── Owner-sim fix, Phase 6: recurring truth ──
+s.group('Recurring truth: real work, not a calendar; never wrapped while billing')
+{
+  const prog = (over: Partial<CampaignProgress>): CampaignProgress =>
+    ({ total: 0, live: 0, queued: 0, awaitingYou: 0, inProgress: 0, nextDueISO: null, ...over })
+  // shippedStatus reads the recurring work orders, not a timer.
+  const active = shippedStatus(prog({ recurringTotal: 2, recurringActive: 1 }), false)
+  s.eq('recurring work in motion → Live with the honest count', active.blurb, 'Live · 1 of 2 monthly services in motion')
+  const idle = shippedStatus(prog({ recurringTotal: 2, recurringActive: 0 }), false)
+  s.eq('nothing started → In production, plainly (no timer lie)', idle.blurb, 'In production · your team is setting up your monthly services')
+  const mixed = shippedStatus(prog({ total: 3, live: 3, recurringTotal: 1, recurringActive: 1 }), false)
+  s.eq('all pieces out + monthly still running → LIVE, never Done', mixed.phase, 'live')
+  s.eq('and the card says the monthly keeps going', mixed.blurb, 'Live · all pieces out, monthly services keep running')
+  // canWrap: the completion sweep's predicate.
+  s.eq('open subscription blocks the wrap', canWrap(prog({ total: 3, live: 3 }), true), false)
+  s.eq('recurring work blocks the wrap', canWrap(prog({ total: 3, live: 3, recurringTotal: 1 }), false), false)
+  s.eq('unfinished pieces block the wrap', canWrap(prog({ total: 3, live: 2 }), false), false)
+  s.eq('finished + no subscription + no recurring → wraps', canWrap(prog({ total: 3, live: 3 }), false), true)
+  s.eq('services-only (total 0) never wraps', canWrap(prog({}), false), false)
+  // Month-2 mint math.
+  s.eq('day 0 → month 1 (minted at ship, nothing owed)', monthsElapsed('2026-07-01T00:00:00Z', '2026-07-01T12:00:00Z'), 1)
+  s.eq('day 31 → month 2', monthsElapsed('2026-07-01T00:00:00Z', '2026-08-01T00:00:00Z'), 2)
+  s.eq('day 65 → month 3', monthsElapsed('2026-07-01T00:00:00Z', '2026-09-04T00:00:00Z'), 3)
+  s.eq('a bad start date never goes negative', monthsElapsed('garbage', '2026-07-01T00:00:00Z'), 1)
+  s.eq('month 2 with 1 cycle minted → 1 owed', cycleShortfall(2, 1), 1)
+  s.eq('caught up → 0 owed (idempotent)', cycleShortfall(2, 2), 0)
+  s.eq('cycle titles read plainly', cycleTitle('Reply to reviews', 2), 'Month 2: Reply to reviews')
+}
+
+// ── Owner-sim fix, Phase 6: booking + schedule + delivery + TikTok ──
+s.group('Booking feeds the schedule: nothing posts before the shoot that makes it')
+{
+  const input = { targetDate: '2026-08-15', contentBeats: beatsN(3) }
+  const plain = deriveSchedule(input, SHIP)
+  const clamped = deriveSchedule(input, SHIP, { notBeforeISO: '2026-08-20' })
+  s.check('without a booking, dates are unchanged (back-compat)', plain.firstPostISO === '2026-08-15')
+  s.eq('with a booked shoot, no post lands before shoot + edit window', clamped.firstPostISO, '2026-08-23')
+  s.check('no draft is due before the shoot itself', clamped.beats.every((b) => b.draftReadyISO >= '2026-08-20'))
+  s.check('beats stay ordered after the clamp', isMonotonic(clamped.beats.map((b) => b.postISO)))
+  // The shoot-place question rides the gate rail whenever a booking gate applies.
+  const shootDraft = { items: lines(['reel']), brief: { contentBeats: beatsN(1).map((b) => ({ ...b, type: 'reel' })) } as never, sourceCatalogId: 'reel', sourceCatalogIds: ['reel'] }
+  const g = resolveGates(shootDraft)
+  s.check('a shoot order asks WHERE the shoot happens (required)', g.custom.some((c) => c.id === 'shoot-place' && c.required))
+  const noShoot = resolveGates({ items: [], brief: undefined, sourceCatalogId: 'gpost', sourceCatalogIds: ['gpost'] })
+  s.check('a no-shoot order never asks for a place', !noShoot.custom.some((c) => c.id === 'shoot-place'))
+}
+
+s.group('Delivery setup-only + TikTok off the sell surfaces')
+{
+  const full = draftFromBuilder({ itemId: 'delivery', status: 'approve', vals: {} })
+  const fullBill = summarize(full.items)
+  s.check('sanity: the full delivery card carries a monthly', fullBill.perMonth > 0)
+  const setup = draftFromBuilder({ itemId: 'delivery', status: 'approve', vals: { options: 'setup-only' } })
+  const setupBill = summarize(setup.items)
+  s.eq('setup-only bills NO monthly', setupBill.perMonth, 0)
+  s.eq('the one-time fix is unchanged', setupBill.oneTimeOnDelivery, fullBill.oneTimeOnDelivery)
+  s.check('the monthly line is opted out, not deleted (visible + reversible)',
+    setup.items.some((it) => it.serviceId === 'delivery-opt' && it.cadence.kind !== 'one-time' && it.optOut === 'have-it'))
+  // TikTok is unsellable until the rail exists — no sell surface may promise it.
+  const surfaces = JSON.stringify({ t: CAMPAIGN_TEMPLATES, c: SERVICE_CHANNELS, cc: CAMPAIGN_CONTENT })
+  s.check('no sell surface mentions TikTok', !/tiktok/i.test(surfaces))
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

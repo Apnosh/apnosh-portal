@@ -1158,32 +1158,39 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
   return { views, actions, counts }
 }
 
-export function HomeFunnelLive({ clientId, height, fill }: { clientId?: string; height?: number; fill?: boolean }) {
+export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void }) {
   const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   const [loading, setLoading] = useState(false)
   useEffect(() => {
-    if (!clientId) return
+    // No client, or no Google data: tell the parent, so Home can render its
+    // Day-0 body in place of the funnel — never a blank screen.
+    if (!clientId) { onVisibility?.('empty'); return }
     let alive = true
     setLoading(true)
     fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!alive || !d) return
+        if (!alive) return
+        if (!d) { onVisibility?.('empty'); return }
         // Phase 2: the honest computed stages are the source of truth for the
         // funnel numbers (Awareness = connected-sum). Fall back to the legacy
         // views/actions only if stages are absent (older payloads).
         const derived = fromStages(d.stages)
+        const views = derived?.views ?? d.views ?? null
+        const actions = derived?.actions ?? d.actions ?? null
         setData({
-          views: derived?.views ?? d.views ?? null,
-          actions: derived?.actions ?? d.actions ?? null,
+          views, actions,
           counts: derived?.counts,
           asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null,
         })
+        onVisibility?.(views && actions && views.total > 0 ? 'shown' : 'empty')
       })
-      .catch(() => { /* Home stays lean if this fails */ })
+      .catch(() => { if (alive) onVisibility?.('empty') /* Home stays lean if this fails */ })
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
+    // onVisibility identity is caller-stable; depend on the data inputs only
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, range])
   if (!data?.views || !data?.actions || data.views.total <= 0) return null
   return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} /></div>

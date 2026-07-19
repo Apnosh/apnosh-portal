@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
 import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges, campaignHasAccruedMoney, reconcileCampaignProduction } from '@/lib/campaigns/work-orders'
-import { mintServiceWorkOrders } from '@/lib/campaigns/service-work-orders'
+import { mintServiceWorkOrders, getServiceWorkOrders } from '@/lib/campaigns/service-work-orders'
+import type { ItemServiceOrder } from '@/lib/campaigns/tracker/item-status'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { getCampaignOutcomes } from '@/lib/campaigns/outcomes/read'
 import { getCampaignPieces } from '@/lib/campaigns/tracker/pieces'
 import { getCampaignActivity } from '@/lib/campaigns/tracker/activity'
 import { getCampaignReadiness } from '@/lib/campaigns/readiness'
+import { getCampaignPayment } from '@/lib/campaigns/campaign-payments-server'
+import { getBookingForCampaign } from '@/lib/campaigns/gates/booking-server'
+import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
+import { checkoutBill } from '@/lib/campaigns/checkout-bill'
+import { shipBillingGate, SHIP_NEEDS_PAYMENT } from '@/lib/campaigns/ship-guard'
 import { beatsFromLines } from '@/lib/campaigns/catalog'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
@@ -33,15 +39,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const shippedTeamRun = shipped && campaign!.draft.path !== 'diy'
   // Outcomes apply to any shipped campaign with published pieces (team or DIY); progress/
   // charges are team-run only. Each read is best-effort so one failure never blanks the page.
-  const [progress, charges, outcomes, pieces, activity, readiness] = await Promise.all([
+  const [progress, charges, outcomes, pieces, activity, readiness, payment, booking, svcOrders] = await Promise.all([
     shippedTeamRun ? getCampaignProgress(id).catch(() => null) : Promise.resolve(null),
     shippedTeamRun ? getCampaignCharges(id).catch(() => null) : Promise.resolve(null),
     shipped ? getCampaignOutcomes(id).catch(() => null) : Promise.resolve(null),
     shipped ? getCampaignPieces(id).catch(() => null) : Promise.resolve(null),
     shipped ? getCampaignActivity(id).catch(() => null) : Promise.resolve(null),
     shipped ? getCampaignReadiness(id).catch(() => null) : Promise.resolve(null),
+    // The upfront charge-at-checkout receipt (paid at order time), if any.
+    shipped ? getCampaignPayment(id).catch(() => null) : Promise.resolve(null),
+    // The shoot booking (Checkout Gates): confirmed date, a needs_reschedule, or request-mode.
+    shipped ? getBookingForCampaign(id).catch(() => null) : Promise.resolve(null),
+    // Per-service work-order state (slim, owner-safe) for the per-item detail page.
+    shippedTeamRun ? getServiceWorkOrders(id).catch(() => null) : Promise.resolve(null),
   ])
-  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness })
+  // Additive: only the owner-safe columns ride out — never steps, assignees, or internal notes.
+  const serviceOrders: ItemServiceOrder[] | null = svcOrders
+    ? svcOrders.map((o) => ({ lineItemId: o.lineItemId, serviceId: o.serviceId, status: o.status, dueDate: o.dueDate, deliveredAt: o.deliveredAt }))
+    : null
+  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking, serviceOrders })
 }
 
 // PATCH /api/campaigns/:id — { items?: LineItem[], fields?: {...} }.
@@ -80,11 +96,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Deliberately NOT here (owner-forgery-proof, like wrapUpSentAt): gbpFixedAt — the self-serve
     // Google-profile task's completion stamp is written only by POST /api/campaigns/:id/gbp-fixed,
     // which re-runs the diagnosis server-side and stamps only on a fresh all-good read.
-    for (const k of ['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'setupSkipped']) {
+    // Known keys, plus owner-defined custom asks (id `custom-<slug>` from the campaign builder).
+    // Custom keys still pass the same string + 2000-char cap, so nothing unbounded/injected accretes.
+    const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'footageUrls', 'setupSkipped', 'deliveryAccess', 'siteAccess', 'adAccess', 'adTargeting', 'brandVoice', 'photoUrls'])
+    // footageUrls/photoUrls hold comma-joined lists of uploaded-file URLs, so they get a larger cap
+    // than the free-text intake fields (which stay tight to keep injected text out of the brief AI).
+    const capFor = (k: string) => (k === 'footageUrls' || k === 'photoUrls' ? 8000 : 2000)
+    for (const k of Object.keys(e as Record<string, unknown>)) {
+      // Known keys, owner custom asks (custom-<slug>), and checkout gate answers (gate-<slug>, Phase 4a).
+      if (!KNOWN.has(k) && !/^(custom|gate)-[a-z0-9-]{1,60}$/.test(k)) continue
       const v = (e as Record<string, unknown>)[k]
       if (v === undefined) continue
       if (typeof v !== 'string') return NextResponse.json({ error: `execution.${k} must be a string` }, { status: 400 })
-      if (v.length > 2000) return NextResponse.json({ error: `execution.${k} is too long (2000 max)` }, { status: 400 })
+      if (v.length > capFor(k)) return NextResponse.json({ error: `execution.${k} is too long (${capFor(k)} max)` }, { status: 400 })
       clean[k] = v
     }
     body.fields.execution = clean
@@ -119,6 +143,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // concurrent ship PATCHes (double-tap, retry, two tabs) can never both run the
   // one-shot mint/notify block below — the loser's guarded update matches zero rows.
   const wantsShip = body.fields?.status === 'shipped' && campaign.status !== 'shipped'
+
+  // ── G7 (hardened for the ONE pay-first model, owner decision B): payment-aware ship.
+  // Every billable campaign ships through the upfront checkout, which threads the paid PaymentIntent
+  // into this PATCH. shipBillingGate decides:
+  //   'allow'  → free/DIY $0 order, or a genuinely legacy pre-checkout campaign (dated carve-out)
+  //   'verify' → a PaymentIntent was presented → confirm the charge succeeded + covers the bill, or 402
+  //   'refuse' → a billable, non-legacy ship with NO payment → block (it must go through checkout)
+  if (wantsShip) {
+    const { preTaxCents, perMonthCents } = checkoutBill({ items: campaign.draft.items })
+    const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
+    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt })
+    if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT }, { status: 402 })
+    if (gate === 'verify') {
+      const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId: paymentIntentId!, clientId: campaign.clientId, campaignId: id, preTaxCents })
+      if (!verified.ok) return NextResponse.json({ error: verified.reason }, { status: 402 })
+    }
+  }
+
   let justShipped = false
   try {
     if (Array.isArray(body.items)) await replaceLineItems(id, campaign.clientId, body.items as LineItem[])
@@ -141,6 +183,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const cur = (campaign.execution ?? {}) as Record<string, string>
     const changed = ['featuring', 'offerText', 'mustSay', 'avoid'].some((k) => k in delta && (delta[k] ?? '') !== (cur[k] ?? ''))
     if (changed) await clearCampaignBriefCache(id).catch(() => {})
+    // "Edit my footage" handoff: when the owner uploads their clips on /ready, put the links onto every
+    // content draft's brief so the editing team actually sees what to cut. Best-effort + idempotent (it
+    // strips any prior footage line before re-adding), never blocks the save.
+    if ('footageUrls' in delta) {
+      const urls = (delta.footageUrls ?? '').split(',').map((s) => s.trim()).filter(Boolean)
+      ;(async () => {
+        const { createAdminClient } = await import('@/lib/supabase/admin')
+        const admin = createAdminClient()
+        const { data: drafts } = await admin.from('content_drafts').select('id, media_brief').eq('campaign_id', id).neq('status', 'published')
+        const line = urls.length ? `Client footage to edit: ${urls.join(' ')}` : null
+        for (const d of drafts ?? []) {
+          const mb = (d.media_brief && typeof d.media_brief === 'object' && !Array.isArray(d.media_brief)) ? (d.media_brief as Record<string, unknown>) : {}
+          const instr = (Array.isArray(mb.instructions) ? (mb.instructions as unknown[]).filter((x): x is string => typeof x === 'string') : []).filter((x) => !/^Client footage to edit:/.test(x))
+          if (line) instr.push(line)
+          await admin.from('content_drafts').update({ media_brief: { ...mb, instructions: instr } }).eq('id', d.id)
+        }
+      })().catch(() => {})
+    }
   }
   // The owner shipping a team-run campaign is the handoff signal: tell the staff
   // assigned to this client so the "your team is preparing each piece" promise is
@@ -149,6 +209,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    // The slot HELD at checkout feeds the content schedule (deriveSchedule's not-before
+    // clamp): the mint below must never date a piece before the shoot that produces it.
+    // Best-effort; confirmBookingForPayment re-stamps the confirmed date after pay.
+    const shipPI = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : null
+    if (shipPI && !campaign.execution?.shootDateISO) {
+      try {
+        const { createAdminClient } = await import('@/lib/supabase/admin')
+        const a = createAdminClient()
+        const { data: bk } = await a
+          .from('bookings')
+          .select('slot_date, status')
+          .eq('stripe_payment_intent_id', shipPI)
+          .in('status', ['held', 'confirmed'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+        const slotDate = (bk as { slot_date?: string | null } | null)?.slot_date
+        if (slotDate) {
+          campaign.execution = { ...(campaign.execution ?? {}), shootDateISO: slotDate }
+          await updateCampaignFields(id, { execution: campaign.execution as Record<string, unknown> }).catch(() => {})
+        }
+      } catch { /* schedule falls back to the unclamped dates */ }
+    }
     // Lock estimate-mode dates at ship: with no target date or occasion,
     // deriveSchedule re-anchors to "now" on every call, so the dates the owner
     // approved would drift forward by the review→ship gap. Persist the anchor as

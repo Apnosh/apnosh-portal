@@ -9,9 +9,9 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Loader2, Trash2, Rocket, Check, CalendarDays, Users, FileText, Ban, Filter } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Trash2, Rocket, Check, CalendarDays, Users, FileText, Ban } from 'lucide-react'
 import { playsFrom } from '@/lib/campaigns/plays'
-import { type LineItem, type OptOutReason } from '@/lib/campaigns/types'
+import { summarize, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { aggregateGoLive } from '@/lib/campaigns/aggregate-golive'
 import { reconcileBeatsToLines } from '@/lib/campaigns/catalog'
@@ -27,13 +27,15 @@ import HonestBillBar from '@/components/campaigns/honest-bill-bar'
 import CampaignNowCard from '@/components/campaigns/campaign-now-card'
 import CampaignResults, { hasResults } from '@/components/campaigns/campaign-results'
 import CampaignWork from '@/components/campaigns/tracker/campaign-work'
+import { ProductionSummary, ProductionGuide } from '@/components/campaigns/tracker/production-guide'
 import CampaignTeamCard from '@/components/campaigns/campaign-team-card'
+import BookingCard, { type CampaignBooking } from '@/components/campaigns/booking-card'
 import ContactSupport from '@/components/campaigns/contact-support'
 import { fmtShort } from '@/components/campaigns/tracker/piece-tracker'
 import ActivityFeed from '@/components/campaigns/tracker/activity-feed'
 import type { CampaignOutcomes } from '@/lib/campaigns/outcomes/verdict'
 import type { TrackerPiece, ActivityEvent } from '@/lib/campaigns/tracker/types'
-import type { ReadinessReport } from '@/lib/campaigns/readiness-types'
+import { setupOwed, type ReadinessReport } from '@/lib/campaigns/readiness-types'
 import { C, DISPLAY, GRAD, SHADOW_CARD, EYEBROW } from '@/components/campaigns/ui'
 import MotionStyles from '@/components/campaigns/motion-styles'
 
@@ -46,10 +48,15 @@ export default function CampaignDetailPage() {
   const [pieces, setPieces] = useState<TrackerPiece[]>([])
   const [activity, setActivity] = useState<ActivityEvent[]>([])
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null)
+  // The shoot booking (Checkout Gates): confirmed date, needs_reschedule, or request-mode — never faked.
+  const [booking, setBooking] = useState<CampaignBooking | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Ship-only failure, shown inline over the footer (the footer's Ship button is the retry).
   const [shipError, setShipError] = useState<string | null>(null)
+  // The stop settlement, straight from the server — what stopped, what still bills, and that
+  // the MONEY stopped. Shown as a banner after a stop (the server also sends it to the inbox).
+  const [stopNote, setStopNote] = useState<{ summary: string; cancelFailed: boolean } | null>(null)
 
   // One reload for everything — the tracker re-fetches this after an approve/changes so the merged
   // pieces + activity re-derive server-side (never a client-side re-merge; the payload lacks join keys).
@@ -64,6 +71,7 @@ export default function CampaignDetailPage() {
       setPieces((j.pieces as TrackerPiece[]) ?? [])
       setActivity((j.activity as ActivityEvent[]) ?? [])
       setReadiness((j.readiness as ReadinessReport) ?? null)
+      setBooking((j.booking as CampaignBooking) ?? null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Load failed') }
   }, [id])
   useEffect(() => { load() }, [load])
@@ -150,11 +158,22 @@ export default function CampaignDetailPage() {
   // Terminal stop: nothing new starts or posts; in-flight work finishes and bills.
   async function stop() {
     if (!camp) return
-    if (typeof window !== 'undefined' && !window.confirm('Stop this campaign? Nothing new will start or post. Work already being made finishes and bills as normal. This cannot be undone.')) return
+    const monthly = summarize(camp.draft.items).perMonth
+    const confirmMsg = monthly > 0
+      ? `Stop this campaign? Nothing new will start or post. Your $${Math.round(monthly)}/mo billing is canceled right away. Work already being made finishes and bills as normal. This cannot be undone.`
+      : 'Stop this campaign? Nothing new will start or post. Work already being made finishes and bills as normal. This cannot be undone.'
+    if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) return
     setBusy(true)
     const r = await fetch(`/api/campaigns/${id}/stop`, { method: 'POST' }).catch(() => null)
     setBusy(false)
-    if (r && r.ok) { void load() }
+    if (r && r.ok) {
+      // Show the server's own settlement — including "Monthly billing is canceled." — instead of
+      // discarding it. subscriptionCancelFailed surfaces honestly (staff finishes it by hand).
+      const j = await r.json().catch(() => null)
+      const s = j?.settlement as { summary?: string; subscriptionCancelFailed?: number } | undefined
+      if (s?.summary) setStopNote({ summary: s.summary, cancelFailed: (s.subscriptionCancelFailed ?? 0) > 0 })
+      void load()
+    }
     else if (typeof window !== 'undefined') window.alert('Could not stop the campaign. Try again.')
   }
 
@@ -182,7 +201,15 @@ export default function CampaignDetailPage() {
                 <div className="cw-skel" style={{ width: '100%', height: 280, borderRadius: 18 }} />
               </div>
             )
-            : <Detail camp={camp} progress={progress} outcomes={outcomes} pieces={pieces} activity={activity} readiness={readiness} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />}
+            : <>
+                {stopNote && (
+                  <div role="status" style={{ background: stopNote.cancelFailed ? '#fdf6e9' : '#eaf7f3', border: `1px solid ${stopNote.cancelFailed ? '#f0dfb8' : '#cdeae0'}`, borderRadius: 14, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: stopNote.cancelFailed ? '#854f0b' : '#2e6b57', lineHeight: 1.55 }}>
+                    <div style={{ fontWeight: 700, marginBottom: 2 }}>Campaign stopped</div>
+                    {stopNote.summary}
+                  </div>
+                )}
+                <Detail camp={camp} progress={progress} outcomes={outcomes} pieces={pieces} activity={activity} readiness={readiness} booking={booking} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />
+              </>}
         </div>
 
         {/* Footer only while a draft: bill + Save/Ship. Once shipped, the header pill + Now card carry the
@@ -208,13 +235,14 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
+function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   outcomes: CampaignOutcomes | null
   pieces: TrackerPiece[]
   activity: ActivityEvent[]
   readiness: ReadinessReport | null
+  booking: CampaignBooking | null
   onReload: () => Promise<void> | void
   onToggleOptOut: (id: string, r: OptOutReason) => void
   onToggleInclude: (id: string) => void
@@ -398,6 +426,17 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
           )}
           {/* the ONE home for outcomes — the real target of "See every piece" */}
           <div id="campaign-results"><CampaignResults outcomes={outcomes} pieces={pieces} /></div>
+          {/* Shoot booking (Checkout Gates): confirmed date, a needs-reschedule prompt, or request-mode —
+              real state, with a live reschedule picker. Never a faked date. */}
+          {booking && <BookingCard clientId={camp.clientId} booking={booking} onReload={onReload} />}
+          {/* One-look status above the timeline: what's happening now, what's next, when it goes live */}
+          <ProductionSummary
+            phase={st.phase}
+            goLive={sv.goLive}
+            whenLine={sv.whenLine}
+            progress={progress ? { live: progress.live, total: progress.total } : null}
+            awaitingYou={readiness ? setupOwed(readiness).length : 0}
+          />
           {/* THE HERO: the timeline, with the pulsing needs-you button right under it */}
           <CampaignWork
             pieces={pieces}
@@ -417,14 +456,24 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
             onFinishSetup={() => router.push(`/dashboard/campaigns/${camp.draft.id}/ready`)}
             onRequestChange={() => router.push('/dashboard/messages?to=strategist')}
           />
-          {/* who handles everything: Apnosh runs setup, matched creators make the creative — changeable */}
-          <CampaignTeamCard camp={camp} onChoose={onChooseCreator} onOpenTeam={() => router.push(`/dashboard/campaigns/${camp.draft.id}/team`)} />
+          {/* who handles everything: Apnosh runs setup + makes the creative. The Send Message
+              button lives on this card and goes straight to the team (Apnosh for now). */}
+          <CampaignTeamCard camp={camp} onMessage={() => router.push('/dashboard/messages?to=strategist')} />
+          {/* Below the timeline: the ordered items as tappable Campaign-details rows — each opens
+              that item's own detail page (one row per line item; two items can share a name) */}
+          {st.phase !== 'done' && (
+            <ProductionGuide
+              items={(camp.draft.items ?? [])
+                .filter((it) => it.included && !it.optOut && (it.plain || it.name))
+                .map((it) => ({ id: it.id, name: it.plain || it.name, does: it.does || undefined }))}
+              onOpenItem={(itemId) => router.push(`/dashboard/campaigns/${camp.draft.id}/item/${itemId}`)}
+            />
+          )}
           {/* the order receipt, its own page */}
           <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <LinkRow Icon={Filter} label="See it as a funnel" sub="Where people dropped off, stage by stage" onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/results`)} />
-            <LinkRow Icon={FileText} label="View order details" sub="Everything you ordered, with prices" onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/order`)} />
-            {/* terminal stop — quiet by design; the confirm dialog carries the consequences */}
-            {!stopped && <LinkRow Icon={Ban} label="Stop this campaign" sub="Nothing new starts or posts. In-flight work finishes and bills." onClick={onStop} />}
+            {/* Order details is the home for everything money + canceling — the
+                cancel-an-order request lives on that page now, not here. */}
+            <LinkRow Icon={FileText} label="View order details" sub="Everything you ordered, prices, and canceling" onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/order`)} />
           </div>
           {/* the running log of real, timestamped production events */}
           <ActivityFeed events={activity} />
@@ -434,9 +483,6 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, onReloa
       ) : (
         <>
           {playsBlock}
-          <div style={{ marginTop: 12 }}>
-            <LinkRow Icon={Filter} label="See it as a funnel" sub="Add plays stage by stage and watch it respond" onClick={() => router.push(`/dashboard/campaigns/${camp.draft.id}/results`)} />
-          </div>
           <CreativeControl value={camp.creativeControl} onChange={onSetCreativeControl} />
           {creatorsBlock}
           {recommended.length > 0 && (

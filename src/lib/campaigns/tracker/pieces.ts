@@ -107,6 +107,7 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
     pieces.push({
       id: did,
       orderId: order ? (order.id as string) : null,
+      pieceKey: key,
       label: pieceLabel(d.caption) ?? (order ? (order.title as string) : null) ?? fallbackLabel((order?.discipline as string) || disciplineFromKey(key)),
       channel: (order?.discipline as string) || disciplineFromKey(key),
       who: creatorName ?? (order ? (order.creator_id as string) : 'Your team'),
@@ -149,6 +150,7 @@ export async function getCampaignPieces(campaignId: string): Promise<TrackerPiec
     pieces.push({
       id: o.id as string,
       orderId: o.id as string,
+      pieceKey: key,
       label: (o.title as string) || fallbackLabel((o.discipline as string) || disciplineFromKey(key)),
       channel: (o.discipline as string) || disciplineFromKey(key),
       who: names.get((o.creator_id as string) ?? '') ?? (o.creator_id as string),

@@ -3,12 +3,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
-import { priceLabel, ITEM_PRICES } from "@/lib/campaigns/builder/item-prices";
+import { priceLabel, ITEM_PRICES, priceNotes, passthroughNotesForServices, withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from "@/lib/campaigns/builder/item-prices";
 import { isProTier } from "@/lib/entitlements";
 import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { contentFor } from "@/lib/campaigns/data/content-overrides";
+import { isBuyable, isHidden, comingSoonReason } from "@/lib/campaigns/data/catalog-availability";
+import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY } from "@/lib/campaigns/data/live-alternatives";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
 import { whyFor } from "@/lib/campaigns/data/why-for";
 import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
@@ -330,7 +332,7 @@ const GOAL = {
 const DIRECT = [
   { id: "post", title: "A social media post", sub: "One post for Instagram or Facebook.", icon: "post" },
   { id: "graphic", title: "A designed graphic", sub: "A flyer or graphic to share or print.", icon: "graphic" },
-  { id: "reel", title: "A short reel", sub: "A quick video for Instagram or TikTok.", icon: "reel" },
+  { id: "reel", title: "A short reel", sub: "A quick video for Instagram.", icon: "reel" },
   { id: "offer", title: "A special offer", sub: "A coupon or limited-time deal.", icon: "offer" },
   { id: "reply", title: "An auto-reply", sub: "Reply to messages or reviews for you.", icon: "reply" },
 ];
@@ -2109,7 +2111,7 @@ const CATALOG = [
   { id: "catering", type: "plan", icon: "people", title: "Promote your catering", sub: "1 styled photo, 1 post, 1 outreach email to nearby offices", cad: "once" },
   { id: "reviewsplan", type: "plan", icon: "chat", title: "Boost reviews and rating", sub: "Review-request system set up, plus the first asks", cad: "setup" },
 
-  { id: "reel", type: "content", icon: "video", title: "A short video", sub: "A reel for Instagram and TikTok", cad: "once", hot: true },
+  { id: "reel", type: "content", icon: "video", title: "A short video", sub: "A reel for Instagram", cad: "once", hot: true },
   { id: "story", type: "content", icon: "story", title: "A story", sub: "A quick post to stay top of mind", cad: "once" },
   { id: "graphic", type: "content", icon: "image", title: "A social media post", sub: "A designed post: graphic, carousel, or photo", cad: "once" },
   { id: "dish", type: "content", icon: "image", title: "Feature a dish", sub: "Show off one of your best plates", cad: "once", hot: true },
@@ -2182,6 +2184,22 @@ export const catGet = (id) => {
     title: typeof o.title === "string" && o.title.trim() ? o.title.trim() : p.title,
     sub: typeof o.tagline === "string" && o.tagline.trim() ? o.tagline.trim() : p.sub,
   };
+};
+// Availability (the honesty gate): resolve the buyable state for a card id, honoring any admin
+// CMS override (CONTENT_OVERRIDES[id].visibility) on top of the code default in catalog-availability.
+// buyableId → can be added/bought/shipped; comingSoonId → visible but disabled; hiddenId → dropped
+// from the browse. These read the SAME resolver the server guard uses, so the store can never offer
+// a buy the server would reject.
+const buyableId = (id) => isBuyable(id, CONTENT_OVERRIDES);
+const hiddenId = (id) => isHidden(id, CONTENT_OVERRIDES);
+const soonReason = (id) => comingSoonReason(id, CONTENT_OVERRIDES);
+// Drop hidden ids and push coming-soon ids to the END of a shelf's id list (bookmarked cards still
+// render, with a badge, but never crowd out what the owner can actually buy).
+const orderIds = (ids) => {
+  const vis = (ids || []).filter((id) => !hiddenId(id));
+  const live = vis.filter((id) => buyableId(id));
+  const soon = vis.filter((id) => !buyableId(id));
+  return [...live, ...soon];
 };
 // Every card now has its own bespoke builder + price (promoevent got its own
 // free-event madlib + playbook). Identity map, kept as a single seam in case a
@@ -2259,7 +2277,10 @@ const FEATURED = {
 };
 
 const ROWS = [
-  { id: "suggested", title: "Suggested for you", note: "Based on your menu and what's coming up", big: true, ids: ["nights", "reach", "gpost", "reviewsreply", "dish", "winback", "slowoffer"] },
+  // The static fallback set is honest now: it says it is NOT personalized (the AI row swaps in
+  // "Picked for your goals and reviews" when real recs land), and it holds only LIVE staples —
+  // the old set claimed "Based on your menu" while being hardcoded and mostly coming soon.
+  { id: "suggested", title: "Suggested for you", note: "Popular first steps. Not personalized yet", big: true, ids: ["gbp", "dish", "reel", "gpost", "reviewsreply", "delivery", "website"] },
   // TWO LAYERS, ONE SYSTEM: section headers say what the campaigns DO (verb-first,
   // across-the-counter words); the funnel-stage words the Home dashboard teaches
   // (Awareness → Interest → Customer actions → Orders → Retention) live as TAGS on
@@ -2337,19 +2358,26 @@ function planTags(p) {
   const pr = ITEM_PRICES[buildIdFor(p.id)];
   const creative = p.type === "content" || p.id === "shoot";
   let priceSaysCadence = false;
+  // One-time amounts show WITH the 10% checkout service fee folded in ("fee included"), so the
+  // number on the shelf is the number the card is charged (pre-tax) — never a cart surprise.
+  const oneTimeShown = pr ? withServiceFee(pr.oneTime) : 0;
   if (pr && (pr.oneTime > 0 || pr.perMonth > 0)) {
     if (pr.oneTime > 0 && pr.perMonth > 0) {
-      t.push({ label: `Setup $${pr.oneTime.toLocaleString()}`, accent: true });
+      t.push({ label: `Setup $${oneTimeShown.toLocaleString()}, fee included`, accent: true });
       t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
       priceSaysCadence = p.cad === "recurring";
     } else if (pr.perMonth > 0) {
       t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
       priceSaysCadence = p.cad === "recurring";
     } else {
-      t.push({ label: creative ? `Starting $${pr.oneTime.toLocaleString()}` : `$${pr.oneTime.toLocaleString()} one time`, accent: true });
-      priceSaysCadence = p.cad === "once";
+      t.push({ label: creative ? `Starting $${oneTimeShown.toLocaleString()}, fee included` : `$${oneTimeShown.toLocaleString()}, fee included`, accent: true });
     }
   }
+  // Pass-through costs (Fix: honest ad spend): a card whose services bill real extra costs
+  // (paid-ads' "ad spend billed at cost, $500/mo minimum") flags it right on the shelf. The
+  // pill is short; the product page and checkout bill quote the full catalog note verbatim.
+  const costNotes = priceNotes(buildIdFor(p.id));
+  if (costNotes.length) t.push({ label: /ad|sponsor/i.test(costNotes.join(" ")) ? "+ ad spend" : "+ extra costs", accent: true });
   // Skip the cadence chip when the price chip already says it ("$165/mo" + "Recurring"
   // was double-telling); keep it for the cadences a price can't express (auto/setup/group).
   if (!priceSaysCadence) t.push({ label: CADENCE_TAG[p.cad] || "Plan" });
@@ -2358,10 +2386,20 @@ function planTags(p) {
   return t;
 }
 
-function PlanCardV({ p, onOpen, full }) {
+// A small "Soon" ribbon for a bookmarked (coming-soon) card. Honest by construction: the card still
+// opens (the owner can read what it will do), but its buy footer is disabled downstream.
+function SoonBadge() {
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+    <span style={{ position: "absolute", top: 8, left: 8, zIndex: 2, background: "rgba(20,30,26,0.72)", color: "#fff", fontFamily: "Inter, sans-serif", fontSize: 9.5, fontWeight: 800, letterSpacing: 0.6, textTransform: "uppercase", borderRadius: 6, padding: "2.5px 6px", backdropFilter: "blur(2px)" }}>Soon</span>
+  );
+}
+
+function PlanCardV({ p, onOpen, full }) {
+  const soon = !buyableId(p.id);
+  return (
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)", opacity: soon ? 0.82 : 1 }}>
       <div style={{ position: "relative", height: 90, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+        {soon && <SoonBadge />}
         <div style={{ position: "absolute", width: 110, height: 110, borderRadius: 55, background: "rgba(255,255,255,0.12)", bottom: -36, right: -24 }} />
         <div style={{ position: "absolute", width: 60, height: 60, borderRadius: 30, background: "rgba(0,0,0,0.05)", bottom: -22, left: -16 }} />
         <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={62} /></div>
@@ -2377,11 +2415,12 @@ function PlanCardV({ p, onOpen, full }) {
 }
 
 function PlanCardH({ p, onOpen }) {
+  const soon = !buyableId(p.id);
   return (
-    <button onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 15, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: "0 1px 2px rgba(20,30,26,0.03)" }}>
-      <div style={{ width: 50, height: 50, borderRadius: 13, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><Art id={p.id} size={34} /></div>
+    <button onClick={() => onOpen(p.id)} style={{ width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 13, background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 15, padding: "11px 13px", cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: "0 1px 2px rgba(20,30,26,0.03)", opacity: soon ? 0.82 : 1 }}>
+      <div style={{ position: "relative", width: 50, height: 50, borderRadius: 13, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{soon && <SoonBadge />}<Art id={p.id} size={34} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 2 }}>{p.title}</div>
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 2 }}>{p.title}{soon && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10.5, fontWeight: 700, color: TOKENS.faint, marginLeft: 6 }}>Coming soon</span>}</div>
         <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.sub}</div>
         <div style={{ display: "flex", gap: 5 }}>{planTags(p).map((t, i) => <TagPill key={i} accent={t.accent}>{t.label}</TagPill>)}</div>
       </div>
@@ -2395,9 +2434,11 @@ function PlanCardBig({ p, onOpen, full }) {
   // Title/sub are clamped to fixed 2-line blocks and the tag area to a fixed band so
   // every card in the row lands at the same height regardless of copy length.
   const clamp2 = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
+  const soon = !buyableId(p.id);
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)", opacity: soon ? 0.82 : 1 }}>
       <div style={{ position: "relative", height: 96, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
+        {soon && <SoonBadge />}
         <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.12)", bottom: -40, right: -26 }} />
         <div style={{ position: "absolute", width: 70, height: 70, borderRadius: 35, background: "rgba(0,0,0,0.05)", bottom: -24, left: -18 }} />
         <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={64} /></div>
@@ -2412,7 +2453,8 @@ function PlanCardBig({ p, onOpen, full }) {
 }
 
 function CategoryRow({ row, onOpen, onSeeAll }) {
-  const items = row.ids.map(catGet).filter(Boolean);
+  // Drop hidden ids and float coming-soon cards to the end, so a shelf leads with what's buyable.
+  const items = orderIds(row.ids).map(catGet).filter(Boolean);
   const big = row.big;
   return (
     <div style={{ marginBottom: big ? 26 : 22 }}>
@@ -2516,22 +2558,30 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
   const query = q.trim().toLowerCase();
   // Search over the resolved cards (catGet) so an admin-edited title both matches and
   // renders — DB campaigns included, same match fields.
-  const results = query ? [...CATALOG, ...DB_CARDS].map((x) => catGet(x.id)).filter((p) => (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
+  const results = query ? [...CATALOG, ...DB_CARDS].map((x) => catGet(x.id)).filter((p) => p && !hiddenId(p.id) && (p.title + " " + p.sub + " " + p.type + " " + (CADENCE_TAG[p.cad] || "")).toLowerCase().includes(query)) : [];
   // AI recommendations (fetched by the wrapper): drive the featured card + the
-  // "Suggested for you" row when present; otherwise the static defaults show.
-  const recList = (recommended || []).filter((r) => r && catGet(r.id));
+  // "Suggested for you" row when present; otherwise the static defaults show. Only BUYABLE cards can
+  // be recommended — a coming-soon card must never headline the store as a top pick (honesty gate).
+  const recList = (recommended || []).filter((r) => r && catGet(r.id) && buyableId(r.id));
   const recFeatured = recList[0] ? { item: catGet(recList[0].id), reason: recList[0].reason } : null;
   const recRowIds = recList.slice(recFeatured ? 1 : 0).map((r) => r.id);
   // DB campaigns join their chosen shelf before the suggested-row swap.
   const baseRows = ROWS.map(rowWithDb);
-  const rows = recRowIds.length
+  const allRows = recRowIds.length
     ? baseRows.map((row) => (row.id === "suggested" ? { ...row, ids: recRowIds, note: "Picked for your goals and reviews" } : row))
     : baseRows;
+  // ONE honest "Coming soon" section instead of shelves that are 100% dark: a shelf with
+  // nothing buyable stops pretending to be a shopping aisle (13 dark cards across two
+  // shelves was the sim's walk-away for the highest-budget owners).
+  const { liveRows, soonIds } = collapseDarkShelves(allRows, { buyable: buyableId, hidden: hiddenId });
+  const rows = soonIds.length
+    ? [...liveRows, { id: "__soon", title: "Coming soon", note: "We only sell what really works today. These are on the way", ids: soonIds }]
+    : liveRows;
   return (
     <div style={{ paddingBottom: 26 }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
       <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
-      <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, lineHeight: 1.4 }}>Prices are estimates. You approve before anything runs, and you only pay when each piece ships.</div></div>
+      <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, lineHeight: 1.4 }}>You see the full price before you pay. Your card is only charged at checkout.</div></div>
       {!query && recsLoading && !recFeatured && (
         <div style={{ padding: "0 20px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, background: TOKENS.mintTint, border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "9px 13px" }}>
@@ -2546,7 +2596,30 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {results.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
           </div>
-          {results.length === 0 && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.faint, padding: "10px 0" }}>Nothing matches yet. Try a word like video, email, or reviews, or describe it with Something else.</div>}
+          {/* Zero LIVE answers: say so out loud and route to the nearest live plays — a search
+              that only finds grey cards (or nothing) must never read as a working aisle. */}
+          {(() => {
+            const liveResults = results.filter((p) => buyableId(p.id));
+            if (liveResults.length > 0) return null;
+            const detourIds = results.length
+              ? liveAlternativesFor(results[0].id, CONTENT_OVERRIDES, 4)
+              : liveAlternativesForStage("aware", CONTENT_OVERRIDES, 4);
+            return (
+              <div style={{ padding: "10px 0 0" }}>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, marginBottom: 12 }}>
+                  {results.length ? "Everything matching that is still being built. We only sell what really works." : "Nothing matches that yet. Try a word like video, photo, or reviews."}
+                </div>
+                {detourIds.length > 0 && (
+                  <>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.faint, marginBottom: 10 }}>What you can do today</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {detourIds.map((id) => { const p = catGet(id); return p ? <PlanCardV key={id} p={p} onOpen={onOpen} full /> : null; })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
       ) : (
         <>
@@ -2559,16 +2632,29 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
             <>
               {!featHidden && (recFeatured
                 ? <RecFeatured item={recFeatured.item} reason={recFeatured.reason} onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />
-                : <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />)}
+                : (buyableId("promoevent") ? <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} /> : null))}
               {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
             </>
           ) : (() => {
             const row = rowWithDb(ROWS.find((r) => r.id === lens));
-            const items = row ? row.ids.map(catGet).filter(Boolean) : [];
+            const items = row ? orderIds(row.ids).map(catGet).filter(Boolean) : [];
+            const liveCount = items.filter((p) => buyableId(p.id)).length;
+            // A shelf with ZERO live plays says so and routes to the nearest live plays —
+            // never a wall of grey cards pretending to be a store.
+            const detourIds = liveCount === 0 ? liveAlternativesForStage(lens, CONTENT_OVERRIDES) : [];
             return (
               <div style={{ padding: "0 20px 6px" }}>
                 <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: TOKENS.ink, marginBottom: 3 }}>{row ? row.title : ""}</div>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 14 }}>{items.length} {items.length === 1 ? "play" : "plays"} for this goal</div>
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 14 }}>{liveCount === 0 && items.length > 0 ? "Nothing here is ready to buy yet" : `${liveCount} of ${items.length} ready to buy`}</div>
+                {liveCount === 0 && detourIds.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "11px 13px", marginBottom: 12, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.5 }}>Everything on this shelf is still being built. We only sell what really works. Here is what you can do today.</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                      {detourIds.map((id) => { const p = catGet(id); return p ? <PlanCardV key={id} p={p} onOpen={onOpen} full /> : null; })}
+                    </div>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.faint, margin: "16px 0 0" }}>Coming soon on this shelf</div>
+                  </div>
+                )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   {items.map((p) => <PlanCardV key={p.id} p={p} onOpen={onOpen} full />)}
                 </div>
@@ -2592,7 +2678,11 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
 }
 
 function CategoryAll({ rowId, onBack, onOpen }) {
-  const row = rowWithDb(ROWS.find((r) => r.id === rowId)) || { title: "Plans", ids: [] };
+  // '__soon' is the synthetic collapsed shelf (every all-dark row folded into one honest
+  // section) — recompute its ids the same way the browse does, so see-all matches.
+  const row = rowId === "__soon"
+    ? { title: "Coming soon", ids: collapseDarkShelves(ROWS.map(rowWithDb), { buyable: buyableId, hidden: hiddenId }).soonIds }
+    : rowWithDb(ROWS.find((r) => r.id === rowId)) || { title: "Plans", ids: [] };
   const items = row.ids.map(catGet).filter(Boolean);
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -2769,6 +2859,18 @@ function doerTab(opt, tier) {
   return { lane, short: "Apnosh", price: m ? `$${m[1]}` : null, pro: false, detail: "We fix it all for you." };
 }
 
+/** Fee-included price label for a catalog id — the number the card is actually charged
+ *  (pre-tax). One-time amounts fold in the 10% service fee; monthly amounts have no fee. */
+function feeIncludedLabel(id) {
+  const pr = ITEM_PRICES[id];
+  if (!pr) return priceLabel(id);
+  const one = withServiceFee(pr.oneTime);
+  if (pr.oneTime > 0 && pr.perMonth > 0) return `$${one.toLocaleString()} + $${pr.perMonth.toLocaleString()}/mo, fee included`;
+  if (pr.perMonth > 0) return `$${pr.perMonth.toLocaleString()}/mo`;
+  if (pr.oneTime > 0) return `$${one.toLocaleString()}, fee included`;
+  return priceLabel(id);
+}
+
 /** The CTA's price label. Reuses ITEM_PRICES/priceLabel; the only extra rule mirrors
  *  planTags exactly: creative work prices as a floor ("Starting $X"). Either owner-run gbp
  *  lane (diy or ai) reads Free, matching the madlib's own free line. */
@@ -2777,7 +2879,14 @@ function pdpPrice(p, doer) {
   if (lane === "diy" || lane === "ai") return "Free";
   const pr = ITEM_PRICES[buildIdFor(p.id)];
   const creative = p.type === "content" || p.id === "shoot";
-  if (creative && pr && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${pr.oneTime.toLocaleString()}`;
+  // One-time amounts show WITH the 10% service fee folded in, so the buy box's number is the
+  // charged number (pre-tax) — same rule as the shelf pills.
+  if (!pr) return priceLabel(buildIdFor(p.id));
+  const oneShown = withServiceFee(pr.oneTime);
+  if (creative && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${oneShown.toLocaleString()}, fee included`;
+  if (pr.perMonth > 0 && pr.oneTime > 0) return `$${oneShown.toLocaleString()} + $${pr.perMonth.toLocaleString()}/mo, fee included`;
+  if (pr.perMonth > 0) return `$${pr.perMonth.toLocaleString()}/mo`;
+  if (pr.oneTime > 0) return `$${oneShown.toLocaleString()}, fee included`;
   return priceLabel(buildIdFor(p.id));
 }
 
@@ -3053,6 +3162,12 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   });
   const [openOpt, setOpenOpt] = useState(null);
   const toggleOpt = (id) => setSelected((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]);
+  // Delivery setup-only (sim break #9): the one-time fix must never weld the monthly
+  // subscription on. The checkbox defaults ON; unchecking rides the 'setup-only' sentinel
+  // through options → spec → the adapter, which opts the monthly line out (bills nothing,
+  // mints nothing). Re-opening from the cart restores the choice.
+  const isDelivery = itemId === "delivery";
+  const [monthlyCare, setMonthlyCare] = useState(() => !(Array.isArray(initialOptions) && initialOptions.includes("setup-only")));
   const pro = isProTier(tier);
   // The gbp AI lane, if this card has one — the zone-4 "Add Apnosh AI" row selects THIS version so
   // the account upgrade and the picked version stay one state (never two conflicting truths).
@@ -3081,21 +3196,52 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const base = laneFree ? { oneTime: 0, perMonth: 0 } : baseP;
   const optM = optionsMoney(selected);
   const totalOneTime = base.oneTime + optM.oneTime;
-  const totalPerMonth = base.perMonth + optM.perMonth;
+  const totalPerMonth = (isDelivery && !monthlyCare ? 0 : base.perMonth) + optM.perMonth;
   const creative = p.type === "content" || p.id === "shoot";
-  const totalLabel = (totalOneTime === 0 && totalPerMonth === 0) ? "Free" : `${creative && totalOneTime > 0 ? "From " : ""}${moneyLabel(totalOneTime, totalPerMonth)}`;
+  // "Your total" folds the 10% checkout service fee into the one-time amount and says so —
+  // the buy box's number IS the charged number (pre-tax), never a cart surprise.
+  const feeOneTime = withServiceFee(totalOneTime);
+  const totalLabel = (totalOneTime === 0 && totalPerMonth === 0) ? "Free" : `${creative && totalOneTime > 0 ? "From " : ""}${moneyLabel(feeOneTime, totalPerMonth)}${totalOneTime > 0 ? ", fee included" : ""}`;
+  // Pass-through costs, quoted verbatim from the catalog so the price area never hides real
+  // extra spend (e.g. paid-ads' "ad spend billed at cost, $500/mo minimum"). Free owner-run
+  // lanes bill nothing, so they carry no note; selected add-on services bring their own.
+  const costNotes = laneFree ? passthroughNotesForServices(selected) : [...new Set([...priceNotes(buildIdFor(p.id)), ...passthroughNotesForServices(selected)])];
+  // The honesty gate: a bookmarked (coming-soon) card still opens so the owner can read what it will
+  // do, but it cannot be added/bought. The footer swaps to a disabled "Coming soon" with the reason.
+  const soon = !buyableId(itemId);
+  const soonMsg = soonReason(itemId);
+  // Coming-soon detours: the unbundle note (a bundle blocked by one unbuilt step still has
+  // ready pieces) + live alternatives for the same goal, so this page is never a dead end.
+  const unbundle = soon ? UNBUNDLED_TODAY[itemId] : null;
+  const altIds = soon ? liveAlternativesFor(itemId, CONTENT_OVERRIDES) : [];
+  // "Tell me when it's ready": persisted server-side (catalog_interest + a staff page);
+  // localStorage only remembers that THIS device already asked.
+  const [notifyState, setNotifyState] = useState(() => {
+    try { return typeof window !== "undefined" && localStorage.getItem(`apnosh:notify:${itemId}`) ? "saved" : "idle"; } catch { return "idle"; }
+  });
+  const askNotify = async () => {
+    if (notifyState === "saving" || notifyState === "saved") return;
+    setNotifyState("saving");
+    try {
+      const res = await fetch("/api/catalog/interest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemId }) });
+      if (!res.ok) throw new Error();
+      try { localStorage.setItem(`apnosh:notify:${itemId}`, "1"); } catch { /* fine */ }
+      setNotifyState("saved");
+    } catch { setNotifyState("error"); }
+  };
 
   const [added, setAdded] = useState(false);
   const [rushOpen, setRushOpen] = useState(false);
   // Section 1 handoffs: version + options ride into the passthrough exactly as `doer` does today.
+  const chosenOptions = isDelivery && !monthlyCare ? [...selected, "setup-only"] : selected;
   const buildPreset = () => {
     const pr = {};
     if (doerCfg && doer) pr.doer = doer;
-    if (selected.length) pr.options = selected;
+    if (chosenOptions.length) pr.options = chosenOptions;
     return Object.keys(pr).length ? pr : null;
   };
   const onAddToPlan = () => {
-    addToPlan({ itemId, doer: doerCfg ? doer : null, options: selected });
+    addToPlan({ itemId, doer: doerCfg ? doer : null, options: chosenOptions });
     setAdded(true);
     // Owner: adding IS the final step for these catalog campaigns — collect it
     // into the plan and close back to the store (the persistent plan bar shows
@@ -3418,17 +3564,64 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
             behind it. "Add to plan" is the filled primary (collect-only local draft, ships/bills
             nothing); "Buy now instead" the quiet secondary into Continue; AI keeps its Pro path. ── */}
       <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 9 }}>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-            <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
-          </div>
-          {/* After adding, the button STAYS confirmed and becomes the door to the plan —
-              the add never again looks like nothing happened. Changing the config re-arms it. */}
-          <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan
-          </button>
-          {upsellAi && (
-            <a href="/dashboard/billing" className="apnpress" style={{ display: "block", textAlign: "center", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 10 }}>Upgrade to Pro to use Apnosh AI</a>
+          {soon ? (
+            // BOOKMARKED: no price quote, no buy — but never a dead end. The honest reason, the
+            // unbundle note (ready pieces of a blocked bundle), live detours for the same goal,
+            // and a real "tell me when it's ready" that a human sees.
+            <>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, lineHeight: 1.45, marginBottom: 8 }}>{soonMsg || "Coming soon."}</div>
+              {unbundle && (
+                <div style={{ background: TOKENS.mintTint, borderRadius: 12, padding: "9px 12px", marginBottom: 10, fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.mintDark, lineHeight: 1.5 }}>{unbundle.note}</div>
+              )}
+              {altIds.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.faint, marginBottom: 7 }}>What you can do today</div>
+                  <div className="apnosh-row" style={{ display: "flex", gap: 8, overflowX: "auto" }}>
+                    {altIds.map((aid) => { const a = catGet(aid); if (!a) return null; return (
+                      <button key={aid} onClick={() => onOpenCard(aid)} className="apnpress" style={{ flexShrink: 0, textAlign: "left", background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "9px 12px", cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+                        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.ink }}>{a.title}</div>
+                        {feeIncludedLabel(aid) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.mintDark, fontWeight: 600, marginTop: 1 }}>{feeIncludedLabel(aid)}</div>}
+                      </button>
+                    ); })}
+                  </div>
+                </div>
+              )}
+              <button onClick={askNotify} disabled={notifyState === "saved" || notifyState === "saving"} style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: notifyState === "saved" || notifyState === "saving" ? "default" : "pointer", background: notifyState === "saved" ? "#eef7f3" : TOKENS.ink, color: notifyState === "saved" ? TOKENS.mintDark : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                {notifyState === "saved" ? (
+                  <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>We will tell you when it is ready</>
+                ) : notifyState === "saving" ? "Saving…" : notifyState === "error" ? "That did not save. Tap to try again" : (
+                  <><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" /></svg>Tell me when it&rsquo;s ready</>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              {/* Setup-only choice (delivery): the monthly is opt-outable BEFORE money moves. */}
+              {isDelivery && baseP.perMonth > 0 && (
+                <label style={{ display: "flex", alignItems: "flex-start", gap: 9, cursor: "pointer", marginBottom: 10 }}>
+                  <input type="checkbox" checked={monthlyCare} onChange={(e) => setMonthlyCare(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: TOKENS.mint, flexShrink: 0 }} />
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.ink, lineHeight: 1.45 }}>
+                    <b style={{ fontWeight: 700 }}>Keep the monthly care</b> (${baseP.perMonth.toLocaleString()}/mo). Promos and rankings managed each month. Uncheck for the one-time fix only.
+                  </span>
+                </label>
+              )}
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: costNotes.length ? 4 : 9 }}>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
+                <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{totalLabel}</span>
+              </div>
+              {costNotes.map((n) => (
+                <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "right", marginBottom: 4 }}>Plus {plainCostNote(n)}</div>
+              ))}
+              {costNotes.length > 0 && <div style={{ marginBottom: 5 }} />}
+              {/* After adding, the button STAYS confirmed and becomes the door to the plan —
+                  the add never again looks like nothing happened. Changing the config re-arms it. */}
+              <button onClick={onAddToPlan} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: "pointer", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>Add to plan
+              </button>
+              {upsellAi && (
+                <a href="/dashboard/billing" className="apnpress" style={{ display: "block", textAlign: "center", textDecoration: "none", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.mintDark, marginTop: 10 }}>Upgrade to Pro to use Apnosh AI</a>
+              )}
+            </>
           )}
         </div>
     </div>
@@ -3803,7 +3996,12 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
         {itemId === "gbp" && (gbpLaneOf(vals.doer) === "diy" || gbpLaneOf(vals.doer) === "ai")
           ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
-          : priceLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>About {priceLabel(itemId)}. You approve before anything runs, and only pay when each piece ships.</div>}
+          : feeIncludedLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>{(ITEM_PRICES[itemId]?.perMonth > 0)
+              ? <>About {feeIncludedLabel(itemId)}. You add your card at checkout. Cancel monthly services anytime.</>
+              : <>About {feeIncludedLabel(itemId)}. You pay once at checkout.</>}</div>}
+        {priceNotes(itemId).map((n) => (
+          <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.85)", textAlign: "center", marginTop: -4, marginBottom: 10 }}>Plus {plainCostNote(n)}</div>
+        ))}
         {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
           return m.warn
             ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: "8px 12px", textAlign: "center", marginBottom: 10 }}>{m.text}</div>
@@ -4277,8 +4475,6 @@ function planDelivery(items) {
  *  checkout moment. Checkout composes the WHOLE plan as ONE campaign (plan-checkout.ts)
  *  and ships it through the same rail Buy now uses. Exported for the render smoke. */
 export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout }) {
-  const [stage, setStage] = useState("list");
-  const [composed, setComposed] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [droppedNote, setDroppedNote] = useState(null);
@@ -4292,6 +4488,10 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
   const toggleRush = (id) => setRushed((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const rushFeeTotal = items.reduce((sum, it) => { const r = itemRush(it.itemId); return rushed.has(it.itemId) && r ? sum + r.fee : sum; }, 0);
   const anyCreative = items.some((it) => isCreativeCard(catGet(it.itemId)));
+  // Pass-through costs (ad spend etc.) belong ON the order summary — the one place owners do
+  // their math — in plain words, with one real total when a minimum is named.
+  const cartCostNotes = [...new Set(items.flatMap((it) => priceNotes(it.itemId)))];
+  const cartAdMin = Math.round(passthroughMonthlyMinimumCents(cartCostNotes) / 100);
   // Service fee: a flat 10% of the one-time subtotal. Taxes depend on the client's location, so
   // they're shown as "calculated at checkout" (no invented rate). Both are display only for now —
   // like rush, they're shown but not yet folded into what checkout actually charges.
@@ -4309,10 +4509,11 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
     }, 240);
   };
 
-  // Compose the one-campaign draft NOW so anything stale is caught before the last look.
-  // Items that no longer price are removed OUT LOUD (the note below) — never silently billed.
-  const startCheckout = () => {
-    if (blocked || empty) return;
+  // Check out: compose the WHOLE plan as one campaign NOW (so anything stale is caught) and open
+  // the real checkout page (full bill + card). Items that no longer price are removed OUT LOUD (the
+  // note below) — never silently billed. No separate "review" step: the checkout page IS the review.
+  const startCheckout = async () => {
+    if (blocked || empty || busy) return;
     const res = composePlanCampaign(items);
     if (res.dropped.length) {
       const names = res.dropped.map((id) => (catGet(id) || { title: id }).title).join(", ");
@@ -4320,18 +4521,12 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
       setDroppedNote(`We took ${names} out of your plan. It can't be priced right now, so you were not charged for it.`);
     }
     if (!res.draft) return;
-    setComposed({ draft: res.draft, perItem: res.perItem });
     setError(null);
-    setStage("confirm");
-  };
-
-  const confirmShip = async () => {
-    if (busy || !composed) return;
     setBusy(true);
-    setError(null);
-    const ok = onCheckout ? await onCheckout(composed.draft) : false;
-    if (!ok) { setBusy(false); setError("That didn't go through. Nothing was ordered. Try again."); }
-    // On success the host clears the plan and navigates to the campaign's ready page.
+    const ok = onCheckout ? await onCheckout(res.draft) : false;
+    setBusy(false);
+    // On success the checkout page is now open; on failure nothing shipped and retry is safe.
+    if (!ok) setError("That didn't go through. Try again.");
   };
 
   const header = (title, backFn) => (
@@ -4342,59 +4537,6 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
       <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4, margin: 0 }}>{title}</h1>
     </div>
   );
-
-  if (stage === "confirm" && composed) {
-    const d = composed.draft;
-    return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
-        {header("One last look", () => { setStage("list"); setError(null); })}
-        <div style={{ flex: 1, overflowY: "auto", padding: "4px 18px 16px" }}>
-          <div style={{ background: "#fff", borderRadius: 18, border: `1px solid ${TOKENS.line}`, padding: "4px 16px", marginBottom: 14 }}>
-            {composed.perItem.map(({ itemId }) => {
-              const it = items.find((x) => x.itemId === itemId) || { itemId, doer: null, options: [] };
-              const p = catGet(itemId) || { title: itemId };
-              return (
-                <div key={itemId} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
-                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>{p.title}</span>
-                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.ink, whiteSpace: "nowrap" }}>{planMoneyLabel(planItemMoney(it), isCreativeCard(catGet(itemId)))}</span>
-                </div>
-              );
-            })}
-            {serviceFee > 0 && (
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>Service fee (10%)</span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink }}>{`$${serviceFee.toLocaleString()}`}</span>
-              </div>
-            )}
-            {totalWithFee.oneTime > 0 && (
-              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "11px 0", borderBottom: `1px solid ${TOKENS.line}` }}>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>Taxes</span>
-                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub }}>Calculated at checkout</span>
-              </div>
-            )}
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "12px 0" }}>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
-              <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.3 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
-            </div>
-          </div>
-          {/* What happens next — every line true to the real rail: one campaign, delivery-gated billing. */}
-          <div style={{ background: TOKENS.mintTint, borderRadius: 16, padding: "13px 15px" }}>
-            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, marginBottom: 6 }}>What happens when you confirm</div>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#3f7d6a", lineHeight: 1.55 }}>
-              Everything here starts as one campaign, so you track it all in one place. The work begins right away. You pay for each piece only when it is delivered.{totals.perMonth > 0 ? " Monthly items keep running until you stop them." : ""}
-            </div>
-          </div>
-        </div>
-        <div style={{ flexShrink: 0, background: "#fff", borderTop: `1px solid ${TOKENS.line}`, boxShadow: "0 -10px 28px rgba(20,40,30,0.10)", padding: "11px 18px calc(12px + env(safe-area-inset-bottom))" }}>
-          {error && <div role="alert" style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: "#b3462e", textAlign: "center", marginBottom: 8 }}>{error}</div>}
-          <button onClick={confirmShip} disabled={busy} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: busy ? "default" : "pointer", background: busy ? TOKENS.mintDark : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>
-            {busy ? "Starting your plan…" : "Confirm and start"}
-          </button>
-          <button onClick={() => { setStage("list"); setError(null); }} disabled={busy} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Go back</button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -4433,7 +4575,13 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
                     <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>Monthly services</span>
                     <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink, whiteSpace: "nowrap" }}>{`$${totals.perMonth.toLocaleString()}/mo`}</span>
                   </div>
-                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Billed monthly once your services start.</div>
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Billed monthly to your card starting at checkout. Cancel anytime.</div>
+                  {cartCostNotes.map((n) => (
+                    <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 3 }}>Plus {plainCostNote(n)}</div>
+                  ))}
+                  {cartAdMin > 0 && (
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 600, color: TOKENS.ink, marginTop: 3 }}>With ad spend, about ${(totals.perMonth + cartAdMin).toLocaleString()}+/mo.</div>
+                  )}
                 </>
               )}
               {totalWithFee.oneTime > 0 && (
@@ -4487,8 +4635,8 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
             <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Your total</span>
             <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
           </div>
-          {/* Honest: tapping Check out only opens the last look; work starts on Confirm there. */}
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Includes a 10% service fee. Plus taxes at checkout. Nothing starts or bills yet.</div>
+          {/* Honest: Check out goes straight to the payment page; nothing bills until you pay there. */}
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Includes a 10% service fee, plus tax. You&apos;ll add your card and pay next.</div>
           <button onClick={startCheckout} disabled={blocked} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: blocked ? "default" : "pointer", background: blocked ? TOKENS.dash : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? "none" : "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>Check out</button>
           <button onClick={onBack} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Keep shopping</button>
         </div>

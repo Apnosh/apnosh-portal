@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server'
 import { pollOutcomes } from '@/lib/campaigns/outcomes/reconcile'
 import { sweepCampaignCompletions } from '@/lib/campaigns/completion'
+import { sweepRecurringCycles } from '@/lib/campaigns/recurring-cycles'
 
 export const runtime = 'nodejs'
 export const maxDuration = 120
@@ -28,5 +29,8 @@ export async function GET(req: Request) {
   // After fresh outcome snapshots land: wrap any campaign whose every piece is
   // done (stamps execution.wrapUpSentAt + sends the owner the grounded letter).
   const completions = await sweepCampaignCompletions().catch((e) => ({ error: e instanceof Error ? e.message : 'completion sweep failed', checked: 0, completed: 0, notified: 0 }))
-  return NextResponse.json({ ok: true, ...result, completions })
+  // Month-2+ of every ACTIVE campaign subscription mints its next cycle of real service
+  // work (a billing month must never pass with no work object minted).
+  const recurring = await sweepRecurringCycles().catch((e) => ({ error: e instanceof Error ? e.message : 'recurring sweep failed', subscriptions: 0, minted: 0 }))
+  return NextResponse.json({ ok: true, ...result, completions, recurring })
 }

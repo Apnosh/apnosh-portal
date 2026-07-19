@@ -14,7 +14,8 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { CAMPAIGN_CONTENT, type CampaignContent } from './data/campaign-content'
-import { contentFor, cleanLanes, cleanStringList, cleanRush, type ContentOverride, type ContentOverrideMap } from './data/content-overrides'
+import { contentFor, cleanLanes, cleanStringList, cleanRush, cleanNeeds, type ContentOverride, type ContentOverrideMap } from './data/content-overrides'
+import { cleanGatesConfig } from './gates/config'
 import { FUNNEL_STAGES, type CreateCatalogId, type FunnelStage } from './data/create-catalog'
 
 /** Keep only real funnel-stage ids, in order, no dupes — the store contract for chips. */
@@ -41,6 +42,9 @@ export interface ContentOverrideRow {
   requirements?: unknown
   whats_included?: unknown
   rush?: unknown
+  needs?: unknown
+  gates?: unknown
+  visibility?: unknown
   updated_at?: string | null
   updated_by?: string | null
 }
@@ -76,6 +80,11 @@ export function rowToOverride(row: ContentOverrideRow): ContentOverride {
   if (whatYouGet.length) o.whatYouGet = whatYouGet
   const rush = cleanRush(row.rush)
   if (rush) o.rush = rush
+  const needs = cleanNeeds(row.needs)
+  if (needs) o.needs = needs
+  const gates = cleanGatesConfig(row.gates)
+  if (gates) o.gates = gates
+  if (row.visibility === 'live' || row.visibility === 'coming_soon' || row.visibility === 'hidden') o.visibility = row.visibility
   return o
 }
 

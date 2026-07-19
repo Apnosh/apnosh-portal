@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { deliverGuard } from '@/lib/campaigns/data/service-playbooks'
 
 /**
  * PATCH /api/admin/service-work-orders/:id — the operator control for ONE service work order.
@@ -45,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // the honesty guarantee against proof that already exists.
   const { data: row, error: readErr } = await svc
     .from('service_work_orders')
-    .select('campaign_id, client_id, title, steps, status, proof_url, started_at, updated_at')
+    .select('campaign_id, client_id, service_id, title, steps, status, proof_url, started_at, updated_at')
     .eq('id', id)
     .maybeSingle()
   if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
@@ -125,19 +126,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     update.status = nextStatus
   }
 
-  // HONESTY GUARANTEES, enforced on the FINAL row state (not just the transition, not just the UI):
-  // (a) delivered always carries proof; (b) delivered requires the WORK to actually be done — every
-  // step complete after this merge — so an order can never be handed over half-worked.
+  // HONESTY GUARANTEE, enforced on the FINAL row state (not just the transition, not just the UI):
+  // delivered always carries proof AND — on the transition into delivered — every step is done, so an
+  // order can never be handed over half-worked or without evidence. One pure guard (deliverGuard),
+  // shared with its tests, generic over every authored playbook.
   const finalStatus = (update.status ?? row.status) as string
-  const finalProof = 'proof_url' in update ? update.proof_url : row.proof_url
-  if (finalStatus === 'delivered' && !finalProof) {
-    return NextResponse.json({ error: 'A proof link is required before a service can be marked delivered.' }, { status: 400 })
-  }
-  if (finalStatus === 'delivered' && row.status !== 'delivered') {
-    const open = mergedSteps.filter((s) => s.status !== 'done')
-    if (open.length > 0) {
-      return NextResponse.json({ error: `Not everything is done yet: ${open.map((s) => (s as { label?: string }).label ?? s.id).slice(0, 3).join(', ')}${open.length > 3 ? '…' : ''}.` }, { status: 400 })
-    }
+  const finalProof = ('proof_url' in update ? update.proof_url : row.proof_url) as string | null
+  if (finalStatus === 'delivered') {
+    const guard = deliverGuard(mergedSteps, finalProof, { checkSteps: row.status !== 'delivered' })
+    if (!guard.ok) return NextResponse.json({ error: guard.reason }, { status: 400 })
   }
 
   // Optimistic concurrency: three writers (this PATCH, the apply route, the sync) all rewrite the
@@ -165,6 +162,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       body: 'Your team finished it. The proof is on your campaign page.',
       link: row.campaign_id ? `/dashboard/campaigns/${row.campaign_id}` : '/dashboard/campaigns',
     }).catch(() => ({ notified: 0 }))
+
+    // OWNERSHIP (sim crack #26): a delivered photo/video service lands in the owner's own
+    // Photos & files library, not just a proof row on a feed. The deliverable link becomes
+    // an asset they can open and download. Best-effort; never blocks the delivery.
+    const PHOTO_SERVICES = new Set(['photo-library', 'menu-photo-refresh'])
+    if (finalProof && PHOTO_SERVICES.has((row.service_id as string) ?? '')) {
+      try {
+        const isImage = /\.(jpe?g|png|webp|gif|heic)(\?|$)/i.test(finalProof)
+        await svc.from('assets').insert({
+          client_id: row.client_id,
+          name: `${(row.title as string) || 'Your photos'} (delivered by your team)`,
+          type: isImage ? 'image' : 'file',
+          file_url: finalProof,
+          tags: ['delivered', 'apnosh'],
+          uploaded_by_client: false,
+        })
+      } catch { /* the proof still lives on the work order */ }
+    }
   }
 
   if (row.campaign_id) revalidatePath(`/admin/campaign-orders/${row.campaign_id}`)

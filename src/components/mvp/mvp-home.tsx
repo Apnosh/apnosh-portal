@@ -22,6 +22,8 @@ import Link from 'next/link'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 import type { TimelineEvent } from '@/lib/dashboard/get-since-last-checked'
 import type { UpcomingWorkItem } from '@/lib/dashboard/get-upcoming-work'
+import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
+import { selectHomeOrders } from '@/lib/campaigns/home-cards'
 import { HomeFunnelLive } from './home-funnel'
 import { MvpThemeProvider, useMvpTheme } from './mvp-theme'
 
@@ -151,6 +153,13 @@ const METRIC_STAGE: Record<string, { key: string; label: string }> = {
 // NOT rendered. Flip this to `true` to bring the whole old home back exactly as it was.
 const LEGACY_HOME = false
 
+// The funnel IS the entire home, per the owner. The body the 20-owner sim added
+// below it (connect prompt, suggestions, "Your orders", quick links — the
+// anti-blank-home and show-my-order fixes) is PARKED: kept in this file but not
+// rendered. Flip to `true` to bring that body back. Tradeoff of `false`: a brand
+// new owner with no Google data sees an empty home until the funnel has data.
+const SHOW_HOME_BODY = false
+
 export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
   // One theme provider wraps the whole Home tree, so the funnel and every card
   // below read the same light/dark skin and the one toggle flips all of it.
@@ -165,6 +174,10 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
   const { C } = useMvpTheme()
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
+  // Whether the funnel hero actually rendered. Without Google data it hides, and Home
+  // shows an honest connect card in its place — never a blank screen (the sim's most-hit
+  // defect: 6 of 20 owners finished onboarding onto an empty white page).
+  const [funnelVis, setFunnelVis] = useState<'loading' | 'shown' | 'empty'>('loading')
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const onScroll = () => {
@@ -220,47 +233,51 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             funnel (Awareness → Interest → Customer actions → Orders → Retention)
             in the glass-vessel view. Renders only when the business has Google data. */}
         <div style={{ margin: '-16px -18px 0' }}>
-          <HomeFunnelLive clientId={clientId} height={620} fill />
-        </div>
-        {LEGACY_HOME && (<>
-        {/* SWIPEABLE METRIC CARDS — swipe left/right to change which graph
-            you're looking at; dots show where you are. No tabs. */}
-        <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
-          {metrics.map((mv) => {
-            const st = METRIC_STAGE[mv.key]
-            return <MetricCard key={mv.key} mv={mv} stage={st ? { href: `/dashboard/insights?stage=${st.key}`, label: st.label } : undefined} />
-          })}
+          <HomeFunnelLive clientId={clientId} height={620} fill onVisibility={setFunnelVis} />
         </div>
 
-        {/* dots — current metric + tap to jump */}
-        {metrics.length > 1 && (
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 12 }}>
-            {metrics.map((mv, i) => (
-              <button key={mv.key} aria-label={mv.tabLabel} onClick={() => goTo(i)} style={{ width: i === activeIdx ? 20 : 7, height: 7, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === activeIdx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
-            ))}
-          </div>
+        {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
+            the owner. Flip the flag to bring back the connect prompt, suggestions,
+            orders, and quick links. */}
+        {SHOW_HOME_BODY && (<>
+        {/* NO GOOGLE DATA — the funnel hid, so say so honestly and give the fix.
+            Never a blank screen, never invented numbers. */}
+        {funnelVis === 'empty' && (
+          <Link href="/dashboard/connected-accounts" className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '16px 15px', marginTop: 16, marginBottom: 4, textDecoration: 'none', color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
+            <div style={{ width: 42, height: 42, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plug size={20} color={C.greenDk} /></div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 14.5, color: C.ink }}>Your numbers show here</div>
+              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.45 }}>Connect your Google Business Profile and this page fills with real numbers. We never show made-up ones.</div>
+            </div>
+            <ChevronRight size={17} color={C.faint} />
+          </Link>
         )}
 
-        {/* See all insights — small text link under the graphs */}
-        <Link href="/dashboard/insights" style={{ display: 'block', textAlign: 'center', marginTop: 12, marginBottom: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>
-          See all insights · full year →
-        </Link>
+        {/* THE HOME BODY — always rendered (funnel or not), so a paid order, the
+            tailored suggestions, and what just happened are never invisible. */}
 
-        {/* SUGGESTIONS — a small Robinhood-style stack of tailored cards. One
-            reads as "Do this next"; the rest are timely info or genuine
-            recommendations drawn from this restaurant's own signals. */}
-        <SuggestionStack items={data.suggestions ?? []} clientId={clientId} ready={suggestionsReady} />
+        {/* SUGGESTIONS — a small stack of tailored cards. One reads as "Do this
+            next"; the rest are timely info or genuine recommendations drawn from
+            this restaurant's own signals (the AI set merges in when ready). */}
+        <div style={{ marginTop: 16 }}>
+          <SuggestionStack items={data.suggestions ?? []} clientId={clientId} ready={suggestionsReady} />
+        </div>
+
+        {/* YOUR ORDERS — shipped campaigns still running, with their REAL status
+            (Needs you / In production / Live) and what happens next. The sim's
+            silent week-after-checkout starts here instead of nowhere. */}
+        <HomeOrders clientId={clientId} />
 
         {/* COMING UP NEXT — what the team is actively working on and what's
-            going live next, from the content pipeline. Always shown; a calm
-            empty state when nothing is queued. */}
+            going live next, from the content pipeline. Hidden when empty
+            (Day-0 has nothing queued; an empty ribbon would just be noise). */}
+        {(data.upcomingWork?.length ?? 0) > 0 && (
         <div style={{ marginTop: 22 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Coming up next</span>
             <span style={{ fontSize: 11, color: C.faint }}>what your team is on</span>
           </div>
-          {(data.upcomingWork?.length ?? 0) > 0 ? (
-            (data.upcomingWork ?? []).map((w) => {
+          {(data.upcomingWork ?? []).map((w) => {
               const t = WORK_TONE[w.tone] ?? WORK_TONE.planning
               return (
                 <div key={w.id} style={{ display: 'flex', alignItems: 'center', gap: 11, background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 8 }}>
@@ -272,22 +289,19 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
                   <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '4px 10px', boxShadow: `0 2px 8px ${t.fg}1f` }}>{w.statusLabel}</span>
                 </div>
               )
-            })
-          ) : (
-            <EmptySection icon={<CalendarDays size={20} color={C.green} />} title="Nothing queued right now" text="Your next posts will show up here as your team lines them up." />
-          )}
+          })}
         </div>
+        )}
 
-        {/* RECENT ACTIVITY — a calm highlight reel of what just happened: posts
-            that went live, new reviews, replies, milestones. The headline win
-            gets a filled green dot + bold; the rest are quiet context. Always
-            shown; a calm empty state when nothing's happened yet. */}
+        {/* SINCE YOU WERE HERE — a calm highlight reel of what just happened:
+            posts that went live, new reviews, replies, milestones. Hidden when
+            nothing has happened yet (Day-0). */}
+        {(data.activity?.length ?? 0) > 0 && (
         <div style={{ marginTop: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Recent activity</span>
-            {(data.activity?.length ?? 0) > 0 && <Link href="/dashboard/inbox" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>}
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Since you were here</span>
+            <Link href="/dashboard/inbox" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
           </div>
-          {(data.activity?.length ?? 0) > 0 ? (
             <div style={{ background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '16px 15px 9px', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
               {(data.activity ?? []).map((e, i, arr) => {
                 const last = i === arr.length - 1
@@ -311,12 +325,11 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
                 )
               })}
             </div>
-          ) : (
-            <EmptySection icon={<Sparkles size={20} color={C.green} />} title="Nothing new yet" text="Your posts, reviews, and wins will show up here." />
-          )}
         </div>
+        )}
 
-        {/* QUICK LINKS — handy shortcuts at the foot of the home. */}
+        {/* QUICK LINKS — handy shortcuts at the foot of the home. Always shown,
+            so even a brand-new account has real doors to walk through. */}
         <div style={{ marginTop: 24 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Quick links</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -329,6 +342,31 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             ))}
           </div>
         </div>
+        </>)}
+
+        {LEGACY_HOME && (<>
+        {/* SWIPEABLE METRIC CARDS — swipe left/right to change which graph
+            you're looking at; dots show where you are. No tabs. */}
+        <div ref={scrollRef} onScroll={onScroll} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory' }}>
+          {metrics.map((mv) => {
+            const st = METRIC_STAGE[mv.key]
+            return <MetricCard key={mv.key} mv={mv} stage={st ? { href: `/dashboard/insights?stage=${st.key}`, label: st.label } : undefined} />
+          })}
+        </div>
+
+        {/* dots — current metric + tap to jump */}
+        {metrics.length > 1 && (
+          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 7, marginTop: 12 }}>
+            {metrics.map((mv, i) => (
+              <button key={mv.key} aria-label={mv.tabLabel} onClick={() => goTo(i)} style={{ width: i === activeIdx ? 20 : 7, height: 7, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === activeIdx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
+            ))}
+          </div>
+        )}
+
+        {/* See all insights — small text link under the graphs */}
+        <Link href="/dashboard/insights" style={{ display: 'block', textAlign: 'center', marginTop: 12, marginBottom: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>
+          See all insights · full year →
+        </Link>
         </>)}
         </div>
       </div>
@@ -527,18 +565,59 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
   )
 }
 
-/* Calm empty state for a home section so it still reads as present (and the
-   home never collapses) when there's nothing to show yet. Centered, soft,
-   with a haloed icon so it feels designed rather than blank. */
-function EmptySection({ icon, title, text }: { icon?: React.ReactNode; title?: string; text: string }) {
+/* ── YOUR ORDERS — shipped campaigns still running, on Home ─────────────────
+   The sim's most-damaging silence: a paid order in production never showed on
+   Home. This fetches the SAME campaigns + progress the Campaigns board uses and
+   renders the in-progress ones with their real status pill and the honest
+   "what happens next" line (shippedStatus's own blurb — never invented).
+   Hidden entirely when there are no shipped orders (nothing fake to show). */
+const ORDER_TONE: Record<string, { fg: string; bg: string }> = {
+  'Needs you': { fg: '#bd7e16', bg: '#fbf3e4' },
+  'In production': { fg: '#3a6ea5', bg: '#eef3fb' },
+  'Live': { fg: '#2e9a78', bg: '#eaf7f3' },
+}
+
+function HomeOrders({ clientId }: { clientId?: string }) {
   const { C } = useMvpTheme()
+  const [cards, setCards] = useState<CampCard[] | null>(null)
+  useEffect(() => {
+    if (!clientId) return
+    let live = true
+    fetch(`/api/campaigns?clientId=${clientId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!live || !j) return
+        const saved = (j.campaigns ?? []) as SavedCampaign[]
+        const progress = (j.progress ?? {}) as Record<string, CampaignProgress>
+        setCards(selectHomeOrders(saved.map((c) => campaignCardVM(c, progress[c.draft.id]))))
+      })
+      .catch(() => { /* Home stays lean if this fails */ })
+    return () => { live = false }
+  }, [clientId])
+
+  if (!cards || cards.length === 0) return null
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', background: C.cardSoft, border: `1px dashed ${C.greenLine}`, borderRadius: 18, padding: '22px 20px' }}>
-      {icon && (
-        <div style={{ width: 46, height: 46, borderRadius: '50%', background: C.card, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12, boxShadow: '0 2px 10px rgba(74,189,152,0.18)' }}>{icon}</div>
-      )}
-      {title && <div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink, marginBottom: 3 }}>{title}</div>}
-      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5, maxWidth: 230 }}>{text}</div>
+    <div style={{ marginTop: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Your orders</span>
+        <Link href="/dashboard/campaigns" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {cards.map((c) => {
+          const t = ORDER_TONE[c.pill] ?? ORDER_TONE['In production']
+          return (
+            <Link key={c.key} href={c.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 12, background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '13px 14px', textDecoration: 'none', color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
+              <span className={c.pill === 'Live' ? 'mvp-ping' : undefined} style={{ width: 9, height: 9, borderRadius: 99, background: t.fg, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title}</div>
+                {/* the honest next-step line from shippedStatus, e.g. "In production · your team's on it" */}
+                <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.blurb}</div>
+              </div>
+              <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '4px 10px', boxShadow: `0 2px 8px ${t.fg}1f` }}>{c.pill}</span>
+            </Link>
+          )
+        })}
+      </div>
     </div>
   )
 }

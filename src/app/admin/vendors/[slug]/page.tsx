@@ -18,6 +18,8 @@ import { creatorRatingAggregate, recentRatingsForCreator } from '@/lib/campaigns
 import { ratingLabel } from '@/lib/campaigns/work-ratings-core'
 import PortfolioManager from './portfolio-manager'
 import ProfileEditor from './profile-editor'
+import ConnectPayouts from './connect-payouts'
+import { getVendorConnectStatus } from '@/lib/campaigns/vendor-connect'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +82,7 @@ export default async function AdminVendorDetailPage({ params }: PageProps) {
     creatorRatingAggregate(vendor.id),
     recentRatingsForCreator(vendor.id, 10),
   ])
+  const connectStatus = await getVendorConnectStatus(vendor.id).catch(() => ({ hasAccount: false, detailsSubmitted: false, payoutsEnabled: false, chargesEnabled: false, accountId: null }))
   const listings = listingsRes.data ?? []
 
   return (
@@ -125,6 +128,9 @@ export default async function AdminVendorDetailPage({ params }: PageProps) {
         logoUrl={vendor.logo_url}
         bookable={vendor.bookable}
       />
+
+      {/* Stripe Connect payout onboarding (G5) — a vendor must finish this before a payout can be sent. */}
+      <ConnectPayouts vendorId={vendor.id} initial={connectStatus} />
 
       {/* Ratings: real rows only. Empty state is honest, never a placeholder. */}
       <div className="bg-white border border-ink-6 rounded-2xl p-5">

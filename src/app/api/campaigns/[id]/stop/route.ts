@@ -9,8 +9,11 @@
  *   - production sweep (stopCampaign): voids never-started creator work, pulls
  *     every unpublished team draft out of the publish path, cancels undelivered
  *     services. In-flight creator work is PROTECTED — it finishes and bills.
+ *   - subscription cancel: the campaign's Stripe monthly subscription(s) are canceled
+ *     IMMEDIATELY (cancelCampaignSubscriptions) — the settlement says monthly billing
+ *     ends now, so it does. Idempotent + degrade-safe; a failure pages staff.
  *   - an honest settlement back to the owner: what stopped, what continues,
- *     what has been billed so far. Money is never touched: charges exist only
+ *     what has been billed so far. One-time charges are never touched: they exist only
  *     for approved/published work, which the sweep never voids.
  */
 import { NextRequest, NextResponse } from 'next/server'
@@ -18,6 +21,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getCampaign } from '@/lib/campaigns/server'
 import { stopCampaign, getCampaignCharges } from '@/lib/campaigns/work-orders'
+import { cancelCampaignSubscriptions } from '@/lib/campaigns/campaign-subscription-server'
 import { summarize } from '@/lib/campaigns/types'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 
@@ -52,13 +56,23 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const charges = await getCampaignCharges(id).catch(() => ({ accruedCents: 0, count: 0 }))
   const monthlyStopped = summarize(campaign.draft.items).perMonth
 
+  // The money half of the stop: cancel the campaign's Stripe subscription(s) IMMEDIATELY (the
+  // settlement says billing ends now, so it must). Idempotent + degrade-safe by contract
+  // (cancelCampaignSubscriptions): no subscription / no Stripe keys / already canceled never
+  // errors the stop; a real cancel failure pages staff and the settlement says so honestly.
+  const subs = await cancelCampaignSubscriptions(id).catch(() => ({ canceled: 0, alreadyCanceled: 0, failed: 0 }))
+
   const name = campaign.draft.name || 'Your campaign'
   const stoppedCount = sweep.voidedOrders + sweep.rejectedDrafts + sweep.cancelledServices
+  const monthlyLine = monthlyStopped <= 0 ? null
+    : subs.failed > 0
+      ? `We are turning off your monthly billing ($${Math.round(monthlyStopped)}/mo) now. Our team is finishing it by hand.`
+      : 'Monthly billing is canceled. Nothing else charges this card for this campaign.'
   const settlementLines = [
     stoppedCount > 0 ? `${stoppedCount} unstarted piece${stoppedCount === 1 ? '' : 's'} of work stopped.` : 'Nothing was left to stop.',
     sweep.inFlight > 0 ? `${sweep.inFlight} piece${sweep.inFlight === 1 ? ' is' : 's are'} already being made — they finish and bill as normal.` : null,
     charges.accruedCents > 0 ? `Owed for delivered work so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done; it arrives on one invoice.` : 'Nothing is owed.',
-    monthlyStopped > 0 ? `Monthly items ($${Math.round(monthlyStopped)}/mo) stop now.` : null,
+    monthlyLine,
   ].filter((l): l is string => !!l)
 
   // Staff must know immediately — especially when in-flight work continues.
@@ -88,6 +102,8 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       inFlight: sweep.inFlight,
       billedCents: charges.accruedCents,
       monthlyStopped,
+      subscriptionsCanceled: subs.canceled + subs.alreadyCanceled,
+      subscriptionCancelFailed: subs.failed,
       summary: settlementLines.join(' '),
     },
   })

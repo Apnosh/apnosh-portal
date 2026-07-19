@@ -77,6 +77,10 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
       occasion: (c.occasion as string) ?? undefined,
       targetDate: (c.target_date as string) ?? undefined,
       context: (c.context as string) ?? undefined,
+      // The catalog card this campaign was built from — written on create (server.ts) but never
+      // hydrated back until now. Service-needs reads it (e.g. the `edit` card's footage-upload ask),
+      // so without this the ask never fires on the readiness path.
+      sourceCatalogId: (c.source_catalog_id as string) ?? undefined,
       brief: brief ?? undefined,
     },
     phase: (c.phase as SavedCampaign['phase']) ?? 'build',
@@ -91,6 +95,11 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
     producerChoices: (c.producer_choices as Record<string, PieceProducer> | null) ?? {},
     creativeControl: (c.creative_control as SavedCampaign['creativeControl']) ?? 'handoff',
     execution: (c.execution as SavedCampaign['execution']) ?? {},
+    // Cancellation-request fields (migration 225). undefined when the columns
+    // don't exist yet, so a pre-migration deploy reads as "no request".
+    cancelState: 'cancel_state' in c ? ((c.cancel_state as SavedCampaign['cancelState']) ?? null) : undefined,
+    cancelRequestedAt: 'cancel_requested_at' in c ? ((c.cancel_requested_at as string) ?? null) : undefined,
+    cancelReason: 'cancel_reason' in c ? ((c.cancel_reason as string) ?? null) : undefined,
   }
 }
 
@@ -171,10 +180,20 @@ export async function getCampaign(id: string): Promise<SavedCampaign | null> {
 
 export async function createCampaign(clientId: string, createdBy: string | null, draft: CampaignDraft): Promise<string> {
   const admin = createAdminClient()
+  // Honor the owner's onboarding approval preference ("I want to see everything" →
+  // approve-first). Previously every campaign defaulted to hands-off with auto-signed
+  // concepts, so the choice was collected and ignored. Best-effort; the owner can still
+  // change it per campaign on the detail page.
+  let creativeControl: string | null = null
+  try {
+    const { data: prof } = await admin.from('client_profiles').select('approval_type').eq('client_id', clientId).maybeSingle()
+    if ((prof as { approval_type?: string | null } | null)?.approval_type === 'full') creativeControl = 'approve_concept'
+  } catch { /* default stands */ }
   const { data: c, error } = await admin
     .from('campaigns')
     .insert({
       client_id: clientId,
+      ...(creativeControl ? { creative_control: creativeControl } : {}),
       name: draft.name,
       intent: draft.intent,
       path: draft.path,
@@ -182,6 +201,7 @@ export async function createCampaign(clientId: string, createdBy: string | null,
       budget_monthly: draft.budgetMonthly,
       planned: draft.planned ?? false,
       goal_key: draft.goalKey ?? null,
+      source_catalog_id: draft.sourceCatalogId ?? null,
       occasion: draft.occasion ?? null,
       target_date: draft.targetDate ?? null,
       context: draft.context ?? null,
@@ -372,7 +392,7 @@ export async function getCampaignProgressBatch(campaignIds: string[]): Promise<R
 /** Pure bucketing of a campaign's content_drafts (team lane) + creator_work_orders
  *  (creator lane) + service_work_orders (service lane, migration 190). */
 function computeProgress(drafts: Record<string, unknown>[], orders: Record<string, unknown>[], serviceOrders: Record<string, unknown>[] = []): CampaignProgress | null {
-  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0, dropped = 0, servicesAwaitingYou = 0
+  let total = 0, live = 0, queued = 0, awaitingYou = 0, inProgress = 0, dropped = 0, servicesAwaitingYou = 0, recurringTotal = 0, recurringActive = 0
   let nextDueISO: string | null = null
   const bumpDue = (raw: string | null) => {
     const dt = (raw ?? '').slice(0, 10)
@@ -445,7 +465,15 @@ function computeProgress(drafts: Record<string, unknown>[], orders: Record<strin
   // ongoing cycle can never hold a campaign out of 'done' forever. 'cancelled'
   // (a stopped campaign's void) is not work anymore.
   for (const w of serviceOrders ?? []) {
-    if (turnaroundFor((w.service_id as string) ?? '')?.class === 'recurring') continue
+    if (turnaroundFor((w.service_id as string) ?? '')?.class === 'recurring') {
+      // Monthly programs stay out of total/live (no finish line) but their REAL state is
+      // counted, so the owner card reads from the work, never a calendar timer.
+      const rs = (w.status as string) ?? ''
+      if (rs === 'cancelled') continue
+      recurringTotal++
+      if (rs !== 'queued') recurringActive++
+      continue
+    }
     const s = (w.status as string) ?? ''
     if (s === 'cancelled') continue
     total++
@@ -455,6 +483,6 @@ function computeProgress(drafts: Record<string, unknown>[], orders: Record<strin
     bumpDue(w.due_date as string | null)
   }
 
-  if (!total && !dropped) return null
-  return { total, live, queued, awaitingYou, inProgress, nextDueISO, dropped, servicesAwaitingYou }
+  if (!total && !dropped && !recurringTotal) return null
+  return { total, live, queued, awaitingYou, inProgress, nextDueISO, dropped, servicesAwaitingYou, recurringTotal, recurringActive }
 }
