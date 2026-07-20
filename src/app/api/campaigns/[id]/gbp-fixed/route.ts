@@ -18,13 +18,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign } from '@/lib/campaigns/server'
 import { diagnoseGbp } from '@/lib/gbp-diagnose'
+import { gbpFinishReadiness, GBP_FINISH_MIN_SCORE } from '@/lib/gbp-finish'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 30
 
-export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const campaign = await getCampaign(id)
   if (!campaign) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -43,20 +44,30 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const existing = campaign.execution?.gbpFixedAt
   if (existing) return NextResponse.json({ ok: true, fixedAt: existing, already: true })
 
-  // The honesty gate, enforced HERE: a fresh server-side read of the live profile
-  // must be fully successful (connected, nothing unreadable) and every section good.
-  // On refusal we name the parts that are not good yet, so the owner is told WHY the
-  // task stayed open instead of being left to guess (the UI renders these).
+  // The honesty gate, enforced HERE with a fresh server-side read. The bar is
+  // gbpFinishReadiness (shared with the UI): a part that is absent or unverified blocks,
+  // a part that is merely improvable does not, and the listing-health score must clear
+  // its floor. `anyway: true` is the owner's deliberate override for everything that
+  // still refuses — it does not pretend the profile is clean, it RECORDS what was still
+  // open at the moment they chose to finish.
+  const anyway = await req.json().then((b) => (b as { anyway?: unknown } | null)?.anyway === true).catch(() => false)
+
   const diag = await diagnoseGbp(campaign.clientId).catch(() => null)
   const readable = !!diag && diag.connected && !diag.readFailed && diag.sections.length > 0
-  const blocking = readable ? diag!.sections.filter((s) => s.status !== 'good') : []
-  const allGood = readable && blocking.length === 0
-  if (!allGood) {
+  if (!readable) {
+    // Never stamp on a profile we could not read — not even with `anyway`, since we
+    // would have nothing true to record about its state.
+    return NextResponse.json({ error: 'we could not read your Google profile just now', blocking: [] }, { status: 409 })
+  }
+  const readiness = gbpFinishReadiness(diag!.sections, diag!.score)
+  const stillOpen = diag!.sections.filter((s) => s.status !== 'good')
+  if (!readiness.ready && !anyway) {
     return NextResponse.json({
-      error: readable
-        ? 'the profile did not check out all good on a fresh read'
-        : 'we could not read your Google profile just now',
-      blocking: blocking.map((s) => ({ key: s.key, label: s.label, status: s.status, current: s.current })),
+      error: readiness.scoreShort
+        ? `your profile scores ${diag!.score ?? 0} of 100, and ${GBP_FINISH_MIN_SCORE} is the bar to finish`
+        : 'some parts of your profile are still missing',
+      blocking: stillOpen.map((s) => ({ key: s.key, label: s.label, status: s.status, current: s.current })),
+      canFinishAnyway: true,
     }, { status: 409 })
   }
 
@@ -68,9 +79,17 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
   const exec = (cur?.execution && typeof cur.execution === 'object' ? cur.execution : {}) as Record<string, unknown>
   if (typeof exec.gbpFixedAt === 'string' && exec.gbpFixedAt) return NextResponse.json({ ok: true, fixedAt: exec.gbpFixedAt, already: true })
+  // Record what was ACTUALLY true at the moment of finishing. On the clean path that is
+  // just the timestamp; when the owner overrode the bar we also write the parts that were
+  // still open and the score, so the completion record never reads as "it was perfect".
+  const stamp: Record<string, unknown> = { ...exec, gbpFixedAt: nowIso }
+  if (!readiness.ready) {
+    stamp.gbpFinishedWithGaps = stillOpen.map((s) => ({ key: s.key, label: s.label, status: s.status }))
+    stamp.gbpScoreAtFinish = diag!.score
+  }
   const { data: claimed, error } = await admin
     .from('campaigns')
-    .update({ execution: { ...exec, gbpFixedAt: nowIso }, updated_at: nowIso })
+    .update({ execution: stamp, updated_at: nowIso })
     .eq('id', id)
     .filter('execution->>gbpFixedAt', 'is', null)
     .select('id')
