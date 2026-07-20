@@ -16,7 +16,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { AnalystPayload } from './analyst-payload'
+import type { AnalystPayload } from './analyst-derive'
 
 /**
  * THE MODEL, IN ONE PLACE.
@@ -55,12 +55,20 @@ export interface AnalystFunnelStep {
   unit?: string
   isEmpty: boolean
   keptFromPrevPct: number | null
+  /** Move vs the same stage last period. Null when the two are not comparable. */
+  changePct: number | null
 }
 
 /** Deterministic funnel-with-drop-offs for the UI. Numbers come only from here. */
 export function funnelFromPayload(payload: AnalystPayload): AnalystFunnelStep[] {
   const keptByStage = new Map<number, number>()
   for (const d of payload.dropOffs) keptByStage.set(d.toStage, d.keptPct)
+  // Only comparable changes reach the UI. A not-comparable stage shows no chip at all,
+  // which is the honest render: better to show nothing than a number that misleads.
+  const changeByStage = new Map<number, number>()
+  for (const c of payload.changes) {
+    if (c.comparable && c.changePct != null) changeByStage.set(c.stage, c.changePct)
+  }
   return payload.stages.map((s) => ({
     stage: s.stage,
     label: s.label,
@@ -68,6 +76,7 @@ export function funnelFromPayload(payload: AnalystPayload): AnalystFunnelStep[] 
     unit: s.unit,
     isEmpty: s.isEmpty,
     keptFromPrevPct: keptByStage.get(s.stage) ?? null,
+    changePct: changeByStage.get(s.stage) ?? null,
   }))
 }
 
@@ -89,6 +98,17 @@ export function renderPayloadForPrompt(payload: AnalystPayload): string {
     lines.push(`  ${s.stage}. ${s.label}: ${num(s.headline)}${s.unit ? ` ${s.unit}` : ''}`)
     for (const src of s.sources) {
       if (src.value != null) lines.push(`       - ${src.label}: ${num(src.value)}`)
+    }
+  }
+  lines.push('')
+  lines.push(`CHANGE VS THE PERIOD BEFORE (the previous ${payload.window}):`)
+  if (!payload.changes.length) lines.push('  (no earlier period to compare against)')
+  for (const c of payload.changes) {
+    if (c.comparable && c.changePct != null) {
+      const dir = c.changePct > 0 ? 'up' : c.changePct < 0 ? 'down' : 'flat'
+      lines.push(`  ${c.label}: ${num(c.previous)} -> ${num(c.current)} = ${dir} ${Math.abs(c.changePct)}%`)
+    } else {
+      lines.push(`  ${c.label}: CANNOT COMPARE (${c.reason ?? 'not comparable'})`)
     }
   }
   lines.push('')
@@ -117,6 +137,9 @@ You are given a BRIEF of the owner's real numbers. These are the ONLY facts you 
 HARD RULES (breaking any of these fails the task):
 - Use ONLY numbers that appear in the BRIEF. Never invent, estimate, round-guess, or extrapolate a number.
 - Never compare them to other restaurants or "industry averages" or "typical" figures. You have no such data.
+- The ONLY fair comparison is the owner against their own past, using the CHANGE section. Lead with it when it is there, because a number on its own does not tell them if things are getting better or worse.
+- Where CHANGE says CANNOT COMPARE, you must not compare those two numbers or imply a direction. Say plainly that you cannot compare it yet and why, in the owner's words.
+- A change is not a reason. You may say what moved, never why it moved.
 - Never say one thing CAUSED another. You may say two things happened together, not that one caused the other.
 - For anything listed under DARK SOURCES, you cannot see it. Say so plainly and point to connecting it. Never guess its value.
 - If the funnel shows a big drop between two steps, that gap is the story. Name it in plain words.

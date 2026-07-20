@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown } from 'lucide-react'
+import { ChevronLeft, Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown, TrendingUp } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 
 const C = {
@@ -22,7 +22,27 @@ const C = {
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
-interface FunnelStep { stage: number; label: string; value: number | null; unit?: string; isEmpty: boolean; keptFromPrevPct: number | null }
+interface FunnelStep { stage: number; label: string; value: number | null; unit?: string; isEmpty: boolean; keptFromPrevPct: number | null; changePct: number | null }
+
+/**
+ * How this stage moved against the same stage last period. Absent whenever the two
+ * periods are not a fair comparison (the server decides that, not this component),
+ * so no chip is the honest answer rather than a zero.
+ */
+function ChangeChip({ pct }: { pct: number }) {
+  const up = pct > 0
+  const flat = pct === 0
+  const tone = flat ? { fg: C.faint, bg: '#f2f2f4' } : up ? { fg: C.greenDk, bg: C.greenSoft } : { fg: C.coral, bg: C.coralBg }
+  return (
+    <span
+      title={`vs the period before`}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: tone.bg, color: tone.fg, borderRadius: 99, padding: '3px 7px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}
+    >
+      {!flat && (up ? <TrendingUp size={11} /> : <TrendingDown size={11} />)}
+      {flat ? 'flat' : `${Math.abs(pct)}%`}
+    </span>
+  )
+}
 interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[] }
 interface AnalystResponse {
   locked?: boolean
@@ -127,6 +147,7 @@ function ReadView({ read, funnel, when }: { read: Read; funnel: FunnelStep[]; wh
                   {s.isEmpty
                     ? <span style={{ fontSize: 12, color: C.faint }}>No data yet</span>
                     : <span style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600 }}>{(s.value ?? 0).toLocaleString('en-US')}</span>}
+                  {!s.isEmpty && s.changePct != null && <ChangeChip pct={s.changePct} />}
                 </div>
               </div>
             ))}

@@ -7,7 +7,7 @@
  *
  * Run: node_modules/.bin/tsx scripts/verify-analyst-payload.ts */
 
-import { deriveDropOffs, summarizeSources, type AnalystStage } from '../src/lib/insights/analyst-payload'
+import { deriveDropOffs, summarizeSources, type AnalystStage } from '../src/lib/insights/analyst-derive'
 
 let fail = 0
 const ok = (cond: boolean, msg: string) => { console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fail++ }
