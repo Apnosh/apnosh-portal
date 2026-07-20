@@ -248,6 +248,12 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
+      {/* The swipe row is styled with .mvp-swipe, but that rule is declared inside
+          mvp-home's style block, which never renders on this screen — so the graphs
+          carried a visible scrollbar here. Declared locally so the class actually
+          applies wherever it is used. */}
+      <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
+.mvp-swipe::-webkit-scrollbar{display:none}`}</style>
       <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
       {/* sticky back header */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
@@ -312,44 +318,16 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
     setSel(k)
     try { window.history.replaceState(null, '', `/dashboard/insights?stage=${k}`) } catch { /* ignore */ }
   }
-  // Keep the carousel on the selected stage (mount + deep-link arriving late).
-  // This used to re-pin EVERY FRAME until the layout went quiet, which fixed a
-  // slow-load deep-link but fought the owner's finger: a swipe was dragged back
-  // mid-gesture. So it is a one-shot scroll again, and the slow-load case is
-  // handled the narrow way instead — re-pin only when the container's width
-  // actually changes (late fonts/data), and never once the owner has touched it.
+  // keep the carousel on the selected stage (mount + deep-link arriving late)
   useEffect(() => {
     const el = swipeRef.current
     if (!el) return
-    let touched = false
-    let t: ReturnType<typeof setTimeout> | undefined
-    const markTouched = () => { touched = true }
-    el.addEventListener('pointerdown', markTouched, { passive: true })
-    el.addEventListener('touchstart', markTouched, { passive: true })
-    el.addEventListener('wheel', markTouched, { passive: true })
-
-    const pin = () => {
-      if (touched) return
-      const want = idx * el.clientWidth
-      if (Math.abs(el.scrollLeft - want) < 2) return
-      progRef.current = true
-      el.scrollTo({ left: want, behavior: 'auto' })
-      clearTimeout(t)
-      t = setTimeout(() => { progRef.current = false }, 120)
-    }
-    pin()
-    // Width changes on a slow load land the one-shot a slide short; a resize is
-    // NOT something a swipe causes, so re-pinning here never interrupts a gesture.
-    const ro = new ResizeObserver(() => pin())
-    ro.observe(el)
-    return () => {
-      ro.disconnect()
-      clearTimeout(t)
-      el.removeEventListener('pointerdown', markTouched)
-      el.removeEventListener('touchstart', markTouched)
-      el.removeEventListener('wheel', markTouched)
-      progRef.current = false
-    }
+    const want = idx * el.clientWidth
+    if (Math.abs(el.scrollLeft - want) < 2) return
+    progRef.current = true
+    el.scrollTo({ left: want, behavior: 'auto' })
+    const t = setTimeout(() => { progRef.current = false }, 120)
+    return () => clearTimeout(t)
   }, [idx])
   // a finished swipe picks the stage it landed on
   const onSwipe = () => {
