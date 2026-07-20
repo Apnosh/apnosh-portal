@@ -70,7 +70,7 @@
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star, MessageCircle, Megaphone, X, Search, ImagePlus } from 'lucide-react'
+import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star, MessageCircle, Megaphone, X, Search, ImagePlus, Lock, ArrowRight } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 import { gbpFinishReadiness, GBP_FINISH_MIN_SCORE } from '@/lib/gbp-finish'
@@ -465,6 +465,13 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
             diag={diag}
             mode="diy"
             taskDone={taskDone}
+            hasCampaignTask={!!campaignId}
+            aiLaneLocked={mode === 'ai' && !isPro}
+            onFinish={(anyway) => { void finishTask(anyway) }}
+            finishing={finishing}
+            finishError={finishError}
+            rechecking={rechecking}
+            onRecheck={recheck}
             openKey={openKey}
             onToggle={(k) => setOpenKey((cur) => (cur === k ? null : k))}
             drafting={drafting}
@@ -527,12 +534,20 @@ const hubCardStyle: CSSProperties = {
 
 /* ── The section walkthrough ───────────────────────────────────── */
 
-function Walkthrough({ diag, mode, taskDone, openKey, onToggle, drafting, draft, draftError, copied, onDraft, onCopy }: {
+function Walkthrough({ diag, mode, taskDone, hasCampaignTask = false, aiLaneLocked = false, onFinish, finishing = false, finishError = null, rechecking = false, onRecheck, openKey, onToggle, drafting, draft, draftError, copied, onDraft, onCopy }: {
   diag: GbpDiagnosis
   /** 'ai' = the "Draft it for me" experience; 'diy' = the plain checklist (Fix-it-on-Google links). */
   mode: 'diy' | 'ai'
   /** The campaign task tied to this walkthrough was just marked done (all-good + PATCH landed). */
   taskDone?: boolean
+  hasCampaignTask?: boolean
+  /** True when this campaign asked for the AI builder but the plan does not include it. */
+  aiLaneLocked?: boolean
+  onFinish?: (anyway: boolean) => void
+  finishing?: boolean
+  finishError?: string | null
+  rechecking?: boolean
+  onRecheck?: () => void
   openKey: string | null
   onToggle: (key: string) => void
   drafting: boolean
@@ -549,6 +564,23 @@ function Walkthrough({ diag, mode, taskDone, openKey, onToggle, drafting, draft,
 
   return (
     <>
+      {/* The plan boundary, said out loud. Quietly handing someone the checklist when
+          their campaign asked for the AI builder leaves them wondering where it went. */}
+      {aiLaneLocked && (
+        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '12px 14px', marginBottom: 12, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <Lock size={15} color={C.mute} style={{ flexShrink: 0, marginTop: 2 }} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink }}>Writing it for you is part of the AI plan</div>
+            <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.5 }}>
+              You can still fix everything yourself below. Each part links straight to the right page on Google.
+            </div>
+            <Link href="/dashboard/billing" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 7, fontSize: 12.5, fontWeight: 700, color: C.greenDk, textDecoration: 'none' }}>
+              See the AI plan <ArrowRight size={13} />
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Progress: N of M done + a thin bar. */}
       <div style={{ padding: '2px 2px 16px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -593,10 +625,82 @@ function Walkthrough({ diag, mode, taskDone, openKey, onToggle, drafting, draft,
           )
       ))}
 
+      {mode === 'diy' && hasCampaignTask && !taskDone && onFinish && (
+        <SelfServeFinish
+          allDone={allDone}
+          onFinish={onFinish}
+          finishing={finishing}
+          finishError={finishError}
+          rechecking={rechecking}
+          onRecheck={onRecheck}
+        />
+      )}
+
       <div style={{ textAlign: 'center', fontSize: 12, color: C.faint, padding: '12px 0 2px' }}>
         Read from your live Google listing.
       </div>
     </>
+  )
+}
+
+/**
+ * Finishing the free, do-it-yourself lane.
+ *
+ * This lane is a person editing their own Google profile in another tab, so it has to
+ * close on THEIR say-so. There is no team to sign it off and no AI in this lane at all.
+ *
+ * It still offers to check first, because a re-check is free and being told "we looked
+ * and it all reads good" is worth more than ticking your own box. But the check is an
+ * offer, not a gate: if the owner says they are done, the task closes. The server
+ * records what was still open at that moment, so a self-marked finish is never written
+ * down as a clean bill of health.
+ */
+function SelfServeFinish({ allDone, onFinish, finishing, finishError, rechecking, onRecheck }: {
+  allDone: boolean
+  onFinish: (anyway: boolean) => void
+  finishing: boolean
+  finishError: string | null
+  rechecking: boolean
+  onRecheck?: () => void
+}) {
+  return (
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '16px 16px 15px', marginTop: 14 }}>
+      <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink }}>
+        {allDone ? 'Everything checks out' : 'Finished editing on Google?'}
+      </div>
+      <div style={{ fontSize: 13, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
+        {allDone
+          ? 'We read your live listing and every part looks good. Mark this done to close it out.'
+          : 'Make your changes in Google, then mark this done. You can always come back and check again later.'}
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onFinish(true)}
+        disabled={finishing}
+        style={{ marginTop: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: finishing ? 'default' : 'pointer', opacity: finishing ? 0.8 : 1, font: 'inherit' }}
+      >
+        {finishing ? <><Loader2 size={16} className="mvp-spin" /> Marking it done&hellip;</> : <><Check size={17} strokeWidth={3} /> Mark this done</>}
+      </button>
+
+      {!allDone && onRecheck && (
+        <button
+          type="button"
+          onClick={onRecheck}
+          disabled={rechecking}
+          className="mvp-row"
+          style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%', height: 42, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14, fontWeight: 700, cursor: rechecking ? 'default' : 'pointer', font: 'inherit' }}
+        >
+          {rechecking ? <><Loader2 size={15} className="mvp-spin" /> Checking&hellip;</> : 'Check my profile again first'}
+        </button>
+      )}
+
+      {finishError && (
+        <div style={{ marginTop: 9, background: C.redSoft, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: C.red, lineHeight: 1.45 }}>
+          {finishError}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -676,7 +780,7 @@ function ProblemCard({ section, mode, open, onToggle, drafting, draft, draftErro
                   onCopy={onCopy}
                 />
               )}
-              {showFixOnGoogle && <FixOnGoogleBlock />}
+              {showFixOnGoogle && <FixOnGoogleBlock sectionKey={section.key} />}
             </>
           )}
         </div>
@@ -742,22 +846,22 @@ function DraftBlock({ drafting, draft, draftError, copied, onDraft, onCopy }: {
   )
 }
 
-/** Checklist (diy) mode: no AI. A link to fix this section on Google + the honest self-check line
- *  (the walkthrough re-checks your live profile itself, so there is nothing to mark done by hand). */
-function FixOnGoogleBlock() {
+/** Checklist (diy) mode: no AI, ever. A link straight to the Google page that holds this
+ *  section, then the owner comes back and marks the whole task done. */
+function FixOnGoogleBlock({ sectionKey }: { sectionKey: string }) {
   return (
     <div style={{ marginTop: 12 }}>
       <a
-        href="https://business.google.com"
+        href={googleEditHrefFor(sectionKey)}
         target="_blank"
         rel="noopener noreferrer"
         className="mvp-row"
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', height: 44, borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.greenDk, fontSize: 14.5, fontWeight: 700, textDecoration: 'none' }}
       >
-        Fix it on Google <ExternalLink size={15} />
+        Edit this on Google <ExternalLink size={15} />
       </a>
       <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '9px 0 0' }}>
-        Fix this in your Google profile, then come back. We check it for you when you refresh.
+        Opens Google in a new tab. Change it there, come back, then mark this done at the bottom.
       </p>
     </div>
   )
@@ -1450,9 +1554,27 @@ function useGbpSectionSave({ clientId, section, initialNote, onAccepted }: {
  *  Google's own signed-in editor pages — with one listing they land on the
  *  right business. Never a fake in-app editor for these. */
 const GOOGLE_EDIT_HREF: Record<string, string> = {
+  // /info is Google's business-information editor: it holds the name, categories,
+  // hours, description and website in one page, so every text-ish section lands there.
   categories: 'https://business.google.com/info',
+  hours: 'https://business.google.com/info',
+  description: 'https://business.google.com/info',
+  links: 'https://business.google.com/info',
   menu: 'https://business.google.com/menu',
   photos: 'https://business.google.com/photos',
+}
+
+/**
+ * Where to send someone to fix this section themselves.
+ *
+ * The self-serve lane is the whole product for a free owner, so "go fix it" has to
+ * land on the page that actually holds the thing. It used to drop everyone on the
+ * Google Business home screen and leave them to find it, which is the difference
+ * between a task and a chore. The root is kept only as a fallback for a section we
+ * do not have a specific page for.
+ */
+function googleEditHrefFor(key: string): string {
+  return GOOGLE_EDIT_HREF[key] ?? 'https://business.google.com'
 }
 
 const smallEditBtnStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', background: 'none', padding: 2, color: C.greenDk, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', font: 'inherit' }
