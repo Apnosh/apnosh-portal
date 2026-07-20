@@ -69,23 +69,59 @@ export default function AnalystPage() {
 
   // First open serves the cached read (cheap); the Refresh button forces a
   // fresh generate (refresh: true skips the cache on the server).
+  //
+  // Every path below MUST end in a state that renders something. This page used to
+  // have three ways to show a completely blank screen, which is worse than an error:
+  // the owner cannot tell a broken page from a slow one, and there is nothing to
+  // report. Now a failure always names itself and always offers Try again.
   const run = useCallback((refresh = false) => {
     if (!client?.id) return
     setState('loading'); setErr(null)
+
+    // The server may spend up to 30s on a live generate. Without a client-side cap a
+    // dropped connection leaves the page spinning forever with no way out.
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 45_000)
+
     fetch('/api/dashboard/analyst', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ clientId: client.id, window: '30d', refresh }),
+      signal: ctl.signal,
     })
       .then(async (r) => {
         const j = (await r.json().catch(() => ({}))) as AnalystResponse & { error?: string }
         if (!r.ok) throw new Error(j.error || `Failed (${r.status})`)
         return j
       })
-      .then((j) => { setData(j); setState(j.locked ? 'locked' : 'ready') })
-      .catch((e) => { setErr(e.message); setState('error') })
+      .then((j) => {
+        if (j.locked) { setData(j); setState('locked'); return }
+        // A 200 with no read is the blank-page case: the old code set 'ready' and then
+        // rendered nothing at all because the render was guarded on data.read.
+        if (!j.read?.bottomLine) throw new Error('the analyst came back empty')
+        setData(j); setState('ready')
+      })
+      .catch((e: unknown) => {
+        const aborted = e instanceof DOMException && e.name === 'AbortError'
+        setErr(aborted ? 'that took too long, so we stopped waiting' : (e instanceof Error ? e.message : 'something went wrong'))
+        setState('error')
+      })
+      .finally(() => clearTimeout(timer))
   }, [client?.id])
 
   useEffect(() => { run(false) }, [run])
+
+  // Which restaurant we are reading for comes from context and can arrive a beat late.
+  // If it never arrives, `run` returns early and the page would sit on "Reading your
+  // numbers..." forever, looking broken. Say so instead.
+  const waitingForClient = !client?.id
+  useEffect(() => {
+    if (!waitingForClient) return
+    const t = setTimeout(() => {
+      setErr('we could not tell which restaurant to read. Try picking it again from the menu.')
+      setState('error')
+    }, 8_000)
+    return () => clearTimeout(t)
+  }, [waitingForClient])
 
   const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard/insights') }
 
@@ -105,10 +141,15 @@ export default function AnalystPage() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 16px 40px' }}>
-          {state === 'loading' && <Centered>Reading your numbers&hellip;</Centered>}
-          {state === 'error' && <Centered>Couldn&apos;t generate: {err}<div style={{ marginTop: 12 }}><button onClick={() => run(false)} style={btn}>Try again</button></div></Centered>}
-          {state === 'locked' && <Locked />}
-          {state === 'ready' && data?.read && <ReadView read={data.read} funnel={data.funnel ?? []} when={whenLabel(data.generatedAt)} />}
+          {/* Exhaustive on purpose: the last branch is a plain else, so there is no
+              combination of state and data that renders an empty screen. */}
+          {state === 'loading' ? <Centered>Reading your numbers&hellip;</Centered>
+            : state === 'locked' ? <Locked />
+            : state === 'ready' && data?.read ? <ReadView read={data.read} funnel={data.funnel ?? []} when={whenLabel(data.generatedAt)} />
+            : <Centered>
+                We could not put your read together{err ? `: ${err}` : '.'}
+                <div style={{ marginTop: 12 }}><button onClick={() => run(false)} style={btn}>Try again</button></div>
+              </Centered>}
         </div>
       </div>
     </div>

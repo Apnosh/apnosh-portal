@@ -17,7 +17,7 @@ import {
   ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
   Heart, Star, MessageCircle, Mail, Eye, Users, Plug, Store, HelpCircle, Camera, Pencil, Send, MapPin,
 } from 'lucide-react'
-import { useState, useRef, useEffect, useMemo } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 import type { TimelineEvent } from '@/lib/dashboard/get-since-last-checked'
@@ -814,6 +814,50 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, avg, max, periodDays, yoyPct, yoyLabel }
 }
 
+/* ── ONE range for the whole session ──────────────────────────────────────────
+   Every chart in the portal used to keep its own range, starting at 7 days, while
+   the home funnel and the AI analyst both worked in 30. So Home said "last 30 days"
+   and tapping through to Insights silently showed a different window, and the two
+   numbers disagreed for no visible reason.
+
+   The window is a property of what the OWNER is currently looking at, not of an
+   individual chart, so it lives in one place. Every chart subscribes, so picking a
+   range anywhere moves everything at once and it survives navigation between Home,
+   Insights, and back. 30 days is the default because that is what the funnel and the
+   analyst read, and those are the numbers the rest of the product is built around. */
+const RANGE_KEY = 'apnosh.chartRange'
+const isChartRange = (v: unknown): v is ChartRange => v === '7d' || v === '30d' || v === '1y' || v === 'custom'
+
+const defaultCStart = () => { const t = new Date(); return isoDate(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) }
+
+type RangeState = { range: ChartRange; cStart: string; cEnd: string }
+let shared: RangeState | null = null
+const listeners = new Set<() => void>()
+
+function readShared(): RangeState {
+  if (shared) return shared
+  // A 'custom' range is deliberately NOT restored: its saved dates would be stale on
+  // the next visit, which is exactly the kind of quietly-wrong number this avoids.
+  let range: ChartRange = '30d'
+  try {
+    const saved = sessionStorage.getItem(RANGE_KEY)
+    if (isChartRange(saved) && saved !== 'custom') range = saved
+  } catch { /* private mode / no storage — the default is fine */ }
+  shared = { range, cStart: defaultCStart(), cEnd: isoDate(new Date()) }
+  return shared
+}
+
+function writeShared(patch: Partial<RangeState>) {
+  shared = { ...readShared(), ...patch }
+  if (patch.range) { try { sessionStorage.setItem(RANGE_KEY, patch.range) } catch { /* ignore */ } }
+  for (const l of listeners) l()
+}
+
+const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l) } }
+// The server has no session storage, so it always renders the default. Returning a
+// stable object here matters: a fresh one each call makes React loop.
+const SERVER_STATE: RangeState = { range: '30d', cStart: '', cEnd: '' }
+
 /* Shared range state + summary for one metric. The hero and its chart both read
    this, so the range chips move the headline number, not just the bars. */
 export function useChartRange(src: ChartSrc): {
@@ -822,9 +866,10 @@ export function useChartRange(src: ChartSrc): {
   cEnd: string; setCEnd: (s: string) => void
   summary: RangeSummary
 } {
-  const [range, setRange] = useState<ChartRange>('7d')
-  const [cStart, setCStart] = useState(() => { const t = new Date(); return isoDate(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) })
-  const [cEnd, setCEnd] = useState(() => isoDate(new Date()))
+  const { range, cStart, cEnd } = useSyncExternalStore(subscribe, readShared, () => SERVER_STATE)
+  const setRange = useCallback((r: ChartRange) => writeShared({ range: r }), [])
+  const setCStart = useCallback((s: string) => writeShared({ cStart: s }), [])
+  const setCEnd = useCallback((s: string) => writeShared({ cEnd: s }), [])
   const summary = useMemo(() => bucketsFor(range, src, cStart, cEnd), [range, src, cStart, cEnd])
   return { range, setRange, cStart, setCStart, cEnd, setCEnd, summary }
 }
