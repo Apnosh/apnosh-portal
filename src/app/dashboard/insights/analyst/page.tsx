@@ -43,7 +43,78 @@ function ChangeChip({ pct }: { pct: number }) {
     </span>
   )
 }
-interface ReviewRead { headline: string; praise: string[]; complaints: string[] }
+interface ReviewTheme { label: string; positive: number; negative: number }
+interface ReviewRead { headline: string; praise: string[]; complaints: string[]; themes: ReviewTheme[]; countedOver: number }
+interface ReviewStats {
+  recent: { days: number; count: number; avg: number | null; mix: Record<string, number> }
+  lifetime: { count: number; avg: number | null; mix: Record<string, number> }
+  unanswered: number
+}
+
+/**
+ * Star spread. Counted from real review rows, never from the model, so the bars are
+ * safe to read literally. Shows where the weight sits at a glance: an average of 3.6
+ * hides whether that is everyone shrugging or half loving and half furious.
+ */
+function StarBars({ mix, total }: { mix: Record<string, number>; total: number }) {
+  const max = Math.max(1, ...[1, 2, 3, 4, 5].map((k) => mix[String(k)] ?? 0))
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {[5, 4, 3, 2, 1].map((star) => {
+        const n = mix[String(star)] ?? 0
+        const good = star >= 4
+        return (
+          <div key={star} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 11.5, color: C.mute, width: 26, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{star}&#9733;</span>
+            <div style={{ flex: 1, height: 14, background: '#f2f2f4', borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ width: `${(n / max) * 100}%`, height: '100%', background: good ? C.green : C.coral, borderRadius: 4, transition: 'width .3s ease' }} />
+            </div>
+            <span style={{ fontSize: 11.5, color: n ? C.ink : C.faint, width: 34, fontVariantNumeric: 'tabular-nums' }}>
+              {n}{total > 0 ? ` (${Math.round((n / total) * 100)}%)` : ''}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * What people talk about, and whether they are happy about it.
+ *
+ * Each bar is a count of REAL reviews: the model tagged which quotes belong to which
+ * topic, and the counting happened server-side over quotes proven to exist. So a bar
+ * of 4 means four people actually said it.
+ */
+function ThemeBars({ themes, countedOver }: { themes: ReviewTheme[]; countedOver: number }) {
+  const max = Math.max(1, ...themes.map((t) => t.positive + t.negative))
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {themes.map((t) => {
+        const total = t.positive + t.negative
+        return (
+          <div key={t.label}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
+              <span style={{ fontSize: 13, fontWeight: 600 }}>{t.label}</span>
+              <span style={{ fontSize: 11.5, color: C.faint, fontVariantNumeric: 'tabular-nums' }}>
+                {t.negative > 0 && <span style={{ color: C.coral, fontWeight: 700 }}>{t.negative} unhappy</span>}
+                {t.negative > 0 && t.positive > 0 && ' · '}
+                {t.positive > 0 && <span style={{ color: C.greenDk, fontWeight: 700 }}>{t.positive} happy</span>}
+              </span>
+            </div>
+            <div style={{ display: 'flex', height: 16, borderRadius: 4, overflow: 'hidden', background: '#f2f2f4', width: `${(total / max) * 100}%`, minWidth: 40 }}>
+              {t.negative > 0 && <div style={{ flex: t.negative, background: C.coral }} />}
+              {t.positive > 0 && <div style={{ flex: t.positive, background: C.green }} />}
+            </div>
+          </div>
+        )
+      })}
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 2, lineHeight: 1.45 }}>
+        Counted across the {countedOver} reviews with enough written in them to read.
+      </div>
+    </div>
+  )
+}
 interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[]; reviews: ReviewRead | null }
 
 /**
@@ -52,10 +123,27 @@ interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: str
  * once you have seen the problem. The whole block is absent when the analyst had too
  * few reviews to read, rather than showing an encouraging empty state.
  */
-function ReviewsBlock({ r }: { r: ReviewRead }) {
+function ReviewsBlock({ r, stats }: { r: ReviewRead; stats: ReviewStats | null }) {
   return (
     <Section title="What people are saying">
-      <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: r.complaints.length || r.praise.length ? 12 : 0 }}>{r.headline}</div>
+      <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: 14 }}>{r.headline}</div>
+
+      {stats && stats.recent.count > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: C.mute }}>Star spread</span>
+            <span style={{ fontSize: 11.5, color: C.faint }}>{stats.recent.count} reviews, avg {stats.recent.avg ?? '-'}</span>
+          </div>
+          <StarBars mix={stats.recent.mix} total={stats.recent.count} />
+        </div>
+      )}
+
+      {r.themes.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: C.mute, marginBottom: 8 }}>What they talk about</div>
+          <ThemeBars themes={r.themes} countedOver={r.countedOver} />
+        </div>
+      )}
       {r.complaints.length > 0 && (
         <div style={{ marginBottom: r.praise.length ? 12 : 0 }}>
           <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: C.coral, marginBottom: 6 }}>They complain about</div>
@@ -83,6 +171,7 @@ interface AnalystResponse {
   locked?: boolean
   read?: Read
   funnel?: FunnelStep[]
+  reviewStats?: ReviewStats | null
   reputation?: { rating: number | null; reviewCount: number | null }
   business?: { name: string }
   generatedAt?: string
@@ -180,7 +269,7 @@ export default function AnalystPage() {
               combination of state and data that renders an empty screen. */}
           {state === 'loading' ? <Centered>Reading your numbers&hellip;</Centered>
             : state === 'locked' ? <Locked />
-            : state === 'ready' && data?.read ? <ReadView read={data.read} funnel={data.funnel ?? []} when={whenLabel(data.generatedAt)} />
+            : state === 'ready' && data?.read ? <ReadView read={data.read} funnel={data.funnel ?? []} stats={data.reviewStats ?? null} when={whenLabel(data.generatedAt)} />
             : <Centered>
                 We could not put your read together{err ? `: ${err}` : '.'}
                 <div style={{ marginTop: 12 }}><button onClick={() => run(false)} style={btn}>Try again</button></div>
@@ -198,7 +287,7 @@ function Centered({ children }: { children: React.ReactNode }) {
 }
 
 // ── The read ─────────────────────────────────────────────────────────────
-function ReadView({ read, funnel, when }: { read: Read; funnel: FunnelStep[]; when: string }) {
+function ReadView({ read, funnel, stats, when }: { read: Read; funnel: FunnelStep[]; stats: ReviewStats | null; when: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       {/* bottom line */}
@@ -231,7 +320,7 @@ function ReadView({ read, funnel, when }: { read: Read; funnel: FunnelStep[]; wh
         </Section>
       )}
 
-      {read.reviews && <ReviewsBlock r={read.reviews} />}
+      {read.reviews && <ReviewsBlock r={read.reviews} stats={stats} />}
 
       {read.working.length > 0 && (
         <Section title="What's working">

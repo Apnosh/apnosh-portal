@@ -16,7 +16,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { AnalystPayload } from './analyst-derive'
+import { tallyThemes, type AnalystPayload, type ReviewTheme, type ThemeTags } from './analyst-derive'
 
 /**
  * THE MODEL, IN ONE PLACE.
@@ -57,6 +57,10 @@ export interface ReviewRead {
   praise: string[]
   /** what people complain about, same rule */
   complaints: string[]
+  /** topics with counted praise vs complaint, for the bar chart. Counted in code. */
+  themes: ReviewTheme[]
+  /** how many real reviews the topics were counted over, so the chart can say so */
+  countedOver: number
 }
 
 /** The authoritative funnel the PAGE renders — built from the payload, not the AI. */
@@ -142,8 +146,9 @@ export function renderPayloadForPrompt(payload: AnalystPayload): string {
     lines.push(`  all time: ${rv.lifetime.count} reviews, average ${rv.lifetime.avg ?? 'n/a'} (${mix(rv.lifetime.mix)})`)
     lines.push(`  landed inside this report's ${rv.inWindow.days} day window: ${rv.inWindow.count}`)
     lines.push(`  never replied to: ${rv.unanswered} of ${rv.recent.count}`)
-    lines.push('  WHAT THEY WROTE (real words, use these and only these to say what people praise or complain about):')
-    for (const q of rv.quotes) lines.push(`    - ${q.rating} star, ${q.when}: "${q.text}"`)
+    lines.push('  WHAT THEY WROTE (real words, use these and only these to say what people praise or complain about).')
+    lines.push('  Each is numbered. Cite these numbers in "themes" so the chart counts real reviews:')
+    rv.quotes.forEach((q, i) => lines.push(`    [${i + 1}] ${q.rating} star, ${q.when}: "${q.text}"`))
   }
   lines.push('')
   lines.push(`REPUTATION: rating ${payload.reputation.rating ?? 'n/a'}, ${payload.reputation.reviewCount ?? 'n/a'} reviews`)
@@ -186,14 +191,21 @@ Return ONLY a JSON object, no prose around it, in exactly this shape:
   "reviews": {
     "headline": "one plain sentence on what reviews add up to",
     "praise": ["what people say they like, in their words not yours"],
-    "complaints": ["what people complain about, most common first"]
+    "complaints": ["what people complain about, most common first"],
+    "themes": [
+      {"label": "short topic name, e.g. Price or Banh mi or Staff",
+       "positive": [numbers of the quotes that speak WELL of this topic],
+       "negative": [numbers of the quotes that COMPLAIN about this topic]}
+    ]
   }
 }
 Keep working to at most 3 bullets, fixes to at most 2, blindSpots to at most 3, praise and complaints to at most 3 each.
-Set "reviews" to null ONLY when the brief says reviews could not be read or there are too few.`
+Set "reviews" to null ONLY when the brief says reviews could not be read or there are too few.
+
+About "themes": group what people talk about into up to 6 topics, most-mentioned first. Name topics the way the owner would (the dish, the staff, the prices, the wait), not in marketing words. Put each quote number under positive or negative for that topic. A quote can appear under several DIFFERENT topics, because one review often mentions the food and the price. Only cite numbers that appear in the brief. These numbers are counted and drawn as a chart, so a number you invent becomes a visible lie.`
 
 /** Validate + narrow the model's JSON into an AnalystRead. Throws on bad shape. */
-export function parseAnalystRead(raw: string): AnalystRead {
+export function parseAnalystRead(raw: string, quoteCount = 0): AnalystRead {
   const json = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
   let o: unknown
   try {
@@ -217,10 +229,14 @@ export function parseAnalystRead(raw: string): AnalystRead {
   let reviews: ReviewRead | null = null
   const rr = r.reviews as Record<string, unknown> | null | undefined
   if (rr && typeof rr === 'object' && typeof rr.headline === 'string' && rr.headline.trim()) {
+    // Themes are COUNTED here, over quotes proven to exist, never taken as written.
+    const themes = tallyThemes(Array.isArray(rr.themes) ? (rr.themes as ThemeTags[]) : [], quoteCount)
     reviews = {
       headline: rr.headline.trim(),
       praise: asStrings(rr.praise).slice(0, 3),
       complaints: asStrings(rr.complaints).slice(0, 3),
+      themes,
+      countedOver: quoteCount,
     }
   }
 
@@ -278,7 +294,7 @@ export async function runAnalyst(payload: AnalystPayload): Promise<AnalystRunRes
   })
   const block = response.content.find((b) => b.type === 'text')
   const raw = block && block.type === 'text' ? block.text : ''
-  const read = parseAnalystRead(raw)
+  const read = parseAnalystRead(raw, payload.reviews?.quotes.length ?? 0)
   return {
     read,
     tokensIn: response.usage.input_tokens,
