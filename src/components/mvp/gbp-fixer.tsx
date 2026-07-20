@@ -72,6 +72,7 @@ import Link from 'next/link'
 import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star, MessageCircle, Megaphone, X, Search, ImagePlus } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
+import { gbpFinishReadiness, GBP_FINISH_MIN_SCORE } from '@/lib/gbp-finish'
 
 /* Wire types for GET /api/dashboard/gbp-diagnosis — mirrors GbpDiagnosis in
    src/lib/gbp-diagnose.ts (that module is server-only, so the shapes are
@@ -233,12 +234,16 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
   // profile that isn't all good is refused, and the refusal names the parts still open.
   const [finishing, setFinishing] = useState(false)
   const [finishError, setFinishError] = useState<string | null>(null)
-  const finishTask = useCallback(async () => {
+  const finishTask = useCallback(async (anyway = false) => {
     if (!campaignId || finishing || taskDone) return
     setFinishing(true)
     setFinishError(null)
     try {
-      const r = await fetch(`/api/campaigns/${campaignId}/gbp-fixed`, { method: 'POST' })
+      const r = await fetch(`/api/campaigns/${campaignId}/gbp-fixed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ anyway }),
+      })
       const j = await r.json().catch(() => ({})) as { ok?: boolean; error?: string }
       if (r.ok && j.ok) { markingRef.current = true; setTaskDone(true) }
       else setFinishError(j.error || 'We could not finish it just now. Try again in a minute.')
@@ -431,7 +436,7 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
             taskDone={taskDone}
             taskBlocking={taskBlocking}
             hasCampaignTask={!!campaignId}
-            onFinish={() => { void finishTask() }}
+            onFinish={(anyway) => { void finishTask(anyway) }}
             finishing={finishing}
             finishError={finishError}
             rechecking={rechecking}
@@ -832,8 +837,9 @@ export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false,
   taskBlocking?: Array<{ key: string; label: string }>
   /** True when this run is attached to a campaign that carries the profile task. */
   hasCampaignTask?: boolean
-  /** Explicitly finish the campaign task (the server re-verifies before it stamps). */
-  onFinish?: () => void
+  /** Explicitly finish the campaign task (the server re-verifies before it stamps).
+   *  `anyway` is the owner's deliberate override of the readiness bar. */
+  onFinish?: (anyway?: boolean) => void
   finishing?: boolean
   finishError?: string | null
   rechecking?: boolean
@@ -2745,8 +2751,9 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
   taskBlocking?: Array<{ key: string; label: string }>
   /** True when this run is attached to a campaign that carries the profile task. */
   hasCampaignTask?: boolean
-  /** Explicitly finish the campaign task (the server re-verifies before it stamps). */
-  onFinish?: () => void
+  /** Explicitly finish the campaign task (the server re-verifies before it stamps).
+   *  `anyway` is the owner's deliberate override of the readiness bar. */
+  onFinish?: (anyway?: boolean) => void
   finishing?: boolean
   finishError?: string | null
   rechecking?: boolean
@@ -2762,6 +2769,10 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
     .filter((g) => g.parts.length > 0)
   const stray = sections.filter((s) => !CHAPTER_ORDER.includes(s.key))
   if (stray.length > 0) groups.push({ name: 'More', parts: stray })
+
+  // The SAME readiness rule the server enforces, so the button we offer and the answer
+  // we get back can never disagree: absent/unverified parts block, improvable ones don't.
+  const readiness = gbpFinishReadiness(sections, score)
 
   return (
     <>
@@ -2836,19 +2847,21 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
               Your profile checked out. Come back after big changes to check it again.
             </div>
           </div>
-        ) : allGood ? (
+        ) : readiness.ready ? (
           <div style={{ background: C.greenSoft, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px' }}>
-            <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>Every part looks good</div>
+            <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>
+              {allGood ? 'Every part looks good' : 'Your profile is in good shape'}
+            </div>
             <div style={{ fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
-              {hasCampaignTask
-                ? 'Finish it and this campaign task is done.'
-                : 'Nothing needs fixing right now.'}
+              {readiness.polish.length > 0
+                ? <>Nothing is missing{score != null ? `, and you are at ${score} of 100` : ''}. {readiness.polish.length === 1 ? 'One part' : `${readiness.polish.length} parts`} could still be sharper, but that is polish you can do any time.</>
+                : hasCampaignTask ? 'Finish it and this campaign task is done.' : 'Nothing needs fixing right now.'}
             </div>
             {hasCampaignTask && (
               <>
                 <button
                   type="button"
-                  onClick={onFinish}
+                  onClick={() => onFinish?.(false)}
                   disabled={!!finishing}
                   className="mvp-row"
                   style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 12, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: finishing ? 'default' : 'pointer', opacity: finishing ? 0.8 : 1, font: 'inherit' }}
@@ -2871,13 +2884,15 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
               {hasCampaignTask ? 'Not ready to finish yet' : 'A few parts still need work'}
             </div>
             <div style={{ fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
-              {taskBlocking.length > 0
-                ? <>{taskBlocking.length === 1 ? 'One part is' : `${taskBlocking.length} parts are`} not good yet{hasCampaignTask ? ', so the campaign task stays open' : ''}:</>
-                : <>Go back and fix the parts marked above, then check again.</>}
+              {readiness.scoreShort
+                ? <>Nothing is missing, but your profile scores {score ?? 0} of 100 and {GBP_FINISH_MIN_SCORE} is the bar.</>
+                : readiness.blockers.length > 0
+                  ? <>{readiness.blockers.length === 1 ? 'One part is' : `${readiness.blockers.length} parts are`} still missing{hasCampaignTask ? ', so the campaign task stays open' : ''}:</>
+                  : <>Go back and fix the parts marked above, then check again.</>}
             </div>
-            {taskBlocking.length > 0 && (
+            {readiness.blockers.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
-                {taskBlocking.map((b) => (
+                {readiness.blockers.map((b) => (
                   <span key={b.key} style={{ fontSize: 12, fontWeight: 700, color: C.ink, background: C.bg, border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '4px 10px' }}>
                     {b.label}
                   </span>
@@ -2895,6 +2910,29 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
                 ? <><Loader2 size={16} className="mvp-spin" /> Checking your profile&hellip;</>
                 : 'Check my profile again'}
             </button>
+            {/* The deliberate override. It never claims the profile is clean — finishing this
+                way records the parts that were still open, so the record stays true. */}
+            {hasCampaignTask && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onFinish?.(true)}
+                  disabled={!!finishing}
+                  className="mvp-row"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 8, height: 44, borderRadius: 13, border: `0.5px solid ${C.line}`, background: '#fff', color: C.ink, fontSize: 14.5, fontWeight: 700, cursor: finishing ? 'default' : 'pointer', opacity: finishing ? 0.8 : 1, font: 'inherit' }}
+                >
+                  {finishing ? <><Loader2 size={15} className="mvp-spin" /> Finishing&hellip;</> : 'Finish anyway'}
+                </button>
+                <p style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.45, margin: '7px 0 0' }}>
+                  Closes the task and notes what was still open, so the record stays honest.
+                </p>
+                {finishError && (
+                  <div style={{ marginTop: 8, background: C.redSoft, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: C.red, lineHeight: 1.45 }}>
+                    {finishError}
+                  </div>
+                )}
+              </>
+            )}
             {recheckFailed && (
               <div style={{ marginTop: 8, background: C.redSoft, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: C.red, lineHeight: 1.45 }}>
                 We could not check right now. Try again in a minute.
