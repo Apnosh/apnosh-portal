@@ -957,6 +957,7 @@ export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false,
           total={total}
           clientId={clientId}
           onBack={() => setPhase(phase.index === 0 ? { name: 'intro' } : { name: 'part', index: phase.index - 1 })}
+          onSkipToEnd={() => setPhase({ name: 'summary' })}
           onDone={(outcome) => finishPart(sections[phase.index].key, outcome, phase.index)}
           onSaved={markUpdated}
           onSilentRefresh={onRecheck}
@@ -978,6 +979,10 @@ export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false,
           taskDone={taskDone}
           taskBlocking={taskBlocking}
           hasCampaignTask={hasCampaignTask}
+          onOpenPart={(key) => {
+            const i = sections.findIndex((sec) => sec.key === key)
+            if (i >= 0) setPhase({ name: 'part', index: i })
+          }}
           onFinish={onFinish}
           finishing={finishing}
           finishError={finishError}
@@ -1549,7 +1554,7 @@ function PublishMenuButton({ clientId, onPublished }: { clientId: string; onPubl
  * ("Finish" on the last part) moves on; a part the owner did not fix records
  * as skipped, a part Google accepted a save for records as updated.
  */
-function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clientId, onBack, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
+function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clientId, onBack, onSkipToEnd, onDone, onSaved, onSilentRefresh, drafting, draft, draftError, onDraft, initialEditing, initialSaveNote }: {
   section: GbpDiagnosisSection
   /** Apnosh AI's tailored advice for this part, once it loads (falls back to
    *  the deterministic `section.advice` only after loading ends). */
@@ -1562,6 +1567,8 @@ function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clien
   total: number
   clientId: string
   onBack: () => void
+  /** Jump straight to the Overview instead of walking every remaining part. */
+  onSkipToEnd?: () => void
   onDone: (outcome: PartOutcome) => void
   onSaved: (sectionKey: string) => void
   onSilentRefresh?: () => void
@@ -1623,6 +1630,19 @@ function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clien
             )}
             <span style={{ fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>Part {index + 1} of {total}</span>
           </span>
+          {/* Jump straight to the Overview. Walking all 9 parts to reach the end (or to
+              finish) was the only way through; this is the shortcut, and nothing is lost —
+              every part is still listed on the Overview and can be reopened from there. */}
+          {onSkipToEnd && !isLast && (
+            <button
+              type="button"
+              onClick={onSkipToEnd}
+              className="mvp-row"
+              style={{ marginLeft: 'auto', flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, height: 30, padding: '0 9px', borderRadius: 99, border: 'none', background: 'none', color: C.greenDk, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}
+            >
+              Skip to the end <ChevronRight size={14} />
+            </button>
+          )}
         </div>
         <div style={{ height: 5, borderRadius: 99, background: '#e9e9ee', overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${Math.round(((index + 1) / total) * 100)}%`, background: C.green, borderRadius: 99, transition: 'width .4s ease' }} />
@@ -2740,7 +2760,7 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, adviceLoading, onSi
  *  its outcome grouped under its chapter, a fresh re-check (which is what
  *  can complete the campaign task), the honest delay note, and the
  *  Keep-it-strong cards (reviews / post / Q and A). */
-function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking = [], hasCampaignTask = false, onFinish, finishing, finishError, rechecking, recheckFailed, onRecheck, onOpenQanda, onOpenPost, onBack }: {
+function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking = [], hasCampaignTask = false, onOpenPart, onFinish, finishing, finishError, rechecking, recheckFailed, onRecheck, onOpenQanda, onOpenPost, onBack }: {
   sections: GbpDiagnosisSection[]
   outcomes: Record<string, PartOutcome>
   allGood: boolean
@@ -2751,6 +2771,8 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
   taskBlocking?: Array<{ key: string; label: string }>
   /** True when this run is attached to a campaign that carries the profile task. */
   hasCampaignTask?: boolean
+  /** Reopen a part from the Overview, so any section can be revisited directly. */
+  onOpenPart?: (key: string) => void
   /** Explicitly finish the campaign task (the server re-verifies before it stamps).
    *  `anyway` is the owner's deliberate override of the readiness bar. */
   onFinish?: (anyway?: boolean) => void
@@ -2806,8 +2828,10 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
           <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
             {g.parts.map((s, i) => {
               const o = summaryOutcome(s, outcomes)
-              return (
-                <div key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+              // Every row reopens its part, so any section can be revisited straight from
+              // the Overview instead of walking back through the ones in front of it.
+              const rowInner = (
+                <>
                   {o.good
                     ? (
                       <span style={{ width: 20, height: 20, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -2815,9 +2839,25 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
                       </span>
                     )
                     : <span style={{ width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 8, height: 8, borderRadius: '50%', background: o.color }} /></span>}
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: C.ink }}>{s.label}</span>
+                  <span style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 14, fontWeight: 600, color: C.ink }}>{s.label}</span>
                   <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: o.color }}>{o.word}</span>
-                </div>
+                  {onOpenPart && <ChevronRight size={15} color={C.faint} style={{ flexShrink: 0, marginLeft: 2 }} />}
+                </>
+              )
+              const rowStyle = { display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` } as const
+              return onOpenPart ? (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => onOpenPart(s.key)}
+                  aria-label={`Open ${s.label}`}
+                  className="mvp-row"
+                  style={{ ...rowStyle, width: '100%', border: 'none', background: 'none', cursor: 'pointer', font: 'inherit' }}
+                >
+                  {rowInner}
+                </button>
+              ) : (
+                <div key={s.key} style={rowStyle}>{rowInner}</div>
               )
             })}
           </div>
