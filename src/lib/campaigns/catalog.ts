@@ -48,13 +48,18 @@ const PLAIN_NAMES: Record<string, string> = {
   'lto-launch': 'Launch a new item', 'staff-advocacy': 'Get your team asking', 'google-food-order': 'Google order button',
 }
 
-/** Build a Line Item from a catalog service (used for newly-added lines). */
+/** Build a Line Item from a catalog service (used for newly-added lines).
+ *  `producer` defaults to 'team': a catalog service is Apnosh-run unless a caller
+ *  reassigns it (the GBP owner lanes re-stamp 'diy'). It used to be left unset,
+ *  which persisted as NULL and only behaved correctly because every consumer tests
+ *  `!== 'diy'` — see lib/campaigns/doers.ts. Always stamping it removes that trap. */
 export function serviceToLine(s: PricedService, id: string): LineItem {
   const { price, cadence } = cadenceOf(s)
   return {
     id, serviceId: s.id, name: s.name, plain: PLAIN_NAMES[s.id] ?? s.name, does: shortDoes(s),
     stage: s.section, price, cadence, eta: '~1 week',
     metric: s.metric, why: s.evidence, market: s.prices[0].market, handler: s.handler,
+    producer: 'team',
     included: true, lock: 'editable',
   }
 }
@@ -70,6 +75,8 @@ export function serviceToLines(s: PricedService, idBase: string): LineItem[] {
       id: `${idBase}-${i}`, serviceId: s.id, name: s.name, plain: PLAIN_NAMES[s.id] ?? s.name, does: shortDoes(s),
       stage: s.section, price: p.amount, cadence, eta: '~1 week',
       metric: s.metric, why: s.evidence, market: p.market, handler: s.handler,
+      // Apnosh-run by default; the GBP owner lanes re-stamp 'diy' after this.
+      producer: 'team',
       included: true, lock: 'editable',
     }
   })
