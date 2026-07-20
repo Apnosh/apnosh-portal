@@ -34,7 +34,14 @@ const nextConfig: NextConfig = {
       { source: '/dashboard/email-sms/:path*', destination: '/dashboard/insights', permanent: false },
       // :path+ requires at least one segment, so /dashboard/insights itself never
       // matches and this cannot loop.
-      { source: '/dashboard/insights/:path+', destination: '/dashboard/insights', permanent: false },
+      //
+      // The negative lookahead is load-bearing. This rule was written when insights
+      // really was one page with no subroutes, so a catch-all was safe. /insights/analyst
+      // was added later and this silently ate it: the AI Analyst button appeared to do
+      // nothing because every tap redirected straight back to the page it came from,
+      // and the page was unreachable by direct URL too. Any real subroute added here in
+      // future must be exempted the same way, or it will vanish the same silent way.
+      { source: '/dashboard/insights/:path((?!analyst$).+)', destination: '/dashboard/insights', permanent: false },
       { source: '/dashboard/requests/:path*', destination: '/dashboard/messages', permanent: false },
     ]
   },
