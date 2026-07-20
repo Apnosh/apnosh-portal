@@ -80,6 +80,8 @@ export interface AnalystPayload {
   /** Same-stage movement vs the previous period. Empty when there is no history. */
   changes: AnalystChange[]
   dropOffs: AnalystDropOff[]
+  /** What people actually wrote. Null when reviews could not be read. */
+  reviews: ReviewDigest | null
   reputation: { rating: number | null; reviewCount: number | null }
   topSearches: Array<{ query: string; impressions: number }>
   activeCampaignsByStage: Record<string, string[]>
@@ -190,5 +192,127 @@ export function summarizeSources(stages: AnalystStage[]): AnalystSourceSummary {
   return {
     connected: [...connected],
     dark: [...dark.entries()].map(([label, state]) => ({ label, state })),
+  }
+}
+
+// ── Reviews: what people actually said ───────────────────────────────────
+
+/** One real review, trimmed to what the analyst needs. */
+export interface ReviewRow {
+  rating: number | null
+  text: string | null
+  postedAt: string | null
+  /** true when the owner has already replied */
+  answered: boolean
+}
+
+/** A verbatim excerpt handed to the model as evidence. Never paraphrased here. */
+export interface ReviewQuote {
+  rating: number
+  when: string
+  text: string
+}
+
+/**
+ * The review picture: counts computed in code, real words carried through.
+ *
+ * The split of labour matters. Every NUMBER here (how many of each star, how many
+ * unanswered) is counted from rows, so the model can never miscount them. The QUOTES
+ * are verbatim, so when the analyst says "people mention prices" there is real text
+ * behind it rather than a guess about a restaurant it has never visited.
+ */
+export interface ReviewDigest {
+  /** Everything on record, however far back it goes. */
+  lifetime: { count: number; avg: number | null; mix: Record<string, number> }
+  /** A wider recent slice, because sentiment needs more than a handful of reviews. */
+  recent: { days: number; count: number; avg: number | null; mix: Record<string, number> }
+  /** How many landed inside the analyst's own reporting window. */
+  inWindow: { days: number; count: number }
+  /** Reviews with no reply from the owner, across `recent`. */
+  unanswered: number
+  /** Real words, newest first, deliberately mixing happy and unhappy. */
+  quotes: ReviewQuote[]
+  /** Set when there is too little to read anything into. */
+  tooFewToRead: boolean
+}
+
+const MIX_KEYS = ['1', '2', '3', '4', '5']
+const emptyMix = (): Record<string, number> => Object.fromEntries(MIX_KEYS.map((k) => [k, 0]))
+
+function tally(rows: ReviewRow[]): { count: number; avg: number | null; mix: Record<string, number> } {
+  const mix = emptyMix()
+  let sum = 0
+  let n = 0
+  for (const r of rows) {
+    if (r.rating == null) continue
+    const k = String(Math.round(r.rating))
+    if (k in mix) mix[k]++
+    sum += r.rating
+    n++
+  }
+  return { count: rows.length, avg: n ? Math.round((sum / n) * 10) / 10 : null, mix }
+}
+
+/** Trim a review to a quotable excerpt without cutting mid-word. */
+function excerpt(text: string, max = 220): string {
+  const clean = text.replace(/\s+/g, ' ').trim()
+  if (clean.length <= max) return clean
+  const cut = clean.slice(0, max)
+  const lastSpace = cut.lastIndexOf(' ')
+  return (lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut) + '...'
+}
+
+/**
+ * Shape raw review rows into the digest. Pure, so the counting rules are testable.
+ *
+ * `quotes` deliberately takes from BOTH ends rather than the newest N. A run of recent
+ * five-star reviews would otherwise hide the complaint that keeps recurring, and the
+ * complaint is usually the useful part. Unhappy reviews are taken first for the same
+ * reason, then happy ones fill the remaining room.
+ */
+export function summarizeReviews(
+  rows: ReviewRow[],
+  opts: { windowDays: number; recentDays?: number; maxQuotes?: number; now?: number },
+): ReviewDigest {
+  const recentDays = opts.recentDays ?? 365
+  const maxQuotes = opts.maxQuotes ?? 14
+  const now = opts.now ?? Date.now()
+  const ageDays = (iso: string | null): number | null => {
+    if (!iso) return null
+    const t = Date.parse(iso)
+    return Number.isFinite(t) ? (now - t) / 86_400_000 : null
+  }
+
+  const dated = rows.filter((r) => ageDays(r.postedAt) != null)
+  const recentRows = dated.filter((r) => (ageDays(r.postedAt) as number) <= recentDays)
+  const windowRows = dated.filter((r) => (ageDays(r.postedAt) as number) <= opts.windowDays)
+
+  const withText = recentRows
+    .filter((r) => r.text && r.text.trim().length > 12 && r.rating != null)
+    .sort((a, b) => Date.parse(b.postedAt ?? '') - Date.parse(a.postedAt ?? ''))
+
+  const unhappy = withText.filter((r) => (r.rating as number) <= 3)
+  const happy = withText.filter((r) => (r.rating as number) >= 4)
+  const room = Math.max(0, maxQuotes)
+  const takeUnhappy = unhappy.slice(0, Math.min(unhappy.length, Math.ceil(room / 2)))
+  const takeHappy = happy.slice(0, Math.max(0, room - takeUnhappy.length))
+
+  const quotes: ReviewQuote[] = [...takeUnhappy, ...takeHappy]
+    .sort((a, b) => Date.parse(b.postedAt ?? '') - Date.parse(a.postedAt ?? ''))
+    .map((r) => ({
+      rating: r.rating as number,
+      when: (r.postedAt ?? '').slice(0, 10),
+      text: excerpt(r.text as string),
+    }))
+
+  return {
+    lifetime: tally(dated),
+    recent: { days: recentDays, ...tally(recentRows) },
+    inWindow: { days: opts.windowDays, count: windowRows.length },
+    unanswered: recentRows.filter((r) => !r.answered).length,
+    quotes,
+    // Two reviews cannot tell you what "people" think, and saying otherwise is the
+    // kind of confident nonsense this whole engine exists to avoid.
+    tooFewToRead: withText.length < 3,
   }
 }

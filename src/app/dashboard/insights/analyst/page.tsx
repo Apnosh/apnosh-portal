@@ -43,7 +43,42 @@ function ChangeChip({ pct }: { pct: number }) {
     </span>
   )
 }
-interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[] }
+interface ReviewRead { headline: string; praise: string[]; complaints: string[] }
+interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[]; reviews: ReviewRead | null }
+
+/**
+ * What people are actually saying. Complaints sit ABOVE praise on purpose: an owner
+ * scanning this on their phone needs the problem first, and praise reads as reassurance
+ * once you have seen the problem. The whole block is absent when the analyst had too
+ * few reviews to read, rather than showing an encouraging empty state.
+ */
+function ReviewsBlock({ r }: { r: ReviewRead }) {
+  return (
+    <Section title="What people are saying">
+      <div style={{ fontSize: 14, lineHeight: 1.5, marginBottom: r.complaints.length || r.praise.length ? 12 : 0 }}>{r.headline}</div>
+      {r.complaints.length > 0 && (
+        <div style={{ marginBottom: r.praise.length ? 12 : 0 }}>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: C.coral, marginBottom: 6 }}>They complain about</div>
+          {r.complaints.map((t) => (
+            <div key={t} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '5px 0', fontSize: 13.5, lineHeight: 1.45 }}>
+              <span style={{ color: C.coral, fontWeight: 700, lineHeight: 1.45 }}>&bull;</span> {t}
+            </div>
+          ))}
+        </div>
+      )}
+      {r.praise.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.07em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 6 }}>They love</div>
+          {r.praise.map((t) => (
+            <div key={t} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '5px 0', fontSize: 13.5, lineHeight: 1.45 }}>
+              <span style={{ color: C.greenDk, fontWeight: 700, lineHeight: 1.45 }}>&bull;</span> {t}
+            </div>
+          ))}
+        </div>
+      )}
+    </Section>
+  )
+}
 interface AnalystResponse {
   locked?: boolean
   read?: Read
@@ -195,6 +230,8 @@ function ReadView({ read, funnel, when }: { read: Read; funnel: FunnelStep[]; wh
           </div>
         </Section>
       )}
+
+      {read.reviews && <ReviewsBlock r={read.reviews} />}
 
       {read.working.length > 0 && (
         <Section title="What's working">
