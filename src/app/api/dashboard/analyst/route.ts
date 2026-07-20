@@ -20,6 +20,19 @@ import type { InsightsWindow } from '@/lib/insights/compute-stages'
 
 export const maxDuration = 30
 
+/**
+ * Just the counted review stats, for a cache hit. Cheap (one indexed read) and
+ * deliberately separate from the full payload build, which is the expensive part.
+ */
+async function loadReviewDigestForStats(clientId: string, window: InsightsWindow) {
+  try {
+    const { buildReviewStats } = await import('@/lib/insights/analyst-payload')
+    return await buildReviewStats(clientId, window)
+  } catch {
+    return null
+  }
+}
+
 export async function POST(req: NextRequest) {
   let body: Record<string, unknown>
   try {
@@ -67,10 +80,16 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
       const row = data as { read: unknown; funnel: unknown; business: unknown; reputation: unknown; generated_at: string } | null
       if (row?.read && row.generated_at && Date.now() - new Date(row.generated_at).getTime() < CACHE_FRESH_MS) {
+        // The star chart is counted from rows, not written by the model, so recompute it
+        // on the way out rather than storing it. That keeps the chart on cached reads
+        // WITHOUT a new column: adding one and failing to migrate would break the whole
+        // cache write, and every open would silently re-bill a fresh generate.
+        const digest = await loadReviewDigestForStats(clientId, window)
         return NextResponse.json({
           locked: false,
           read: row.read,
           funnel: row.funnel,
+          reviewStats: digest,
           reputation: row.reputation,
           business: row.business,
           window,
@@ -85,6 +104,10 @@ export async function POST(req: NextRequest) {
     const payload = await buildAnalystPayload(clientId, window)
     const funnel = funnelFromPayload(payload)
     const { read, costCents } = await runAnalyst(payload)
+    // The star mix is counted from real rows, so the page can draw it without the model.
+    const reviewStats = payload.reviews
+      ? { recent: payload.reviews.recent, lifetime: payload.reviews.lifetime, unanswered: payload.reviews.unanswered }
+      : null
     const generatedAt = new Date().toISOString()
 
     // store the fresh read (best-effort; a failure never blocks the response)
@@ -109,6 +132,7 @@ export async function POST(req: NextRequest) {
       locked: false,
       read,
       funnel,
+      reviewStats,
       reputation: payload.reputation,
       business: payload.business,
       window,

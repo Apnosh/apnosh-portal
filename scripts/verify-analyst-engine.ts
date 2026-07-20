@@ -14,7 +14,7 @@ import {
   funnelFromPayload,
   SYSTEM,
 } from '../src/lib/insights/analyst'
-import { deriveChanges, summarizeReviews, type ReviewRow } from '../src/lib/insights/analyst-derive'
+import { deriveChanges, summarizeReviews, tallyThemes, type ReviewRow } from '../src/lib/insights/analyst-derive'
 import type { AnalystPayload } from '../src/lib/insights/analyst-derive'
 
 let fail = 0
@@ -211,6 +211,44 @@ console.log('\n== parseAnalystRead: the review section ==')
 
   const junk = parseAnalystRead(JSON.stringify({ bottomLine: 'x', reviews: { praise: ['a'] } }))
   ok(junk.reviews === null, 'a headline-less review section is dropped, not half-rendered')
+}
+
+console.log('\n== tallyThemes: the chart counts real reviews, never the model\'s arithmetic ==')
+{
+  // 4 quotes were shown to the model. Anything it cites outside 1..4 is invented.
+  const t = tallyThemes([
+    { label: 'Price', positive: [], negative: [1, 2, 3] },
+    { label: 'Staff', positive: [2, 4], negative: [] },
+    { label: 'Banh mi', positive: [4], negative: [1] },
+  ], 4)
+  const price = t.find((x) => x.label === 'Price')!
+  ok(price.negative === 3 && price.positive === 0, 'counts come from the cited reviews')
+  ok(t[0].label === 'Price', 'loudest topic sorts first')
+  ok(t.find((x) => x.label === 'Banh mi')!.positive === 1, 'a quote can back several different topics')
+
+  // The failure this exists to stop.
+  const invented = tallyThemes([{ label: 'Wait time', positive: [7, 8, 99], negative: [] }], 4)
+  ok(invented.length === 0, 'a theme citing reviews that do not exist is dropped entirely')
+
+  const partly = tallyThemes([{ label: 'Parking', positive: [1, 42], negative: [] }], 4)
+  ok(partly[0].positive === 1, 'out-of-range citations are stripped, the real one survives')
+
+  ok(tallyThemes([{ label: 'Dupes', positive: [2, 2, 2], negative: [] }], 4)[0].positive === 1,
+     'the same review cannot be counted three times')
+  ok(tallyThemes([{ label: 'Both', positive: [1], negative: [1] }], 4)[0].positive === 0,
+     'one review cannot be both praise and complaint for one topic')
+  ok(tallyThemes([{ label: 'Empty', positive: [], negative: [] }], 4).length === 0,
+     'a topic nobody actually mentioned is not drawn as an empty bar')
+  ok(tallyThemes([{ label: '  ', positive: [1], negative: [] }], 4).length === 0, 'a blank label is dropped')
+  ok(tallyThemes(Array.from({ length: 20 }, (_, i) => ({ label: 'T' + i, positive: [1], negative: [] })), 4).length === 6,
+     'at most 6 topics reach the chart')
+}
+
+console.log('\n== the brief numbers its quotes so tags can point at them ==')
+{
+  const b = renderPayloadForPrompt(payload)
+  ok(/\[1\] 2 star/.test(b), 'quotes are numbered for citation')
+  ok(/a number you invent becomes a visible lie/i.test(SYSTEM), 'the model is warned the counts are drawn')
 }
 
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}\n`)

@@ -275,7 +275,7 @@ export function summarizeReviews(
   opts: { windowDays: number; recentDays?: number; maxQuotes?: number; now?: number },
 ): ReviewDigest {
   const recentDays = opts.recentDays ?? 365
-  const maxQuotes = opts.maxQuotes ?? 14
+  const maxQuotes = opts.maxQuotes ?? 20
   const now = opts.now ?? Date.now()
   const ageDays = (iso: string | null): number | null => {
     if (!iso) return null
@@ -315,4 +315,64 @@ export function summarizeReviews(
     // kind of confident nonsense this whole engine exists to avoid.
     tooFewToRead: withText.length < 3,
   }
+}
+
+/**
+ * One topic people keep raising, with how many said it warmly vs unhappily.
+ *
+ * These counts drive a bar chart, so they must be real. They are NOT numbers the
+ * model wrote: the model tags each quote it read with a topic and a sentiment, and
+ * the counting happens here, over quotes that were verified to exist. A model that
+ * hallucinates "12 people loved the banh mi" cannot put 12 on a chart.
+ */
+export interface ReviewTheme {
+  label: string
+  positive: number
+  negative: number
+  /** 1-based indexes into the quotes the model was shown, so a claim can be traced back. */
+  positiveRefs: number[]
+  negativeRefs: number[]
+}
+
+/** What the model returns per theme: a label plus which quotes support each side. */
+export interface ThemeTags {
+  label: string
+  positive: number[]
+  negative: number[]
+}
+
+/**
+ * Turn the model's tags into counted themes, dropping anything it made up.
+ *
+ * Guards, in order: a reference must point at a quote that actually exists; the same
+ * quote cannot be counted twice on the same side; a quote cannot be both praise and
+ * complaint for one theme (the model must pick, and we keep the complaint, since the
+ * softer reading is the one more likely to be wrong); and a theme nobody actually
+ * said anything about is discarded rather than drawn as an empty bar.
+ */
+export function tallyThemes(tags: ThemeTags[], quoteCount: number, maxThemes = 6): ReviewTheme[] {
+  const valid = (ids: unknown): number[] => {
+    if (!Array.isArray(ids)) return []
+    const seen = new Set<number>()
+    for (const raw of ids) {
+      const n = typeof raw === 'number' ? Math.trunc(raw) : Number.parseInt(String(raw), 10)
+      if (Number.isFinite(n) && n >= 1 && n <= quoteCount) seen.add(n)
+    }
+    return [...seen].sort((a, b) => a - b)
+  }
+
+  const out: ReviewTheme[] = []
+  for (const t of tags) {
+    const label = typeof t?.label === 'string' ? t.label.trim() : ''
+    if (!label) continue
+    const negativeRefs = valid(t.negative)
+    const negSet = new Set(negativeRefs)
+    const positiveRefs = valid(t.positive).filter((id) => !negSet.has(id))
+    if (positiveRefs.length + negativeRefs.length === 0) continue
+    out.push({ label, positive: positiveRefs.length, negative: negativeRefs.length, positiveRefs, negativeRefs })
+  }
+  // Loudest topics first, so the chart leads with what comes up most.
+  return out
+    .sort((a, b) => (b.positive + b.negative) - (a.positive + a.negative))
+    .slice(0, Math.max(0, maxThemes))
 }

@@ -73,6 +73,15 @@ async function loadReviewDigest(clientId: string, window: InsightsWindow): Promi
   }
 }
 
+/**
+ * The counted review numbers on their own, for callers that already have a cached
+ * read and only need the chart. Same reader, so the two can never disagree.
+ */
+export async function buildReviewStats(clientId: string, window: InsightsWindow) {
+  const d = await loadReviewDigest(clientId, window)
+  return d ? { recent: d.recent, lifetime: d.lifetime, unanswered: d.unanswered } : null
+}
+
 /** ComputedStage → the flattened AnalystStage the payload carries. */
 function toAnalystStage(cs: ComputedStage): AnalystStage {
   return {
