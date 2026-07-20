@@ -279,10 +279,6 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 // The five funnel stages, in funnel order — the swipeable header moves through
 // these, so every stage is reachable from every stage and a deep-link lands on
 // exactly the stage that was tapped.
-/* The campaign-correlation sections under each stage graph are parked until
-   the owner wants them live. */
-const SHOW_STAGE_CAMPAIGNS = false
-
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },
@@ -317,25 +313,43 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
     try { window.history.replaceState(null, '', `/dashboard/insights?stage=${k}`) } catch { /* ignore */ }
   }
   // Keep the carousel on the selected stage (mount + deep-link arriving late).
-  // This must HOLD the position until layout is quiet: on a slow load the
-  // container's width changes after the first scrollTo (fonts, data, late
-  // paint), the one-shot position ends up one slide off, and onSwipe then
-  // "picked" the neighboring stage — a Customer-actions tap landed on the
-  // Interest graph. So we re-pin every frame until it stays put.
+  // This used to re-pin EVERY FRAME until the layout went quiet, which fixed a
+  // slow-load deep-link but fought the owner's finger: a swipe was dragged back
+  // mid-gesture. So it is a one-shot scroll again, and the slow-load case is
+  // handled the narrow way instead — re-pin only when the container's width
+  // actually changes (late fonts/data), and never once the owner has touched it.
   useEffect(() => {
     const el = swipeRef.current
     if (!el) return
-    let raf = 0
-    let quiet = 0
-    progRef.current = true
-    const place = () => {
+    let touched = false
+    let t: ReturnType<typeof setTimeout> | undefined
+    const markTouched = () => { touched = true }
+    el.addEventListener('pointerdown', markTouched, { passive: true })
+    el.addEventListener('touchstart', markTouched, { passive: true })
+    el.addEventListener('wheel', markTouched, { passive: true })
+
+    const pin = () => {
+      if (touched) return
       const want = idx * el.clientWidth
-      if (Math.abs(el.scrollLeft - want) >= 2) { el.scrollLeft = want; quiet = 0 } else quiet++
-      if (quiet < 8) raf = requestAnimationFrame(place)
-      else progRef.current = false
+      if (Math.abs(el.scrollLeft - want) < 2) return
+      progRef.current = true
+      el.scrollTo({ left: want, behavior: 'auto' })
+      clearTimeout(t)
+      t = setTimeout(() => { progRef.current = false }, 120)
     }
-    raf = requestAnimationFrame(place)
-    return () => { cancelAnimationFrame(raf); progRef.current = false }
+    pin()
+    // Width changes on a slow load land the one-shot a slide short; a resize is
+    // NOT something a swipe causes, so re-pinning here never interrupts a gesture.
+    const ro = new ResizeObserver(() => pin())
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      clearTimeout(t)
+      el.removeEventListener('pointerdown', markTouched)
+      el.removeEventListener('touchstart', markTouched)
+      el.removeEventListener('wheel', markTouched)
+      progRef.current = false
+    }
   }, [idx])
   // a finished swipe picks the stage it landed on
   const onSwipe = () => {
@@ -374,15 +388,10 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
           cards (scoped to the chart's picked range), extras, and campaigns */}
       <div style={{ padding: '0 18px' }}>
         <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
-        {/* Campaign-correlation block (Did it move? / What we did / Active
-            campaigns) — hidden for now at the owner's call; flip the flag
-            to bring it back when it's ready to show. */}
-        {SHOW_STAGE_CAMPAIGNS && (
-          <>
-            <CampaignTrend mv={byKey.get(focus.metric)} list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
-            <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
-          </>
-        )}
+        {/* Campaign-correlation block: "Did it move?" (the metric with a pin at
+            each campaign's real go-live date) and the campaigns behind it. */}
+        <CampaignTrend mv={byKey.get(focus.metric)} list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
+        <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
       </div>
     </div>
   )
