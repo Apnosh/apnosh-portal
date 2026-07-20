@@ -214,20 +214,40 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client?.id, isPro, diag?.checkedAt])
 
+  // Was this task already finished on an earlier visit? A READ only — it never stamps,
+  // so revisiting the builder shows "complete" instead of offering Finish again.
   useEffect(() => {
-    if (!campaignId || markingRef.current || taskDone) return
-    // HONESTY GATE: only a fully successful read where every section is good may complete
-    // the task. A load error, a disconnected profile, a failed read, or any section that
-    // still needs work leaves the task open.
-    if (!diag || loadError || !diag.connected || diag.readFailed) return
-    const allGood = (diag.sections?.length ?? 0) > 0 && diag.sections.every((s) => s.status === 'good')
-    if (!allGood) return
-    markingRef.current = true
-    // The server verifies for itself (fresh diagnosis) before stamping; already-done returns ok.
-    fetch(`/api/campaigns/${campaignId}/gbp-fixed`, { method: 'POST' })
-      .then((r) => { if (r.ok) setTaskDone(true); else markingRef.current = false })
-      .catch(() => { markingRef.current = false })
-  }, [campaignId, diag, loadError, taskDone])
+    if (!campaignId) return
+    let alive = true
+    fetch(`/api/campaigns/${campaignId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { execution?: { gbpFixedAt?: string } } | null) => {
+        if (alive && j?.execution?.gbpFixedAt) { markingRef.current = true; setTaskDone(true) }
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [campaignId])
+
+  // Finishing is now an explicit act, not a silent auto-stamp: the owner taps Finish and
+  // the SERVER re-runs the diagnosis before it stamps. The honesty gate is unchanged — a
+  // profile that isn't all good is refused, and the refusal names the parts still open.
+  const [finishing, setFinishing] = useState(false)
+  const [finishError, setFinishError] = useState<string | null>(null)
+  const finishTask = useCallback(async () => {
+    if (!campaignId || finishing || taskDone) return
+    setFinishing(true)
+    setFinishError(null)
+    try {
+      const r = await fetch(`/api/campaigns/${campaignId}/gbp-fixed`, { method: 'POST' })
+      const j = await r.json().catch(() => ({})) as { ok?: boolean; error?: string }
+      if (r.ok && j.ok) { markingRef.current = true; setTaskDone(true) }
+      else setFinishError(j.error || 'We could not finish it just now. Try again in a minute.')
+    } catch {
+      setFinishError('We could not finish it just now. Try again in a minute.')
+    } finally {
+      setFinishing(false)
+    }
+  }, [campaignId, finishing, taskDone])
 
   // The parts still keeping the campaign's Google-profile task OPEN. Finishing the
   // walkthrough is not the same as the profile being complete: the task only completes
@@ -411,6 +431,9 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
             taskDone={taskDone}
             taskBlocking={taskBlocking}
             hasCampaignTask={!!campaignId}
+            onFinish={() => { void finishTask() }}
+            finishing={finishing}
+            finishError={finishError}
             rechecking={rechecking}
             recheckFailed={recheckFailed}
             onRecheck={recheck}
@@ -797,7 +820,7 @@ function summaryOutcome(section: GbpDiagnosisSection, outcomes: Record<string, P
  * first screen without localStorage, open a part's editor, or inject a save
  * note); the live page never passes them.
  */
-export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false, taskDone, taskBlocking = [], hasCampaignTask = false, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
+export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false, taskDone, taskBlocking = [], hasCampaignTask = false, onFinish, finishing, finishError, rechecking, recheckFailed, onRecheck, drafting, draft, draftError, onDraft, onOpenQanda, onOpenPost, initialPhase, initialIndex, initialOutcomes, initialEditing, initialSaveNote }: {
   diag: GbpDiagnosis
   clientId: string
   /** Apnosh AI advice keyed by section (loaded by the parent GbpFixer). */
@@ -809,6 +832,10 @@ export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false,
   taskBlocking?: Array<{ key: string; label: string }>
   /** True when this run is attached to a campaign that carries the profile task. */
   hasCampaignTask?: boolean
+  /** Explicitly finish the campaign task (the server re-verifies before it stamps). */
+  onFinish?: () => void
+  finishing?: boolean
+  finishError?: string | null
   rechecking?: boolean
   recheckFailed?: boolean
   onRecheck?: () => void
@@ -945,6 +972,9 @@ export function AiReview({ diag, clientId, aiAdvice = {}, adviceLoading = false,
           taskDone={taskDone}
           taskBlocking={taskBlocking}
           hasCampaignTask={hasCampaignTask}
+          onFinish={onFinish}
+          finishing={finishing}
+          finishError={finishError}
           rechecking={rechecking}
           recheckFailed={recheckFailed}
           onRecheck={onRecheck}
@@ -2704,7 +2734,7 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, adviceLoading, onSi
  *  its outcome grouped under its chapter, a fresh re-check (which is what
  *  can complete the campaign task), the honest delay note, and the
  *  Keep-it-strong cards (reviews / post / Q and A). */
-function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking = [], hasCampaignTask = false, rechecking, recheckFailed, onRecheck, onOpenQanda, onOpenPost, onBack }: {
+function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking = [], hasCampaignTask = false, onFinish, finishing, finishError, rechecking, recheckFailed, onRecheck, onOpenQanda, onOpenPost, onBack }: {
   sections: GbpDiagnosisSection[]
   outcomes: Record<string, PartOutcome>
   allGood: boolean
@@ -2715,6 +2745,10 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
   taskBlocking?: Array<{ key: string; label: string }>
   /** True when this run is attached to a campaign that carries the profile task. */
   hasCampaignTask?: boolean
+  /** Explicitly finish the campaign task (the server re-verifies before it stamps). */
+  onFinish?: () => void
+  finishing?: boolean
+  finishError?: string | null
   rechecking?: boolean
   recheckFailed?: boolean
   onRecheck?: () => void
@@ -2742,7 +2776,7 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
           <ChevronLeft size={19} color={C.mute} />
         </button>
         <span style={{ fontFamily: DISPLAY, fontSize: 16.5, fontWeight: 600, color: C.ink }}>
-          {allGood ? 'Every part looks good' : 'You went through every part'}
+          Overview
         </span>
       </div>
 
@@ -2779,64 +2813,99 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
         </div>
       ))}
 
-      {allGood ? (
-        <div style={{ background: C.greenSoft, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px', marginTop: 12 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>Every section looks good</div>
-          <div style={{ fontSize: 13, color: C.mute, marginTop: 2, lineHeight: 1.45 }}>Nothing needs fixing right now. Come back after big changes to check again.</div>
-          {/* Only shown after the campaign PATCH actually landed. Never claimed on a failed save. */}
-          {taskDone && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 13, fontWeight: 600, color: C.greenDk }}>
-              <Check size={14} strokeWidth={3} /> All done. This campaign task is complete.
-            </div>
-          )}
+      {/* ── Finish ─────────────────────────────────────────────────────────
+          The one place the campaign task closes, and the one place that says
+          why it can't yet. Three honest states:
+            done     → it is complete, with the date-free plain confirmation
+            ready    → every part is good; an explicit Finish button stamps it
+                       (the SERVER re-reads the profile before it agrees)
+            blocked  → name the parts still open, and offer a re-check
+          Finishing is deliberate now, not a silent auto-stamp, so "finished"
+          is always something the owner chose and the server verified. */}
+      <div style={{ marginTop: 18 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '0 2px 8px' }}>
+          Finish
         </div>
-      ) : (
-        <>
-          {/* Why the campaign task did NOT finish. Going through the walkthrough is not the
-              same as the profile being complete: the task only closes when a fresh read comes
-              back with every part good. Name the stragglers instead of leaving the owner to
-              wonder why the campaign still says it is in production. */}
-          {hasCampaignTask && taskBlocking.length > 0 && (
-            <div style={{ background: C.amber ? `${C.amber}14` : C.bg, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px', marginBottom: 12 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>
-                Your campaign task is still open
-              </div>
-              <div style={{ fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
-                It finishes on its own once every part is good. {taskBlocking.length === 1 ? 'One part is' : `${taskBlocking.length} parts are`} not there yet:
-              </div>
+
+        {taskDone ? (
+          <div style={{ background: C.greenSoft, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 14.5, fontWeight: 600, color: C.ink }}>
+              <Check size={16} color={C.greenDk} strokeWidth={3} /> This campaign task is complete
+            </div>
+            <div style={{ fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
+              Your profile checked out. Come back after big changes to check it again.
+            </div>
+          </div>
+        ) : allGood ? (
+          <div style={{ background: C.greenSoft, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px' }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>Every part looks good</div>
+            <div style={{ fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
+              {hasCampaignTask
+                ? 'Finish it and this campaign task is done.'
+                : 'Nothing needs fixing right now.'}
+            </div>
+            {hasCampaignTask && (
+              <>
+                <button
+                  type="button"
+                  onClick={onFinish}
+                  disabled={!!finishing}
+                  className="mvp-row"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 12, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: finishing ? 'default' : 'pointer', opacity: finishing ? 0.8 : 1, font: 'inherit' }}
+                >
+                  {finishing
+                    ? <><Loader2 size={16} className="mvp-spin" /> Finishing&hellip;</>
+                    : <><Check size={16} strokeWidth={3} /> Finish this campaign</>}
+                </button>
+                {finishError && (
+                  <div style={{ marginTop: 8, background: C.redSoft, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: C.red, lineHeight: 1.45 }}>
+                    {finishError}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ) : (
+          <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 16px', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+            <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>
+              {hasCampaignTask ? 'Not ready to finish yet' : 'A few parts still need work'}
+            </div>
+            <div style={{ fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
+              {taskBlocking.length > 0
+                ? <>{taskBlocking.length === 1 ? 'One part is' : `${taskBlocking.length} parts are`} not good yet{hasCampaignTask ? ', so the campaign task stays open' : ''}:</>
+                : <>Go back and fix the parts marked above, then check again.</>}
+            </div>
+            {taskBlocking.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
                 {taskBlocking.map((b) => (
-                  <span key={b.key} style={{ fontSize: 12, fontWeight: 700, color: C.ink, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '4px 10px' }}>
+                  <span key={b.key} style={{ fontSize: 12, fontWeight: 700, color: C.ink, background: C.bg, border: `0.5px solid ${C.line}`, borderRadius: 99, padding: '4px 10px' }}>
                     {b.label}
                   </span>
                 ))}
               </div>
-              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>
-                Fix those above, then tap Check again below. Nothing else is needed from you.
+            )}
+            <button
+              type="button"
+              onClick={onRecheck}
+              disabled={!!rechecking}
+              className="mvp-row"
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 12, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: rechecking ? 'default' : 'pointer', opacity: rechecking ? 0.8 : 1, font: 'inherit' }}
+            >
+              {rechecking
+                ? <><Loader2 size={16} className="mvp-spin" /> Checking your profile&hellip;</>
+                : 'Check my profile again'}
+            </button>
+            {recheckFailed && (
+              <div style={{ marginTop: 8, background: C.redSoft, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: C.red, lineHeight: 1.45 }}>
+                We could not check right now. Try again in a minute.
               </div>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={onRecheck}
-            disabled={!!rechecking}
-            className="mvp-row"
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%', marginTop: 14, height: 46, borderRadius: 13, border: 'none', background: C.green, color: '#fff', fontSize: 15, fontWeight: 700, cursor: rechecking ? 'default' : 'pointer', opacity: rechecking ? 0.8 : 1, font: 'inherit' }}
-          >
-            {rechecking
-              ? <><Loader2 size={16} className="mvp-spin" /> Checking your profile&hellip;</>
-              : 'Check my profile again'}
-          </button>
-          {recheckFailed && (
-            <div style={{ marginTop: 8, background: C.redSoft, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, color: C.red, lineHeight: 1.45 }}>
-              We could not check right now. Try again in a minute.
-            </div>
-          )}
-          <p style={{ textAlign: 'center', fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '10px 2px 0' }}>
-            Changes you make on Google can take a few minutes to show up here.
-          </p>
-        </>
-      )}
+            )}
+            <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '10px 0 0' }}>
+              Changes you make on Google can take a few minutes to show up here.
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Keep it strong: the other Google tools, now homed on the summary. */}
       <div style={{ marginTop: 18 }}>
