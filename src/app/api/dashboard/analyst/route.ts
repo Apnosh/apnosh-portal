@@ -15,7 +15,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isProTier } from '@/lib/entitlements'
 import { buildAnalystPayload } from '@/lib/insights/analyst-payload'
-import { runAnalyst, funnelFromPayload } from '@/lib/insights/analyst'
+import { runAnalyst, funnelFromPayload, ANALYST_MODEL } from '@/lib/insights/analyst'
 import type { InsightsWindow } from '@/lib/insights/compute-stages'
 
 export const maxDuration = 30
@@ -97,7 +97,9 @@ export async function POST(req: NextRequest) {
         funnel,
         business: payload.business,
         reputation: payload.reputation,
-        model: 'claude-sonnet-4-5-20250929',
+        // Read from the engine, never re-typed here: a stored report must name the model
+        // that actually wrote it, or the cost and quality history becomes unreadable.
+        model: ANALYST_MODEL,
         cost_cents: costCents,
         generated_at: generatedAt,
       })
