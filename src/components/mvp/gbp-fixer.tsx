@@ -69,6 +69,7 @@
 
 import { useState, useEffect, useCallback, useRef, type CSSProperties } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy, ExternalLink, Plug, Pencil, Star, MessageCircle, Megaphone, X, Search, ImagePlus } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
@@ -160,6 +161,7 @@ const DRAFT_FAIL = 'Could not write a draft right now. Try again in a minute.'
  */
 export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: string; mode?: 'diy' | 'ai' | 'view' }) {
   const { client, loading: clientLoading } = useClient()
+  const router = useRouter()
   // The viewer is read-only and tier-free. The AI lane unlocks only when the resolved mode is
   // 'ai' AND this client is still Pro; anything else runs the checklist. A URL/prop alone can
   // never unlock AI without the live Pro entitlement.
@@ -245,14 +247,23 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
         body: JSON.stringify({ anyway }),
       })
       const j = await r.json().catch(() => ({})) as { ok?: boolean; error?: string }
-      if (r.ok && j.ok) { markingRef.current = true; setTaskDone(true) }
-      else setFinishError(j.error || 'We could not finish it just now. Try again in a minute.')
+      if (r.ok && j.ok) {
+        markingRef.current = true
+        setTaskDone(true)
+        // Finishing ENDS the walkthrough: go straight back to the campaign, which now
+        // shows it complete. Leaving the owner parked on a "you are done" card made them
+        // hunt for the way out. refresh() so the campaign re-reads the fresh stamp.
+        router.replace(`/dashboard/campaigns/${campaignId}`)
+        router.refresh()
+        return
+      }
+      setFinishError(j.error || 'We could not finish it just now. Try again in a minute.')
     } catch {
       setFinishError('We could not finish it just now. Try again in a minute.')
     } finally {
       setFinishing(false)
     }
-  }, [campaignId, finishing, taskDone])
+  }, [campaignId, finishing, taskDone, router])
 
   // The parts still keeping the campaign's Google-profile task OPEN. Finishing the
   // walkthrough is not the same as the profile being complete: the task only completes
