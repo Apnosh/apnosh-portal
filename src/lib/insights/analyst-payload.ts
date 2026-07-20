@@ -27,10 +27,51 @@ export * from './analyst-derive'
 import {
   deriveChanges,
   deriveDropOffs,
+  summarizeReviews,
   summarizeSources,
   type AnalystPayload,
   type AnalystStage,
+  type ReviewDigest,
+  type ReviewRow,
 } from './analyst-derive'
+
+const WINDOW_DAYS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '12m': 365 }
+
+/**
+ * Real reviews, for the digest the analyst reads.
+ *
+ * Reads `reviews` only, deliberately. `local_reviews` holds a partly overlapping copy
+ * of the same Google reviews (4 of 7 duplicated on the client checked), so merging the
+ * two would double-count the very numbers this is supposed to get right.
+ *
+ * The slice is a YEAR, not the analyst's 30-day window, because sentiment needs volume:
+ * the same client has 3 reviews in 30 days but 23 in a year. The digest reports both,
+ * so the read can say what people say without implying it all happened last month.
+ */
+async function loadReviewDigest(clientId: string, window: InsightsWindow): Promise<ReviewDigest | null> {
+  try {
+    const admin = createAdminClient()
+    const since = new Date()
+    since.setUTCDate(since.getUTCDate() - 400) // a little past a year, so the year slice is complete
+    const { data, error } = await admin
+      .from('reviews')
+      .select('rating, review_text, posted_at, response_text')
+      .eq('client_id', clientId)
+      .gte('posted_at', since.toISOString())
+      .order('posted_at', { ascending: false })
+      .limit(500)
+    if (error || !data) return null
+    const rows: ReviewRow[] = (data as Record<string, unknown>[]).map((r) => ({
+      rating: typeof r.rating === 'number' ? r.rating : null,
+      text: typeof r.review_text === 'string' ? r.review_text : null,
+      postedAt: typeof r.posted_at === 'string' ? r.posted_at : null,
+      answered: typeof r.response_text === 'string' && r.response_text.trim().length > 0,
+    }))
+    return summarizeReviews(rows, { windowDays: WINDOW_DAYS[window] ?? 30 })
+  } catch {
+    return null // best-effort, like everything else here
+  }
+}
 
 /** ComputedStage → the flattened AnalystStage the payload carries. */
 function toAnalystStage(cs: ComputedStage): AnalystStage {
@@ -67,11 +108,12 @@ export async function buildAnalystPayload(
   const range: AnalyticsRange = window
   const admin = createAdminClient()
 
-  const [stagesRes, prevStagesRes, campaignsRes, gbpRes, bizRes, locRes] = await Promise.allSettled([
+  const [stagesRes, prevStagesRes, reviewsRes, campaignsRes, gbpRes, bizRes, locRes] = await Promise.allSettled([
     computeStages(clientId, window),
     // The same funnel one period earlier. Best-effort like everything else here: if it
     // fails we simply have no comparison, never a wrong one.
     computeStages(clientId, window, 1),
+    loadReviewDigest(clientId, window),
     getStageCampaigns(clientId),
     getGbpAnalytics(clientId, range),
     admin.from('clients').select('name').eq('id', clientId).maybeSingle(),
@@ -84,6 +126,7 @@ export async function buildAnalystPayload(
   const changes = prevStages.length ? deriveChanges(stages, prevStages) : []
   const dropOffs = deriveDropOffs(stages)
   const sources = summarizeSources(stages)
+  const reviews = reviewsRes.status === 'fulfilled' ? reviewsRes.value : null
 
   // reputation rides in on the Retention stage's real review sources — no extra query
   const retention = stages.find((s) => s.stage === 5)
@@ -115,6 +158,7 @@ export async function buildAnalystPayload(
     stages,
     changes,
     dropOffs,
+    reviews,
     reputation,
     topSearches,
     activeCampaignsByStage,

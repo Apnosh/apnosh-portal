@@ -14,7 +14,7 @@ import {
   funnelFromPayload,
   SYSTEM,
 } from '../src/lib/insights/analyst'
-import { deriveChanges } from '../src/lib/insights/analyst-derive'
+import { deriveChanges, summarizeReviews, type ReviewRow } from '../src/lib/insights/analyst-derive'
 import type { AnalystPayload } from '../src/lib/insights/analyst-derive'
 
 let fail = 0
@@ -43,6 +43,17 @@ const payload: AnalystPayload = {
   dropOffs: [
     { fromStage: 1, fromLabel: 'Awareness', fromValue: 16000, toStage: 3, toLabel: 'Actions', toValue: 40, keptPct: 0.3 },
   ],
+  reviews: {
+    lifetime: { count: 54, avg: 3.9, mix: { '1': 8, '2': 2, '3': 5, '4': 7, '5': 32 } },
+    recent: { days: 365, count: 23, avg: 3.4, mix: { '1': 5, '2': 2, '3': 3, '4': 4, '5': 9 } },
+    inWindow: { days: 30, count: 3 },
+    unanswered: 19,
+    quotes: [
+      { rating: 2, when: '2026-07-12', text: 'So damn expensive, two water bottles for 8 dollars and they asked for a tip.' },
+      { rating: 5, when: '2026-06-02', text: 'Great addition to the neighbourhood, lovely staff.' },
+    ],
+    tooFewToRead: false,
+  },
   reputation: { rating: 4.5, reviewCount: 182 },
   topSearches: [{ query: 'grocery near me', impressions: 900 }],
   activeCampaignsByStage: { shown: ['Summer Awareness Push'] },
@@ -140,6 +151,66 @@ console.log('\n== funnelFromPayload: only comparable changes reach the UI ==')
   const s3 = f.find((x) => x.stage === 3)
   ok(s1?.changePct === 25, 'comparable change is passed through to the page')
   ok(s3?.changePct === null, 'non-comparable change renders no chip')
+}
+
+console.log('\n== the brief carries real review words, not a summary of them ==')
+{
+  const b = renderPayloadForPrompt(payload)
+  ok(b.includes('So damn expensive'), 'the actual complaint text reaches the model')
+  ok(b.includes('5star 9') || b.includes('5star 9,'), 'the star mix is spelled out')
+  ok(b.includes('never replied to: 19'), 'unanswered count is in the brief')
+  ok(/use these and only these/i.test(b), 'the model is told not to invent themes')
+  ok(/other restaurants|industry averages/i.test(SYSTEM), 'still forbids peer benchmarks')
+  ok(/ONLY from those quotes/i.test(SYSTEM), 'review claims must trace to a quote')
+}
+
+console.log('\n== summarizeReviews: counts in code, words carried through ==')
+{
+  const now = Date.parse('2026-07-20T00:00:00Z')
+  const ago = (d: number) => new Date(now - d * 86400000).toISOString()
+  const rows: ReviewRow[] = [
+    { rating: 1, text: 'Way too expensive for what you get, and they ask for a tip.', postedAt: ago(5), answered: false },
+    { rating: 2, text: 'Prices are unreasonable for the neighbourhood.', postedAt: ago(40), answered: false },
+    { rating: 5, text: 'Lovely staff and a great range of snacks.', postedAt: ago(60), answered: true },
+    { rating: 5, text: 'Exactly what this area needed, so glad they opened.', postedAt: ago(200), answered: false },
+    { rating: 4, text: 'Good selection though a little pricey.', postedAt: ago(300), answered: false },
+    { rating: 5, text: 'x', postedAt: ago(10), answered: false },              // too short to quote
+    { rating: 5, text: 'Old but good, should not count as recent.', postedAt: ago(900), answered: false },
+  ]
+  const d = summarizeReviews(rows, { windowDays: 30, recentDays: 365, maxQuotes: 6, now })
+
+  ok(d.lifetime.count === 7, 'lifetime counts every dated review')
+  ok(d.recent.count === 6, 'the year slice excludes the 900-day-old one')
+  ok(d.inWindow.count === 2, 'the 30 day window counts only what landed in it')
+  ok(d.unanswered === 5, 'unanswered counted from real reply text, not guessed')
+  ok(d.recent.mix['5'] === 3 && d.recent.mix['1'] === 1, 'star mix is tallied per rating')
+  ok(d.quotes.every((q) => q.text !== 'x'), 'a one-character review is never quoted')
+  ok(d.quotes.some((q) => q.rating <= 3) && d.quotes.some((q) => q.rating >= 4), 'quotes span unhappy AND happy')
+  ok(!d.quotes.some((q) => q.text.startsWith('Old but good')), 'nothing outside the recent slice is quoted')
+  ok(d.tooFewToRead === false, 'five usable reviews is enough to read')
+
+  // The guard that stops one grumpy review becoming "customers are unhappy".
+  const thin = summarizeReviews(
+    [{ rating: 1, text: 'Did not enjoy it at all, would not come back.', postedAt: ago(3), answered: false }],
+    { windowDays: 30, recentDays: 365, now },
+  )
+  ok(thin.tooFewToRead === true, 'a single review is flagged as too few to read')
+}
+
+console.log('\n== parseAnalystRead: the review section ==')
+{
+  const withReviews = parseAnalystRead(JSON.stringify({
+    bottomLine: 'x', working: [], fixes: [], blindSpots: [],
+    reviews: { headline: 'Mixed.', praise: ['staff', 'range', 'a', 'b'], complaints: ['price'] },
+  }))
+  ok(withReviews.reviews?.complaints[0] === 'price', 'complaints parse through')
+  ok(withReviews.reviews?.praise.length === 3, 'praise capped at 3')
+
+  const noReviews = parseAnalystRead(JSON.stringify({ bottomLine: 'x', reviews: null }))
+  ok(noReviews.reviews === null, 'a null review section is allowed')
+
+  const junk = parseAnalystRead(JSON.stringify({ bottomLine: 'x', reviews: { praise: ['a'] } }))
+  ok(junk.reviews === null, 'a headline-less review section is dropped, not half-rendered')
 }
 
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}\n`)

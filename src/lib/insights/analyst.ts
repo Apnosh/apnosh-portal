@@ -45,6 +45,18 @@ export interface AnalystRead {
   fixes: Array<{ move: string; why: string }>
   /** what the analyst genuinely cannot see yet (+ the connect step) */
   blindSpots: string[]
+  /** what reviewers praise and complain about, drawn only from real quoted reviews */
+  reviews: ReviewRead | null
+}
+
+/** The review read. Every point must be traceable to a quote in the brief. */
+export interface ReviewRead {
+  /** one plain sentence on the overall picture */
+  headline: string
+  /** what people say they like, each tied to something someone actually wrote */
+  praise: string[]
+  /** what people complain about, same rule */
+  complaints: string[]
 }
 
 /** The authoritative funnel the PAGE renders — built from the payload, not the AI. */
@@ -118,6 +130,22 @@ export function renderPayloadForPrompt(payload: AnalystPayload): string {
     lines.push(`  ${d.fromLabel} ${num(d.fromValue)} -> ${d.toLabel} ${num(d.toValue)} = ${d.keptPct}% kept`)
   }
   lines.push('')
+  const rv = payload.reviews
+  if (!rv) {
+    lines.push('REVIEWS: could not read them just now.')
+  } else if (rv.tooFewToRead) {
+    lines.push(`REVIEWS: only ${rv.recent.count} in the last ${rv.recent.days} days, too few to read a pattern into. Do not claim one.`)
+  } else {
+    const mix = (m: Record<string, number>) => [5, 4, 3, 2, 1].map((k) => `${k}star ${m[String(k)] ?? 0}`).join(', ')
+    lines.push(`REVIEWS (last ${rv.recent.days} days): ${rv.recent.count} reviews, average ${rv.recent.avg ?? 'n/a'}`)
+    lines.push(`  star mix: ${mix(rv.recent.mix)}`)
+    lines.push(`  all time: ${rv.lifetime.count} reviews, average ${rv.lifetime.avg ?? 'n/a'} (${mix(rv.lifetime.mix)})`)
+    lines.push(`  landed inside this report's ${rv.inWindow.days} day window: ${rv.inWindow.count}`)
+    lines.push(`  never replied to: ${rv.unanswered} of ${rv.recent.count}`)
+    lines.push('  WHAT THEY WROTE (real words, use these and only these to say what people praise or complain about):')
+    for (const q of rv.quotes) lines.push(`    - ${q.rating} star, ${q.when}: "${q.text}"`)
+  }
+  lines.push('')
   lines.push(`REPUTATION: rating ${payload.reputation.rating ?? 'n/a'}, ${payload.reputation.reviewCount ?? 'n/a'} reviews`)
   if (payload.topSearches.length) {
     lines.push('TOP SEARCHES: ' + payload.topSearches.map((q) => `"${q.query}" (${q.impressions})`).join(', '))
@@ -141,6 +169,10 @@ HARD RULES (breaking any of these fails the task):
 - Where CHANGE says CANNOT COMPARE, you must not compare those two numbers or imply a direction. Say plainly that you cannot compare it yet and why, in the owner's words.
 - A change is not a reason. You may say what moved, never why it moved.
 - Never say one thing CAUSED another. You may say two things happened together, not that one caused the other.
+- The REVIEWS section carries real quoted reviews. You may summarise what people praise and complain about, but ONLY from those quotes. Never invent a theme nobody wrote, and never guess at food, service, or prices you were not told about.
+- Put the complaint that comes up most FIRST. An owner needs the problem more than the compliment.
+- If REVIEWS says there are too few to read, say that plainly and leave praise and complaints empty. Do not stretch one or two reviews into a pattern.
+- Reviews nobody replied to are a real, fixable miss. If that count is meaningful, say so.
 - For anything listed under DARK SOURCES, you cannot see it. Say so plainly and point to connecting it. Never guess its value.
 - If the funnel shows a big drop between two steps, that gap is the story. Name it in plain words.
 - Be specific and short. No filler, no hype, no "leverage/synergy/optimize" jargon.
@@ -150,9 +182,15 @@ Return ONLY a JSON object, no prose around it, in exactly this shape:
   "bottomLine": "one or two sentences: the single most important thing happening",
   "working": ["short bullet tied to a real number", "..."],
   "fixes": [{"move": "the concrete next thing to do", "why": "why it matters, tied to a number"}],
-  "blindSpots": ["what you cannot see yet and what to connect to see it"]
+  "blindSpots": ["what you cannot see yet and what to connect to see it"],
+  "reviews": {
+    "headline": "one plain sentence on what reviews add up to",
+    "praise": ["what people say they like, in their words not yours"],
+    "complaints": ["what people complain about, most common first"]
+  }
 }
-Keep working to at most 3 bullets, fixes to at most 2, blindSpots to at most 3.`
+Keep working to at most 3 bullets, fixes to at most 2, blindSpots to at most 3, praise and complaints to at most 3 each.
+Set "reviews" to null ONLY when the brief says reviews could not be read or there are too few.`
 
 /** Validate + narrow the model's JSON into an AnalystRead. Throws on bad shape. */
 export function parseAnalystRead(raw: string): AnalystRead {
@@ -174,11 +212,24 @@ export function parseAnalystRead(raw: string): AnalystRead {
         .filter((f) => typeof f?.move === 'string' && (f.move as string).trim())
         .map((f) => ({ move: (f.move as string).trim(), why: typeof f.why === 'string' ? (f.why as string).trim() : '' }))
     : []
+  // The review read is optional by design: the model is told to null it when there is
+  // too little to go on, and a malformed one is dropped rather than half-rendered.
+  let reviews: ReviewRead | null = null
+  const rr = r.reviews as Record<string, unknown> | null | undefined
+  if (rr && typeof rr === 'object' && typeof rr.headline === 'string' && rr.headline.trim()) {
+    reviews = {
+      headline: rr.headline.trim(),
+      praise: asStrings(rr.praise).slice(0, 3),
+      complaints: asStrings(rr.complaints).slice(0, 3),
+    }
+  }
+
   return {
     bottomLine,
     working: asStrings(r.working).slice(0, 3),
     fixes: fixes.slice(0, 2),
     blindSpots: asStrings(r.blindSpots).slice(0, 3),
+    reviews,
   }
 }
 
@@ -220,7 +271,7 @@ export async function runAnalyst(payload: AnalystPayload): Promise<AnalystRunRes
     thinking: { type: 'adaptive' },
     // Thinking tokens are billed against max_tokens, so the old 1200 ceiling would now cut
     // the JSON off mid-object. Medium effort keeps the page quick without going shallow.
-    max_tokens: 3000,
+    max_tokens: 4000,
     output_config: { effort: 'medium' },
     system: SYSTEM,
     messages: [{ role: 'user', content: `Here is the BRIEF:\n\n${brief}\n\nWrite the read as JSON only.` }],
