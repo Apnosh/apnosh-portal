@@ -16,9 +16,24 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
-import type { AnalystPayload } from './analyst-payload'
+import type { AnalystPayload } from './analyst-derive'
 
-const MODEL = 'claude-sonnet-4-5-20250929'
+/**
+ * THE MODEL, IN ONE PLACE.
+ *
+ * Anthropic has no "always newest" alias. `claude-opus-4-8` looks like one because it
+ * carries no date, but it pins a generation: it will keep serving Opus 4.8 forever and
+ * will never silently become 4.9. That is deliberate and we want it — a model that
+ * changed under us could change how the analyst writes, and what it costs, with no
+ * deploy and no way to tell which version produced a stored report.
+ *
+ * So bumps stay a human decision. What we CAN remove is the busywork: this constant is
+ * the only place the analyst's model is named (the route reads it too, so the model
+ * recorded next to each stored report is always the one that actually ran), and
+ * ANALYST_MODEL can be overridden by env, so a bump can be tested in preview without a
+ * code change. RATES must move with it or the cost log silently lies.
+ */
+export const ANALYST_MODEL = process.env.ANALYST_MODEL || 'claude-opus-4-8'
 
 /** The prose the AI returns. NO numbers originate here — see funnelFromPayload. */
 export interface AnalystRead {
@@ -40,12 +55,20 @@ export interface AnalystFunnelStep {
   unit?: string
   isEmpty: boolean
   keptFromPrevPct: number | null
+  /** Move vs the same stage last period. Null when the two are not comparable. */
+  changePct: number | null
 }
 
 /** Deterministic funnel-with-drop-offs for the UI. Numbers come only from here. */
 export function funnelFromPayload(payload: AnalystPayload): AnalystFunnelStep[] {
   const keptByStage = new Map<number, number>()
   for (const d of payload.dropOffs) keptByStage.set(d.toStage, d.keptPct)
+  // Only comparable changes reach the UI. A not-comparable stage shows no chip at all,
+  // which is the honest render: better to show nothing than a number that misleads.
+  const changeByStage = new Map<number, number>()
+  for (const c of payload.changes) {
+    if (c.comparable && c.changePct != null) changeByStage.set(c.stage, c.changePct)
+  }
   return payload.stages.map((s) => ({
     stage: s.stage,
     label: s.label,
@@ -53,6 +76,7 @@ export function funnelFromPayload(payload: AnalystPayload): AnalystFunnelStep[] 
     unit: s.unit,
     isEmpty: s.isEmpty,
     keptFromPrevPct: keptByStage.get(s.stage) ?? null,
+    changePct: changeByStage.get(s.stage) ?? null,
   }))
 }
 
@@ -74,6 +98,17 @@ export function renderPayloadForPrompt(payload: AnalystPayload): string {
     lines.push(`  ${s.stage}. ${s.label}: ${num(s.headline)}${s.unit ? ` ${s.unit}` : ''}`)
     for (const src of s.sources) {
       if (src.value != null) lines.push(`       - ${src.label}: ${num(src.value)}`)
+    }
+  }
+  lines.push('')
+  lines.push(`CHANGE VS THE PERIOD BEFORE (the previous ${payload.window}):`)
+  if (!payload.changes.length) lines.push('  (no earlier period to compare against)')
+  for (const c of payload.changes) {
+    if (c.comparable && c.changePct != null) {
+      const dir = c.changePct > 0 ? 'up' : c.changePct < 0 ? 'down' : 'flat'
+      lines.push(`  ${c.label}: ${num(c.previous)} -> ${num(c.current)} = ${dir} ${Math.abs(c.changePct)}%`)
+    } else {
+      lines.push(`  ${c.label}: CANNOT COMPARE (${c.reason ?? 'not comparable'})`)
     }
   }
   lines.push('')
@@ -102,6 +137,9 @@ You are given a BRIEF of the owner's real numbers. These are the ONLY facts you 
 HARD RULES (breaking any of these fails the task):
 - Use ONLY numbers that appear in the BRIEF. Never invent, estimate, round-guess, or extrapolate a number.
 - Never compare them to other restaurants or "industry averages" or "typical" figures. You have no such data.
+- The ONLY fair comparison is the owner against their own past, using the CHANGE section. Lead with it when it is there, because a number on its own does not tell them if things are getting better or worse.
+- Where CHANGE says CANNOT COMPARE, you must not compare those two numbers or imply a direction. Say plainly that you cannot compare it yet and why, in the owner's words.
+- A change is not a reason. You may say what moved, never why it moved.
 - Never say one thing CAUSED another. You may say two things happened together, not that one caused the other.
 - For anything listed under DARK SOURCES, you cannot see it. Say so plainly and point to connecting it. Never guess its value.
 - If the funnel shows a big drop between two steps, that gap is the story. Name it in plain words.
@@ -144,9 +182,20 @@ export function parseAnalystRead(raw: string): AnalystRead {
   }
 }
 
-/** Sonnet 4.5 rates: $3/M in, $15/M out. */
-export function analystCostCents(tokensIn: number, tokensOut: number): number {
-  return Math.ceil((tokensIn / 1_000_000) * 3 * 100 + (tokensOut / 1_000_000) * 15 * 100)
+/** Published per-million-token rates, in dollars. Keep in step with ANALYST_MODEL. */
+const RATES: Record<string, { in: number; out: number }> = {
+  'claude-opus-4-8': { in: 5, out: 25 },
+  'claude-sonnet-4-5-20250929': { in: 3, out: 15 },
+}
+
+/**
+ * Real spend for one read, in cents. An unknown model falls back to the Opus rate
+ * (the dearer of the two we run) so a forgotten RATES entry over-states cost rather
+ * than under-stating it — an honest cost log fails loud, not quiet.
+ */
+export function analystCostCents(tokensIn: number, tokensOut: number, model: string = ANALYST_MODEL): number {
+  const rate = RATES[model] ?? RATES['claude-opus-4-8']
+  return Math.ceil((tokensIn / 1_000_000) * rate.in * 100 + (tokensOut / 1_000_000) * rate.out * 100)
 }
 
 export interface AnalystRunResult {
@@ -164,8 +213,15 @@ export async function runAnalyst(payload: AnalystPayload): Promise<AnalystRunRes
 
   const brief = renderPayloadForPrompt(payload)
   const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 1200,
+    model: ANALYST_MODEL,
+    // Reading a funnel is real thinking: find the biggest drop, weigh it against what is
+    // dark, decide the one move worth naming. Adaptive lets the model spend that effort
+    // where it needs to. It is off unless asked for on this model generation.
+    thinking: { type: 'adaptive' },
+    // Thinking tokens are billed against max_tokens, so the old 1200 ceiling would now cut
+    // the JSON off mid-object. Medium effort keeps the page quick without going shallow.
+    max_tokens: 3000,
+    output_config: { effort: 'medium' },
     system: SYSTEM,
     messages: [{ role: 'user', content: `Here is the BRIEF:\n\n${brief}\n\nWrite the read as JSON only.` }],
   })

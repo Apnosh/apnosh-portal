@@ -376,13 +376,23 @@ export function computeStagesFrom(
  * compute the honest stages. Never throws (both resolvers are best-effort). No
  * manual store exists yet, so manual stays empty here.
  */
-export async function computeStages(clientId: string, window: InsightsWindow = '30d'): Promise<ComputedStage[]> {
+/**
+ * `periodsBack` reads the SAME funnel for an earlier stretch of time: 1 means the
+ * period immediately before the current one. Used by the analyst to compare the
+ * owner to their own past. The explore detail is skipped when looking back, since
+ * nothing renders it for a past period and it would be a wasted query.
+ */
+export async function computeStages(
+  clientId: string,
+  window: InsightsWindow = '30d',
+  periodsBack = 0,
+): Promise<ComputedStage[]> {
   const { resolveSourceStatuses } = await import('./resolve-source-statuses')
   const { loadStageValues, loadInterestExplore } = await import('./stage-values')
   const [statuses, values, explore] = await Promise.all([
     resolveSourceStatuses(clientId),
-    loadStageValues(clientId, window),
-    loadInterestExplore(clientId, window),
+    loadStageValues(clientId, window, periodsBack),
+    periodsBack === 0 ? loadInterestExplore(clientId, window) : Promise.resolve(null),
   ])
   const stages = computeStagesFrom(statuses, values, {})
   // Interest (stage 2) carries the real "what they explored" GA4 detail. Never

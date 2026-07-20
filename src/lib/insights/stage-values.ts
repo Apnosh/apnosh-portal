@@ -41,16 +41,41 @@ function ymd(d: Date): string {
 /** The two windows we read against:
  *  - gbp: anchored to today-3 (the GBP Performance API's documented lag boundary),
  *    matching getGbpAnalytics so the funnel agrees with the Visibility tab.
- *  - other: a plain last-N-days bound for social / website / search / reviews. */
-function windowBounds(w: InsightsWindow): { gbpStart: string; gbpEnd: string; otherBound: string } {
+ *  - other: a plain last-N-days bound for social / website / search / reviews.
+ *
+ * `periodsBack` slides BOTH windows back by whole periods, so periodsBack=1 on a
+ * 30d window is the 30 days immediately before the current 30. That is what lets
+ * the analyst compare the owner to their own past instead of to other businesses.
+ *
+ * The upper bound on the "other" sources is null for the live period and only set
+ * when looking back. That is deliberate: the live query stays exactly as it was
+ * (`>= start`, open-ended), so adding history cannot change a number the owner
+ * already sees on the dashboard today.
+ */
+function windowBounds(
+  w: InsightsWindow,
+  periodsBack = 0,
+): { gbpStart: string; gbpEnd: string; otherStart: string; otherEnd: string | null } {
   const days = windowDays(w)
+  const shift = days * periodsBack
+
   const gbpEnd = new Date()
-  gbpEnd.setUTCDate(gbpEnd.getUTCDate() - 3)
+  gbpEnd.setUTCDate(gbpEnd.getUTCDate() - 3 - shift)
   const gbpStart = new Date(gbpEnd)
   gbpStart.setUTCDate(gbpStart.getUTCDate() - (days - 1))
-  const other = new Date()
-  other.setUTCDate(other.getUTCDate() - (days - 1))
-  return { gbpStart: ymd(gbpStart), gbpEnd: ymd(gbpEnd), otherBound: ymd(other) }
+
+  const otherStart = new Date()
+  otherStart.setUTCDate(otherStart.getUTCDate() - (days - 1) - shift)
+  // The day before the next period begins, so consecutive periods never double-count.
+  const otherEndDate = new Date(otherStart)
+  otherEndDate.setUTCDate(otherEndDate.getUTCDate() + (days - 1))
+
+  return {
+    gbpStart: ymd(gbpStart),
+    gbpEnd: ymd(gbpEnd),
+    otherStart: ymd(otherStart),
+    otherEnd: periodsBack > 0 ? ymd(otherEndDate) : null,
+  }
 }
 
 const num = (v: unknown): number => {
@@ -63,10 +88,20 @@ const num = (v: unknown): number => {
  * leaves its sources null. Only wired sources that can plausibly resolve
  * CONNECTED are read — the rest are simply never added to the map (=> null).
  */
-export async function loadStageValues(clientId: string, w: InsightsWindow = '30d'): Promise<StageValueMap> {
+export async function loadStageValues(
+  clientId: string,
+  w: InsightsWindow = '30d',
+  periodsBack = 0,
+): Promise<StageValueMap> {
   const out: StageValueMap = {}
-  const { gbpStart, gbpEnd, otherBound } = windowBounds(w)
+  const { gbpStart, gbpEnd, otherStart, otherEnd } = windowBounds(w, periodsBack)
   const admin = createAdminClient()
+  // Close the top of the window only when looking back, so a past period stops where
+  // the next one starts. On the live period this is a no-op and the query is untouched.
+  const capDate = <T extends { lte: (col: string, v: string) => T }>(q: T, col = 'date'): T =>
+    otherEnd ? q.lte(col, otherEnd) : q
+  const capTs = <T extends { lte: (col: string, v: string) => T }>(q: T, col: string): T =>
+    otherEnd ? q.lte(col, otherEnd + 'T23:59:59.999Z') : q
 
   // ── Google Business Profile (gbp_metrics) ──────────────────────────────
   try {
@@ -107,8 +142,8 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
     let ratingSum = 0
     let ratingN = 0
     const [rev, local] = await Promise.all([
-      admin.from('reviews').select('rating, posted_at').eq('client_id', clientId).gte('posted_at', otherBound + 'T00:00:00'),
-      admin.from('local_reviews').select('rating, created_at_platform').eq('client_id', clientId).gte('created_at_platform', otherBound + 'T00:00:00'),
+      capTs(admin.from('reviews').select('rating, posted_at').eq('client_id', clientId).gte('posted_at', otherStart + 'T00:00:00'), 'posted_at'),
+      capTs(admin.from('local_reviews').select('rating, created_at_platform').eq('client_id', clientId).gte('created_at_platform', otherStart + 'T00:00:00'), 'created_at_platform'),
     ])
     for (const r of (rev.data ?? []) as Record<string, unknown>[]) {
       count++
@@ -128,11 +163,11 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
   // ── Instagram (social_metrics) -> reach, profile visits, engagement,
   //    follower growth. All written daily by the sync-social-metrics edge fn. ──
   try {
-    const { data, error } = await admin
+    const { data, error } = await capDate(admin
       .from('social_metrics')
       .select('reach, followers_gained, profile_visits, engagement')
       .eq('client_id', clientId)
-      .gte('date', otherBound)
+      .gte('date', otherStart))
     if (!error && data) {
       let reach = 0, gained = 0, visits = 0, engaged = 0
       for (const r of data as Record<string, unknown>[]) {
@@ -152,11 +187,11 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
   //    order clicks, returning users. sessions are always ingested when GA4 is
   //    connected; menu_views / order_clicks come from migration 206. ──
   try {
-    const { data, error } = await admin
+    const { data, error } = await capDate(admin
       .from('website_metrics')
       .select('sessions, menu_views, order_clicks, returning_users')
       .eq('client_id', clientId)
-      .gte('date', otherBound)
+      .gte('date', otherStart))
     if (!error && data) {
       let visits = 0, menu = 0, order = 0, ret = 0
       let sawSessions = false, sawReturning = false
@@ -175,11 +210,11 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
 
   // ── Search Console (search_metrics) -> site impressions (drill-down) ────
   try {
-    const { data, error } = await admin
+    const { data, error } = await capDate(admin
       .from('search_metrics')
       .select('total_impressions')
       .eq('client_id', clientId)
-      .gte('date', otherBound)
+      .gte('date', otherStart))
     if (!error && data) {
       let impr = 0
       for (const r of data as Record<string, unknown>[]) impr += num(r.total_impressions)
@@ -195,14 +230,14 @@ export async function loadStageValues(clientId: string, w: InsightsWindow = '30d
  *  the Interest panel simply hides rather than inventing an empty state. Every
  *  number is a real sum/weighted-average of rows — nothing estimated. */
 export async function loadInterestExplore(clientId: string, w: InsightsWindow = '30d'): Promise<StageExplore | null> {
-  const { otherBound } = windowBounds(w)
+  const { otherStart } = windowBounds(w)
   const admin = createAdminClient()
   try {
     const { data, error } = await admin
       .from('website_metrics')
       .select('sessions, page_views, visitors, avg_session_duration, top_pages')
       .eq('client_id', clientId)
-      .gte('date', otherBound)
+      .gte('date', otherStart)
     if (error || !data || data.length === 0) return null
     let sessions = 0, pageViews = 0, visitors = 0, durSum = 0, durWeight = 0
     let sawSessions = false, sawVisitors = false, sawDur = false

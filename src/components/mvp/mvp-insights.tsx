@@ -32,6 +32,8 @@ import {
   Route, Heart, Megaphone, Sparkles,
 } from 'lucide-react'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
+import { useClient } from '@/lib/client-context'
+import { isProTier } from '@/lib/entitlements'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
@@ -263,7 +265,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
           {data?.businessName && <div style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.businessName}</div>}
         </div>
         {/* one button, reads the WHOLE funnel (the drop-off is cross-stage) */}
-        <Link href="/dashboard/insights/analyst" aria-label="AI Analyst" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, background: C.greenSoft, color: C.greenDk, border: `1px solid ${C.greenLine}`, borderRadius: 99, padding: '7px 13px', fontSize: 12.5, fontWeight: 700, textDecoration: 'none', flexShrink: 0 }}><Sparkles size={14} /> AI Analyst</Link>
+        <AnalystButton />
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
@@ -279,6 +281,64 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
       </div>
       </div>
     </div>
+  )
+}
+
+const ANALYST_HREF = '/dashboard/insights/analyst'
+
+/**
+ * The AI Analyst entry, top right of the Insights header.
+ *
+ * Two things it has to get right, both reported by the owner:
+ *
+ * 1. IT MUST ALWAYS DO SOMETHING. It was a bare <Link>, and a tap could land on a
+ *    screen that never appeared, with no feedback at all. A control that sometimes
+ *    does nothing is the worst possible state, because there is no way to tell a
+ *    broken app from a slow one. So: an explicit push, a pressed state so the tap is
+ *    always acknowledged, and a hard fallback to a full page load if the client-side
+ *    navigation has not moved us anywhere after a beat. A slow navigation beats a
+ *    silent one.
+ *
+ * 2. IT MUST BE HONEST ABOUT THE PRO GATE. The server only ever generates a read for
+ *    Pro (and Internal) clients; everyone else was invited to tap a full-price-looking
+ *    button and only then told they could not use it. The lock now shows on the button
+ *    itself, so the gate is visible before the tap, and the page explains it.
+ */
+function AnalystButton() {
+  const router = useRouter()
+  const { client } = useClient()
+  const pro = isProTier(client?.tier)
+  const [pressed, setPressed] = useState(false)
+
+  const go = () => {
+    setPressed(true)
+    const from = typeof window !== 'undefined' ? window.location.pathname : ''
+    router.push(ANALYST_HREF)
+    // Safety net: if we are still on exactly the same path shortly after, the client
+    // router did not take us anywhere, so force a real navigation instead.
+    setTimeout(() => {
+      if (typeof window !== 'undefined' && window.location.pathname === from) {
+        window.location.assign(ANALYST_HREF)
+      }
+    }, 700)
+  }
+
+  return (
+    <button
+      onClick={go}
+      aria-label={pro ? 'AI Analyst' : 'AI Analyst, Pro plan only'}
+      style={{
+        marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
+        background: pro ? C.greenSoft : '#f2f2f4',
+        color: pro ? C.greenDk : C.mute,
+        border: `1px solid ${pro ? C.greenLine : C.line}`,
+        borderRadius: 99, padding: '7px 13px', fontSize: 12.5, fontWeight: 700,
+        flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit',
+        opacity: pressed ? 0.55 : 1, transition: 'opacity .12s ease',
+      }}
+    >
+      {pro ? <Sparkles size={14} /> : <Lock size={13} />} AI Analyst
+    </button>
   )
 }
 

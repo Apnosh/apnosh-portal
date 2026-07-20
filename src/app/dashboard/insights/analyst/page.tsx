@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown } from 'lucide-react'
+import { ChevronLeft, Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown, TrendingUp } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 
 const C = {
@@ -22,7 +22,27 @@ const C = {
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
-interface FunnelStep { stage: number; label: string; value: number | null; unit?: string; isEmpty: boolean; keptFromPrevPct: number | null }
+interface FunnelStep { stage: number; label: string; value: number | null; unit?: string; isEmpty: boolean; keptFromPrevPct: number | null; changePct: number | null }
+
+/**
+ * How this stage moved against the same stage last period. Absent whenever the two
+ * periods are not a fair comparison (the server decides that, not this component),
+ * so no chip is the honest answer rather than a zero.
+ */
+function ChangeChip({ pct }: { pct: number }) {
+  const up = pct > 0
+  const flat = pct === 0
+  const tone = flat ? { fg: C.faint, bg: '#f2f2f4' } : up ? { fg: C.greenDk, bg: C.greenSoft } : { fg: C.coral, bg: C.coralBg }
+  return (
+    <span
+      title={`vs the period before`}
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: tone.bg, color: tone.fg, borderRadius: 99, padding: '3px 7px', fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}
+    >
+      {!flat && (up ? <TrendingUp size={11} /> : <TrendingDown size={11} />)}
+      {flat ? 'flat' : `${Math.abs(pct)}%`}
+    </span>
+  )
+}
 interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[] }
 interface AnalystResponse {
   locked?: boolean
@@ -49,23 +69,59 @@ export default function AnalystPage() {
 
   // First open serves the cached read (cheap); the Refresh button forces a
   // fresh generate (refresh: true skips the cache on the server).
+  //
+  // Every path below MUST end in a state that renders something. This page used to
+  // have three ways to show a completely blank screen, which is worse than an error:
+  // the owner cannot tell a broken page from a slow one, and there is nothing to
+  // report. Now a failure always names itself and always offers Try again.
   const run = useCallback((refresh = false) => {
     if (!client?.id) return
     setState('loading'); setErr(null)
+
+    // The server may spend up to 30s on a live generate. Without a client-side cap a
+    // dropped connection leaves the page spinning forever with no way out.
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 45_000)
+
     fetch('/api/dashboard/analyst', {
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ clientId: client.id, window: '30d', refresh }),
+      signal: ctl.signal,
     })
       .then(async (r) => {
         const j = (await r.json().catch(() => ({}))) as AnalystResponse & { error?: string }
         if (!r.ok) throw new Error(j.error || `Failed (${r.status})`)
         return j
       })
-      .then((j) => { setData(j); setState(j.locked ? 'locked' : 'ready') })
-      .catch((e) => { setErr(e.message); setState('error') })
+      .then((j) => {
+        if (j.locked) { setData(j); setState('locked'); return }
+        // A 200 with no read is the blank-page case: the old code set 'ready' and then
+        // rendered nothing at all because the render was guarded on data.read.
+        if (!j.read?.bottomLine) throw new Error('the analyst came back empty')
+        setData(j); setState('ready')
+      })
+      .catch((e: unknown) => {
+        const aborted = e instanceof DOMException && e.name === 'AbortError'
+        setErr(aborted ? 'that took too long, so we stopped waiting' : (e instanceof Error ? e.message : 'something went wrong'))
+        setState('error')
+      })
+      .finally(() => clearTimeout(timer))
   }, [client?.id])
 
   useEffect(() => { run(false) }, [run])
+
+  // Which restaurant we are reading for comes from context and can arrive a beat late.
+  // If it never arrives, `run` returns early and the page would sit on "Reading your
+  // numbers..." forever, looking broken. Say so instead.
+  const waitingForClient = !client?.id
+  useEffect(() => {
+    if (!waitingForClient) return
+    const t = setTimeout(() => {
+      setErr('we could not tell which restaurant to read. Try picking it again from the menu.')
+      setState('error')
+    }, 8_000)
+    return () => clearTimeout(t)
+  }, [waitingForClient])
 
   const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard/insights') }
 
@@ -85,10 +141,15 @@ export default function AnalystPage() {
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 16px 40px' }}>
-          {state === 'loading' && <Centered>Reading your numbers&hellip;</Centered>}
-          {state === 'error' && <Centered>Couldn&apos;t generate: {err}<div style={{ marginTop: 12 }}><button onClick={() => run(false)} style={btn}>Try again</button></div></Centered>}
-          {state === 'locked' && <Locked />}
-          {state === 'ready' && data?.read && <ReadView read={data.read} funnel={data.funnel ?? []} when={whenLabel(data.generatedAt)} />}
+          {/* Exhaustive on purpose: the last branch is a plain else, so there is no
+              combination of state and data that renders an empty screen. */}
+          {state === 'loading' ? <Centered>Reading your numbers&hellip;</Centered>
+            : state === 'locked' ? <Locked />
+            : state === 'ready' && data?.read ? <ReadView read={data.read} funnel={data.funnel ?? []} when={whenLabel(data.generatedAt)} />
+            : <Centered>
+                We could not put your read together{err ? `: ${err}` : '.'}
+                <div style={{ marginTop: 12 }}><button onClick={() => run(false)} style={btn}>Try again</button></div>
+              </Centered>}
         </div>
       </div>
     </div>
@@ -127,6 +188,7 @@ function ReadView({ read, funnel, when }: { read: Read; funnel: FunnelStep[]; wh
                   {s.isEmpty
                     ? <span style={{ fontSize: 12, color: C.faint }}>No data yet</span>
                     : <span style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600 }}>{(s.value ?? 0).toLocaleString('en-US')}</span>}
+                  {!s.isEmpty && s.changePct != null && <ChangeChip pct={s.changePct} />}
                 </div>
               </div>
             ))}
@@ -193,7 +255,12 @@ function Locked() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '40px 26px' }}>
       <div style={{ width: 60, height: 60, borderRadius: 17, background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Sparkles size={26} color={C.greenDk} /></div>
-      <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, marginTop: 16 }}>Meet your AI Analyst</div>
+      {/* Name the gate before the pitch. An owner who cannot use this yet should know
+          that in the first line, not after reading the whole card. */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 14, background: '#f2f2f4', color: C.mute, borderRadius: 99, padding: '4px 10px', fontSize: 11.5, fontWeight: 700 }}>
+        <Lock size={12} /> Pro plan only
+      </div>
+      <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, marginTop: 10 }}>Meet your AI Analyst</div>
       <div style={{ fontSize: 13.5, color: C.mute, marginTop: 8, lineHeight: 1.55, maxWidth: 300 }}>
         It reads your whole funnel and tells you, in plain words, where people drop off and the one thing to fix next. Grounded in your real numbers, never guesses.
       </div>

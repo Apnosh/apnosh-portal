@@ -14,7 +14,8 @@ import {
   funnelFromPayload,
   SYSTEM,
 } from '../src/lib/insights/analyst'
-import type { AnalystPayload } from '../src/lib/insights/analyst-payload'
+import { deriveChanges } from '../src/lib/insights/analyst-derive'
+import type { AnalystPayload } from '../src/lib/insights/analyst-derive'
 
 let fail = 0
 const ok = (cond: boolean, msg: string) => { console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fail++ }
@@ -34,6 +35,10 @@ const payload: AnalystPayload = {
     { stage: 4, label: 'Sales', headline: null, unit: 'guests', isEmpty: true, note: 'Connect your register.', sources: [
       { label: 'Guests served', provider: 'pos', value: null, status: 'COMING_SOON', counted: false },
     ] },
+  ],
+  changes: [
+    { stage: 1, label: 'Awareness', current: 16000, previous: 12800, changePct: 25, comparable: true },
+    { stage: 3, label: 'Actions', current: 40, previous: null, changePct: null, comparable: false, reason: 'no number for one of the two periods' },
   ],
   dropOffs: [
     { fromStage: 1, fromLabel: 'Awareness', fromValue: 16000, toStage: 3, toLabel: 'Actions', toValue: 40, keptPct: 0.3 },
@@ -94,6 +99,47 @@ console.log('\n== parseAnalystRead: rejects junk + missing bottomLine ==')
   threw = false
   try { parseAnalystRead(JSON.stringify({ working: ['x'] })) } catch { threw = true }
   ok(threw, 'missing bottomLine throws')
+}
+
+console.log('\n== deriveChanges: only compares like with like ==')
+{
+  const src = (label: string, value: number | null) => ({ label, provider: 'p', value, status: 'CONNECTED', counted: true })
+  const stage = (stage: number, headline: number | null, sources: ReturnType<typeof src>[]) =>
+    ({ stage, label: `S${stage}`, headline, isEmpty: headline == null, sources })
+
+  const now = [
+    stage(1, 120, [src('Google', 120)]),                       // same source both periods
+    stage(2, 300, [src('Google', 100), src('Website', 200)]),  // website is NEW this period
+    stage(3, 50, [src('Google', 50)]),                         // last period was zero
+    stage(4, 10, [src('Google', 10)]),                         // no previous stage at all
+  ]
+  const before = [
+    stage(1, 100, [src('Google', 100)]),
+    stage(2, 100, [src('Google', 100)]),
+    stage(3, 0, [src('Google', 0)]),
+  ]
+  const ch = deriveChanges(now, before)
+  const byStage = new Map(ch.map((c) => [c.stage, c]))
+
+  ok(byStage.get(1)?.comparable === true && byStage.get(1)?.changePct === 20, 'same sources both periods -> real 20% change')
+  ok(byStage.get(2)?.comparable === false, 'a source that only reports this period blocks the comparison')
+  ok((byStage.get(2)?.reason ?? '').includes('different sources'), 'and says why, so the analyst can explain it')
+  ok(byStage.get(3)?.comparable === false, 'a zero earlier period is not turned into infinite growth')
+  ok(byStage.get(4)?.comparable === false, 'a stage with no earlier period is not compared')
+  ok(ch.every((c) => c.comparable || c.changePct === null), 'every non-comparable change carries a null percent')
+
+  // The trap this guards against, stated as a test: naive math would claim +200%.
+  const naive = Math.round(((300 - 100) / 100) * 100)
+  ok(naive === 200 && byStage.get(2)?.changePct === null, 'the misleading +200% is suppressed, not reported')
+}
+
+console.log('\n== funnelFromPayload: only comparable changes reach the UI ==')
+{
+  const f = funnelFromPayload(payload)
+  const s1 = f.find((x) => x.stage === 1)
+  const s3 = f.find((x) => x.stage === 3)
+  ok(s1?.changePct === 25, 'comparable change is passed through to the page')
+  ok(s3?.changePct === null, 'non-comparable change renders no chip')
 }
 
 console.log(`\n${fail === 0 ? 'ALL PASS' : fail + ' FAILED'}\n`)
