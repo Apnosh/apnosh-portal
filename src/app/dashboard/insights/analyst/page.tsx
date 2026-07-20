@@ -255,7 +255,12 @@ function Locked() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '40px 26px' }}>
       <div style={{ width: 60, height: 60, borderRadius: 17, background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Sparkles size={26} color={C.greenDk} /></div>
-      <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, marginTop: 16 }}>Meet your AI Analyst</div>
+      {/* Name the gate before the pitch. An owner who cannot use this yet should know
+          that in the first line, not after reading the whole card. */}
+      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 14, background: '#f2f2f4', color: C.mute, borderRadius: 99, padding: '4px 10px', fontSize: 11.5, fontWeight: 700 }}>
+        <Lock size={12} /> Pro plan only
+      </div>
+      <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, marginTop: 10 }}>Meet your AI Analyst</div>
       <div style={{ fontSize: 13.5, color: C.mute, marginTop: 8, lineHeight: 1.55, maxWidth: 300 }}>
         It reads your whole funnel and tells you, in plain words, where people drop off and the one thing to fix next. Grounded in your real numbers, never guesses.
       </div>
