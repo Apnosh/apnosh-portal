@@ -82,6 +82,15 @@ export function deriveServiceNeeds(
           // The delivery card's playbook needs the DELIVERY APP logins, not a POS vendor —
           // "Which POS?" was jargon that answered the wrong question.
           if (id === 'delivery-opt') push({ id: 'delivery-access', kind: 'input', group: 'Access', field: 'deliveryAccess', inputType: 'text', title: 'Your delivery apps, and how we get in', why: 'Which apps you sell on, plus the login email or store ID for each. Your team can only fix pages it can reach.', placeholder: 'e.g. DoorDash and Uber Eats, login mia@myshop.com', value: exec.deliveryAccess ?? '', done: !!exec.deliveryAccess })
+          // The Google button card needs the LINKS, not the vendor's name. "Which POS?" is
+          // the same jargon the delivery card already learned to drop: it answers a question
+          // we then have to chase, while the link IS the thing we write onto the listing.
+          // The order-links route pre-fills both from the client's own site, so this is
+          // usually a confirm rather than a hunt.
+          else if (id === 'google-food-order') {
+            push({ id: 'ordering-link', kind: 'input', group: 'Access', field: 'orderingLink', inputType: 'text', title: 'Your online ordering link', why: 'This is what we put on the Order button, so orders come to you instead of a delivery app.', placeholder: 'e.g. yourplace.toasttab.com or your own order page', value: exec.orderingLink ?? '', done: !!exec.orderingLink })
+            push({ id: 'booking-link', kind: 'input', group: 'Access', field: 'bookingLink', inputType: 'text', title: 'Your reservations link', why: 'This goes on the Reserve button. OpenTable, Resy, Yelp and your own booking page all work.', placeholder: 'e.g. opentable.com/your-place', value: exec.bookingLink ?? '', done: !!exec.bookingLink, optional: true })
+          }
           else push({ id: 'pos-vendor', kind: 'input', group: 'Access', field: 'vendorInfo', inputType: 'text', title: 'Which ordering or POS system do you use?', why: 'Your ordering or point-of-sale vendor controls when this can go live.', placeholder: 'e.g. Toast, Square, Clover', value: exec.vendorInfo ?? '', done: !!exec.vendorInfo })
           break
         case 'gbp-photos':
@@ -118,7 +127,13 @@ export function deriveServiceNeeds(
         if (!doneSetup.has('review-claim')) push({ id: 'listing-access', kind: 'action', group: 'Access', title: 'Connect your listings', why: 'So your hours and menu match everywhere. Listings can take up to a week to update.', actionLabel: 'Connect', href: CONNECT_HREF, done: false })
         break
       case 'pos-vendor':
-        push({ id: 'pos-vendor', kind: 'input', group: 'Access', field: 'vendorInfo', inputType: 'text', title: 'Which ordering or POS system do you use?', why: 'Your ordering or point-of-sale vendor controls when this can go live.', placeholder: 'e.g. Toast, Square, Clover', value: exec.vendorInfo ?? '', done: !!exec.vendorInfo })
+        // The Google button card asks for the ordering LINK above, which is a better
+        // version of the same question, so the gate must not re-ask the vendor's name.
+        // Both paths fire for one service (the playbook needsInput AND the turnaround
+        // gate), and only patching the playbook branch left the jargon ask on screen.
+        if (id !== 'google-food-order') {
+          push({ id: 'pos-vendor', kind: 'input', group: 'Access', field: 'vendorInfo', inputType: 'text', title: 'Which ordering or POS system do you use?', why: 'Your ordering or point-of-sale vendor controls when this can go live.', placeholder: 'e.g. Toast, Square, Clover', value: exec.vendorInfo ?? '', done: !!exec.vendorInfo })
+        }
         break
       case 'sms-10dlc':
         push({ id: 'sms-register', kind: 'action', group: 'Info', title: 'Set up text messaging', why: 'Carriers require your legal business details before you can text customers. We collect these securely.', actionLabel: 'Add', href: BIZ_HREF, done: false })
