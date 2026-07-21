@@ -25,6 +25,21 @@ const GATE_ASK: Record<string, string | undefined> = {
 
 const SHOOT_ASK = 'Pick times for a photo or video shoot'
 
+/** Per-service asks that OVERRIDE the gate-kind default above.
+ *
+ *  The gate map is keyed on the turnaround gate, so every 'pos-vendor' service promised
+ *  "Tell us your ordering or POS system". The Google button card stopped asking that (the
+ *  intake wants the LINK, which is the thing we write onto the listing), and this file did
+ *  not follow, so the product page sold one question and the order asked another.
+ *
+ *  This file's own comment predicted it: the two are "kept in lockstep by voice, not
+ *  import", because service-needs.ts is server-only and cannot be pulled in here. An
+ *  override map is the smallest honest patch. If this list grows past a few entries, the
+ *  right fix is a shared client-safe source both can read. */
+const SERVICE_ASK: Record<string, string> = {
+  'google-food-order': 'Your online ordering link, and your booking link if you take reservations',
+}
+
 /** Same service sets service-needs.ts keys on (kept in lockstep by voice, not import — that
  *  module is server-only and cannot be pulled into this client-safe file). */
 const MENU_SERVICES = new Set(['site-menu', 'menu-eng', 'catering-engine', 'menu-photo-refresh'])
@@ -40,7 +55,7 @@ function pushServiceAsks(serviceIds: string[], out: string[], shootAsk: string):
   for (const serviceId of serviceIds) {
     const t = turnaroundFor(serviceId)
     if (t?.class === 'setup' && t.gate) {
-      const ask = GATE_ASK[t.gate.kind]
+      const ask = SERVICE_ASK[serviceId] ?? GATE_ASK[t.gate.kind]
       if (ask) push(ask)
     }
     if (t?.class === 'creative' && t.needsShoot) push(shootAsk)
