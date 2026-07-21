@@ -57,6 +57,21 @@ export function deriveServiceNeeds(
     })
   }
 
+  // The owner-run lanes of the Google button card. Same shape as the gbp walkthrough
+  // above: the campaign's deliverable IS the owner doing it, so the task points at the
+  // screen that does it, and it is done when the buttons are actually live.
+  const ownerRunOrder = (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'google-food-order' && it.producer === 'diy')
+  if (ownerRunOrder) {
+    push({
+      id: 'order-buttons', kind: 'action', group: 'Access',
+      title: 'Point your Google order buttons at you',
+      why: 'We show you where they go today, what we can change, and what Google locks. You confirm before anything moves.',
+      actionLabel: exec.orderButtonsFixedAt ? 'Open' : 'Start',
+      href: `/dashboard/order-buttons?campaignId=${campaign.draft.id}`,
+      done: !!exec.orderButtonsFixedAt,
+    })
+  }
+
   // ── playbook-driven needs: everything the TEAM's own checklist starts with ──
   // Each service's playbook (service-playbooks.ts) opens with a client intake step whose
   // needsInput names what only the owner can give: Manager access, site and delivery logins,
