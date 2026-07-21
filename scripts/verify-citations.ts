@@ -41,8 +41,13 @@ section('a directory nobody looked at is never reported as fine')
   ok('every directory starts unchecked', plan.directories.every((d) => d.status === 'unchecked'))
   ok('unchecked is NOT counted as matching', plan.counts.match === 0)
   ok('unchecked is NOT counted as needing work either', plan.needsWork === 0)
-  ok('the headline says out loud that nothing was checked', /not been checked|needs? a look/i.test(plan.headline))
+  ok('the headline says out loud that nothing was checked', /been checked yet|not been checked|needs? a look/i.test(plan.headline))
   ok('the headline never claims everything is fine', !/every directory .* matches/i.test(plan.headline))
+  // The first version of this said "Nothing is wrong on the 0 we checked", which passed the
+  // phrase check above while reading as reassurance about work nobody did. Assert the sense,
+  // not just the words.
+  ok('it does not report a clean result on zero checks', !/nothing is wrong/i.test(plan.headline))
+  ok('it says plainly that none have been checked', /none of the 6 directories/i.test(plan.headline))
 }
 
 section('checked and clean is stated only for what was actually checked')
@@ -50,7 +55,7 @@ section('checked and clean is stated only for what was actually checked')
   const plan = buildCitationPlan(SOURCE, [audit({ platform: 'yelp' })])
   ok('the checked one reads as a match', plan.directories.find((d) => d.key === 'yelp')!.status === 'match')
   ok('the other five stay unchecked', plan.counts.unchecked === DIRECTORIES.length - 1)
-  ok('the headline names both facts', /1|Nothing is wrong/.test(plan.headline) && /5 still/.test(plan.headline))
+  ok('the headline names both facts', /Nothing is wrong on the 1/.test(plan.headline) && /5 still/.test(plan.headline))
 }
 
 section('a mismatch names exactly which fields differ')

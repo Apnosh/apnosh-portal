@@ -183,7 +183,12 @@ export function headlineFor(
     return `Google is missing your ${joinWords(sourceMissing)}, so there is nothing to match the others against yet.`
   }
   const wrong = counts.differs + counts.missing
+  const checked = counts.match + wrong
   if (wrong === 0 && counts.unchecked === 0) return 'Every directory we track matches your Google listing.'
+  // Nothing checked at all is its own sentence. The general form below produced "Nothing is
+  // wrong on the 0 we checked", which is both awkward and reads as reassurance about work
+  // that never happened.
+  if (checked === 0) return `None of the ${counts.unchecked} directories we track have been checked yet.`
   if (wrong === 0) return `Nothing is wrong on the ${counts.match} we checked. ${counts.unchecked} still ${counts.unchecked === 1 ? 'needs' : 'need'} a look.`
   const head = `${wrong} ${wrong === 1 ? 'directory does' : 'directories do'} not match your Google listing`
   return counts.unchecked > 0 ? `${head}, and ${counts.unchecked} more ${counts.unchecked === 1 ? 'has' : 'have'} not been checked.` : `${head}.`
