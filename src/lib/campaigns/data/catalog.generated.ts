@@ -3044,7 +3044,6 @@ export const GENERATED_CATALOG: PricedService[] = [
           "offshore": 1
         },
         "kind": "one-time",
-        "note": "estimated price, confirm before launch",
         "amount": 165
       }
     ],
