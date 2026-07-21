@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { ExternalLink, Lock, Check, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
+import { ExternalLink, Lock, Check, AlertCircle, Loader2, ArrowRight, Sparkles } from 'lucide-react'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -38,6 +38,8 @@ interface Read {
   needs: { blocked: boolean; reason: string | null; nextService: string | null }
 }
 interface PlanRow { button: string; action: 'add' | 'change' | 'keep'; from: string | null; to: string }
+interface AdvicePath { title: string; body: string; cost: string; action: string }
+interface Advice { situation: string; paths: AdvicePath[]; startHere: string; avoid: string | null }
 
 /** Show a link the way a person reads one: the site, not the tracking soup. */
 function pretty(uri: string | null): string {
@@ -57,6 +59,10 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
   const [plan, setPlan] = useState<PlanRow[] | null>(null)
   const [planNote, setPlanNote] = useState<string | null>(null)
   const [busy, setBusy] = useState<'preview' | 'apply' | null>(null)
+  // Advice is a separate, optional layer. It loads after the read, and a failure or a
+  // non-Pro tier just leaves the deterministic screen standing on its own.
+  const [advice, setAdvice] = useState<Advice | null>(null)
+  const [adviceState, setAdviceState] = useState<'idle' | 'loading' | 'locked' | 'none'>('idle')
   const [err, setErr] = useState<string | null>(null)
   const [done, setDone] = useState<{ verified: boolean; checks: { button: string; ok: boolean }[] } | null>(null)
 
@@ -77,6 +83,23 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  // Ask for advice once the read has landed. Deliberately after: the advice is grounded
+  // in the same live facts, and showing it before the situation would put the answer
+  // above the question.
+  useEffect(() => {
+    if (!read || adviceState !== 'idle') return
+    setAdviceState('loading')
+    void (async () => {
+      try {
+        const res = await fetch('/api/dashboard/listing/order-links/advice', { method: 'POST' })
+        const body = await res.json()
+        if (body?.locked) { setAdviceState('locked'); return }
+        if (body?.advice) { setAdvice(body.advice as Advice); setAdviceState('idle'); return }
+        setAdviceState('none')
+      } catch { setAdviceState('none') }
+    })()
+  }, [read, adviceState])
 
   async function call(dryRun: boolean) {
     setBusy(dryRun ? 'preview' : 'apply'); setErr(null)
@@ -139,6 +162,54 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
           {read.needsOwnerCheck.length} of these are DoorDash Storefront links. That is a page
           you can pay DoorDash to run for you, so it may already be yours. Worth a check.
         </Note>
+      )}
+
+      {/* what your options actually are. the AI lane's real job: an owner who has no
+          ordering page cannot act on "add your link", because they do not know what
+          the alternatives are or which fits them. */}
+      {adviceState === 'loading' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: C.mute, margin: '16px 0' }}>
+          <Loader2 size={13} className="mvp-spin" /> Working out your options…
+        </div>
+      )}
+
+      {advice && (
+        <div style={{ background: C.greenSoft, borderRadius: 14, padding: '14px 15px', margin: '18px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 8 }}>
+            <Sparkles size={12} /> Your options
+          </div>
+          <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5, marginBottom: 12 }}>{advice.situation}</div>
+
+          {advice.paths.map((p, i) => (
+            <div key={i} style={{ background: '#fff', borderRadius: 11, padding: '11px 12px', marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, marginBottom: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.faint, minWidth: 12 }}>{i + 1}</span>
+                <span style={{ fontSize: 13.5, fontWeight: 650, color: C.ink }}>{p.title}</span>
+              </div>
+              <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, marginBottom: 6, paddingLeft: 19 }}>{p.body}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, paddingLeft: 19 }}>
+                <Chip>{p.cost}</Chip>
+                <Chip tone="ink">{p.action}</Chip>
+              </div>
+            </div>
+          ))}
+
+          {advice.startHere && (
+            <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5, marginTop: 10, fontWeight: 600 }}>
+              Start here: <span style={{ fontWeight: 400 }}>{advice.startHere}</span>
+            </div>
+          )}
+          {advice.avoid && (
+            <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5, marginTop: 6 }}>{advice.avoid}</div>
+          )}
+        </div>
+      )}
+
+      {adviceState === 'locked' && (
+        <div style={{ border: `1px dashed ${C.line}`, borderRadius: 13, padding: '12px 13px', margin: '18px 0', fontSize: 13, color: C.mute, lineHeight: 1.5 }}>
+          <strong style={{ color: C.ink }}>Not sure which way to go?</strong> On the Pro plan, Apnosh AI reads
+          your listing and lays out your real options, with what each one costs and what to do first.
+        </div>
       )}
 
       {/* the fields */}
@@ -269,6 +340,16 @@ function Field({ label, help, value, onChange, found }: { label: string; help: s
         </div>
       )}
     </div>
+  )
+}
+
+function Chip({ children, tone }: { children: React.ReactNode; tone?: 'ink' }) {
+  return (
+    <span style={{
+      display: 'inline-block', borderRadius: 8, padding: '3px 8px', fontSize: 11.5, lineHeight: 1.4,
+      background: tone === 'ink' ? '#f2f2f4' : C.greenSoft,
+      color: tone === 'ink' ? C.ink : C.greenDk, fontWeight: 600,
+    }}>{children}</span>
   )
 }
 
