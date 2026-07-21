@@ -456,10 +456,38 @@ function CustomGates({ gates, answers, onChange }: {
                 {g.why && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginBottom: 6 }}>{g.why}</div>}
                 {g.inputType === 'select' && g.options?.length ? (
                   <>
-                    <select value={answers[g.id] ?? ''} onChange={(e) => onChange(g.id, e.target.value)} style={{ width: '100%', fontFamily: 'Inter, sans-serif', fontSize: 13, borderRadius: 12, border: `1px solid ${LINE}`, padding: '10px 11px', background: '#fff' }}>
-                      <option value="">Choose…</option>
-                      {g.options.map((o) => <option key={o} value={o}>{o}</option>)}
-                    </select>
+                    {/* Tappable rows, not a native select. Every option is readable at once,
+                        which matters when one of them blocks the order: an owner should be
+                        able to see the honest "no" without opening a menu to find it. Also
+                        a far bigger tap target on a phone, where this is mostly used. */}
+                    <div role="radiogroup" aria-label={g.title} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                      {g.options.map((o) => {
+                        const picked = (answers[g.id] ?? '') === o
+                        const blocks = g.blockOn === o
+                        return (
+                          <button
+                            key={o} type="button" role="radio" aria-checked={picked}
+                            onClick={() => onChange(g.id, picked ? '' : o)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+                              borderRadius: 13, padding: '11px 12px', cursor: 'pointer', font: 'inherit',
+                              border: picked ? `1.5px solid ${blocks ? '#e0a13a' : MINT}` : `1px solid ${LINE}`,
+                              background: picked ? (blocks ? '#fdf6e9' : '#f2fbf8') : '#fff',
+                            }}
+                          >
+                            <span style={{
+                              width: 18, height: 18, borderRadius: 99, flexShrink: 0,
+                              border: picked ? 'none' : `1.5px solid ${LINE}`,
+                              background: picked ? (blocks ? '#e0a13a' : MINT) : '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              {picked && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+                            </span>
+                            <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: picked ? 600 : 500, color: INK }}>{o}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                     {/* Asset check answered with the blocking option: say why, and give the honest
                         detour. The pay button stays locked; nothing is ever charged on this answer. */}
                     {g.blockOn && (answers[g.id] ?? '') === g.blockOn && (
