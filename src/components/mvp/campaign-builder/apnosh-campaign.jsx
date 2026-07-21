@@ -4404,7 +4404,7 @@ function ItemGates({ state, open, onToggle, answers, onAnswer }) {
           the panel never opens. That shipped: the row said "1 question before you order",
           the cart stayed locked, and Answer did nothing, which made the paid lane
           unorderable. Same for the option rows below. */}
-      <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="apnpress" style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
+      <button type="button" onClick={(e) => { e.stopPropagation(); onToggle(); }} className="apnpress" style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
         <span style={{ fontSize: 13, flexShrink: 0 }}>{done ? "\u2713" : "\u26A0"}</span>
         <span style={{ flex: 1, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: tone.ink }}>
           {done ? "Answered" : `${unanswered || 1} question${(unanswered || 1) > 1 ? "s" : ""} before you order`}
