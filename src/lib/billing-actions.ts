@@ -375,6 +375,12 @@ export interface InvoiceLineInput {
   unitAmountDollars: number
   productId?: string       // optional -- references products.id
   serviceCategory?: 'reel' | 'website' | 'gbp' | 'addon' | 'custom'
+  /**
+   * Set when this line is being GIVEN AWAY: the price it would normally carry, with
+   * unitAmountDollars at 0. A bare $0 line reads like a mistake on an invoice; saying
+   * what it is worth is what makes it land as a gift. Never billed, only described.
+   */
+  compedFromDollars?: number
 }
 
 export async function createOneTimeInvoice(args: {
@@ -409,8 +415,16 @@ export async function createOneTimeInvoice(args: {
   if (args.lines.length === 0) {
     return { success: false, error: 'Invoice must have at least one line item' }
   }
-  if (args.lines.some(l => !l.description || l.unitAmountDollars <= 0 || l.quantity < 1)) {
-    return { success: false, error: 'Every line needs a description, positive price, and quantity \u2265 1' }
+  // $0 is ALLOWED and meaningful: it is how a comped item appears on the invoice as
+  // a real line the client can see, priced at nothing. Rejecting it forced admins to
+  // bill a penny for something they meant to give away, which reads worse to the
+  // client than the gift it actually was. Negatives are still refused: a credit is a
+  // different instrument (a discount or a credit note), not a negative line.
+  if (args.lines.some(l => !l.description || l.unitAmountDollars < 0 || l.quantity < 1)) {
+    return { success: false, error: 'Every line needs a description, a price of $0 or more, and quantity \u2265 1' }
+  }
+  if (args.lines.every(l => l.unitAmountDollars === 0)) {
+    return { success: false, error: 'Every line is $0, so there is nothing to invoice. Send this as a note instead.' }
   }
 
   const admin = getAdminSupabase()
@@ -487,16 +501,26 @@ export async function createOneTimeInvoice(args: {
 
     // Step 2: attach each line item.
     for (const line of args.lines) {
+      // A comped line is billed at zero but SAYS so, with the value it would have
+      // carried. Stripe cannot strike text through, so the words do that job.
+      const comped = line.unitAmountDollars === 0 && (line.compedFromDollars ?? 0) > 0
+      const description = comped
+        ? `${line.description} (included at no charge, normally $${(line.compedFromDollars as number).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })})`
+        : line.description
       await stripe.invoiceItems.create({
         customer: bc.stripe_customer_id,
         invoice: invoice.id,
-        description: line.description,
+        description,
         quantity: line.quantity,
         unit_amount: dollarsToCents(line.unitAmountDollars),
         currency: 'usd',
         metadata: {
           product_id: line.productId ?? '',
           service_category: line.serviceCategory ?? 'custom',
+          // Recorded so revenue reporting can tell a genuine $0 line from a gift,
+          // and so the value given away is auditable later.
+          comped: comped ? 'true' : '',
+          comped_from_cents: comped ? String(dollarsToCents(line.compedFromDollars as number)) : '',
         },
       })
     }
@@ -579,8 +603,33 @@ export async function createOneTimeInvoice(args: {
       else await stripe.invoices.del(createdInvoiceId).then(() => undefined, () => undefined)
     }
     const msg = err instanceof Error ? err.message : 'Failed to create invoice'
-    return { success: false, error: msg }
+    return { success: false, error: explainStripeError(msg) }
   }
+}
+
+/**
+ * Turn Stripe's raw error into something an admin can act on.
+ *
+ * "No such customer: cus_..." is the one that costs the most time, because it looks
+ * like corrupt data and is almost never that. A Stripe customer id belongs to ONE
+ * account in ONE mode, so the usual cause is that the keys were switched (live to
+ * test, or between accounts) while the stored ids were created under the old ones.
+ *
+ * We deliberately do NOT auto-create a replacement customer. In test mode that would
+ * hand back a cheerful "invoice sent" for an invoice that can never take real money,
+ * which is a worse failure than this one: it fails silently, and later.
+ */
+function explainStripeError(msg: string): string {
+  if (/no such customer/i.test(msg)) {
+    return 'This client\'s saved Stripe customer does not exist in the Stripe account the app is currently using. '
+      + 'That normally means the Stripe keys were switched (live to test, or to a different account) after the customer was saved. '
+      + 'Check which mode you are in, then either put the matching keys back or re-run "Set up Stripe billing" for this client to create a customer in the current mode. '
+      + `(${msg})`
+  }
+  if (/no such (price|product|coupon)/i.test(msg)) {
+    return `That item does not exist in the Stripe account currently in use, which usually means a keys or mode mismatch. (${msg})`
+  }
+  return msg
 }
 
 // ---------------------------------------------------------------------------
