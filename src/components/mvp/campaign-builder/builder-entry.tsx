@@ -33,7 +33,7 @@ type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
 type PlanPayload = { itemId: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft) => Promise<boolean> }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft, gateAnswers?: Record<string, string>) => Promise<boolean> }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -132,7 +132,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   const [analyzing, setAnalyzing] = useState(false)
   // The checkout overlay (charge-at-checkout): holds the draft while the owner pays. Shared by the cart
   // (pre-merged draft, no producer map) AND single-campaign Buy now (carries producerChoices + recall).
-  const [checkout, setCheckout] = useState<{ draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; recall?: { goalId: string; vals: Record<string, unknown> } | null } | null>(null)
+  const [checkout, setCheckout] = useState<{ draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; gateAnswers?: Record<string, string>; recall?: { goalId: string; vals: Record<string, unknown> } | null } | null>(null)
 
   // Real signals for the product page's "why this, for you" line. Same instant-first
   // pattern as the rec cache: last bundle renders immediately from localStorage, a
@@ -416,9 +416,10 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   // charge the campaign ships (saveAndShip, inside CampaignCheckout), the plan clears, and the
   // owner lands on the new campaign's "Get it ready" page. Returning true just means the checkout
   // page opened — the store covers itself while it's up.
-  const onCheckout = async (draft: CampaignDraft): Promise<boolean> => {
+  const onCheckout = async (draft: CampaignDraft, gateAnswers?: Record<string, string>): Promise<boolean> => {
     if (!client?.id) return false
-    setCheckout({ draft })
+    // Carry the cart's answers so checkout does not ask the same question twice.
+    setCheckout({ draft, gateAnswers })
     return true
   }
 
@@ -480,6 +481,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         <CampaignCheckout
           clientId={client.id}
           draft={checkout.draft}
+          initialGateAnswers={checkout.gateAnswers}
           producerChoices={checkout.producerChoices}
           restaurant={client.name || 'your restaurant'}
           onSuccess={(id, dest) => {
