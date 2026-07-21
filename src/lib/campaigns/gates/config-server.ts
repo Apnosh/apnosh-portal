@@ -58,5 +58,22 @@ export async function resolveGatesForDraft(draft: Pick<CampaignDraft, 'items' | 
     getGatesConfig(draft.sourceCatalogId),
     assetFactsForClient(opts?.clientId),
   ])
-  return resolveGates(draft, config, facts)
+  const gates = resolveGates(draft, config, facts)
+
+  // An asset gate protects a PURCHASE. It exists so we never take money for work that
+  // cannot be delivered, and so a plan does not ship to a team that will be blocked.
+  //
+  // An owner-run plan is neither. Nothing is charged, no work order is minted, and the
+  // owner does the work themselves against their own systems. If it turns out they have
+  // no ordering page, they find that out in a minute at no cost, which is exactly what
+  // self-serve is for. Asking them to qualify first is a checkout question with no
+  // checkout behind it.
+  //
+  // So: when every line the owner is buying is owner-run, the asset gates drop. Custom
+  // gates set by an admin stay, since those are deliberate per-campaign asks, and the
+  // booking gate stays because a shoot is a real appointment either way.
+  const live = (draft.items ?? []).filter((it) => it.included && !it.optOut)
+  const allOwnerRun = live.length > 0 && live.every((it) => it.producer === 'diy')
+  if (!allOwnerRun) return gates
+  return { ...gates, custom: gates.custom.filter((g) => !g.id.startsWith('asset-')) }
 }
