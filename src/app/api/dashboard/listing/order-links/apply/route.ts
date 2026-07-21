@@ -22,6 +22,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { listPlaceActionLinks, savePlaceActionLinks, type PlaceActionType } from '@/lib/gbp-place-actions'
 import { diagnoseOrderLinks, validateOwnUrl, OWNABLE_TYPES } from '@/lib/campaigns/order-links'
 
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
   const body = await req.json().catch(() => null) as
-    { orderingLink?: string; bookingLink?: string; dryRun?: boolean; takeoverTakeoutAndDelivery?: boolean } | null
+    { orderingLink?: string; bookingLink?: string; dryRun?: boolean; takeoverTakeoutAndDelivery?: boolean; campaignId?: string } | null
   if (!body) return NextResponse.json({ error: 'Bad request' }, { status: 400 })
 
   // Default to a dry run. Writing to a live listing has to be asked for.
@@ -156,10 +157,27 @@ export async function POST(req: NextRequest) {
       return { button: p.button, wanted: p.to, now: now?.uri ?? null, ok: now?.uri === p.to }
     })
 
+  const allOk = verified.every((v) => v.ok)
+
+  // Stamp the campaign task done, but ONLY on a verified read-back. Stamping on "the
+  // request did not throw" is what makes a progress bar lie, and this write path had
+  // exactly that bug an hour ago. Server-written, not in the owner PATCH whitelist.
+  const campaignId = typeof (body as { campaignId?: string }).campaignId === 'string' ? (body as { campaignId?: string }).campaignId : null
+  if (allOk && campaignId && /^[A-Za-z0-9-]{1,64}$/.test(campaignId)) {
+    try {
+      const admin = createAdminClient()
+      const { data } = await admin.from('campaigns').select('execution').eq('id', campaignId).eq('client_id', clientId).maybeSingle()
+      const exec = ((data as { execution?: Record<string, unknown> } | null)?.execution ?? {}) as Record<string, unknown>
+      await admin.from('campaigns')
+        .update({ execution: { ...exec, orderButtonsFixedAt: new Date().toISOString() } })
+        .eq('id', campaignId).eq('client_id', clientId)
+    } catch { /* the buttons are live either way; the stamp is bookkeeping */ }
+  }
+
   return NextResponse.json({
     dryRun: false,
     applied: true,
-    verified: verified.every((v) => v.ok),
+    verified: allOk,
     checks: verified,
     headlineAfter: readAfter.headline,
     cannotChange,

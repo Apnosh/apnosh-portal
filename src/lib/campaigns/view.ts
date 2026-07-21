@@ -101,6 +101,11 @@ export interface CampaignExecution {
    *  full, successful, every-section-good read. NOT in the owner PATCH whitelist, so it
    *  cannot be forged or cleared through the API — same guarantee as wrapUpSentAt. */
   gbpFixedAt?: string
+  /** ISO stamp: the owner's Google order buttons went live and read back correct. Written
+   *  by the apply route after it verifies against a fresh listing read, never on the
+   *  strength of a request that did not throw. Not in the owner PATCH whitelist, so it
+   *  cannot be forged: the same guarantee as gbpFixedAt. */
+  orderButtonsFixedAt?: string
   /** ISO stamp: the completion sweep sent the owner's wrap-up letter. System-written
    *  (cron via admin client); NOT in the owner PATCH whitelist, so it cannot be forged
    *  or cleared through the API. */
@@ -197,6 +202,10 @@ export function ownerSetupComplete(s: SavedCampaign): boolean {
   // diagnosis stamps execution.gbpFixedAt.
   const diyGbp = (d.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'gbp-setup' && it.producer === 'diy')
   if (diyGbp) need.push(filled(ex.gbpFixedAt))
+  // Same rule for the owner-run Google button lanes: the deliverable IS the owner
+  // pointing their buttons, so the campaign needs them until the write verified.
+  const diyOrder = (d.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'google-food-order' && it.producer === 'diy')
+  if (diyOrder) need.push(filled(ex.orderButtonsFixedAt))
   return need.every(Boolean)
 }
 

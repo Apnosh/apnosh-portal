@@ -3649,13 +3649,13 @@ const GBP_DOER_SELF = "done by you yourself, step by step, free";
 const GBP_DOER_AI = "done with Apnosh AI, step by step, free";
 const GBP_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.gbp && ITEM_PRICES.gbp.oneTime) || 365}`;
 
-// The "Smooth out ordering" card's lanes. TWO, not three, and the missing one is deliberate:
-// the AI lane has no walkthrough to land in yet. Picking it would bill $0 (planItemMoney) and
-// mint no work order (producer 'diy'), then hand the owner a post-ship task pointing at a
-// surface that does not exist. A free lane that leads nowhere is worse than no lane, so the
-// AI option goes in when its walkthrough does. Same load-bearing tokens as the gbp lanes:
-// "yourself" => diy, plain "Apnosh" => the done-for-you team lane.
+// The "Smooth out ordering" card's lanes. The AI option was deliberately absent until it
+// had a walkthrough to land in; /dashboard/order-buttons is that surface now, so all three
+// are real. AI reads the live listing, lays out the owner's actual options, then writes and
+// reads back to prove it took. Same load-bearing tokens as the gbp lanes: "yourself" => diy,
+// "Apnosh AI" => the ai lane, plain "Apnosh" => the done-for-you team lane.
 const ORDER_DOER_SELF = "done by you yourself, step by step, free";
+const ORDER_DOER_AI = "done with Apnosh AI, step by step, free";
 const ORDER_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.friction && ITEM_PRICES.friction.oneTime) || 165}`;
 
 const QL = {
@@ -3683,7 +3683,7 @@ const QL = {
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
   gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_SELF, GBP_DOER_AI, GBP_DOER_APNOSH] } } },
   reviewsreply: { lead: "Reply to {which} reviews.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] } } },
-  friction: { lead: "Make {channel} easier for guests, {doer}.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] }, doer: { k: "pick", label: "Who does it", v: ORDER_DOER_APNOSH, o: [ORDER_DOER_SELF, ORDER_DOER_APNOSH] } } },
+  friction: { lead: "Make {channel} easier for guests, {doer}.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] }, doer: { k: "pick", label: "Who does it", v: ORDER_DOER_APNOSH, o: [ORDER_DOER_SELF, ORDER_DOER_AI, ORDER_DOER_APNOSH] } } },
   listings: { lead: "Get {where} listed and synced.", slots: { where: { k: "multi", v: ["Yelp", "Apple Maps"], o: ["Yelp", "Apple Maps", "Bing", "TripAdvisor", "Facebook"] } } },
   website: { lead: "Fix {what} on your site.", slots: { what: { k: "multi", v: ["the menu", "speed"], o: ["the menu", "speed", "buttons and links", "photos", "hours"] } } },
   localseo: { lead: "Show up when neighbors search {term}.", slots: { term: { k: "text", v: "food near me", ph: "e.g. korean bbq near me" } } },

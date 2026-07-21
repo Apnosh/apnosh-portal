@@ -106,7 +106,7 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
     try {
       const res = await fetch('/api/dashboard/listing/order-links/apply', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderingLink: ordering, bookingLink: booking, dryRun }),
+        body: JSON.stringify({ orderingLink: ordering, bookingLink: booking, dryRun, campaignId }),
       })
       const body = await res.json()
       if (!res.ok) { setErr(body?.error ?? 'That did not work.'); return }
