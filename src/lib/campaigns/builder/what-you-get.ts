@@ -90,6 +90,25 @@ function orderBaseRows(version: WhatYouGetSelection['version']): string[] {
   return baseRows('friction')
 }
 
+/** Reply-to-reviews, framed by lane. Unlike gbp and friction this one never "finishes": new
+ *  reviews keep arriving, so the free and AI lanes promise a pass over what is waiting today
+ *  and the team lane is the only one that keeps going. Saying otherwise would sell a
+ *  subscription as a one-off. */
+function reviewsBaseRows(version: WhatYouGetSelection['version']): string[] {
+  if (version === 'diy') return [
+    'We show you every review still waiting on a reply, worst first',
+    'You write and post each one on Google yourself',
+    'Mark it done when you have caught up',
+  ]
+  if (version === 'ai') return [
+    'We show you every review still waiting on a reply, worst first',
+    'We draft each reply in your voice for you to edit',
+    'You approve, and we post it to Google and prove it posted',
+  ]
+  // team (done-for-you) is the default lane, and the only one that keeps running.
+  return baseRows('reviewsreply')
+}
+
 /** The item's own deliverables, unversioned — the pre-selection base list (today's behavior). */
 function baseRows(itemId: string): string[] {
   const goalId = SYSTEM_ALIAS[itemId] ?? itemId
@@ -155,6 +174,7 @@ export function whatYouGet(itemId: string, sel: WhatYouGetSelection = {}): WhatY
   // BASE — framed by version for gbp (the only versioned card today), else the plain list.
   const base = itemId === 'gbp' ? gbpBaseRows(sel.version)
     : itemId === 'friction' ? orderBaseRows(sel.version)
+    : itemId === 'reviewsreply' ? reviewsBaseRows(sel.version)
     : baseRows(itemId)
   sections.push({ rows: base })
 

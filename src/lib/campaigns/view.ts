@@ -112,6 +112,15 @@ export interface CampaignExecution {
    *  facts, and one field holding both would let a self-claim read as verification. This one
    *  IS owner-writable, because self-serve closes on their say-so. */
   orderButtonsSelfDoneAt?: string
+  /** ISO stamp: the owner caught up on review replies through the AI walkthrough. Written
+   *  server-side only after a reply actually posted to Google, so like orderButtonsFixedAt
+   *  it means "we did it and Google took it", not "a request did not throw". NOT in the
+   *  owner PATCH whitelist. */
+  reviewRepliesDoneAt?: string
+  /** ISO stamp: the owner said they replied to their reviews THEMSELVES, on the free lane.
+   *  Separate field from reviewRepliesDoneAt for the same reason as the order buttons:
+   *  claimed and proven are different facts. Owner-writable. */
+  reviewRepliesSelfDoneAt?: string
   /** ISO stamp: the completion sweep sent the owner's wrap-up letter. System-written
    *  (cron via admin client); NOT in the owner PATCH whitelist, so it cannot be forged
    *  or cleared through the API. */

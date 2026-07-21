@@ -23,14 +23,9 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import { ExternalLink, Lock, Check, AlertCircle, Loader2, ArrowRight, ArrowLeft, Sparkles } from 'lucide-react'
+import { ExternalLink, Lock, Check, AlertCircle, Loader2, ArrowRight } from 'lucide-react'
+import { C, SaysLabel, Panel, Progress, H, Fine, Says, Section, Row, Field, Note, Bad, Loading, Next, Nav, ActionCard, pretty } from './walkthrough-kit'
 
-const C = {
-  green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
-  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2',
-  line: '#e6e6ea', bg: '#f5f5f7',
-  red: '#c0564f', redSoft: '#fdeeee', amber: '#e0a13a', amberSoft: '#fdf6e9',
-}
 
 interface Link { type: string; label: string; uri: string; goesTo: string | null }
 interface Proposal { type: string; label: string; proposed: string | null; provider: string | null; because: string | null }
@@ -74,15 +69,6 @@ function fallbackPaths(read: Read): AdvicePath[] {
   return out
 }
 
-/** A link as a person reads one: the site, not the tracking soup. */
-function pretty(uri: string | null): string {
-  if (!uri) return 'nothing set'
-  try {
-    const u = new URL(uri)
-    const path = u.pathname === '/' ? '' : u.pathname
-    return u.hostname.replace(/^www\./, '') + (path.length > 20 ? path.slice(0, 20) + '…' : path)
-  } catch { return uri.slice(0, 36) }
-}
 
 export default function OrderButtons({ campaignId }: { campaignId?: string }) {
   const [step, setStep] = useState(0)
@@ -94,7 +80,6 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
   const [planNote, setPlanNote] = useState<string | null>(null)
   const [busy, setBusy] = useState<'preview' | 'apply' | null>(null)
   const [advice, setAdvice] = useState<Advice | null>(null)
-  const [openPath, setOpenPath] = useState<number | null>(null)
   const [adviceState, setAdviceState] = useState<'idle' | 'loading' | 'locked' | 'none'>('idle')
   const [err, setErr] = useState<string | null>(null)
   const [done, setDone] = useState<{ verified: boolean; checks: { button: string; ok: boolean }[] } | null>(null)
@@ -152,7 +137,7 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
 
   return (
     <Panel>
-      <Progress step={step} />
+      <Progress steps={STEPS} step={step} />
 
       {/* 1 ── what is true today. Read-only on purpose: the owner should understand the
               situation before being asked to do anything about it. */}
@@ -212,26 +197,7 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
                 {advice?.startHere
                   || (ordering ? 'Not sure that is the best link? Here are your options.' : 'Do not have one? Here is where owners like you usually get one.')}
               </Fine>
-              {/* Action first. The owner is standing in their kitchen deciding what to DO, so the
-                  headline is the move, and the reasoning waits behind a tap for the one owner in
-                  ten who wants it. The old card led with a label and three sentences of context,
-                  which read as an essay and buried the one line that mattered. */}
-              {shownPaths.map((p, i) => {
-                const open = openPath === i
-                return (
-                  <div key={i} style={{ background: '#fff', borderRadius: 11, padding: '11px 12px', marginBottom: 7 }}>
-                    <div style={{ fontSize: 14, fontWeight: 650, color: C.ink, lineHeight: 1.4 }}>{p.action}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
-                      <Chip>{p.cost}</Chip>
-                      <button type="button" onClick={() => setOpenPath(open ? null : i)}
-                        style={{ background: 'none', border: 0, padding: 0, fontSize: 12.5, color: C.mute, fontWeight: 600, cursor: 'pointer' }}>
-                        {open ? 'Hide why' : 'Why'}
-                      </button>
-                    </div>
-                    {open && <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, marginTop: 8 }}>{p.body}</div>}
-                  </div>
-                )
-              })}
+              {shownPaths.map((p, i) => <ActionCard key={i} action={p.action} cost={p.cost} why={p.body} />)}
             </div>
           )}
           {adviceState === 'locked' && (
@@ -321,124 +287,18 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
 
 /* ── pieces ───────────────────────────────────────────────────── */
 
-function Panel({ children }: { children: React.ReactNode }) {
-  return <div style={{ padding: '4px 16px 40px', maxWidth: 620, margin: '0 auto', fontFamily: 'Inter, sans-serif' }}>{children}</div>
-}
 
 /** Where you are, and how much is left. The wall version had no sense of progress at all. */
-function Progress({ step }: { step: number }) {
-  return (
-    <div style={{ display: 'flex', gap: 5, margin: '4px 0 16px' }}>
-      {STEPS.map((s, i) => (
-        <div key={s} style={{ flex: 1 }}>
-          <div style={{ height: 3, borderRadius: 2, background: i <= step ? C.green : C.line }} />
-          <div style={{ fontSize: 10.5, fontWeight: 600, color: i === step ? C.greenDk : C.faint, marginTop: 4 }}>{s}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
 
-function H({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 17.5, fontWeight: 650, color: C.ink, lineHeight: 1.35, marginBottom: 10 }}>{children}</div>
-}
 
-function Fine({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
-  return <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5, marginBottom: 8, ...style }}>{children}</div>
-}
 
-function SaysLabel({ generic }: { generic?: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 7 }}>
-      <Sparkles size={12} /> {generic ? 'Your options' : 'Apnosh AI says'}
-    </div>
-  )
-}
 
-function Says({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ background: C.greenSoft, borderRadius: 13, padding: '11px 13px', marginBottom: 14 }}>
-      <SaysLabel />
-      <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{children}</div>
-    </div>
-  )
-}
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 7 }}>{title}</div>
-      {children}
-    </div>
-  )
-}
 
-function Row({ label, value, tone, hint }: { label: string; value: string; tone: 'ok' | 'warn' | 'empty'; hint?: string }) {
-  const dot = tone === 'warn' ? C.amber : tone === 'empty' ? C.faint : C.green
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 0', borderBottom: `1px solid ${C.line}` }}>
-      <span style={{ width: 7, height: 7, borderRadius: 99, background: dot, flexShrink: 0 }} />
-      <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, minWidth: 92 }}>{label}</span>
-      <span style={{ fontSize: 13, color: tone === 'empty' ? C.faint : C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-        {value}{hint ? ` · ${hint}` : ''}
-      </span>
-    </div>
-  )
-}
 
-function Field({ label, help, value, onChange, found }: { label: string; help?: string; value: string; onChange: (v: string) => void; found: string | null }) {
-  return (
-    <div style={{ marginBottom: 14 }}>
-      <label style={{ display: 'block', fontSize: 13, fontWeight: 650, color: C.ink, marginBottom: help ? 3 : 6 }}>{label}</label>
-      {help && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginBottom: 6 }}>{help}</div>}
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="https://"
-        style={{ width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `1px solid ${C.line}`, padding: '11px 12px', fontSize: 14, color: C.ink, font: 'inherit' }} />
-      {found && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.greenDk, marginTop: 5 }}>
-          <Check size={11} /> {found}
-        </div>
-      )}
-    </div>
-  )
-}
 
-function Chip({ children, tone }: { children: React.ReactNode; tone?: 'ink' }) {
-  return (
-    <span style={{ display: 'inline-block', borderRadius: 8, padding: '3px 8px', fontSize: 11.5, lineHeight: 1.4, fontWeight: 600,
-      background: tone === 'ink' ? '#f2f2f4' : C.greenSoft, color: tone === 'ink' ? C.ink : C.greenDk }}>{children}</span>
-  )
-}
 
-function Note({ children }: { children: React.ReactNode }) {
-  return <div style={{ background: C.amberSoft, borderRadius: 12, padding: '11px 13px', fontSize: 13, color: C.ink, lineHeight: 1.5, marginBottom: 14 }}>{children}</div>
-}
 
-function Bad({ children }: { children: React.ReactNode }) {
-  return <div style={{ background: C.redSoft, borderRadius: 12, padding: '11px 13px', fontSize: 13, color: C.red, lineHeight: 1.5, margin: '12px 0' }}>{children}</div>
-}
 
-function Loading({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.mute, fontSize: 13.5, margin: '12px 0' }}><Loader2 size={14} className="mvp-spin" /> {children}</div>
-}
 
-function Next({ children, onClick, disabled }: { children: React.ReactNode; onClick: () => void; disabled?: boolean }) {
-  const on = !disabled
-  return (
-    <button onClick={onClick} disabled={disabled} style={{
-      flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, border: 'none', borderRadius: 12,
-      padding: '13px 16px', fontSize: 14.5, fontWeight: 650, font: 'inherit', marginTop: 4,
-      background: on ? C.green : C.line, color: on ? '#fff' : C.faint, cursor: on ? 'pointer' : 'default',
-    }}>{children}</button>
-  )
-}
 
-function Nav({ onBack, children }: { onBack: () => void; children: React.ReactNode }) {
-  return (
-    <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: 5, border: `1px solid ${C.line}`, background: '#fff', borderRadius: 12, padding: '13px 15px', fontSize: 13.5, color: C.mute, cursor: 'pointer', font: 'inherit', marginTop: 4 }}>
-        <ArrowLeft size={14} /> Back
-      </button>
-      {children}
-    </div>
-  )
-}

@@ -3649,6 +3649,14 @@ const GBP_DOER_SELF = "done by you yourself, step by step, free";
 const GBP_DOER_AI = "done with Apnosh AI, step by step, free";
 const GBP_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.gbp && ITEM_PRICES.gbp.oneTime) || 365}`;
 
+// The "Reply to reviews" card's lanes. Same three-lane shape as gbp and friction, but the
+// Apnosh lane is a MONTHLY service, not a one-time fix: replying to reviews never finishes.
+// The price string says so, because "$165" next to a recurring line reads as one-time and
+// that is the kind of surprise that ends a subscription.
+const REVIEW_DOER_SELF = "done by you yourself, step by step, free";
+const REVIEW_DOER_AI = "done with Apnosh AI, step by step, free";
+const REVIEW_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.reviewsreply && ITEM_PRICES.reviewsreply.perMonth) || 165} a month`;
+
 // The "Smooth out ordering" card's lanes. The AI option was deliberately absent until it
 // had a walkthrough to land in; /dashboard/order-buttons is that surface now, so all three
 // are real. AI reads the live listing, lays out the owner's actual options, then writes and
@@ -3682,7 +3690,7 @@ const QL = {
   earlyaccess: { lead: "Give subscribers early access to {what}, {timing} before everyone.", slots: { what: { k: "multi", v: ["new menu items"], o: ["new menu items", "events", "specials", "reservations"] }, timing: { k: "pick", v: "a few days", o: ["a day", "a few days", "a week"] } } },
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
   gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_SELF, GBP_DOER_AI, GBP_DOER_APNOSH] } } },
-  reviewsreply: { lead: "Reply to {which} reviews.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] } } },
+  reviewsreply: { lead: "Reply to {which} reviews, {doer}.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] }, doer: { k: "pick", label: "Who does it", v: REVIEW_DOER_APNOSH, o: [REVIEW_DOER_SELF, REVIEW_DOER_AI, REVIEW_DOER_APNOSH] } } },
   friction: { lead: "Make {channel} easier for guests, {doer}.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] }, doer: { k: "pick", label: "Who does it", v: ORDER_DOER_APNOSH, o: [ORDER_DOER_SELF, ORDER_DOER_AI, ORDER_DOER_APNOSH] } } },
   listings: { lead: "Get {where} listed and synced.", slots: { where: { k: "multi", v: ["Yelp", "Apple Maps"], o: ["Yelp", "Apple Maps", "Bing", "TripAdvisor", "Facebook"] } } },
   website: { lead: "Fix {what} on your site.", slots: { what: { k: "multi", v: ["the menu", "speed"], o: ["the menu", "speed", "buttons and links", "photos", "hours"] } } },

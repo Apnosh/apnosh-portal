@@ -93,6 +93,33 @@ export function deriveServiceNeeds(
         })
   }
 
+  // The owner-run lanes of the review-reply card. Same two-task shape as the order buttons
+  // above, with one difference that matters: replying to reviews never FINISHES. New reviews
+  // keep arriving. So "done" here means caught up on what was waiting, not solved forever,
+  // and the copy says so rather than implying the job is closed.
+  const reviewLine = (campaign.draft.items ?? []).find((it) => it.included && !it.optOut && it.serviceId === 'review-responses' && it.producer === 'diy')
+  if (reviewLine) {
+    const isAi = reviewLine.ownerMode === 'ai'
+    push(isAi
+      ? {
+          id: 'review-replies', kind: 'action', group: 'Content',
+          title: 'Reply to the reviews still waiting',
+          why: 'We show you every review with no reply yet, worst first, and draft each one in your voice. Nothing posts until you say yes.',
+          actionLabel: exec.reviewRepliesDoneAt ? 'Open' : 'Start',
+          href: `/dashboard/review-replies?campaignId=${campaign.draft.id}`,
+          done: !!exec.reviewRepliesDoneAt,
+        }
+      : {
+          id: 'review-replies-self', kind: 'action', group: 'Content',
+          title: 'Reply to your unanswered reviews',
+          why: 'Open your reviews on Google, reply to the ones still waiting, then mark this done.',
+          actionLabel: 'Open Google',
+          href: 'https://business.google.com/reviews',
+          done: !!(exec.reviewRepliesSelfDoneAt || exec.reviewRepliesDoneAt),
+          markDoneField: 'reviewRepliesSelfDoneAt',
+        })
+  }
+
   // ── playbook-driven needs: everything the TEAM's own checklist starts with ──
   // Each service's playbook (service-playbooks.ts) opens with a client intake step whose
   // needsInput names what only the owner can give: Manager access, site and delivery logins,
@@ -142,7 +169,9 @@ export function deriveServiceNeeds(
       }
     }
     // Asks the playbook words inside a broader intake step (no dedicated needsInput key):
-    if (id === 'review-responses') {
+    // Only the TEAM lane needs this: it briefs a human writer. On the owner-run lanes the
+    // owner IS the voice, so asking them to describe it to themselves is noise.
+    if (id === 'review-responses' && !reviewLine) {
       push({ id: 'brand-voice', kind: 'input', group: 'Content', field: 'brandVoice', inputType: 'textarea', title: 'How should your replies sound?', why: 'We write every reply in your voice. Tell us the words to use and the words to never use.', placeholder: 'e.g. warm and casual. Always thank them by name. Never blame staff.', value: exec.brandVoice ?? '', done: !!exec.brandVoice })
     }
     if (id === 'site-menu') {
