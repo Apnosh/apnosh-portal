@@ -4398,7 +4398,7 @@ function ItemGates({ state, open, onToggle, answers, onAnswer }) {
     ? { bg: "#fdf6e9", line: "#f0dfb8", ink: "#854f0b" }
     : { bg: "#f2fbf8", line: "#cdeae0", ink: TOKENS.mintDark };
   return (
-    <div style={{ background: tone.bg, border: `1px solid ${tone.line}`, borderRadius: 14, padding: open ? "11px 13px 13px" : "10px 13px", margin: "-6px 0 12px" }}>
+    <div style={{ background: tone.bg, borderTop: `1px solid ${tone.line}`, padding: open ? "10px 13px 13px" : "9px 13px" }}>
       <button onClick={onToggle} className="apnpress" style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
         <span style={{ fontSize: 13, flexShrink: 0 }}>{done ? "\u2713" : "\u26A0"}</span>
         <span style={{ flex: 1, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: tone.ink }}>
@@ -4440,7 +4440,7 @@ function ItemGates({ state, open, onToggle, answers, onAnswer }) {
   );
 }
 
-function PlanItemCard({ it, tier, leaving, onOpen, onRemove, rush, rushed, onToggleRush }) {
+function PlanItemCard({ it, tier, leaving, onOpen, onRemove, rush, rushed, onToggleRush, gates }) {
   const p = catGet(it.itemId) || { title: it.itemId, type: "task" };
   const money = planItemMoney(it);
   const versioned = doerSlotFor(it.itemId) && it.doer;
@@ -4454,7 +4454,7 @@ function PlanItemCard({ it, tier, leaving, onOpen, onRemove, rush, rushed, onTog
   const canRush = !!rush && del.days != null;
   const arrival = canRush && rushed ? `Ready by around ${etaDateLabel(Math.max(1, del.days - rush.days))}` : del.text;
   return (
-    <div style={{ position: "relative", background: "#fff", border: `1px solid ${rushed ? TOKENS.mint : TOKENS.line}`, borderRadius: 16, marginTop: 10, boxShadow: "0 1px 2px rgba(20,40,30,0.03)", transition: "transform 240ms ease, opacity 240ms ease", transform: leaving ? "translateX(72%)" : "none", opacity: leaving ? 0 : 1 }}>
+    <div style={{ position: "relative", background: "#fff", border: `1px solid ${rushed ? TOKENS.mint : TOKENS.line}`, borderRadius: 16, overflow: "hidden", marginTop: 10, boxShadow: "0 1px 2px rgba(20,40,30,0.03)", transition: "transform 240ms ease, opacity 240ms ease", transform: leaving ? "translateX(72%)" : "none", opacity: leaving ? 0 : 1 }}>
       {/* the whole card is click-to-edit */}
       <button onClick={onOpen} className="apnpress" style={{ width: "100%", display: "flex", alignItems: "flex-start", gap: 12, background: "none", border: "none", padding: "13px 40px 13px 13px", cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
         <span style={{ width: 46, height: 46, borderRadius: 12, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -4479,6 +4479,10 @@ function PlanItemCard({ it, tier, leaving, onOpen, onRemove, rush, rushed, onTog
           {rushed ? "✓ Getting it faster — tap to undo" : `Get it faster · about ${rush.days} day${rush.days === 1 ? "" : "s"} sooner for +$${rush.fee}`}
         </button>
       )}
+      {/* Required options, INSIDE the card. A separate strip underneath read like a system
+          message about the item; in here it reads as part of the thing being bought, which
+          is what a required option is. */}
+      {gates && <ItemGates {...gates} />}
       {/* simple remove — top-right X */}
       <button onClick={onRemove} aria-label={`Remove ${p.title}`} className="apnpress" style={{ position: "absolute", top: 8, right: 8, width: 26, height: 26, borderRadius: 13, border: "none", background: "rgba(20,35,28,0.05)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7c837e" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
@@ -4649,16 +4653,14 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
         ) : (
           <>
             {items.map((it) => (
-              <div key={it.itemId}>
-                <PlanItemCard it={it} tier={tier} leaving={leaving.has(it.itemId)} rush={itemRush(it.itemId)} rushed={rushed.has(it.itemId)} onToggleRush={() => toggleRush(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
-                <ItemGates
-                  state={gateState(it.itemId)}
-                  open={openGateItem === it.itemId}
-                  onToggle={() => setOpenGateItem(openGateItem === it.itemId ? null : it.itemId)}
-                  answers={gateAnswers}
-                  onAnswer={(gid, v) => setGateAnswers((a) => ({ ...a, [gid]: v }))}
-                />
-              </div>
+              <PlanItemCard key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} rush={itemRush(it.itemId)} rushed={rushed.has(it.itemId)} onToggleRush={() => toggleRush(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)}
+                gates={{
+                  state: gateState(it.itemId),
+                  open: openGateItem === it.itemId,
+                  onToggle: () => setOpenGateItem(openGateItem === it.itemId ? null : it.itemId),
+                  answers: gateAnswers,
+                  onAnswer: (gid, v) => setGateAnswers((a) => ({ ...a, [gid]: v })),
+                }} />
             ))}
             {/* Order summary — Amazon-style: items count, price lines, total, estimated delivery + rush. */}
             <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, padding: "14px 16px 13px", marginTop: 16 }}>
