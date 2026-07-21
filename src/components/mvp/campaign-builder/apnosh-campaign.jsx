@@ -4727,9 +4727,18 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
                 </div>
               )}
             </div>
-            {blocked && (
+            {/* Two different reasons the cart can be locked, and they must say different
+                things. This used to render on `blocked`, which now also covers unanswered
+                questions, so a free plan with one question open was told to upgrade to Pro:
+                wrong reason, wrong fix, and it named a paid lane the cart did not contain. */}
+            {proBlocked && (
               <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "12px 14px", marginTop: 14, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.55 }}>
                 Apnosh AI is on the Pro plan. <a href="/dashboard/billing" style={{ color: "#854f0b", fontWeight: 700 }}>Upgrade to Pro</a>, or tap the item to pick another version, or remove it.
+              </div>
+            )}
+            {!proBlocked && anyGateOpen && (
+              <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "12px 14px", marginTop: 14, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.55 }}>
+                Answer the question on your item above to place this order.
               </div>
             )}
           </>
