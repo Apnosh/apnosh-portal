@@ -71,6 +71,25 @@ function gbpBaseRows(version: WhatYouGetSelection['version']): string[] {
   return [`We fix all ${gbpPartCount()} parts of your profile`, 'We recheck it and show you what changed']
 }
 
+/** The Google order-button card's base rows, framed by lane. The card's own deliverables
+ *  describe the DONE-FOR-YOU job ("a test order run all the way through"), which is a promise
+ *  nobody keeps on a lane where the owner does the work themselves. Same treatment gbp already
+ *  had, and the same reason: a lane must describe what THAT lane does. */
+function orderBaseRows(version: WhatYouGetSelection['version']): string[] {
+  if (version === 'diy') return [
+    'We show you exactly which buttons to change, and where',
+    'You set them on Google yourself, at your own pace',
+    'Mark it done when your links are live',
+  ]
+  if (version === 'ai') return [
+    'We read your listing and tell you where the buttons go today',
+    'We fill in your own ordering and booking links for you to confirm',
+    'We set them on Google and read it back to prove it took',
+  ]
+  // team (done-for-you) is the default lane.
+  return baseRows('friction')
+}
+
 /** The item's own deliverables, unversioned — the pre-selection base list (today's behavior). */
 function baseRows(itemId: string): string[] {
   const goalId = SYSTEM_ALIAS[itemId] ?? itemId
@@ -134,7 +153,9 @@ export function whatYouGet(itemId: string, sel: WhatYouGetSelection = {}): WhatY
   const sections: WhatYouGetSection[] = []
 
   // BASE — framed by version for gbp (the only versioned card today), else the plain list.
-  const base = itemId === 'gbp' ? gbpBaseRows(sel.version) : baseRows(itemId)
+  const base = itemId === 'gbp' ? gbpBaseRows(sel.version)
+    : itemId === 'friction' ? orderBaseRows(sel.version)
+    : baseRows(itemId)
   sections.push({ rows: base })
 
   // ADDED — one group per selected option, from the option service's real deliverables.

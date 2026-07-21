@@ -106,6 +106,12 @@ export interface CampaignExecution {
    *  strength of a request that did not throw. Not in the owner PATCH whitelist, so it
    *  cannot be forged: the same guarantee as gbpFixedAt. */
   orderButtonsFixedAt?: string
+  /** ISO stamp: the owner said they set their Google order links THEMSELVES, on the free
+   *  self-serve lane. Deliberately a different field from orderButtonsFixedAt, which means
+   *  "we wrote it and re-read the listing to confirm". Claimed and proven are different
+   *  facts, and one field holding both would let a self-claim read as verification. This one
+   *  IS owner-writable, because self-serve closes on their say-so. */
+  orderButtonsSelfDoneAt?: string
   /** ISO stamp: the completion sweep sent the owner's wrap-up letter. System-written
    *  (cron via admin client); NOT in the owner PATCH whitelist, so it cannot be forged
    *  or cleared through the API. */
@@ -196,6 +202,8 @@ export function ownerSetupComplete(s: SavedCampaign): boolean {
   // Left on vendorInfo, this campaign could never reach ready: nothing fills that field
   // for this service any more. The booking link stays optional, since a place with no
   // reservations is a normal case, not a missing answer.
+  // The paid lane needs the link so the team can set it. The owner-run lanes do not: they
+  // are done when the owner says so (free) or when our verified write lands (AI).
   if (svc.has('google-food-order')) need.push(filled(ex.orderingLink))
   // The self-serve Google-profile fix (the gbp card's free version): the campaign's deliverable
   // IS the owner's walkthrough, so the campaign honestly needs them until the fixer's all-good
@@ -205,7 +213,7 @@ export function ownerSetupComplete(s: SavedCampaign): boolean {
   // Same rule for the owner-run Google button lanes: the deliverable IS the owner
   // pointing their buttons, so the campaign needs them until the write verified.
   const diyOrder = (d.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'google-food-order' && it.producer === 'diy')
-  if (diyOrder) need.push(filled(ex.orderButtonsFixedAt))
+  if (diyOrder) need.push(filled(ex.orderButtonsFixedAt) || filled(ex.orderButtonsSelfDoneAt))
   return need.every(Boolean)
 }
 

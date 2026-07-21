@@ -86,7 +86,10 @@ export function deriveServiceNeeds(
           why: 'Open your Google profile, put your own ordering and booking links on the Order and Reserve buttons, then mark this done.',
           actionLabel: 'Open Google',
           href: 'https://business.google.com/edit/l/#lp',
-          done: !!exec.orderButtonsFixedAt,
+          // Self-serve closes on the owner's say-so, so it reads the CLAIMED stamp (and the
+          // verified one too, in case they switched lanes after we had already set it).
+          done: !!(exec.orderButtonsSelfDoneAt || exec.orderButtonsFixedAt),
+          markDoneField: 'orderButtonsSelfDoneAt',
         })
   }
 

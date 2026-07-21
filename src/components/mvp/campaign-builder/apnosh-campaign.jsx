@@ -4751,7 +4751,9 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
             <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 700, color: TOKENS.ink, letterSpacing: -0.4 }}>{planMoneyLabel(totalWithFee, anyCreative)}</span>
           </div>
           {/* Honest: Check out goes straight to the payment page; nothing bills until you pay there. */}
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>Includes a 10% service fee, plus tax. You&apos;ll add your card and pay next.</div>
+          {/* A $0 cart has no fee, no tax, and takes no card, so the standard line would be three
+    false statements in a row. */}
+<div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, textAlign: "center", marginBottom: 9 }}>{totalWithFee.oneTime > 0 || totalWithFee.perMonth > 0 ? <>Includes a 10% service fee, plus tax. You&apos;ll add your card and pay next.</> : <>Nothing to pay. This plan is yours to run.</>}</div>
           <button onClick={startCheckout} disabled={blocked} className="apnpress" style={{ width: "100%", height: 52, borderRadius: 26, border: "none", cursor: blocked ? "default" : "pointer", background: blocked ? TOKENS.dash : TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? "none" : "0 8px 22px rgba(74,189,152,0.42)", WebkitTapHighlightColor: "transparent" }}>Check out</button>
           <button onClick={onBack} className="apnpress" style={{ display: "block", width: "100%", background: "none", border: "none", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: "#7c837e", marginTop: 10, WebkitTapHighlightColor: "transparent" }}>Keep shopping</button>
         </div>
