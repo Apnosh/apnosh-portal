@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
 import { computeTaxCents, saveCustomerAddress, paymentsTable, type BillingAddress } from '@/lib/campaigns/checkout-server'
+import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 
 function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
@@ -13,6 +14,11 @@ function denied(reason: string | undefined) {
  * Never trusts a client-sent amount: the subtotal + fee come from the stored payment row.
  */
 export async function POST(req: NextRequest) {
+  // Server-side kill switch. Checked FIRST, before auth or any Stripe work, so a
+  // closed checkout cannot be reached by calling the API directly.
+  if (!campaignCheckoutEnabled()) {
+    return NextResponse.json({ error: CHECKOUT_CLOSED_MESSAGE, checkoutClosed: true }, { status: 503 })
+  }
   const body = await req.json().catch(() => ({}))
   const paymentIntentId = body.paymentIntentId as string | undefined
   const address = body.address as BillingAddress | undefined

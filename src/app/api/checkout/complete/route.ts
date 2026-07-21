@@ -4,6 +4,7 @@ import { stripe } from '@/lib/stripe'
 import { paymentsTable } from '@/lib/campaigns/checkout-server'
 import { confirmBookingForPayment } from '@/lib/campaigns/gates/booking-server'
 import { ensureCampaignSubscription } from '@/lib/campaigns/campaign-subscription-server'
+import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 
 function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
@@ -17,6 +18,11 @@ function denied(reason: string | undefined) {
  * already-linked campaign without re-charging or re-shipping.
  */
 export async function POST(req: NextRequest) {
+  // Server-side kill switch. Checked FIRST, before auth or any Stripe work, so a
+  // closed checkout cannot be reached by calling the API directly.
+  if (!campaignCheckoutEnabled()) {
+    return NextResponse.json({ error: CHECKOUT_CLOSED_MESSAGE, checkoutClosed: true }, { status: 503 })
+  }
   const body = await req.json().catch(() => ({}))
   const paymentIntentId = body.paymentIntentId as string | undefined
   const campaignId = body.campaignId as string | undefined
