@@ -28,11 +28,6 @@ function denied(reason: string | undefined) {
  * A $0 one-time bill (all owner-run/free lanes) skips Stripe entirely — the caller ships directly.
  */
 export async function POST(req: NextRequest) {
-  // Server-side kill switch. Checked FIRST, before auth or any Stripe work, so a
-  // closed checkout cannot be reached by calling the API directly.
-  if (!campaignCheckoutEnabled()) {
-    return NextResponse.json({ error: CHECKOUT_CLOSED_MESSAGE, checkoutClosed: true }, { status: 503 })
-  }
   const body = await req.json().catch(() => ({}))
   const clientId = body.clientId as string | undefined
   const draft = body.draft as CampaignDraft | undefined
@@ -72,6 +67,21 @@ export async function POST(req: NextRequest) {
       monthlyCents: 0,
       gates,
     })
+  }
+
+  // Server-side kill switch, positioned HERE rather than at the top of the route.
+  //
+  // It used to be the first statement, which read as the safest place for a money
+  // guard and was wrong: this route also serves the FREE lanes, which return above
+  // without ever touching Stripe. A $0 owner-run plan was being refused with "your
+  // team will send an invoice for this", an invoice for nothing, by a switch whose
+  // only job is to stop card charges.
+  //
+  // Everything above this line is free or read-only: bill math, availability, gates.
+  // Everything below takes a card. So the guard sits on the boundary it actually
+  // guards, still on the server, still before any Stripe call, and still fail-closed.
+  if (!campaignCheckoutEnabled()) {
+    return NextResponse.json({ error: CHECKOUT_CLOSED_MESSAGE, checkoutClosed: true }, { status: 503 })
   }
 
   const cust = await ensureCheckoutCustomer(clientId)
