@@ -12,7 +12,7 @@
 import type { CampaignDraft, BuildPath, LineItem } from '../types'
 import { composeCampaign } from '../campaign-composer'
 import { summarize } from '../types'
-import { composePlanForGoal, mapAudience } from './compose-plan'
+import { composePlanForGoal, mapAudience, ITEM_SHAPE } from './compose-plan'
 import { serviceById, serviceToLine, serviceToLines } from '../catalog'
 
 // seedFromItem (the Content Menu cart seeder) now lives with the item shapes it reads,
@@ -106,11 +106,19 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
   // 'diy'), no payment-method ask, and the shipped campaign asks the owner to run the
   // walkthrough (service-needs.ts) — in the mode ownerMode records. The AI lane's Pro gate is
   // enforced at run time (the fixer + the gbp-draft endpoint re-check the live tier), never here.
-  const gbpLane = itemId === 'gbp' ? gbpLaneFromDoer(spec.doer) : 'team'
+  // Card-agnostic, deliberately. This used to read `itemId === 'gbp'` with the zeroing
+  // hardcoded to 'gbp-setup', so gbp was the only card that could offer owner-run lanes.
+  // Meanwhile planItemMoney (plan-draft.ts) zeroes the base price for ANY item whose doer
+  // says diy/ai — it was never gbp-gated. Adding a doer slot to a second card would have
+  // billed the owner $0 here while this still marked the line 'team', minting a staff work
+  // order: free to them, costed to us. Both halves now key on the same two facts —
+  // does this item carry a doer choice, and is the line one of the item's OWN services.
+  const lane = spec.doer ? gbpLaneFromDoer(spec.doer) : 'team'
+  const ownServiceIds = new Set(ITEM_SHAPE[itemId]?.services ?? [])
   const svcLines = (serviceIds ?? []).flatMap((id, i) => { const s = serviceById(id); return s ? serviceToLines(s, `li-svc-${i}`) : [] })
     .map((li): LineItem => (
-      (gbpLane === 'diy' || gbpLane === 'ai') && li.serviceId === 'gbp-setup'
-        ? { ...li, producer: 'diy', price: 0, ownerMode: gbpLane, does: gbpLane === 'ai' ? 'You fix it with Apnosh AI, step by step' : 'You fix it yourself, step by step' }
+      (lane === 'diy' || lane === 'ai') && li.serviceId != null && ownServiceIds.has(li.serviceId)
+        ? { ...li, producer: 'diy', price: 0, ownerMode: lane, does: lane === 'ai' ? 'You fix it with Apnosh AI, step by step' : 'You fix it yourself, step by step' }
         : li
     ))
   // The lead move (non-system goals) is a real, costed operational service (e.g. GBP setup) the plan
