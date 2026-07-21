@@ -98,7 +98,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // which re-runs the diagnosis server-side and stamps only on a fresh all-good read.
     // Known keys, plus owner-defined custom asks (id `custom-<slug>` from the campaign builder).
     // Custom keys still pass the same string + 2000-char cap, so nothing unbounded/injected accretes.
-    const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'footageUrls', 'setupSkipped', 'deliveryAccess', 'siteAccess', 'adAccess', 'adTargeting', 'brandVoice', 'photoUrls'])
+    const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'bookingLink', 'setupNotes', 'vendorInfo', 'menuSource', 'footageUrls', 'setupSkipped', 'deliveryAccess', 'siteAccess', 'adAccess', 'adTargeting', 'brandVoice', 'photoUrls'])
     // footageUrls/photoUrls hold comma-joined lists of uploaded-file URLs, so they get a larger cap
     // than the free-text intake fields (which stay tight to keep injected text out of the brief AI).
     const capFor = (k: string) => (k === 'footageUrls' || k === 'photoUrls' ? 8000 : 2000)

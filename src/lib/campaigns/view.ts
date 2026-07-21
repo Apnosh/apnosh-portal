@@ -77,6 +77,7 @@ export interface CampaignExecution {
   filmStaff?: string     // OK to film + tag staff (Yes / Ask first / No)
   socialHandles?: string // their Instagram / TikTok handles
   orderingLink?: string  // online ordering link
+  bookingLink?: string   // reservations link, for the Google Reserve button (google-food-order)
   setupNotes?: string    // anything else that helps the team
   vendorInfo?: string    // ordering / POS / booking system (from a pos-vendor service)
   menuSource?: string    // where to find the current menu (from a menu service)
@@ -184,7 +185,13 @@ export function ownerSetupComplete(s: SavedCampaign): boolean {
       || ['photo-library', 'video-engine', 'video-single', 'creator-collab', 'menu-photo-refresh'].some((id) => svc.has(id))
     if (hasShoot) need.push(filled(ex.shootTimes), filled(ex.onSiteContact), filled(ex.filmStaff))
   }
-  if (['ordering-setup', 'delivery-opt', 'ai-phone', 'giftcards', 'google-food-order'].some((id) => svc.has(id))) need.push(filled(ex.vendorInfo))
+  if (['ordering-setup', 'delivery-opt', 'ai-phone', 'giftcards'].some((id) => svc.has(id))) need.push(filled(ex.vendorInfo))
+  // The Google button card asks for the ordering LINK, not the vendor's name (see
+  // service-needs.ts), so its readiness has to gate on the thing we actually collect.
+  // Left on vendorInfo, this campaign could never reach ready: nothing fills that field
+  // for this service any more. The booking link stays optional, since a place with no
+  // reservations is a normal case, not a missing answer.
+  if (svc.has('google-food-order')) need.push(filled(ex.orderingLink))
   // The self-serve Google-profile fix (the gbp card's free version): the campaign's deliverable
   // IS the owner's walkthrough, so the campaign honestly needs them until the fixer's all-good
   // diagnosis stamps execution.gbpFixedAt.
