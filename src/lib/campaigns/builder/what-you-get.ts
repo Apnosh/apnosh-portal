@@ -109,21 +109,21 @@ function reviewsBaseRows(version: WhatYouGetSelection['version']): string[] {
   return baseRows('reviewsreply')
 }
 
-/** Get-listed-everywhere, framed by lane. The honesty problem here is different from the other
- *  cards: we cannot WRITE to Yelp, Apple Maps or any of them, so no owner-run lane may promise
- *  that we fix them. What the free and AI lanes actually deliver is the right answer and the
- *  right link, which is the hard part, and the team lane is the only one where someone goes
- *  and does it. Say that plainly or the $195 looks like a tax on convenience. */
+/** Get-listed-everywhere, framed by lane. The honesty problem here is sharper than on the
+ *  other cards: we cannot read OR write any of these directories, so no owner-run lane may
+ *  claim to inspect one or fix one. What the free and AI lanes deliver is the right answer and
+ *  the right link. The team lane is the only one where somebody goes and does the claiming,
+ *  and the copy has to earn the price on that difference alone. */
 function listingsBaseRows(version: WhatYouGetSelection['version']): string[] {
   if (version === 'diy') return [
     'Your name, address and phone in one place, exactly as they should read',
-    'A link straight to the page that edits each directory',
+    'A link straight to the page that edits each site',
     'You claim and correct each one, and mark it done',
   ]
   if (version === 'ai') return [
-    'We check Yelp against your Google listing and tell you what does not match',
-    'The right text ready to copy, so every directory ends up saying the same thing',
-    'One directory at a time, worst first, with the link to fix it',
+    'The same three lines to copy, so every site ends up saying exactly the same thing',
+    'One site at a time, with what usually trips people up on that one',
+    'It remembers where you got to, so you can do a couple and come back',
   ]
   // team (done-for-you): the only lane where somebody else does the claiming.
   return baseRows('listings')
