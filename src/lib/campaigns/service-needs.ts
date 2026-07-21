@@ -120,6 +120,33 @@ export function deriveServiceNeeds(
         })
   }
 
+  // The owner-run lanes of the get-listed card. Same two-task shape again, but note what is
+  // NOT here: there is no verified stamp to read, because we cannot see inside Yelp, Apple
+  // Maps or the rest. Both lanes close on the owner's word, and the copy never implies we
+  // checked. The team lane is the only one where somebody actually goes and claims them.
+  const listingsLine = (campaign.draft.items ?? []).find((it) => it.included && !it.optOut && it.serviceId === 'listings-sync' && it.producer === 'diy')
+  if (listingsLine) {
+    const isAi = listingsLine.ownerMode === 'ai'
+    push(isAi
+      ? {
+          id: 'citations', kind: 'action', group: 'Access',
+          title: 'Get your details matching everywhere',
+          why: 'We show you what each directory says against your Google listing, hand you the right text, and link you straight to the page that fixes it.',
+          actionLabel: exec.citationsSelfDoneAt ? 'Open' : 'Start',
+          href: `/dashboard/listings?campaignId=${campaign.draft.id}`,
+          done: !!exec.citationsSelfDoneAt,
+        }
+      : {
+          id: 'citations-self', kind: 'action', group: 'Access',
+          title: 'Claim and correct your other listings',
+          why: 'Make Yelp, Apple Maps and the rest say exactly what your Google listing says, then mark this done.',
+          actionLabel: 'See your list',
+          href: '/dashboard/listings',
+          done: !!exec.citationsSelfDoneAt,
+          markDoneField: 'citationsSelfDoneAt',
+        })
+  }
+
   // ── playbook-driven needs: everything the TEAM's own checklist starts with ──
   // Each service's playbook (service-playbooks.ts) opens with a client intake step whose
   // needsInput names what only the owner can give: Manager access, site and delivery logins,

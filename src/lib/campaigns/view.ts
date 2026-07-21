@@ -121,6 +121,16 @@ export interface CampaignExecution {
    *  Separate field from reviewRepliesDoneAt for the same reason as the order buttons:
    *  claimed and proven are different facts. Owner-writable. */
   reviewRepliesSelfDoneAt?: string
+  /** Directory keys the owner says they have claimed or corrected ('yelp', 'apple_maps', ...).
+   *  Owner-claimed by necessity: we can read Yelp and nothing else, and we can write none of
+   *  them, so there is no verified equivalent to promote this to. Deliberately NOT written
+   *  into citation_audits, which holds what WE checked; a claim in that table would corrupt
+   *  the strategist's evidence. */
+  citationsFixed?: string[]
+  /** ISO stamp: the owner finished a pass over their directories. A claim, like the field
+   *  above, and named the same way as the other self-serve stamps so nobody mistakes it for
+   *  something we verified. */
+  citationsSelfDoneAt?: string
   /** ISO stamp: the completion sweep sent the owner's wrap-up letter. System-written
    *  (cron via admin client); NOT in the owner PATCH whitelist, so it cannot be forged
    *  or cleared through the API. */

@@ -109,6 +109,26 @@ function reviewsBaseRows(version: WhatYouGetSelection['version']): string[] {
   return baseRows('reviewsreply')
 }
 
+/** Get-listed-everywhere, framed by lane. The honesty problem here is different from the other
+ *  cards: we cannot WRITE to Yelp, Apple Maps or any of them, so no owner-run lane may promise
+ *  that we fix them. What the free and AI lanes actually deliver is the right answer and the
+ *  right link, which is the hard part, and the team lane is the only one where someone goes
+ *  and does it. Say that plainly or the $195 looks like a tax on convenience. */
+function listingsBaseRows(version: WhatYouGetSelection['version']): string[] {
+  if (version === 'diy') return [
+    'Your name, address and phone in one place, exactly as they should read',
+    'A link straight to the page that edits each directory',
+    'You claim and correct each one, and mark it done',
+  ]
+  if (version === 'ai') return [
+    'We check Yelp against your Google listing and tell you what does not match',
+    'The right text ready to copy, so every directory ends up saying the same thing',
+    'One directory at a time, worst first, with the link to fix it',
+  ]
+  // team (done-for-you): the only lane where somebody else does the claiming.
+  return baseRows('listings')
+}
+
 /** The item's own deliverables, unversioned — the pre-selection base list (today's behavior). */
 function baseRows(itemId: string): string[] {
   const goalId = SYSTEM_ALIAS[itemId] ?? itemId
@@ -175,6 +195,7 @@ export function whatYouGet(itemId: string, sel: WhatYouGetSelection = {}): WhatY
   const base = itemId === 'gbp' ? gbpBaseRows(sel.version)
     : itemId === 'friction' ? orderBaseRows(sel.version)
     : itemId === 'reviewsreply' ? reviewsBaseRows(sel.version)
+    : itemId === 'listings' ? listingsBaseRows(sel.version)
     : baseRows(itemId)
   sections.push({ rows: base })
 

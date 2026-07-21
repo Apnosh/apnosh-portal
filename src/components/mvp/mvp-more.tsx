@@ -43,6 +43,7 @@ const GROUPS: { title: string; rows: Row[] }[] = [
       { label: 'Google Business Profile', sub: 'See and fix what Google shows', href: '/dashboard/google-profile', Icon: MapPin },
       { label: 'Google order buttons', sub: 'Where Order and Reserve send people', href: '/dashboard/order-buttons', Icon: ShoppingBag },
       { label: 'Reply to reviews', sub: 'The ones still waiting, worst first', href: '/dashboard/review-replies', Icon: Star },
+      { label: 'Your other listings', sub: 'Yelp, Apple Maps and the rest, matching Google', href: '/dashboard/listings', Icon: MapPin },
       { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon },
       { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target },
     ],
