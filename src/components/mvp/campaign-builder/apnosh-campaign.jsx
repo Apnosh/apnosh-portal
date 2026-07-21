@@ -4386,6 +4386,60 @@ export function PlanBar({ items, onOpen }) {
  *  renders (doerDisplay, plainNameOf, optionDelta), so they can never drift. Tapping
  *  the card body or Edit re-opens the PDP with this saved config; re-adding replaces
  *  it (the cart is keyed by itemId). Remove slides the card out. */
+/** Required questions attached to ONE cart item, in the shape a food-ordering app uses:
+ *  a flagged row under the item, tap to open, answer, and the cart stays locked until
+ *  every flagged item is done. Options are rows rather than a dropdown because one of
+ *  them can stop the order, and an owner should see that without opening a menu. */
+function ItemGates({ state, open, onToggle, answers, onAnswer }) {
+  const { gates, unanswered, blocking, blockGate } = state;
+  if (!gates.length) return null;
+  const done = unanswered === 0 && !blocking;
+  const tone = blocking || !done
+    ? { bg: "#fdf6e9", line: "#f0dfb8", ink: "#854f0b" }
+    : { bg: "#f2fbf8", line: "#cdeae0", ink: TOKENS.mintDark };
+  return (
+    <div style={{ background: tone.bg, border: `1px solid ${tone.line}`, borderRadius: 14, padding: open ? "11px 13px 13px" : "10px 13px", margin: "-6px 0 12px" }}>
+      <button onClick={onToggle} className="apnpress" style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
+        <span style={{ fontSize: 13, flexShrink: 0 }}>{done ? "\u2713" : "\u26A0"}</span>
+        <span style={{ flex: 1, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: tone.ink }}>
+          {done ? "Answered" : `${unanswered || 1} question${(unanswered || 1) > 1 ? "s" : ""} before you order`}
+        </span>
+        <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: tone.ink }}>{open ? "Close" : (done ? "Change" : "Answer")}</span>
+      </button>
+      {open && gates.map((g) => (
+        <div key={g.id} style={{ marginTop: 11 }}>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, color: TOKENS.ink }}>{g.title}</div>
+          {g.why && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 2, marginBottom: 7, lineHeight: 1.45 }}>{g.why}</div>}
+          <div role="radiogroup" aria-label={g.title} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {(g.options || []).map((o) => {
+              const picked = (answers[g.id] || "") === o;
+              const stops = g.blockOn === o;
+              return (
+                <button key={o} type="button" role="radio" aria-checked={picked} onClick={() => onAnswer(g.id, picked ? "" : o)}
+                  style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", borderRadius: 12, padding: "10px 11px", cursor: "pointer", font: "inherit",
+                    border: picked ? `1.5px solid ${stops ? "#e0a13a" : TOKENS.mint}` : `1px solid ${TOKENS.line}`,
+                    background: picked ? (stops ? "#fdf1dc" : "#eefaf6") : "#fff" }}>
+                  <span style={{ width: 17, height: 17, borderRadius: 99, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                    border: picked ? "none" : `1.5px solid ${TOKENS.line}`, background: picked ? (stops ? "#e0a13a" : TOKENS.mint) : "#fff" }}>
+                    {picked && <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>}
+                  </span>
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: picked ? 600 : 500, color: TOKENS.ink }}>{o}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      {blocking && blockGate && (
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "#854f0b", lineHeight: 1.5, marginTop: 10 }}>
+          {blockGate.blockMessage || "This order cannot go through with that answer."}
+          {blockGate.rerouteHref && <a href={blockGate.rerouteHref} style={{ color: "#854f0b", fontWeight: 700, marginLeft: 5 }}>{blockGate.rerouteLabel || "Talk to your team"}</a>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlanItemCard({ it, tier, leaving, onOpen, onRemove, rush, rushed, onToggleRush }) {
   const p = catGet(it.itemId) || { title: it.itemId, type: "task" };
   const money = planItemMoney(it);
@@ -4477,7 +4531,7 @@ function planDelivery(items) {
 /** The plan view (route {name:"plan"}): the collected items, the running total, and the
  *  checkout moment. Checkout composes the WHOLE plan as ONE campaign (plan-checkout.ts)
  *  and ships it through the same rail Buy now uses. Exported for the render smoke. */
-export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout }) {
+export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, onCheckout }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [droppedNote, setDroppedNote] = useState(null);
@@ -4501,8 +4555,46 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
   const SERVICE_FEE_RATE = 0.1;
   const serviceFee = Math.round(totals.oneTime * SERVICE_FEE_RATE);
   const totalWithFee = { oneTime: totals.oneTime + serviceFee, perMonth: totals.perMonth };
-  const blocked = planProBlocked(items, tier);
+  const proBlocked = planProBlocked(items, tier);
   const empty = items.length === 0;
+
+  // Required questions, per item. Fetched from /api/gates/for-draft, which runs the SAME
+  // resolver checkout uses, so the two can never disagree about what is required.
+  //
+  // These used to live only inside checkout, which meant an owner committed to buying
+  // before being told the thing might not apply to them. One of the answers can block the
+  // order outright ("No online ordering yet"), so it belongs on the item, before the money
+  // step, the way a food app makes you pick required options before the cart will let you go.
+  const [gatesByItem, setGatesByItem] = useState({});
+  const [gateAnswers, setGateAnswers] = useState({});
+  const [openGateItem, setOpenGateItem] = useState(null);
+  useEffect(() => {
+    if (empty) { setGatesByItem({}); return; }
+    let dead = false;
+    (async () => {
+      try {
+        const res = composePlanCampaign(items);
+        if (!res.draft) return;
+        const r = await fetch('/api/gates/for-draft', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, draft: res.draft }),
+        });
+        const j = await r.json();
+        if (!dead && r.ok) setGatesByItem(j.byItem || {});
+      } catch { /* no gates shown beats a broken cart; checkout still asks */ }
+    })();
+    return () => { dead = true; };
+  }, [items, clientId, empty]);
+
+  // A gate is satisfied when answered, and NOT satisfied when the answer is the blocking one.
+  const gateState = (id) => {
+    const gs = gatesByItem[id] || [];
+    const unanswered = gs.filter((g) => g.required && !(gateAnswers[g.id] || '').trim());
+    const blocking = gs.filter((g) => g.blockOn && gateAnswers[g.id] === g.blockOn);
+    return { gates: gs, unanswered: unanswered.length, blocking: blocking.length > 0, blockGate: blocking[0] || null };
+  };
+  const anyGateOpen = items.some((it) => { const st = gateState(it.itemId); return st.unanswered > 0 || st.blocking; });
+  const blocked = proBlocked || anyGateOpen;
 
   const slideOut = (id) => {
     setLeaving((s) => new Set(s).add(id));
@@ -4526,7 +4618,7 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
     if (!res.draft) return;
     setError(null);
     setBusy(true);
-    const ok = onCheckout ? await onCheckout(res.draft) : false;
+    const ok = onCheckout ? await onCheckout(res.draft, gateAnswers) : false;
     setBusy(false);
     // On success the checkout page is now open; on failure nothing shipped and retry is safe.
     if (!ok) setError("That didn't go through. Try again.");
@@ -4557,7 +4649,16 @@ export function PlanView({ items, tier, onBack, onOpenItem, onRemove, onCheckout
         ) : (
           <>
             {items.map((it) => (
-              <PlanItemCard key={it.itemId} it={it} tier={tier} leaving={leaving.has(it.itemId)} rush={itemRush(it.itemId)} rushed={rushed.has(it.itemId)} onToggleRush={() => toggleRush(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
+              <div key={it.itemId}>
+                <PlanItemCard it={it} tier={tier} leaving={leaving.has(it.itemId)} rush={itemRush(it.itemId)} rushed={rushed.has(it.itemId)} onToggleRush={() => toggleRush(it.itemId)} onOpen={() => onOpenItem(it.itemId, { doer: it.doer || undefined, options: it.options.length ? it.options : undefined })} onRemove={() => slideOut(it.itemId)} />
+                <ItemGates
+                  state={gateState(it.itemId)}
+                  open={openGateItem === it.itemId}
+                  onToggle={() => setOpenGateItem(openGateItem === it.itemId ? null : it.itemId)}
+                  answers={gateAnswers}
+                  onAnswer={(gid, v) => setGateAnswers((a) => ({ ...a, [gid]: v }))}
+                />
+              </div>
             ))}
             {/* Order summary — Amazon-style: items count, price lines, total, estimated delivery + rush. */}
             <div style={{ background: "#fff", border: `1px solid ${TOKENS.line}`, borderRadius: 18, padding: "14px 16px 13px", marginTop: 16 }}>
@@ -4797,6 +4898,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <PlanView
               items={planItems}
               tier={tier}
+              clientId={clientId}
               onBack={backToBrowse}
               onOpenItem={(id, preset) => setRoute({ name: "pdp", itemId: id, from: "plan", preset })}
               onRemove={(id) => removeFromPlan(id)}
