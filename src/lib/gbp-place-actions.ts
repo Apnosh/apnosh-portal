@@ -76,12 +76,25 @@ export async function savePlaceActionLinks(
     const uri = (desired[t.value] ?? '').trim()
     const existing = mine.get(t.value)
     try {
+      // Every branch checks the response. These used to be bare awaits with the result
+      // thrown away, so a link Google refused still reported ok:true and the owner was
+      // told their button was fixed when it was not.
+      let res: Response | null = null
+      let what = ''
       if (uri && existing && existing.uri !== uri) {
-        await fetch(`${BASE}/${existing.name}?updateMask=uri`, { method: 'PATCH', headers: auth, body: JSON.stringify({ uri }) })
+        what = `update ${t.label}`
+        res = await fetch(`${BASE}/${existing.name}?updateMask=uri`, { method: 'PATCH', headers: auth, body: JSON.stringify({ uri }) })
       } else if (uri && !existing) {
-        await fetch(`${BASE}/${loc}/placeActionLinks`, { method: 'POST', headers: auth, body: JSON.stringify({ uri, placeActionType: t.value }) })
+        what = `add ${t.label}`
+        res = await fetch(`${BASE}/${loc}/placeActionLinks`, { method: 'POST', headers: auth, body: JSON.stringify({ uri, placeActionType: t.value }) })
       } else if (!uri && existing) {
-        await fetch(`${BASE}/${existing.name}`, { method: 'DELETE', headers: { Authorization: `Bearer ${tok.accessToken}` } })
+        what = `remove ${t.label}`
+        res = await fetch(`${BASE}/${existing.name}`, { method: 'DELETE', headers: { Authorization: `Bearer ${tok.accessToken}` } })
+      }
+      if (res && !res.ok) {
+        const body = await res.json().catch(() => ({}))
+        const detail = (body as { error?: { message?: string } })?.error?.message
+        return { ok: false, error: `Could not ${what}: ${detail || `HTTP ${res.status}`}` }
       }
     } catch (err) {
       return { ok: false, error: (err as Error).message }
