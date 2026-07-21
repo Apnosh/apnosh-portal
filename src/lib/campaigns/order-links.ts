@@ -33,28 +33,54 @@ const LABELS: Record<string, string> = {
   SHOP_ONLINE: 'Shop online',
 }
 
-/** Known ordering middlemen, host to the name the OWNER would recognise.
+/**
+ * Where a link goes, and whether that is a problem.
  *
- *  Used only to say where a link currently points, never to decide what is editable
- *  (that is isEditable, straight from Google).
+ * THREE buckets, not two, and the distinction is the whole point of this service:
  *
- *  Spelled out rather than derived from the host: mangling 'doordash.com' into a
- *  display name gives "Doordash", while order.online (DoorDash's white-label
- *  storefront) has to be spelled anyway. Two spellings for one company also broke the
- *  "every button goes to X" check, since it counts distinct names. Brands are data. */
-const AGGREGATORS: Record<string, string> = {
-  'doordash.com': 'DoorDash',
-  'order.online': 'DoorDash', // DoorDash's white-label storefront
-  'ubereats.com': 'Uber Eats',
-  'grubhub.com': 'Grubhub',
-  'postmates.com': 'Postmates',
-  'seamless.com': 'Seamless',
-  'slicelife.com': 'Slice',
-  'chownow.com': 'ChowNow',
-  'toasttab.com': 'Toast',
-  'opentable.com': 'OpenTable',
-  'resy.com': 'Resy',
-  'yelp.com': 'Yelp',
+ *   'marketplace' — DoorDash, Uber Eats, Grubhub. They bring demand, take a large cut,
+ *                   and own the guest. A button pointing here is the leak we are fixing.
+ *   'storefront'  — Toast, Square, Chowbus, ChowNow. The restaurant's OWN ordering, just
+ *                   hosted by someone. Low or flat fee, their branding, their customer.
+ *                   Pointing the button here is the WIN, not a compromise.
+ *   'booking'     — OpenTable, Resy, Yelp Reservations, Tock. How nearly every restaurant
+ *                   takes reservations. The correct answer for the Reserve button.
+ *
+ * The first version of this file lumped all three together, so it would have told a
+ * restaurant that its own Toast ordering page or its OpenTable link "is not your own
+ * ordering page" and refused it. That is backwards: it rejects the most common right
+ * answer. Being on someone else's domain does not make it a middleman.
+ */
+export type LinkKind = 'marketplace' | 'storefront' | 'booking'
+
+const PROVIDERS: Record<string, { name: string; kind: LinkKind }> = {
+  // Commission marketplaces. They own the guest.
+  'doordash.com': { name: 'DoorDash', kind: 'marketplace' },
+  'ubereats.com': { name: 'Uber Eats', kind: 'marketplace' },
+  'grubhub.com': { name: 'Grubhub', kind: 'marketplace' },
+  'postmates.com': { name: 'Postmates', kind: 'marketplace' },
+  'seamless.com': { name: 'Seamless', kind: 'marketplace' },
+  // The restaurant's own ordering, hosted. order.online is DoorDash STOREFRONT, their
+  // white-label product, which is a different deal from the marketplace above: the
+  // restaurant's own page and their own guest. Google also injects order.online links
+  // itself, so seeing one does NOT prove the restaurant subscribes. isEditable stays the
+  // only authority on what we may change; this map only names things.
+  'order.online': { name: 'DoorDash Storefront', kind: 'storefront' },
+  'toasttab.com': { name: 'Toast', kind: 'storefront' },
+  'squareup.com': { name: 'Square', kind: 'storefront' },
+  'square.site': { name: 'Square', kind: 'storefront' },
+  'chowbus.com': { name: 'Chowbus', kind: 'storefront' },
+  'chownow.com': { name: 'ChowNow', kind: 'storefront' },
+  'slicelife.com': { name: 'Slice', kind: 'storefront' },
+  'popmenu.com': { name: 'Popmenu', kind: 'storefront' },
+  'spoton.com': { name: 'SpotOn', kind: 'storefront' },
+  'clover.com': { name: 'Clover', kind: 'storefront' },
+  'owner.com': { name: 'Owner', kind: 'storefront' },
+  // Booking. Correct for Reserve a table.
+  'opentable.com': { name: 'OpenTable', kind: 'booking' },
+  'resy.com': { name: 'Resy', kind: 'booking' },
+  'exploretock.com': { name: 'Tock', kind: 'booking' },
+  'sevenrooms.com': { name: 'SevenRooms', kind: 'booking' },
 }
 
 export interface RawActionLink {
@@ -88,6 +114,12 @@ export interface OrderLinksRead {
   ourLinksGoingToApps: ReadLink[]
   /** True when every single link on the listing points at a known middleman. */
   allGoToApps: boolean
+  /** Links we cannot honestly classify without asking the owner. DoorDash Storefront
+   *  (order.online) is the case: it is a white-label page that belongs to whoever pays
+   *  for it, and Google also injects those links on its own. Calling it "yours" when it
+   *  is not would tell an owner their ordering is fine while it leaks commission, so the
+   *  ambiguity is reported instead of guessed. */
+  needsOwnerCheck: ReadLink[]
   /** Plain sentence for the top of the screen. Counted, never guessed. */
   headline: string
   /** How many buttons this service could actually change or claim. */
@@ -105,11 +137,27 @@ function hostOf(uri: string): string | null {
 
 /** The known aggregator a url belongs to, or null. Matches on registrable suffix so
  *  a regional subdomain (order.doordash.com) still resolves. */
-export function aggregatorFor(uri: string): string | null {
+export function providerFor(uri: string): { name: string; kind: LinkKind } | null {
   const host = hostOf(uri)
   if (!host) return null
-  const hit = Object.keys(AGGREGATORS).find((a) => host === a || host.endsWith('.' + a))
-  return hit ? AGGREGATORS[hit] : null
+  const hit = Object.keys(PROVIDERS).find((a) => host === a || host.endsWith('.' + a))
+  if (hit) return PROVIDERS[hit]
+  // Yelp is two products on one domain: /reservations is booking (a fine answer for the
+  // Reserve button), everything else is just their listing page (not ordering at all).
+  if (host === 'yelp.com' || host.endsWith('.yelp.com')) {
+    try {
+      if (new URL(uri).pathname.includes('/reservations')) return { name: 'Yelp Reservations', kind: 'booking' }
+    } catch { /* fall through */ }
+    return null
+  }
+  return null
+}
+
+/** The commission middleman a url belongs to, or null. Only 'marketplace' counts:
+ *  a Toast or OpenTable link is the restaurant's own, not a leak. */
+export function aggregatorFor(uri: string): string | null {
+  const p = providerFor(uri)
+  return p && p.kind === 'marketplace' ? p.name : null
 }
 
 /** Turn the raw API rows into the honest read. */
@@ -136,13 +184,15 @@ export function diagnoseOrderLinks(raw: RawActionLink[] | null | undefined): Ord
   const filled = new Set(links.map((l) => l.type))
   const emptySlots = OWNABLE_TYPES.filter((t) => !filled.has(t.type)).map((t) => ({ type: t.type, label: t.label }))
   const ourLinksGoingToApps = ours.filter((l) => l.goesTo != null)
+  // A white-label page belongs to whoever pays for it, and we cannot tell from the url.
+  const needsOwnerCheck = links.filter((l) => providerFor(l.uri)?.name === 'DoorDash Storefront')
   const allGoToApps = links.length > 0 && links.every((l) => l.goesTo != null)
   const fixableCount = ourLinksGoingToApps.length + emptySlots.length
 
   return {
-    ours, locked, emptySlots, ourLinksGoingToApps, allGoToApps,
+    ours, locked, emptySlots, ourLinksGoingToApps, allGoToApps, needsOwnerCheck,
     fixableCount,
-    headline: headlineFor(links, ourLinksGoingToApps, emptySlots, allGoToApps),
+    headline: headlineFor(links, ourLinksGoingToApps, emptySlots, allGoToApps, needsOwnerCheck),
   }
 }
 
@@ -152,11 +202,17 @@ function headlineFor(
   ourAppLinks: ReadLink[],
   emptySlots: { label: string }[],
   allGoToApps: boolean,
+  needsOwnerCheck: ReadLink[],
 ): string {
   if (!links.length) return 'Your Google listing has no ordering or booking buttons set at all.'
   const apps = Array.from(new Set(links.map((l) => l.goesTo).filter((g): g is string => g != null)))
   if (allGoToApps && apps.length === 1) {
     return `Every ordering button on your Google listing goes to ${apps[0]}.`
+  }
+  // Every link is DoorDash-run, but some are the white-label kind we cannot attribute.
+  // Say that plainly rather than picking a side we have no evidence for.
+  if (needsOwnerCheck.length && links.every((l) => l.goesTo != null || needsOwnerCheck.includes(l))) {
+    return 'Every ordering button on your Google listing is run by DoorDash, and some of them may not be yours.'
   }
   if (ourAppLinks.length && emptySlots.length) {
     return `${ourAppLinks.length} of your buttons point at a delivery app, and ${emptySlots.length} are empty.`
@@ -220,7 +276,102 @@ export function validateOwnUrl(input: string): { ok: true; url: string } | { ok:
   }
   if (parsed.protocol !== 'https:') return { ok: false, error: 'Use an https link so guests get a secure page.' }
   if (!parsed.hostname.includes('.')) return { ok: false, error: 'That does not look like a web address.' }
-  const app = aggregatorFor(parsed.toString())
-  if (app) return { ok: false, error: `That is a ${app} link. This is for your own ordering page, so you keep the order.` }
+  // Only a COMMISSION marketplace is refused. A Toast, Square, Chowbus, OpenTable or
+  // Resy link is the restaurant's own ordering or booking and is exactly what belongs
+  // on the button. Refusing those would reject the most common correct answer.
+  const p = providerFor(parsed.toString())
+  if (p && p.kind === 'marketplace') {
+    return { ok: false, error: `That is a ${p.name} link, and they take a cut of every order. This is for your own ordering page, so you keep it.` }
+  }
   return { ok: true, url: parsed.toString() }
+}
+
+/* ── finding the owner's ordering page for them ──────────────────────────
+   The business record cannot answer this: no column stores an ordering url, and the
+   fields that exist were contradicted by the live listing on the first client checked.
+   The WEBSITE can answer it. Reading shopyellowbee.com and shinyashokudotukwila.com
+   found Shinya's real Chowbus ordering link in one request.
+
+   So: crawl the site, PROPOSE what we found, let the owner confirm. Never write a
+   guessed url. Pure and html-in so it is testable without the network. ── */
+
+/** A link on the owner's site that looks like ordering or booking. */
+export interface FoundLink {
+  url: string
+  /** The provider we recognise, when we do. null = looks like their own page. */
+  provider: string | null
+  kind: LinkKind | 'unknown'
+  /** Why we think this is it, shown to the owner so the proposal is never a black box. */
+  because: string
+}
+
+const ORDER_PATH = /(order|checkout|cart|shop)/i
+const BOOK_PATH = /(reserv|book|table)/i
+
+/**
+ * Candidate ordering and booking links from a page's html.
+ *
+ * Ranks known storefront/booking providers first (a Chowbus link is a much better
+ * signal than a /menu/ path), then same-site paths that look like ordering. Marketplace
+ * links are returned too but marked, since "your Order button already goes to DoorDash"
+ * is worth showing even though it is not the answer.
+ */
+export function findOrderingLinks(html: string, siteUrl: string): FoundLink[] {
+  let origin: string
+  try { origin = new URL(siteUrl).origin } catch { return [] }
+  const hrefs = Array.from(html.matchAll(/href=["']([^"']+)["']/gi)).map((m) => m[1])
+  const out = new Map<string, FoundLink>()
+  for (const raw of hrefs) {
+    if (!raw || raw.startsWith('#') || /^(mailto|tel|javascript):/i.test(raw)) continue
+    let abs: string
+    try { abs = new URL(raw, origin).toString() } catch { continue }
+    // Strip the tracking noise so two links to the same page collapse into one.
+    let clean: string
+    try {
+      const u = new URL(abs)
+      for (const k of Array.from(u.searchParams.keys())) if (/^utm_|^srsltid$/i.test(k)) u.searchParams.delete(k)
+      u.hash = ''
+      clean = u.toString()
+    } catch { clean = abs }
+    if (out.has(clean)) continue
+
+    const p = providerFor(clean)
+    if (p && (p.kind === 'storefront' || p.kind === 'booking')) {
+      out.set(clean, { url: clean, provider: p.name, kind: p.kind,
+        because: p.kind === 'booking' ? `Your site links to ${p.name} for bookings.` : `Your site links to ${p.name} for ordering.` })
+      continue
+    }
+    if (p && p.kind === 'marketplace') {
+      out.set(clean, { url: clean, provider: p.name, kind: 'marketplace',
+        because: `Your site sends people to ${p.name}, who take a cut.` })
+      continue
+    }
+    // Same-site paths only. An unrecognised OTHER domain is not evidence of anything.
+    let path: string
+    try {
+      const u = new URL(clean)
+      if (u.origin !== origin) continue
+      path = u.pathname
+    } catch { continue }
+    if (ORDER_PATH.test(path)) {
+      out.set(clean, { url: clean, provider: null, kind: 'unknown', because: 'A page on your own site that looks like ordering.' })
+    } else if (BOOK_PATH.test(path)) {
+      out.set(clean, { url: clean, provider: null, kind: 'unknown', because: 'A page on your own site that looks like booking.' })
+    }
+  }
+  // Best evidence first: real providers, then own-site guesses, marketplaces last.
+  const rank = (f: FoundLink) => (f.kind === 'storefront' ? 0 : f.kind === 'booking' ? 1 : f.kind === 'unknown' ? 2 : 3)
+  return Array.from(out.values()).sort((a, b) => rank(a) - rank(b)).slice(0, 12)
+}
+
+/** The single link we PROPOSE for one button, or null when we have nothing honest to
+ *  offer. Never returns a marketplace link: that is the thing being fixed. */
+export function proposeFor(type: OwnableActionType, found: FoundLink[]): FoundLink | null {
+  const usable = found.filter((f) => f.kind !== 'marketplace')
+  if (type === 'DINING_RESERVATION') {
+    return usable.find((f) => f.kind === 'booking')
+      ?? usable.find((f) => f.kind === 'unknown' && BOOK_PATH.test(f.url)) ?? null
+  }
+  return usable.find((f) => f.kind === 'storefront')
+    ?? usable.find((f) => f.kind === 'unknown' && ORDER_PATH.test(f.url)) ?? null
 }
