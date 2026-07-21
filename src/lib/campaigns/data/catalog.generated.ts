@@ -3033,7 +3033,7 @@ export const GENERATED_CATALOG: PricedService[] = [
     "id": "google-food-order",
     "section": "foundation",
     "name": "Google order and reserve links",
-    "desc": "Wire the Order and Reserve buttons on your Google profile and Maps to your own ordering and booking.",
+    "desc": "Point the Order and Reserve buttons on your Google profile and Maps at your own ordering and booking, on every button Google lets us set.",
     "essential": false,
     "handler": "apnosh",
     "handlerWhy": "Technical wiring on Google and your site.",
@@ -3051,7 +3051,7 @@ export const GENERATED_CATALOG: PricedService[] = [
     "evidence": "The Google action buttons are a major conversion surface most listings leave on default.",
     "metric": {
       "label": "Orders and bookings from Google",
-      "expect": "The Order and Reserve buttons point to your own site"
+      "expect": "Your own ordering and booking sit on the buttons we can set. Delivery app links Google adds itself stay on the listing."
     },
     "goalPlays": [
       {
@@ -3069,13 +3069,14 @@ export const GENERATED_CATALOG: PricedService[] = [
       ]
     },
     "deliverables": {
-      "summary": "We wire the Order and Reserve buttons on your Google listing to your own site, not the apps.",
+      "summary": "We put your own ordering and booking on the Google buttons that are yours to set.",
       "included": [
         "The Order button on your Google profile and Maps pointed to your own ordering page",
+        "Takeout and Delivery pointed to your own ordering wherever those links are yours to set",
         "The Reserve button on Google and Maps pointed to your own booking",
         "A test order and a test booking run all the way through before it goes live",
         "A check that the buttons work right on a phone, where most people tap them",
-        "Confirmation that guests now order and book with you, not a third-party app"
+        "A plain list of which buttons we changed, and which ones Google keeps locked"
       ]
     }
   }
