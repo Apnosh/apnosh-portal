@@ -2130,13 +2130,10 @@ const CATALOG = [
   { id: "shoot", type: "task", icon: "camera", title: "Book a shoot", sub: "A pro comes to you. A photo library plus a reel, yours to keep", cad: "setup" },
   { id: "gbp", type: "task", icon: "store", title: "Polish your Google profile", sub: "Profile fixed top to bottom: photos, hours, menu, info", cad: "setup" },
   { id: "reviewsreply", type: "task", icon: "chat", title: "Reply to reviews", sub: "Every review gets a drafted reply, monthly", cad: "recurring" },
-  { id: "qr", type: "task", icon: "qr", title: "Add a table QR", sub: "Design, print files, and a signup page wired to your list", cad: "setup" },
   { id: "friction", type: "task", icon: "cart", title: "Smooth out ordering", sub: "Get the order button working on your Google listing", cad: "setup" },
   { id: "listings", type: "task", icon: "pin", title: "Get listed everywhere", sub: "Yelp, Apple Maps and more: synced and correct", cad: "recurring" },
   { id: "website", type: "task", icon: "store", title: "Fix your website and menu", sub: "Fast, correct, and easy to order from", cad: "setup" },
   { id: "localseo", type: "task", icon: "pin", title: "Show up in local search", sub: "Be the answer when neighbors search food near me", cad: "recurring" },
-  { id: "delivery", type: "task", icon: "cart", title: "Tune up your delivery apps", sub: "Photos, menu and hours fixed on your delivery pages", cad: "recurring" },
-  { id: "nextdoor", type: "task", icon: "people", title: "Get known on Nextdoor", sub: "Your neighborhood feed, kept active for you", cad: "recurring" },
   { id: "giftcard", type: "task", icon: "gift", title: "Push gift cards", sub: "Sell gift cards for gifts and slow seasons", cad: "once", season: true },
   { id: "ticket", type: "task", icon: "ticket", title: "Run a ticketed event", sub: "Sell spots to a dinner or class", cad: "group" },
 
@@ -2255,7 +2252,7 @@ const PICK = {
   reviewsplan: "reviews", reviewsreply: "reviews", reviewreq: "reviews",
   launch: "offer", slowoffer: "offer", giftcard: "offer",
   reel: "reel", videoplan: "reel", story: "story", carousel: "carousel", dish: "dish",
-  gpost: "listing", gbp: "listing", listings: "listing", localseo: "map", website: "ordering", delivery: "ordering", nextdoor: "people",
+  gpost: "listing", gbp: "listing", listings: "listing", localseo: "map", website: "ordering",
   welcome: "mail", second: "mail", news: "mail", referral: "mail", earlyaccess: "mail",
   birthday: "birthday", shoot: "camera", qr: "qr", friction: "ordering", ticket: "ticket",
   listgrow: "auto", segment: "auto", utm: "chart", winback: "winback", edit: "reel", direct: "ordering",
@@ -2280,7 +2277,7 @@ const ROWS = [
   // The static fallback set is honest now: it says it is NOT personalized (the AI row swaps in
   // "Picked for your goals and reviews" when real recs land), and it holds only LIVE staples —
   // the old set claimed "Based on your menu" while being hardcoded and mostly coming soon.
-  { id: "suggested", title: "Suggested for you", note: "Popular first steps. Not personalized yet", big: true, ids: ["gbp", "dish", "reel", "gpost", "reviewsreply", "delivery", "website"] },
+  { id: "suggested", title: "Suggested for you", note: "Popular first steps. Not personalized yet", big: true, ids: ["gbp", "dish", "reel", "gpost", "reviewsreply", "website"] },
   // TWO LAYERS, ONE SYSTEM: section headers say what the campaigns DO (verb-first,
   // across-the-counter words); the funnel-stage words the Home dashboard teaches
   // (Awareness → Interest → Customer actions → Orders → Retention) live as TAGS on
@@ -2290,11 +2287,11 @@ const ROWS = [
   // The goal shelves hold TOOLS AND FIXES (concrete, one price, one job); the big
   // multi-month programs live on their own "Full campaigns" shelf below, so a $70
   // fix never sits next to an $8k system (the audit's price-cliff finding).
-  { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "website", "localseo", "nextdoor", "delivery", "creator", "gpost"] },
+  { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "website", "localseo", "creator", "gpost"] },
   { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["reel", "dish", "story", "graphic", "shoot", "reviewsplan", "reviewsreply"] },
-  { id: "actions", title: "Make it easy to order", note: "Working buttons, right info, easy ways to act", ids: ["friction", "direct", "website", "gbp", "qr"] },
+  { id: "actions", title: "Make it easy to order", note: "Working buttons, right info, easy ways to act", ids: ["friction", "direct", "website", "gbp"] },
   { id: "orders", title: "Fill your seats", note: "Events, deals, and pushes that ring the register", ids: ["promoevent", "launch", "ticket", "catering", "giftcard", "slowoffer"] },
-  { id: "back", title: "Bring guests back", note: "Turn one visit into two, three, ten", ids: ["welcome", "news", "birthday", "earlyaccess", "winback", "direct", "qr"] },
+  { id: "back", title: "Bring guests back", note: "Turn one visit into two, three, ten", ids: ["welcome", "news", "birthday", "earlyaccess", "winback", "direct"] },
   // The heavy hitters, separated on purpose: multi-month programs we run end to end.
   { id: "programs", title: "Full campaigns", note: "We plan it, make it, and run it for you, month after month", ids: ["firstvisit", "nights", "regulars", "reach"] },
   // Production-only shelf: shoots, edits, and single pieces bought as GOODS, not
@@ -2307,7 +2304,7 @@ const ROWS = [
 const rowWithDb = (row) => {
   if (!row) return row;
   const extra = DB_CARDS.filter((c) => c.shelf === row.id && !row.ids.includes(c.id)).map((c) => c.id);
-  return extra.length ? { ...row, ids: [...row.ids, ...extra] } : row;
+  return extra.length ? { ...row, ids: [] } : row;
 };
 
 // Lenses mirror the rows: filter by what the owner wants done. "all" is the full browse.
@@ -3677,13 +3674,10 @@ const QL = {
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
   gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_SELF, GBP_DOER_AI, GBP_DOER_APNOSH] } } },
   reviewsreply: { lead: "Reply to {which} reviews.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] } } },
-  qr: { lead: "Add a table QR that {action}.", slots: { action: { k: "pick", v: "grows your list", o: ["grows your list", "collects reviews", "links your menu", "links your socials", "takes orders"] } } },
   friction: { lead: "Make {channel} easier for guests.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] } } },
   listings: { lead: "Get {where} listed and synced.", slots: { where: { k: "multi", v: ["Yelp", "Apple Maps"], o: ["Yelp", "Apple Maps", "Bing", "TripAdvisor", "Facebook"] } } },
   website: { lead: "Fix {what} on your site.", slots: { what: { k: "multi", v: ["the menu", "speed"], o: ["the menu", "speed", "buttons and links", "photos", "hours"] } } },
   localseo: { lead: "Show up when neighbors search {term}.", slots: { term: { k: "text", v: "food near me", ph: "e.g. korean bbq near me" } } },
-  delivery: { lead: "Tune up {apps}.", slots: { apps: { k: "multi", v: ["DoorDash"], o: ["DoorDash", "Uber Eats", "Grubhub", "your own site"] } } },
-  nextdoor: { lead: "Get known on Nextdoor for {vibe}.", slots: { vibe: { k: "text", v: "your specials", ph: "e.g. best happy hour nearby" } } },
   edit: { lead: "Edit my {what}.", slots: { what: { k: "multi", v: ["videos"], o: ["videos", "photos", "menu shots", "old footage"] } } },
   direct: { lead: "Move {who} to direct orders with {perk}.", slots: { who: { k: "pick", v: "your regulars", o: ["your regulars", "delivery-app customers", "everyone"] }, perk: { k: "text", v: "10% off direct orders", ph: "e.g. free drink when you order direct" } } },
   giftcard: { lead: "Promote {kind} gift cards for {occasion}, in {amounts}, order by {date}, {list}.", slots: { kind: { k: "pick", v: "digital", o: ["digital", "physical", "digital and physical"] }, occasion: { k: "pick", v: "the holidays", o: ["the holidays", "Mother's Day", "Father's Day", "the season", "slow months", "graduation"], custom: true }, amounts: { k: "pick", v: "set amounts ($25, $50, $100)", o: ["set amounts ($25, $50, $100)", "any amount"] }, date: { k: "date", v: 21 }, list: { k: "pick", v: "reaching your email + text list", o: ["reaching your email + text list", "social only"] } }, extras: [{ id: "offer", k: "text", label: "Add a bonus", ph: "like $10 bonus on $50", clause: (v) => `, with ${v}` }, { id: "intensity", k: "pick", label: "Make it a big push", o: ["a soft push", "a big push"], clause: (v) => `, as ${v}` }, { id: "boost", k: "pick", label: "Add paid reach", o: ["yes, add paid ads", "no thanks"], clause: (v) => (v.startsWith("yes") ? ", with paid ads" : "") }] },

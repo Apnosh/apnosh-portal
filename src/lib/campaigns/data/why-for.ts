@@ -71,8 +71,6 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
   listings: (s) => { const v = views(s); return v ? `People found you on Google ${n(v)} times last month. Matching info everywhere helps the other apps catch up.` : null },
   localseo: (s) => { const v = views(s); return v ? `You showed up in ${n(v)} searches and map looks last month. This works on growing that number.` : null },
   gpost: (s) => { const v = views(s); return v ? `Your Google listing was seen ${n(v)} times in the last 30 days. A fresh post gives those people something new to see.` : null },
-  nextdoor: () => null,
-  delivery: () => null,
   website: (s) => {
     const c = s.actions30d?.websiteClicks
     return typeof c === 'number' && c > 0 ? `Google sent ${n(c)} people to your website last month. This makes sure the site does not lose them.` : null
@@ -111,7 +109,6 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
   birthday: () => null,
   earlyaccess: () => null,
   winback: () => null,
-  qr: () => null,
   direct: () => null,
 }
 
