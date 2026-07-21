@@ -99,6 +99,7 @@ const MVP_EXACT = new Set([
   '/dashboard', '/dashboard/orders', '/dashboard/inbox', '/dashboard/messages', '/dashboard/insights',
   '/dashboard/more', '/dashboard/billing',
   '/dashboard/assets', '/dashboard/goals', '/dashboard/help', '/dashboard/google-profile',
+  '/dashboard/order-buttons',
 ])
 const MVP_PREFIX = [
   '/dashboard/insights', // insights + its sub-routes (e.g. /insights/analyst) own their full-screen chrome
