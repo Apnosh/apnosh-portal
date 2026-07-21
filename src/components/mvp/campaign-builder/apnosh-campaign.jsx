@@ -4398,8 +4398,13 @@ function ItemGates({ state, open, onToggle, answers, onAnswer }) {
     ? { bg: "#fdf6e9", line: "#f0dfb8", ink: "#854f0b" }
     : { bg: "#f2fbf8", line: "#cdeae0", ink: TOKENS.mintDark };
   return (
-    <div style={{ background: tone.bg, borderTop: `1px solid ${tone.line}`, padding: open ? "10px 13px 13px" : "9px 13px" }}>
-      <button onClick={onToggle} className="apnpress" style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
+    <div onClick={(e) => e.stopPropagation()} style={{ background: tone.bg, borderTop: `1px solid ${tone.line}`, padding: open ? "10px 13px 13px" : "9px 13px" }}>
+      {/* stopPropagation is load-bearing, not defensive. This sits INSIDE the item card, and
+          the card is click-to-edit, so without it the toggle's click bubbles to the card and
+          the panel never opens. That shipped: the row said "1 question before you order",
+          the cart stayed locked, and Answer did nothing, which made the paid lane
+          unorderable. Same for the option rows below. */}
+      <button onClick={(e) => { e.stopPropagation(); onToggle(); }} className="apnpress" style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left", WebkitTapHighlightColor: "transparent" }}>
         <span style={{ fontSize: 13, flexShrink: 0 }}>{done ? "\u2713" : "\u26A0"}</span>
         <span style={{ flex: 1, fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 700, color: tone.ink }}>
           {done ? "Answered" : `${unanswered || 1} question${(unanswered || 1) > 1 ? "s" : ""} before you order`}
@@ -4415,7 +4420,7 @@ function ItemGates({ state, open, onToggle, answers, onAnswer }) {
               const picked = (answers[g.id] || "") === o;
               const stops = g.blockOn === o;
               return (
-                <button key={o} type="button" role="radio" aria-checked={picked} onClick={() => onAnswer(g.id, picked ? "" : o)}
+                <button key={o} type="button" role="radio" aria-checked={picked} onClick={(e) => { e.stopPropagation(); onAnswer(g.id, picked ? "" : o); }}
                   style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", borderRadius: 12, padding: "10px 11px", cursor: "pointer", font: "inherit",
                     border: picked ? `1.5px solid ${stops ? "#e0a13a" : TOKENS.mint}` : `1px solid ${TOKENS.line}`,
                     background: picked ? (stops ? "#fdf1dc" : "#eefaf6") : "#fff" }}>
