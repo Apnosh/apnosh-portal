@@ -20,35 +20,17 @@ import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { listPlaceActionLinks } from '@/lib/gbp-place-actions'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  diagnoseOrderLinks, findOrderingLinks, proposeFor, whatWeNeed,
+  diagnoseOrderLinks, proposeFor, whatWeNeed,
   OWNABLE_TYPES, type FoundLink,
 } from '@/lib/campaigns/order-links'
+// Shared with the advice route so both surfaces read the SAME evidence about whether
+// this restaurant has ordering of its own. Two screens disagreeing on that would be
+// worse than either being wrong alone.
+import { crawlSiteForOrdering, siteUrlOf } from '@/lib/campaigns/order-site-crawl'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 30
-
-/** The client's own site, fetched once. Best-effort: a dead or slow site just means
- *  no proposals, never a failed request — the diagnosis half still stands alone. */
-async function crawlSite(url: string): Promise<{ links: FoundLink[]; error: string | null }> {
-  try {
-    const res = await fetch(url, {
-      redirect: 'follow',
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ApnoshBot/1.0; +https://apnosh.com)' },
-      signal: AbortSignal.timeout(10000),
-    })
-    if (!res.ok) return { links: [], error: `Your site returned ${res.status}.` }
-    const ct = res.headers.get('content-type') ?? ''
-    if (!ct.includes('html')) return { links: [], error: 'That address did not return a web page.' }
-    // Cap the body: a huge page should not stall the request, and ordering links live
-    // in the nav, which is near the top.
-    const html = (await res.text()).slice(0, 600_000)
-    return { links: findOrderingLinks(html, res.url), error: null }
-  } catch (e) {
-    const msg = e instanceof Error && e.name === 'TimeoutError' ? 'Your site took too long to answer.' : 'We could not reach your site.'
-    return { links: [], error: msg }
-  }
-}
 
 export async function GET(req: NextRequest) {
   const { user, clientId } = await resolveCurrentClient(req.nextUrl.searchParams.get('clientId'))
@@ -64,11 +46,10 @@ export async function GET(req: NextRequest) {
   try {
     const admin = createAdminClient()
     const { data } = await admin.from('businesses').select('website_url').eq('client_id', clientId).maybeSingle()
-    const raw = (data as { website_url?: string | null } | null)?.website_url ?? null
-    if (raw) siteUrl = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+    siteUrl = siteUrlOf((data as { website_url?: string | null } | null)?.website_url)
   } catch { /* no site on file → no proposals, which is an honest outcome */ }
 
-  const crawl = siteUrl ? await crawlSite(siteUrl) : { links: [] as FoundLink[], error: null }
+  const crawl = siteUrl ? await crawlSiteForOrdering(siteUrl) : { links: [] as FoundLink[], error: null, readable: false }
 
   // One proposal per button we could actually set. Absent when we found nothing:
   // a blank field with an honest reason beats a guessed url.
