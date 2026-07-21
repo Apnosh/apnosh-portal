@@ -60,16 +60,34 @@ export function deriveServiceNeeds(
   // The owner-run lanes of the Google button card. Same shape as the gbp walkthrough
   // above: the campaign's deliverable IS the owner doing it, so the task points at the
   // screen that does it, and it is done when the buttons are actually live.
-  const ownerRunOrder = (campaign.draft.items ?? []).some((it) => it.included && !it.optOut && it.serviceId === 'google-food-order' && it.producer === 'diy')
-  if (ownerRunOrder) {
-    push({
-      id: 'order-buttons', kind: 'action', group: 'Access',
-      title: 'Point your Google order buttons at you',
-      why: 'We show you where they go today, what we can change, and what Google locks. You confirm before anything moves.',
-      actionLabel: exec.orderButtonsFixedAt ? 'Open' : 'Start',
-      href: `/dashboard/order-buttons?campaignId=${campaign.draft.id}`,
-      done: !!exec.orderButtonsFixedAt,
-    })
+  const orderLine = (campaign.draft.items ?? []).find((it) => it.included && !it.optOut && it.serviceId === 'google-food-order' && it.producer === 'diy')
+  if (orderLine) {
+    // Two owner-run lanes, two different tasks, because they are different products.
+    //
+    // The AI lane earns its tier by doing the hard part: it reads the listing, proposes a
+    // link, writes it, and reads back to prove it took. That needs the walkthrough.
+    //
+    // The FREE lane is self-serve in the same shape as the Google-profile fix: here is the
+    // page, go do it, tell us when it is done. Sending it into the AI walkthrough would
+    // hand a free owner the paid surface, and the paid lane stops meaning anything.
+    const isAi = orderLine.ownerMode === 'ai'
+    push(isAi
+      ? {
+          id: 'order-buttons', kind: 'action', group: 'Access',
+          title: 'Point your Google order buttons at you',
+          why: 'We show you where they go today, what we can change, and what Google locks. You confirm before anything moves.',
+          actionLabel: exec.orderButtonsFixedAt ? 'Open' : 'Start',
+          href: `/dashboard/order-buttons?campaignId=${campaign.draft.id}`,
+          done: !!exec.orderButtonsFixedAt,
+        }
+      : {
+          id: 'order-buttons-self', kind: 'action', group: 'Access',
+          title: 'Set your Google order and reserve links',
+          why: 'Open your Google profile, put your own ordering and booking links on the Order and Reserve buttons, then mark this done.',
+          actionLabel: 'Open Google',
+          href: 'https://business.google.com/edit/l/#lp',
+          done: !!exec.orderButtonsFixedAt,
+        })
   }
 
   // ── playbook-driven needs: everything the TEAM's own checklist starts with ──

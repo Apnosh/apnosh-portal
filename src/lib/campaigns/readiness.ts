@@ -142,11 +142,19 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   // finish their part without connecting accounts right now — each stays visible to undo. The in-campaign
   // work actions (approve concepts / review pieces) are the real work and are never skippable.
   const skipped = new Set((exec.setupSkipped ?? '').split(',').map((s) => s.trim()).filter(Boolean))
-  // gbp-fix (the self-serve Google-profile walkthrough) is the campaign's actual deliverable —
-  // skipping it would skip the campaign, so it is never deferrable.
+  // Skippable is now an ALLOWLIST: only an item explicitly marked optional can be deferred.
+  //
+  // This was a denylist naming three ids, which meant every new required step arrived
+  // skippable by default and nobody had to notice. A required thing offering "Skip for
+  // now" is a contradiction: either it is genuinely needed, and the button is a trap that
+  // strands the campaign, or it is not, and it should not be required. Whoever adds the
+  // next required step should not have to remember to defend against this.
+  //
+  // Items declare `optional: true` at the point they are created (service-needs.ts), which
+  // is where the person writing the ask knows whether it can wait.
   for (const it of items) {
     if (it.kind !== 'action') continue
-    if (it.id !== 'concepts' && it.id !== 'review' && it.id !== 'gbp-fix') it.skippable = true
+    it.skippable = it.optional === true
     if (it.skippable && skipped.has(it.id)) it.skipped = true
   }
 
