@@ -159,7 +159,10 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
   }
 
   const required = items.filter((i) => !i.optional && !i.skipped)
-  return { campaignName: campaign.draft.name, items, done: required.filter((i) => i.done).length, total: required.length, doneSetupIds: Array.from(doneSetup) }
+  // Nobody is doing this plan but the owner, so the page must not promise a team.
+  const liveLines = (campaign.draft.items ?? []).filter((it) => it.included && !it.optOut)
+  const ownerRunOnly = liveLines.length > 0 && liveLines.every((it) => it.producer === 'diy')
+  return { campaignName: campaign.draft.name, items, done: required.filter((i) => i.done).length, total: required.length, doneSetupIds: Array.from(doneSetup), ownerRunOnly }
 }
 
 /** Apply the owner's per-campaign needs config: Required/Optional/Off overrides on the auto-detected

@@ -21,6 +21,9 @@ export interface ReadinessItem {
   /** An action the owner can defer ("Skip for now") — e.g. connect an account, add brand details.
    *  Real in-campaign work (approve concepts / review pieces) is NOT skippable. */
   skippable?: boolean
+  /** Execution field this action stamps when the owner marks it done themselves. Present only
+   *  on self-serve actions, where the owner's word IS the completion signal. */
+  markDoneField?: string
   /** True when the owner has deferred this action; it drops out of the required count but stays
    *  visible to undo. */
   skipped?: boolean
@@ -46,6 +49,10 @@ export interface ReadinessReport {
   /** setup already in place (Google connected, socials linked...) — kept out of the journey's setup
    *  band + the go-live estimate so the owner is never re-quoted work that's done. */
   doneSetupIds: string[]
+  /** True when every live line is owner-run (producer 'diy'). No team is doing anything on
+   *  this plan, so any copy promising one would be a plain lie. Computed server-side so the
+   *  page never has to re-derive it from line items it does not have. */
+  ownerRunOnly: boolean
 }
 
 /** In-campaign WORK actions (approve concepts / review pieces) — real owner to-dos, but not setup:

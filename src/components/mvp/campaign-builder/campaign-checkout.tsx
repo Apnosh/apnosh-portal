@@ -858,10 +858,19 @@ function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSlot, onS
     ? 'Your go-live date, the best time to film, and the dishes to feature. Takes a minute, and you can do it later too.'
     : 'Your go-live date and a few quick details. Takes a minute, and you can do it later too.'
 
+  // No team is behind an owner-run plan, so the confirmation must not promise one. Derived
+  // from the draft this screen already holds rather than threaded down as a prop.
+  const liveLines = (draft.items ?? []).filter((it) => it.included && !it.optOut)
+  const ownerRunOnly = liveLines.length > 0 && liveLines.every((it) => it.producer === 'diy')
+
   const steps: { state: 'done' | 'active' | 'todo'; title: string; sub: string }[] = [
     { state: 'done', title: 'Order placed', sub: todayLabel },
     ...(bookedSlot ? [{ state: 'done' as const, title: 'Shoot booked', sub: `${fmtDayShort(bookedSlot.date)} · ${fmtTime12(bookedSlot.start)}${bookedSlot.timezone ? ` (${bookedSlot.timezone})` : ''}` }] : []),
-    { state: 'active', title: 'We get to work', sub: 'Your team starts right away' },
+    // An owner-run plan has no team behind it. Promising one on the confirmation screen is
+    // the first thing they read after ordering, and it would be false.
+    ownerRunOnly
+      ? { state: 'active', title: 'Over to you', sub: 'Your steps are waiting whenever you are' }
+      : { state: 'active', title: 'We get to work', sub: 'Your team starts right away' },
     { state: 'todo', title: 'Goes live', sub: goLiveShort || 'We confirm the date once we start' },
   ]
 

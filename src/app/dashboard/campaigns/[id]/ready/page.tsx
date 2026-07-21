@@ -120,9 +120,9 @@ export default function ReadyPage() {
       <div style={{ background: HERO_BG, borderRadius: 18, padding: 16, marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 5 }}>
           <span style={{ width: 30, height: 30, borderRadius: 9, background: '#fff', display: 'grid', placeItems: 'center', flexShrink: 0 }}><Sparkles size={16} color={C.greenDk} /></span>
-          <h1 style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: C.ink, margin: 0 }}>A few things that help</h1>
+          <h1 style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, color: C.ink, margin: 0 }}>{report.ownerRunOnly ? 'What to do next' : 'A few things that help'}</h1>
         </div>
-        <p style={{ fontSize: 12.5, color: C.mute, margin: 0, lineHeight: 1.5 }}>Your team starts what it can right away. Some things here they cannot start without. The rest just make the work better.</p>
+        <p style={{ fontSize: 12.5, color: C.mute, margin: 0, lineHeight: 1.5 }}>{report.ownerRunOnly ? 'This plan is yours to run, so there is no team waiting on you. Work through these when it suits you.' : 'Your team starts what it can right away. Some things here they cannot start without. The rest just make the work better.'}</p>
         {sharedCount > 0 && <p style={{ fontSize: 11.5, color: C.greenDk, margin: '10px 0 0', fontWeight: 600 }}>{sharedCount} shared — thank you</p>}
       </div>
 
@@ -136,7 +136,7 @@ export default function ReadyPage() {
                   onChange={(v) => setExec((e) => ({ ...e, [it.field as string]: v }))}
                   onSave={(v) => saveField(it.field as string, v, it.saveTo)} />
               ) : (
-                <ActionCard key={it.id} item={it} onSkipToggle={() => skipAction(it.id, !it.skipped)} />
+                <ActionCard key={it.id} item={it} onSkipToggle={() => skipAction(it.id, !it.skipped)} onMarkDone={(f, v) => { setExec((e) => ({ ...e, [f]: v })); saveField(f, v) }} />
               ))}
             </div>
           </section>
@@ -234,7 +234,7 @@ function FootageUpload({ value, onSave }: { value: string; onSave: (v: string) =
   )
 }
 
-function ActionCard({ item, onSkipToggle }: { item: ReadinessItem; onSkipToggle: () => void }) {
+function ActionCard({ item, onSkipToggle, onMarkDone }: { item: ReadinessItem; onSkipToggle: () => void; onMarkDone: (field: string, value: string) => void }) {
   // A finished action (e.g. the self-checking Google-profile walkthrough) shows a green check
   // and a quiet link back in, instead of still shouting "Start".
   if (item.done) {
@@ -260,6 +260,17 @@ function ActionCard({ item, onSkipToggle }: { item: ReadinessItem; onSkipToggle:
           ? <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: C.faint }}>Skipped</span>
           : <a href={item.href} style={{ flexShrink: 0, fontSize: 13, fontWeight: 700, color: '#fff', background: C.ink, borderRadius: 10, padding: '8px 14px', textDecoration: 'none' }}>{item.actionLabel}</a>}
       </div>
+      {/* Self-serve actions close on the owner's word: the work happens on Google, not in
+          here, so there is nothing for us to verify. Writes a CLAIMED stamp, kept separate
+          from the verified one, so "they said so" never reads as "we checked". */}
+      {item.markDoneField && (
+        <button
+          onClick={() => onMarkDone(item.markDoneField!, item.done ? '' : new Date().toISOString())}
+          style={{ marginTop: 10, background: item.done ? 'none' : C.ink, border: item.done ? 'none' : undefined, color: item.done ? C.mute : '#fff', borderRadius: 10, padding: item.done ? 0 : '8px 14px', fontSize: item.done ? 12 : 13, fontWeight: 700, cursor: 'pointer' }}
+        >
+          {item.done ? 'Mark not done' : 'I did this'}
+        </button>
+      )}
       {item.skippable && (
         <button onClick={onSkipToggle} style={{ marginTop: 10, background: 'none', border: 'none', color: C.mute, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0 }}>{item.skipped ? 'Undo skip' : 'Skip for now'}</button>
       )}
