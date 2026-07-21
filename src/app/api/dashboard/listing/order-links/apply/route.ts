@@ -73,6 +73,24 @@ export async function POST(req: NextRequest) {
   // Start from what is on the listing now, so an untouched button is preserved rather
   // than reconciled away. Only OUR editable links can be carried or changed; the
   // aggregator ones Google locks are not ours to send at all.
+  // Google allows SEVERAL links of the same type, and savePlaceActionLinks keeps one
+  // per type. So if a listing already carries two editable Takeout links, building the
+  // desired map below would keep the last and the reconcile would DELETE the other:
+  // silent data loss on a listing we were asked to improve. Refuse instead. Losing a
+  // working ordering link is far worse than not adding one, and the owner can clean the
+  // duplicate up on Google in a minute.
+  const seen = new Map<string, number>()
+  for (const l of readBefore.ours) seen.set(l.type, (seen.get(l.type) ?? 0) + 1)
+  const dupes = readBefore.ours.filter((l) => (seen.get(l.type) ?? 0) > 1)
+  if (dupes.length) {
+    const labels = Array.from(new Set(dupes.map((d) => d.label)))
+    return NextResponse.json({
+      error: `Your listing has more than one link on ${labels.join(' and ')}. We will not change it, because saving would remove one of them. Tidy those on Google first, then come back.`,
+      duplicates: dupes.map((d) => ({ button: d.label, uri: d.uri })),
+      applied: false,
+    }, { status: 409 })
+  }
+
   const desired: Partial<Record<PlaceActionType, string>> = {}
   for (const l of readBefore.ours) {
     if (OWNABLE_TYPES.some((t) => t.type === l.type)) desired[l.type as PlaceActionType] = l.uri
