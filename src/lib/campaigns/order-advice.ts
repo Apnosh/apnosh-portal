@@ -43,7 +43,9 @@ export interface AdvicePayload {
 export interface AdvicePath {
   /** Short label, e.g. "You may already have this". */
   title: string
-  /** Two or three plain sentences. */
+  /** ONE short sentence. This used to allow two or three and the screen turned into an
+   *  essay: an owner mid-task reads the first line and acts, they do not study a
+   *  paragraph. Anything longer belongs in the action, as a step. */
   body: string
   /** What it costs the owner, in plain words. "Free" is allowed only when it is. */
   cost: string
@@ -155,15 +157,26 @@ Do not recommend building a custom ordering page. Payments, menu sync, tax and r
 Do not tell them to drop the delivery apps. Marketplaces bring reach; the point is to also give people who searched for them BY NAME a direct way to order.
 
 VOICE
-Plain words a busy person reads once. Short sentences. No marketing jargon, no "leverage", no "optimize". Never use an em dash. Do not open with a greeting. Say "you" and "your".
-Numbers only if they are in the payload. Do not invent a commission percentage; you may say "a cut of every order" without a number.
+This is read mid-task by someone with a kitchen to run. They are looking for what to DO, not an explanation to study.
+
+  title   2 to 5 words
+  body    ONE short sentence. Not two. It says why this path exists, nothing more.
+  action  the literal first move, starting with a verb: "Log into DoorDash and look for
+          Storefront", "Ask your Toast rep to switch on online ordering". One step, not a
+          plan. If they cannot do it in one sitting it is too big.
+  cost    a few words: "Free to check", "A monthly fee instead of a cut per order".
+
+Plain words, 5th grade reading level. No marketing jargon, no "leverage", no "optimize".
+Never use an em dash. No greeting. Say "you" and "your".
+Numbers only if they are in the payload. Do not invent a commission percentage; you may
+say "a cut of every order" without one.
 
 OUTPUT
 Return ONLY valid JSON, no prose around it:
 {
   "situation": "one sentence on what is true today, from the buttons above",
-  "paths": [{ "title": "short label", "body": "two or three sentences", "cost": "plain words, e.g. Free to check, or A monthly fee instead of a cut per order", "action": "the single thing to do" }],
-  "startHere": "the one thing to do first and why it is first",
+  "paths": [{ "title": "2 to 5 words", "body": "ONE short sentence", "cost": "a few words", "action": "the first move, starting with a verb" }],
+  "startHere": "one short sentence naming which path to try first",
   "avoid": "one sentence on what you would not do, or null"
 }
 Two to four paths. Order them best-first for THIS restaurant.`
@@ -196,10 +209,18 @@ export function parseAdvice(raw: string, payload: AdvicePayload): OrderAdvice | 
   if (!cleaned.length) return null
 
   const noDash = (s: string) => s.replace(/\s*—\s*/g, ', ')
+  // The prompt asks for one sentence. Models drift long on the third or fourth path, and a
+  // screen that starts tight and ends in paragraphs is worse than one that is uniformly
+  // dense. Keep the first sentence and drop the rest.
+  const oneSentence = (s: string) => {
+    const t = s.trim()
+    const m = t.match(/^[^.!?]*[.!?]/)
+    return m && m[0].length >= 20 ? m[0].trim() : t
+  }
   return {
-    situation: noDash(o.situation.trim()),
+    situation: oneSentence(noDash(o.situation.trim())),
     paths: cleaned.map((p) => ({
-      title: noDash(p.title.trim()), body: noDash(p.body.trim()),
+      title: noDash(p.title.trim()), body: oneSentence(noDash(p.body.trim())),
       cost: noDash(p.cost.trim()), action: noDash(p.action.trim()),
     })),
     startHere: typeof o.startHere === 'string' ? noDash(o.startHere.trim()) : '',

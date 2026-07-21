@@ -71,6 +71,7 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
   const [planNote, setPlanNote] = useState<string | null>(null)
   const [busy, setBusy] = useState<'preview' | 'apply' | null>(null)
   const [advice, setAdvice] = useState<Advice | null>(null)
+  const [openPath, setOpenPath] = useState<number | null>(null)
   const [adviceState, setAdviceState] = useState<'idle' | 'loading' | 'locked' | 'none'>('idle')
   const [err, setErr] = useState<string | null>(null)
   const [done, setDone] = useState<{ verified: boolean; checks: { button: string; ok: boolean }[] } | null>(null)
@@ -160,8 +161,7 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
           )}
           {read.needsOwnerCheck.length > 0 && (
             <Note>
-              {read.needsOwnerCheck.length} of these are DoorDash Storefront links. That is a page you can
-              pay DoorDash to run for you, so it may already be yours. Worth a check.
+              {read.needsOwnerCheck.length} of these are DoorDash Storefront links, which may already be yours. Worth a check.
             </Note>
           )}
           <Next onClick={() => setStep(1)}>
@@ -185,18 +185,29 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
             <div style={{ background: C.greenSoft, borderRadius: 14, padding: '13px 14px', marginTop: 4 }}>
               <SaysLabel />
               <Fine style={{ marginBottom: 10 }}>
-                {ordering ? 'If that link is right, carry on. If you are not sure it is the best one:' : 'Do not have one? Here is where owners like you usually get one.'}
+                {advice.startHere
+                  || (ordering ? 'Not sure that is the best link? Here are your options.' : 'Do not have one? Here is where owners like you usually get one.')}
               </Fine>
-              {advice.paths.map((p, i) => (
-                <div key={i} style={{ background: '#fff', borderRadius: 11, padding: '10px 12px', marginBottom: 7 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 650, color: C.ink, marginBottom: 3 }}>{p.title}</div>
-                  <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, marginBottom: 6 }}>{p.body}</div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    <Chip>{p.cost}</Chip><Chip tone="ink">{p.action}</Chip>
+              {/* Action first. The owner is standing in their kitchen deciding what to DO, so the
+                  headline is the move, and the reasoning waits behind a tap for the one owner in
+                  ten who wants it. The old card led with a label and three sentences of context,
+                  which read as an essay and buried the one line that mattered. */}
+              {advice.paths.map((p, i) => {
+                const open = openPath === i
+                return (
+                  <div key={i} style={{ background: '#fff', borderRadius: 11, padding: '11px 12px', marginBottom: 7 }}>
+                    <div style={{ fontSize: 14, fontWeight: 650, color: C.ink, lineHeight: 1.4 }}>{p.action}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
+                      <Chip>{p.cost}</Chip>
+                      <button type="button" onClick={() => setOpenPath(open ? null : i)}
+                        style={{ background: 'none', border: 0, padding: 0, fontSize: 12.5, color: C.mute, fontWeight: 600, cursor: 'pointer' }}>
+                        {open ? 'Hide why' : 'Why'}
+                      </button>
+                    </div>
+                    {open && <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, marginTop: 8 }}>{p.body}</div>}
                   </div>
-                </div>
-              ))}
-              {advice.startHere && <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5, marginTop: 9, fontWeight: 600 }}>Start here: <span style={{ fontWeight: 400 }}>{advice.startHere}</span></div>}
+                )
+              })}
             </div>
           )}
           {adviceState === 'locked' && (
@@ -215,7 +226,7 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
       {step === 2 && (
         <>
           <H>Do you take reservations?</H>
-          <Fine>If you do, the Reserve button on your listing can send people straight to your booking page. If you do not, skip this. It is not a gap.</Fine>
+          <Fine>Your Reserve button can send people straight to your booking page.</Fine>
           <Field label="Your reservations link" value={booking} onChange={setBooking}
             help="OpenTable, Resy, Yelp and your own booking page all work."
             found={read.proposals.find((p) => p.type === 'DINING_RESERVATION')?.because ?? null} />
