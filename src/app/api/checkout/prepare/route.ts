@@ -8,6 +8,7 @@ import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data
 import { getContentOverrides } from '@/lib/campaigns/content-overrides-server'
 import { shapeFor } from '@/lib/campaigns/builder/compose-plan'
 import type { CampaignDraft } from '@/lib/campaigns/types'
+import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 
 /** Plain owner-facing name for a catalog id (falls back to the id itself). */
 function cardName(id: string): string {
@@ -27,6 +28,11 @@ function denied(reason: string | undefined) {
  * A $0 one-time bill (all owner-run/free lanes) skips Stripe entirely — the caller ships directly.
  */
 export async function POST(req: NextRequest) {
+  // Server-side kill switch. Checked FIRST, before auth or any Stripe work, so a
+  // closed checkout cannot be reached by calling the API directly.
+  if (!campaignCheckoutEnabled()) {
+    return NextResponse.json({ error: CHECKOUT_CLOSED_MESSAGE, checkoutClosed: true }, { status: 503 })
+  }
   const body = await req.json().catch(() => ({}))
   const clientId = body.clientId as string | undefined
   const draft = body.draft as CampaignDraft | undefined
