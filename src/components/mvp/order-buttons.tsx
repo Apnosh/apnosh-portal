@@ -51,6 +51,29 @@ interface Advice { situation: string; paths: AdvicePath[]; startHere: string; av
 
 const STEPS = ['Look', 'Ordering', 'Booking', 'Check', 'Done'] as const
 
+/** The model call can fail: no credits, a timeout, a response we cannot parse. When it did,
+ *  this screen showed an empty field and nothing else, which reads as a broken product and
+ *  is the worst thing a paid lane can do. These paths come from the same listing read the
+ *  model gets, so they are always true. Less tailored, never absent. */
+function fallbackPaths(read: Read): AdvicePath[] {
+  const out: AdvicePath[] = []
+  if (read.needsOwnerCheck.length > 0) {
+    out.push({
+      title: 'Check the Storefront link',
+      action: 'Log into DoorDash and look for Storefront',
+      cost: 'Free to check',
+      body: `${read.needsOwnerCheck.length} of the links on your listing are DoorDash Storefront pages. That is a direct ordering page in your own name, but Google adds those on its own too, so we cannot tell from the link alone whether you pay for it. If it is yours, your Order button can point straight at it.`,
+    })
+  }
+  out.push({
+    title: 'Ask your register company',
+    action: 'Ask whoever runs your registers to switch on online ordering',
+    cost: 'Usually a monthly fee instead of a cut of each order',
+    body: 'Most register and point of sale companies include a direct ordering page. Orders land with you instead of going through a delivery app, so you keep more of each one.',
+  })
+  return out
+}
+
 /** A link as a person reads one: the site, not the tracking soup. */
 function pretty(uri: string | null): string {
   if (!uri) return 'nothing set'
@@ -125,6 +148,7 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
   if (!read) return <Panel><Loading>Reading your Google listing…</Loading></Panel>
 
   const changes = (plan ?? []).filter((p) => p.action !== 'keep')
+  const shownPaths = advice?.paths?.length ? advice.paths : fallbackPaths(read)
 
   return (
     <Panel>
@@ -181,18 +205,18 @@ export default function OrderButtons({ campaignId }: { campaignId?: string }) {
             found={read.proposals.find((p) => p.type === 'FOOD_ORDERING')?.because ?? null} />
 
           {adviceState === 'loading' && <Loading>Working out your options…</Loading>}
-          {advice && advice.paths.length > 0 && (
+          {adviceState !== 'loading' && adviceState !== 'locked' && shownPaths.length > 0 && (
             <div style={{ background: C.greenSoft, borderRadius: 14, padding: '13px 14px', marginTop: 4 }}>
-              <SaysLabel />
+              <SaysLabel generic={!advice} />
               <Fine style={{ marginBottom: 10 }}>
-                {advice.startHere
+                {advice?.startHere
                   || (ordering ? 'Not sure that is the best link? Here are your options.' : 'Do not have one? Here is where owners like you usually get one.')}
               </Fine>
               {/* Action first. The owner is standing in their kitchen deciding what to DO, so the
                   headline is the move, and the reasoning waits behind a tap for the one owner in
                   ten who wants it. The old card led with a label and three sentences of context,
                   which read as an essay and buried the one line that mattered. */}
-              {advice.paths.map((p, i) => {
+              {shownPaths.map((p, i) => {
                 const open = openPath === i
                 return (
                   <div key={i} style={{ background: '#fff', borderRadius: 11, padding: '11px 12px', marginBottom: 7 }}>
@@ -323,10 +347,10 @@ function Fine({ children, style }: { children: React.ReactNode; style?: React.CS
   return <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5, marginBottom: 8, ...style }}>{children}</div>
 }
 
-function SaysLabel() {
+function SaysLabel({ generic }: { generic?: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 7 }}>
-      <Sparkles size={12} /> Apnosh AI says
+      <Sparkles size={12} /> {generic ? 'Your options' : 'Apnosh AI says'}
     </div>
   )
 }
