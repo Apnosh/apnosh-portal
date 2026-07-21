@@ -1143,7 +1143,7 @@ function CreateInvoiceForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (lines.some(l => !l.description || l.unitAmountDollars <= 0)) {
+    if (lines.some(l => !l.description || l.unitAmountDollars < 0)) {
       setError('Every line needs a description and positive price'); return
     }
     const linesToSend = addBuffer && bufferDollars > 0
@@ -1367,16 +1367,46 @@ function CreateInvoiceForm({
               className="w-14 px-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
             />
             <div className="relative w-24">
-              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4 text-xs">$</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={l.unitAmountDollars || ''}
-                onChange={e => updateLine(i, { unitAmountDollars: parseFloat(e.target.value) || 0 })}
-                className="w-full pl-5 pr-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
-              />
+              {l.unitAmountDollars === 0 && (l.compedFromDollars ?? 0) > 0 ? (
+                // Comped: show what it is worth, struck through, and that they pay nothing.
+                <div className="w-full px-2 py-1.5 border border-emerald-200 bg-emerald-50 rounded text-sm flex items-baseline gap-1.5 justify-end">
+                  <span className="line-through text-ink-4 text-xs">${l.compedFromDollars}</span>
+                  <span className="text-emerald-700 font-semibold text-xs">FREE</span>
+                </div>
+              ) : (
+                <>
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-ink-4 text-xs">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={l.unitAmountDollars || ''}
+                    onChange={e => updateLine(i, { unitAmountDollars: parseFloat(e.target.value) || 0 })}
+                    className="w-full pl-5 pr-2 py-1.5 border border-ink-6 rounded text-sm bg-white"
+                  />
+                </>
+              )}
             </div>
+            {/* Comp toggle. Comping REMEMBERS the price it was comped from, so the
+                invoice can say "normally $1,195, included at no charge" instead of a
+                bare $0 that reads like a mistake. Un-comping puts the price back. */}
+            <button
+              type="button"
+              title={l.unitAmountDollars === 0 && (l.compedFromDollars ?? 0) > 0 ? 'Charge for this again' : 'Include this free'}
+              onClick={() => {
+                const comped = l.unitAmountDollars === 0 && (l.compedFromDollars ?? 0) > 0
+                if (comped) updateLine(i, { unitAmountDollars: l.compedFromDollars ?? 0, compedFromDollars: undefined })
+                else if (l.unitAmountDollars > 0) updateLine(i, { compedFromDollars: l.unitAmountDollars, unitAmountDollars: 0 })
+              }}
+              disabled={l.unitAmountDollars === 0 && !(l.compedFromDollars ?? 0)}
+              className={`text-[10px] font-semibold px-1.5 py-1 rounded border shrink-0 ${
+                l.unitAmountDollars === 0 && (l.compedFromDollars ?? 0) > 0
+                  ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+                  : 'border-ink-6 text-ink-4 hover:text-ink-2 disabled:opacity-40'
+              }`}
+            >
+              {l.unitAmountDollars === 0 && (l.compedFromDollars ?? 0) > 0 ? 'Comped' : 'Comp'}
+            </button>
             {lines.length > 1 && (
               <button type="button" onClick={() => removeLine(i)} className="text-ink-4 hover:text-red-500">
                 <X className="w-3 h-3" />
