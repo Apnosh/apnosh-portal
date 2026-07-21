@@ -59,6 +59,9 @@ export interface CampaignCheckoutProps {
   /** Per-piece producer picks (single-campaign "Buy now" carries these; the cart pre-merges them onto
    *  line items and passes none). Applied via a PATCH before ship, same as the old direct rail. */
   producerChoices?: Record<string, PieceProducer>
+  /** Answers the owner already gave in the cart, where these questions are now asked on the
+   *  item. Seeds the gate state so checkout never re-asks something already answered. */
+  initialGateAnswers?: Record<string, string>
   /** Called when the owner LEAVES the confirmation screen — to the setup page or the campaign. */
   onSuccess: (campaignId: string, dest: 'setup' | 'campaign') => void
   onCancel: () => void
@@ -74,7 +77,7 @@ function stripePromiseFor(key: string) {
   return _stripePromise
 }
 
-export default function CampaignCheckout({ clientId, draft, restaurant, producerChoices, onSuccess, onCancel }: CampaignCheckoutProps) {
+export default function CampaignCheckout({ clientId, draft, restaurant, producerChoices, initialGateAnswers, onSuccess, onCancel }: CampaignCheckoutProps) {
   const [prep, setPrep] = useState<PrepareResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Set once the order is placed (paid + shipped) — flips the whole overlay to the confirmation.
@@ -124,7 +127,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
             <Header onBack={onCancel} />
             {error && !prep && <ErrorBox message={error} onBack={onCancel} />}
             {!error && !prep && <Loading />}
-            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} onPlaced={onPlaced} />}
+            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} onPlaced={onPlaced} />}
             {prep && !prep.free && prep.clientSecret && prep.publishableKey && (
               <Elements
                 stripe={stripePromiseFor(prep.publishableKey)}
@@ -132,6 +135,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
               >
                 <PayForm
                   clientId={clientId}
+                  initialGateAnswers={initialGateAnswers}
                   draft={draft}
                   restaurant={restaurant}
                   producerChoices={producerChoices}
@@ -436,6 +440,11 @@ function CustomGates({ gates, answers, onChange }: {
   onChange: (id: string, value: string) => void
 }) {
   if (!gates.length) return null
+  // Already answered in the cart, where these are now asked on the item. Asking again reads
+  // as the first answer not having landed, so the whole block goes away rather than showing
+  // pre-filled. The state still carries the answers; only the re-ask is gone.
+  const unanswered = gates.filter((g) => !(answers[g.id] ?? '').trim())
+  if (!unanswered.length) return null
   return (
     <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '13px 16px 15px', marginBottom: 16 }}>
       <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 8 }}>Before you order</div>
@@ -536,8 +545,9 @@ function gateExecutionPatch(gates: CustomGate[], answers: Record<string, string>
   return out
 }
 
-function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId, initialBreakdown, monthlyCents, setupOnly, savedCard, gates, onPlaced }: {
+function PayForm({ clientId, draft, restaurant, producerChoices, initialGateAnswers, paymentIntentId, initialBreakdown, monthlyCents, setupOnly, savedCard, gates, onPlaced }: {
   clientId: string
+  initialGateAnswers?: Record<string, string>
   draft: CampaignDraft
   restaurant?: string
   producerChoices?: Record<string, PieceProducer>
@@ -569,7 +579,10 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   // gate applies, so the button waits until availability resolves.
   const customGates = gates?.custom ?? []
   const [bookingBlocking, setBookingBlocking] = useState(!!gates?.booking?.required)
-  const [gateAnswers, setGateAnswers] = useState<Record<string, string>>({})
+  // Seeded from the cart, where these questions are now asked ON the item. Checkout keeps
+  // the state (gateExecutionPatch persists it, gateBlocking gates the pay button) but must
+  // not ASK again: answering the same question twice reads as the first answer not landing.
+  const [gateAnswers, setGateAnswers] = useState<Record<string, string>>(initialGateAnswers ?? {})
   // The shoot slot currently held (if any), so the confirmation can replay exactly what was booked.
   const [heldSlot, setHeldSlot] = useState<Hold | null>(null)
   // Monthly consent (G4): a plan with recurring services starts a real subscription from this card at
@@ -771,11 +784,14 @@ function PayForm({ clientId, draft, restaurant, producerChoices, paymentIntentId
   )
 }
 
-function FreeCheckout({ clientId, draft, producerChoices, gates, onPlaced }: { clientId: string; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; gates?: ResolvedGates; onPlaced: (id: string, breakdown: Breakdown) => void }) {
+function FreeCheckout({ clientId, draft, producerChoices, gates, initialGateAnswers, onPlaced }: { clientId: string; initialGateAnswers?: Record<string, string>; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; gates?: ResolvedGates; onPlaced: (id: string, breakdown: Breakdown) => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const customGates = gates?.custom ?? []
-  const [gateAnswers, setGateAnswers] = useState<Record<string, string>>({})
+  // Seeded from the cart, where these questions are now asked ON the item. Checkout keeps
+  // the state (gateExecutionPatch persists it, gateBlocking gates the pay button) but must
+  // not ASK again: answering the same question twice reads as the first answer not landing.
+  const [gateAnswers, setGateAnswers] = useState<Record<string, string>>(initialGateAnswers ?? {})
   const blocked = customGatesBlocking(customGates, gateAnswers)
   const place = async () => {
     if (busy || blocked) return
