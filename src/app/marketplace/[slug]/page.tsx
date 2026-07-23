@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { getVendorBySlug } from '@/lib/dashboard/get-marketplace'
 import { getVendorPortfolio } from '@/lib/marketplace/portfolio'
+import { rowToPackage, formatCents, maxPriceCents } from '@/lib/marketplace/package'
 import BookButton from './book-button'
 
 export const dynamic = 'force-dynamic'
@@ -248,6 +249,57 @@ export default async function VendorProfilePage({ params }: PageProps) {
                         Onboarding deliverables valued at ${onboardingValue.toLocaleString()}
                       </p>
                     )}
+
+                    {/* Creator-package presentation: the deliverables and priced add-ons a
+                        creator set in their own storefront editor. Read through the shared model
+                        so what a buyer sees is exactly what the creator published. Apnosh's
+                        bundle listings do not carry this shape, so nothing extra renders for them. */}
+                    {(() => {
+                      const pkg = rowToPackage({
+                        slug: l.slug, title: l.title, category: l.category, listing_type: l.listingType,
+                        description: l.description, price_cents: l.priceCents, billing_period: l.billingPeriod,
+                        details: l.details, active: true,
+                      })
+                      const max = maxPriceCents(pkg)
+                      const hasRange = pkg.priceCents != null && max != null && max > pkg.priceCents
+                      return (
+                        <>
+                          {pkg.deliverables.length > 0 && (
+                            <ul className="mb-3 space-y-1">
+                              {pkg.deliverables.map((d, i) => (
+                                <li key={i} className="flex items-start gap-2 text-[13px] text-ink-2">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" /> {d}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {pkg.options.length > 0 && (
+                            <div className="mb-3">
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-3 mb-1.5">Add-ons</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {pkg.options.map((o) => (
+                                  <span key={o.id} className="text-[12px] text-ink-2 bg-ink-7/40 rounded-full px-2.5 py-1">
+                                    {o.label} <span className="text-ink-3">+{formatCents(o.priceDeltaCents)}</span>
+                                  </span>
+                                ))}
+                              </div>
+                              {hasRange && (
+                                <p className="text-[11px] text-ink-3 mt-1.5">
+                                  With every add-on: up to {formatCents(max)}
+                                </p>
+                              )}
+                            </div>
+                          )}
+                          {(pkg.turnaroundDays != null || pkg.revisions != null) && (
+                            <p className="text-[11px] text-ink-3 mb-3">
+                              {[pkg.turnaroundDays != null ? `${pkg.turnaroundDays}-day turnaround` : null,
+                                pkg.revisions != null ? `${pkg.revisions} revision${pkg.revisions === 1 ? '' : 's'} included` : null]
+                                .filter(Boolean).join(' · ')}
+                            </p>
+                          )}
+                        </>
+                      )
+                    })()}
 
                     <p className="text-[11px] text-ink-3 mb-3">
                       Category: {CATEGORY_LABELS[l.category] ?? l.category}
