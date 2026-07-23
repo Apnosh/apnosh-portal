@@ -18,6 +18,7 @@ import type { WhySignals } from '@/lib/campaigns/data/why-for'
 import type { ContentOverrideMap } from '@/lib/campaigns/data/content-overrides'
 import { registerDbCampaigns, type DbCampaign } from '@/lib/campaigns/data/db-campaigns'
 import type { CreatorStoreCard as CreatorStoreCardT } from '@/lib/marketplace/store-cards'
+import { requestMarketplaceBooking } from '@/app/marketplace/[slug]/actions'
 import { registerLiveServices } from '@/lib/campaigns/catalog'
 import type { PricedService } from '@/lib/campaigns/data/priced-catalog'
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
@@ -34,7 +35,7 @@ type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
 type PlanPayload = { itemId: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; creatorCards?: CreatorStoreCardT[]; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft, gateAnswers?: Record<string, string>) => Promise<boolean> }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; creatorCards?: CreatorStoreCardT[]; onBookCreator?: (a: { vendorSlug: string; listingSlug: string }) => Promise<{ ok: boolean; error?: string }>; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft, gateAnswers?: Record<string, string>) => Promise<boolean> }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -456,6 +457,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         contentOverrides={contentOverrides}
         dbCampaigns={dbCampaigns}
         creatorCards={creatorCards}
+        onBookCreator={(a) => requestMarketplaceBooking(a)}
         tier={client?.tier ?? null}
         clientId={client?.id ?? null}
         onCreate={onCreate}

@@ -31,6 +31,14 @@ export interface CreatorStoreCard {
   lead: string
   /** Where tapping goes: the creator's storefront, anchored to this package. */
   href: string
+  /** Everything the in-store product page needs, so it can render exactly like a campaign page. */
+  description: string
+  deliverables: string[]
+  options: { label: string; priceDeltaCents: number }[]
+  turnaroundDays: number | null
+  revisions: number | null
+  priceCents: number | null
+  maxPriceCents: number | null
 }
 
 /** Which vendor crafts count as creatives that belong in the store's content shelf. */
@@ -88,6 +96,13 @@ export async function getCreatorStoreCards(state?: string): Promise<CreatorStore
       priceLabel,
       lead: (pkg.deliverables[0] || pkg.description || '').trim(),
       href: `/marketplace/${v.slug}#${row.slug}`,
+      description: pkg.description,
+      deliverables: pkg.deliverables,
+      options: pkg.options.map((o) => ({ label: o.label, priceDeltaCents: o.priceDeltaCents })),
+      turnaroundDays: pkg.turnaroundDays,
+      revisions: pkg.revisions,
+      priceCents: start,
+      maxPriceCents: max,
     })
   }
   return cards

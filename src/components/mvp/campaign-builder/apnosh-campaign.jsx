@@ -2452,21 +2452,21 @@ function PlanCardBig({ p, onOpen, full }) {
 // A creator's own package, appearing right in the store next to Apnosh's cards. An anchor, not
 // a builder open: tapping goes to the creator's storefront to view and request, because a
 // creator-set price cannot reach a charge until the payout rail and its legal sign-off land.
-function CreatorStoreCard({ c }) {
+function CreatorStoreCard({ c, onOpen }) {
   return (
-    <a href={c.href} style={{ flexShrink: 0, width: 168, textDecoration: "none", background: "#fff", borderRadius: 16, border: `1px solid ${TOKENS.line}`, boxShadow: "0 1px 3px rgba(20,30,26,0.06)", padding: 13, display: "flex", flexDirection: "column", gap: 6, WebkitTapHighlightColor: "transparent" }}>
+    <button onClick={() => onOpen && onOpen(c)} style={{ flexShrink: 0, width: 168, textAlign: "left", cursor: "pointer", background: "#fff", borderRadius: 16, border: `1px solid ${TOKENS.line}`, boxShadow: "0 1px 3px rgba(20,30,26,0.06)", padding: 13, display: "flex", flexDirection: "column", gap: 6, WebkitTapHighlightColor: "transparent" }}>
       <span style={{ alignSelf: "flex-start", fontFamily: "Inter, sans-serif", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.mintDark, background: TOKENS.mintTint, borderRadius: 6, padding: "2px 6px" }}>Creator</span>
       <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25 }}>{c.title}</div>
       <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>by {c.vendorName}</div>
       {c.lead && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, lineHeight: 1.4, flex: 1 }}>{c.lead}</div>}
       <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, marginTop: 2 }}>{c.priceLabel}</div>
-    </a>
+    </button>
   );
 }
 
 // The "From local creators" spotlight row, near the top of the browse. Renders nothing until a
 // real creator has published, so the store never shows an empty promise.
-function CreatorSpotlight({ items = [] }) {
+function CreatorSpotlight({ items = [], onOpen }) {
   if (!items.length) return null;
   return (
     <div style={{ marginBottom: 26 }}>
@@ -2475,13 +2475,123 @@ function CreatorSpotlight({ items = [] }) {
         <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, marginTop: 1 }}>Book a real creator directly, at their own rate</div>
       </div>
       <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
-        {items.map((c) => <CreatorStoreCard key={c.id} c={c} />)}
+        {items.map((c) => <CreatorStoreCard key={c.id} c={c} onOpen={onOpen} />)}
       </div>
     </div>
   );
 }
 
-function CategoryRow({ row, onOpen, onSeeAll, creatorCards = [] }) {
+// The creator product page — the page you land on from a creator card in the store. Built to
+// look like the campaign ProductPage (same hero, same "What you get", same sticky footer), but
+// populated from the creator's own package and ending in "Request booking" rather than a buy,
+// since a creator-set price cannot be charged until the payout rail lands.
+const CREATOR_ART = { videographer: "reel", photographer: "dish", food_influencer: "story", graphic_designer: "graphic", social_manager: "gpost" };
+const CREATOR_CAT_LABEL = { videographer: "Videographer", photographer: "Photographer", food_influencer: "Food creator", graphic_designer: "Graphic designer", social_manager: "Social manager" };
+function fmtDelta(cents) { const d = cents / 100; return d % 1 === 0 ? `$${d.toLocaleString("en-US")}` : `$${d.toLocaleString("en-US", { minimumFractionDigits: 2 })}`; }
+
+function CreatorProductPage({ card, restaurant, onBack, onBook }) {
+  const [booking, setBooking] = useState(false);
+  const [done, setDone] = useState(false);
+  const [err, setErr] = useState(null);
+  const artId = CREATOR_ART[card.category] || "reel";
+  const catLabel = CREATOR_CAT_LABEL[card.category] || "Creator";
+
+  async function book() {
+    if (!onBook) return;
+    setBooking(true); setErr(null);
+    try {
+      const r = await onBook({ vendorSlug: card.vendorSlug, listingSlug: card.listingSlug });
+      if (r && r.ok) setDone(true); else setErr((r && r.error) || "That did not send.");
+    } catch { setErr("That did not send."); }
+    finally { setBooking(false); }
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      <div style={{ flex: 1, overflowY: "auto", paddingBottom: 12 }}>
+        {/* HERO — same shape as the campaign product page. */}
+        <div style={{ position: "relative", background: "linear-gradient(168deg, #fbfaf4 0%, #f2f8f4 54%, #e7f3ed 100%)", padding: "14px 20px 26px", overflow: "hidden" }}>
+          <div aria-hidden style={{ position: "absolute", top: -80, right: -60, width: 240, height: 240, borderRadius: "50%", background: "radial-gradient(circle, rgba(74,189,152,0.22), rgba(74,189,152,0))", pointerEvents: "none" }} />
+          <button onClick={onBack} aria-label="Back" className="apnpress" style={{ position: "relative", width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <div className="apnrise" style={{ position: "relative", marginTop: 14 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: TOKENS.mintDark, background: "rgba(74,189,152,0.14)", borderRadius: 8, padding: "4px 9px" }}>{catLabel}</span>
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: "#7c837e", background: "rgba(20,30,26,0.05)", borderRadius: 8, padding: "4px 9px" }}>One-time</span>
+            </div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.mintDark, marginBottom: 6 }}>by {card.vendorName}</div>
+            <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 26, fontWeight: 700, color: TOKENS.ink, lineHeight: 1.16, letterSpacing: -0.5, margin: 0, textWrap: "balance" }}>{card.title}</h1>
+            <div className="apnrise2" style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
+              <div style={{ width: 128, height: 128, borderRadius: 30, background: gType("content"), display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 16px 34px rgba(74,189,152,0.28), 0 3px 8px rgba(20,40,30,0.12)" }}>
+                <Art id={artId} size={76} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* SELL */}
+        <div style={{ padding: "16px 20px 0" }}>
+          <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "#4c554f", lineHeight: 1.55 }}>{card.description}</p>
+        </div>
+
+        {/* HOW IT'S DONE */}
+        <div style={{ padding: "22px 20px 0" }}>
+          <BlockLabel label="How it's done" />
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>Booked directly with {card.vendorName}, at their own rate.</div>
+        </div>
+
+        {/* WHAT YOU GET */}
+        <div style={{ padding: "18px 20px 0" }}>
+          <BlockLabel label="What you get" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {(card.deliverables || []).map((g, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
+                <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink, lineHeight: 1.45 }}>{g}</span>
+              </div>
+            ))}
+          </div>
+          {(card.options || []).length > 0 && (
+            <div style={{ marginTop: 15, background: TOKENS.mintTint, borderRadius: 14, padding: "12px 14px" }}>
+              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.mintDark, marginBottom: 9 }}>Add-ons you can pick</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                {card.options.map((o, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 9 }}>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.ink }}>{o.label}</span>
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.mintDark }}>+{fmtDelta(o.priceDeltaCents)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {(card.turnaroundDays != null || card.revisions != null) && (
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginTop: 13 }}>
+              {[card.turnaroundDays != null ? `${card.turnaroundDays}-day turnaround` : null, card.revisions != null ? `${card.revisions} revision${card.revisions === 1 ? "" : "s"} included` : null].filter(Boolean).join(" \u00b7 ")}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* STICKY FOOTER — price + Request booking, matching the campaign buy bar. */}
+      <div style={{ borderTop: `1px solid ${TOKENS.line}`, background: "#fff", padding: "12px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink }}>{card.priceLabel}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>Booked directly, no charge yet</div>
+        </div>
+        <button onClick={book} disabled={booking || done} className="apnpress" style={{ flex: 1, height: 48, borderRadius: 15, border: "none", background: done ? "#eaf7f3" : TOKENS.mint, color: done ? TOKENS.mintDark : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, cursor: booking || done ? "default" : "pointer", WebkitTapHighlightColor: "transparent", boxShadow: done ? "none" : "0 6px 18px rgba(74,189,152,0.34)" }}>
+          {done ? "Requested \u2713" : booking ? "Sending\u2026" : "Request booking"}
+        </button>
+      </div>
+      {err && <div style={{ padding: "0 20px 12px", fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#c0564f", background: "#fff" }}>{err}</div>}
+      {done && <div style={{ padding: "0 20px 12px", fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, background: "#fff" }}>Your team will connect you with {card.vendorName}.</div>}
+    </div>
+  );
+}
+
+function CategoryRow({ row, onOpen, onSeeAll, creatorCards = [], onOpenCreator }) {
   // Drop hidden ids and float coming-soon cards to the end, so a shelf leads with what's buyable.
   const items = orderIds(row.ids).map(catGet).filter(Boolean);
   const big = row.big;
@@ -2496,7 +2606,7 @@ function CategoryRow({ row, onOpen, onSeeAll, creatorCards = [] }) {
       </button>
       <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
         {items.map((p) => big ? <PlanCardBig key={p.id} p={p} onOpen={onOpen} /> : <PlanCardV key={p.id} p={p} onOpen={onOpen} />)}
-        {(row.id === "content" ? creatorCards : []).map((c) => <CreatorStoreCard key={c.id} c={c} />)}
+        {(row.id === "content" ? creatorCards : []).map((c) => <CreatorStoreCard key={c.id} c={c} onOpen={onOpenCreator} />)}
         <button onClick={() => onSeeAll(row.id)} style={{ flexShrink: 0, width: big ? 110 : 92, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
           <div style={{ width: 46, height: 46, borderRadius: 23, background: "#eef1ef", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
@@ -2580,7 +2690,7 @@ function SearchBar({ value, onChange }) {
   );
 }
 
-function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, initialLens, creatorCards = [] }) {
+function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, initialLens, creatorCards = [], onOpenCreator }) {
   const [q, setQ] = useState("");
   const [featHidden, setFeatHidden] = useState(false);
   // A funnel-stage deep link (Home's weak-leg tap) lands with its shelf pre-filtered.
@@ -2663,8 +2773,8 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
               {!featHidden && (recFeatured
                 ? <RecFeatured item={recFeatured.item} reason={recFeatured.reason} onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />
                 : (buyableId("promoevent") ? <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} /> : null))}
-              <CreatorSpotlight items={creatorCards} />
-              {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} creatorCards={creatorCards} />)}
+              <CreatorSpotlight items={creatorCards} onOpen={onOpenCreator} />
+              {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} creatorCards={creatorCards} onOpenCreator={onOpenCreator} />)}
             </>
           ) : (() => {
             const row = rowWithDb(ROWS.find((r) => r.id === lens));
@@ -4825,7 +4935,7 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, creatorCards = [], tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, creatorCards = [], onBookCreator, tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
   // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
   // Set during render so every child render below reads the current map; a late fetch just
   // re-renders this tree with the fresh edits.
@@ -4858,6 +4968,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };
   const backToBrowse = () => setRoute({ name: "browse" });
+  // A creator card opens an in-store product page that looks like a campaign product page,
+  // rather than linking out to the old marketplace profile.
+  const openCreator = (card) => setRoute({ name: "creatorPdp", card });
   const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : route.from === "plan" ? setRoute({ name: "plan" }) : backToBrowse());
 
   // Save for real, then route on the outcome: confirm on success, a retry
@@ -4908,7 +5021,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <>
               <AppHeader />
               <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: planItems.length > 0 ? 76 : 0 }}>
-                <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} creatorCards={creatorCards} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
+                <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} creatorCards={creatorCards} onOpenCreator={openCreator} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
               </div>
             </>
           )}
@@ -4917,6 +5030,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
           )}
 
+          {route.name === "creatorPdp" && (
+            <CreatorProductPage card={route.card} restaurant={restaurant} onBack={backToBrowse} onBook={onBookCreator} />
+          )}
           {route.name === "pdp" && (
             <ProductPage
               itemId={route.itemId}
