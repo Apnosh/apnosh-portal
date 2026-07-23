@@ -24,9 +24,26 @@
  * wrapper, and the create route's server-side guard, so all three agree on one buyable set.
  */
 
+import { CREATE_CATALOG_IDS } from './create-catalog'
+
 export type CardAvailability = 'live' | 'coming_soon' | 'hidden'
 
 export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'coming_soon', 'hidden']
+
+/**
+ * THE ALLOWLIST (owner call, 2026-07-21): only the cards we have FULLY BUILT and verified
+ * end to end are buyable. Everything else in the built-in catalog shows as "coming soon" —
+ * visible, honest, not buyable — until it is finished to the same bar.
+ *
+ * This is deliberately an allowlist, not a denylist. "Only what we fully built is live" means
+ * a NEW or half-finished card must default to coming_soon, never quietly go on sale because
+ * someone forgot to gate it. To make one buyable you add its id here, which is the same moment
+ * you would be signing off that it is done.
+ *
+ * The four: the 3-lane setup walkthroughs (Google profile, order buttons, review replies,
+ * get-listed) — each has a real diagnosis, a real owner walkthrough, and a verifier.
+ */
+export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings']
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
  *  card and the product page so "coming soon" is never a mystery. No em dashes, 5th-grade words. */
@@ -44,6 +61,14 @@ export const COMING_SOON_REASON: Record<string, string> = {
   program: 'We are rebuilding this full program from the pieces we can run today. Coming soon.',
   // Table-QR list capture depends on the guest-list rail that is not built yet.
   capture: 'The guest-list side of this is coming soon.',
+  // The creative cards (reels, posts, shoots, edits) are the next thing we are building. They
+  // work, but not yet to the bar the four live cards set, so they wait until they do.
+  creative: 'We are making this one better right now. Coming soon.',
+  // Local ads need the client's ad account connected, which is not wired yet.
+  ads: 'This needs your ad account connected, which is coming soon.',
+  // Website + local-search fixes: only part is self-serve today (the Google side), the rest is
+  // a real site rebuild. Held back until the whole thing is one clean flow.
+  site: 'We are still building this into one clean flow. Coming soon.',
 }
 
 /** Which reason group each bookmarked built-in belongs to (drives COMING_SOON_REASON). */
@@ -64,15 +89,29 @@ const COMING_SOON_GROUP: Record<string, keyof typeof COMING_SOON_REASON> = {
   reviews: 'partialSend',
   // Table QR promises "wired to your list" — the list-capture rail is not built.
   qr: 'capture',
+  // The creative shelf — the next build. Held to coming-soon while we rework it.
+  reel: 'creative', story: 'creative', graphic: 'creative', dish: 'creative', edit: 'creative',
+  gpost: 'creative', shoot: 'creative',
+  // Ads need an ad-account connection.
+  reach: 'ads',
+  // Website + local search: part-Google, part site rebuild, not one flow yet.
+  website: 'site', localseo: 'site',
 }
 
 /**
- * The built-in bookmark decision (Phase A, owner-signed-off). Every id here is 'coming_soon'
- * (visible, not buyable). Anything NOT listed is 'live'. Keyed by CreateCatalogId; the resolver is
- * loose so an unknown id (a DB campaign) simply defaults to 'live'.
+ * The built-in decision, derived from the allowlist (owner call, 2026-07-21): EVERY built-in
+ * catalog id is 'coming_soon' unless it is in FULLY_BUILT_LIVE. This inverts the old denylist,
+ * where anything unlisted defaulted to live — that let a half-built card ship by omission.
+ *
+ * Only built-in ids are gated here. An id NOT in the built-in catalog (a DB campaign, which only
+ * registers once its services are real) is absent from this map and the resolver defaults it to
+ * 'live', unchanged. Admin CMS overrides still win over this in availabilityFor.
  */
 export const BUILTIN_AVAILABILITY: Record<string, CardAvailability> = Object.fromEntries(
-  Object.keys(COMING_SOON_GROUP).map((id) => [id, 'coming_soon' as CardAvailability]),
+  CREATE_CATALOG_IDS.map((id) => [
+    id,
+    (FULLY_BUILT_LIVE.includes(id) ? 'live' : 'coming_soon') as CardAvailability,
+  ]),
 )
 
 /** A per-card override the CMS can set (from catalog_content_overrides.visibility). */
