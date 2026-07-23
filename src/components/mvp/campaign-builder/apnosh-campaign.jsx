@@ -2452,14 +2452,29 @@ function PlanCardBig({ p, onOpen, full }) {
 // A creator's own package, appearing right in the store next to Apnosh's cards. An anchor, not
 // a builder open: tapping goes to the creator's storefront to view and request, because a
 // creator-set price cannot reach a charge until the payout rail and its legal sign-off land.
+// Built to match PlanCardV (the campaign store card) exactly: an icon header, a 2-line title,
+// a 2-line sub, and a tag band. The header icon is a plain person for now, a placeholder for a
+// real creator profile photo later. Same width, radius, shadow and proportions as a campaign
+// card so the two read as one shelf.
 function CreatorStoreCard({ c, onOpen }) {
   return (
-    <button onClick={() => onOpen && onOpen(c)} style={{ flexShrink: 0, width: 168, textAlign: "left", cursor: "pointer", background: "#fff", borderRadius: 16, border: `1px solid ${TOKENS.line}`, boxShadow: "0 1px 3px rgba(20,30,26,0.06)", padding: 13, display: "flex", flexDirection: "column", gap: 6, WebkitTapHighlightColor: "transparent" }}>
-      <span style={{ alignSelf: "flex-start", fontFamily: "Inter, sans-serif", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.mintDark, background: TOKENS.mintTint, borderRadius: 6, padding: "2px 6px" }}>Creator</span>
-      <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25 }}>{c.title}</div>
-      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>by {c.vendorName}</div>
-      {c.lead && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, lineHeight: 1.4, flex: 1 }}>{c.lead}</div>}
-      <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, marginTop: 2 }}>{c.priceLabel}</div>
+    <button onClick={() => onOpen && onOpen(c)} style={{ flexShrink: 0, width: 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)" }}>
+      <div style={{ position: "relative", height: 90, background: gType("content"), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+        <div style={{ position: "absolute", width: 110, height: 110, borderRadius: 55, background: "rgba(255,255,255,0.12)", bottom: -36, right: -24 }} />
+        <div style={{ position: "absolute", width: 60, height: 60, borderRadius: 30, background: "rgba(0,0,0,0.05)", bottom: -22, left: -16 }} />
+        {/* Placeholder person icon — swapped for the creator's real profile photo later. */}
+        <div style={{ position: "relative", width: 54, height: 54, borderRadius: 27, background: "rgba(255,255,255,0.92)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(20,40,30,0.12)" }}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.6" /><path d="M4.5 20.5v-1a5.5 5.5 0 0 1 5.5-5.5h4a5.5 5.5 0 0 1 5.5 5.5v1" /></svg>
+        </div>
+      </div>
+      <div style={{ padding: "10px 11px 12px" }}>
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 3, height: 33, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{c.title}</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.sub, lineHeight: 1.35, marginBottom: 8, height: 30, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>by {c.vendorName}</div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignContent: "flex-start", height: 44, overflow: "hidden" }}>
+          <TagPill accent>{c.priceLabel}</TagPill>
+          <TagPill>{CREATOR_CAT_LABEL[c.category] || "Creator"}</TagPill>
+        </div>
+      </div>
     </button>
   );
 }
