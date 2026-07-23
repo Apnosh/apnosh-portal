@@ -50,14 +50,6 @@ const GROUPS: { title: string; rows: Row[] }[] = [
     ],
   },
   {
-    title: 'Find help',
-    rows: [
-      // The creative marketplace: browse creators who set their own packages and prices.
-      // Surfaced now (owner's call) so it is visible as the shelf fills with real creators.
-      { label: 'Find a creator', sub: 'Photographers, videographers and more, at their own rates', href: '/dashboard/marketplace', Icon: Users },
-    ],
-  },
-  {
     title: 'Help',
     rows: [
       { label: 'Contact support', sub: 'Talk to your team', href: '/dashboard/messages', Icon: Headset },
