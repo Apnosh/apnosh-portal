@@ -17,6 +17,7 @@ import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
 import type { WhySignals } from '@/lib/campaigns/data/why-for'
 import type { ContentOverrideMap } from '@/lib/campaigns/data/content-overrides'
 import { registerDbCampaigns, type DbCampaign } from '@/lib/campaigns/data/db-campaigns'
+import type { CreatorStoreCard as CreatorStoreCardT } from '@/lib/marketplace/store-cards'
 import { registerLiveServices } from '@/lib/campaigns/catalog'
 import type { PricedService } from '@/lib/campaigns/data/priced-catalog'
 import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
@@ -33,7 +34,7 @@ type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
 type PlanPayload = { itemId: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft, gateAnswers?: Record<string, string>) => Promise<boolean> }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; creatorCards?: CreatorStoreCardT[]; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft, gateAnswers?: Record<string, string>) => Promise<boolean> }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -83,6 +84,9 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   const [recsLoading, setRecsLoading] = useState(false)
   const [commitment, setCommitment] = useState<{ perMonth: number; count: number }>({ perMonth: 0, count: 0 })
   const [monthlyCap, setMonthlyCap] = useState(0)
+  // Creator packages that appear IN the store (spotlight + mixed into the content shelf).
+  // Empty until real creators publish; the store shows just the Apnosh catalog until then.
+  const [creatorCards, setCreatorCards] = useState<CreatorStoreCardT[]>([])
   // undefined while loading, then the real answer. Tri-state so an owner who DOES
   // have a list never momentarily defaults to social-only before the check lands.
   const [hasList, setHasList] = useState<boolean | undefined>(undefined)
@@ -156,6 +160,17 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         try { localStorage.setItem(cacheKey, JSON.stringify({ signals: j, ts: Date.now() })) } catch { /* storage full/private — fine */ }
       })
       .catch(() => { /* fallback copy shows; nothing personalized is ever faked */ })
+    return () => { cancelled = true }
+  }, [client?.id])
+
+  // The creator packages that ride in the store next to the Apnosh catalog.
+  useEffect(() => {
+    if (!client?.id) return
+    let cancelled = false
+    fetch(`/api/dashboard/creator-cards?clientId=${client.id}`)
+      .then((r) => (r.ok ? r.json() : { cards: [] }))
+      .then((j) => { if (!cancelled) setCreatorCards(Array.isArray(j?.cards) ? j.cards : []) })
+      .catch(() => { /* store still shows the Apnosh catalog */ })
     return () => { cancelled = true }
   }, [client?.id])
 
@@ -440,6 +455,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         whySignals={whySignals}
         contentOverrides={contentOverrides}
         dbCampaigns={dbCampaigns}
+        creatorCards={creatorCards}
         tier={client?.tier ?? null}
         clientId={client?.id ?? null}
         onCreate={onCreate}

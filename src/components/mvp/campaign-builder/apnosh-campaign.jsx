@@ -2449,7 +2449,39 @@ function PlanCardBig({ p, onOpen, full }) {
   );
 }
 
-function CategoryRow({ row, onOpen, onSeeAll }) {
+// A creator's own package, appearing right in the store next to Apnosh's cards. An anchor, not
+// a builder open: tapping goes to the creator's storefront to view and request, because a
+// creator-set price cannot reach a charge until the payout rail and its legal sign-off land.
+function CreatorStoreCard({ c }) {
+  return (
+    <a href={c.href} style={{ flexShrink: 0, width: 168, textDecoration: "none", background: "#fff", borderRadius: 16, border: `1px solid ${TOKENS.line}`, boxShadow: "0 1px 3px rgba(20,30,26,0.06)", padding: 13, display: "flex", flexDirection: "column", gap: 6, WebkitTapHighlightColor: "transparent" }}>
+      <span style={{ alignSelf: "flex-start", fontFamily: "Inter, sans-serif", fontSize: 9.5, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.mintDark, background: TOKENS.mintTint, borderRadius: 6, padding: "2px 6px" }}>Creator</span>
+      <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.25 }}>{c.title}</div>
+      <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>by {c.vendorName}</div>
+      {c.lead && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.sub, lineHeight: 1.4, flex: 1 }}>{c.lead}</div>}
+      <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: TOKENS.ink, marginTop: 2 }}>{c.priceLabel}</div>
+    </a>
+  );
+}
+
+// The "From local creators" spotlight row, near the top of the browse. Renders nothing until a
+// real creator has published, so the store never shows an empty promise.
+function CreatorSpotlight({ items = [] }) {
+  if (!items.length) return null;
+  return (
+    <div style={{ marginBottom: 26 }}>
+      <div style={{ padding: "0 20px 10px" }}>
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.3 }}>From local creators</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, marginTop: 1 }}>Book a real creator directly, at their own rate</div>
+      </div>
+      <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
+        {items.map((c) => <CreatorStoreCard key={c.id} c={c} />)}
+      </div>
+    </div>
+  );
+}
+
+function CategoryRow({ row, onOpen, onSeeAll, creatorCards = [] }) {
   // Drop hidden ids and float coming-soon cards to the end, so a shelf leads with what's buyable.
   const items = orderIds(row.ids).map(catGet).filter(Boolean);
   const big = row.big;
@@ -2464,6 +2496,7 @@ function CategoryRow({ row, onOpen, onSeeAll }) {
       </button>
       <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
         {items.map((p) => big ? <PlanCardBig key={p.id} p={p} onOpen={onOpen} /> : <PlanCardV key={p.id} p={p} onOpen={onOpen} />)}
+        {(row.id === "content" ? creatorCards : []).map((c) => <CreatorStoreCard key={c.id} c={c} />)}
         <button onClick={() => onSeeAll(row.id)} style={{ flexShrink: 0, width: big ? 110 : 92, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
           <div style={{ width: 46, height: 46, borderRadius: 23, background: "#eef1ef", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
@@ -2547,7 +2580,7 @@ function SearchBar({ value, onChange }) {
   );
 }
 
-function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, initialLens }) {
+function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, initialLens, creatorCards = [] }) {
   const [q, setQ] = useState("");
   const [featHidden, setFeatHidden] = useState(false);
   // A funnel-stage deep link (Home's weak-leg tap) lands with its shelf pre-filtered.
@@ -2630,7 +2663,8 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
               {!featHidden && (recFeatured
                 ? <RecFeatured item={recFeatured.item} reason={recFeatured.reason} onOpen={onOpen} onDismiss={() => setFeatHidden(true)} />
                 : (buyableId("promoevent") ? <FeaturedCard onOpen={onOpen} onDismiss={() => setFeatHidden(true)} /> : null))}
-              {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} />)}
+              <CreatorSpotlight items={creatorCards} />
+              {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} creatorCards={creatorCards} />)}
             </>
           ) : (() => {
             const row = rowWithDb(ROWS.find((r) => r.id === lens));
@@ -4791,7 +4825,7 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, creatorCards = [], tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
   // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
   // Set during render so every child render below reads the current map; a late fetch just
   // re-renders this tree with the fresh edits.
@@ -4874,7 +4908,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <>
               <AppHeader />
               <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: planItems.length > 0 ? 76 : 0 }}>
-                <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
+                <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} creatorCards={creatorCards} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} />
               </div>
             </>
           )}
