@@ -41,6 +41,10 @@ const nextConfig: NextConfig = {
       // nothing because every tap redirected straight back to the page it came from,
       // and the page was unreachable by direct URL too. Any real subroute added here in
       // future must be exempted the same way, or it will vanish the same silent way.
+      // Explicit FIRST, because the catch-all below would otherwise eat it and send it to
+      // /dashboard/insights (exactly the silent-vanish the comment above warns about). The
+      // old half-built /insights/setup wizard route moved to the real surface at /measure.
+      { source: '/dashboard/insights/setup', destination: '/dashboard/measure', permanent: false },
       { source: '/dashboard/insights/:path((?!analyst$).+)', destination: '/dashboard/insights', permanent: false },
       { source: '/dashboard/requests/:path*', destination: '/dashboard/messages', permanent: false },
     ]
