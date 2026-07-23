@@ -13,14 +13,16 @@ function SitePicker() {
   const returnTo = params.get('returnTo')
 
   const [sites, setSites] = useState<GSCSite[]>([])
+  const [readerEmail, setReaderEmail] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     if (!clientId) { setError('Missing clientId'); setLoading(false); return }
     fetchGSCSitesForClient(clientId).then((res) => {
-      if (res.success) setSites(res.sites)
+      if (res.success) { setSites(res.sites); setReaderEmail(res.readerEmail) }
       else setError(res.error)
       setLoading(false)
     })
@@ -70,19 +72,42 @@ function SitePicker() {
   }
 
   if (sites.length === 0) {
+    // The service-account case: nothing shows up here until the owner has added our reader
+    // email as a user on their property. Before this, the screen said "no sites found" and
+    // left them with no idea what to do. Now it names the exact address to grant.
     return (
-      <div className="max-w-lg mx-auto px-6 py-20 text-center">
+      <div className="max-w-lg mx-auto px-6 py-16 text-center">
         <Search className="w-10 h-10 text-ink-4 mx-auto mb-3" />
-        <p className="text-sm font-medium text-ink mb-2">No Search Console sites found</p>
-        <p className="text-xs text-ink-4 mb-6 max-w-xs mx-auto">
-          The account you connected doesn&apos;t have any verified Search Console properties. Verify your site at search.google.com/search-console first.
-        </p>
-        <button
-          onClick={() => router.push('/dashboard/connect-accounts')}
-          className="px-4 py-2 text-sm font-medium text-white bg-brand hover:bg-brand-dark rounded-lg"
-        >
-          Try again
-        </button>
+        <p className="text-sm font-medium text-ink mb-2">Nothing to pick yet</p>
+        {readerEmail ? (
+          <>
+            <p className="text-xs text-ink-4 mb-4 max-w-sm mx-auto">
+              We read your Search Console through one address. Add it as a <strong>Full</strong> user in
+              Search Console (Settings → Users and permissions), then come back and your site shows up here.
+            </p>
+            <button
+              onClick={() => { void navigator.clipboard?.writeText(readerEmail); setCopied(true); setTimeout(() => setCopied(false), 1400) }}
+              className="inline-flex items-center gap-2 px-3 py-2 mb-6 text-sm font-medium text-brand-dark bg-brand-tint rounded-lg hover:bg-brand-tint/70"
+            >
+              {readerEmail} {copied ? <Check className="w-3.5 h-3.5" /> : <span className="text-xs">Copy</span>}
+            </button>
+            <div className="text-xs text-ink-4 mb-6">
+              No Search Console yet? <a href="https://search.google.com/search-console" target="_blank" rel="noreferrer" className="text-brand hover:underline">Set one up first</a>.
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-ink-4 mb-6 max-w-xs mx-auto">
+            The account you connected doesn&apos;t have any verified Search Console properties. Verify your site at search.google.com/search-console first.
+          </p>
+        )}
+        <div>
+          <button
+            onClick={() => router.push('/dashboard/connect-accounts')}
+            className="px-4 py-2 text-sm font-medium text-white bg-brand hover:bg-brand-dark rounded-lg"
+          >
+            Try again
+          </button>
+        </div>
       </div>
     )
   }

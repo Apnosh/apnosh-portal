@@ -2,7 +2,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listGSCSites, type GSCSite } from '@/lib/google'
-import { serviceAccountEnabled, getServiceAccountToken, GSC_SCOPE } from '@/lib/google-service-account'
+import { serviceAccountEnabled, getServiceAccountToken, getServiceAccountEmail, GSC_SCOPE } from '@/lib/google-service-account'
 
 /**
  * Fetch GSC sites for a client. When the service account is configured we
@@ -11,13 +11,16 @@ import { serviceAccountEnabled, getServiceAccountToken, GSC_SCOPE } from '@/lib/
  */
 export async function fetchGSCSitesForClient(
   clientId: string
-): Promise<{ success: true; sites: GSCSite[] } | { success: false; error: string }> {
+): Promise<{ success: true; sites: GSCSite[]; readerEmail: string | null } | { success: false; error: string }> {
   if (serviceAccountEnabled()) {
     const token = await getServiceAccountToken(GSC_SCOPE)
     if (!token) return { success: false, error: 'Service account is not configured correctly.' }
     try {
       const sites = await listGSCSites(token)
-      return { success: true, sites }
+      // The reader email travels with the result so the picker's empty state can tell the
+      // owner WHICH address to grant. Without this, a client whose site the service account
+      // has not been added to yet lands on "no sites found" with no idea what to do next.
+      return { success: true, sites, readerEmail: getServiceAccountEmail() }
     } catch (err) {
       return { success: false, error: err instanceof Error ? err.message : 'Failed to list sites' }
     }
@@ -39,7 +42,7 @@ export async function fetchGSCSitesForClient(
 
   try {
     const sites = await listGSCSites(conn.access_token)
-    return { success: true, sites }
+    return { success: true, sites, readerEmail: null }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : 'Failed to list sites' }
   }
