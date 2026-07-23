@@ -151,7 +151,9 @@ function OrderCard({ o, busy, onAct, stars }: { o: WorkOrder; busy: boolean; onA
       )}
       {due && <p className="mt-2 text-[12px] text-neutral-400">Due {due}</p>}
 
-      <Link href={`/creator/work/${o.id}`} className="mt-2 inline-block text-[12px] font-semibold text-neutral-900 underline">Open full brief →</Link>
+      {/* Campaign pieces have a full AI brief page; a marketplace booking's brief is the card itself
+          (title + notes), so it delivers inline with no separate brief to open. */}
+      {o.campaignId && <Link href={`/creator/work/${o.id}`} className="mt-2 inline-block text-[12px] font-semibold text-neutral-900 underline">Open full brief →</Link>}
 
       {/* Actions by state */}
       {o.status === 'offered' && (

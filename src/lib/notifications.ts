@@ -30,6 +30,7 @@ export type NotificationKind =
   | 'campaign_wrapped'
   | 'invoice_reminder'
   | 'work_offer'
+  | 'booking_reminder'
 
 export interface NotificationRow {
   id: string

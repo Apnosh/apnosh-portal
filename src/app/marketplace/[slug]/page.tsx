@@ -197,6 +197,7 @@ export default async function VendorProfilePage({ params }: PageProps) {
             const firstMonthFree = details.firstMonthFree === true
             const onboardingValue = details.onboardingValue as number | undefined
             const setup = details.setup as number | undefined
+            const tieredListing = Array.isArray(details.tiers) && (details.tiers as unknown[]).length > 0
 
             return (
               <div
@@ -230,7 +231,7 @@ export default async function VendorProfilePage({ params }: PageProps) {
 
                     <div className="flex flex-wrap items-baseline gap-3 mb-3">
                       <span className="text-[24px] font-bold text-ink tabular-nums">
-                        {priceLabel(l.priceCents, l.billingPeriod)}
+                        {tieredListing ? 'from ' : ''}{priceLabel(l.priceCents, l.billingPeriod)}
                       </span>
                       {setup !== undefined && setup > 0 && (
                         <span className="text-[12px] text-ink-3">
@@ -264,7 +265,29 @@ export default async function VendorProfilePage({ params }: PageProps) {
                       const hasRange = pkg.priceCents != null && max != null && max > pkg.priceCents
                       return (
                         <>
-                          {pkg.deliverables.length > 0 && (
+                          {/* Tiered: each level with its own price and list. Levels scale scope. */}
+                          {pkg.tiers.length > 0 && (
+                            <div className="mb-3 space-y-2">
+                              {pkg.tiers.map((t) => (
+                                <div key={t.id} className="border border-ink-6 rounded-xl p-3">
+                                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                                    <span className="text-[13px] font-semibold text-ink">{t.name}</span>
+                                    <span className="text-[14px] font-bold text-ink tabular-nums">
+                                      {formatCents(t.priceCents)}{l.billingPeriod === 'monthly' ? '/mo' : ''}
+                                    </span>
+                                  </div>
+                                  <ul className="space-y-1">
+                                    {t.deliverables.map((d, i) => (
+                                      <li key={i} className="flex items-start gap-2 text-[12.5px] text-ink-2">
+                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0 mt-0.5" /> {d}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {pkg.tiers.length === 0 && pkg.deliverables.length > 0 && (
                             <ul className="mb-3 space-y-1">
                               {pkg.deliverables.map((d, i) => (
                                 <li key={i} className="flex items-start gap-2 text-[13px] text-ink-2">

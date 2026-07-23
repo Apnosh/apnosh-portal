@@ -39,6 +39,20 @@ export interface PackageOption {
   priceDeltaCents: number
 }
 
+/**
+ * One scope tier of an offering (Good / Better / Best). Tiers scale SCOPE — how many, how much —
+ * never quality: it is the same creator, more of the work. Each tier carries its own price and its
+ * own list of what the buyer gets. A package with no tiers is the simple one-price case.
+ */
+export interface PackageTier {
+  id: string
+  name: string
+  priceCents: number
+  deliverables: string[]
+  /** One short line to tell this tier apart from the others. Optional. */
+  note?: string
+}
+
 /** The editor's model of a package. Everything a creator sets. */
 export interface CreatorPackage {
   id?: string
@@ -47,10 +61,15 @@ export interface CreatorPackage {
   category: PackageCategory
   listingType: ListingType
   description: string
-  /** null only when listingType is 'quote'. */
+  /** The standard product this is an offering of, from the creative catalog. null = free-form. */
+  productId: string | null
+  /** null only when listingType is 'quote', or when the price lives in tiers. */
   priceCents: number | null
   billingPeriod: BillingPeriod | null
+  /** Used only when tiers is empty (the single-price case). Tiered packages carry scope per tier. */
   deliverables: string[]
+  /** 0 = single price (uses priceCents + deliverables). >=1 = tiered (price + scope per tier). */
+  tiers: PackageTier[]
   options: PackageOption[]
   turnaroundDays: number | null
   revisions: number | null
@@ -74,8 +93,10 @@ export interface ListingRow {
 
 /** What we store in details. Nothing else lives there, so the editor owns the whole shape. */
 interface PackageDetails {
+  productId?: unknown
   deliverables?: unknown
   options?: unknown
+  tiers?: unknown
   turnaroundDays?: unknown
   revisions?: unknown
 }
@@ -95,13 +116,25 @@ const isPosInt = (n: unknown): n is number => typeof n === 'number' && Number.is
  */
 export function validatePackage(p: CreatorPackage): string[] {
   const errs: string[] = []
+  const tiered = p.tiers.length > 0
   if (!p.title.trim()) errs.push('Give your package a name.')
   if (!PACKAGE_CATEGORIES.includes(p.category)) errs.push('Pick what kind of work this is.')
 
   if (p.listingType === 'quote') {
+    // A quote is a single custom request: no set price and no tiers.
     if (p.priceCents != null) errs.push('A quote package has no set price. Leave the price blank.')
+    if (tiered) errs.push('A quote package is one custom request, so it has no tiers. Remove them or set a price.')
+  } else if (tiered) {
+    // Price and scope live per tier. Each tier must be priced and say what the buyer gets.
+    p.tiers.forEach((t, i) => {
+      if (!t.name.trim()) errs.push(`Level ${i + 1} needs a name.`)
+      if (!isPosInt(t.priceCents) || t.priceCents <= 0) errs.push(`Level ${i + 1} needs a price above zero.`)
+      if (t.deliverables.filter((d) => d.trim()).length === 0) errs.push(`Level ${i + 1} needs at least one thing the buyer gets.`)
+    })
   } else {
+    // The simple one-price case: a base price and a list of deliverables.
     if (!isPosInt(p.priceCents) || (p.priceCents ?? 0) <= 0) errs.push('Set a price above zero.')
+    if (p.deliverables.length === 0) errs.push('List at least one thing the buyer gets.')
   }
 
   if (p.listingType === 'subscription') {
@@ -109,7 +142,6 @@ export function validatePackage(p: CreatorPackage): string[] {
   }
 
   if (!p.description.trim()) errs.push('Say in a sentence what this package is.')
-  if (p.deliverables.length === 0) errs.push('List at least one thing the buyer gets.')
 
   p.options.forEach((o, i) => {
     if (!o.label.trim()) errs.push(`Add-on ${i + 1} needs a name.`)
@@ -124,8 +156,14 @@ export function validatePackage(p: CreatorPackage): string[] {
 /** Turn an editor package into the vendor_listings row to write. Assumes validatePackage passed. */
 export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
   const details: PackageDetails = {
+    productId: p.productId ?? null,
     deliverables: p.deliverables.map((d) => d.trim()).filter(Boolean),
     options: p.options.map((o) => ({ id: o.id, label: o.label.trim(), priceDeltaCents: o.priceDeltaCents })),
+    tiers: p.tiers.map((t) => ({
+      id: t.id, name: t.name.trim(), priceCents: t.priceCents,
+      deliverables: t.deliverables.map((d) => d.trim()).filter(Boolean),
+      ...(t.note && t.note.trim() ? { note: t.note.trim() } : {}),
+    })),
     turnaroundDays: p.turnaroundDays,
     revisions: p.revisions,
   }
@@ -137,7 +175,8 @@ export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
     category: p.category,
     listing_type: p.listingType,
     description: p.description.trim(),
-    price_cents: p.listingType === 'quote' ? null : p.priceCents,
+    // The column shows the "starting at" number: the lowest tier when tiered, else the base price.
+    price_cents: startingPriceCents(p),
     billing_period: p.listingType === 'subscription' ? p.billingPeriod : (p.listingType === 'quote' ? null : 'one_time'),
     details,
     active: p.active,
@@ -158,6 +197,21 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
         return [{ id: typeof oo.id === 'string' ? oo.id : `opt-${i}`, label, priceDeltaCents }]
       })
     : []
+  const tiers: PackageTier[] = Array.isArray(d.tiers)
+    ? d.tiers.flatMap((t, i) => {
+        if (!t || typeof t !== 'object') return []
+        const tt = t as Record<string, unknown>
+        const name = typeof tt.name === 'string' ? tt.name : ''
+        const priceCents = isPosInt(tt.priceCents) ? tt.priceCents : 0
+        const tierDeliverables = Array.isArray(tt.deliverables) ? tt.deliverables.filter((x): x is string => typeof x === 'string') : []
+        if (!name) return []
+        return [{
+          id: typeof tt.id === 'string' ? tt.id : `tier-${i}`,
+          name, priceCents, deliverables: tierDeliverables,
+          ...(typeof tt.note === 'string' && tt.note ? { note: tt.note } : {}),
+        }]
+      })
+    : []
   const cat = (PACKAGE_CATEGORIES as readonly string[]).includes(row.category) ? (row.category as PackageCategory) : 'other'
   const lt = (['one_off', 'package', 'subscription', 'quote'] as const).includes(row.listing_type as ListingType)
     ? (row.listing_type as ListingType) : 'one_off'
@@ -168,10 +222,12 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
     category: cat,
     listingType: lt,
     description: row.description ?? '',
+    productId: typeof d.productId === 'string' ? d.productId : null,
     priceCents: typeof row.price_cents === 'number' ? row.price_cents : null,
     billingPeriod: (['monthly', 'annual', 'one_time'] as const).includes(row.billing_period as BillingPeriod)
       ? (row.billing_period as BillingPeriod) : null,
     deliverables,
+    tiers,
     options,
     turnaroundDays: isPosInt(d.turnaroundDays) ? d.turnaroundDays : null,
     revisions: isPosInt(d.revisions) ? d.revisions : null,
@@ -179,15 +235,29 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
   }
 }
 
-/** The "starting at" price a card shows: the base, since options only add on top. Null = quote. */
-export function startingPriceCents(p: Pick<CreatorPackage, 'priceCents'>): number | null {
+/**
+ * The "starting at" price a card shows: the lowest tier when tiered, else the base price. Options
+ * only add on top, so they never lower this. Null = quote (or no price set yet).
+ */
+export function startingPriceCents(p: Pick<CreatorPackage, 'priceCents' | 'tiers' | 'listingType'>): number | null {
+  if (p.listingType === 'quote') return null
+  if (p.tiers.length) {
+    const prices = p.tiers.map((t) => t.priceCents).filter((n) => isPosInt(n) && n > 0)
+    return prices.length ? Math.min(...prices) : null
+  }
   return p.priceCents
 }
 
-/** The most a buyer could pay: base plus every option. Useful for an honest "from X to Y" range. */
-export function maxPriceCents(p: Pick<CreatorPackage, 'priceCents' | 'options'>): number | null {
+/** The most a buyer could pay: the top tier (or base) plus every option. For an honest "X to Y". */
+export function maxPriceCents(p: Pick<CreatorPackage, 'priceCents' | 'tiers' | 'options' | 'listingType'>): number | null {
+  if (p.listingType === 'quote') return null
+  const addOns = p.options.reduce((s, o) => s + Math.max(0, o.priceDeltaCents), 0)
+  if (p.tiers.length) {
+    const prices = p.tiers.map((t) => t.priceCents).filter((n) => isPosInt(n) && n > 0)
+    return prices.length ? Math.max(...prices) + addOns : null
+  }
   if (p.priceCents == null) return null
-  return p.priceCents + p.options.reduce((s, o) => s + Math.max(0, o.priceDeltaCents), 0)
+  return p.priceCents + addOns
 }
 
 /** $1,299 from 129900. Whole dollars unless there are cents. */
@@ -202,8 +272,8 @@ export function formatCents(cents: number | null): string {
 /** A blank package to seed the editor's "new" form. */
 export function emptyPackage(category: PackageCategory = 'videographer'): CreatorPackage {
   return {
-    slug: '', title: '', category, listingType: 'one_off', description: '',
-    priceCents: null, billingPeriod: 'one_time', deliverables: [], options: [],
+    slug: '', title: '', category, listingType: 'one_off', description: '', productId: null,
+    priceCents: null, billingPeriod: 'one_time', deliverables: [], tiers: [], options: [],
     turnaroundDays: null, revisions: null, active: false,
   }
 }

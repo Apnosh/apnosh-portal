@@ -220,12 +220,15 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
   // Delivered work is the OWNER's turn — this transition previously notified nobody,
   // so finished pieces sat invisible until the owner happened to open the campaign
   // (the silent stall). Tell them; the campaign page has Approve / Ask-for-changes.
-  if (patch.status === 'delivered' && cur && cur.campaign_id) {
+  if (patch.status === 'delivered' && cur) {
+    // Campaign pieces point the owner at the campaign; a marketplace booking (no campaign) points at
+    // the bookings list, where the same Approve / Ask-for-changes gate lives.
+    const reviewLink = cur.campaign_id ? `/dashboard/campaigns/${cur.campaign_id}` : '/dashboard/bookings'
     await notifyClientOwners(cur.client_id, {
       kind: 'client_signoff',
       title: `${cur.title || 'A piece'} is ready for your review`,
       body: 'The finished work was delivered. Take a look and approve it, or ask for changes.',
-      link: `/dashboard/campaigns/${cur.campaign_id}`,
+      link: reviewLink,
     }).catch(() => ({ notified: 0 }))
   }
   // A creator saying no used to be terminal (the signal WAS the recovery). Now
@@ -282,6 +285,11 @@ async function autoReassignDeclinedOrder(orderId: string): Promise<{ id: string;
   const admin = createAdminClient()
   const { data: row, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).maybeSingle()
   if (error || !row || row.status !== 'declined') return null
+
+  // A directly-booked marketplace order (no campaign) is never auto-reassigned: the restaurant chose
+  // THIS creator, so bouncing the job to a different one is wrong. A decline there is terminal;
+  // cancelling the booking is the way out.
+  if (!row.campaign_id) return null
 
   // A stopped campaign's work must stay stopped: the decline block only runs on
   // real creator declines, but a stop can land between that write and this read —
@@ -951,7 +959,9 @@ export async function bridgeApprovedOrderToDraft(orderId: string): Promise<strin
   const admin = createAdminClient()
   // select('*') so a missing content_draft_id column (pre-179) does not error the read.
   const { data: o, error } = await admin.from('creator_work_orders').select('*').eq('id', orderId).single()
-  if (error || !o || o.status !== 'approved' || o.content_draft_id) return null
+  // A marketplace booking (campaign_id null) is NOT a campaign content piece: its deliverable goes to
+  // the restaurant, not into the team's social publish queue. Skip the bridge for it.
+  if (error || !o || o.status !== 'approved' || o.content_draft_id || !o.campaign_id) return null
   const row = buildBridgeDraftRow({
     client_id: o.client_id as string,
     campaign_id: (o.campaign_id as string | null) ?? null,

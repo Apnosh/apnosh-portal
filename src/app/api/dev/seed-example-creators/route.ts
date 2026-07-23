@@ -3,6 +3,10 @@
  * with real packages so the store's "From local creators" spotlight and content-shelf mix can be
  * SEEN populated before real creators are onboarded.
  *
+ * Packages are built from the standard creative catalog (the same products a real creator picks),
+ * then priced per level. So the demo exercises the whole model: tiered one-offs, a single-price
+ * offering, and a monthly management subscription.
+ *
  * Everything it touches is namespaced `example-*` and every name ends in "(Example)", so it is
  * unmistakable and trivially removable. POST seeds, DELETE removes. Both require a logged-in user
  * and only ever operate on `example-*` vendors, so the blast radius is contained to demo data.
@@ -14,58 +18,102 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { packageToRow, type CreatorPackage } from '@/lib/marketplace/package'
+import { packageToRow, type CreatorPackage, type PackageCategory } from '@/lib/marketplace/package'
+import { productById, packageFromProduct } from '@/lib/marketplace/creative-catalog'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+/** Build a priced package from a standard product: fill tier prices (dollars), add priced add-ons. */
+function offer(productId: string, opts: {
+  tierPrices?: number[]        // dollars per level, in catalog order
+  price?: number               // dollars, for single-price products (no tiers)
+  addOns?: Record<string, number> // label -> dollars
+  turnaroundDays?: number | null
+  revisions?: number | null
+}): CreatorPackage {
+  const product = productById(productId)
+  if (!product) throw new Error(`unknown product ${productId}`)
+  const pkg = packageFromProduct(product)
+  pkg.active = true
+  if (pkg.tiers.length && opts.tierPrices) {
+    pkg.tiers = pkg.tiers.map((t, i) => ({ ...t, priceCents: Math.round((opts.tierPrices![i] ?? 0) * 100) }))
+  }
+  if (!pkg.tiers.length && opts.price != null) pkg.priceCents = Math.round(opts.price * 100)
+  if (opts.addOns) {
+    pkg.options = Object.entries(opts.addOns).map(([label, dollars], i) => ({ id: `opt-${i}`, label, priceDeltaCents: Math.round(dollars * 100) }))
+  }
+  if (opts.turnaroundDays !== undefined) pkg.turnaroundDays = opts.turnaroundDays
+  if (opts.revisions !== undefined) pkg.revisions = opts.revisions
+  return pkg
+}
+
+// vendors.craft is a coarse dispatch key (CHECK: Video/Photo/Social/Design), not the listing
+// category. The listing category (which drives the store shelf) comes from the product.
+const CRAFT_KEY: Record<PackageCategory, 'Video' | 'Photo' | 'Social' | 'Design'> = {
+  videographer: 'Video', photographer: 'Photo', food_influencer: 'Social',
+  graphic_designer: 'Design', social_manager: 'Social', web_designer: 'Design',
+  local_seo: 'Social', email_marketer: 'Social', pr_specialist: 'Social',
+  strategist: 'Social', full_service_agency: 'Social', other: 'Social',
+}
+
 interface ExampleCreator {
   slug: string
   name: string
-  craft: 'Video' | 'Photo' | 'Social'
+  craft: PackageCategory
   description: string
-  pkg: CreatorPackage
+  packages: CreatorPackage[]
 }
 
 const EXAMPLES: ExampleCreator[] = [
   {
-    slug: 'example-maya-video', name: 'Maya Rivera (Example)', craft: 'Video',
+    slug: 'example-maya-video', name: 'Maya Rivera (Example)', craft: 'videographer',
     description: 'Restaurant reels shot and cut for social. Seattle-based.',
-    pkg: {
-      slug: 'signature-reel-pack', title: 'Signature Reel Pack', category: 'videographer',
-      listingType: 'one_off', description: 'Three short reels shot and edited at your restaurant, ready to post.',
-      priceCents: 45000, billingPeriod: 'one_time',
-      deliverables: ['3 vertical reels', '1 hero cut for ads'],
-      options: [
-        { id: 'opt-extra-reel', label: 'Extra reel', priceDeltaCents: 12000 },
-        { id: 'opt-rush', label: 'Rush in 48 hours', priceDeltaCents: 15000 },
-      ],
-      turnaroundDays: 10, revisions: 2, active: true,
-    },
+    packages: [
+      offer('reel-pack', {
+        tierPrices: [350, 450, 650],
+        addOns: { 'Extra reel': 120, 'Rush in 48 hours': 150 },
+        turnaroundDays: 10, revisions: 2,
+      }),
+    ],
   },
   {
-    slug: 'example-leo-photo', name: 'Leo Tanaka (Example)', craft: 'Photo',
+    slug: 'example-leo-photo', name: 'Leo Tanaka (Example)', craft: 'photographer',
     description: 'Food photography that makes the plate the hero.',
-    pkg: {
-      slug: 'dish-photo-day', title: 'Dish Photo Day', category: 'photographer',
-      listingType: 'one_off', description: 'A half-day shoot at your restaurant with about 20 finished photos.',
-      priceCents: 60000, billingPeriod: 'one_time',
-      deliverables: ['20 edited photos', 'Shot list planned before the day'],
-      options: [{ id: 'opt-drinks', label: 'Add your drinks menu', priceDeltaCents: 15000 }],
-      turnaroundDays: 7, revisions: 1, active: true,
-    },
+    packages: [
+      offer('dish-photo-day', {
+        tierPrices: [400, 600, 850],
+        addOns: { 'Add your drinks menu': 150 },
+        turnaroundDays: 7, revisions: 1,
+      }),
+      offer('brand-photo-day', {
+        price: 700,
+        addOns: { 'Add headshots for the team': 200 },
+        turnaroundDays: 10, revisions: 1,
+      }),
+    ],
   },
   {
-    slug: 'example-priya-social', name: 'Priya Nair (Example)', craft: 'Social',
+    slug: 'example-priya-social', name: 'Priya Nair (Example)', craft: 'food_influencer',
     description: 'Local food creator. Tastings and honest posts to a Seattle audience.',
-    pkg: {
-      slug: 'tasting-post', title: 'Tasting Post', category: 'food_influencer',
-      listingType: 'one_off', description: 'A visit, a tasting, and a post that sends real people your way.',
-      priceCents: 30000, billingPeriod: 'one_time',
-      deliverables: ['1 in-feed post', '3 stories with your location tagged'],
-      options: [{ id: 'opt-reel', label: 'Add a reel', priceDeltaCents: 20000 }],
-      turnaroundDays: 5, revisions: null, active: true,
-    },
+    packages: [
+      offer('tasting-post', {
+        tierPrices: [200, 300, 500],
+        addOns: { 'Whitelist for you to boost as an ad': 150 },
+        turnaroundDays: 5, revisions: null,
+      }),
+    ],
+  },
+  {
+    slug: 'example-sofia-manager', name: 'Sofia Reyes (Example)', craft: 'social_manager',
+    description: 'Runs restaurant social month to month, so your feed never goes quiet.',
+    packages: [
+      offer('monthly-social', {
+        tierPrices: [400, 700, 1100],
+        addOns: { 'Add reply management': 150 },
+        turnaroundDays: null, revisions: null,
+      }),
+    ],
   },
 ]
 
@@ -88,8 +136,10 @@ export async function POST(req: NextRequest) {
       .maybeSingle()
     if (vErr || !vendor) continue
 
-    const row = packageToRow(ex.pkg, vendor.id as string)
-    await db.from('vendor_listings').upsert(row, { onConflict: 'vendor_id,slug' })
+    for (const pkg of ex.packages) {
+      const row = packageToRow(pkg, vendor.id as string)
+      await db.from('vendor_listings').upsert(row, { onConflict: 'vendor_id,slug' })
+    }
     created.push(ex.slug)
   }
 

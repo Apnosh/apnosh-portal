@@ -2457,14 +2457,16 @@ function PlanCardBig({ p, onOpen, full }) {
 // real creator profile photo later. Same width, radius, shadow and proportions as a campaign
 // card so the two read as one shelf.
 function CreatorStoreCard({ c, onOpen }) {
+  const av = CRAFT_AV[c.category] || ["#8bd0b6", "#4abd98"];
   return (
     <button onClick={() => onOpen && onOpen(c)} style={{ flexShrink: 0, width: 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)" }}>
       <div style={{ position: "relative", height: 90, background: gType("content"), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
         <div style={{ position: "absolute", width: 110, height: 110, borderRadius: 55, background: "rgba(255,255,255,0.12)", bottom: -36, right: -24 }} />
         <div style={{ position: "absolute", width: 60, height: 60, borderRadius: 30, background: "rgba(0,0,0,0.05)", bottom: -22, left: -16 }} />
-        {/* Placeholder person icon — swapped for the creator's real profile photo later. */}
-        <div style={{ position: "relative", width: 54, height: 54, borderRadius: 27, background: "rgba(255,255,255,0.92)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 6px rgba(20,40,30,0.12)" }}>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.6" /><path d="M4.5 20.5v-1a5.5 5.5 0 0 1 5.5-5.5h4a5.5 5.5 0 0 1 5.5 5.5v1" /></svg>
+        {/* Craft-colored monogram — the creator's initials, matching their profile avatar. Real
+            profile photo swaps in here later. */}
+        <div style={{ position: "relative", width: 54, height: 54, borderRadius: 27, background: `linear-gradient(150deg, ${av[0]}, ${av[1]})`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 3px 8px rgba(20,40,30,0.2)", border: "2px solid rgba(255,255,255,0.85)" }}>
+          <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 700, color: "#fff", letterSpacing: 0.3 }}>{initialsOf(c.vendorName)}</span>
         </div>
       </div>
       <div style={{ padding: "10px 11px 12px" }}>
@@ -2504,22 +2506,34 @@ const CREATOR_ART = { videographer: "reel", photographer: "dish", food_influence
 const CREATOR_CAT_LABEL = { videographer: "Videographer", photographer: "Photographer", food_influencer: "Food creator", graphic_designer: "Graphic designer", social_manager: "Social manager" };
 function fmtDelta(cents) { const d = cents / 100; return d % 1 === 0 ? `$${d.toLocaleString("en-US")}` : `$${d.toLocaleString("en-US", { minimumFractionDigits: 2 })}`; }
 
-function CreatorProductPage({ card, restaurant, onBack, onBook }) {
-  const [booking, setBooking] = useState(false);
-  const [done, setDone] = useState(false);
-  const [err, setErr] = useState(null);
+function CreatorProductPage({ card, restaurant, onBack, onBook, onHoldSlot, onCreatorSlots, onOpenProfile }) {
   const artId = CREATOR_ART[card.category] || "reel";
   const catLabel = CREATOR_CAT_LABEL[card.category] || "Creator";
+  const recurring = !!card.recurring;
+  const per = recurring ? "/mo" : "";
+  const shape = card.bookingShape || "scheduled";
 
-  async function book() {
-    if (!onBook) return;
-    setBooking(true); setErr(null);
-    try {
-      const r = await onBook({ vendorSlug: card.vendorSlug, listingSlug: card.listingSlug });
-      if (r && r.ok) setDone(true); else setErr((r && r.error) || "That did not send.");
-    } catch { setErr("That did not send."); }
-    finally { setBooking(false); }
+  // Scope tiers (Good/Better/Best). 2+ means the buyer picks a level; the pick drives price + list.
+  const tiers = Array.isArray(card.tiers) ? card.tiers : [];
+  const tiered = tiers.length >= 2;
+  const [tierIdx, setTierIdx] = useState(0);
+  const activeTier = tiers[tierIdx] || (tiers.length === 1 ? tiers[0] : null);
+
+  const shownDeliverables = activeTier ? activeTier.deliverables : (card.deliverables || []);
+  const footerPrice = activeTier ? `${fmtDelta(activeTier.priceCents)}${per}` : card.priceLabel;
+
+  // The booking flow is its own step, and it depends on the product's shape: scheduled picks a
+  // slot, async gathers a brief, recurring picks a start date. All three end in one submit.
+  const [step, setStep] = useState("browse");
+  if (step === "book") {
+    return (
+      <CreatorBookingPanel
+        card={card} tier={activeTier} shape={shape} recurring={recurring} per={per} vendorName={card.vendorName}
+        onBack={() => setStep("browse")} onHoldSlot={onHoldSlot} onBook={onBook} onCreatorSlots={onCreatorSlots}
+      />
+    );
   }
+  const ctaLabel = shape === "scheduled" ? "Pick a time" : shape === "recurring" ? "Choose a start date" : "Continue";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -2533,9 +2547,12 @@ function CreatorProductPage({ card, restaurant, onBack, onBook }) {
           <div className="apnrise" style={{ position: "relative", marginTop: 14 }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
               <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, color: TOKENS.mintDark, background: "rgba(74,189,152,0.14)", borderRadius: 8, padding: "4px 9px" }}>{catLabel}</span>
-              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: "#7c837e", background: "rgba(20,30,26,0.05)", borderRadius: 8, padding: "4px 9px" }}>One-time</span>
+              <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: "#7c837e", background: "rgba(20,30,26,0.05)", borderRadius: 8, padding: "4px 9px" }}>{recurring ? "Monthly" : "One-time"}</span>
             </div>
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.mintDark, marginBottom: 6 }}>by {card.vendorName}</div>
+            <button onClick={() => onOpenProfile && onOpenProfile(card.vendorSlug)} className="apnpress" style={{ display: "inline-flex", alignItems: "center", gap: 3, border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.mintDark, marginBottom: 6, WebkitTapHighlightColor: "transparent" }}>
+              by {card.vendorName}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+            </button>
             <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 26, fontWeight: 700, color: TOKENS.ink, lineHeight: 1.16, letterSpacing: -0.5, margin: 0, textWrap: "balance" }}>{card.title}</h1>
             <div className="apnrise2" style={{ marginTop: 20, display: "flex", justifyContent: "center" }}>
               <div style={{ width: 128, height: 128, borderRadius: 30, background: gType("content"), display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 16px 34px rgba(74,189,152,0.28), 0 3px 8px rgba(20,40,30,0.12)" }}>
@@ -2556,11 +2573,33 @@ function CreatorProductPage({ card, restaurant, onBack, onBook }) {
           <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>Booked directly with {card.vendorName}, at their own rate.</div>
         </div>
 
-        {/* WHAT YOU GET */}
+        {/* CHOOSE YOUR LEVEL — only when the creator offers more than one. Levels scale scope,
+            not quality: same creator, more of the work. Picking one drives the price and the list. */}
+        {tiered && (
+          <div style={{ padding: "22px 20px 0" }}>
+            <BlockLabel label="Choose your level" />
+            <div style={{ display: "flex", gap: 8 }}>
+              {tiers.map((t, i) => {
+                const on = i === tierIdx;
+                return (
+                  <button key={t.id || i} onClick={() => setTierIdx(i)} className="apnpress" style={{ flex: 1, minWidth: 0, textAlign: "left", cursor: "pointer", borderRadius: 13, padding: "10px 11px", border: on ? `1.5px solid ${TOKENS.mint}` : `1px solid ${TOKENS.line}`, background: on ? TOKENS.mintTint : "#fff", WebkitTapHighlightColor: "transparent" }}>
+                    <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 12.5, fontWeight: 600, color: on ? TOKENS.mintDark : TOKENS.ink, lineHeight: 1.2, marginBottom: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.name}</div>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 700, color: TOKENS.ink }}>{fmtDelta(t.priceCents)}{recurring && <span style={{ fontSize: 10.5, fontWeight: 600, color: TOKENS.faint }}>/mo</span>}</div>
+                  </button>
+                );
+              })}
+            </div>
+            {activeTier && activeTier.note && (
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginTop: 9, lineHeight: 1.45 }}>{activeTier.note}</div>
+            )}
+          </div>
+        )}
+
+        {/* WHAT YOU GET — the selected level's list when tiered, else the package's own list. */}
         <div style={{ padding: "18px 20px 0" }}>
           <BlockLabel label="What you get" />
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {(card.deliverables || []).map((g, i) => (
+            {(shownDeliverables || []).map((g, i) => (
               <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>
                 <span style={{ width: 22, height: 22, borderRadius: 11, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
@@ -2593,15 +2632,497 @@ function CreatorProductPage({ card, restaurant, onBack, onBook }) {
       {/* STICKY FOOTER — price + Request booking, matching the campaign buy bar. */}
       <div style={{ borderTop: `1px solid ${TOKENS.line}`, background: "#fff", padding: "12px 20px", display: "flex", alignItems: "center", gap: 14 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink }}>{card.priceLabel}</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>Booked directly, no charge yet</div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 700, color: TOKENS.ink }}>{footerPrice}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>{shape === "scheduled" ? "Book a time, no charge yet" : "No charge yet"}</div>
         </div>
-        <button onClick={book} disabled={booking || done} className="apnpress" style={{ flex: 1, height: 48, borderRadius: 15, border: "none", background: done ? "#eaf7f3" : TOKENS.mint, color: done ? TOKENS.mintDark : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, cursor: booking || done ? "default" : "pointer", WebkitTapHighlightColor: "transparent", boxShadow: done ? "none" : "0 6px 18px rgba(74,189,152,0.34)" }}>
-          {done ? "Requested \u2713" : booking ? "Sending\u2026" : "Request booking"}
+        <button onClick={() => setStep("book")} className="apnpress" style={{ flex: 1, height: 48, borderRadius: 15, border: "none", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15.5, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent", boxShadow: "0 6px 18px rgba(74,189,152,0.34)" }}>
+          {ctaLabel}
         </button>
       </div>
-      {err && <div style={{ padding: "0 20px 12px", fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#c0564f", background: "#fff" }}>{err}</div>}
-      {done && <div style={{ padding: "0 20px 12px", fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, background: "#fff" }}>Your team will connect you with {card.vendorName}.</div>}
+    </div>
+  );
+}
+
+// The booking flow, shape-aware. Scheduled shows the creator's real open slots; async gathers a
+// brief; recurring picks a start date. All end in one submit: a scheduled pick HOLDS a real slot
+// (instant → confirmed, request → held for the creator's yes), the rest send an enriched request.
+function CreatorBookingPanel({ card, tier, shape, recurring, per, vendorName, onBack, onHoldSlot, onBook, onCreatorSlots }) {
+  const intakeQs = Array.isArray(card.intake) ? card.intake : [];
+  const [answers, setAnswers] = useState({});
+  const setA = (id, v) => setAnswers((a) => ({ ...a, [id]: v }));
+
+  const [slotState, setSlotState] = useState({ loading: shape === "scheduled", data: null });
+  const [selDate, setSelDate] = useState(null);
+  const [selSlot, setSelSlot] = useState(null);
+  const [startDate, setStartDate] = useState("");
+  const [dayView, setDayView] = useState("strip");
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    if (shape === "scheduled" && onCreatorSlots) {
+      Promise.resolve(onCreatorSlots(card.vendorSlug)).then((d) => {
+        if (!alive) return;
+        setSlotState({ loading: false, data: d });
+        const ds = d && Array.isArray(d.slots) ? [...new Set(d.slots.map((s) => s.date))].sort() : [];
+        if (ds.length) setSelDate(ds[0]);
+      }).catch(() => { if (alive) setSlotState({ loading: false, data: null }); });
+    }
+    return () => { alive = false; };
+  }, [shape, card.vendorSlug, onCreatorSlots]);
+
+  const fmtTimeJS = (hhmm) => { const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm || ""); if (!m) return hhmm || ""; const h = +m[1]; const ap = h < 12 ? "AM" : "PM"; const h12 = h % 12 === 0 ? 12 : h % 12; return `${h12}:${m[2]} ${ap}`; };
+  const fmtDayJS = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" });
+  const dowJS = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  const slotLabelJS = (date, start) => `${fmtDayJS(date)} · ${fmtTimeJS(start)}`;
+
+  const data = slotState.data;
+  const slots = (data && Array.isArray(data.slots) ? data.slots : []);
+  const byDate = {}; slots.forEach((s) => { (byDate[s.date] = byDate[s.date] || []).push(s); });
+  const dates = Object.keys(byDate).sort();
+  const noAvail = shape === "scheduled" && !slotState.loading && (!data || !data.available);
+  const requiredMissing = intakeQs.some((q) => q.required && !(answers[q.id] || "").trim());
+  const todayISO = new Date().toISOString().slice(0, 10);
+
+  function briefFromIntake(prefix) {
+    const parts = [];
+    if (tier) parts.push(`${tier.name} level`);
+    if (prefix) parts.push(prefix);
+    intakeQs.forEach((q) => { const v = (answers[q.id] || "").trim(); if (v) parts.push(`${q.label} ${v}`); });
+    return parts.join(". ") || undefined;
+  }
+
+  async function submit() {
+    setSubmitting(true); setResult(null);
+    try {
+      if (shape === "scheduled" && !noAvail && selSlot) {
+        const r = await onHoldSlot({ vendorSlug: card.vendorSlug, listingSlug: card.listingSlug, tierName: tier ? tier.name : null, date: selSlot.date, start: selSlot.start, intake: answers });
+        if (r && r.ok) setResult({ ok: true, mode: "slot", status: r.status, label: slotLabelJS(selSlot.date, selSlot.start) });
+        else setResult({ ok: false, error: (r && r.needsLogin) ? "Please sign in to book." : ((r && r.error) || "That did not send.") });
+      } else {
+        const prefix = shape === "recurring" && startDate ? `Start ${startDate}` : (noAvail ? "Prefers a scheduled time" : "");
+        const r = await onBook({ vendorSlug: card.vendorSlug, listingSlug: card.listingSlug, brief: briefFromIntake(prefix) });
+        if (r && r.ok) setResult({ ok: true, mode: "request" });
+        else setResult({ ok: false, error: (r && r.needsLogin) ? "Please sign in to book." : ((r && r.error) || "That did not send.") });
+      }
+    } catch { setResult({ ok: false, error: "That did not send." }); }
+    finally { setSubmitting(false); }
+  }
+
+  const canSubmit = !submitting && !requiredMissing
+    && (shape !== "scheduled" || noAvail || !!selSlot)
+    && (shape !== "recurring" || !!startDate);
+  const title = shape === "scheduled" ? (noAvail ? "Request a time" : "Pick a time") : shape === "recurring" ? "Start your plan" : "Tell them what you need";
+  const cta = shape === "scheduled" && !noAvail ? (data && data.confirmMode === "instant" ? "Book this time" : "Request this time") : (shape === "recurring" ? "Start plan" : "Send request");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      {/* HEADER */}
+      <div style={{ padding: "14px 20px", borderBottom: `1px solid ${TOKENS.line}`, background: "#fff", display: "flex", alignItems: "center", gap: 12 }}>
+        <button onClick={onBack} aria-label="Back" className="apnpress" style={{ width: 34, height: 34, borderRadius: 17, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+        </button>
+        <div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 17, fontWeight: 700, color: TOKENS.ink }}>{result && result.ok ? "You’re set" : title}</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint }}>{card.title}{tier ? ` · ${tier.name}` : ""}</div>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px 12px" }}>
+        {result && result.ok ? (
+          <div style={{ textAlign: "center", paddingTop: 24 }}>
+            <div style={{ width: 60, height: 60, borderRadius: 30, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+            </div>
+            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 20, fontWeight: 700, color: TOKENS.ink, marginBottom: 8 }}>
+              {result.mode === "slot" ? (result.status === "confirmed" ? "You’re booked" : "Time held for you") : "Request sent"}
+            </div>
+            {result.mode === "slot" && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.mintDark, marginBottom: 6 }}>{result.label}</div>}
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, maxWidth: 260, margin: "0 auto" }}>
+              {result.mode === "slot"
+                ? (result.status === "confirmed" ? `Confirmed with ${vendorName}. No charge yet.` : `The time is yours. ${vendorName} confirms within a day, and nobody else can take it.`)
+                : `${vendorName} will follow up to get started.${shape === "recurring" && startDate ? ` Starting ${startDate}.` : ""}`}
+            </div>
+            <button onClick={onBack} className="apnpress" style={{ marginTop: 22, height: 46, padding: "0 28px", borderRadius: 14, border: "none", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Done</button>
+            {result.mode === "slot" && (
+              <div style={{ marginTop: 14 }}>
+                <a href="/dashboard/bookings" style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.mintDark, fontWeight: 600, textDecoration: "none" }}>View your bookings</a>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* SCHEDULED — a day strip + open times, or an honest request when no calendar is open. */}
+            {shape === "scheduled" && (
+              slotState.loading ? (
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, textAlign: "center", padding: "20px 0" }}>Loading {vendorName}’s open times…</div>
+              ) : noAvail ? (
+                <div style={{ background: TOKENS.mintTint, borderRadius: 14, padding: "13px 15px", marginBottom: 16 }}>
+                  <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}>{vendorName} hasn’t opened their calendar yet. Send a request with the details below and they’ll propose times.</div>
+                </div>
+              ) : (
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <BlockLabel label="Day" />
+                    <button onClick={() => setDayView(dayView === "calendar" ? "strip" : "calendar")} className="apnpress" style={{ border: "none", background: "none", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.mintDark, padding: "0 0 8px", WebkitTapHighlightColor: "transparent" }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>
+                      {dayView === "calendar" ? "List" : "View calendar"}
+                    </button>
+                  </div>
+                  {dayView === "calendar" ? (
+                    <MonthCalendar availableDates={dates} selDate={selDate} onPick={(d) => { setSelDate(d); setSelSlot(null); }} />
+                  ) : (
+                    <div style={{ display: "flex", gap: 7, overflowX: "auto", paddingBottom: 4, scrollbarWidth: "none" }}>
+                      {dates.map((d) => {
+                        const on = d === selDate;
+                        return (
+                          <button key={d} onClick={() => { setSelDate(d); setSelSlot(null); }} className="apnpress" style={{ flex: "0 0 auto", width: 58, borderRadius: 12, padding: "8px 2px", textAlign: "center", cursor: "pointer", border: on ? `1.5px solid ${TOKENS.mint}` : `1px solid ${TOKENS.line}`, background: on ? TOKENS.mintTint : "#fff" }}>
+                            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: on ? TOKENS.mintDark : TOKENS.faint }}>{dowJS(d)}</div>
+                            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 700, color: TOKENS.ink, marginTop: 2 }}>{d.slice(8, 10)}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <div style={{ marginTop: 14 }}>
+                    <BlockLabel label={selDate ? `Open times · ${fmtDayJS(selDate)}` : "Open times"} />
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      {(byDate[selDate] || []).map((s, i) => {
+                        const on = selSlot && selSlot.date === s.date && selSlot.start === s.start;
+                        return (
+                          <button key={i} onClick={() => setSelSlot(s)} className="apnpress" style={{ borderRadius: 11, padding: "11px 6px", textAlign: "center", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, border: on ? `1.5px solid ${TOKENS.mint}` : `1px solid ${TOKENS.line}`, background: on ? TOKENS.mint : "#fff", color: on ? "#fff" : TOKENS.ink }}>{fmtTimeJS(s.start)}</button>
+                        );
+                      })}
+                    </div>
+                    {data && data.timezone && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, marginTop: 9 }}>Times in {String(data.timezone).split("/").pop().replace("_", " ")}</div>}
+                  </div>
+                </div>
+              )
+            )}
+
+            {/* RECURRING — a start date. */}
+            {shape === "recurring" && (
+              <div style={{ marginBottom: 18 }}>
+                <BlockLabel label="Start date" />
+                <input type="date" min={todayISO} value={startDate} onChange={(e) => setStartDate(e.target.value)} style={{ width: "100%", borderRadius: 12, border: `1px solid ${TOKENS.line}`, padding: "11px 13px", fontFamily: "Inter, sans-serif", fontSize: 14, color: TOKENS.ink }} />
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, marginTop: 8 }}>Your plan runs month to month from here. Cancel anytime.</div>
+              </div>
+            )}
+
+            {/* INTAKE — the 2-3 questions this product asks, so the creator starts ready. */}
+            {intakeQs.length > 0 && (
+              <div>
+                <BlockLabel label={shape === "scheduled" ? "So they arrive ready" : "What they need to start"} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {intakeQs.map((q) => (
+                    <div key={q.id}>
+                      <label style={{ display: "block", fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 5 }}>{q.label}{q.required ? "" : <span style={{ color: TOKENS.faint, fontWeight: 400 }}> (optional)</span>}</label>
+                      <input value={answers[q.id] || ""} onChange={(e) => setA(q.id, e.target.value)} placeholder={q.hint || ""} style={{ width: "100%", borderRadius: 11, border: `1px solid ${TOKENS.line}`, padding: "10px 12px", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {result && !result.ok && <div style={{ marginTop: 14, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#c0564f" }}>{result.error}</div>}
+          </>
+        )}
+      </div>
+
+      {/* FOOTER */}
+      {!(result && result.ok) && (
+        <div style={{ borderTop: `1px solid ${TOKENS.line}`, background: "#fff", padding: "12px 20px", display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 700, color: TOKENS.ink }}>{tier ? `${fmtDelta(tier.priceCents)}${per}` : card.priceLabel}</div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, color: TOKENS.faint }}>{selSlot ? slotLabelJS(selSlot.date, selSlot.start) : "No charge yet"}</div>
+          </div>
+          <button onClick={submit} disabled={!canSubmit} className="apnpress" style={{ flex: 1, height: 48, borderRadius: 15, border: "none", background: canSubmit ? TOKENS.mint : "#c9d6cf", color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, cursor: canSubmit ? "pointer" : "default", boxShadow: canSubmit ? "0 6px 18px rgba(74,189,152,0.34)" : "none" }}>
+            {submitting ? "Sending…" : cta}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// The creator's full profile — the trust surface a restaurant lands on from "by {creator}". Built
+// only from real data (portfolio, reviews, rating, offerings); empty sections say so honestly. The
+// person-icon placeholder becomes a real profile here.
+const CRAFT_AV = {
+  photographer: ["#f0a868", "#e07f3a"], videographer: ["#79b2ef", "#4a8fe0"],
+  food_influencer: ["#f088b0", "#df5e98"], graphic_designer: ["#a888de", "#875dcf"], social_manager: ["#63cfa6", "#37b085"],
+};
+function initialsOf(name) {
+  const n = (name || "").replace(/\(example\)/i, "").trim();
+  const parts = n.split(/\s+/).filter(Boolean);
+  const a = (parts[0] && parts[0][0]) || "?";
+  const b = (parts[1] && parts[1][0]) || "";
+  return (a + b).toUpperCase();
+}
+function Stars({ rating, size = 13 }) {
+  const full = Math.round(rating || 0);
+  return (
+    <span style={{ display: "inline-flex", gap: 1 }}>
+      {[1, 2, 3, 4, 5].map((i) => (
+        <svg key={i} width={size} height={size} viewBox="0 0 24 24" fill={i <= full ? "#f5b301" : "none"} stroke={i <= full ? "#f5b301" : TOKENS.line} strokeWidth="1.5">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+        </svg>
+      ))}
+    </span>
+  );
+}
+function fmtMonthYear(iso) { try { return new Date(iso).toLocaleDateString("en-US", { month: "short", year: "numeric" }); } catch { return ""; } }
+
+function CreatorProfilePage({ vendorSlug, onBack, onCreatorProfile, onOpenOffering, onBook }) {
+  const [state, setState] = useState({ loading: true, data: null });
+  const [msg, setMsg] = useState(null);
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    Promise.resolve(onCreatorProfile && onCreatorProfile(vendorSlug)).then((d) => { if (alive) setState({ loading: false, data: d || null }); })
+      .catch(() => { if (alive) setState({ loading: false, data: null }); });
+    return () => { alive = false; };
+  }, [vendorSlug, onCreatorProfile]);
+
+  if (state.loading) {
+    return <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      <ProfileTopBar onBack={onBack} />
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>Loading profile…</div>
+    </div>;
+  }
+  const p = state.data;
+  if (!p) {
+    return <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      <ProfileTopBar onBack={onBack} />
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>This creator isn’t available.</div>
+    </div>;
+  }
+
+  const catLabel = CREATOR_CAT_LABEL[p.craft] || "Creator";
+  const av = CRAFT_AV[p.craft] || ["#8bd0b6", "#4abd98"];
+  const isInfluencer = p.craft === "food_influencer";
+  const displayName = (p.name || "").replace(/\s*\(example\)/i, "");
+  const firstName = displayName.split(/\s+/)[0] || displayName;
+
+  async function message() {
+    if (!onBook || !p.offerings || !p.offerings[0]) return;
+    setSending(true);
+    try {
+      const r = await onBook({ vendorSlug: p.slug, listingSlug: p.offerings[0].listingSlug, brief: `Question for ${displayName} before booking.` });
+      setMsg(r && r.ok ? { ok: true } : { ok: false, text: (r && r.needsLogin) ? "Please sign in to message." : ((r && r.error) || "That did not send.") });
+    } catch { setMsg({ ok: false, text: "That did not send." }); }
+    finally { setSending(false); }
+  }
+
+  const shapeCTA = (s) => s === "scheduled" ? "Book a time" : s === "recurring" ? "Start a plan" : "Get started";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+      <div style={{ flex: 1, overflowY: "auto", paddingBottom: 12 }}>
+        {/* 01 IDENTITY */}
+        <div style={{ position: "relative", background: "linear-gradient(168deg, #fbfaf4 0%, #f2f8f4 54%, #e7f3ed 100%)", padding: "14px 20px 24px", overflow: "hidden" }}>
+          <button onClick={onBack} aria-label="Back" className="apnpress" style={{ position: "relative", width: 36, height: 36, borderRadius: 18, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+          </button>
+          <div className="apnrise" style={{ position: "relative", marginTop: 12, display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+            <div style={{ width: 84, height: 84, borderRadius: 42, background: `linear-gradient(150deg, ${av[0]}, ${av[1]})`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 10px 26px rgba(20,40,30,0.18)", overflow: "hidden" }}>
+              {p.avatarUrl
+                ? <img src={p.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+                : <span style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 30, fontWeight: 700, color: "#fff" }}>{initialsOf(p.name)}</span>}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, marginTop: 12 }}>
+              <h1 style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 700, color: TOKENS.ink, margin: 0, letterSpacing: -0.4 }}>{displayName}</h1>
+              {p.verified && <svg width="18" height="18" viewBox="0 0 24 24" fill={TOKENS.mint} stroke="none"><path d="M12 2l2.4 2.1 3.2-.2.9 3.1 2.6 1.9-1.3 2.9 .5 3.2-3.1 .9-1.9 2.6-3-1-3 1-1.9-2.6-3.1-.9 .5-3.2L2 11l2.6-1.9 .9-3.1 3.2 .2z" /><path d="M9 12l2 2 4-4" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+            </div>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.mintDark, fontWeight: 600, marginTop: 2 }}>{catLabel}{p.serviceArea && p.serviceArea.length ? ` · Serves ${p.serviceArea.join(", ")}` : ""}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
+              {p.avgRating != null ? (
+                <div style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                  <Stars rating={p.avgRating} />
+                  <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 700, color: TOKENS.ink }}>{p.avgRating.toFixed(1)}</span>
+                  {p.reviewCount > 0 && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint }}>({p.reviewCount})</span>}
+                </div>
+              ) : (
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.faint, background: "rgba(20,30,26,0.05)", borderRadius: 8, padding: "3px 8px" }}>New to Apnosh</span>
+              )}
+              {p.totalBookings > 0 && <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub }}>{p.totalBookings} {p.totalBookings === 1 ? "job" : "jobs"} done</span>}
+            </div>
+          </div>
+        </div>
+
+        {/* 02 THE WORK — influencer leads with audience; everyone else with the portfolio grid. */}
+        {isInfluencer && p.followerCount != null && (
+          <div style={{ padding: "16px 20px 0" }}>
+            <div style={{ background: TOKENS.mintTint, borderRadius: 14, padding: "13px 15px", display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 700, color: TOKENS.mintDark }}>{p.followerCount.toLocaleString()}</div>
+              <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub }}>followers on their main channel</div>
+            </div>
+          </div>
+        )}
+        <div style={{ padding: "18px 20px 0" }}>
+          <BlockLabel label="Their work" />
+          {p.portfolio && p.portfolio.length ? (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {p.portfolio.slice(0, 6).map((it, i) => (
+                <div key={it.id || i} style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 12, overflow: "hidden", background: `linear-gradient(150deg, ${av[0]}, ${av[1]})` }}>
+                  {it.url && <img src={it.url} alt={it.caption || ""} loading="lazy" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />}
+                  {it.caption && <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 9px 8px", background: "linear-gradient(transparent, rgba(0,0,0,0.55))", color: "#fff", fontFamily: "Inter, sans-serif", fontSize: 11, lineHeight: 1.3 }}>{it.caption}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.faint, background: TOKENS.card || "#fff", border: `1px dashed ${TOKENS.line}`, borderRadius: 12, padding: "16px", textAlign: "center" }}>
+              Work samples coming soon.
+            </div>
+          )}
+        </div>
+
+        {/* 03 ABOUT */}
+        {(p.bio || (p.styleTags && p.styleTags.length)) && (
+          <div style={{ padding: "20px 20px 0" }}>
+            <BlockLabel label={`About ${firstName}`} />
+            {p.bio && <p style={{ margin: 0, fontFamily: "Inter, sans-serif", fontSize: 14, color: "#4c554f", lineHeight: 1.55 }}>{p.bio}</p>}
+            {p.styleTags && p.styleTags.length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 11 }}>
+                {p.styleTags.map((t, i) => <TagPill key={i}>{t}</TagPill>)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 04 WHAT THEY OFFER */}
+        {p.offerings && p.offerings.length > 0 && (
+          <div style={{ padding: "22px 20px 0" }}>
+            <BlockLabel label="What they offer" />
+            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+              {p.offerings.map((o) => (
+                <button key={o.id} onClick={() => onOpenOffering && onOpenOffering(o)} className="apnpress" style={{ textAlign: "left", cursor: "pointer", border: `1px solid ${TOKENS.line}`, borderRadius: 14, padding: "12px 14px", background: "#fff", display: "flex", alignItems: "center", gap: 12, WebkitTapHighlightColor: "transparent" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600, color: TOKENS.ink }}>{o.title}</div>
+                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginTop: 2 }}>{o.priceLabel} · {shapeCTA(o.bookingShape)}</div>
+                  </div>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 05 REVIEWS */}
+        <div style={{ padding: "22px 20px 0" }}>
+          <BlockLabel label="What restaurants say" />
+          {p.reviews && p.reviews.length ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {p.reviews.slice(0, 5).map((r, i) => (
+                <div key={i} style={{ borderTop: i === 0 ? "none" : `1px solid ${TOKENS.line}`, paddingTop: i === 0 ? 0 : 12 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    <Stars rating={r.stars} size={12} />
+                    <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint }}>{r.restaurant || "A restaurant"}{r.when ? ` · ${fmtMonthYear(r.when)}` : ""}</span>
+                  </div>
+                  {r.comment && <p style={{ margin: "6px 0 0", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.ink, lineHeight: 1.5 }}>{r.comment}</p>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.faint }}>No reviews yet. Be the first to work with {firstName}.</div>
+          )}
+        </div>
+
+        {/* 06 HOW IT WORKS */}
+        <div style={{ padding: "22px 20px 4px" }}>
+          <BlockLabel label="How it works" />
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {["You only pay when you book, never before.", `Your details go straight to ${firstName} so they arrive ready.`, "Questions and changes run safely through Apnosh."].map((line, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 9 }}>
+                <span style={{ width: 20, height: 20, borderRadius: 10, background: TOKENS.mintTint, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                </span>
+                <span style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.45 }}>{line}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* 07 ACTION — message is the ask-first door; offerings above are the book path. */}
+      <div style={{ borderTop: `1px solid ${TOKENS.line}`, background: "#fff", padding: "12px 20px" }}>
+        {msg && msg.ok ? (
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.mintDark, fontWeight: 600, textAlign: "center", padding: "12px 0" }}>Message sent. {firstName} will reach out.</div>
+        ) : (
+          <>
+            <button onClick={message} disabled={sending || !(p.offerings && p.offerings[0])} className="apnpress" style={{ width: "100%", height: 48, borderRadius: 15, border: `1.5px solid ${TOKENS.mint}`, background: "#fff", color: TOKENS.mintDark, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
+              {sending ? "Sending…" : `Message ${firstName}`}
+            </button>
+            {msg && !msg.ok && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "#c0564f", textAlign: "center", marginTop: 7 }}>{msg.text}</div>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ProfileTopBar({ onBack }) {
+  return (
+    <div style={{ padding: "14px 20px", borderBottom: `1px solid ${TOKENS.line}`, background: "#fff" }}>
+      <button onClick={onBack} aria-label="Back" className="apnpress" style={{ width: 34, height: 34, borderRadius: 17, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+      </button>
+    </div>
+  );
+}
+
+// A month grid for the booking picker's "View calendar" mode — easier to scan than the day strip.
+// Only days with real open slots are tappable; the rest are dimmed. Paging is clamped to the months
+// that actually have availability, so a restaurant can't wander into empty months.
+function MonthCalendar({ availableDates, selDate, onPick }) {
+  const availSet = new Set(availableDates);
+  const first = availableDates[0] || null;
+  const last = availableDates[availableDates.length - 1] || null;
+  const initYm = (selDate || first || new Date().toISOString().slice(0, 10)).slice(0, 7);
+  const [ym, setYm] = useState(initYm);
+  const y = Number(ym.slice(0, 4)), m = Number(ym.slice(5, 7));
+  const firstMonth = first ? first.slice(0, 7) : ym;
+  const lastMonth = last ? last.slice(0, 7) : ym;
+  const canPrev = ym > firstMonth;
+  const canNext = ym < lastMonth;
+  const shift = (delta) => { const dt = new Date(Date.UTC(y, m - 1 + delta, 1)); setYm(`${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, "0")}`); };
+  const startDow = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(`${ym}-${String(d).padStart(2, "0")}`);
+  const monthLabel = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+  const arrow = (dir, enabled, onClick) => (
+    <button onClick={enabled ? onClick : undefined} disabled={!enabled} className="apnpress" style={{ width: 28, height: 28, borderRadius: 14, border: "none", background: enabled ? "rgba(20,35,28,0.06)" : "transparent", cursor: enabled ? "pointer" : "default", opacity: enabled ? 1 : 0.3, display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d={dir === "prev" ? "M15 5l-7 7 7 7" : "M9 5l7 7-7 7"} /></svg>
+    </button>
+  );
+  return (
+    <div style={{ border: `1px solid ${TOKENS.line}`, borderRadius: 14, padding: 12 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        {arrow("prev", canPrev, () => shift(-1))}
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 700, color: TOKENS.ink }}>{monthLabel}</div>
+        {arrow("next", canNext, () => shift(1))}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3, marginBottom: 4 }}>
+        {["S", "M", "T", "W", "T", "F", "S"].map((w, i) => <div key={i} style={{ textAlign: "center", fontFamily: "Inter, sans-serif", fontSize: 10, fontWeight: 700, color: TOKENS.faint }}>{w}</div>)}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 3 }}>
+        {cells.map((iso, i) => {
+          if (!iso) return <div key={i} />;
+          const avail = availSet.has(iso);
+          const on = iso === selDate;
+          const dnum = iso.slice(8, 10).replace(/^0/, "");
+          return (
+            <button key={i} onClick={avail ? () => onPick(iso) : undefined} disabled={!avail} className={avail ? "apnpress" : undefined}
+              style={{ aspectRatio: "1 / 1", borderRadius: 9, border: "none", cursor: avail ? "pointer" : "default", background: on ? TOKENS.mint : avail ? TOKENS.mintTint : "transparent", color: on ? "#fff" : avail ? TOKENS.ink : TOKENS.faint, fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: avail ? 700 : 400, opacity: avail ? 1 : 0.5, display: "flex", alignItems: "center", justifyContent: "center", WebkitTapHighlightColor: "transparent" }}>
+              {dnum}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -4950,7 +5471,7 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
      onCreate   : ({ itemId, status, vals }) => void  — persist hook
      onClose    : () => void                           — exit the builder
    ============================================================ */
-export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, creatorCards = [], onBookCreator, tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
+export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, creatorCards = [], onBookCreator, onHoldCreator, onCreatorSlots, onCreatorProfile, tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
   // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
   // Set during render so every child render below reads the current map; a late fetch just
   // re-renders this tree with the fresh edits.
@@ -4986,6 +5507,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
   // A creator card opens an in-store product page that looks like a campaign product page,
   // rather than linking out to the old marketplace profile.
   const openCreator = (card) => setRoute({ name: "creatorPdp", card });
+  const openCreatorProfile = (vendorSlug) => setRoute({ name: "creatorProfile", vendorSlug });
   const backToSource = () => (route.from === "catall" ? setRoute({ name: "catall", rowId: route.rowId }) : route.from === "plan" ? setRoute({ name: "plan" }) : backToBrowse());
 
   // Save for real, then route on the outcome: confirm on success, a retry
@@ -5045,8 +5567,11 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
             <CategoryAll rowId={route.rowId} onBack={backToBrowse} onOpen={(id) => openCard(id, "catall", route.rowId)} />
           )}
 
+          {route.name === "creatorProfile" && (
+            <CreatorProfilePage vendorSlug={route.vendorSlug} onBack={backToBrowse} onCreatorProfile={onCreatorProfile} onOpenOffering={openCreator} onBook={onBookCreator} />
+          )}
           {route.name === "creatorPdp" && (
-            <CreatorProductPage card={route.card} restaurant={restaurant} onBack={backToBrowse} onBook={onBookCreator} />
+            <CreatorProductPage card={route.card} restaurant={restaurant} onBack={backToBrowse} onBook={onBookCreator} onHoldSlot={onHoldCreator} onCreatorSlots={onCreatorSlots} onOpenProfile={openCreatorProfile} />
           )}
           {route.name === "pdp" && (
             <ProductPage

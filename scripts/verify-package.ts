@@ -26,11 +26,27 @@ function pkg(over: Partial<CreatorPackage> = {}): CreatorPackage {
   return {
     slug: '', title: 'Signature Reel Pack', category: 'videographer', listingType: 'one_off',
     description: 'Three short reels shot and edited at your restaurant.',
+    productId: null,
     priceCents: 45000, billingPeriod: 'one_time',
     deliverables: ['3 vertical reels', '1 hero cut for ads'],
+    tiers: [],
     options: [{ id: 'o1', label: 'Extra reel', priceDeltaCents: 12000 }],
     turnaroundDays: 10, revisions: 2, active: true, ...over,
   }
+}
+
+/** A tiered package: price and scope live per level, top-level price/deliverables are empty. */
+function tieredPkg(over: Partial<CreatorPackage> = {}): CreatorPackage {
+  return pkg({
+    productId: 'reel-pack', priceCents: null, deliverables: [],
+    tiers: [
+      { id: 't0', name: '2 reels', priceCents: 35000, deliverables: ['2 vertical reels'] },
+      { id: 't1', name: '3 reels', priceCents: 45000, deliverables: ['3 vertical reels', '1 hero cut'] },
+      { id: 't2', name: '5 reels', priceCents: 65000, deliverables: ['5 vertical reels', '1 hero cut', 'Captions'] },
+    ],
+    options: [{ id: 'o', label: 'Rush', priceDeltaCents: 15000 }],
+    ...over,
+  })
 }
 
 /* ── validation refuses what would mislead a buyer ───────────────── */
@@ -105,7 +121,35 @@ section('pricing is honest: base is the floor, options only add')
   const p = pkg({ priceCents: 45000, options: [{ id: 'o', label: 'Extra', priceDeltaCents: 12000 }] })
   ok('starting price is the base', startingPriceCents(p) === 45000)
   ok('max price is base plus every option', maxPriceCents(p) === 57000)
-  ok('a quote has no starting price', startingPriceCents({ priceCents: null }) === null)
+  ok('a quote has no starting price', startingPriceCents(pkg({ listingType: 'quote', priceCents: null })) === null)
+}
+
+/* ── levels (tiers): scale scope, never quality ──────────────────── */
+
+section('a tiered package is valid and priced by its levels')
+{
+  ok('a well-formed tiered package passes', validatePackage(tieredPkg()).length === 0)
+  ok('starting price is the cheapest level', startingPriceCents(tieredPkg()) === 35000)
+  ok('max price is the top level plus every add-on', maxPriceCents(tieredPkg()) === 80000)
+  ok('the row stores the starting level as its price', packageToRow(tieredPkg(), 'v1').price_cents === 35000)
+}
+
+section('tiered validation refuses a level that would mislead a buyer')
+{
+  ok('an unpriced level is refused', validatePackage(tieredPkg({ tiers: [{ id: 't', name: 'Basic', priceCents: 0, deliverables: ['x'] }] })).some((e) => /level 1 needs a price/i.test(e)))
+  ok('an unnamed level is refused', validatePackage(tieredPkg({ tiers: [{ id: 't', name: ' ', priceCents: 1000, deliverables: ['x'] }] })).some((e) => /level 1 needs a name/i.test(e)))
+  ok('a level with nothing in it is refused', validatePackage(tieredPkg({ tiers: [{ id: 't', name: 'Basic', priceCents: 1000, deliverables: [] }] })).some((e) => /level 1 needs at least one/i.test(e)))
+  ok('a quote cannot also have levels', validatePackage(tieredPkg({ listingType: 'quote', priceCents: null })).some((e) => /no tiers/i.test(e)))
+}
+
+section('tiers round-trip losslessly through a row')
+{
+  const back = rowToPackage(packageToRow(tieredPkg({ id: 'p1' }), 'v1'))
+  ok('every level survives', back.tiers.length === 3)
+  ok('level names survive', back.tiers.map((t) => t.name).join('|') === '2 reels|3 reels|5 reels')
+  ok('level prices survive', back.tiers[1].priceCents === 45000)
+  ok('level scope survives', back.tiers[2].deliverables.join('|') === '5 vertical reels|1 hero cut|Captions')
+  ok('the standard product id survives', back.productId === 'reel-pack')
 }
 
 section('money formats cleanly')
