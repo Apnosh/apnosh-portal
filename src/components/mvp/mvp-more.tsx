@@ -12,7 +12,7 @@
  */
 
 import Link from 'next/link'
-import { ChevronRight, CreditCard, FileText, Headset, HelpCircle, Image as ImageIcon, LineChart, LogOut, MapPin, Palette, Plug, Settings, ShoppingBag, Star, Store, Target } from 'lucide-react'
+import { ChevronRight, CreditCard, FileText, Headset, HelpCircle, Image as ImageIcon, LineChart, LogOut, MapPin, Palette, Plug, Settings, ShoppingBag, Star, Store, Target, Users } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 
 const C = {
@@ -47,6 +47,14 @@ const GROUPS: { title: string; rows: Row[] }[] = [
       { label: 'Get measurable', sub: 'Search Console and Analytics, so you can see what works', href: '/dashboard/measure', Icon: LineChart },
       { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon },
       { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target },
+    ],
+  },
+  {
+    title: 'Find help',
+    rows: [
+      // The creative marketplace: browse creators who set their own packages and prices.
+      // Surfaced now (owner's call) so it is visible as the shelf fills with real creators.
+      { label: 'Find a creator', sub: 'Photographers, videographers and more, at their own rates', href: '/dashboard/marketplace', Icon: Users },
     ],
   },
   {
