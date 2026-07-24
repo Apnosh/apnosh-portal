@@ -5,7 +5,9 @@ import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import type { WorkOrder, WorkOrderStatus } from '@/lib/campaigns/work-orders'
 import type { CreatorEarnings } from '@/lib/campaigns/view'
+import type { CalendarItem } from '@/lib/marketplace/creator-schedule-types'
 import { safeHref } from '@/lib/campaigns/work-orders-core'
+import CreatorCalendar from '@/components/creator/creator-calendar'
 
 export default function CreatorWorkPage() {
   return (
@@ -27,6 +29,8 @@ function Inbox() {
   const [earnings, setEarnings] = useState<CreatorEarnings | null>(null)
   const [ratingLabel, setRatingLabel] = useState<string | null>(null)
   const [orderStars, setOrderStars] = useState<Record<string, number>>({})
+  const [calendar, setCalendar] = useState<CalendarItem[]>([])
+  const [view, setView] = useState<'todo' | 'calendar'>('todo')
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -34,7 +38,7 @@ function Inbox() {
     if (creator) {
       const r = await fetch(`/api/creator/work?creator=${encodeURIComponent(creator)}`, { cache: 'no-store' })
       const j = await r.json().catch(() => ({ orders: [] }))
-      setOrders(j.orders ?? []); setResolvedId(creator); setEarnings(null); setRatingLabel(null); setOrderStars({})
+      setOrders(j.orders ?? []); setResolvedId(creator); setEarnings(null); setRatingLabel(null); setOrderStars({}); setCalendar([])
       return
     }
     // No param: resolve the logged-in creator (creator_logins).
@@ -43,6 +47,7 @@ function Inbox() {
     setOrders(j.orders ?? []); setResolvedId(j.creatorId ?? null); setEarnings((j.earnings as CreatorEarnings) ?? null)
     setRatingLabel(typeof j.ratingLabel === 'string' ? j.ratingLabel : null)
     setOrderStars((j.ratingsByOrder as Record<string, number>) ?? {})
+    setCalendar((j.calendar as CalendarItem[]) ?? [])
   }, [creator])
 
   useEffect(() => { load() }, [load])
@@ -94,6 +99,19 @@ function Inbox() {
         </div>
       </header>
 
+      {/* To do (the inbox) vs Calendar (the master schedule — same one as the Bookings tab). */}
+      <div className="flex gap-1.5 px-4 pt-3 pb-1">
+        {(['todo', 'calendar'] as const).map((v) => (
+          <button key={v} onClick={() => setView(v)}
+            className={`flex-1 rounded-[10px] py-2 text-[13.5px] border ${view === v ? 'border-emerald-400 bg-emerald-50 text-emerald-700 font-semibold' : 'border-neutral-200 bg-white text-neutral-500 font-medium'}`}>
+            {v === 'todo' ? 'To do' : 'Calendar'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'calendar' ? (
+        <CreatorCalendar items={calendar} />
+      ) : (
       <main className="mx-auto max-w-xl px-4 py-5 space-y-6">
         {err && (
           <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>
@@ -118,6 +136,7 @@ function Inbox() {
           </section>
         )}
       </main>
+      )}
     </div>
   )
 }

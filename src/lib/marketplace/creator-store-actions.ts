@@ -25,6 +25,7 @@ import {
 } from './package'
 import { dispatchForSkills } from './creator-skills'
 import type { CalendarItem } from './creator-schedule-types'
+import { calendarForCreator } from './creator-calendar-data'
 
 const US_STATES = new Set(['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'])
 
@@ -197,35 +198,5 @@ export async function updateMyProfile(input: { name: string; bio: string; skills
 export async function getMyCalendar(): Promise<CalendarItem[]> {
   const vendor = await myVendorId()
   if (!vendor) return []
-  const admin = createAdminClient()
-  const { data } = await admin
-    .from('creator_work_orders')
-    .select('id, title, status, due_date, campaign_piece_key')
-    .eq('creator_id', vendor.id)
-    .not('due_date', 'is', null)
-    .not('status', 'in', '(approved,declined)')
-    .order('due_date', { ascending: true })
-  const orders = (data ?? []) as Array<Record<string, unknown>>
-
-  // Attach the shoot TIME for marketplace bookings (piece key 'booking:<uuid>' / '...#<month>').
-  const BOOKING_KEY = /^booking:([0-9a-f-]{36})/i
-  const bookingIds = [...new Set(orders.map((o) => BOOKING_KEY.exec((o.campaign_piece_key as string | null) ?? '')?.[1]).filter(Boolean) as string[])]
-  const timeById = new Map<string, string | null>()
-  if (bookingIds.length) {
-    const { data: bks } = await admin.from('bookings').select('id, slot_start').in('id', bookingIds)
-    for (const b of bks ?? []) timeById.set(b.id as string, (b.slot_start as string | null) ?? null)
-  }
-
-  return orders.map((o) => {
-    const bId = BOOKING_KEY.exec((o.campaign_piece_key as string | null) ?? '')?.[1]
-    const time = bId ? (timeById.get(bId) ?? null) : null
-    return {
-      id: o.id as string,
-      date: o.due_date as string,
-      time,
-      title: (o.title as string) || 'Work',
-      status: (o.status as string) || '',
-      kind: time ? ('shoot' as const) : ('work' as const),
-    }
-  })
+  return calendarForCreator(vendor.id)
 }
