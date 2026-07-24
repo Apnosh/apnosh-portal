@@ -19,7 +19,9 @@ import {
 import { getVendorBySlug } from '@/lib/dashboard/get-marketplace'
 import { getVendorPortfolio } from '@/lib/marketplace/portfolio'
 import { rowToPackage, formatCents, maxPriceCents } from '@/lib/marketplace/package'
+import { bookingShapeForCategory } from '@/lib/marketplace/creative-catalog'
 import BookButton from './book-button'
+import BookOffer from './book-offer'
 
 export const dynamic = 'force-dynamic'
 
@@ -199,6 +201,20 @@ export default async function VendorProfilePage({ params }: PageProps) {
             const setup = details.setup as number | undefined
             const tieredListing = Array.isArray(details.tiers) && (details.tiers as unknown[]).length > 0
 
+            // The creator-authored offer, read once: its photos, levels, add-ons, questions, and how
+            // it's delivered (which decides the booking flow). Apnosh bundles don't carry this shape.
+            const pkg = rowToPackage({
+              slug: l.slug, title: l.title, category: l.category, listing_type: l.listingType,
+              description: l.description, price_cents: l.priceCents, billing_period: l.billingPeriod,
+              details: l.details, active: true,
+            })
+            const pkgMax = maxPriceCents(pkg)
+            const shape = pkg.bookingShape ?? bookingShapeForCategory(pkg.category)
+            const bookMode = pkg.listingType === 'quote' ? 'quote'
+              : (pkg.listingType === 'subscription' || shape === 'recurring') ? 'recurring'
+              : shape === 'async' ? 'async' : 'scheduled'
+            const billingMonthly = pkg.billingPeriod === 'monthly' || pkg.listingType === 'subscription'
+
             return (
               <div
                 key={l.id}
@@ -229,6 +245,16 @@ export default async function VendorProfilePage({ params }: PageProps) {
                       </p>
                     )}
 
+                    {/* Offer photos the creator added in their storefront editor. */}
+                    {pkg.photos.length > 0 && (
+                      <div className="flex gap-2 overflow-x-auto mb-3 -mx-1 px-1">
+                        {pkg.photos.map((u, i) => (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img key={i} src={u} alt="" className="h-28 w-28 object-cover rounded-xl flex-shrink-0" loading="lazy" />
+                        ))}
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap items-baseline gap-3 mb-3">
                       <span className="text-[24px] font-bold text-ink tabular-nums">
                         {tieredListing ? 'from ' : ''}{priceLabel(l.priceCents, l.billingPeriod)}
@@ -256,12 +282,7 @@ export default async function VendorProfilePage({ params }: PageProps) {
                         so what a buyer sees is exactly what the creator published. Apnosh's
                         bundle listings do not carry this shape, so nothing extra renders for them. */}
                     {(() => {
-                      const pkg = rowToPackage({
-                        slug: l.slug, title: l.title, category: l.category, listing_type: l.listingType,
-                        description: l.description, price_cents: l.priceCents, billing_period: l.billingPeriod,
-                        details: l.details, active: true,
-                      })
-                      const max = maxPriceCents(pkg)
+                      const max = pkgMax
                       const hasRange = pkg.priceCents != null && max != null && max > pkg.priceCents
                       return (
                         <>
@@ -328,12 +349,28 @@ export default async function VendorProfilePage({ params }: PageProps) {
                       Category: {CATEGORY_LABELS[l.category] ?? l.category}
                     </p>
 
-                    <BookButton
-                      vendorSlug={vendor.slug}
-                      listingSlug={l.slug}
-                      listingType={l.listingType}
-                      isApnosh={vendor.isApnosh}
-                    />
+                    {vendor.isApnosh ? (
+                      <BookButton
+                        vendorSlug={vendor.slug}
+                        listingSlug={l.slug}
+                        listingType={l.listingType}
+                        isApnosh={vendor.isApnosh}
+                      />
+                    ) : (
+                      <BookOffer
+                        vendorSlug={vendor.slug}
+                        vendorName={vendor.name}
+                        listingSlug={l.slug}
+                        title={l.title}
+                        mode={bookMode}
+                        billingMonthly={billingMonthly}
+                        turnaroundDays={pkg.turnaroundDays}
+                        basePriceCents={pkg.priceCents}
+                        tiers={pkg.tiers.map((t) => ({ name: t.name, priceCents: t.priceCents, deliverables: t.deliverables }))}
+                        options={pkg.options.map((o) => ({ label: o.label, priceDeltaCents: o.priceDeltaCents }))}
+                        intake={pkg.intake}
+                      />
+                    )}
                   </div>
                 </div>
               </div>
