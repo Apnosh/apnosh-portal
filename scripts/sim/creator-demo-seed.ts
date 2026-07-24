@@ -9,14 +9,21 @@
  *
  * No real money: payouts are internal ledger rows, exactly as in the sims. No Stripe call is made.
  *
+ * HIDDEN FROM CLIENTS BY DEFAULT. This writes to the live database, so a bookable demo creator would
+ * show up on the real store shelf and a restaurant could book someone who does not exist. The account
+ * is seeded `bookable = false`: the owner can still sign in and walk every creator screen, but no
+ * client can see or book them. Pass --live only when the shop page itself is what needs looking at,
+ * and take it down afterwards.
+ *
  *   npx tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-demo-seed.ts
+ *   npx tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-demo-seed.ts --live
  *   npx tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-demo-seed.ts --clean
  */
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { onboardCreatorCore } from '@/lib/marketplace/onboard-creator'
 import { emptyPackage, packageToRow, type CreatorPackage } from '@/lib/marketplace/package'
-import { getVendorScheduleBySlug, confirmLabel, CREATOR_GATE_KIND } from '@/lib/marketplace/creator-schedule'
+import { getVendorSchedule, confirmLabel, CREATOR_GATE_KIND } from '@/lib/marketplace/creator-schedule'
 import { mintBookingWorkOrder } from '@/lib/marketplace/booking-work-order'
 import { updateWorkOrder } from '@/lib/campaigns/work-orders'
 
@@ -104,6 +111,7 @@ async function book(a: Admin, meta: Record<string, unknown>, row: Record<string,
 async function main() {
   const a = createAdminClient()
   const clean = process.argv.includes('--clean')
+  const live = process.argv.includes('--live')   // opt in to being visible on the real store shelf
 
   // Find or make the login.
   let userId: string | null = null
@@ -135,11 +143,14 @@ async function main() {
     name: NAME, email: EMAIL, craft: 'Photo', crafts: ['photo', 'video', 'social'],
     styleTags: ['Warm + natural light', 'Fast turnaround'],
     serviceArea: ['WA'], description: 'Food photographer and video maker in Seattle. I shoot menus, reels, and run social for a handful of restaurants.',
-    personId: userId, invite: false, bookable: true,
+    personId: userId, invite: false, bookable: live,
   })
   if (!onboard.ok || !onboard.vendorId) throw new Error(`onboarding failed: ${JSON.stringify(onboard)}`)
   const vendorId = onboard.vendorId
   const slug = onboard.slug!
+  // onboardCreatorCore deliberately never demotes an existing creator, so a re-run has to set this
+  // itself — otherwise a once-live demo account stays on the shelf forever.
+  await a.from('vendors').update({ bookable: live }).eq('id', vendorId)
 
   // Hours: weekdays 9-5, confirms each booking.
   const wk = { start: '09:00', end: '17:00' }
@@ -159,7 +170,9 @@ async function main() {
     listingIds[pkg.slug] = data.id as string
   }
 
-  const sched = await getVendorScheduleBySlug(slug, undefined, 200, 240)
+  // By vendor id, not slug: the by-slug reader is the PUBLIC path and refuses a non-bookable
+  // creator, which a hidden demo account is by default.
+  const sched = await getVendorSchedule(vendorId, undefined, 200, 240)
   if (sched.slots.length < 3) throw new Error('not enough open times to seed bookings')
   const metaFor = (p: CreatorPackage, intake: Record<string, string>, extra: Record<string, unknown> = {}) => ({
     vendorId, vendorSlug: slug, listingId: listingIds[p.slug], listingSlug: p.slug, listingTitle: p.title,
@@ -212,14 +225,18 @@ async function main() {
 │    email     ${EMAIL}
 │    password  ${PASSWORD}
 │
-│  Their shop      /marketplace/${slug}
 │  Their work      /creator/work
 │  Their bookings  /creator/bookings
 │  Their earnings  /creator/earnings
+│  Their shop      /marketplace/${slug}${live ? '' : '   (hidden until --live)'}
 │
 │  Seeded: 3 offers · 1 request awaiting their yes · 1 upcoming shoot
 │          1 reel delivered awaiting the restaurant · 1 finished + paid
 │          $${(owed / 100).toLocaleString()} showing as earned (ledger only, no real money)
+│
+│  ${live
+    ? 'VISIBLE TO CLIENTS. They are on the real store shelf and can be\n│  booked by a restaurant. Take them down when you are done looking.'
+    : 'Hidden from clients. You can walk every creator screen; no restaurant\n│  can see or book them. Pass --live to put the shop page on the shelf.'}
 │
 │  Remove it:  npx tsx --tsconfig scripts/sim/tsconfig.json \\
 │                scripts/sim/creator-demo-seed.ts --clean
