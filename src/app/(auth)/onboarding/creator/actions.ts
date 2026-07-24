@@ -59,6 +59,7 @@ function buildOfferPackage(offer: NonNullable<CreatorOnboardingInput['offer']>):
 }
 
 export async function completeCreatorOnboarding(input: CreatorOnboardingInput): Promise<{ ok: boolean; error?: string; slug?: string }> {
+ try {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: 'Please sign in again.' }
@@ -99,4 +100,8 @@ export async function completeCreatorOnboarding(input: CreatorOnboardingInput): 
   if (pkg) { try { await saveMyPackage(pkg) } catch { /* they can add packages in the storefront */ } }
 
   return { ok: true, slug: res.slug }
+ } catch (e) {
+  // Never throw to the client — a rejected server action would leave the "Setting up…" spinner stuck.
+  return { ok: false, error: e instanceof Error ? e.message : 'Setup could not finish. Try again.' }
+ }
 }

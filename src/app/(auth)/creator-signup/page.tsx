@@ -51,28 +51,34 @@ export default function CreatorSignupPage() {
 
     setLoading(true)
 
-    // Step 1 — create the login (skip if a prior attempt already made it).
-    if (!accountReady) {
-      if (password.length < 8) { setError('Password must be at least 8 characters'); setLoading(false); return }
-      if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
-      if (!agree) { setError('Please agree to the Creator Agreement to continue'); setLoading(false); return }
-      const supabase = createClient()
-      const { error: signErr } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } })
-      if (signErr) { setError(signErr.message); setLoading(false); return }
-      setAccountReady(true)
+    // Wrapped so a thrown/timed-out call surfaces an error you can retry, never a spinner that hangs.
+    try {
+      // Step 1 — create the login (skip if a prior attempt already made it).
+      if (!accountReady) {
+        if (password.length < 8) { setError('Password must be at least 8 characters'); setLoading(false); return }
+        if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
+        if (!agree) { setError('Please agree to the Creator Agreement to continue'); setLoading(false); return }
+        const supabase = createClient()
+        const { error: signErr } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } })
+        if (signErr) { setError(signErr.message); setLoading(false); return }
+        setAccountReady(true)
+      }
+
+      // Step 2 — turn the login into a creator. Idempotent, so a retry after a failure is safe.
+      const res = await becomeCreator({
+        name: fullName.trim(),
+        craft,
+        serviceArea: areas,
+        agreementVersion: CREATOR_AGREEMENT_VERSION,
+      })
+      if (!res.ok) { setError(res.error ?? 'Your account is ready but setup did not finish. Tap Finish setup to retry.'); setLoading(false); return }
+
+      router.push('/creator/storefront')
+      router.refresh()
+    } catch {
+      setError('That took too long. Your account may be ready — tap the button to try again.')
+      setLoading(false)
     }
-
-    // Step 2 — turn the login into a creator. Idempotent, so a retry after a failure is safe.
-    const res = await becomeCreator({
-      name: fullName.trim(),
-      craft,
-      serviceArea: areas,
-      agreementVersion: CREATOR_AGREEMENT_VERSION,
-    })
-    if (!res.ok) { setError(res.error ?? 'Your account is ready but setup did not finish. Tap Finish setup to retry.'); setLoading(false); return }
-
-    router.push('/creator/storefront')
-    router.refresh()
   }
 
   return (

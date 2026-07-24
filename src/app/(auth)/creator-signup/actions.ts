@@ -13,6 +13,7 @@ import { onboardCreatorCore, type CreatorCraft } from '@/lib/marketplace/onboard
 import { CREATOR_AGREEMENT_VERSION } from '@/lib/marketplace/creator-agreement'
 
 export async function becomeCreator(input: { name: string; craft: CreatorCraft; serviceArea?: string[]; agreementVersion?: string }): Promise<{ ok: boolean; error?: string; slug?: string }> {
+ try {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: 'Please create your account first.' }
@@ -40,4 +41,8 @@ export async function becomeCreator(input: { name: string; craft: CreatorCraft; 
     agreementVersion: CREATOR_AGREEMENT_VERSION,
   })
   return { ok: res.ok, error: res.error, slug: res.slug }
+ } catch (e) {
+  // Never throw to the client — a rejected server action would leave the "Setting up…" spinner stuck.
+  return { ok: false, error: e instanceof Error ? e.message : 'Setup could not finish. Try again.' }
+ }
 }

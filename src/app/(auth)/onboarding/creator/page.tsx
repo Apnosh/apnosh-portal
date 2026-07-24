@@ -81,20 +81,26 @@ export default function CreatorOnboarding() {
           priceDollars: priceNum || 0,
         }
       : null
-    const res = await completeCreatorOnboarding({
-      name: data.name.trim(),
-      skills: data.skills,
-      serviceArea: areaTokens.map((s) => s.toUpperCase()),
-      bio: data.bio.trim(),
-      styleTags: data.styleTags,
-      portfolioLinks: data.links.map((l) => l.trim()).filter(Boolean),
-      offer,
-      agreementVersion: CREATOR_AGREEMENT_VERSION,
-    })
-    if (!res.ok) { setError(res.error ?? 'Could not finish setup. Try again.'); setSubmitting(false); return }
-    try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
-    router.push('/creator/storefront')
-    router.refresh()
+    // Wrapped so a thrown/timed-out setup surfaces an error you can retry, never a spinner that hangs.
+    try {
+      const res = await completeCreatorOnboarding({
+        name: data.name.trim(),
+        skills: data.skills,
+        serviceArea: areaTokens.map((s) => s.toUpperCase()),
+        bio: data.bio.trim(),
+        styleTags: data.styleTags,
+        portfolioLinks: data.links.map((l) => l.trim()).filter(Boolean),
+        offer,
+        agreementVersion: CREATOR_AGREEMENT_VERSION,
+      })
+      if (!res.ok) { setError(res.error ?? 'Could not finish setup. Try again.'); setSubmitting(false); return }
+      try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+      router.push('/creator/storefront')
+      router.refresh()
+    } catch {
+      setError('That took too long. Tap Finish setup to try again.')
+      setSubmitting(false)
+    }
   }
 
   function goNext() { if (screen < PHASES.length - 1) setScreen((s) => s + 1); else finish() }
