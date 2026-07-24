@@ -54,6 +54,21 @@ export interface CreatorEarnings {
   netCents: number    // total earned (accrued + payable + paid)
   paidCents: number   // of that, already paid out
   count: number
+  feeCents: number    // what Apnosh kept across those pieces, as a real number
+}
+
+/** One earned piece, so "where does it go" is answerable job by job instead of as one lump. */
+export interface CreatorPayoutLine {
+  workOrderId: string
+  title: string
+  /** The day the work was due (what the creator remembers it by). */
+  date: string | null
+  restaurantName: string | null
+  grossCents: number
+  feeCents: number
+  netCents: number
+  feePercent: number
+  status: 'accrued' | 'payable' | 'paid'
 }
 
 export interface CampaignExecution {

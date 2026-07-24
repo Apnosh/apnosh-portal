@@ -32,10 +32,7 @@ const navBtn: React.CSSProperties = { width: 34, height: 34, borderRadius: 10, b
 
 export default function CreatorCalendar({ items }: { items: CalendarItem[] }) {
   const now = new Date()
-  const [year, setYear] = useState(now.getFullYear())
-  const [month, setMonth] = useState(now.getMonth())
   const todayISO = iso(now.getFullYear(), now.getMonth(), now.getDate())
-  const [sel, setSel] = useState(todayISO)
 
   const byDate = useMemo(() => {
     const m = new Map<string, CalendarItem[]>()
@@ -44,16 +41,32 @@ export default function CreatorCalendar({ items }: { items: CalendarItem[] }) {
     return m
   }, [items])
 
+  // Open on the next day that actually HAS something. Landing on an empty today made a creator with
+  // four upcoming jobs read "Nothing on this day" and think their calendar was broken.
+  const firstUpcoming = useMemo(() => {
+    const dates = items.map((i) => i.date).filter((d) => d && d >= todayISO).sort()
+    return dates[0] ?? todayISO
+  }, [items, todayISO])
+
+  // Both the chosen day and the month on screen stay UNSET until the creator touches them, so they
+  // follow `firstUpcoming` once items arrive. On /creator/work the list loads after mount, so
+  // seeding these from the first (empty) render would pin the view to an empty today forever.
+  const [sel, setSel] = useState<string | null>(null)
+  const [cursor, setCursor] = useState<{ y: number; m: number } | null>(null)
+  const selected = sel ?? firstUpcoming
+  const year = cursor?.y ?? Number(selected.slice(0, 4))
+  const month = cursor?.m ?? Number(selected.slice(5, 7)) - 1
+
   const firstWeekday = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const cells: (number | null)[] = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
   while (cells.length % 7 !== 0) cells.push(null)
 
-  const prev = () => (month === 0 ? (setYear((y) => y - 1), setMonth(11)) : setMonth((m) => m - 1))
-  const next = () => (month === 11 ? (setYear((y) => y + 1), setMonth(0)) : setMonth((m) => m + 1))
+  const prev = () => setCursor(month === 0 ? { y: year - 1, m: 11 } : { y: year, m: month - 1 })
+  const next = () => setCursor(month === 11 ? { y: year + 1, m: 0 } : { y: year, m: month + 1 })
 
-  const selItems = byDate.get(sel) ?? []
-  const selDate = new Date(`${sel}T00:00:00`)
+  const selItems = byDate.get(selected) ?? []
+  const selDate = new Date(`${selected}T00:00:00`)
 
   return (
     <div style={{ background: C.bg, minHeight: '100%', padding: '16px 14px 32px', boxSizing: 'border-box' }}>
@@ -77,7 +90,7 @@ export default function CreatorCalendar({ items }: { items: CalendarItem[] }) {
             const dayItems = byDate.get(cISO) ?? []
             const hasShoot = dayItems.some((x) => x.kind === 'shoot')
             const isToday = cISO === todayISO
-            const isSel = cISO === sel
+            const isSel = cISO === selected
             return (
               <button key={i} onClick={() => setSel(cISO)} style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 10, border: 'none', cursor: 'pointer', background: isSel ? C.green : isToday ? C.greenSoft : 'transparent', color: isSel ? '#fff' : C.ink }}>
                 <span style={{ fontSize: 13, fontWeight: isToday || isSel ? 700 : 500 }}>{d}</span>

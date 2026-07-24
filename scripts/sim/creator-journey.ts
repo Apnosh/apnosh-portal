@@ -30,7 +30,7 @@ import { getVendorScheduleBySlug, vendorIdForSlug, getVendorRule, confirmLabel, 
 import { computeOpenSlots } from '@/lib/campaigns/gates/availability'
 import { mintBookingWorkOrder, workOrdersForBookings, voidBookingWorkOrder } from '@/lib/marketplace/booking-work-order'
 import { calendarForCreator } from '@/lib/marketplace/creator-calendar-data'
-import { listWorkOrdersForCreator, getCreatorEarnings, getCreatorIdForUser, updateWorkOrder } from '@/lib/campaigns/work-orders'
+import { listWorkOrdersForCreator, getCreatorEarnings, getCreatorPayoutLines, getCreatorIdForUser, updateWorkOrder } from '@/lib/campaigns/work-orders'
 import { Suite } from './lib'
 
 config({ path: '.env.local' })
@@ -307,6 +307,16 @@ async function main() {
     const after = await getCreatorEarnings(vendorId)
     s.check('their earnings screen reflects it', after.netCents === before.netCents + (payout?.net_cents ?? -1), `${before.netCents} → ${after.netCents}`)
     s.check('nothing is shown as already paid', after.paidCents === 0)
+    s.check('the fee is a real number they can see', after.feeCents === (payout?.fee_cents ?? -1), `${after.feeCents}`)
+
+    // Job by job, so "where did the rest go" is answerable per piece, not as one lump.
+    const lines = await getCreatorPayoutLines(vendorId)
+    const line = lines.find((l) => l.workOrderId === job.orderId)
+    s.check('the job appears in their earnings breakdown', !!line, `${lines.length} lines`)
+    s.check('the breakdown names the job', (line?.title ?? '').includes('SIM Photo Day'), line?.title)
+    s.check('the breakdown names the restaurant', !!line?.restaurantName, line?.restaurantName)
+    s.check('the breakdown adds up (fee + net = what the job paid)', !!line && line.feeCents + line.netCents === line.grossCents, JSON.stringify(line))
+    s.check('the breakdown shows it as owed, not paid', line?.status === 'accrued')
 
     // Finished work leaves the calendar so it stops nagging them.
     s.check('a finished job drops off their calendar', !(await calendarForCreator(vendorId)).some((c) => c.id === job.orderId))

@@ -11,7 +11,7 @@ import { creatorById, rankCreators, type Disc } from './creators'
 import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
 import { feePercentForCreator, assignVendorsToOrderRows, notifyVendorsOfNewWork, notifyVendorOfWork, bestVendorForDiscipline, creatorNamesByIds } from './vendor-supply'
 import { isCampaignCheckoutPaid } from './campaign-payments-server'
-import type { SavedCampaign, CampaignCharges, CreatorEarnings } from './view'
+import type { SavedCampaign, CampaignCharges, CreatorEarnings, CreatorPayoutLine } from './view'
 
 export type { WorkOrderStatus }
 export { IllegalTransition } from './work-orders-core'
@@ -470,17 +470,59 @@ export async function getCreatorEarnings(creatorId: string): Promise<CreatorEarn
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('creator_payouts')
-    .select('net_cents, status')
+    .select('net_cents, fee_cents, status')
     .eq('creator_id', creatorId)
     .in('status', ['accrued', 'payable', 'paid'])
-  if (error || !data) return { netCents: 0, paidCents: 0, count: 0 }
-  let netCents = 0, paidCents = 0
+  if (error || !data) return { netCents: 0, paidCents: 0, count: 0, feeCents: 0 }
+  let netCents = 0, paidCents = 0, feeCents = 0
   for (const p of data) {
     const n = (p.net_cents as number) ?? 0
     netCents += n
+    feeCents += (p.fee_cents as number) ?? 0
     if (p.status === 'paid') paidCents += n
   }
-  return { netCents, paidCents, count: data.length }
+  return { netCents, paidCents, count: data.length, feeCents }
+}
+
+/**
+ * The creator's earnings broken out job by job, newest first — so "what am I owed, and where did the
+ * rest go" is answerable per piece instead of as one lump sum. Titles come from the work order and
+ * the restaurant from its client; both degrade to a placeholder rather than failing the screen.
+ */
+export async function getCreatorPayoutLines(creatorId: string): Promise<CreatorPayoutLine[]> {
+  const admin = createAdminClient()
+  try {
+    const { data, error } = await admin
+      .from('creator_payouts')
+      .select('work_order_id, gross_cents, fee_cents, net_cents, fee_percent, status, created_at')
+      .eq('creator_id', creatorId)
+      .in('status', ['accrued', 'payable', 'paid'])
+      .order('created_at', { ascending: false })
+    if (error || !data?.length) return []
+
+    const orderIds = [...new Set(data.map((p) => (p.work_order_id as string) ?? '').filter(Boolean))]
+    const { data: orders } = await admin
+      .from('creator_work_orders')
+      .select('id, title, due_date, client_id')
+      .in('id', orderIds)
+    const byOrder = new Map((orders ?? []).map((o) => [o.id as string, o]))
+    const restaurants = await restaurantNamesByIds(admin, (orders ?? []).map((o) => (o.client_id as string) ?? ''))
+
+    return data.map((p) => {
+      const o = byOrder.get((p.work_order_id as string) ?? '')
+      return {
+        workOrderId: (p.work_order_id as string) ?? '',
+        title: ((o?.title as string) ?? '').trim() || 'Work',
+        date: (o?.due_date as string) ?? null,
+        restaurantName: restaurants.get((o?.client_id as string) ?? '') ?? null,
+        grossCents: (p.gross_cents as number) ?? 0,
+        feeCents: (p.fee_cents as number) ?? 0,
+        netCents: (p.net_cents as number) ?? 0,
+        feePercent: Number(p.fee_percent ?? 0),
+        status: ((p.status as CreatorPayoutLine['status']) ?? 'accrued'),
+      }
+    })
+  } catch { return [] }
 }
 
 /**

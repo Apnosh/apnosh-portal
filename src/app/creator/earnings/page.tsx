@@ -9,7 +9,7 @@
 
 import { currentVendor } from '@/lib/marketplace/creator-schedule'
 import { getVendorConnectStatus } from '@/lib/campaigns/vendor-connect'
-import { getCreatorEarnings } from '@/lib/campaigns/work-orders'
+import { getCreatorEarnings, getCreatorPayoutLines } from '@/lib/campaigns/work-orders'
 import EarningsView from '@/components/creator/earnings-view'
 
 export const dynamic = 'force-dynamic'
@@ -25,11 +25,12 @@ export default async function CreatorEarningsPage() {
     )
   }
 
-  const [earnings, connect] = await Promise.all([
+  const [earnings, lines, connect] = await Promise.all([
     getCreatorEarnings(vendor.id),
+    getCreatorPayoutLines(vendor.id),
     getVendorConnectStatus(vendor.id),
   ])
   const payoutsLive = process.env.STRIPE_CONNECT_PAYOUTS === '1'
 
-  return <EarningsView earnings={earnings} connect={connect} payoutsLive={payoutsLive} />
+  return <EarningsView earnings={earnings} lines={lines} connect={connect} payoutsLive={payoutsLive} />
 }
