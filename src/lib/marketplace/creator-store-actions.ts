@@ -132,6 +132,10 @@ export interface MyProfile {
   serviceArea: string[]
   styleTags: string[]
   portfolioLinks: string[]
+  /** vendors.logo_url — the round profile photo. null until they upload one. */
+  avatarUrl: string | null
+  /** vendors.cover_url — the wide banner at the top of their shop. */
+  coverUrl: string | null
 }
 
 /** The logged-in creator's editable profile fields, or null when they're not a creator. */
@@ -141,7 +145,7 @@ export async function getMyCreatorProfile(): Promise<MyProfile | null> {
   const admin = createAdminClient()
   const { data } = await admin
     .from('vendors')
-    .select('id, name, slug, bookable, description, crafts, service_area, style_tags, portfolio_links')
+    .select('id, name, slug, bookable, description, crafts, service_area, style_tags, portfolio_links, logo_url, cover_url')
     .eq('id', vendor.id)
     .maybeSingle()
   if (!data) return null
@@ -156,6 +160,8 @@ export async function getMyCreatorProfile(): Promise<MyProfile | null> {
     serviceArea: arr(data.service_area),
     styleTags: arr(data.style_tags),
     portfolioLinks: arr(data.portfolio_links),
+    avatarUrl: (data.logo_url as string | null) ?? null,
+    coverUrl: (data.cover_url as string | null) ?? null,
   }
 }
 
@@ -187,6 +193,58 @@ export async function updateMyProfile(input: { name: string; bio: string; skills
   if (error) return { ok: false, error: 'Could not save. Try again.' }
   revalidatePath('/creator/account'); revalidatePath('/creator/account/profile'); revalidatePath(`/marketplace/${vendor.slug}`)
   return { ok: true }
+}
+
+/* ── the creator's PHOTOS — avatar + cover, self-serve upload ────────────────────────────── */
+
+const PORTFOLIO_BUCKET = 'vendor-portfolio'
+
+/** Decode a base64 image data URL to a Buffer + mime. The client downscales before sending, so
+ *  this is normally tiny; the size guard is a backstop for anything that skips that path. */
+function decodeImageDataUrl(dataUrl: string, maxBytes: number): { ok: true; buffer: Buffer; mimeType: string; ext: string } | { ok: false; error: string } {
+  const match = /^data:(image\/[a-z+]+);base64,(.+)$/i.exec(dataUrl ?? '')
+  if (!match) return { ok: false, error: 'That image did not upload. Try another photo.' }
+  const mimeType = match[1]
+  const ext = mimeType.split('/')[1].replace('jpeg', 'jpg').replace('svg+xml', 'svg')
+  const buffer = Buffer.from(match[2], 'base64')
+  if (buffer.length > maxBytes) return { ok: false, error: 'That photo is too big. Try a smaller one.' }
+  return { ok: true, buffer, mimeType, ext }
+}
+
+/** Shared writer for the two single-image slots on the vendor row. Uploads to the vendor-portfolio
+ *  bucket under the creator's own slug folder, then points the column at the public URL. Vendor-
+ *  scoped via myVendorId(), and the admin client bypasses the bucket's admin-only write RLS after
+ *  that ownership check. Returns the new URL so the editor can show it without a full refresh. */
+async function uploadCreatorImage(kind: 'avatar' | 'cover', dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const vendor = await myVendorId()
+  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+  const decoded = decodeImageDataUrl(dataUrl, 8 * 1024 * 1024)
+  if (!decoded.ok) return decoded
+
+  const admin = createAdminClient()
+  const filename = `${vendor.slug}/${kind}-${Date.now()}.${decoded.ext}`
+  const { error: upErr } = await admin.storage
+    .from(PORTFOLIO_BUCKET)
+    .upload(filename, decoded.buffer, { contentType: decoded.mimeType, cacheControl: '31536000', upsert: false })
+  if (upErr) return { ok: false, error: 'That photo did not save. Try again.' }
+
+  const { data: pub } = admin.storage.from(PORTFOLIO_BUCKET).getPublicUrl(filename)
+  const column = kind === 'avatar' ? 'logo_url' : 'cover_url'
+  const { error } = await admin.from('vendors').update({ [column]: pub.publicUrl, updated_at: new Date().toISOString() }).eq('id', vendor.id)
+  if (error) return { ok: false, error: 'That photo did not save. Try again.' }
+
+  revalidatePath('/creator/account'); revalidatePath('/creator/account/profile'); revalidatePath(`/marketplace/${vendor.slug}`)
+  return { ok: true, url: pub.publicUrl }
+}
+
+/** Set the creator's round profile photo (vendors.logo_url). dataUrl is a downscaled JPEG. */
+export async function uploadMyAvatar(dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  return uploadCreatorImage('avatar', dataUrl)
+}
+
+/** Set the creator's wide cover banner (vendors.cover_url). dataUrl is a downscaled JPEG. */
+export async function uploadMyCover(dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  return uploadCreatorImage('cover', dataUrl)
 }
 
 /* ── the creator's MASTER CALENDAR — every dated thing in one place ──────────────────────── */
