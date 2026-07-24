@@ -86,6 +86,20 @@ export type SimpleBookingResult =
   | { ok: true; bookingId: string; dueDate?: string | null; startDate?: string | null }
   | { ok: false; needsLogin?: boolean; error: string }
 
+/** One dated thing on the creator's master calendar — a shoot (has a time) or a deliverable deadline
+ *  (no time). Sourced from their work orders (every confirmed booking + campaign piece mints one),
+ *  so it's every shape in one place: shoots on their day, editing/design/plan work on its due date. */
+export interface CalendarItem {
+  id: string
+  /** YYYY-MM-DD (the due date, or the shoot day). */
+  date: string
+  /** HH:MM for a scheduled shoot; null for remote/deadline work. */
+  time: string | null
+  title: string
+  status: string
+  kind: 'shoot' | 'work'
+}
+
 /** One row in a creator's incoming list. */
 export interface IncomingBooking {
   id: string

@@ -75,7 +75,13 @@ export default function AvailabilityEditor({ initialVendor, initialForm }: {
   return (
     <div className="max-w-2xl mx-auto px-5 py-8">
       <h1 className="text-xl font-bold text-neutral-900">When you shoot</h1>
-      <p className="text-sm text-neutral-500 mt-1 mb-6">Set your hours once. Restaurants only ever see times you are actually free, and a booked slot disappears on its own.</p>
+      <p className="text-sm text-neutral-500 mt-1 mb-4">Set your hours once. Restaurants only ever see times you are actually free, and a booked slot disappears on its own.</p>
+
+      {/* Hours govern ON-SITE shoots only. Remote work (editing, design, web, writing) is booked by
+          turnaround, not a time slot, so a multi-skill creator is never on set intervals for it. */}
+      <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-4 py-3 mb-6 text-[13px] leading-relaxed text-emerald-900">
+        These hours are just for <span className="font-semibold">on-site shoots</span>. Editing, design, and other remote work is booked by how fast you deliver, not a time slot, so it never uses these hours.
+      </div>
 
       {/* Weekly hours */}
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-400 mb-2">Weekly hours</div>
