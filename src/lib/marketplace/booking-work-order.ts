@@ -151,12 +151,12 @@ export async function mintBookingWorkOrder(bookingId: string, opts?: { month?: n
     const title = (meta.tierName ? `${meta.listingTitle} · ${meta.tierName}` : meta.listingTitle) + monthTag
     const dueISO = opts?.dueDateISO ?? ((b.slot_date as string) ?? null)
     const dayLabel = shootDayLabel(dueISO)
-    const intakeLines = Object.values(meta.intake).filter((v) => typeof v === 'string' && v.trim())
+    const intakeLines = Object.entries(meta.intake).filter(([, v]) => typeof v === 'string' && v.trim())
     const dueWord = shape === 'scheduled' ? 'Shoot day' : shape === 'recurring' ? 'This month' : 'Deliver by'
     const brief = [
       `${shape === 'recurring' ? 'Monthly plan' : shape === 'quote' ? 'Custom job' : shape === 'async' ? 'Booked work' : 'Booked shoot'}: ${title}.`,
       dayLabel ? `${dueWord}: ${dayLabel}.` : '',
-      ...intakeLines.map((v) => `Note: ${v}.`),
+      ...intakeLines.map(([q, v]) => `${q}: ${v}.`),
       'Deliver the finished work here when it is ready — the restaurant reviews and approves it.',
     ].filter(Boolean).join(' ')
 

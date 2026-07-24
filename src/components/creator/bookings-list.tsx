@@ -172,7 +172,7 @@ function BookingCard({ b, accent, busy, onAccept, onReschedule, onCancel }: {
   b: IncomingBooking; accent: 'held' | 'confirmed'; busy: boolean
   onAccept?: () => void; onReschedule: () => void; onCancel: () => void
 }) {
-  const intakeEntries = Object.values(b.intake).filter(Boolean)
+  const intakeEntries = Object.entries(b.intake).filter(([, v]) => v)
   const stripe = accent === 'held' ? C.amber : C.green
   return (
     <div style={{ position: 'relative', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,.04)', overflow: 'hidden' }}>
@@ -189,8 +189,8 @@ function BookingCard({ b, accent, busy, onAccept, onReschedule, onCancel }: {
 
         {intakeEntries.length > 0 && (
           <ul style={{ margin: '11px 0 0', padding: '11px 0 0', borderTop: `0.5px solid ${C.line}`, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {intakeEntries.map((v, i) => (
-              <li key={i} style={{ fontSize: 12.5, color: C.mute, display: 'flex', gap: 7 }}><span style={{ color: C.faint }}>•</span> {v}</li>
+            {intakeEntries.map(([q, v], i) => (
+              <li key={i} style={{ fontSize: 12.5, color: C.mute, display: 'flex', gap: 7 }}><span style={{ color: C.faint }}>•</span> <span><span style={{ color: C.ink, fontWeight: 600 }}>{q}</span> {v}</span></li>
             ))}
           </ul>
         )}
@@ -216,7 +216,7 @@ function BookingCard({ b, accent, busy, onAccept, onReschedule, onCancel }: {
 
 function QuoteCard({ q, busy, onSend }: { q: QuoteRequest; busy: boolean; onSend: (price: string) => void }) {
   const [price, setPrice] = useState('')
-  const intakeEntries = Object.values(q.intake).filter(Boolean)
+  const intakeEntries = Object.entries(q.intake).filter(([, v]) => v)
   const valid = parseFloat(price) > 0
   return (
     <div style={{ position: 'relative', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,.04)', overflow: 'hidden' }}>
@@ -226,8 +226,8 @@ function QuoteCard({ q, busy, onSend }: { q: QuoteRequest; busy: boolean; onSend
         <div style={{ fontSize: 12.5, color: C.mute, marginTop: 2 }}>A restaurant asked for a price.</div>
         {intakeEntries.length > 0 && (
           <ul style={{ margin: '9px 0 0', padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {intakeEntries.map((v, i) => (
-              <li key={i} style={{ fontSize: 12.5, color: C.mute, display: 'flex', gap: 7 }}><span style={{ color: C.faint }}>•</span> {v}</li>
+            {intakeEntries.map(([q, v], i) => (
+              <li key={i} style={{ fontSize: 12.5, color: C.mute, display: 'flex', gap: 7 }}><span style={{ color: C.faint }}>•</span> <span><span style={{ color: C.ink, fontWeight: 600 }}>{q}</span> {v}</span></li>
             ))}
           </ul>
         )}

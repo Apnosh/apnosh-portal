@@ -264,6 +264,7 @@ export async function getMyCreatorBookings(): Promise<ClientBooking[]> {
       vendorName: (nameById.get(m!.vendorId) || '').replace(/\s*\(example\)/i, '') || 'Creator',
       listingTitle: m!.listingTitle,
       tierName: m!.tierName,
+      intake: m!.intake ?? {},
       shape: m!.shape ?? 'scheduled',
       quotedCents: m!.quotedCents ?? null,
       quoteStatus: m!.quoteStatus ?? null,

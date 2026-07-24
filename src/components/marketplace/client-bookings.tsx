@@ -188,6 +188,15 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
                       <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', borderRadius: 99, padding: '3px 9px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em', textTransform: 'uppercase', background: tone.bg, color: tone.fg }}>{phase.label}</span>
                     </div>
 
+                    {/* What the restaurant told the creator (their answers to the offer's questions). */}
+                    {Object.entries(b.intake).filter(([, v]) => v).length > 0 && (
+                      <ul style={{ margin: '11px 0 0', padding: '11px 0 0', borderTop: `0.5px solid ${C.line}`, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {Object.entries(b.intake).filter(([, v]) => v).map(([q, v], i) => (
+                          <li key={i} style={{ fontSize: 12, color: C.mute, display: 'flex', gap: 7 }}><span style={{ color: C.faint }}>•</span> <span><span style={{ color: C.ink, fontWeight: 600 }}>{q}</span> {v}</span></li>
+                        ))}
+                      </ul>
+                    )}
+
                     {/* Delivered → the review panel: see the work, approve, or ask for changes. */}
                     {phase.key === 'delivered' && (
                       <div style={{ marginTop: 12, borderRadius: 13, border: '0.5px solid rgba(109,75,179,0.22)', background: 'rgba(241,236,251,0.6)', padding: '12px 13px' }}>
