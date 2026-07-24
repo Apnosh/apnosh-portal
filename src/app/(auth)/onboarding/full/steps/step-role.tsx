@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { useRouter } from 'next/navigation'
 import { type OnboardingData, ROLES } from '../data'
 import { Question, OptionCard, Badge } from '../ui'
 
@@ -11,6 +12,10 @@ interface Props {
 }
 
 export default function StepRole({ data, update, nav }: Props) {
+  const router = useRouter()
+  // Freelancer is the fork: it leaves the restaurant flow for the creator setup right away, before
+  // any business row is written. Every other role continues the business flow as before.
+  const pick = (id: string) => (id === 'freelancer' ? router.push('/onboarding/creator') : update('role', id))
   return (
     <>
       <Question title="Who are you?" subtitle="This helps us tailor your experience" />
@@ -19,7 +24,7 @@ export default function StepRole({ data, update, nav }: Props) {
           <OptionCard
             key={r.id}
             selected={data.role === r.id}
-            onClick={() => update('role', r.id)}
+            onClick={() => pick(r.id)}
             disabled={!!r.disabled}
           >
             {!!r.disabled && <Badge>Soon</Badge>}

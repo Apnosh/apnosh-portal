@@ -28,6 +28,14 @@ export interface OnboardCreatorInput {
   name: string
   email: string
   craft: CreatorCraft
+  /** The creator's full skill set (skill ids from creator-skills.ts). The scalar `craft` above stays
+   *  the primary/dispatch skill; this is the multi-select list stored in vendors.crafts. Optional so
+   *  admin-added single-craft creators still work. */
+  crafts?: string[]
+  /** Aesthetic style tags for profile match (stored in vendors.style_tags). */
+  styleTags?: string[]
+  /** Links to the creator's work (stored in vendors.portfolio_links) until image upload lands. */
+  portfolioLinks?: string[]
   /** Service areas (US state codes). Defaults to ['WA'] (the store is WA-only in v1). */
   serviceArea?: string[]
   description?: string
@@ -85,6 +93,22 @@ async function uniqueSlug(admin: ReturnType<typeof createAdminClient>, base: str
   return `${base}-${Date.now()}`
 }
 
+/** The optional multi-skill columns from migration 228. Written best-effort: if the DB doesn't have
+ *  them yet (42703), the caller retries the write without them, so onboarding never breaks before the
+ *  migration is applied. */
+function skillCols(input: OnboardCreatorInput, defaultCraft: boolean): Record<string, unknown> {
+  const cols: Record<string, unknown> = {}
+  // On INSERT, default crafts to the scalar craft (lowercased skill id) so every creator has a skills
+  // list the campaign router can match on. On UPDATE, only set it when explicitly given, so a re-run
+  // never clobbers a richer list.
+  if (input.crafts?.length) cols.crafts = input.crafts
+  else if (defaultCraft) cols.crafts = [input.craft.toLowerCase()]
+  if (input.styleTags?.length) cols.style_tags = input.styleTags
+  if (input.portfolioLinks?.length) cols.portfolio_links = input.portfolioLinks
+  return cols
+}
+const MISSING_COLUMN = '42703'
+
 export async function onboardCreatorCore(input: OnboardCreatorInput): Promise<OnboardCreatorResult> {
   const admin = createAdminClient()
   const name = (input.name ?? '').trim()
@@ -123,16 +147,24 @@ export async function onboardCreatorCore(input: OnboardCreatorInput): Promise<On
       vendorId = mine.id as string
       slug = mine.slug as string
       // Update profile fields, but PRESERVE bookable — never demote an already-approved creator on a re-run.
-      await admin.from('vendors').update({ name, craft, service_area: serviceArea, ...(input.description ? { description: input.description } : {}) }).eq('id', vendorId)
+      const upd = { name, craft, service_area: serviceArea, ...(input.description ? { description: input.description } : {}) }
+      const r = await admin.from('vendors').update({ ...upd, ...skillCols(input, false) }).eq('id', vendorId)
+      if (r.error && (r.error as { code?: string }).code === MISSING_COLUMN) {
+        await admin.from('vendors').update(upd).eq('id', vendorId) // pre-migration: skip the new columns
+      }
     } else {
       slug = await uniqueSlug(admin, slugify(name))
-      const { data: created, error: cErr } = await admin.from('vendors').insert({
+      const baseRow = {
         slug, name, vendor_type: 'individual', bookable, verified: false, tier: 'free',
         is_apnosh: false, service_area: serviceArea, craft, person_id: personId,
         ...(input.description ? { description: input.description } : {}),
-      }).select('id').single()
-      if (cErr || !created) return { ok: false, error: `Could not create the creator: ${cErr?.message ?? 'unknown error'}` }
-      vendorId = created.id as string
+      }
+      let ins = await admin.from('vendors').insert({ ...baseRow, ...skillCols(input, true) }).select('id').single()
+      if (ins.error && (ins.error as { code?: string }).code === MISSING_COLUMN) {
+        ins = await admin.from('vendors').insert(baseRow).select('id').single() // pre-migration: skip the new columns
+      }
+      if (ins.error || !ins.data) return { ok: false, error: `Could not create the creator: ${ins.error?.message ?? 'unknown error'}` }
+      vendorId = ins.data.id as string
     }
 
     // 3) creator_logins routes them into /creator on sign-in; creator_id = the vendor uuid (as text),

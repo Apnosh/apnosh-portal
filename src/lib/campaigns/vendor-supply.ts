@@ -21,6 +21,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { DEFAULT_PLATFORM_FEE } from './work-orders-core'
 import { creatorById, type Disc } from './creators'
+import { skillIdsForDispatch } from '@/lib/marketplace/creator-skills'
 import { createNotification } from '@/lib/notifications'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -69,20 +70,33 @@ export interface LiveVendor {
  *  rating first, then volume. Null when the bench is empty (→ internal team). */
 export async function bestVendorForDiscipline(d: Disc, excludeIds: string[] = []): Promise<LiveVendor | null> {
   const admin = createAdminClient()
-  let q = admin
-    .from('vendors')
-    .select('id, name, person_id')
-    .eq('craft', d)
-    .eq('bookable', true)
-    .not('person_id', 'is', null)
-    .order('avg_rating', { ascending: false, nullsFirst: false })
-    .order('total_bookings', { ascending: false })
-    .limit(1)
   // Only UUID-shaped exclusions belong in a uuid-column filter; pool ids ('v_maya')
   // can never match a vendors row anyway.
   const ex = [...new Set(excludeIds.filter((id) => UUID.test(id)))]
-  if (ex.length) q = q.not('id', 'in', `(${ex.join(',')})`)
-  const { data, error } = await q.maybeSingle()
+  // A creator can have MANY skills (migration 228), so match the discipline against their whole
+  // skills list — any skill that dispatches to `d` (e.g. 'Design' ← design OR web). The backfill +
+  // onboardCreatorCore keep `crafts` populated for every creator, so this covers them all.
+  const skillIds = skillIdsForDispatch(d)
+
+  const build = (useCrafts: boolean) => {
+    let q = admin.from('vendors').select('id, name, person_id')
+    if (useCrafts && skillIds.length) q = q.overlaps('crafts', skillIds)
+    else q = q.eq('craft', d) // pre-migration fallback: the scalar primary craft only
+    q = q
+      .eq('bookable', true)
+      .not('person_id', 'is', null)
+      .order('avg_rating', { ascending: false, nullsFirst: false })
+      .order('total_bookings', { ascending: false })
+      .limit(1)
+    if (ex.length) q = q.not('id', 'in', `(${ex.join(',')})`)
+    return q
+  }
+
+  let { data, error } = await build(true).maybeSingle()
+  // Before migration 228 the `crafts` column doesn't exist (42703) — fall back to the scalar craft.
+  if (error && (error as { code?: string }).code === '42703') {
+    ;({ data, error } = await build(false).maybeSingle())
+  }
   if (error || !data) return null
   return { id: data.id as string, name: (data.name as string) || 'A vendor', personId: (data.person_id as string | null) ?? null }
 }

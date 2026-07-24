@@ -5,7 +5,9 @@ export const ROLES: Array<{ id: string; emoji: string; title: string; desc: stri
   { id: 'manager', emoji: '👔', title: 'Manager', desc: 'I manage this business or its marketing' },
   { id: 'employee', emoji: '💻', title: 'Employee', desc: 'I work here and handle our marketing' },
   { id: 'agency', emoji: '🤝', title: 'Agency / consultant', desc: 'I manage marketing on behalf of someone else' },
-  { id: 'freelancer', emoji: '⚡', title: 'Freelancer', desc: 'I work with multiple clients', disabled: true },
+  // Freelancer forks OUT of the business flow into the creator setup (steps/step-role.tsx routes on
+  // tap, before any business row is written). Kept in this list so the choice lives at the front door.
+  { id: 'freelancer', emoji: '⚡', title: 'Freelancer', desc: 'I sell photo, video, or creative work' },
 ]
 
 export const BIZ_TYPES = [
