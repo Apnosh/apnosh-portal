@@ -10,11 +10,18 @@
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { onboardCreatorCore, type CreatorCraft } from '@/lib/marketplace/onboard-creator'
+import { CREATOR_AGREEMENT_VERSION } from '@/lib/marketplace/creator-agreement'
 
-export async function becomeCreator(input: { name: string; craft: CreatorCraft; serviceArea?: string[] }): Promise<{ ok: boolean; error?: string; slug?: string }> {
+export async function becomeCreator(input: { name: string; craft: CreatorCraft; serviceArea?: string[]; agreementVersion?: string }): Promise<{ ok: boolean; error?: string; slug?: string }> {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: 'Please create your account first.' }
+
+  // Acceptance is enforced server-side too (not just the checkbox): the version they accepted must be
+  // the current agreement, so we never record a stale or missing acceptance.
+  if (input.agreementVersion !== CREATOR_AGREEMENT_VERSION) {
+    return { ok: false, error: 'Please accept the Creator Agreement to continue.' }
+  }
 
   const admin = createAdminClient()
   // A restaurant account must not become a creator on the same login — the middleware routes clients
@@ -30,6 +37,7 @@ export async function becomeCreator(input: { name: string; craft: CreatorCraft; 
     personId: user.id,   // they just signed up — link THIS login, no email
     invite: false,
     bookable: false,      // review gate: they build their profile now, admin approves them into the store
+    agreementVersion: CREATOR_AGREEMENT_VERSION,
   })
   return { ok: res.ok, error: res.error, slug: res.slug }
 }

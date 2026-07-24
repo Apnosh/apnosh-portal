@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { becomeCreator } from './actions'
 import type { CreatorCraft } from '@/lib/marketplace/onboard-creator'
+import { CREATOR_AGREEMENT_VERSION } from '@/lib/marketplace/creator-agreement'
 
 const CRAFTS: { value: CreatorCraft; label: string }[] = [
   { value: 'Photo', label: 'Photographer' },
@@ -25,6 +26,8 @@ export default function CreatorSignupPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [craft, setCraft] = useState<CreatorCraft>('Photo')
+  const [area, setArea] = useState('WA')
+  const [agree, setAgree] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
@@ -35,6 +38,7 @@ export default function CreatorSignupPage() {
     if (!fullName.trim()) { setError('Enter your name'); return }
     if (password.length < 8) { setError('Password must be at least 8 characters'); return }
     if (password !== confirmPassword) { setError('Passwords do not match'); return }
+    if (!agree) { setError('Please agree to the Creator Agreement to continue'); return }
 
     setLoading(true)
     const supabase = createClient()
@@ -46,7 +50,12 @@ export default function CreatorSignupPage() {
     if (signErr) { setError(signErr.message); setLoading(false); return }
 
     // Now signed in — turn this fresh login into a creator with a storefront.
-    const res = await becomeCreator({ name: fullName.trim(), craft })
+    const res = await becomeCreator({
+      name: fullName.trim(),
+      craft,
+      serviceArea: area.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
+      agreementVersion: CREATOR_AGREEMENT_VERSION,
+    })
     if (!res.ok) { setError(res.error ?? 'Could not finish setting up your creator account.'); setLoading(false); return }
 
     router.push('/creator/storefront')
@@ -85,6 +94,12 @@ export default function CreatorSignupPage() {
             </div>
           </div>
           <div>
+            <label className="block text-xs font-medium text-ink-2 mb-1">Where you work (state codes)</label>
+            <input type="text" value={area} onChange={(e) => setArea(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
+              placeholder="WA" />
+          </div>
+          <div>
             <label className="block text-xs font-medium text-ink-2 mb-1">Email</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
               className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
@@ -102,7 +117,16 @@ export default function CreatorSignupPage() {
               className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
               placeholder="Re-enter your password" />
           </div>
-          <button type="submit" disabled={loading}
+          <label className="flex items-start gap-2 cursor-pointer pt-1">
+            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5" />
+            <span className="text-[11px] text-ink-3 leading-relaxed">
+              I agree to the{' '}
+              <Link href="/creator-terms" target="_blank" className="text-brand-dark font-medium hover:underline">Creator Agreement</Link>
+              {' '}and{' '}
+              <Link href="/privacy" target="_blank" className="text-brand-dark font-medium hover:underline">Privacy Policy</Link>.
+            </span>
+          </label>
+          <button type="submit" disabled={loading || !agree}
             className="w-full bg-brand text-ink font-semibold text-sm py-2.5 px-4 rounded-full hover:bg-brand-dark hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2">
             {loading ? 'Setting up your studio…' : 'Join as a creator'}
           </button>

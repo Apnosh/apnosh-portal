@@ -39,6 +39,9 @@ export interface OnboardCreatorInput {
   /** Whether the creator is bookable in the store right away. Default true (self-serve creators go
    *  live, verified=false, like the seeded pool). Pass false to require an admin to flip them live. */
   bookable?: boolean
+  /** The Creator Agreement version they accepted, recorded (with a timestamp) on vendors.details so
+   *  there's a durable record of who agreed to what and when. Omit for admin-added creators. */
+  agreementVersion?: string
 }
 
 export interface OnboardCreatorResult {
@@ -128,6 +131,19 @@ export async function onboardCreatorCore(input: OnboardCreatorInput): Promise<On
     // (as text), matching how work orders + payouts key off it.
     const { error: clErr } = await admin.from('creator_logins').upsert({ person_id: personId, creator_id: vendorId }, { onConflict: 'person_id' })
     if (clErr) return { ok: false, error: `Linked the vendor but could not finish the login routing: ${clErr.message}`, vendorId, slug, personId, invited }
+
+    // Record the Creator Agreement acceptance (version + timestamp) on the person's auth account —
+    // the durable audit of who agreed to what, when. becomeCreator already enforces that the accepted
+    // version is current, so this is the record, not the gate; keep it best-effort so it never blocks
+    // onboarding. (vendors has no jsonb column, and the person is who legally accepted.)
+    if (input.agreementVersion) {
+      try {
+        const { data: u } = await admin.auth.admin.getUserById(personId)
+        const meta = { ...((u?.user?.user_metadata as Record<string, unknown>) ?? {}) }
+        meta.creator_agreement = { version: input.agreementVersion, acceptedAt: new Date().toISOString() }
+        await admin.auth.admin.updateUserById(personId, { user_metadata: meta })
+      } catch { /* audit write is best-effort; acceptance is already enforced at the action */ }
+    }
 
     return { ok: true, vendorId, slug, invited, personId }
   } catch (e) {
