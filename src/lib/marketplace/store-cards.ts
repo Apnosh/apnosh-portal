@@ -101,11 +101,11 @@ export async function getCreatorStoreCards(state?: string): Promise<CreatorStore
     // selected tier's full list. When not tiered, top-level deliverables carry it (unchanged).
     const tiered = pkg.tiers.length > 0
     const leadDeliverable = tiered ? (pkg.tiers[0]?.deliverables[0] ?? '') : (pkg.deliverables[0] ?? '')
-    // Booking shape + intake come from the standard product; a from-scratch package falls back to
-    // its craft (shoots scheduled, design async, management recurring) with no intake.
+    // Booking shape + intake: prefer what the creator authored on the offer, then the standard
+    // product, then a craft-based guess (shoots scheduled, design async, management recurring).
     const product = productById(pkg.productId)
-    const bookingShape: BookingShape = product ? product.bookingShape : bookingShapeForCategory(pkg.category)
-    const intake: IntakeQuestion[] = product ? product.intake : []
+    const bookingShape: BookingShape = pkg.bookingShape ?? (product ? product.bookingShape : bookingShapeForCategory(pkg.category))
+    const intake: IntakeQuestion[] = pkg.intake.length ? pkg.intake : (product ? product.intake : [])
     cards.push({
       id: `creator:${v.slug}:${row.slug}`,
       vendorSlug: v.slug as string,

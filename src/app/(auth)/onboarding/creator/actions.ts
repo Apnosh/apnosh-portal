@@ -54,7 +54,8 @@ function buildOfferPackage(offer: NonNullable<CreatorOnboardingInput['offer']>):
     slug: slugify(title), title, category: offer.category as PackageCategory,
     listingType: 'one_off', description: `${title} for restaurants.`,
     productId: null, priceCents, billingPeriod: 'one_time',
-    deliverables: [title], tiers: [], options: [], turnaroundDays: null, revisions: null, active: true,
+    deliverables: [title], tiers: [], options: [], turnaroundDays: null, revisions: null,
+    photos: [], intake: [], bookingShape: 'scheduled', active: true,
   }
 }
 

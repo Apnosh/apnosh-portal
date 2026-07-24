@@ -211,30 +211,37 @@ function decodeImageDataUrl(dataUrl: string, maxBytes: number): { ok: true; buff
   return { ok: true, buffer, mimeType, ext }
 }
 
-/** Shared writer for the two single-image slots on the vendor row. Uploads to the vendor-portfolio
- *  bucket under the creator's own slug folder, then points the column at the public URL. Vendor-
- *  scoped via myVendorId(), and the admin client bypasses the bucket's admin-only write RLS after
- *  that ownership check. Returns the new URL so the editor can show it without a full refresh. */
-async function uploadCreatorImage(kind: 'avatar' | 'cover', dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
-  const vendor = await myVendorId()
-  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+/** Upload one image to the creator's own folder in the vendor-portfolio bucket and return its public
+ *  URL. No DB write: the caller decides where the URL lands (a vendor column, or an offer's photos).
+ *  The admin client bypasses the bucket's admin-only write RLS after the caller's ownership check. */
+async function putCreatorImage(slug: string, prefix: string, dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   const decoded = decodeImageDataUrl(dataUrl, 8 * 1024 * 1024)
   if (!decoded.ok) return decoded
-
   const admin = createAdminClient()
-  const filename = `${vendor.slug}/${kind}-${Date.now()}.${decoded.ext}`
+  const filename = `${slug}/${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${decoded.ext}`
   const { error: upErr } = await admin.storage
     .from(PORTFOLIO_BUCKET)
     .upload(filename, decoded.buffer, { contentType: decoded.mimeType, cacheControl: '31536000', upsert: false })
   if (upErr) return { ok: false, error: 'That photo did not save. Try again.' }
-
   const { data: pub } = admin.storage.from(PORTFOLIO_BUCKET).getPublicUrl(filename)
+  return { ok: true, url: pub.publicUrl }
+}
+
+/** Shared writer for the two single-image slots on the vendor row. Vendor-scoped via myVendorId();
+ *  points the column at the new public URL. Returns the URL so the editor shows it without a refresh. */
+async function uploadCreatorImage(kind: 'avatar' | 'cover', dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const vendor = await myVendorId()
+  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+  const put = await putCreatorImage(vendor.slug, kind, dataUrl)
+  if (!put.ok) return put
+
+  const admin = createAdminClient()
   const column = kind === 'avatar' ? 'logo_url' : 'cover_url'
-  const { error } = await admin.from('vendors').update({ [column]: pub.publicUrl, updated_at: new Date().toISOString() }).eq('id', vendor.id)
+  const { error } = await admin.from('vendors').update({ [column]: put.url, updated_at: new Date().toISOString() }).eq('id', vendor.id)
   if (error) return { ok: false, error: 'That photo did not save. Try again.' }
 
   revalidatePath('/creator/account'); revalidatePath('/creator/account/profile'); revalidatePath(`/marketplace/${vendor.slug}`)
-  return { ok: true, url: pub.publicUrl }
+  return { ok: true, url: put.url }
 }
 
 /** Set the creator's round profile photo (vendors.logo_url). dataUrl is a downscaled JPEG. */
@@ -245,6 +252,14 @@ export async function uploadMyAvatar(dataUrl: string): Promise<{ ok: true; url: 
 /** Set the creator's wide cover banner (vendors.cover_url). dataUrl is a downscaled JPEG. */
 export async function uploadMyCover(dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
   return uploadCreatorImage('cover', dataUrl)
+}
+
+/** Upload one offer/gallery photo and return its public URL. The offer editor keeps the URL in the
+ *  offer's photos list and persists it with saveMyPackage. Vendor-scoped; writes no column itself. */
+export async function uploadMyImage(dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const vendor = await myVendorId()
+  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+  return putCreatorImage(vendor.slug, 'offer', dataUrl)
 }
 
 /* ── the creator's MASTER CALENDAR — every dated thing in one place ──────────────────────── */

@@ -26,7 +26,11 @@
  * for what a "standard creative product" IS.
  */
 
-import { slugify, type PackageCategory, type ListingType, type BillingPeriod, type CreatorPackage, type PackageTier } from './package'
+import { slugify, type PackageCategory, type ListingType, type BillingPeriod, type CreatorPackage, type PackageTier, type BookingShape, type IntakeItem } from './package'
+
+// BookingShape's canonical home is now package.ts (creators author it per offer). Re-exported here
+// so existing importers (store-cards) keep working unchanged.
+export type { BookingShape }
 
 /** One tier template: a name and the scope at that level. No price — the creator sets that. */
 export interface CreativeTier {
@@ -37,9 +41,6 @@ export interface CreativeTier {
   /** One short line to help a creator (and later a buyer) tell tiers apart. */
   blurb?: string
 }
-
-/** How a restaurant books this product. Decides which flow the product page shows. */
-export type BookingShape = 'scheduled' | 'async' | 'recurring'
 
 /** One question asked at booking, so the creator starts ready. Kept to 2-3 per product. */
 export interface IntakeQuestion {
@@ -372,6 +373,14 @@ export function packageFromProduct(p: CreativeProduct): CreatorPackage {
     deliverables: [...t.scope],
     ...(t.blurb ? { note: t.blurb } : {}),
   }))
+  // Seed the creator's own intake from the product's, so a template arrives with sensible
+  // questions they can then edit or delete. Photos are always theirs to add.
+  const intake: IntakeItem[] = p.intake.map((q, i) => ({
+    id: `ask-${i}`,
+    label: q.label,
+    ...(q.hint ? { hint: q.hint } : {}),
+    ...(q.required ? { required: true } : {}),
+  }))
   return {
     slug: slugify(p.name),
     title: p.name,
@@ -386,6 +395,9 @@ export function packageFromProduct(p: CreativeProduct): CreatorPackage {
     options: [],
     turnaroundDays: null,
     revisions: null,
+    photos: [],
+    intake,
+    bookingShape: p.bookingShape,
     active: false,
   }
 }

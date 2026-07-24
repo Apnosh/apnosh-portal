@@ -32,6 +32,25 @@ export type PackageCategory = (typeof PACKAGE_CATEGORIES)[number]
 export type ListingType = 'one_off' | 'package' | 'subscription' | 'quote'
 export type BillingPeriod = 'monthly' | 'annual' | 'one_time'
 
+/**
+ * How a buyer books this offer. The creator now chooses this per offer instead of it being guessed
+ * from the category. scheduled = someone comes on-site, so it needs a time (a calendar); async = a
+ * remote deliverable with a turnaround; recurring = an ongoing monthly plan. A "custom quote" offer
+ * is listingType 'quote' and has no set price. Canonical here; creative-catalog re-exports it.
+ */
+export type BookingShape = 'scheduled' | 'async' | 'recurring'
+
+/** One thing the creator needs FROM the buyer before they start — their own intake question. */
+export interface IntakeItem {
+  id: string
+  /** The question, in the buyer's words ("Which dishes should we feature?"). */
+  label: string
+  /** Optional helper text under the question. */
+  hint?: string
+  /** A required question blocks the booking until answered. */
+  required?: boolean
+}
+
 /** One toggle-able add-on. Its price is added to the base, never subtracted. */
 export interface PackageOption {
   id: string
@@ -73,6 +92,12 @@ export interface CreatorPackage {
   options: PackageOption[]
   turnaroundDays: number | null
   revisions: number | null
+  /** Offer photos as public URLs. The first is the cover. Stored in details jsonb. */
+  photos: string[]
+  /** The creator's own questions for the buyer, asked at booking. Stored in details jsonb. */
+  intake: IntakeItem[]
+  /** How this offer is delivered/booked. null = fall back to the category guess (legacy rows). */
+  bookingShape: BookingShape | null
   active: boolean
 }
 
@@ -99,6 +124,9 @@ interface PackageDetails {
   tiers?: unknown
   turnaroundDays?: unknown
   revisions?: unknown
+  photos?: unknown
+  intake?: unknown
+  bookingShape?: unknown
 }
 
 /** A URL-safe slug from a title. Deterministic, so the same title always maps to the same slug
@@ -166,6 +194,16 @@ export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
     })),
     turnaroundDays: p.turnaroundDays,
     revisions: p.revisions,
+    photos: p.photos.map((u) => u.trim()).filter(Boolean),
+    intake: p.intake
+      .map((q) => ({
+        id: q.id,
+        label: q.label.trim(),
+        ...(q.hint && q.hint.trim() ? { hint: q.hint.trim() } : {}),
+        ...(q.required ? { required: true } : {}),
+      }))
+      .filter((q) => q.label),
+    bookingShape: p.bookingShape,
   }
   return {
     ...(p.id ? { id: p.id } : {}),
@@ -212,6 +250,23 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
         }]
       })
     : []
+  const photos = Array.isArray(d.photos) ? d.photos.filter((x): x is string => typeof x === 'string' && !!x.trim()) : []
+  const intake: IntakeItem[] = Array.isArray(d.intake)
+    ? d.intake.flatMap((q, i) => {
+        if (!q || typeof q !== 'object') return []
+        const qq = q as Record<string, unknown>
+        const label = typeof qq.label === 'string' ? qq.label : ''
+        if (!label.trim()) return []
+        return [{
+          id: typeof qq.id === 'string' ? qq.id : `ask-${i}`,
+          label,
+          ...(typeof qq.hint === 'string' && qq.hint ? { hint: qq.hint } : {}),
+          ...(qq.required === true ? { required: true } : {}),
+        }]
+      })
+    : []
+  const bookingShape: BookingShape | null = (['scheduled', 'async', 'recurring'] as const).includes(d.bookingShape as BookingShape)
+    ? (d.bookingShape as BookingShape) : null
   const cat = (PACKAGE_CATEGORIES as readonly string[]).includes(row.category) ? (row.category as PackageCategory) : 'other'
   const lt = (['one_off', 'package', 'subscription', 'quote'] as const).includes(row.listing_type as ListingType)
     ? (row.listing_type as ListingType) : 'one_off'
@@ -231,6 +286,9 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
     options,
     turnaroundDays: isPosInt(d.turnaroundDays) ? d.turnaroundDays : null,
     revisions: isPosInt(d.revisions) ? d.revisions : null,
+    photos,
+    intake,
+    bookingShape,
     active: row.active ?? true,
   }
 }
@@ -274,6 +332,6 @@ export function emptyPackage(category: PackageCategory = 'videographer'): Creato
   return {
     slug: '', title: '', category, listingType: 'one_off', description: '', productId: null,
     priceCents: null, billingPeriod: 'one_time', deliverables: [], tiers: [], options: [],
-    turnaroundDays: null, revisions: null, active: false,
+    turnaroundDays: null, revisions: null, photos: [], intake: [], bookingShape: 'scheduled', active: false,
   }
 }
