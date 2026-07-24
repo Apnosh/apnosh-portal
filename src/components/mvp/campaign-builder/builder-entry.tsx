@@ -19,7 +19,7 @@ import type { ContentOverrideMap } from '@/lib/campaigns/data/content-overrides'
 import { registerDbCampaigns, type DbCampaign } from '@/lib/campaigns/data/db-campaigns'
 import type { CreatorStoreCard as CreatorStoreCardT } from '@/lib/marketplace/store-cards'
 import { requestMarketplaceBooking } from '@/app/marketplace/[slug]/actions'
-import { holdCreatorBooking, fetchCreatorSlots } from '@/lib/marketplace/creator-booking'
+import { holdCreatorBooking, fetchCreatorSlots, confirmAsyncBooking, startRecurringBooking, requestQuote } from '@/lib/marketplace/creator-booking'
 import { fetchCreatorProfile } from '@/lib/marketplace/creator-profile-actions'
 import { registerLiveServices } from '@/lib/campaigns/catalog'
 import type { PricedService } from '@/lib/campaigns/data/priced-catalog'
@@ -37,7 +37,7 @@ type MenuOpt = { l: string; photo?: string; f?: boolean }
 type RecItem = { id: string; reason: string }
 type CreatePayload = { itemId: string; status: string; vals: Record<string, unknown> }
 type PlanPayload = { itemId: string; vals: Record<string, unknown> }
-type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; creatorCards?: CreatorStoreCardT[]; onBookCreator?: (a: { vendorSlug: string; listingSlug: string; brief?: string }) => Promise<{ ok: boolean; error?: string; needsLogin?: boolean }>; onHoldCreator?: (a: { vendorSlug: string; listingSlug: string; tierName?: string | null; date: string; start: string; intake?: Record<string, string> }) => Promise<{ ok: boolean; status?: string; error?: string; needsLogin?: boolean; timezone?: string; confirmMode?: string }>; onCreatorSlots?: (vendorSlug: string) => Promise<{ available: boolean; slots: { date: string; start: string; end: string }[]; timezone: string | null; confirmMode: string }>; onCreatorProfile?: (slug: string) => Promise<unknown>; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft, gateAnswers?: Record<string, string>) => Promise<boolean> }
+type BuilderProps = { restaurant?: string; menu?: MenuOpt[]; initialItem?: string; initialView?: string; recommended?: RecItem[]; recsLoading?: boolean; initialLens?: string; monthlyCommitment?: number; liveCount?: number; monthlyCap?: number; hasList?: boolean; profile?: CampaignProfile | null; whySignals?: WhySignals | null; contentOverrides?: ContentOverrideMap | null; dbCampaigns?: DbCampaign[] | null; creatorCards?: CreatorStoreCardT[]; onBookCreator?: (a: { vendorSlug: string; listingSlug: string; tierName?: string | null; intake?: Record<string, string>; shape?: string; startDate?: string | null; isQuote?: boolean; brief?: string }) => Promise<{ ok: boolean; error?: string; needsLogin?: boolean; dueDate?: string | null; startDate?: string | null }>; onHoldCreator?: (a: { vendorSlug: string; listingSlug: string; tierName?: string | null; date: string; start: string; intake?: Record<string, string> }) => Promise<{ ok: boolean; status?: string; error?: string; needsLogin?: boolean; timezone?: string; confirmMode?: string }>; onCreatorSlots?: (vendorSlug: string) => Promise<{ available: boolean; slots: { date: string; start: string; end: string }[]; timezone: string | null; confirmMode: string }>; onCreatorProfile?: (slug: string) => Promise<unknown>; tier?: string | null; clientId?: string | null; onCreate?: (p: CreatePayload) => Promise<boolean>; onClose?: () => void; onPlan?: (p: PlanPayload) => void; onCheckout?: (draft: CampaignDraft, gateAnswers?: Record<string, string>) => Promise<boolean> }
 const ApnoshCampaign = ApnoshCampaignRaw as unknown as ComponentType<BuilderProps>
 
 // Honor ?template= deep-links from the discovery/preview pages + Home suggestions.
@@ -459,7 +459,14 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         contentOverrides={contentOverrides}
         dbCampaigns={dbCampaigns}
         creatorCards={creatorCards}
-        onBookCreator={(a) => requestMarketplaceBooking(a)}
+        onBookCreator={(a) => {
+          // Route the booking to the right rail by shape. Quote asks a price first; async/recurring
+          // confirm + mint now; a no-calendar scheduled listing falls back to a plain request.
+          if (a.isQuote) return requestQuote({ vendorSlug: a.vendorSlug, listingSlug: a.listingSlug, tierName: a.tierName, intake: a.intake })
+          if (a.shape === 'recurring') return startRecurringBooking({ vendorSlug: a.vendorSlug, listingSlug: a.listingSlug, tierName: a.tierName, startDate: a.startDate ?? undefined, intake: a.intake })
+          if (a.shape === 'async') return confirmAsyncBooking({ vendorSlug: a.vendorSlug, listingSlug: a.listingSlug, tierName: a.tierName, intake: a.intake })
+          return requestMarketplaceBooking({ vendorSlug: a.vendorSlug, listingSlug: a.listingSlug, brief: a.brief })
+        }}
         onHoldCreator={(a) => holdCreatorBooking(a)}
         onCreatorSlots={(slug) => fetchCreatorSlots(slug)}
         onCreatorProfile={(slug) => fetchCreatorProfile(slug)}

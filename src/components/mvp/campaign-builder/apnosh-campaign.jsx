@@ -2511,7 +2511,9 @@ function CreatorProductPage({ card, restaurant, onBack, onBook, onHoldSlot, onCr
   const catLabel = CREATOR_CAT_LABEL[card.category] || "Creator";
   const recurring = !!card.recurring;
   const per = recurring ? "/mo" : "";
-  const shape = card.bookingShape || "scheduled";
+  // A quote job has no set price, so it always books as a brief the creator prices first.
+  const isQuote = !!card.quote;
+  const shape = isQuote ? "async" : (card.bookingShape || "scheduled");
 
   // Scope tiers (Good/Better/Best). 2+ means the buyer picks a level; the pick drives price + list.
   const tiers = Array.isArray(card.tiers) ? card.tiers : [];
@@ -2528,12 +2530,12 @@ function CreatorProductPage({ card, restaurant, onBack, onBook, onHoldSlot, onCr
   if (step === "book") {
     return (
       <CreatorBookingPanel
-        card={card} tier={activeTier} shape={shape} recurring={recurring} per={per} vendorName={card.vendorName}
+        card={card} tier={activeTier} shape={shape} recurring={recurring} isQuote={isQuote} per={per} vendorName={card.vendorName}
         onBack={() => setStep("browse")} onHoldSlot={onHoldSlot} onBook={onBook} onCreatorSlots={onCreatorSlots}
       />
     );
   }
-  const ctaLabel = shape === "scheduled" ? "Pick a time" : shape === "recurring" ? "Choose a start date" : "Continue";
+  const ctaLabel = isQuote ? "Get a quote" : shape === "scheduled" ? "Pick a time" : shape === "recurring" ? "Choose a start date" : "Continue";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -2646,7 +2648,7 @@ function CreatorProductPage({ card, restaurant, onBack, onBook, onHoldSlot, onCr
 // The booking flow, shape-aware. Scheduled shows the creator's real open slots; async gathers a
 // brief; recurring picks a start date. All end in one submit: a scheduled pick HOLDS a real slot
 // (instant → confirmed, request → held for the creator's yes), the rest send an enriched request.
-function CreatorBookingPanel({ card, tier, shape, recurring, per, vendorName, onBack, onHoldSlot, onBook, onCreatorSlots }) {
+function CreatorBookingPanel({ card, tier, shape, recurring, isQuote, per, vendorName, onBack, onHoldSlot, onBook, onCreatorSlots }) {
   const intakeQs = Array.isArray(card.intake) ? card.intake : [];
   const [answers, setAnswers] = useState({});
   const setA = (id, v) => setAnswers((a) => ({ ...a, [id]: v }));
@@ -2701,9 +2703,13 @@ function CreatorBookingPanel({ card, tier, shape, recurring, per, vendorName, on
         if (r && r.ok) setResult({ ok: true, mode: "slot", status: r.status, label: slotLabelJS(selSlot.date, selSlot.start) });
         else setResult({ ok: false, error: (r && r.needsLogin) ? "Please sign in to book." : ((r && r.error) || "That did not send.") });
       } else {
+        // Route by shape: a quote asks for a price first; async/recurring confirm + mint now; a
+        // no-calendar scheduled listing falls back to a plain request. builder-entry dispatches on
+        // isQuote + shape, so the panel just says which it is.
         const prefix = shape === "recurring" && startDate ? `Start ${startDate}` : (noAvail ? "Prefers a scheduled time" : "");
-        const r = await onBook({ vendorSlug: card.vendorSlug, listingSlug: card.listingSlug, brief: briefFromIntake(prefix) });
-        if (r && r.ok) setResult({ ok: true, mode: "request" });
+        const mode = isQuote ? "quote" : noAvail ? "request" : shape === "recurring" ? "recurring" : "async";
+        const r = await onBook({ vendorSlug: card.vendorSlug, listingSlug: card.listingSlug, tierName: tier ? tier.name : null, intake: answers, shape, startDate: startDate || null, isQuote, brief: briefFromIntake(prefix) });
+        if (r && r.ok) setResult({ ok: true, mode, dueDate: r.dueDate, startDate: r.startDate });
         else setResult({ ok: false, error: (r && r.needsLogin) ? "Please sign in to book." : ((r && r.error) || "That did not send.") });
       }
     } catch { setResult({ ok: false, error: "That did not send." }); }
@@ -2713,8 +2719,8 @@ function CreatorBookingPanel({ card, tier, shape, recurring, per, vendorName, on
   const canSubmit = !submitting && !requiredMissing
     && (shape !== "scheduled" || noAvail || !!selSlot)
     && (shape !== "recurring" || !!startDate);
-  const title = shape === "scheduled" ? (noAvail ? "Request a time" : "Pick a time") : shape === "recurring" ? "Start your plan" : "Tell them what you need";
-  const cta = shape === "scheduled" && !noAvail ? (data && data.confirmMode === "instant" ? "Book this time" : "Request this time") : (shape === "recurring" ? "Start plan" : "Send request");
+  const title = isQuote ? "Request a quote" : shape === "scheduled" ? (noAvail ? "Request a time" : "Pick a time") : shape === "recurring" ? "Start your plan" : "Tell them what you need";
+  const cta = isQuote ? "Request a quote" : shape === "scheduled" && !noAvail ? (data && data.confirmMode === "instant" ? "Book this time" : "Request this time") : shape === "recurring" ? "Start plan" : noAvail ? "Send request" : "Book it";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
@@ -2736,16 +2742,22 @@ function CreatorBookingPanel({ card, tier, shape, recurring, per, vendorName, on
               <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={TOKENS.mintDark} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
             </div>
             <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 20, fontWeight: 700, color: TOKENS.ink, marginBottom: 8 }}>
-              {result.mode === "slot" ? (result.status === "confirmed" ? "You’re booked" : "Time held for you") : "Request sent"}
+              {result.mode === "slot" ? (result.status === "confirmed" ? "You’re booked" : "Time held for you") : result.mode === "async" ? "You’re booked" : result.mode === "recurring" ? "Plan started" : result.mode === "quote" ? "Quote requested" : "Request sent"}
             </div>
             {result.mode === "slot" && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.mintDark, marginBottom: 6 }}>{result.label}</div>}
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, maxWidth: 260, margin: "0 auto" }}>
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.5, maxWidth: 270, margin: "0 auto" }}>
               {result.mode === "slot"
                 ? (result.status === "confirmed" ? `Confirmed with ${vendorName}. No charge yet.` : `The time is yours. ${vendorName} confirms within a day, and nobody else can take it.`)
-                : `${vendorName} will follow up to get started.${shape === "recurring" && startDate ? ` Starting ${startDate}.` : ""}`}
+                : result.mode === "async"
+                ? `Booked with ${vendorName}.${result.dueDate ? ` They deliver by ${fmtDayJS(result.dueDate)}.` : ""} No charge until you approve the work.`
+                : result.mode === "recurring"
+                ? `Your plan with ${vendorName} is on. This month’s work is underway, and you’re billed each month only after you approve it.`
+                : result.mode === "quote"
+                ? `${vendorName} will send you a price. Accept it in your bookings and they get started.`
+                : `${vendorName} will follow up to get started.`}
             </div>
             <button onClick={onBack} className="apnpress" style={{ marginTop: 22, height: 46, padding: "0 28px", borderRadius: 14, border: "none", background: TOKENS.mint, color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Done</button>
-            {result.mode === "slot" && (
+            {result.mode !== "request" && (
               <div style={{ marginTop: 14 }}>
                 <a href="/dashboard/bookings" style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.mintDark, fontWeight: 600, textDecoration: "none" }}>View your bookings</a>
               </div>

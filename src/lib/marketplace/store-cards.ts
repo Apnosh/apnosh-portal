@@ -44,6 +44,8 @@ export interface CreatorStoreCard {
   maxPriceCents: number | null
   /** True when this is billed monthly (a management plan), so the page reads "a month". */
   recurring: boolean
+  /** True when this is a custom job with no set price — the creator quotes it before it books. */
+  quote: boolean
   /** How this books: scheduled (pick a slot), async (a brief), recurring (a start date). */
   bookingShape: BookingShape
   /** The 2-3 questions to ask at booking, so the creator starts ready. */
@@ -124,6 +126,7 @@ export async function getCreatorStoreCards(state?: string): Promise<CreatorStore
       priceCents: start,
       maxPriceCents: max,
       recurring: pkg.listingType === 'subscription',
+      quote: pkg.listingType === 'quote',
       bookingShape,
       intake,
     })

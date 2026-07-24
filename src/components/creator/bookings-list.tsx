@@ -9,8 +9,8 @@
 
 import { useState } from 'react'
 import { Check, Loader2, CalendarClock, CalendarCheck } from 'lucide-react'
-import { acceptCreatorBooking, cancelCreatorBooking } from '@/lib/marketplace/creator-booking'
-import type { IncomingBooking } from '@/lib/marketplace/creator-schedule-types'
+import { acceptCreatorBooking, cancelCreatorBooking, setBookingQuote } from '@/lib/marketplace/creator-booking'
+import type { IncomingBooking, QuoteRequest } from '@/lib/marketplace/creator-schedule-types'
 import RescheduleSheet from './reschedule-sheet'
 
 function fmtTime(hhmm: string | null): string {
@@ -26,13 +26,24 @@ function slotLabel(date: string | null, start: string | null): string {
   return start ? `${d} · ${fmtTime(start)}` : d
 }
 
-export default function BookingsList({ initialVendor, initialBookings }: {
+export default function BookingsList({ initialVendor, initialBookings, initialQuotes = [] }: {
   initialVendor: { name: string; slug: string } | null
   initialBookings: IncomingBooking[]
+  initialQuotes?: QuoteRequest[]
 }) {
   const [bookings, setBookings] = useState<IncomingBooking[]>(initialBookings)
+  const [quotes, setQuotes] = useState<QuoteRequest[]>(initialQuotes)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescheduleId, setRescheduleId] = useState<string | null>(null)
+
+  async function sendQuote(id: string, priceStr: string) {
+    const dollars = parseFloat(priceStr)
+    if (!(dollars > 0)) return
+    setBusy(id)
+    const res = await setBookingQuote({ bookingId: id, priceCents: Math.round(dollars * 100) })
+    setBusy(null)
+    if (res.ok) setQuotes((prev) => prev.filter((q) => q.id !== id))
+  }
 
   if (!initialVendor) {
     return (
@@ -64,10 +75,23 @@ export default function BookingsList({ initialVendor, initialBookings }: {
       <h1 className="text-xl font-bold text-neutral-900">Your bookings</h1>
       <p className="text-sm text-neutral-500 mt-1 mb-6">Requests to accept, and the shoots already on your calendar.</p>
 
-      {bookings.length === 0 && (
+      {bookings.length === 0 && quotes.length === 0 && (
         <div className="border border-dashed border-neutral-200 rounded-2xl p-8 text-center text-sm text-neutral-500">
           No bookings yet. Set your hours and publish a package so restaurants can book you.
         </div>
+      )}
+
+      {quotes.length > 0 && (
+        <section className="mb-7">
+          <div className="flex items-center gap-2 mb-3">
+            <CalendarClock className="w-4 h-4 text-violet-600" />
+            <h2 className="text-sm font-bold text-neutral-900">Quote requests</h2>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-600 bg-violet-50 rounded-full px-2 py-0.5">{quotes.length}</span>
+          </div>
+          <div className="space-y-3">
+            {quotes.map((q) => <QuoteCard key={q.id} q={q} busy={busy === q.id} onSend={(price) => sendQuote(q.id, price)} />)}
+          </div>
+        </section>
       )}
 
       {held.length > 0 && (
@@ -147,6 +171,36 @@ function BookingCard({ b, accent, busy, onAccept, onReschedule, onCancel }: {
         )}
         <button onClick={onReschedule} disabled={busy} className="px-3.5 py-2 rounded-xl border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">Reschedule</button>
         <button onClick={onCancel} disabled={busy} className="px-3.5 py-2 rounded-xl text-sm font-medium text-neutral-400 hover:text-red-600">Cancel</button>
+      </div>
+    </div>
+  )
+}
+
+function QuoteCard({ q, busy, onSend }: { q: QuoteRequest; busy: boolean; onSend: (price: string) => void }) {
+  const [price, setPrice] = useState('')
+  const intakeEntries = Object.values(q.intake).filter(Boolean)
+  const valid = parseFloat(price) > 0
+  return (
+    <div className="rounded-2xl border border-violet-200 bg-violet-50/40 p-4">
+      <div className="text-sm font-semibold text-neutral-900">{q.listingTitle}{q.tierName ? <span className="text-neutral-400 font-normal"> · {q.tierName}</span> : null}</div>
+      <div className="text-xs text-neutral-500 mt-0.5">A restaurant asked for a price.</div>
+      {intakeEntries.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {intakeEntries.map((v, i) => (
+            <li key={i} className="text-xs text-neutral-600 flex gap-2"><span className="text-neutral-300">•</span> {v}</li>
+          ))}
+        </ul>
+      )}
+      <div className="mt-3 flex items-center gap-2">
+        <div className="relative">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-neutral-400">$</span>
+          <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, ''))} inputMode="decimal" placeholder="Your price"
+            className="w-32 rounded-xl border border-neutral-200 pl-6 pr-3 py-2 text-sm outline-none focus:border-neutral-400" />
+        </div>
+        <button onClick={() => onSend(price)} disabled={busy || !valid}
+          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-neutral-900 text-white text-sm font-semibold disabled:opacity-40">
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null} Send price
+        </button>
       </div>
     </div>
   )

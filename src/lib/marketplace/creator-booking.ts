@@ -22,7 +22,7 @@ import {
   currentVendor, getVendorRule, getVendorScheduleBySlug, vendorIdForSlug, bookingsForRule,
   CREATOR_GATE_KIND, type VendorSchedule,
 } from './creator-schedule'
-import type { HoldSlotInput, HoldSlotResult, IncomingBooking, ClientBooking } from './creator-schedule-types'
+import type { HoldSlotInput, HoldSlotResult, IncomingBooking, ClientBooking, SimpleBookingResult, QuoteRequest } from './creator-schedule-types'
 import { mintBookingWorkOrder, voidBookingWorkOrder, redateBookingWorkOrder, workOrdersForBookings } from './booking-work-order'
 
 const HOLD_TTL_MS = 24 * 60 * 60 * 1000 // a request-mode hold waits a day on the creator
@@ -37,6 +37,11 @@ interface CreatorBookingMeta {
   listingTitle: string
   tierName: string | null
   intake: Record<string, string>
+  /** Booking shape (absent = scheduled, the original bridge). */
+  shape?: 'scheduled' | 'async' | 'recurring' | 'quote'
+  /** Quote jobs: the creator's named price (cents) + where the quote is. */
+  quotedCents?: number
+  quoteStatus?: 'requested' | 'quoted'
 }
 
 function parseMeta(note: string | null | undefined): CreatorBookingMeta | null {
@@ -256,6 +261,9 @@ export async function getMyCreatorBookings(): Promise<ClientBooking[]> {
       vendorName: (nameById.get(m!.vendorId) || '').replace(/\s*\(example\)/i, '') || 'Creator',
       listingTitle: m!.listingTitle,
       tierName: m!.tierName,
+      shape: m!.shape ?? 'scheduled',
+      quotedCents: m!.quotedCents ?? null,
+      quoteStatus: m!.quoteStatus ?? null,
     }))
     // Attach each booking's deliverable state (order id + status + delivered link) so the list can
     // show "in progress / ready to review / approved" and the approve gate, all from one extra query.
@@ -323,4 +331,162 @@ export async function cancelCreatorBooking(bookingId: string): Promise<{ ok: boo
     revalidatePath('/creator/bookings'); revalidatePath('/dashboard/bookings')
     return { ok: true }
   } catch { return { ok: false, error: 'Could not cancel. Try again.' } }
+}
+
+/* ── async / recurring / quote bookings — the other three shapes, all onto the same pay loop ─────────
+   Scheduled shoots hold a slot (holdCreatorBooking, above). These three have no calendar slot, so
+   they create a slot-less `bookings` row (no rule_id) carrying the shape in note JSON, then mint the
+   same creator_work_order the shoot bridge does. Money stays honest: async/recurring are priced by the
+   booked tier; a quote is priced by the creator FIRST, and mints only once the restaurant accepts. */
+
+async function resolveBookingParties(vendorSlug: string, listingSlug: string): Promise<
+  | { ok: true; userId: string; clientId: string; vendorId: string; listing: { id: string; title: string; category: string; listing_type: string; details: unknown } }
+  | { ok: false; needsLogin?: boolean; error: string }
+> {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, needsLogin: true, error: 'Please sign in to book.' }
+  const admin = createAdminClient()
+  const { data: cu } = await admin.from('client_users').select('client_id').eq('auth_user_id', user.id).maybeSingle()
+  if (!cu?.client_id) return { ok: false, error: 'No restaurant account is linked to your login.' }
+  const vendorId = await vendorIdForSlug(vendorSlug)
+  if (!vendorId) return { ok: false, error: 'Creator not found.' }
+  const { data: listing } = await admin
+    .from('vendor_listings').select('id, title, category, listing_type, details')
+    .eq('vendor_id', vendorId).eq('slug', listingSlug).maybeSingle()
+  if (!listing) return { ok: false, error: 'Listing not found.' }
+  return { ok: true, userId: user.id, clientId: cu.client_id as string, vendorId, listing: listing as { id: string; title: string; category: string; listing_type: string; details: unknown } }
+}
+
+function turnaroundDueISO(details: unknown): string {
+  const d = (details && typeof details === 'object' ? details : {}) as { turnaroundDays?: unknown }
+  const days = typeof d.turnaroundDays === 'number' && d.turnaroundDays > 0 ? d.turnaroundDays : 7
+  return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10)
+}
+
+function newBookingMeta(p: { vendorId: string; vendorSlug: string; listingId: string; listingSlug: string; listingTitle: string; tierName?: string | null; intake?: Record<string, string>; shape: CreatorBookingMeta['shape']; quoteStatus?: 'requested' | 'quoted' }): string {
+  const meta: CreatorBookingMeta = {
+    kind: 'creator', vendorId: p.vendorId, vendorSlug: p.vendorSlug, listingId: p.listingId,
+    listingSlug: p.listingSlug, listingTitle: p.listingTitle, tierName: p.tierName ?? null,
+    intake: cleanIntake(p.intake), shape: p.shape, ...(p.quoteStatus ? { quoteStatus: p.quoteStatus } : {}),
+  }
+  return JSON.stringify(meta)
+}
+
+/** Ping a creator's linked login (if any) that something needs them. Best-effort. */
+async function notifyVendorPerson(admin: ReturnType<typeof createAdminClient>, vendorId: string, title: string, body: string): Promise<void> {
+  try {
+    const { data: v } = await admin.from('vendors').select('person_id').eq('id', vendorId).maybeSingle()
+    if (v?.person_id) await createNotification({ userId: v.person_id as string, kind: 'client_request', title, body, link: '/creator/bookings' })
+  } catch { /* never blocks */ }
+}
+
+/** ASYNC (design/brief): a priced job with no calendar. Confirms + mints straight away, due by the
+ *  creator's turnaround. Then deliver → the restaurant approves → it bills, exactly like a shoot. */
+export async function confirmAsyncBooking(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; intake?: Record<string, string> }): Promise<SimpleBookingResult> {
+  const r = await resolveBookingParties(input.vendorSlug, input.listingSlug)
+  if (!r.ok) return { ok: false, needsLogin: r.needsLogin, error: r.error }
+  const admin = createAdminClient()
+  const dueISO = turnaroundDueISO(r.listing.details)
+  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, shape: 'async' })
+  const { data, error } = await admin.from('bookings').insert({
+    client_id: r.clientId, gate_kind: CREATOR_GATE_KIND, slot_date: dueISO, timezone: 'America/Los_Angeles',
+    status: 'confirmed', note, created_by: r.userId, updated_at: new Date().toISOString(),
+  }).select('id').single()
+  if (error || !data) return { ok: false, error: 'Could not book. Try again.' }
+  await mintBookingWorkOrder(data.id as string)
+  await notifyVendorPerson(admin, r.vendorId, 'New booking to deliver', `${r.listing.title} was booked. Deliver it from your work.`)
+  revalidatePath('/dashboard/bookings')
+  return { ok: true, bookingId: data.id as string, dueDate: dueISO }
+}
+
+/** RECURRING (monthly plan): confirms + mints MONTH 1 now; the recurring cron mints each later month.
+ *  Honest by construction — every month is its own deliver → approve → bill (no silent auto-charge). */
+export async function startRecurringBooking(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; startDate?: string; intake?: Record<string, string> }): Promise<SimpleBookingResult> {
+  const r = await resolveBookingParties(input.vendorSlug, input.listingSlug)
+  if (!r.ok) return { ok: false, needsLogin: r.needsLogin, error: r.error }
+  const admin = createAdminClient()
+  const startISO = input.startDate && /^\d{4}-\d{2}-\d{2}$/.test(input.startDate) ? input.startDate : new Date().toISOString().slice(0, 10)
+  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, shape: 'recurring' })
+  const { data, error } = await admin.from('bookings').insert({
+    client_id: r.clientId, gate_kind: CREATOR_GATE_KIND, slot_date: startISO, timezone: 'America/Los_Angeles',
+    status: 'confirmed', note, created_by: r.userId, updated_at: new Date().toISOString(),
+  }).select('id').single()
+  if (error || !data) return { ok: false, error: 'Could not start the plan. Try again.' }
+  await mintBookingWorkOrder(data.id as string, { month: 1, dueDateISO: startISO })
+  await notifyVendorPerson(admin, r.vendorId, 'New monthly plan', `${r.listing.title} started. This month's work is in your queue.`)
+  revalidatePath('/dashboard/bookings')
+  return { ok: true, bookingId: data.id as string, startDate: startISO }
+}
+
+/** QUOTE (custom job): the restaurant describes it; NO price yet, NO work order. The creator names a
+ *  price (setBookingQuote), the restaurant accepts (acceptBookingQuote), and only then does it mint. */
+export async function requestQuote(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; intake?: Record<string, string> }): Promise<SimpleBookingResult> {
+  const r = await resolveBookingParties(input.vendorSlug, input.listingSlug)
+  if (!r.ok) return { ok: false, needsLogin: r.needsLogin, error: r.error }
+  const admin = createAdminClient()
+  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, shape: 'quote', quoteStatus: 'requested' })
+  const { data, error } = await admin.from('bookings').insert({
+    client_id: r.clientId, gate_kind: CREATOR_GATE_KIND, slot_date: null, timezone: 'America/Los_Angeles',
+    status: 'held', note, created_by: r.userId, updated_at: new Date().toISOString(),
+  }).select('id').single()
+  if (error || !data) return { ok: false, error: 'Could not send the request. Try again.' }
+  await notifyVendorPerson(admin, r.vendorId, 'A restaurant wants a quote', `${r.listing.title}: send them a price.`)
+  revalidatePath('/dashboard/bookings')
+  return { ok: true, bookingId: data.id as string }
+}
+
+/** The creator's pending quote requests — the ones still waiting on a price. */
+export async function getVendorQuoteRequests(): Promise<QuoteRequest[]> {
+  const vendor = await currentVendor()
+  if (!vendor) return []
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin.from('bookings').select('id, note, status, created_at')
+      .like('note', `%"vendorId":"${vendor.id}"%`).like('note', '%"shape":"quote"%').eq('status', 'held')
+      .order('created_at', { ascending: true })
+    return ((data ?? []) as Array<Record<string, unknown>>).map((b) => {
+      const m = parseMeta(b.note as string | null)
+      return { id: b.id as string, listingTitle: m?.listingTitle ?? 'Custom job', tierName: m?.tierName ?? null, intake: m?.intake ?? {}, quotedCents: m?.quotedCents ?? null, quoteStatus: m?.quoteStatus ?? 'requested' }
+    })
+  } catch { return [] }
+}
+
+/** The creator names a price on a quote request → the restaurant can accept it. */
+export async function setBookingQuote(input: { bookingId: string; priceCents: number }): Promise<{ ok: boolean; error?: string }> {
+  const vendor = await currentVendor()
+  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+  if (!(input.priceCents > 0)) return { ok: false, error: 'Enter a price above zero.' }
+  const admin = createAdminClient()
+  const { data: b } = await admin.from('bookings').select('id, note, status, client_id').eq('id', input.bookingId).maybeSingle()
+  if (!b) return { ok: false, error: 'Quote not found.' }
+  const meta = parseMeta(b.note as string | null)
+  if (!meta || meta.shape !== 'quote' || meta.vendorId !== vendor.id) return { ok: false, error: 'That quote is not yours.' }
+  const next: CreatorBookingMeta = { ...meta, quotedCents: Math.round(input.priceCents), quoteStatus: 'quoted' }
+  const { error } = await admin.from('bookings').update({ note: JSON.stringify(next), updated_at: new Date().toISOString() }).eq('id', b.id)
+  if (error) return { ok: false, error: 'Could not send the quote.' }
+  await notifyClientOwners(b.client_id as string, { kind: 'client_request', title: 'You have a quote', body: `${meta.listingTitle}: $${Math.round(input.priceCents / 100)}. Review and accept it.`, link: '/dashboard/bookings' })
+  revalidatePath('/creator/bookings'); revalidatePath('/dashboard/bookings')
+  return { ok: true }
+}
+
+/** The restaurant accepts a quote → it mints the work order at the quoted price + starts the loop. */
+export async function acceptBookingQuote(bookingId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Please sign in.' }
+  const admin = createAdminClient()
+  const { data: b } = await admin.from('bookings').select('id, note, status, client_id').eq('id', bookingId).maybeSingle()
+  if (!b) return { ok: false, error: 'Quote not found.' }
+  const { data: cu } = await admin.from('client_users').select('client_id').eq('auth_user_id', user.id).maybeSingle()
+  if (!cu || cu.client_id !== b.client_id) return { ok: false, error: 'That quote is not yours.' }
+  const meta = parseMeta(b.note as string | null)
+  if (!meta || meta.shape !== 'quote' || !meta.quotedCents) return { ok: false, error: 'No quote to accept yet.' }
+  const dueISO = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)
+  const { error } = await admin.from('bookings').update({ status: 'confirmed', slot_date: dueISO, updated_at: new Date().toISOString() }).eq('id', b.id)
+  if (error) return { ok: false, error: 'Could not accept the quote.' }
+  await mintBookingWorkOrder(bookingId)
+  await notifyVendorPerson(admin, meta.vendorId, 'Quote accepted', `${meta.listingTitle} is a go. Deliver it from your work.`)
+  revalidatePath('/dashboard/bookings')
+  return { ok: true }
 }

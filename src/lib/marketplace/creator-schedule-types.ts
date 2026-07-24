@@ -63,7 +63,28 @@ export interface ClientBooking {
   workStatus?: string | null
   deliveredUrl?: string | null
   amountCents?: number | null
+  /** Which booking shape this is: scheduled | async | recurring | quote (absent = scheduled). */
+  shape?: string | null
+  /** Quote jobs only: the price the creator named (cents), and where the quote is
+   *  ('requested' = waiting on the creator's number, 'quoted' = ready for the restaurant to accept). */
+  quotedCents?: number | null
+  quoteStatus?: string | null
 }
+
+/** A custom (quote) job waiting for the creator to name a price. */
+export interface QuoteRequest {
+  id: string
+  listingTitle: string
+  tierName: string | null
+  intake: Record<string, string>
+  quotedCents: number | null
+  quoteStatus: string
+}
+
+/** Result of a create-booking action that has no slot (async/recurring/quote). */
+export type SimpleBookingResult =
+  | { ok: true; bookingId: string; dueDate?: string | null; startDate?: string | null }
+  | { ok: false; needsLogin?: boolean; error: string }
 
 /** One row in a creator's incoming list. */
 export interface IncomingBooking {

@@ -4,22 +4,27 @@ import 'server-only'
  * BOOKING → WORK ORDER bridge. A confirmed marketplace booking (the `bookings` rail) becomes a real
  * creator_work_order (the delivery + money rail), so a directly-booked creator can deliver, the
  * restaurant can approve, and the existing charge + payout machinery runs — end to end, without a
- * campaign.
+ * campaign. Covers all four booking shapes:
+ *   scheduled  a shot at a picked slot (price = the booked tier)
+ *   async      a design/brief delivered by a date (price = the booked tier)
+ *   quote      a custom job the creator prices first (price = the accepted quote)
+ *   recurring  a monthly plan (one payable order PER MONTH, price = the monthly tier)
  *
  * The order carries campaign_id = NULL (this is a marketplace booking, not a campaign piece). That
- * null is the marker every campaign-only side effect keys off (the publish bridge and the
- * decline-reassign both no-op for it — see work-orders.ts). creator_id = the vendor UUID, which is
- * exactly what getCreatorIdForUser resolves for a logged-in creator, so the same person sees the
- * booking under /creator/bookings AND the deliverable under /creator/work with no new identity code.
+ * null is the marker every campaign-only side effect keys off. creator_id = the vendor UUID, which is
+ * exactly what getCreatorIdForUser resolves for a logged-in creator, so one login sees the booking
+ * under /creator/bookings AND the deliverable under /creator/work with no new identity code.
  *
- * The booking id rides in campaign_piece_key as `booking:<id>` — the idempotency key (never mint
- * twice for one booking) and the join key the restaurant's bookings list reads work state back
- * through. Money is honest: no charge at booking time; the owner charge + creator payout only accrue
- * when the restaurant approves the delivery, via the shared updateWorkOrder path.
+ * The booking id rides in campaign_piece_key as `booking:<id>` (one-shot) or `booking:<id>#<month>`
+ * (recurring month N) — the idempotency key AND the join key the restaurant's bookings list reads
+ * work state back through. Money is honest: no charge at booking time; the owner charge + creator
+ * payout only accrue when the restaurant approves the delivery, via the shared updateWorkOrder path.
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
 import { rowToPackage, startingPriceCents, type ListingRow } from './package'
+
+export type BookingShapeKind = 'scheduled' | 'async' | 'recurring' | 'quote'
 
 /** The marketplace context stashed in bookings.note (mirror of creator-booking.ts's CreatorBookingMeta). */
 interface CreatorBookingMeta {
@@ -31,6 +36,10 @@ interface CreatorBookingMeta {
   listingTitle: string
   tierName: string | null
   intake: Record<string, string>
+  /** Which booking shape this is (absent = scheduled, the original bridge). */
+  shape?: BookingShapeKind
+  /** For quote jobs: the price the creator named and the restaurant accepted. Overrides the tier. */
+  quotedCents?: number
 }
 
 function parseMeta(note: string | null | undefined): CreatorBookingMeta | null {
@@ -43,12 +52,15 @@ function parseMeta(note: string | null | undefined): CreatorBookingMeta | null {
   }
 }
 
-/** The stable per-booking key an order carries so we never mint twice + can read work state back. */
-export function bookingOrderKey(bookingId: string): string {
-  return `booking:${bookingId}`
+/** The stable per-booking key an order carries. A recurring booking gets one order per month, so its
+ *  key carries the 1-based month; one-shot shapes use the bare `booking:<id>`. */
+export function bookingOrderKey(bookingId: string, month?: number): string {
+  return month && month > 1 ? `booking:${bookingId}#${month}` : `booking:${bookingId}`
 }
+/** The booking id behind any order key, ignoring the `#month` suffix. */
 function bookingIdFromKey(key: string | null | undefined): string | null {
-  return key && key.startsWith('booking:') ? key.slice('booking:'.length) : null
+  if (!key || !key.startsWith('booking:')) return null
+  return key.slice('booking:'.length).split('#')[0]
 }
 
 /** vendor_listings.category → the coarse work-order discipline, a last resort when vendors.craft is
@@ -74,26 +86,40 @@ function shootDayLabel(iso: string | null): string | null {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
+/** The price the restaurant agreed to: an accepted quote wins, else the booked tier, else the
+ *  listing's starting price, else 0 (an unpriced quote — the approval path flags it for staff). */
+function resolvePriceCents(meta: CreatorBookingMeta, listing: ListingRow | null): number {
+  if (typeof meta.quotedCents === 'number' && meta.quotedCents > 0) return Math.round(meta.quotedCents)
+  if (!listing) return 0
+  const pkg = rowToPackage(listing)
+  const tier = meta.tierName ? pkg.tiers.find((t) => t.name === meta.tierName) : null
+  return tier ? tier.priceCents : (startingPriceCents(pkg) ?? 0)
+}
+
 /**
  * Mint the work order for a CONFIRMED marketplace booking. Idempotent (returns the existing order id
- * if one already exists for the booking), best-effort, and a silent no-op if the booking isn't a
- * confirmed creator booking or the vendor/listing can't be resolved. Never throws — the caller
- * (holdCreatorBooking / acceptCreatorBooking) must never have a booking fail because the bridge did.
+ * for the same key), best-effort, and a silent no-op if the booking isn't a confirmed creator
+ * booking, isn't priced yet (a quote awaiting its number), or the vendor can't be resolved. Never
+ * throws — a booking must never fail because the bridge did.
+ *
+ * opts.month + opts.dueDateISO drive the recurring case: month N gets its own order, dated to that
+ * month's cycle. One-shot shapes call it with no opts.
  */
-export async function mintBookingWorkOrder(bookingId: string): Promise<string | null> {
+export async function mintBookingWorkOrder(bookingId: string, opts?: { month?: number; dueDateISO?: string }): Promise<string | null> {
   try {
     const admin = createAdminClient()
+    const month = opts?.month
+    const key = bookingOrderKey(bookingId, month)
 
-    // Idempotency: one order per booking, ever.
+    // Idempotency: one order per key, ever.
     const { data: existing } = await admin
       .from('creator_work_orders')
       .select('id')
-      .eq('campaign_piece_key', bookingOrderKey(bookingId))
+      .eq('campaign_piece_key', key)
       .limit(1)
       .maybeSingle()
     if (existing?.id) return existing.id as string
 
-    // Only a confirmed booking becomes deliverable work; a held/expired request never mints.
     const { data: b } = await admin
       .from('bookings')
       .select('id, status, client_id, slot_date, note')
@@ -110,37 +136,30 @@ export async function mintBookingWorkOrder(bookingId: string): Promise<string | 
       .maybeSingle()
     if (!vendor) return null
 
-    // Price = the tier the restaurant booked (what they saw on the product page), else the listing's
-    // starting price, else 0 (a quote — the approval path flags an unpriced piece for staff to price).
     const { data: listing } = await admin
       .from('vendor_listings')
       .select('id, slug, title, category, listing_type, description, price_cents, billing_period, details, active')
       .eq('vendor_id', meta.vendorId)
       .eq('slug', meta.listingSlug)
       .maybeSingle()
-    let amountCents = 0
-    let category = ''
-    if (listing) {
-      const pkg = rowToPackage(listing as ListingRow)
-      category = pkg.category
-      const tier = meta.tierName ? pkg.tiers.find((t) => t.name === meta.tierName) : null
-      amountCents = tier ? tier.priceCents : (startingPriceCents(pkg) ?? 0)
-    }
+    const amountCents = resolvePriceCents(meta, (listing as ListingRow) ?? null)
+    const category = listing ? (listing.category as string) : ''
+    const shape: BookingShapeKind = meta.shape ?? 'scheduled'
 
     const discipline = ((vendor.craft as string | null) || CATEGORY_TO_DISCIPLINE[category] || 'Photo')
-    const title = meta.tierName ? `${meta.listingTitle} · ${meta.tierName}` : meta.listingTitle
-    const dayLabel = shootDayLabel((b.slot_date as string) ?? null)
+    const monthTag = month && month > 1 ? ` · month ${month}` : ''
+    const title = (meta.tierName ? `${meta.listingTitle} · ${meta.tierName}` : meta.listingTitle) + monthTag
+    const dueISO = opts?.dueDateISO ?? ((b.slot_date as string) ?? null)
+    const dayLabel = shootDayLabel(dueISO)
     const intakeLines = Object.values(meta.intake).filter((v) => typeof v === 'string' && v.trim())
+    const dueWord = shape === 'scheduled' ? 'Shoot day' : shape === 'recurring' ? 'This month' : 'Deliver by'
     const brief = [
-      `Booked shoot: ${title}.`,
-      dayLabel ? `Shoot day: ${dayLabel}.` : '',
+      `${shape === 'recurring' ? 'Monthly plan' : shape === 'quote' ? 'Custom job' : shape === 'async' ? 'Booked work' : 'Booked shoot'}: ${title}.`,
+      dayLabel ? `${dueWord}: ${dayLabel}.` : '',
       ...intakeLines.map((v) => `Note: ${v}.`),
       'Deliver the finished work here when it is ready — the restaurant reviews and approves it.',
     ].filter(Boolean).join(' ')
 
-    // status 'accepted' (the booking IS the acceptance) + concept 'approved' (a standard product, no
-    // concept gate) → the creator's Work tab shows "Start work" immediately. campaign_id null routes
-    // it out of every campaign-only side effect.
     const row: Record<string, unknown> = {
       campaign_id: null,
       client_id: b.client_id as string,
@@ -150,18 +169,15 @@ export async function mintBookingWorkOrder(bookingId: string): Promise<string | 
       slot: 0,
       title,
       brief,
-      due_date: (b.slot_date as string) ?? null,
+      due_date: dueISO,
       status: 'accepted',
       concept_status: 'approved',
       amount_cents: amountCents,
-      campaign_piece_key: bookingOrderKey(bookingId),
+      campaign_piece_key: key,
       surcharge_cents: 0,
     }
 
     let { data, error } = await admin.from('creator_work_orders').insert(row).select('id').single()
-    // Defensive parity with mintWorkOrders: pre-183/184 the key/surcharge columns are absent (42703).
-    // Without campaign_piece_key we lose idempotency + the booking join, so only strip surcharge here;
-    // prod is well past 184, so this is a belt-and-suspenders path that shouldn't run.
     if (error && (error as { code?: string }).code === '42703') {
       const stripped = { ...row }
       delete stripped.surcharge_cents
@@ -174,34 +190,43 @@ export async function mintBookingWorkOrder(bookingId: string): Promise<string | 
   }
 }
 
-/** One booking's live work state, for the restaurant's bookings list. */
+/** One booking's live work state, for the restaurant's bookings list. For a recurring booking this is
+ *  the LATEST month's order (the one the restaurant acts on now). */
 export interface BookingWork {
   orderId: string
   status: string
   deliveredUrl: string | null
   amountCents: number
+  month: number | null
 }
 
 /** Read work state for a set of bookings, keyed by booking id (only bookings that have an order
- *  appear). One query; the restaurant's list uses this to show delivery status + the approve gate. */
+ *  appear). Recurring bookings collapse to their newest month. */
 export async function workOrdersForBookings(bookingIds: string[]): Promise<Record<string, BookingWork>> {
   if (!bookingIds.length) return {}
   try {
     const admin = createAdminClient()
-    const keys = bookingIds.map(bookingOrderKey)
+    // Match both the bare key and any `#month` variant. `like` per id keeps it simple and index-free.
+    const orFilter = bookingIds.map((id) => `campaign_piece_key.like.booking:${id}*`).join(',')
     const { data } = await admin
       .from('creator_work_orders')
       .select('id, campaign_piece_key, status, delivered_url, amount_cents')
-      .in('campaign_piece_key', keys)
+      .or(orFilter)
     const out: Record<string, BookingWork> = {}
     for (const r of (data ?? []) as Array<Record<string, unknown>>) {
-      const id = bookingIdFromKey(r.campaign_piece_key as string | null)
-      if (!id) continue
-      out[id] = {
-        orderId: r.id as string,
-        status: (r.status as string) ?? '',
-        deliveredUrl: (r.delivered_url as string) ?? null,
-        amountCents: (r.amount_cents as number) ?? 0,
+      const key = (r.campaign_piece_key as string) || ''
+      const id = bookingIdFromKey(key)
+      if (!id || !bookingIds.includes(id)) continue
+      const month = key.includes('#') ? Number(key.split('#')[1]) || 1 : 1
+      const prev = out[id]
+      if (!prev || month >= (prev.month ?? 1)) {
+        out[id] = {
+          orderId: r.id as string,
+          status: (r.status as string) ?? '',
+          deliveredUrl: (r.delivered_url as string) ?? null,
+          amountCents: (r.amount_cents as number) ?? 0,
+          month,
+        }
       }
     }
     return out
@@ -210,23 +235,23 @@ export async function workOrdersForBookings(bookingIds: string[]): Promise<Recor
   }
 }
 
-/** Void the work order behind a booking when the booking is cancelled — but never touch work that is
- *  already in flight past delivery (a delivered/approved piece has proof + money and stays as history).
- *  Direct update (not the status machine): a cancel is a system void, not a creator's decline, so it
- *  must not trip the decline-reassign path. Best-effort. */
+/** Void the work order behind a booking when the booking is cancelled — never touching work already
+ *  in flight past delivery (a delivered/approved piece has proof + money and stays as history). For a
+ *  recurring booking this releases every not-yet-delivered month. Direct update (not the status
+ *  machine): a cancel is a system void, not a creator's decline. Best-effort. */
 export async function voidBookingWorkOrder(bookingId: string): Promise<void> {
   try {
     const admin = createAdminClient()
     await admin
       .from('creator_work_orders')
       .update({ status: 'declined', note: 'Booking cancelled', updated_at: new Date().toISOString() })
-      .eq('campaign_piece_key', bookingOrderKey(bookingId))
+      .like('campaign_piece_key', `booking:${bookingId}%`)
       .in('status', ['offered', 'accepted', 'in_progress', 'revision'])
   } catch { /* a cancel never fails because the void did */ }
 }
 
 /** Keep the deliverable's due date in step with a rescheduled booking. Best-effort; only moves work
- *  that hasn't been delivered yet (a delivered/approved piece is done, its date is history). */
+ *  that hasn't been delivered yet. Scoped to the bare key (recurring months carry their own dates). */
 export async function redateBookingWorkOrder(bookingId: string, newDateISO: string | null): Promise<void> {
   try {
     const admin = createAdminClient()
@@ -236,4 +261,45 @@ export async function redateBookingWorkOrder(bookingId: string, newDateISO: stri
       .eq('campaign_piece_key', bookingOrderKey(bookingId))
       .in('status', ['offered', 'accepted', 'in_progress', 'revision'])
   } catch { /* a reschedule never fails because the re-date did */ }
+}
+
+/* ── Recurring monthly plans ─────────────────────────────────────────────────────────────────────
+   A monthly plan mints ONE payable order per month. Subscribing mints month 1; the recurring cron
+   mints each later month when its cycle comes due. Honest by construction: every month is its own
+   deliver → approve → charge, so nothing auto-bills without the restaurant approving that month's
+   work. (Real Stripe autopay is the separate, legal-gated later step.) */
+
+const MS_PER_DAY = 86400000
+
+/** How many monthly cycles should exist for a plan that started on startISO, as of nowISO. Cycle 1 is
+ *  the start; a new cycle every ~month (30-day step keeps it timezone-free and predictable). Capped so
+ *  a long-idle cron can't mint a burst. */
+export function monthsDueSince(startISO: string | null, nowISO: string, cap = 24): number {
+  if (!startISO) return 1
+  const start = Date.parse(`${startISO}T00:00:00Z`)
+  const now = Date.parse(nowISO)
+  if (!Number.isFinite(start) || !Number.isFinite(now) || now < start) return 1
+  return Math.min(cap, 1 + Math.floor((now - start) / (30 * MS_PER_DAY)))
+}
+/** The due date for month N of a plan that started on startISO (month 1 = the start). */
+export function recurringMonthDueISO(startISO: string, month: number): string {
+  const start = Date.parse(`${startISO}T00:00:00Z`)
+  return new Date(start + (month - 1) * 30 * MS_PER_DAY).toISOString().slice(0, 10)
+}
+
+/** Mint any monthly orders a confirmed recurring booking is missing, up to the cycle due as of nowISO.
+ *  Idempotent (per-month key). Returns how many new months it minted. Used by the recurring cron. */
+export async function mintDueRecurringMonths(bookingId: string, startISO: string | null, nowISO: string): Promise<number> {
+  const due = monthsDueSince(startISO, nowISO)
+  let minted = 0
+  for (let m = 1; m <= due; m++) {
+    const before = bookingOrderKey(bookingId, m)
+    const admin = createAdminClient()
+    const { data: has } = await admin.from('creator_work_orders').select('id').eq('campaign_piece_key', before).limit(1).maybeSingle()
+    if (has?.id) continue
+    const dueISO = startISO ? recurringMonthDueISO(startISO, m) : nowISO.slice(0, 10)
+    const id = await mintBookingWorkOrder(bookingId, { month: m, dueDateISO: dueISO })
+    if (id) minted++
+  }
+  return minted
 }

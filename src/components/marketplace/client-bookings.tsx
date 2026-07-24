@@ -11,7 +11,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { CalendarClock, Check, Loader2, ExternalLink } from 'lucide-react'
-import { cancelCreatorBooking } from '@/lib/marketplace/creator-booking'
+import { cancelCreatorBooking, acceptBookingQuote } from '@/lib/marketplace/creator-booking'
 import type { ClientBooking } from '@/lib/marketplace/creator-schedule-types'
 import RescheduleSheet from '@/components/creator/reschedule-sheet'
 
@@ -41,6 +41,11 @@ function safeLink(url: string | null | undefined): string | null {
  *  row always tells the true story (in progress → ready to review → approved). */
 function phaseOf(b: ClientBooking): { key: string; label: string; cls: string } {
   const w = b.workStatus
+  // A quote job before it has a work order: waiting on the creator's price, or their price is in.
+  if (!w && b.shape === 'quote') {
+    if (b.quoteStatus === 'quoted' && b.quotedCents) return { key: 'quote_ready', label: 'Quote ready', cls: 'text-violet-700 bg-violet-50' }
+    return { key: 'quote_req', label: 'Quote requested', cls: 'text-amber-700 bg-amber-50' }
+  }
   if (w === 'delivered') return { key: 'delivered', label: 'Ready to review', cls: 'text-violet-700 bg-violet-50' }
   if (w === 'approved') return { key: 'approved', label: 'Approved', cls: 'text-emerald-700 bg-emerald-50' }
   if (w === 'revision') return { key: 'revision', label: 'Changes sent', cls: 'text-amber-700 bg-amber-50' }
@@ -84,6 +89,17 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
     }
   }
 
+  // Accept a creator's quote → it mints the work order at the quoted price and starts the loop.
+  async function acceptQuote(b: ClientBooking) {
+    setBusy(b.id)
+    try {
+      const res = await acceptBookingQuote(b.id)
+      if (res.ok) setBookings((prev) => prev.map((x) => (x.id === b.id ? { ...x, workStatus: 'accepted', quoteStatus: null, amountCents: b.quotedCents ?? x.amountCents } : x)))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto px-5 py-8" style={{ fontFamily: 'Inter, sans-serif' }}>
       <h1 className="text-xl font-bold text-neutral-900">Your bookings</h1>
@@ -99,14 +115,17 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
             const phase = phaseOf(b)
             const isBusy = busy === b.id
             const link = safeLink(b.deliveredUrl)
-            const canScheduleEdit = phase.key === 'held' || phase.key === 'needs' || phase.key === 'confirmed' || phase.key === 'working'
+            const editable = phase.key === 'held' || phase.key === 'needs' || phase.key === 'confirmed' || phase.key === 'working'
+            const canReschedule = editable && (!b.shape || b.shape === 'scheduled')
+            const canCancel = editable || phase.key === 'quote_req'
+            const isRecurring = b.shape === 'recurring'
             return (
               <div key={b.id} className="rounded-2xl border border-neutral-200 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-neutral-900">{b.listingTitle}{b.tierName ? <span className="text-neutral-400 font-normal"> · {b.tierName}</span> : null}</div>
                     <div className="text-xs text-neutral-500 mt-0.5">by {b.vendorName}</div>
-                    <div className="text-sm text-neutral-700 mt-1 font-medium flex items-center gap-1.5"><CalendarClock className="w-3.5 h-3.5 text-neutral-400" />{slotLabel(b.date, b.start)}</div>
+                    {b.date && <div className="text-sm text-neutral-700 mt-1 font-medium flex items-center gap-1.5"><CalendarClock className="w-3.5 h-3.5 text-neutral-400" />{slotLabel(b.date, b.start)}</div>}
                   </div>
                   <span className={`text-[10px] font-semibold uppercase tracking-wide rounded-full px-2.5 py-1 flex-shrink-0 ${phase.cls}`}>{phase.label}</span>
                 </div>
@@ -156,18 +175,48 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
                   <div className="mt-3 text-[13px] text-amber-700">Changes sent. Waiting on the creator to redo it.</div>
                 )}
 
-                {/* In progress → the creator is on it; reschedule/cancel still available. */}
+                {/* In progress → the creator is on it. */}
                 {phase.key === 'working' && (
                   <div className="mt-2 text-[12px] text-neutral-500">The creator is working on this.</div>
                 )}
 
-                {/* Schedule actions — until the work is delivered. */}
-                {canScheduleEdit && (
+                {/* Quote ready → their price; accept to start, or decline. */}
+                {phase.key === 'quote_ready' && (
+                  <div className="mt-3 rounded-xl border border-violet-200 bg-violet-50/50 p-3">
+                    <div className="text-[13px] font-semibold text-neutral-900">{b.vendorName} quoted {money(b.quotedCents) ?? 'a price'}.</div>
+                    <div className="text-[12px] text-neutral-500 mt-0.5">Accept to start. You&apos;re billed only after you approve the finished work.</div>
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <button onClick={() => acceptQuote(b)} disabled={isBusy}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50">
+                        {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />} Accept quote
+                      </button>
+                      <button onClick={() => cancel(b.id)} disabled={isBusy}
+                        className="px-3.5 py-2 rounded-xl text-sm font-medium text-neutral-400 hover:text-red-600 disabled:opacity-50">Decline</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Quote requested → waiting on the creator's price. */}
+                {phase.key === 'quote_req' && (
+                  <div className="mt-2 text-[12px] text-neutral-500">Waiting on {b.vendorName} to send a price.</div>
+                )}
+
+                {isRecurring && (phase.key === 'working' || phase.key === 'confirmed') && (
+                  <div className="mt-1 text-[11px] font-medium text-neutral-400">Monthly plan · billed each month after you approve that month&apos;s work.</div>
+                )}
+
+                {/* Reschedule (scheduled shoots only) + Cancel — until the work is delivered. Quote-ready
+                    carries its own Accept / Decline above, so it skips this row. */}
+                {(canReschedule || canCancel) && phase.key !== 'quote_ready' && (
                   <div className="mt-3 flex items-center gap-2">
-                    <button onClick={() => setReschedule({ id: b.id, vendorSlug: b.vendorSlug })} disabled={isBusy}
-                      className="px-3.5 py-2 rounded-xl border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">Reschedule</button>
-                    <button onClick={() => cancel(b.id)} disabled={isBusy}
-                      className="px-3.5 py-2 rounded-xl text-sm font-medium text-neutral-400 hover:text-red-600 disabled:opacity-50">Cancel</button>
+                    {canReschedule && (
+                      <button onClick={() => setReschedule({ id: b.id, vendorSlug: b.vendorSlug })} disabled={isBusy}
+                        className="px-3.5 py-2 rounded-xl border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">Reschedule</button>
+                    )}
+                    {canCancel && (
+                      <button onClick={() => cancel(b.id)} disabled={isBusy}
+                        className="px-3.5 py-2 rounded-xl text-sm font-medium text-neutral-400 hover:text-red-600 disabled:opacity-50">Cancel</button>
+                    )}
                   </div>
                 )}
               </div>
