@@ -88,7 +88,7 @@ const BTN_PRIMARY: React.CSSProperties = { display: 'inline-flex', alignItems: '
 const BTN_GHOST: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, padding: '9px 15px', borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', color: C.ink, fontSize: 14, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }
 const BTN_TEXT: React.CSSProperties = { padding: '9px 12px', borderRadius: 12, border: 'none', background: 'none', color: C.faint, fontSize: 14, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }
 
-export default function ClientBookings({ initialBookings }: { initialBookings: ClientBooking[] }) {
+export default function ClientBookings({ initialBookings, title = 'Your bookings', subtitle = 'The creators you booked and their work to approve', backHref = '/dashboard/more', backLabel = 'More', linkToDetail = true }: { initialBookings: ClientBooking[]; title?: string; subtitle?: string; backHref?: string; backLabel?: string; linkToDetail?: boolean }) {
   const [bookings, setBookings] = useState<ClientBooking[]>(initialBookings)
   const [busy, setBusy] = useState<string | null>(null)
   const [reschedule, setReschedule] = useState<{ id: string; vendorSlug: string } | null>(null)
@@ -164,7 +164,7 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
   }
 
   return (
-    <MvpShell active="more" header={<MvpDetailHeader title="Your bookings" subtitle="The creators you booked and their work to approve" backHref="/dashboard/more" backLabel="More" />}>
+    <MvpShell active="more" header={<MvpDetailHeader title={title} subtitle={subtitle} backHref={backHref} backLabel={backLabel} />}>
       <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 32px', boxSizing: 'border-box' }}>
         {err && (
           <div style={{ background: C.coralSoft, border: `0.5px solid ${C.coralLine}`, borderRadius: 14, padding: '12px 14px', fontSize: 13.5, color: C.coral, marginBottom: 12 }}>{err}</div>
@@ -195,6 +195,13 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
               const canCancel = editable || phase.key === 'quote_req'
               const isRecurring = b.shape === 'recurring'
               const Icon = shapeIcon(b.shape)
+              const headerInner = (
+                <>
+                  <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{b.listingTitle}{b.tierName ? <span style={{ color: C.faint, fontWeight: 400 }}> · {b.tierName}</span> : null}</div>
+                  <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>by {b.vendorName}</div>
+                  {b.date && <div style={{ fontSize: 12.5, color: C.ink, fontWeight: 600, marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}><CalendarClock size={13} color={C.faint} />{slotLabel(b.date, b.start)}</div>}
+                </>
+              )
               return (
                 <div key={b.id} className="mvp-press" style={{ position: 'relative', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,.04)', overflow: 'hidden' }}>
                   <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: tone.stripe }} />
@@ -202,11 +209,11 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
                     {/* header row: icon + title/vendor + phase pill */}
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                       <span style={{ width: 42, height: 42, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={19} color={C.greenDk} /></span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{b.listingTitle}{b.tierName ? <span style={{ color: C.faint, fontWeight: 400 }}> · {b.tierName}</span> : null}</div>
-                        <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>by {b.vendorName}</div>
-                        {b.date && <div style={{ fontSize: 12.5, color: C.ink, fontWeight: 600, marginTop: 5, display: 'flex', alignItems: 'center', gap: 5 }}><CalendarClock size={13} color={C.faint} />{slotLabel(b.date, b.start)}</div>}
-                      </div>
+                      {linkToDetail ? (
+                        <Link href={`/dashboard/bookings/${b.id}`} style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}>{headerInner}</Link>
+                      ) : (
+                        <div style={{ flex: 1, minWidth: 0 }}>{headerInner}</div>
+                      )}
                       <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', borderRadius: 99, padding: '3px 9px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em', textTransform: 'uppercase', background: tone.bg, color: tone.fg }}>{phase.label}</span>
                     </div>
 

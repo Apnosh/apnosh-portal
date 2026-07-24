@@ -323,14 +323,30 @@ export async function voidBookingWorkOrder(bookingId: string): Promise<void> {
  *  that hasn't been delivered yet. Scoped to the bare key (recurring months carry their own dates). */
 export async function redateBookingWorkOrder(bookingId: string, newDateISO: string | null): Promise<void> {
   try {
+    if (!newDateISO) return
     const admin = createAdminClient()
-    await admin
+    // The single handoff (bare key) + every delivery slot (#d<n>), not recurring months (#<m>), which
+    // carry their own per-month dates.
+    const { data } = await admin
       .from('creator_work_orders')
-      .update({ due_date: newDateISO, updated_at: new Date().toISOString() })
-      // The single handoff (bare key) and every delivery slot (#d<n>), but not recurring months
-      // (#<m>), which carry their own per-month dates.
+      .select('id, due_date')
       .or(`campaign_piece_key.eq.booking:${bookingId},campaign_piece_key.like.booking:${bookingId}#d%`)
       .in('status', ['offered', 'accepted', 'in_progress', 'revision'])
+    const list = (data ?? []) as Array<{ id: string; due_date: string | null }>
+    if (!list.length) return
+    // Preserve the relative stagger: the earliest piece is the base (offset 0); each other piece keeps
+    // its offset from that base against the new date. A single piece just moves to the new date.
+    const times = list.map((o) => (o.due_date ? Date.parse(`${o.due_date}T00:00:00Z`) : NaN)).filter((n) => Number.isFinite(n))
+    const baseMs = times.length ? Math.min(...times) : NaN
+    const newBaseMs = Date.parse(`${newDateISO}T00:00:00Z`)
+    for (const o of list) {
+      let due = newDateISO
+      const oMs = o.due_date ? Date.parse(`${o.due_date}T00:00:00Z`) : NaN
+      if (Number.isFinite(oMs) && Number.isFinite(baseMs) && Number.isFinite(newBaseMs)) {
+        due = new Date(newBaseMs + (oMs - baseMs)).toISOString().slice(0, 10)
+      }
+      await admin.from('creator_work_orders').update({ due_date: due, updated_at: new Date().toISOString() }).eq('id', o.id)
+    }
   } catch { /* a reschedule never fails because the re-date did */ }
 }
 

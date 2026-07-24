@@ -560,6 +560,9 @@ export interface CreatorBookingDetail {
   start: string | null
   end: string | null
   timezone: string | null
+  /** The restaurant that booked, and where (for an on-site shoot). null if not resolvable. */
+  restaurantName: string | null
+  restaurantLocation: string | null
   intake: Record<string, string>
   deliverables: CreatorBookingDetailDeliverable[]
   totalCents: number
@@ -572,12 +575,13 @@ export async function getCreatorBookingDetail(bookingId: string): Promise<Creato
   const vendor = await currentVendor()
   if (!vendor) return null
   const admin = createAdminClient()
-  const { data: b } = await admin.from('bookings').select('id, status, slot_date, slot_start, slot_end, timezone, note').eq('id', bookingId).maybeSingle()
+  const { data: b } = await admin.from('bookings').select('id, status, slot_date, slot_start, slot_end, timezone, note, client_id').eq('id', bookingId).maybeSingle()
   if (!b) return null
   const meta = parseMeta(b.note as string | null)
   if (!meta || meta.vendorId !== vendor.id) return null
   const work = await workOrdersForBookings([bookingId])
   const list = work[bookingId] ?? []
+  const { data: client } = await admin.from('clients').select('name, location').eq('id', b.client_id as string).maybeSingle()
   return {
     id: b.id as string,
     status: b.status as string,
@@ -588,6 +592,8 @@ export async function getCreatorBookingDetail(bookingId: string): Promise<Creato
     start: (b.slot_start as string) ?? null,
     end: (b.slot_end as string) ?? null,
     timezone: (b.timezone as string) ?? null,
+    restaurantName: (client?.name as string | null) ?? null,
+    restaurantLocation: (client?.location as string | null) ?? null,
     intake: meta.intake ?? {},
     deliverables: list.map((d) => ({ orderId: d.orderId, title: d.title, status: d.status, amountCents: d.amountCents, dueDate: d.dueDate, deliveredUrl: d.deliveredUrl })),
     totalCents: list.reduce((s, d) => s + (d.amountCents || 0), 0),

@@ -9,7 +9,7 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, CalendarClock, Camera, Laptop, Repeat, MessageSquareText, Clock } from 'lucide-react'
+import { ArrowLeft, CalendarClock, Camera, Laptop, Repeat, MessageSquareText, Clock, Store, MapPin } from 'lucide-react'
 import type { CreatorBookingDetail } from '@/lib/marketplace/creator-booking'
 
 const C = {
@@ -84,6 +84,21 @@ export default function CreatorBookingDetail({ detail }: { detail: CreatorBookin
               {fmtDate(detail.date)}{detail.start ? ` · ${fmtTime(detail.start)}${detail.end ? ` to ${fmtTime(detail.end)}` : ''}` : ''}
             </div>
             {detail.timezone && detail.start && <div style={{ fontSize: 12, color: C.faint, marginTop: 4, marginLeft: 24 }}>{detail.timezone.replace(/_/g, ' ')}</div>}
+          </Card>
+        )}
+
+        {/* Restaurant */}
+        {detail.restaurantName && (
+          <Card>
+            <Label>Restaurant</Label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: C.ink }}>
+              <Store size={16} color={C.greenDk} /> {detail.restaurantName}
+            </div>
+            {detail.restaurantLocation && detail.shape === 'scheduled' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: C.mute, marginTop: 6, marginLeft: 1 }}>
+                <MapPin size={14} color={C.faint} /> {detail.restaurantLocation}
+              </div>
+            )}
           </Card>
         )}
 
