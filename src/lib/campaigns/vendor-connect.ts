@@ -47,15 +47,17 @@ export async function ensureVendorConnectAccount(vendorId: string): Promise<{ ok
 }
 
 /** Create a Stripe-hosted onboarding link for the vendor (ensures the account first). The vendor opens
- *  the returned url to complete Stripe onboarding (identity, bank). Links are single-use + short-lived. */
-export async function createVendorOnboardingLink(vendorId: string, origin: string): Promise<{ ok: true; url: string; accountId: string } | { ok: false; error: string }> {
+ *  the returned url to complete Stripe onboarding (identity, bank). Links are single-use + short-lived.
+ *  returnPath is where Stripe sends them back (default the admin list; the creator flow passes its own
+ *  page so a self-onboarding creator lands back in their workspace). */
+export async function createVendorOnboardingLink(vendorId: string, origin: string, returnPath = '/admin/vendors'): Promise<{ ok: true; url: string; accountId: string } | { ok: false; error: string }> {
   const acct = await ensureVendorConnectAccount(vendorId)
   if (!acct.ok) return acct
   try {
     const link = await stripe.accountLinks.create({
       account: acct.accountId,
-      refresh_url: `${origin}/admin/vendors?connect=refresh`,
-      return_url: `${origin}/admin/vendors?connect=done`,
+      refresh_url: `${origin}${returnPath}?connect=refresh`,
+      return_url: `${origin}${returnPath}?connect=done`,
       type: 'account_onboarding',
     })
     return { ok: true, url: link.url, accountId: acct.accountId }

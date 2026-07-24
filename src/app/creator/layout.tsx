@@ -22,6 +22,7 @@ export default function CreatorLayout({ children }: { children: React.ReactNode 
             <Link href="/creator/storefront" className="text-neutral-500 hover:text-neutral-900">Storefront</Link>
             <Link href="/creator/availability" className="text-neutral-500 hover:text-neutral-900">Availability</Link>
             <Link href="/creator/bookings" className="text-neutral-500 hover:text-neutral-900">Bookings</Link>
+            <Link href="/creator/earnings" className="text-neutral-500 hover:text-neutral-900">Get paid</Link>
           </nav>
         </div>
       </header>
