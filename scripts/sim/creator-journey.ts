@@ -255,12 +255,20 @@ async function main() {
     s.check('the job is filed under THEIR id', jobRow?.creator_id === vendorId && jobRow?.vendor_id === vendorId)
     s.check('the job is marked as marketplace work, not campaign work', jobRow?.campaign_id === null)
     s.check("the brief carries the restaurant's answer", String(jobRow?.brief ?? '').includes('short rib'))
-    s.check('the brief tells them what to do with the finished work', String(jobRow?.brief ?? '').includes('Deliver the finished work'))
+    s.check('the brief keeps the question it answers', String(jobRow?.brief ?? '').includes('Which dishes'))
+    // The card shows the job's title, day, time, and price as real fields, so the brief must not
+    // repeat them back as boilerplate — that is what buried the answers before.
+    s.check('the brief does not repeat what the card already shows', !/Deliver the finished work|Booked shoot:/.test(String(jobRow?.brief ?? '')), String(jobRow?.brief ?? ''))
+    s.check('a booked add-on is named in the brief', String(jobRow?.brief ?? '').includes('Extra hour'))
 
     // ───────────────────────────────────────────────────────────────────────────
     s.group('8. it shows up on their screens')
     const myWork = await listWorkOrdersForCreator(vendorId)
     s.check('it is in their work list', myWork.some((o) => o.id === job.orderId), `${myWork.length} orders`)
+    const mine = myWork.find((o) => o.id === job.orderId)
+    s.check('the list says WHO the work is for', !!mine?.restaurantName, mine?.restaurantName)
+    s.check('the list says what time to show up', mine?.slotTime === pick.start, `${mine?.slotTime}`)
+    s.check('the list says what it pays', mine?.amountCents === 75000, `${mine?.amountCents}`)
     const cal = await calendarForCreator(vendorId)
     const calItem = cal.find((c) => c.id === job.orderId)
     s.check('it is on their calendar', !!calItem)
@@ -330,6 +338,10 @@ async function main() {
     s.check('the price splits across them with nothing lost', sum === 45000, `${sum} of 45000`)
     s.check('each piece has its own due date', new Set(pieces.map((p) => p.dueDate)).size === 3, pieces.map((p) => p.dueDate).join(', '))
     s.check('the later reels are due later', (pieces[2].dueDate ?? '') > (pieces[0].dueDate ?? ''))
+    // The whole point of the list order: the next thing they owe someone is at the top.
+    const queue = (await listWorkOrdersForCreator(vendorId)).filter((o) => o.status !== 'approved' && o.status !== 'declined' && o.dueDate)
+    const dates = queue.map((o) => o.dueDate ?? '')
+    s.check('their list puts the soonest job first', dates.join() === [...dates].sort().join(), dates.join(' | '))
     s.check('all three land on their calendar', (await calendarForCreator(vendorId)).filter((c) => pieces.some((p) => p.orderId === c.id)).length === 3)
 
     // ───────────────────────────────────────────────────────────────────────────

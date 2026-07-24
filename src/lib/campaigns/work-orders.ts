@@ -36,6 +36,10 @@ export interface WorkOrder {
   amountCents: number
   createdAt: string
   updatedAt: string
+  /** Who the work is for. Set on a creator's own list so a card can say it without opening. */
+  restaurantName?: string
+  /** 'HH:MM' start for an on-site booking, when this order came from one. */
+  slotTime?: string | null
 }
 
 function rowToWO(r: Record<string, unknown>, names?: Map<string, string>): WorkOrder {
@@ -99,17 +103,60 @@ export async function mintWorkOrders(campaign: SavedCampaign, shipISO: string): 
   return rows.length
 }
 
-/** A creator's inbox: every order assigned to them, newest first. */
+/**
+ * A creator's inbox: every order assigned to them, SOONEST DUE FIRST — the next thing they owe
+ * someone belongs at the top, not the thing most recently created. Undated work sorts last.
+ *
+ * Also carries the two facts a creator scans a list for and could otherwise only get by opening the
+ * job: who it is for, and (for an on-site booking) what time they need to be there. Both are looked
+ * up in one extra round-trip each and degrade to undefined rather than failing the list.
+ */
 export async function listWorkOrdersForCreator(creatorId: string): Promise<WorkOrder[]> {
   const admin = createAdminClient()
   const { data, error } = await admin
     .from('creator_work_orders')
     .select('*, campaigns(name)')
     .eq('creator_id', creatorId)
+    .order('due_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false })
   if (error || !data) return []
   const names = await creatorNamesByIds(data.map((r) => (r.creator_id as string) ?? ''))
-  return data.map((r) => ({ ...rowToWO(r, names), campaignName: ((r as { campaigns?: { name?: string } }).campaigns?.name) ?? undefined }))
+  const [restaurants, times] = await Promise.all([
+    restaurantNamesByIds(admin, data.map((r) => (r.client_id as string) ?? '')),
+    bookingStartTimes(admin, data.map((r) => (r.campaign_piece_key as string) ?? '')),
+  ])
+  return data.map((r) => ({
+    ...rowToWO(r, names),
+    campaignName: ((r as { campaigns?: { name?: string } }).campaigns?.name) ?? undefined,
+    restaurantName: restaurants.get((r.client_id as string) ?? '') ?? undefined,
+    slotTime: times.get(bookingIdFromPieceKey((r.campaign_piece_key as string) ?? '') ?? '') ?? null,
+  }))
+}
+
+/** client_id → restaurant name, for the ids given. Empty map on any error (the list still renders). */
+async function restaurantNamesByIds(admin: ReturnType<typeof createAdminClient>, ids: string[]): Promise<Map<string, string>> {
+  const uniq = [...new Set(ids.filter(Boolean))]
+  if (!uniq.length) return new Map()
+  try {
+    const { data } = await admin.from('clients').select('id, name').in('id', uniq)
+    return new Map((data ?? []).map((c) => [c.id as string, (c.name as string) ?? '']))
+  } catch { return new Map() }
+}
+
+/** The booking uuid inside a marketplace piece key ('booking:<uuid>', '…#2', '…#d1'), else null. */
+function bookingIdFromPieceKey(key: string): string | null {
+  const m = /^booking:([0-9a-f-]{36})/i.exec(key ?? '')
+  return m ? m[1] : null
+}
+
+/** booking id → 'HH:MM' start, for the piece keys given. Empty map on any error. */
+async function bookingStartTimes(admin: ReturnType<typeof createAdminClient>, keys: string[]): Promise<Map<string, string>> {
+  const ids = [...new Set(keys.map(bookingIdFromPieceKey).filter((x): x is string => !!x))]
+  if (!ids.length) return new Map()
+  try {
+    const { data } = await admin.from('bookings').select('id, slot_start').in('id', ids)
+    return new Map((data ?? []).flatMap((b) => (b.slot_start ? [[b.id as string, b.slot_start as string]] as [string, string][] : [])))
+  } catch { return new Map() }
 }
 
 /** Clear the cached creative brief for a campaign's orders so the next open

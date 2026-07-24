@@ -184,14 +184,16 @@ export async function mintBookingWorkOrder(bookingId: string, opts?: { month?: n
 
     // Build one work-order row for a single piece (title, its own due date, its own price share, key).
     const buildRow = (pieceTitle: string, pieceDueISO: string | null, pieceAmount: number, pieceKey: string): Record<string, unknown> => {
+      // What the restaurant TOLD them, and nothing else. The creator's card shows the job's title,
+      // restaurant, day, time, and price as real fields, so repeating them here just buried the
+      // answers under boilerplate. Shape + day still lead when there are no answers, so a brief is
+      // never empty.
       const dayLabel = shootDayLabel(pieceDueISO)
-      const brief = [
+      const answers = [...intakeLines.map(([q, v]) => `${q}: ${v}.`), optionsLine].filter(Boolean)
+      const brief = (answers.length ? answers : [
         `${shapeWord}: ${pieceTitle}.`,
         dayLabel ? `${dueWord}: ${dayLabel}.` : '',
-        ...intakeLines.map(([q, v]) => `${q}: ${v}.`),
-        optionsLine,
-        'Deliver the finished work here when it is ready — the restaurant reviews and approves it.',
-      ].filter(Boolean).join(' ')
+      ].filter(Boolean)).join(' ')
       return {
         campaign_id: null, client_id: b.client_id as string, creator_id: meta.vendorId, vendor_id: meta.vendorId,
         discipline, slot: 0, title: pieceTitle, brief, due_date: pieceDueISO, status: 'accepted',

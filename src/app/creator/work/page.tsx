@@ -7,7 +7,22 @@ import type { WorkOrder, WorkOrderStatus } from '@/lib/campaigns/work-orders'
 import type { CreatorEarnings } from '@/lib/campaigns/view'
 import type { CalendarItem } from '@/lib/marketplace/creator-schedule-types'
 import { safeHref } from '@/lib/campaigns/work-orders-core'
+import { briefLines } from '@/lib/marketplace/booking-brief'
 import CreatorCalendar from '@/components/creator/creator-calendar'
+
+/** '09:00' → '9:00 AM'. Returns the raw value if it is not a wall-clock time. */
+function fmtTime(hhmm: string | null | undefined): string {
+  const m = /^(\d{1,2}):(\d{2})/.exec(hhmm ?? '')
+  if (!m) return hhmm ?? ''
+  const h = Number(m[1]), ap = h < 12 ? 'AM' : 'PM', h12 = h % 12 === 0 ? 12 : h % 12
+  return `${h12}:${m[2]} ${ap}`
+}
+
+/** Whole dollars unless there are cents. */
+function money(cents: number): string {
+  const d = cents / 100
+  return d % 1 === 0 ? `$${d.toLocaleString('en-US')}` : `$${d.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
 
 export default function CreatorWorkPage() {
   return (
@@ -73,8 +88,11 @@ function Inbox() {
   }
 
   const name = orders[0]?.creatorName ?? resolvedId
+  // To do keeps the list's soonest-due-first order (the next thing they owe is at the top);
+  // History reads the other way, most recently finished first.
   const live = orders.filter((o) => o.status !== 'approved' && o.status !== 'declined')
   const done = orders.filter((o) => o.status === 'approved' || o.status === 'declined')
+    .slice().sort((a, b) => (b.dueDate ?? '').localeCompare(a.dueDate ?? ''))
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -160,7 +178,14 @@ const DISC_ICON: Record<string, string> = { Video: '🎬', Photo: '📷', Social
 function OrderCard({ o, busy, onAct, stars }: { o: WorkOrder; busy: boolean; onAct: (id: string, p: { status?: WorkOrderStatus; delivered_url?: string }) => void; stars?: number }) {
   const [url, setUrl] = useState(o.deliveredUrl ?? '')
   const meta = STATUS_META[o.status]
-  const due = o.dueDate ? new Date(o.dueDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
+  const due = o.dueDate ? new Date(o.dueDate + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }) : null
+  // An on-site booking has a start time, so the day line reads "Mon, Jul 27 · 9:00 AM" and they know
+  // when to show up. Remote work has only a deadline, so it says so.
+  const when = due ? `${o.slotTime ? '' : 'Due '}${due}${o.slotTime ? ` · ${fmtTime(o.slotTime)}` : ''}` : null
+  const answers = briefLines(o.brief)
+  // Who reviews their work: the restaurant that booked them, or the owner who assigned a campaign
+  // piece. Saying "the owner" on a booking card is confusing when the card names the restaurant.
+  const reviewer = o.restaurantName ?? 'the owner'
 
   return (
     <article className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
@@ -169,17 +194,38 @@ function OrderCard({ o, busy, onAct, stars }: { o: WorkOrder; busy: boolean; onA
           <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-neutral-100 text-base">{DISC_ICON[o.discipline] ?? '✨'}</span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-neutral-900">{o.title}</p>
-            {o.campaignName && <p className="truncate text-xs text-neutral-400">{o.campaignName}</p>}
+            {/* Who it is for: the restaurant for a booking, the campaign for owner-assigned work. */}
+            {(o.restaurantName || o.campaignName) && (
+              <p className="truncate text-xs text-neutral-500">{o.restaurantName ?? o.campaignName}</p>
+            )}
           </div>
         </div>
         <span className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${meta.cls}`}>{meta.label}</span>
       </div>
 
-      {o.brief && <p className="mt-3 text-[13px] leading-relaxed text-neutral-600">{o.brief}</p>}
-      {o.note && (o.status === 'revision' || o.status === 'delivered' || o.conceptStatus === 'changes') && (
-        <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-700">Owner: {o.note}</p>
+      {/* When and what it pays — the two things they scan a list for. */}
+      {(when || o.amountCents > 0) && (
+        <div className="mt-2.5 flex items-center gap-2 text-[12.5px]">
+          {when && <span className="font-medium text-neutral-700">{when}</span>}
+          {when && o.amountCents > 0 && <span className="text-neutral-300">·</span>}
+          {o.amountCents > 0 && <span className="font-semibold text-emerald-700">{money(o.amountCents)}</span>}
+        </div>
       )}
-      {due && <p className="mt-2 text-[12px] text-neutral-400">Due {due}</p>}
+
+      {/* What the restaurant asked for, as their own words rather than a paragraph. */}
+      {answers.length > 0 && (
+        <dl className="mt-3 space-y-1.5">
+          {answers.map((a, i) => (
+            <div key={i}>
+              {a.label && <dt className="text-[11.5px] text-neutral-400">{a.label}</dt>}
+              <dd className="text-[13px] leading-snug text-neutral-700">{a.value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {o.note && (o.status === 'revision' || o.status === 'delivered' || o.conceptStatus === 'changes') && (
+        <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-[12px] text-rose-700">{reviewer === 'the owner' ? 'Owner' : reviewer}: {o.note}</p>
+      )}
 
       {/* Campaign pieces have a full AI brief page; a marketplace booking's brief is the card itself
           (title + notes), so it delivers inline with no separate brief to open. */}
@@ -194,7 +240,7 @@ function OrderCard({ o, busy, onAct, stars }: { o: WorkOrder; busy: boolean; onA
       )}
       {o.status === 'accepted' && (
         <div className="mt-3">{o.conceptStatus !== 'approved'
-          ? <p className="text-[12px] text-amber-700">{o.conceptStatus === 'changes' ? 'Owner asked to rework the idea — start once they approve.' : 'Waiting on the owner to approve the concept.'}</p>
+          ? <p className="text-[12px] text-amber-700">{o.conceptStatus === 'changes' ? 'They asked to rework the idea. Start once they approve.' : `Waiting on ${reviewer} to approve the idea.`}</p>
           : <Btn primary busy={busy} onClick={() => onAct(o.id, { status: 'in_progress' })}>Start work</Btn>}</div>
       )}
       {(o.status === 'in_progress' || o.status === 'revision') && (
@@ -209,7 +255,7 @@ function OrderCard({ o, busy, onAct, stars }: { o: WorkOrder; busy: boolean; onA
         </div>
       )}
       {o.status === 'delivered' && (
-        <p className="mt-3 text-[12px] text-neutral-500">Delivered. Waiting on the owner to review.</p>
+        <p className="mt-3 text-[12px] text-neutral-500">Sent. Waiting on {reviewer} to review it.</p>
       )}
       {o.status === 'approved' && safeHref(o.deliveredUrl) && (
         <a href={safeHref(o.deliveredUrl)!} target="_blank" rel="noreferrer" className="mt-3 inline-block text-[12px] font-medium text-emerald-700 underline">View delivered work</a>
