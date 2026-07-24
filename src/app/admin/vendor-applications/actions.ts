@@ -12,6 +12,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { craftForCategories } from '@/lib/campaigns/vendor-supply'
+import { onboardCreatorCore, type OnboardCreatorInput, type OnboardCreatorResult } from '@/lib/marketplace/onboard-creator'
 
 async function requireAdmin(): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
   const supabase = await createServerClient()
@@ -185,6 +186,19 @@ export async function linkVendorLogin(
 
   revalidatePath('/admin/vendors')
   return { ok: true }
+}
+
+/**
+ * Onboard a real creator with a working login, in one admin step: create their vendor, send them a
+ * set-your-password invite (or link an existing login), and wire both resolution links. Admin only.
+ * The creator sets their own password from the invite — Apnosh never handles it.
+ */
+export async function onboardCreator(input: OnboardCreatorInput): Promise<OnboardCreatorResult> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { ok: false, error: auth.error }
+  const res = await onboardCreatorCore(input)
+  if (res.ok) { revalidatePath('/admin/creators'); revalidatePath('/admin/vendors') }
+  return res
 }
 
 export async function markReviewing(applicationId: string): Promise<{ ok: boolean; error?: string }> {

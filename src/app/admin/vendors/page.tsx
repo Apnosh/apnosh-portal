@@ -11,6 +11,7 @@ import { Building2, User, ShieldCheck, ArrowRight, Star } from 'lucide-react'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { creatorRatingAggregates } from '@/lib/campaigns/work-ratings'
+import AddCreator from './add-creator'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,7 @@ interface VendorRow {
   bookable: boolean
   total_bookings: number
   created_at: string
+  person_id: string | null
 }
 
 export default async function AdminVendorsPage() {
@@ -44,7 +46,7 @@ export default async function AdminVendorsPage() {
 
   const { data } = await admin
     .from('vendors')
-    .select('id, slug, name, vendor_type, craft, verified, tier, bookable, total_bookings, created_at')
+    .select('id, slug, name, vendor_type, craft, verified, tier, bookable, total_bookings, created_at, person_id')
     .order('is_apnosh', { ascending: false })
     .order('verified', { ascending: false })
     .order('created_at', { ascending: false }) as { data: VendorRow[] | null }
@@ -54,10 +56,13 @@ export default async function AdminVendorsPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-6">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">Admin</p>
-        <h1 className="text-[24px] font-semibold text-ink mt-1">Creators</h1>
-        <p className="text-ink-3 text-sm mt-1">{vendors.length} total · profiles, portfolios, and delivered-work ratings</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink-3">Admin</p>
+          <h1 className="text-[24px] font-semibold text-ink mt-1">Creators</h1>
+          <p className="text-ink-3 text-sm mt-1">{vendors.length} total · profiles, portfolios, and delivered-work ratings</p>
+        </div>
+        <AddCreator />
       </div>
 
       <div className="space-y-2">
@@ -90,6 +95,11 @@ export default async function AdminVendorsPage() {
                   {!v.bookable && (
                     <span className="text-[9px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">
                       Paused
+                    </span>
+                  )}
+                  {!v.person_id && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                      No login
                     </span>
                   )}
                 </div>
