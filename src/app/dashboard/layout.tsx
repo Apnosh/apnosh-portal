@@ -97,7 +97,7 @@ function HeaderLocationSelector() {
    desktop deep tool and gets the thin back-header. */
 const MVP_EXACT = new Set([
   '/dashboard', '/dashboard/orders', '/dashboard/inbox', '/dashboard/messages', '/dashboard/insights',
-  '/dashboard/more', '/dashboard/billing',
+  '/dashboard/more', '/dashboard/billing', '/dashboard/bookings',
   '/dashboard/assets', '/dashboard/goals', '/dashboard/help', '/dashboard/google-profile',
   '/dashboard/order-buttons', '/dashboard/review-replies', '/dashboard/listings', '/dashboard/measure',
 ])
