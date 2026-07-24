@@ -31,13 +31,17 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   const path = request.nextUrl.pathname
-  const isAuthPage = path.startsWith('/login') || path.startsWith('/signup') || path.startsWith('/forgot-password') || path.startsWith('/reset-password')
+  // /creator-signup is a PUBLIC signup page (a new creator has no login yet), so it's an auth page,
+  // not a protected /creator surface — matched before the /creator prefix below so it stays public.
+  const isAuthPage = path.startsWith('/login') || path.startsWith('/signup') || path.startsWith('/forgot-password') || path.startsWith('/reset-password') || path.startsWith('/creator-signup')
   const isDashboard = path.startsWith('/dashboard')
   const isAdminRoute = path.startsWith('/admin')
   const isOnboarding = path.startsWith('/onboarding')
   const isClientRoute = path.startsWith('/client')
   const isWorkRoute = path.startsWith('/work') || path.startsWith('/marketplace')
-  const isCreatorRoute = path.startsWith('/creator')
+  // The protected creator surfaces all live under /creator/* — the trailing slash keeps /creator-signup
+  // (the public signup) out of this, so an unauthenticated creator can actually reach it.
+  const isCreatorRoute = path.startsWith('/creator/')
 
   // A non-admin strategist's allow-list under /admin/*. They can drill
   // into a single client's detail (/admin/clients/[slug]/...) because

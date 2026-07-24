@@ -33,6 +33,12 @@ export interface OnboardCreatorInput {
   description?: string
   /** Send a set-your-password invite when no login exists yet. Default true. False = link-only. */
   invite?: boolean
+  /** An already-authenticated user id (self-serve signup): skip the find-by-email / invite entirely
+   *  and link THIS login. When set, no email is ever sent. */
+  personId?: string
+  /** Whether the creator is bookable in the store right away. Default true (self-serve creators go
+   *  live, verified=false, like the seeded pool). Pass false to require an admin to flip them live. */
+  bookable?: boolean
 }
 
 export interface OnboardCreatorResult {
@@ -75,6 +81,8 @@ export async function onboardCreatorCore(input: OnboardCreatorInput): Promise<On
   const serviceArea = input.serviceArea && input.serviceArea.length ? input.serviceArea : ['WA']
 
   try {
+    const bookable = input.bookable !== false
+
     // 1) Find-or-create the vendor (keyed by slug so a re-run reuses the same creator).
     const slug = slugify(name)
     let vendorId: string
@@ -82,26 +90,30 @@ export async function onboardCreatorCore(input: OnboardCreatorInput): Promise<On
     if (existingV?.id) {
       vendorId = existingV.id as string
       await admin.from('vendors').update({
-        name, craft, service_area: serviceArea, bookable: true, ...(input.description ? { description: input.description } : {}),
+        name, craft, service_area: serviceArea, bookable, ...(input.description ? { description: input.description } : {}),
       }).eq('id', vendorId)
     } else {
       const { data: created, error: cErr } = await admin.from('vendors').insert({
-        slug, name, vendor_type: 'individual', bookable: true, verified: false, tier: 'free',
+        slug, name, vendor_type: 'individual', bookable, verified: false, tier: 'free',
         is_apnosh: false, service_area: serviceArea, craft, ...(input.description ? { description: input.description } : {}),
       }).select('id').single()
       if (cErr || !created) return { ok: false, error: `Could not create the creator: ${cErr?.message ?? 'unknown error'}` }
       vendorId = created.id as string
     }
 
-    // 2) Resolve their login: an existing one by email, else a set-your-password invite.
-    let personId = await findUserIdByEmail(admin, email)
+    // 2) Resolve their login: a pre-authed user (self-serve signup), else an existing login by email,
+    //    else a set-your-password invite.
+    let personId = input.personId ?? null
     let invited = false
     if (!personId) {
-      if (input.invite === false) return { ok: false, error: `No login exists for ${email}. Turn on the invite, or have them sign up first.`, vendorId, slug }
-      const { data: inv, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name } })
-      if (invErr || !inv?.user) return { ok: false, error: `Could not send the invite: ${invErr?.message ?? 'unknown error'}`, vendorId, slug }
-      personId = inv.user.id
-      invited = true
+      personId = await findUserIdByEmail(admin, email)
+      if (!personId) {
+        if (input.invite === false) return { ok: false, error: `No login exists for ${email}. Turn on the invite, or have them sign up first.`, vendorId, slug }
+        const { data: inv, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name } })
+        if (invErr || !inv?.user) return { ok: false, error: `Could not send the invite: ${invErr?.message ?? 'unknown error'}`, vendorId, slug }
+        personId = inv.user.id
+        invited = true
+      }
     }
 
     // 3) Wire both links. person_id is one-shot: only claim an unclaimed vendor.

@@ -141,6 +141,10 @@ export default function SignupPage() {
           Already have an account?{' '}
           <Link href="/login" className="text-brand-dark font-medium hover:underline">Sign in</Link>
         </p>
+        <p className="text-center text-xs text-ink-4 mt-2">
+          Offer services to restaurants?{' '}
+          <Link href="/creator-signup" className="text-brand-dark font-medium hover:underline">Join as a creator</Link>
+        </p>
       </div>
     </div>
   )

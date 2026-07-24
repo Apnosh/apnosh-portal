@@ -3,6 +3,7 @@
  * No auth required — anyone can apply.
  */
 
+import Link from 'next/link'
 import ApplicationForm from './application-form'
 
 export const metadata = {
@@ -28,6 +29,14 @@ export default function BecomeVendorPage() {
         <Bullet title="Bookings handled" body="We manage scheduling, payment, and paperwork." />
         <Bullet title="Keep most of it" body="Free tier: 20% platform fee. Pro tier: 15%. Verified: 12%." />
       </div>
+
+      {/* Self-serve fast path for the four creator crafts — no application, no waiting. */}
+      <Link href="/creator-signup" className="block rounded-2xl border border-brand/40 bg-brand/5 p-5 hover:bg-brand/10 transition-colors">
+        <p className="text-[15px] font-semibold text-ink">Photographer, videographer, social creator, or designer?</p>
+        <p className="text-[13px] text-ink-2 mt-1 leading-relaxed">
+          Skip the application. Sign up now, set your own prices, and restaurants can book you directly. <span className="text-brand-dark font-semibold">Join as a creator →</span>
+        </p>
+      </Link>
 
       <ApplicationForm />
     </div>
