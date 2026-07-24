@@ -24,23 +24,24 @@ import {
 } from './package'
 
 export interface MyStore {
-  vendor: { id: string; name: string; slug: string; craft: string | null } | null
+  vendor: { id: string; name: string; slug: string; craft: string | null; bookable: boolean } | null
   packages: CreatorPackage[]
 }
 
 /** The logged-in creator's vendor id, or null when the caller is not a linked creator. The one
- *  place identity is resolved, so every action below trusts the same answer. */
-async function myVendorId(): Promise<{ id: string; name: string; slug: string; craft: string | null } | null> {
+ *  place identity is resolved, so every action below trusts the same answer. `bookable` tells the
+ *  editor whether they're live in the store yet (self-serve creators start pending an admin review). */
+async function myVendorId(): Promise<{ id: string; name: string; slug: string; craft: string | null; bookable: boolean } | null> {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const admin = createAdminClient()
   const { data } = await admin
     .from('vendors')
-    .select('id, name, slug, craft')
+    .select('id, name, slug, craft, bookable')
     .eq('person_id', user.id)
     .maybeSingle()
-  return data ? { id: data.id, name: data.name, slug: data.slug, craft: (data.craft as string | null) ?? null } : null
+  return data ? { id: data.id, name: data.name, slug: data.slug, craft: (data.craft as string | null) ?? null, bookable: data.bookable !== false } : null
 }
 
 /** Everything the storefront editor needs on load: who the creator is, and their packages. */

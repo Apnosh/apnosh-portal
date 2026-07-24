@@ -12,6 +12,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { creatorRatingAggregates } from '@/lib/campaigns/work-ratings'
 import AddCreator from './add-creator'
+import PendingReview from './pending-review'
 
 export const dynamic = 'force-dynamic'
 
@@ -53,6 +54,10 @@ export default async function AdminVendorsPage() {
 
   const vendors = data ?? []
   const ratings = await creatorRatingAggregates(vendors.map(v => v.id))
+  // Review gate: self-serve creators sign up with a login but out of the store (bookable=false).
+  const pending = vendors
+    .filter(v => !v.bookable && v.person_id)
+    .map(v => ({ id: v.id, slug: v.slug, name: v.name, craft: v.craft }))
 
   return (
     <div className="max-w-5xl mx-auto px-4 lg:px-6 pt-6 pb-20 space-y-6">
@@ -64,6 +69,8 @@ export default async function AdminVendorsPage() {
         </div>
         <AddCreator />
       </div>
+
+      <PendingReview initial={pending} />
 
       <div className="space-y-2">
         {vendors.map(v => {
@@ -93,8 +100,8 @@ export default async function AdminVendorsPage() {
                     </span>
                   )}
                   {!v.bookable && (
-                    <span className="text-[9px] font-bold uppercase tracking-wider bg-rose-100 text-rose-700 px-1.5 py-0.5 rounded">
-                      Paused
+                    <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">
+                      Not live
                     </span>
                   )}
                   {!v.person_id && (

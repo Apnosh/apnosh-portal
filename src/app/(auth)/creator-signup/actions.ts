@@ -29,7 +29,7 @@ export async function becomeCreator(input: { name: string; craft: CreatorCraft; 
     serviceArea: input.serviceArea,
     personId: user.id,   // they just signed up — link THIS login, no email
     invite: false,
-    bookable: true,       // self-serve creators go live in the store (verified=false, admin can pause)
+    bookable: false,      // review gate: they build their profile now, admin approves them into the store
   })
   return { ok: res.ok, error: res.error, slug: res.slug }
 }

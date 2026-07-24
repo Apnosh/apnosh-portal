@@ -13,6 +13,7 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { craftForCategories } from '@/lib/campaigns/vendor-supply'
 import { onboardCreatorCore, type OnboardCreatorInput, type OnboardCreatorResult } from '@/lib/marketplace/onboard-creator'
+import { createNotification } from '@/lib/notifications'
 
 async function requireAdmin(): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
   const supabase = await createServerClient()
@@ -199,6 +200,36 @@ export async function onboardCreator(input: OnboardCreatorInput): Promise<Onboar
   const res = await onboardCreatorCore(input)
   if (res.ok) { revalidatePath('/admin/creators'); revalidatePath('/admin/vendors') }
   return res
+}
+
+/**
+ * Approve a creator into the store (or pause them out of it) — the review gate for self-serve signups.
+ * Self-serve creators sign up bookable=false; this flips it. On approval, the creator is told they're
+ * live. Admin only.
+ */
+export async function setCreatorLive(vendorId: string, live: boolean): Promise<{ ok: boolean; error?: string }> {
+  const auth = await requireAdmin()
+  if (!auth.ok) return { ok: false, error: auth.error }
+  const admin = createAdminClient()
+  const { data: v, error } = await admin
+    .from('vendors')
+    .update({ bookable: live })
+    .eq('id', vendorId)
+    .select('id, person_id')
+    .maybeSingle()
+  if (error) return { ok: false, error: error.message }
+  if (!v) return { ok: false, error: 'Creator not found.' }
+  if (live && v.person_id) {
+    await createNotification({
+      userId: v.person_id as string,
+      kind: 'client_request',
+      title: 'You are live on Apnosh',
+      body: 'Your profile is approved. Restaurants can now find and book you.',
+      link: '/creator/storefront',
+    }).catch(() => {})
+  }
+  revalidatePath('/admin/vendors')
+  return { ok: true }
 }
 
 export async function markReviewing(applicationId: string): Promise<{ ok: boolean; error?: string }> {

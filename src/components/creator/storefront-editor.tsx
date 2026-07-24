@@ -99,6 +99,15 @@ export default function StorefrontEditor({ initialVendor, initialPackages }: { i
           What restaurants can book from you, at your price. Publishing puts a package on your storefront. No one is charged from here.
         </p>
 
+        {!initialVendor.bookable && (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-[14px] font-semibold text-neutral-900">Your profile is under review</p>
+            <p className="text-[13px] text-neutral-600 mt-1 leading-relaxed">
+              Set up your packages and hours now. Apnosh reviews new creators before they go live. Once you&apos;re approved, restaurants can find and book you in the store.
+            </p>
+          </div>
+        )}
+
         {packages.length === 0 && (
           <div className="border border-dashed border-neutral-200 rounded-2xl p-8 text-center text-sm text-neutral-500 mb-4">
             No packages yet. Add your first one so restaurants can book you.
