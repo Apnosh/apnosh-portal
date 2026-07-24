@@ -13,7 +13,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { CalendarClock, Check, Loader2, ExternalLink, Camera, Repeat, FileText, Sparkles } from 'lucide-react'
 import { cancelCreatorBooking, acceptBookingQuote } from '@/lib/marketplace/creator-booking'
-import type { ClientBooking } from '@/lib/marketplace/creator-schedule-types'
+import type { ClientBooking, BookingDeliverable } from '@/lib/marketplace/creator-schedule-types'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader } from '@/components/mvp/mvp-detail'
 import RescheduleSheet from '@/components/creator/reschedule-sheet'
@@ -129,6 +129,28 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
     }
   }
 
+  // Per-delivery approve / changes for a multi-delivery booking. Same PATCH path as review(), but
+  // targets one deliverable's order and updates just that piece in state.
+  async function reviewOrder(bookingId: string, orderId: string, decision: 'approved' | 'revision', changeNote?: string) {
+    setBusy(orderId); setErr(null)
+    try {
+      const res = await fetch('/api/creator/work', {
+        method: 'PATCH', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: orderId, status: decision, ...(changeNote ? { note: changeNote } : {}) }),
+      })
+      if (res.ok) {
+        setBookings((prev) => prev.map((x) => (x.id === bookingId ? { ...x, deliverables: x.deliverables.map((d) => (d.orderId === orderId ? { ...d, status: decision } : d)) } : x)))
+      } else {
+        const j = await res.json().catch(() => ({}))
+        setErr(typeof j.error === 'string' ? j.error : 'That did not go through. Try again.')
+      }
+    } catch {
+      setErr('Something went wrong. Check your connection and try again.')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   // Accept a creator's quote → it mints the work order at the quoted price and starts the loop.
   async function acceptQuote(b: ClientBooking) {
     setBusy(b.id); setErr(null)
@@ -198,7 +220,7 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
                     )}
 
                     {/* Delivered → the review panel: see the work, approve, or ask for changes. */}
-                    {phase.key === 'delivered' && (
+                    {phase.key === 'delivered' && b.deliverables.length <= 1 && (
                       <div style={{ marginTop: 12, borderRadius: 13, border: '0.5px solid rgba(109,75,179,0.22)', background: 'rgba(241,236,251,0.6)', padding: '12px 13px' }}>
                         <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>The finished work is ready.</div>
                         {money(b.amountCents) && <div style={{ fontSize: 12, color: C.mute, marginTop: 1 }}>Approving bills you {money(b.amountCents)}.</div>}
@@ -228,7 +250,7 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
                     )}
 
                     {/* Approved → done, with a link to the work and what it billed. */}
-                    {phase.key === 'approved' && (
+                    {phase.key === 'approved' && b.deliverables.length <= 1 && (
                       <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: C.greenDk }}>
                         <span style={{ fontWeight: 600 }}>Approved{money(b.amountCents) ? ` · ${money(b.amountCents)}` : ''}</span>
                         {link && <a href={link} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: C.mute, textDecoration: 'none' }}><ExternalLink size={13} /> View work</a>}
@@ -236,13 +258,27 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
                     )}
 
                     {/* Changes sent → waiting on the creator to redo it. */}
-                    {phase.key === 'revision' && (
+                    {phase.key === 'revision' && b.deliverables.length <= 1 && (
                       <div style={{ marginTop: 10, fontSize: 12.5, color: C.blue }}>Changes sent. Waiting on the creator to redo it.</div>
                     )}
 
                     {/* In progress → the creator is on it. */}
-                    {phase.key === 'working' && (
+                    {phase.key === 'working' && b.deliverables.length <= 1 && (
                       <div style={{ marginTop: 9, fontSize: 12, color: C.mute }}>The creator is working on this.</div>
+                    )}
+
+                    {/* MULTIPLE deliveries → each piece, delivered and approved (and billed) on its own. */}
+                    {b.deliverables.length > 1 && (
+                      <div style={{ marginTop: 4 }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: C.faint, marginTop: 8 }}>
+                          Deliveries · {b.deliverables.filter((d) => d.status === 'approved').length} of {b.deliverables.length} done
+                        </div>
+                        {b.deliverables.map((d) => (
+                          <DeliverableRow key={d.orderId} d={d} busy={busy === d.orderId}
+                            onApprove={() => reviewOrder(b.id, d.orderId, 'approved')}
+                            onChanges={(changeNote) => reviewOrder(b.id, d.orderId, 'revision', changeNote || undefined)} />
+                        ))}
+                      </div>
                     )}
 
                     {/* Quote ready → their price; accept to start, or decline. */}
@@ -299,5 +335,53 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
         />
       )}
     </MvpShell>
+  )
+}
+
+/** The label + tone for one deliverable's work status. */
+function workLabel(status: string): { label: string; fg: string; bg: string } {
+  switch (status) {
+    case 'delivered': return { label: 'Ready to review', fg: C.violet, bg: C.violetBg }
+    case 'approved': return { label: 'Approved', fg: C.greenDk, bg: C.greenSoft }
+    case 'revision': return { label: 'Changes sent', fg: C.blue, bg: C.blueBg }
+    case 'declined': return { label: 'Cancelled', fg: C.mute, bg: C.chip }
+    default: return { label: 'In progress', fg: C.blue, bg: C.blueBg } // accepted, in_progress
+  }
+}
+
+/** One deliverable row in a multi-delivery booking: its title, status, price, and — when it's
+ *  delivered — its own Approve / Ask-for-changes (each piece bills only when it is approved). */
+function DeliverableRow({ d, busy, onApprove, onChanges }: { d: BookingDeliverable; busy: boolean; onApprove: () => void; onChanges: (note: string) => void }) {
+  const [showCh, setShowCh] = useState(false)
+  const [note, setNote] = useState('')
+  const lab = workLabel(d.status)
+  const link = safeLink(d.deliveredUrl)
+  const amt = money(d.amountCents)
+  return (
+    <div style={{ borderTop: `0.5px solid ${C.line}`, marginTop: 10, paddingTop: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title || 'Delivery'}</span>
+        <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', borderRadius: 99, padding: '2px 8px', fontSize: 10, fontWeight: 700, letterSpacing: '.02em', textTransform: 'uppercase', background: lab.bg, color: lab.fg }}>{lab.label}</span>
+      </div>
+      {amt && <div style={{ fontSize: 11.5, color: C.mute, marginTop: 2 }}>{d.status === 'approved' ? `Billed ${amt}` : `Bills ${amt} on approve`}</div>}
+      {d.status === 'delivered' && (
+        <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {link && <a href={link} target="_blank" rel="noreferrer" style={{ ...BTN_GHOST, textDecoration: 'none' }}><ExternalLink size={13} /> View</a>}
+          <button onClick={onApprove} disabled={busy} style={{ ...BTN_PRIMARY, opacity: busy ? 0.5 : 1 }}>{busy ? <Loader2 size={14} className="mvp-spin" /> : <Check size={14} />} Approve</button>
+          <button onClick={() => setShowCh(!showCh)} disabled={busy} style={{ ...BTN_GHOST, opacity: busy ? 0.5 : 1 }}>Changes</button>
+        </div>
+      )}
+      {showCh && d.status === 'delivered' && (
+        <div style={{ marginTop: 8 }}>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="What should the creator change?" className="mvp-input"
+            style={{ width: '100%', boxSizing: 'border-box', borderRadius: 11, border: `0.5px solid ${C.line}`, padding: '9px 11px', fontSize: 13, color: C.ink, fontFamily: 'inherit', outline: 'none', resize: 'vertical' }} />
+          <button onClick={() => { onChanges(note.trim()); setShowCh(false); setNote('') }} disabled={busy || !note.trim()}
+            style={{ marginTop: 8, padding: '8px 14px', borderRadius: 11, border: 'none', background: C.ink, color: '#fff', fontSize: 13.5, fontWeight: 700, fontFamily: 'inherit', cursor: 'pointer', opacity: busy || !note.trim() ? 0.4 : 1 }}>Send changes</button>
+        </div>
+      )}
+      {d.status === 'approved' && link && (
+        <a href={link} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 12, color: C.mute, textDecoration: 'none' }}><ExternalLink size={12} /> View work</a>
+      )}
+    </div>
   )
 }

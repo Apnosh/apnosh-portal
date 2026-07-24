@@ -321,6 +321,20 @@ function OfferForm({ initial, onCancel, onSaved }: { initial: CreatorPackage; on
         )}
       </Section>
 
+      {/* Deliveries — the separate pieces this offer hands over, each tracked on its own */}
+      <Section title="Separate deliveries" hint="List each piece you hand over on its own, like Reel 1, Reel 2. Leave it empty if it's one handoff. The price splits evenly across them, and each is delivered and approved on its own.">
+        {p.deliveries.map((d, i) => (
+          <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <div style={{ flex: 1 }}><TextInput value={d.label} onChange={(v) => set({ deliveries: p.deliveries.map((x, n) => (n === i ? { ...x, label: v } : x)) })} placeholder="Reel 1" /></div>
+            <div style={{ width: 108 }}><NumberInput value={d.offsetDays == null ? '' : String(d.offsetDays)} onChange={(v) => set({ deliveries: p.deliveries.map((x, n) => (n === i ? { ...x, offsetDays: wholeOrNull(v) } : x)) })} placeholder="days later" /></div>
+            <IconBtn title="Remove" onClick={() => set({ deliveries: p.deliveries.filter((_, n) => n !== i) })}><X size={16} color={FAINT} /></IconBtn>
+          </div>
+        ))}
+        <button type="button" onClick={() => set({ deliveries: [...p.deliveries, { id: `del-${Date.now()}-${p.deliveries.length}`, label: '', offsetDays: null }] })} style={linkBtn}>
+          <Plus size={14} /> Add a delivery
+        </button>
+      </Section>
+
       {/* 5 — Add-ons */}
       <Section title="Add-ons they can pick" hint="Optional extras, each with a price on top.">
         {p.options.map((o, i) => (

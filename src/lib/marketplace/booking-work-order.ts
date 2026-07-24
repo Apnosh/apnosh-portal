@@ -86,6 +86,24 @@ function shootDayLabel(iso: string | null): string | null {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
+/** Split `total` cents into `n` whole-cent parts that sum EXACTLY to total (the last part takes the
+ *  remainder). So N deliveries of one booking bill, together, exactly the price the restaurant agreed. */
+function splitCents(total: number, n: number): number[] {
+  if (n <= 0) return []
+  const base = Math.floor(total / n)
+  const out = Array(n).fill(base)
+  out[n - 1] = total - base * (n - 1)
+  return out
+}
+
+/** ISO date `offset` days after `iso` (null-safe). Used to stagger a delivery's due date. */
+function addDaysISO(iso: string | null, offset: number): string | null {
+  if (!iso) return iso
+  const t = Date.parse(`${iso}T00:00:00Z`)
+  if (!Number.isFinite(t)) return iso
+  return new Date(t + offset * 86400000).toISOString().slice(0, 10)
+}
+
 /** The price the restaurant agreed to: an accepted quote wins, else the booked tier, else the
  *  listing's starting price, else 0 (an unpriced quote — the approval path flags it for staff). */
 function resolvePriceCents(meta: CreatorBookingMeta, listing: ListingRow | null): number {
@@ -145,96 +163,125 @@ export async function mintBookingWorkOrder(bookingId: string, opts?: { month?: n
     const amountCents = resolvePriceCents(meta, (listing as ListingRow) ?? null)
     const category = listing ? (listing.category as string) : ''
     const shape: BookingShapeKind = meta.shape ?? 'scheduled'
-
     const discipline = ((vendor.craft as string | null) || CATEGORY_TO_DISCIPLINE[category] || 'Photo')
     const monthTag = month && month > 1 ? ` · month ${month}` : ''
-    const title = (meta.tierName ? `${meta.listingTitle} · ${meta.tierName}` : meta.listingTitle) + monthTag
-    const dueISO = opts?.dueDateISO ?? ((b.slot_date as string) ?? null)
-    const dayLabel = shootDayLabel(dueISO)
+    const baseTitle = (meta.tierName ? `${meta.listingTitle} · ${meta.tierName}` : meta.listingTitle) + monthTag
+    const baseDueISO = opts?.dueDateISO ?? ((b.slot_date as string) ?? null)
     const intakeLines = Object.entries(meta.intake).filter(([, v]) => typeof v === 'string' && v.trim())
     const dueWord = shape === 'scheduled' ? 'Shoot day' : shape === 'recurring' ? 'This month' : 'Deliver by'
-    const brief = [
-      `${shape === 'recurring' ? 'Monthly plan' : shape === 'quote' ? 'Custom job' : shape === 'async' ? 'Booked work' : 'Booked shoot'}: ${title}.`,
-      dayLabel ? `${dueWord}: ${dayLabel}.` : '',
-      ...intakeLines.map(([q, v]) => `${q}: ${v}.`),
-      'Deliver the finished work here when it is ready — the restaurant reviews and approves it.',
-    ].filter(Boolean).join(' ')
+    const shapeWord = shape === 'recurring' ? 'Monthly plan' : shape === 'quote' ? 'Custom job' : shape === 'async' ? 'Booked work' : 'Booked shoot'
 
-    const row: Record<string, unknown> = {
-      campaign_id: null,
-      client_id: b.client_id as string,
-      creator_id: meta.vendorId,
-      vendor_id: meta.vendorId,
-      discipline,
-      slot: 0,
-      title,
-      brief,
-      due_date: dueISO,
-      status: 'accepted',
-      concept_status: 'approved',
-      amount_cents: amountCents,
-      campaign_piece_key: key,
-      surcharge_cents: 0,
+    // Build one work-order row for a single piece (title, its own due date, its own price share, key).
+    const buildRow = (pieceTitle: string, pieceDueISO: string | null, pieceAmount: number, pieceKey: string): Record<string, unknown> => {
+      const dayLabel = shootDayLabel(pieceDueISO)
+      const brief = [
+        `${shapeWord}: ${pieceTitle}.`,
+        dayLabel ? `${dueWord}: ${dayLabel}.` : '',
+        ...intakeLines.map(([q, v]) => `${q}: ${v}.`),
+        'Deliver the finished work here when it is ready — the restaurant reviews and approves it.',
+      ].filter(Boolean).join(' ')
+      return {
+        campaign_id: null, client_id: b.client_id as string, creator_id: meta.vendorId, vendor_id: meta.vendorId,
+        discipline, slot: 0, title: pieceTitle, brief, due_date: pieceDueISO, status: 'accepted',
+        concept_status: 'approved', amount_cents: pieceAmount, campaign_piece_key: pieceKey, surcharge_cents: 0,
+      }
     }
 
-    let { data, error } = await admin.from('creator_work_orders').insert(row).select('id').single()
-    if (error && (error as { code?: string }).code === '42703') {
-      const stripped = { ...row }
-      delete stripped.surcharge_cents
-      ;({ data, error } = await admin.from('creator_work_orders').insert(stripped).select('id').single())
+    // Insert one row, tolerating a missing surcharge_cents column (42703) and a concurrent duplicate
+    // (23505, unique on campaign_piece_key, migration 227 → return the winner). Returns id or null.
+    const insertRow = async (row: Record<string, unknown>, pieceKey: string): Promise<string | null> => {
+      let { data, error } = await admin.from('creator_work_orders').insert(row).select('id').single()
+      if (error && (error as { code?: string }).code === '42703') {
+        const stripped = { ...row }; delete stripped.surcharge_cents
+        ;({ data, error } = await admin.from('creator_work_orders').insert(stripped).select('id').single())
+      }
+      if (error && (error as { code?: string }).code === '23505') {
+        const { data: ex } = await admin.from('creator_work_orders').select('id').eq('campaign_piece_key', pieceKey).is('campaign_id', null).maybeSingle()
+        return (ex?.id as string) ?? null
+      }
+      if (error || !data) return null
+      return data.id as string
     }
-    // A concurrent mint for the same booking/month won the race (unique on campaign_piece_key,
-    // migration 227) — return the order it created instead of a duplicate. Idempotent by construction.
-    if (error && (error as { code?: string }).code === '23505') {
-      const { data: existing } = await admin.from('creator_work_orders').select('id').eq('campaign_piece_key', key).is('campaign_id', null).maybeSingle()
-      return (existing?.id as string) ?? null
+
+    // MULTI-DELIVERY: an offer with >= 2 separate deliveries mints one tracked order per piece (one-
+    // shot shapes only — a recurring month always stays one order, keyed by month). The level price
+    // splits evenly and cent-conserved, so the pieces together bill exactly the agreed price. The
+    // per-delivery key uses `#d<n>` — distinct from the recurring `#<month>` so the two never collide.
+    const deliveries = (!month && listing) ? rowToPackage(listing as ListingRow).deliveries : []
+    if (deliveries.length >= 2) {
+      const amounts = splitCents(amountCents, deliveries.length)
+      let firstId: string | null = null
+      for (let i = 0; i < deliveries.length; i++) {
+        const d = deliveries[i]
+        const pieceKey = `booking:${bookingId}#d${i + 1}`
+        const { data: has } = await admin.from('creator_work_orders').select('id').eq('campaign_piece_key', pieceKey).is('campaign_id', null).limit(1).maybeSingle()
+        if (has?.id) { firstId = firstId ?? (has.id as string); continue }
+        const pieceDue = d.offsetDays != null ? addDaysISO(baseDueISO, d.offsetDays) : baseDueISO
+        const id = await insertRow(buildRow(`${baseTitle} · ${d.label}`, pieceDue, amounts[i], pieceKey), pieceKey)
+        if (id && !firstId) firstId = id
+      }
+      return firstId
     }
-    if (error || !data) return null
-    return data.id as string
+
+    // SINGLE handoff (the default) or a recurring month: one order on the bare / #month key.
+    return await insertRow(buildRow(baseTitle, baseDueISO, amountCents, key), key)
   } catch {
     return null
   }
 }
 
-/** One booking's live work state, for the restaurant's bookings list. For a recurring booking this is
- *  the LATEST month's order (the one the restaurant acts on now). */
+/** One deliverable behind a booking, for the restaurant's bookings list. A single-handoff booking has
+ *  one; a multi-delivery booking (or an accruing monthly plan) has several, each its own deliver +
+ *  approve + charge. */
 export interface BookingWork {
   orderId: string
+  title: string
   status: string
   deliveredUrl: string | null
   amountCents: number
-  month: number | null
+  dueDate: string | null
 }
 
-/** Read work state for a set of bookings, keyed by booking id (only bookings that have an order
- *  appear). Recurring bookings collapse to their newest month. */
-export async function workOrdersForBookings(bookingIds: string[]): Promise<Record<string, BookingWork>> {
+/** Where a booking-order key sits in its booking, for ordering: bare = 0; `#d<n>` = n (a delivery
+ *  slot); `#<m>` = m (a recurring month). Deliveries and months never coexist on one booking. */
+function keySeq(key: string): number {
+  const hash = key.indexOf('#')
+  if (hash < 0) return 0
+  const suffix = key.slice(hash + 1)
+  return (suffix.startsWith('d') ? Number(suffix.slice(1)) : Number(suffix)) || 0
+}
+
+/** Read the deliverables for a set of bookings, keyed by booking id, each list ordered by piece
+ *  (delivery slot or month). Only bookings that have at least one order appear. */
+export async function workOrdersForBookings(bookingIds: string[]): Promise<Record<string, BookingWork[]>> {
   if (!bookingIds.length) return {}
   try {
     const admin = createAdminClient()
-    // Match both the bare key and any `#month` variant. `like` per id keeps it simple and index-free.
+    // Match the bare key and any `#…` variant (delivery slots or months). `like` per id, index-free.
     const orFilter = bookingIds.map((id) => `campaign_piece_key.like.booking:${id}*`).join(',')
     const { data } = await admin
       .from('creator_work_orders')
-      .select('id, campaign_piece_key, status, delivered_url, amount_cents')
+      .select('id, campaign_piece_key, title, status, delivered_url, amount_cents, due_date')
       .or(orFilter)
-    const out: Record<string, BookingWork> = {}
+    const tmp: Record<string, Array<{ w: BookingWork; seq: number }>> = {}
     for (const r of (data ?? []) as Array<Record<string, unknown>>) {
       const key = (r.campaign_piece_key as string) || ''
       const id = bookingIdFromKey(key)
       if (!id || !bookingIds.includes(id)) continue
-      const month = key.includes('#') ? Number(key.split('#')[1]) || 1 : 1
-      const prev = out[id]
-      if (!prev || month >= (prev.month ?? 1)) {
-        out[id] = {
+      ;(tmp[id] ??= []).push({
+        seq: keySeq(key),
+        w: {
           orderId: r.id as string,
+          title: (r.title as string) ?? '',
           status: (r.status as string) ?? '',
           deliveredUrl: (r.delivered_url as string) ?? null,
           amountCents: (r.amount_cents as number) ?? 0,
-          month,
-        }
-      }
+          dueDate: (r.due_date as string) ?? null,
+        },
+      })
     }
+    const out: Record<string, BookingWork[]> = {}
+    for (const id of Object.keys(tmp)) out[id] = tmp[id].sort((a, b) => a.seq - b.seq).map((x) => x.w)
     return out
   } catch {
     return {}
@@ -264,7 +311,9 @@ export async function redateBookingWorkOrder(bookingId: string, newDateISO: stri
     await admin
       .from('creator_work_orders')
       .update({ due_date: newDateISO, updated_at: new Date().toISOString() })
-      .eq('campaign_piece_key', bookingOrderKey(bookingId))
+      // The single handoff (bare key) and every delivery slot (#d<n>), but not recurring months
+      // (#<m>), which carry their own per-month dates.
+      .or(`campaign_piece_key.eq.booking:${bookingId},campaign_piece_key.like.booking:${bookingId}#d%`)
       .in('status', ['offered', 'accepted', 'in_progress', 'revision'])
   } catch { /* a reschedule never fails because the re-date did */ }
 }

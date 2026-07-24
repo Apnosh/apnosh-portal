@@ -31,7 +31,7 @@ function pkg(over: Partial<CreatorPackage> = {}): CreatorPackage {
     deliverables: ['3 vertical reels', '1 hero cut for ads'],
     tiers: [],
     options: [{ id: 'o1', label: 'Extra reel', priceDeltaCents: 12000 }],
-    turnaroundDays: 10, revisions: 2, photos: [], intake: [], bookingShape: 'scheduled', active: true, ...over,
+    turnaroundDays: 10, revisions: 2, photos: [], intake: [], bookingShape: 'scheduled', deliveries: [], active: true, ...over,
   }
 }
 

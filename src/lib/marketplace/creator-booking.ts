@@ -269,12 +269,22 @@ export async function getMyCreatorBookings(): Promise<ClientBooking[]> {
       quotedCents: m!.quotedCents ?? null,
       quoteStatus: m!.quoteStatus ?? null,
     }))
-    // Attach each booking's deliverable state (order id + status + delivered link) so the list can
-    // show "in progress / ready to review / approved" and the approve gate, all from one extra query.
+    // Attach each booking's deliverables (one for a single handoff, several for a multi-delivery
+    // offer or an accruing monthly plan) so the list can show each piece's state + approve gate.
     const work = await workOrdersForBookings(base.map((x) => x.id))
     return base.map((x) => {
-      const w = work[x.id]
-      return { ...x, orderId: w?.orderId ?? null, workStatus: w?.status ?? null, deliveredUrl: w?.deliveredUrl ?? null, amountCents: w?.amountCents ?? null }
+      const list = work[x.id] ?? []
+      // Lead deliverable = what to act on first: something delivered to review, else the first not-yet-
+      // approved piece, else the first. Mirrored into the singular fields for the single-delivery UI.
+      const lead = list.find((w) => w.status === 'delivered') ?? list.find((w) => w.status !== 'approved') ?? list[0] ?? null
+      return {
+        ...x,
+        deliverables: list,
+        orderId: lead?.orderId ?? null,
+        workStatus: lead?.status ?? null,
+        deliveredUrl: lead?.deliveredUrl ?? null,
+        amountCents: lead?.amountCents ?? null,
+      }
     })
   } catch { return [] }
 }

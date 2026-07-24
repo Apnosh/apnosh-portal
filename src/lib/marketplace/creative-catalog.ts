@@ -399,6 +399,7 @@ export function packageFromProduct(p: CreativeProduct): CreatorPackage {
     photos: [],
     intake,
     bookingShape: p.bookingShape,
+    deliveries: [],
     active: false,
   }
 }

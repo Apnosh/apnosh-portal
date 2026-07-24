@@ -45,6 +45,18 @@ export type HoldSlotResult =
   | { ok: true; bookingId: string; status: 'held' | 'confirmed'; confirmMode: ConfirmMode; date: string; start: string; end: string; timezone: string }
   | { ok: false; needsLogin?: boolean; code?: 'slot_taken' | 'no_rule' | 'setup' | 'error'; error: string }
 
+/** One deliverable behind a booking (client-safe mirror of BookingWork). A single-handoff booking
+ *  has one; a multi-delivery booking (or an accruing monthly plan) has several, each delivered +
+ *  approved + billed on its own. */
+export interface BookingDeliverable {
+  orderId: string
+  title: string
+  status: string
+  deliveredUrl: string | null
+  amountCents: number
+  dueDate: string | null
+}
+
 /** One of the current restaurant's creator bookings (their side of the shared status). */
 export interface ClientBooking {
   id: string
@@ -66,6 +78,10 @@ export interface ClientBooking {
   workStatus?: string | null
   deliveredUrl?: string | null
   amountCents?: number | null
+  /** Every deliverable behind this booking (one for a single handoff, several for a multi-delivery
+   *  offer or an accruing monthly plan). The singular fields above mirror the "lead" (most-actionable)
+   *  one for the single-delivery UI. */
+  deliverables: BookingDeliverable[]
   /** Which booking shape this is: scheduled | async | recurring | quote (absent = scheduled). */
   shape?: string | null
   /** Quote jobs only: the price the creator named (cents), and where the quote is

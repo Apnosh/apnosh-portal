@@ -51,6 +51,17 @@ export interface IntakeItem {
   required?: boolean
 }
 
+/** One piece the creator hands over on its own — its own delivery, delivered + approved + paid
+ *  separately. An offer with an empty deliveries list is a single handoff (the default). When set,
+ *  a booking mints one tracked work order per delivery and splits the level's price across them. */
+export interface Delivery {
+  id: string
+  /** What this piece is ("Reel 1", "Edited photos"). */
+  label: string
+  /** Days after the booking (or shoot day) this piece is due. null/absent = same day. */
+  offsetDays?: number | null
+}
+
 /** One toggle-able add-on. Its price is added to the base, never subtracted. */
 export interface PackageOption {
   id: string
@@ -102,6 +113,9 @@ export interface CreatorPackage {
   intake: IntakeItem[]
   /** How this offer is delivered/booked. null = fall back to the category guess (legacy rows). */
   bookingShape: BookingShape | null
+  /** The separate pieces this offer hands over. Empty = one handoff. When set, a booking mints one
+   *  tracked delivery per item and splits the price across them. Stored in details.deliveries. */
+  deliveries: Delivery[]
   active: boolean
 }
 
@@ -132,6 +146,7 @@ interface PackageDetails {
   intake?: unknown
   bookingShape?: unknown
   categories?: unknown
+  deliveries?: unknown
 }
 
 /** A URL-safe slug from a title. Deterministic, so the same title always maps to the same slug
@@ -210,6 +225,9 @@ export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
       .filter((q) => q.label),
     bookingShape: p.bookingShape,
     categories: (p.categories.length ? p.categories : [p.category]).filter((c) => (PACKAGE_CATEGORIES as readonly string[]).includes(c)),
+    deliveries: p.deliveries
+      .map((d) => ({ id: d.id, label: d.label.trim(), ...(typeof d.offsetDays === 'number' && d.offsetDays > 0 ? { offsetDays: Math.round(d.offsetDays) } : {}) }))
+      .filter((d) => d.label),
   }
   return {
     ...(p.id ? { id: p.id } : {}),
@@ -273,6 +291,16 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
     : []
   const bookingShape: BookingShape | null = (['scheduled', 'async', 'recurring'] as const).includes(d.bookingShape as BookingShape)
     ? (d.bookingShape as BookingShape) : null
+  const deliveries: Delivery[] = Array.isArray(d.deliveries)
+    ? d.deliveries.flatMap((x, i) => {
+        if (!x || typeof x !== 'object') return []
+        const xx = x as Record<string, unknown>
+        const label = typeof xx.label === 'string' ? xx.label : ''
+        if (!label.trim()) return []
+        const offset = typeof xx.offsetDays === 'number' && Number.isInteger(xx.offsetDays) && xx.offsetDays > 0 ? xx.offsetDays : null
+        return [{ id: typeof xx.id === 'string' ? xx.id : `del-${i}`, label, ...(offset != null ? { offsetDays: offset } : {}) }]
+      })
+    : []
   const cat = (PACKAGE_CATEGORIES as readonly string[]).includes(row.category) ? (row.category as PackageCategory) : 'other'
   const parsedCats = Array.isArray(d.categories)
     ? d.categories.filter((x): x is PackageCategory => typeof x === 'string' && (PACKAGE_CATEGORIES as readonly string[]).includes(x))
@@ -300,6 +328,7 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
     photos,
     intake,
     bookingShape,
+    deliveries,
     active: row.active ?? true,
   }
 }
@@ -343,6 +372,6 @@ export function emptyPackage(category: PackageCategory = 'videographer'): Creato
   return {
     slug: '', title: '', category, categories: [category], listingType: 'one_off', description: '', productId: null,
     priceCents: null, billingPeriod: 'one_time', deliverables: [], tiers: [], options: [],
-    turnaroundDays: null, revisions: null, photos: [], intake: [], bookingShape: 'scheduled', active: false,
+    turnaroundDays: null, revisions: null, photos: [], intake: [], bookingShape: 'scheduled', deliveries: [], active: false,
   }
 }
