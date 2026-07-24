@@ -210,8 +210,8 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
                       <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', borderRadius: 99, padding: '3px 9px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em', textTransform: 'uppercase', background: tone.bg, color: tone.fg }}>{phase.label}</span>
                     </div>
 
-                    {/* Requirements the restaurant filled in — viewable and editable any time. */}
-                    <ClientIntake bookingId={b.id} intake={b.intake} />
+                    {/* Requirements — every offer question, fillable any time (answered or skipped). */}
+                    <ClientIntake bookingId={b.id} intake={b.intake} questions={b.questions} />
 
                     {/* Delivered → the review panel: see the work, approve, or ask for changes. */}
                     {phase.key === 'delivered' && b.deliverables.length <= 1 && (
@@ -380,16 +380,20 @@ function DeliverableRow({ d, busy, onApprove, onChanges }: { d: BookingDeliverab
   )
 }
 
-/** The requirements the restaurant filled in for a booking — shown as question + answer, and editable
- *  any time after booking (fill-anytime). Only the answers that exist can be edited; nothing to show
- *  means nothing renders. Saves back into the booking's note via updateBookingIntake. */
-function ClientIntake({ bookingId, intake }: { bookingId: string; intake: Record<string, string> }) {
-  const [vals, setVals] = useState<Record<string, string>>(intake)
+/** The requirements on a booking: every question the offer asks, with the restaurant's answers, and
+ *  editable any time — so it can fill in ones it skipped at booking, not just the ones it answered.
+ *  Saves back into the booking's note via updateBookingIntake. Renders nothing if the offer asked
+ *  nothing. */
+function ClientIntake({ bookingId, intake, questions }: { bookingId: string; intake: Record<string, string>; questions: string[] }) {
+  // Show the offer's questions first, then any extra answered keys (legacy, or the notes field).
+  const allQ = [...questions, ...Object.keys(intake).filter((k) => !questions.includes(k))]
+  const seed = () => Object.fromEntries(allQ.map((q) => [q, intake[q] ?? '']))
+  const [vals, setVals] = useState<Record<string, string>>(seed)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [err, setErr] = useState('')
   const entries = Object.entries(vals).filter(([, v]) => v)
-  if (!editing && entries.length === 0) return null
+  if (allQ.length === 0) return null
 
   async function save() {
     setSaving(true); setErr('')
@@ -399,33 +403,37 @@ function ClientIntake({ bookingId, intake }: { bookingId: string; intake: Record
     else setErr(res.error ?? 'Could not save.')
   }
 
+  const hasMissing = allQ.some((q) => !(vals[q] ?? '').trim())
+
   return (
     <div style={{ margin: '11px 0 0', padding: '11px 0 0', borderTop: `0.5px solid ${C.line}` }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: editing ? 8 : 5 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: C.faint }}>What you told them</span>
-        {!editing && <button onClick={() => setEditing(true)} style={{ fontSize: 12, fontWeight: 600, color: C.greenDk, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Edit</button>}
+        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: C.faint }}>What they need from you</span>
+        {!editing && <button onClick={() => setEditing(true)} style={{ fontSize: 12, fontWeight: 600, color: C.greenDk, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{entries.length ? (hasMissing ? 'Add more' : 'Edit') : 'Add details'}</button>}
       </div>
       {editing ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-          {Object.keys(vals).map((q) => (
+          {allQ.map((q) => (
             <div key={q}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.ink, marginBottom: 3 }}>{q}</label>
-              <textarea value={vals[q]} onChange={(e) => setVals({ ...vals, [q]: e.target.value })} rows={2} className="mvp-input"
+              <textarea value={vals[q] ?? ''} onChange={(e) => setVals({ ...vals, [q]: e.target.value })} rows={2} className="mvp-input"
                 style={{ width: '100%', boxSizing: 'border-box', borderRadius: 10, border: `0.5px solid ${C.line}`, padding: '8px 10px', fontSize: 13, color: C.ink, fontFamily: 'inherit', outline: 'none', resize: 'vertical' }} />
             </div>
           ))}
           {err && <div style={{ fontSize: 12, color: C.coral }}>{err}</div>}
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={save} disabled={saving} style={{ ...BTN_PRIMARY, opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
-            <button onClick={() => { setVals(intake); setEditing(false); setErr('') }} disabled={saving} style={BTN_TEXT}>Cancel</button>
+            <button onClick={() => { setVals(seed()); setEditing(false); setErr('') }} disabled={saving} style={BTN_TEXT}>Cancel</button>
           </div>
         </div>
-      ) : (
+      ) : entries.length ? (
         <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
           {entries.map(([q, v], i) => (
             <li key={i} style={{ fontSize: 12, color: C.mute, display: 'flex', gap: 7 }}><span style={{ color: C.faint }}>•</span> <span><span style={{ color: C.ink, fontWeight: 600 }}>{q}</span> {v}</span></li>
           ))}
         </ul>
+      ) : (
+        <div style={{ fontSize: 12, color: C.mute }}>The creator has {allQ.length} question{allQ.length === 1 ? '' : 's'} for you. Tap Add details to answer.</div>
       )}
     </div>
   )

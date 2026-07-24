@@ -71,6 +71,9 @@ export interface ClientBooking {
   /** The requirements the restaurant filled in at booking, as question -> answer (the map key is the
    *  creator's question). Empty when nothing was asked. Lets the restaurant see what they told the creator. */
   intake: Record<string, string>
+  /** The offer's FULL question list (labels, in order), so the restaurant can fill in any it skipped
+   *  at booking, not just the ones it already answered. */
+  questions: string[]
   /** The deliverable behind a confirmed booking (once the bridge mints one): the work order id, its
    *  status (accepted | in_progress | delivered | approved | revision | declined), and the delivered
    *  link. null until a work order exists (a held request has none yet). */

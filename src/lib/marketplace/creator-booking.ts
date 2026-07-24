@@ -24,6 +24,7 @@ import {
 } from './creator-schedule'
 import type { HoldSlotInput, HoldSlotResult, IncomingBooking, ClientBooking, SimpleBookingResult, QuoteRequest } from './creator-schedule-types'
 import { mintBookingWorkOrder, voidBookingWorkOrder, redateBookingWorkOrder, workOrdersForBookings } from './booking-work-order'
+import { rowToPackage, type ListingRow } from './package'
 
 const HOLD_TTL_MS = 24 * 60 * 60 * 1000 // a request-mode hold waits a day on the creator
 
@@ -254,6 +255,18 @@ export async function getMyCreatorBookings(): Promise<ClientBooking[]> {
       const { data: vs } = await admin.from('vendors').select('id, name').in('id', vendorIds)
       for (const v of vs ?? []) nameById.set(v.id as string, (v.name as string) ?? '')
     }
+    // The offer's full question list per booking (vendorId::slug), so the restaurant can fill in
+    // questions it skipped at booking, not just the ones it already answered.
+    const questionsByKey = new Map<string, string[]>()
+    if (vendorIds.length) {
+      const { data: ls } = await admin.from('vendor_listings')
+        .select('vendor_id, slug, title, category, listing_type, description, price_cents, billing_period, details, active')
+        .in('vendor_id', vendorIds)
+      for (const l of ls ?? []) {
+        const pkg = rowToPackage(l as ListingRow)
+        questionsByKey.set(`${l.vendor_id as string}::${l.slug as string}`, pkg.intake.map((q) => q.label))
+      }
+    }
     const base = metas.map(({ r, m }) => ({
       id: r.id as string,
       status: r.status as string,
@@ -265,6 +278,7 @@ export async function getMyCreatorBookings(): Promise<ClientBooking[]> {
       listingTitle: m!.listingTitle,
       tierName: m!.tierName,
       intake: m!.intake ?? {},
+      questions: questionsByKey.get(`${m!.vendorId}::${m!.listingSlug}`) ?? [],
       shape: m!.shape ?? 'scheduled',
       quotedCents: m!.quotedCents ?? null,
       quoteStatus: m!.quoteStatus ?? null,
