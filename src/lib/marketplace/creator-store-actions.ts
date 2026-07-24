@@ -15,6 +15,7 @@
  * deliberately, so this surface carries no financial risk while the shelf fills up.
  */
 
+import { cache } from 'react'
 import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -22,6 +23,9 @@ import {
   validatePackage, packageToRow, rowToPackage,
   type CreatorPackage, type ListingRow,
 } from './package'
+import { dispatchForSkills } from './creator-skills'
+
+const US_STATES = new Set(['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'])
 
 export interface MyStore {
   vendor: { id: string; name: string; slug: string; craft: string | null; bookable: boolean } | null
@@ -31,7 +35,7 @@ export interface MyStore {
 /** The logged-in creator's vendor id, or null when the caller is not a linked creator. The one
  *  place identity is resolved, so every action below trusts the same answer. `bookable` tells the
  *  editor whether they're live in the store yet (self-serve creators start pending an admin review). */
-async function myVendorId(): Promise<{ id: string; name: string; slug: string; craft: string | null; bookable: boolean } | null> {
+const myVendorId = cache(async (): Promise<{ id: string; name: string; slug: string; craft: string | null; bookable: boolean } | null> => {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
@@ -42,7 +46,7 @@ async function myVendorId(): Promise<{ id: string; name: string; slug: string; c
     .eq('person_id', user.id)
     .maybeSingle()
   return data ? { id: data.id, name: data.name, slug: data.slug, craft: (data.craft as string | null) ?? null, bookable: data.bookable !== false } : null
-}
+})
 
 /** Everything the storefront editor needs on load: who the creator is, and their packages. */
 export async function getMyStore(): Promise<MyStore> {
@@ -111,5 +115,74 @@ export async function deleteMyPackage(id: string): Promise<{ ok: boolean }> {
   const { error } = await admin.from('vendor_listings').delete().eq('id', id).eq('vendor_id', vendor.id)
   if (error) return { ok: false }
   revalidatePath('/creator/storefront')
+  return { ok: true }
+}
+
+/* ── the creator's own PROFILE (name, bio, skills, area, style) — read + edit ─────────────── */
+
+export interface MyProfile {
+  id: string
+  name: string
+  slug: string
+  bookable: boolean
+  bio: string
+  skills: string[]
+  serviceArea: string[]
+  styleTags: string[]
+  portfolioLinks: string[]
+}
+
+/** The logged-in creator's editable profile fields, or null when they're not a creator. */
+export async function getMyCreatorProfile(): Promise<MyProfile | null> {
+  const vendor = await myVendorId()
+  if (!vendor) return null
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('vendors')
+    .select('id, name, slug, bookable, description, crafts, service_area, style_tags, portfolio_links')
+    .eq('id', vendor.id)
+    .maybeSingle()
+  if (!data) return null
+  const arr = (v: unknown): string[] => (Array.isArray(v) ? (v as string[]) : [])
+  return {
+    id: data.id as string,
+    name: (data.name as string) ?? '',
+    slug: (data.slug as string) ?? '',
+    bookable: data.bookable !== false,
+    bio: (data.description as string | null) ?? '',
+    skills: arr(data.crafts),
+    serviceArea: arr(data.service_area),
+    styleTags: arr(data.style_tags),
+    portfolioLinks: arr(data.portfolio_links),
+  }
+}
+
+/** Update the creator's own profile. Scoped to their vendor; keeps the scalar `craft` (dispatch key)
+ *  in sync with the primary skill so campaign routing stays correct. */
+export async function updateMyProfile(input: { name: string; bio: string; skills: string[]; serviceArea: string[]; styleTags: string[]; portfolioLinks?: string[] }): Promise<{ ok: boolean; error?: string }> {
+  const vendor = await myVendorId()
+  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+  const name = (input.name ?? '').trim()
+  if (!name) return { ok: false, error: 'Add your name.' }
+  const skills = (input.skills ?? []).filter(Boolean)
+  if (!skills.length) return { ok: false, error: 'Pick at least one thing you do.' }
+  const areas = (input.serviceArea ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean)
+  if (!areas.length) return { ok: false, error: 'Add where you work, like WA.' }
+  const badArea = areas.find((a) => !US_STATES.has(a))
+  if (badArea) return { ok: false, error: `"${badArea}" is not a state code. Use 2-letter codes like WA or OR.` }
+
+  const admin = createAdminClient()
+  const { error } = await admin.from('vendors').update({
+    name,
+    description: input.bio?.trim() || null,
+    craft: dispatchForSkills(skills),
+    crafts: skills,
+    service_area: areas,
+    style_tags: (input.styleTags ?? []).filter(Boolean),
+    ...(input.portfolioLinks ? { portfolio_links: input.portfolioLinks.map((l) => l.trim()).filter(Boolean) } : {}),
+    updated_at: new Date().toISOString(),
+  }).eq('id', vendor.id)
+  if (error) return { ok: false, error: 'Could not save. Try again.' }
+  revalidatePath('/creator/account'); revalidatePath('/creator/account/profile'); revalidatePath(`/marketplace/${vendor.slug}`)
   return { ok: true }
 }

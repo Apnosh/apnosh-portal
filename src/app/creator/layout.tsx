@@ -7,7 +7,9 @@
  * frame, so the whole creator experience feels like one mobile app, matching the restaurant's.
  */
 
+import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { User } from 'lucide-react'
 import CreatorNav, { type CKey } from '@/components/creator/creator-nav'
 
 const SHELL_CSS = `
@@ -35,10 +37,18 @@ function activeOf(path: string): CKey {
 
 export default function CreatorLayout({ children }: { children: React.ReactNode }) {
   const path = usePathname()
+  const onAccount = path.startsWith('/creator/account')
   return (
     <div className="creator-shell">
       <style>{SHELL_CSS}</style>
       <div className="creator-frame">
+        {/* Top bar: brand + the account door (was missing entirely — no profile/sign-out anywhere). */}
+        <header style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: '1px solid #e6e6ea', background: '#fff' }}>
+          <Link href="/creator/work" style={{ fontFamily: "'Cal Sans','Inter',sans-serif", fontWeight: 600, fontSize: 15.5, color: '#1d1d1f', textDecoration: 'none', letterSpacing: '-0.2px' }}>Apnosh <span style={{ color: '#2e9a78' }}>Creators</span></Link>
+          <Link href="/creator/account" aria-label="Your account" style={{ width: 32, height: 32, borderRadius: '50%', background: onAccount ? '#4abd98' : '#eaf7f3', border: `1px solid ${onAccount ? '#4abd98' : 'rgba(74,189,152,0.32)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: onAccount ? '#fff' : '#2e9a78', flexShrink: 0 }}>
+            <User size={17} />
+          </Link>
+        </header>
         <div className="creator-scroll">{children}</div>
         <CreatorNav active={activeOf(path)} />
       </div>

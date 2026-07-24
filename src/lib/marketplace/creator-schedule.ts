@@ -17,6 +17,7 @@ import 'server-only'
  * availability", so a restaurant sees honest request-mode, never a fabricated slot.
  */
 
+import { cache } from 'react'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { computeOpenSlots } from '@/lib/campaigns/gates/availability'
@@ -37,15 +38,17 @@ export function confirmLabel(mode: ConfirmMode): string {
   return `confirm:${mode}`
 }
 
-/** The current logged-in creator's vendor, or null. Identity from the session, never the request. */
-export async function currentVendor(): Promise<{ id: string; name: string; slug: string; craft: string | null } | null> {
+/** The current logged-in creator's vendor, or null. Identity from the session, never the request.
+ *  Wrapped in React cache() so repeat calls within ONE request collapse to a single getUser + vendors
+ *  lookup (a page like /creator/bookings used to resolve this 3x = 6 round-trips). */
+export const currentVendor = cache(async (): Promise<{ id: string; name: string; slug: string; craft: string | null } | null> => {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return null
   const admin = createAdminClient()
   const { data } = await admin.from('vendors').select('id, name, slug, craft').eq('person_id', user.id).maybeSingle()
   return data ? { id: data.id as string, name: data.name as string, slug: data.slug as string, craft: (data.craft as string | null) ?? null } : null
-}
+})
 
 /** The active vendor rule for a vendor id, mapped to the pure engine shape (+ its confirm mode). */
 export async function getVendorRule(vendorId: string): Promise<{ rule: AvailabilityRule; confirmMode: ConfirmMode } | null> {
