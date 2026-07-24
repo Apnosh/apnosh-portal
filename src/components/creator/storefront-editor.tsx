@@ -91,9 +91,13 @@ export default function StorefrontEditor({ initialVendor, initialPackages }: { i
       <div className="max-w-2xl mx-auto px-5 py-8">
         <div className="flex items-center justify-between mb-1">
           <h1 className="text-xl font-bold text-neutral-900">Your packages</h1>
-          <Link href={`/marketplace/${initialVendor.slug}`} target="_blank" className="text-sm font-medium text-emerald-700 hover:underline">
-            View your storefront
-          </Link>
+          {/* The public storefront only exists once approved (the store hides pending creators), so
+              don't offer a link that would 404 — the under-review banner below says why it's not live. */}
+          {initialVendor.bookable && (
+            <Link href={`/marketplace/${initialVendor.slug}`} target="_blank" className="text-sm font-medium text-emerald-700 hover:underline">
+              View your storefront
+            </Link>
+          )}
         </div>
         <p className="text-sm text-neutral-500 mb-6">
           What restaurants can book from you, at your price. Publishing puts a package on your storefront. No one is charged from here.

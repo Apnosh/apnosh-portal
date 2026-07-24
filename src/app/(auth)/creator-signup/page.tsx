@@ -20,6 +20,10 @@ const CRAFTS: { value: CreatorCraft; label: string }[] = [
   { value: 'Design', label: 'Designer' },
 ]
 
+// The store matches creators to restaurants by 2-letter US state code, so a free-text area like
+// "Seattle" would make a creator invisible. Validate to real codes before we ever save one.
+const US_STATES = new Set(['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'])
+
 export default function CreatorSignupPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
@@ -30,33 +34,42 @@ export default function CreatorSignupPage() {
   const [agree, setAgree] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  // True once the login exists. If the creator-setup step then fails, a retry skips the signUp (which
+  // would now error "already registered") and just re-runs setup — so a hiccup isn't a dead-end.
+  const [accountReady, setAccountReady] = useState(false)
   const router = useRouter()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     if (!fullName.trim()) { setError('Enter your name'); return }
-    if (password.length < 8) { setError('Password must be at least 8 characters'); return }
-    if (password !== confirmPassword) { setError('Passwords do not match'); return }
-    if (!agree) { setError('Please agree to the Creator Agreement to continue'); return }
+
+    const areas = area.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
+    if (areas.length === 0) { setError('Enter where you work, like WA'); return }
+    const badArea = areas.find((a) => !US_STATES.has(a))
+    if (badArea) { setError(`"${badArea}" is not a state code. Use 2-letter codes like WA or OR, separated by commas.`); return }
 
     setLoading(true)
-    const supabase = createClient()
-    const { error: signErr } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { full_name: fullName } },
-    })
-    if (signErr) { setError(signErr.message); setLoading(false); return }
 
-    // Now signed in — turn this fresh login into a creator with a storefront.
+    // Step 1 — create the login (skip if a prior attempt already made it).
+    if (!accountReady) {
+      if (password.length < 8) { setError('Password must be at least 8 characters'); setLoading(false); return }
+      if (password !== confirmPassword) { setError('Passwords do not match'); setLoading(false); return }
+      if (!agree) { setError('Please agree to the Creator Agreement to continue'); setLoading(false); return }
+      const supabase = createClient()
+      const { error: signErr } = await supabase.auth.signUp({ email, password, options: { data: { full_name: fullName } } })
+      if (signErr) { setError(signErr.message); setLoading(false); return }
+      setAccountReady(true)
+    }
+
+    // Step 2 — turn the login into a creator. Idempotent, so a retry after a failure is safe.
     const res = await becomeCreator({
       name: fullName.trim(),
       craft,
-      serviceArea: area.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
+      serviceArea: areas,
       agreementVersion: CREATOR_AGREEMENT_VERSION,
     })
-    if (!res.ok) { setError(res.error ?? 'Could not finish setting up your creator account.'); setLoading(false); return }
+    if (!res.ok) { setError(res.error ?? 'Your account is ready but setup did not finish. Tap Finish setup to retry.'); setLoading(false); return }
 
     router.push('/creator/storefront')
     router.refresh()
@@ -98,6 +111,7 @@ export default function CreatorSignupPage() {
             <input type="text" value={area} onChange={(e) => setArea(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
               placeholder="WA" />
+            <p className="text-[10px] text-ink-4 mt-1">2-letter codes like WA or OR. Add a few with commas.</p>
           </div>
           <div>
             <label className="block text-xs font-medium text-ink-2 mb-1">Email</label>
@@ -128,7 +142,7 @@ export default function CreatorSignupPage() {
           </label>
           <button type="submit" disabled={loading || !agree}
             className="w-full bg-brand text-ink font-semibold text-sm py-2.5 px-4 rounded-full hover:bg-brand-dark hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-2">
-            {loading ? 'Setting up your studio…' : 'Join as a creator'}
+            {loading ? 'Setting up your studio…' : accountReady ? 'Finish setup' : 'Join as a creator'}
           </button>
         </form>
 

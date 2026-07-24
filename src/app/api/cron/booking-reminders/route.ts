@@ -19,7 +19,7 @@ export const maxDuration = 60
 
 const CRON_SECRET = process.env.CRON_SECRET
 
-interface Meta { kind?: string; vendorId?: string; listingTitle?: string }
+interface Meta { kind?: string; vendorId?: string; listingTitle?: string; shape?: string }
 function parseMeta(note: string | null): Meta | null {
   if (!note) return null
   try { const m = JSON.parse(note) as Meta; return m?.kind === 'creator' ? m : null } catch { return null }
@@ -69,6 +69,9 @@ export async function GET(req: Request) {
   for (const b of rows as Array<Record<string, unknown>>) {
     const meta = parseMeta(b.note as string | null)
     if (!meta) continue
+    // Only real calendar shoots get a "see you there" nudge. Async/recurring/quote bookings also carry
+    // a slot_date, but it's a delivery deadline, not a time to show up — reminding on those is wrong.
+    if (meta.shape && meta.shape !== 'scheduled') continue
     const label = dayLabel(b.slot_date as string, (b.slot_start as string) ?? null)
     const title = meta.listingTitle ? `${meta.listingTitle} is tomorrow` : 'A booking is tomorrow'
 

@@ -173,8 +173,11 @@ export async function acceptCreatorBooking(bookingId: string): Promise<{ ok: boo
     const { data: rule } = await admin.from('availability_rules').select('scope_id, scope_kind').eq('id', b.rule_id as string).maybeSingle()
     if (!rule || rule.scope_kind !== 'vendor' || rule.scope_id !== vendor.id) return { ok: false, error: 'That booking is not yours.' }
     if (b.status !== 'held') return { ok: b.status === 'confirmed', error: b.status === 'confirmed' ? undefined : 'That booking can no longer be accepted.' }
-    const { error } = await admin.from('bookings').update({ status: 'confirmed', hold_expires_at: null, updated_at: new Date().toISOString() }).eq('id', bookingId)
+    // Atomic claim: only ONE concurrent accept wins the held→confirmed flip, so only the winner mints
+    // (defends against a double-clicked / double-tab accept minting two work orders for one booking).
+    const { data: claimed, error } = await admin.from('bookings').update({ status: 'confirmed', hold_expires_at: null, updated_at: new Date().toISOString() }).eq('id', bookingId).eq('status', 'held').select('id').maybeSingle()
     if (error) throw error
+    if (!claimed) return { ok: true }
     // Accepting the request confirms the shoot — it is now deliverable work.
     await mintBookingWorkOrder(bookingId)
     revalidatePath('/creator/bookings')
@@ -374,10 +377,10 @@ function newBookingMeta(p: { vendorId: string; vendorSlug: string; listingId: st
 }
 
 /** Ping a creator's linked login (if any) that something needs them. Best-effort. */
-async function notifyVendorPerson(admin: ReturnType<typeof createAdminClient>, vendorId: string, title: string, body: string): Promise<void> {
+async function notifyVendorPerson(admin: ReturnType<typeof createAdminClient>, vendorId: string, title: string, body: string, link = '/creator/bookings'): Promise<void> {
   try {
     const { data: v } = await admin.from('vendors').select('person_id').eq('id', vendorId).maybeSingle()
-    if (v?.person_id) await createNotification({ userId: v.person_id as string, kind: 'client_request', title, body, link: '/creator/bookings' })
+    if (v?.person_id) await createNotification({ userId: v.person_id as string, kind: 'client_request', title, body, link })
   } catch { /* never blocks */ }
 }
 
@@ -395,7 +398,7 @@ export async function confirmAsyncBooking(input: { vendorSlug: string; listingSl
   }).select('id').single()
   if (error || !data) return { ok: false, error: 'Could not book. Try again.' }
   await mintBookingWorkOrder(data.id as string)
-  await notifyVendorPerson(admin, r.vendorId, 'New booking to deliver', `${r.listing.title} was booked. Deliver it from your work.`)
+  await notifyVendorPerson(admin, r.vendorId, 'New booking to deliver', `${r.listing.title} was booked. Deliver it from your work.`, '/creator/work')
   revalidatePath('/dashboard/bookings')
   return { ok: true, bookingId: data.id as string, dueDate: dueISO }
 }
@@ -414,7 +417,7 @@ export async function startRecurringBooking(input: { vendorSlug: string; listing
   }).select('id').single()
   if (error || !data) return { ok: false, error: 'Could not start the plan. Try again.' }
   await mintBookingWorkOrder(data.id as string, { month: 1, dueDateISO: startISO })
-  await notifyVendorPerson(admin, r.vendorId, 'New monthly plan', `${r.listing.title} started. This month's work is in your queue.`)
+  await notifyVendorPerson(admin, r.vendorId, 'New monthly plan', `${r.listing.title} started. This month's work is in your queue.`, '/creator/work')
   revalidatePath('/dashboard/bookings')
   return { ok: true, bookingId: data.id as string, startDate: startISO }
 }
@@ -448,7 +451,9 @@ export async function getVendorQuoteRequests(): Promise<QuoteRequest[]> {
     return ((data ?? []) as Array<Record<string, unknown>>).map((b) => {
       const m = parseMeta(b.note as string | null)
       return { id: b.id as string, listingTitle: m?.listingTitle ?? 'Custom job', tierName: m?.tierName ?? null, intake: m?.intake ?? {}, quotedCents: m?.quotedCents ?? null, quoteStatus: m?.quoteStatus ?? 'requested' }
-    })
+    // Drop the ones already priced — those are waiting on the restaurant, not the creator, so they
+    // must leave the "send a price" queue (else a priced quote reappears as un-priced work).
+    }).filter((q) => q.quoteStatus !== 'quoted')
   } catch { return [] }
 }
 
@@ -462,6 +467,7 @@ export async function setBookingQuote(input: { bookingId: string; priceCents: nu
   if (!b) return { ok: false, error: 'Quote not found.' }
   const meta = parseMeta(b.note as string | null)
   if (!meta || meta.shape !== 'quote' || meta.vendorId !== vendor.id) return { ok: false, error: 'That quote is not yours.' }
+  if (b.status !== 'held') return { ok: false, error: 'This request is closed, so it can no longer be priced.' }
   const next: CreatorBookingMeta = { ...meta, quotedCents: Math.round(input.priceCents), quoteStatus: 'quoted' }
   const { error } = await admin.from('bookings').update({ note: JSON.stringify(next), updated_at: new Date().toISOString() }).eq('id', b.id)
   if (error) return { ok: false, error: 'Could not send the quote.' }
@@ -482,11 +488,15 @@ export async function acceptBookingQuote(bookingId: string): Promise<{ ok: boole
   if (!cu || cu.client_id !== b.client_id) return { ok: false, error: 'That quote is not yours.' }
   const meta = parseMeta(b.note as string | null)
   if (!meta || meta.shape !== 'quote' || !meta.quotedCents) return { ok: false, error: 'No quote to accept yet.' }
+  // Only a live (held) quote can be accepted — never resurrect a cancelled/expired one into billable work.
+  if (b.status !== 'held') return { ok: b.status === 'confirmed', error: b.status === 'confirmed' ? undefined : 'This quote can no longer be accepted.' }
   const dueISO = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10)
-  const { error } = await admin.from('bookings').update({ status: 'confirmed', slot_date: dueISO, updated_at: new Date().toISOString() }).eq('id', b.id)
+  // Atomic claim: only ONE accept wins the held→confirmed flip, so a double-accept mints once.
+  const { data: claimed, error } = await admin.from('bookings').update({ status: 'confirmed', slot_date: dueISO, updated_at: new Date().toISOString() }).eq('id', b.id).eq('status', 'held').select('id').maybeSingle()
   if (error) return { ok: false, error: 'Could not accept the quote.' }
+  if (!claimed) return { ok: true }
   await mintBookingWorkOrder(bookingId)
-  await notifyVendorPerson(admin, meta.vendorId, 'Quote accepted', `${meta.listingTitle} is a go. Deliver it from your work.`)
+  await notifyVendorPerson(admin, meta.vendorId, 'Quote accepted', `${meta.listingTitle} is a go. Deliver it from your work.`, '/creator/work')
   revalidatePath('/dashboard/bookings')
   return { ok: true }
 }

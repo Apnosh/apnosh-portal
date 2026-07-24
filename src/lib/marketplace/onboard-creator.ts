@@ -73,6 +73,18 @@ async function findUserIdByEmail(admin: ReturnType<typeof createAdminClient>, em
   return null
 }
 
+/** A slug not yet taken by any vendor: base, then base-2, base-3… Prevents a name collision from
+ *  reusing (and clobbering) another creator's vendor row. */
+async function uniqueSlug(admin: ReturnType<typeof createAdminClient>, base: string): Promise<string> {
+  let slug = base
+  for (let i = 2; i <= 60; i++) {
+    const { data } = await admin.from('vendors').select('id').eq('slug', slug).maybeSingle()
+    if (!data) return slug
+    slug = `${base}-${i}`
+  }
+  return `${base}-${Date.now()}`
+}
+
 export async function onboardCreatorCore(input: OnboardCreatorInput): Promise<OnboardCreatorResult> {
   const admin = createAdminClient()
   const name = (input.name ?? '').trim()
@@ -86,49 +98,45 @@ export async function onboardCreatorCore(input: OnboardCreatorInput): Promise<On
   try {
     const bookable = input.bookable !== false
 
-    // 1) Find-or-create the vendor (keyed by slug so a re-run reuses the same creator).
-    const slug = slugify(name)
-    let vendorId: string
-    const { data: existingV } = await admin.from('vendors').select('id').eq('slug', slug).maybeSingle()
-    if (existingV?.id) {
-      vendorId = existingV.id as string
-      await admin.from('vendors').update({
-        name, craft, service_area: serviceArea, bookable, ...(input.description ? { description: input.description } : {}),
-      }).eq('id', vendorId)
-    } else {
-      const { data: created, error: cErr } = await admin.from('vendors').insert({
-        slug, name, vendor_type: 'individual', bookable, verified: false, tier: 'free',
-        is_apnosh: false, service_area: serviceArea, craft, ...(input.description ? { description: input.description } : {}),
-      }).select('id').single()
-      if (cErr || !created) return { ok: false, error: `Could not create the creator: ${cErr?.message ?? 'unknown error'}` }
-      vendorId = created.id as string
-    }
-
-    // 2) Resolve their login: a pre-authed user (self-serve signup), else an existing login by email,
-    //    else a set-your-password invite.
+    // 1) Resolve the login FIRST — the vendor is keyed to the PERSON, not a name-slug, so two creators
+    //    with the same name never collide, and one person is never split across two vendors.
     let personId = input.personId ?? null
     let invited = false
     if (!personId) {
       personId = await findUserIdByEmail(admin, email)
       if (!personId) {
-        if (input.invite === false) return { ok: false, error: `No login exists for ${email}. Turn on the invite, or have them sign up first.`, vendorId, slug }
+        if (input.invite === false) return { ok: false, error: `No login exists for ${email}. Turn on the invite, or have them sign up first.` }
         const { data: inv, error: invErr } = await admin.auth.admin.inviteUserByEmail(email, { data: { full_name: name } })
-        if (invErr || !inv?.user) return { ok: false, error: `Could not send the invite: ${invErr?.message ?? 'unknown error'}`, vendorId, slug }
+        if (invErr || !inv?.user) return { ok: false, error: `Could not send the invite: ${invErr?.message ?? 'unknown error'}` }
         personId = inv.user.id
         invited = true
       }
     }
 
-    // 3) Wire both links. person_id is one-shot: only claim an unclaimed vendor.
-    const { data: claimed } = await admin.from('vendors').update({ person_id: personId }).eq('id', vendorId).is('person_id', null).select('id').maybeSingle()
-    if (!claimed) {
-      const { data: who } = await admin.from('vendors').select('person_id').eq('id', vendorId).maybeSingle()
-      if (who?.person_id && who.person_id !== personId) {
-        return { ok: false, error: 'This creator is already linked to a different login.', vendorId, slug }
-      }
+    // 2) Reuse THIS person's vendor if they already have one (idempotent re-run, never a 2nd vendor);
+    //    else create a fresh vendor with a UNIQUE slug and claim it at insert. We NEVER touch a vendor
+    //    owned by someone else — a name collision must not overwrite or unlist another creator.
+    let vendorId: string
+    let slug: string
+    const { data: mine } = await admin.from('vendors').select('id, slug').eq('person_id', personId).maybeSingle()
+    if (mine?.id) {
+      vendorId = mine.id as string
+      slug = mine.slug as string
+      // Update profile fields, but PRESERVE bookable — never demote an already-approved creator on a re-run.
+      await admin.from('vendors').update({ name, craft, service_area: serviceArea, ...(input.description ? { description: input.description } : {}) }).eq('id', vendorId)
+    } else {
+      slug = await uniqueSlug(admin, slugify(name))
+      const { data: created, error: cErr } = await admin.from('vendors').insert({
+        slug, name, vendor_type: 'individual', bookable, verified: false, tier: 'free',
+        is_apnosh: false, service_area: serviceArea, craft, person_id: personId,
+        ...(input.description ? { description: input.description } : {}),
+      }).select('id').single()
+      if (cErr || !created) return { ok: false, error: `Could not create the creator: ${cErr?.message ?? 'unknown error'}` }
+      vendorId = created.id as string
     }
-    // creator_logins.person_id is the PK; upsert keeps a re-run idempotent. creator_id = the vendor uuid
-    // (as text), matching how work orders + payouts key off it.
+
+    // 3) creator_logins routes them into /creator on sign-in; creator_id = the vendor uuid (as text),
+    //    matching how work orders + payouts key off it. Upsert keeps a re-run idempotent.
     const { error: clErr } = await admin.from('creator_logins').upsert({ person_id: personId, creator_id: vendorId }, { onConflict: 'person_id' })
     if (clErr) return { ok: false, error: `Linked the vendor but could not finish the login routing: ${clErr.message}`, vendorId, slug, personId, invited }
 

@@ -183,6 +183,12 @@ export async function mintBookingWorkOrder(bookingId: string, opts?: { month?: n
       delete stripped.surcharge_cents
       ;({ data, error } = await admin.from('creator_work_orders').insert(stripped).select('id').single())
     }
+    // A concurrent mint for the same booking/month won the race (unique on campaign_piece_key,
+    // migration 227) — return the order it created instead of a duplicate. Idempotent by construction.
+    if (error && (error as { code?: string }).code === '23505') {
+      const { data: existing } = await admin.from('creator_work_orders').select('id').eq('campaign_piece_key', key).is('campaign_id', null).maybeSingle()
+      return (existing?.id as string) ?? null
+    }
     if (error || !data) return null
     return data.id as string
   } catch {

@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Check, Loader2, CalendarClock, CalendarCheck } from 'lucide-react'
 import { acceptCreatorBooking, cancelCreatorBooking, setBookingQuote } from '@/lib/marketplace/creator-booking'
 import type { IncomingBooking, QuoteRequest } from '@/lib/marketplace/creator-schedule-types'
@@ -35,14 +36,16 @@ export default function BookingsList({ initialVendor, initialBookings, initialQu
   const [quotes, setQuotes] = useState<QuoteRequest[]>(initialQuotes)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescheduleId, setRescheduleId] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
 
   async function sendQuote(id: string, priceStr: string) {
     const dollars = parseFloat(priceStr)
     if (!(dollars > 0)) return
-    setBusy(id)
+    setBusy(id); setErr(null)
     const res = await setBookingQuote({ bookingId: id, priceCents: Math.round(dollars * 100) })
     setBusy(null)
     if (res.ok) setQuotes((prev) => prev.filter((q) => q.id !== id))
+    else setErr(res.error ?? 'Could not send the price. Try again.')
   }
 
   if (!initialVendor) {
@@ -58,16 +61,18 @@ export default function BookingsList({ initialVendor, initialBookings, initialQu
   const confirmed = bookings.filter((b) => b.status === 'confirmed')
 
   async function accept(id: string) {
-    setBusy(id)
+    setBusy(id); setErr(null)
     const res = await acceptCreatorBooking(id)
     setBusy(null)
     if (res.ok) setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, status: 'confirmed' } : b)))
+    else setErr(res.error ?? 'Could not accept that booking. Try again.')
   }
   async function cancel(id: string) {
-    setBusy(id)
+    setBusy(id); setErr(null)
     const res = await cancelCreatorBooking(id)
     setBusy(null)
     if (res.ok) setBookings((prev) => prev.filter((b) => b.id !== id))
+    else setErr(res.error ?? 'Could not cancel that booking. Try again.')
   }
 
   return (
@@ -75,9 +80,14 @@ export default function BookingsList({ initialVendor, initialBookings, initialQu
       <h1 className="text-xl font-bold text-neutral-900">Your bookings</h1>
       <p className="text-sm text-neutral-500 mt-1 mb-6">Requests to accept, and the shoots already on your calendar.</p>
 
+      {err && (
+        <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>
+      )}
+
       {bookings.length === 0 && quotes.length === 0 && (
         <div className="border border-dashed border-neutral-200 rounded-2xl p-8 text-center text-sm text-neutral-500">
-          No bookings yet. Set your hours and publish a package so restaurants can book you.
+          No shoots booked yet. Set your hours and publish a package so restaurants can book you.
+          <span className="block mt-2 text-neutral-400">Design jobs, monthly plans, and custom quotes show up in <Link href="/creator/work" className="font-semibold text-neutral-600 underline">your work</Link>.</span>
         </div>
       )}
 
@@ -172,6 +182,10 @@ function BookingCard({ b, accent, busy, onAccept, onReschedule, onCancel }: {
         <button onClick={onReschedule} disabled={busy} className="px-3.5 py-2 rounded-xl border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50">Reschedule</button>
         <button onClick={onCancel} disabled={busy} className="px-3.5 py-2 rounded-xl text-sm font-medium text-neutral-400 hover:text-red-600">Cancel</button>
       </div>
+      {/* A confirmed shoot delivers like any other job — the finished gallery goes up in the work list. */}
+      {accent === 'emerald' && (
+        <Link href="/creator/work" className="mt-3 inline-block text-[12px] font-semibold text-neutral-900 underline">Deliver in your work →</Link>
+      )}
     </div>
   )
 }

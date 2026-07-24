@@ -28,6 +28,7 @@ function Inbox() {
   const [ratingLabel, setRatingLabel] = useState<string | null>(null)
   const [orderStars, setOrderStars] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (creator) {
@@ -47,10 +48,17 @@ function Inbox() {
   useEffect(() => { load() }, [load])
 
   const act = useCallback(async (id: string, patch: { status?: WorkOrderStatus; delivered_url?: string }) => {
-    setBusy(id)
+    setBusy(id); setErr(null)
     try {
-      await fetch('/api/creator/work', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, ...patch }) })
+      const r = await fetch('/api/creator/work', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id, ...patch }) })
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}))
+        setErr(typeof j.error === 'string' ? j.error : 'That did not go through. Try again.')
+        return
+      }
       await load()
+    } catch {
+      setErr('Something went wrong. Check your connection and try again.')
     } finally { setBusy(null) }
   }, [load])
 
@@ -87,9 +95,12 @@ function Inbox() {
       </header>
 
       <main className="mx-auto max-w-xl px-4 py-5 space-y-6">
+        {err && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{err}</div>
+        )}
         {orders.length === 0 && (
           <div className="rounded-2xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
-            No work yet. When an owner ships a campaign that picks you, it lands here.
+            No work yet. Jobs land here when a restaurant books you or an owner picks you for a campaign.
           </div>
         )}
 
