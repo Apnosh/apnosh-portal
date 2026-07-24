@@ -7,7 +7,7 @@
  * the sign-out that the creator app had nowhere to put.
  */
 
-import { Eye, Pencil, Wallet, Clock, FileText, LifeBuoy, LogOut } from 'lucide-react'
+import { Eye, Pencil, Images, Wallet, Clock, FileText, LifeBuoy, LogOut } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 import { MvpGroup, MvpRow, MvpPill, C, DISPLAY } from '@/components/mvp/mvp-detail'
 import { labelsForSkills } from '@/lib/marketplace/creator-skills'
@@ -38,6 +38,7 @@ export default function AccountHub({ profile }: { profile: MyProfile }) {
           ? <MvpRow icon={<Eye size={18} />} label="View public profile" sub="How restaurants see you" href={`/marketplace/${profile.slug}`} external />
           : <MvpRow icon={<Eye size={18} />} label="Public profile" sub="Goes live once Apnosh approves you" />}
         <MvpRow icon={<Pencil size={18} />} label="Edit your shop" sub="Photos, bio, skills, links" href="/creator/account/profile" />
+        <MvpRow icon={<Images size={18} />} label="Case studies" sub="Photos of your past work" href="/creator/account/portfolio" />
       </MvpGroup>
 
       <MvpGroup title="Work and money">

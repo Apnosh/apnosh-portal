@@ -26,6 +26,7 @@ import {
 import { dispatchForSkills } from './creator-skills'
 import type { CalendarItem } from './creator-schedule-types'
 import { calendarForCreator } from './creator-calendar-data'
+import { getVendorPortfolio } from './portfolio'
 
 const US_STATES = new Set(['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'])
 
@@ -214,7 +215,7 @@ function decodeImageDataUrl(dataUrl: string, maxBytes: number): { ok: true; buff
 /** Upload one image to the creator's own folder in the vendor-portfolio bucket and return its public
  *  URL. No DB write: the caller decides where the URL lands (a vendor column, or an offer's photos).
  *  The admin client bypasses the bucket's admin-only write RLS after the caller's ownership check. */
-async function putCreatorImage(slug: string, prefix: string, dataUrl: string): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+async function putCreatorImage(slug: string, prefix: string, dataUrl: string): Promise<{ ok: true; url: string; path: string } | { ok: false; error: string }> {
   const decoded = decodeImageDataUrl(dataUrl, 8 * 1024 * 1024)
   if (!decoded.ok) return decoded
   const admin = createAdminClient()
@@ -224,7 +225,7 @@ async function putCreatorImage(slug: string, prefix: string, dataUrl: string): P
     .upload(filename, decoded.buffer, { contentType: decoded.mimeType, cacheControl: '31536000', upsert: false })
   if (upErr) return { ok: false, error: 'That photo did not save. Try again.' }
   const { data: pub } = admin.storage.from(PORTFOLIO_BUCKET).getPublicUrl(filename)
-  return { ok: true, url: pub.publicUrl }
+  return { ok: true, url: pub.publicUrl, path: filename }
 }
 
 /** Shared writer for the two single-image slots on the vendor row. Vendor-scoped via myVendorId();
@@ -260,6 +261,73 @@ export async function uploadMyImage(dataUrl: string): Promise<{ ok: true; url: s
   const vendor = await myVendorId()
   if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
   return putCreatorImage(vendor.slug, 'offer', dataUrl)
+}
+
+/* ── the creator's CASE STUDIES — a gallery of past work (proof) ─────────────────────────── */
+
+export interface MyPortfolioItem {
+  id: string
+  url: string
+  caption: string | null
+  featured: boolean
+}
+
+/** The creator's own past-work photos, gallery-ordered. Reuses the shared portfolio reader, so the
+ *  creator manager and the public page show the same items. */
+export async function getMyPortfolio(): Promise<MyPortfolioItem[]> {
+  const vendor = await myVendorId()
+  if (!vendor) return []
+  const items = await getVendorPortfolio(vendor.id)
+  return items.map((i) => ({ id: i.id, url: i.thumbnailUrl ?? i.url, caption: i.caption, featured: i.featured }))
+}
+
+/** Add one past-work photo (a downscaled dataUrl) with an optional caption. Returns the created item
+ *  so the gallery can show it without a reload. Vendor-scoped. */
+export async function addMyPortfolioItem(input: { dataUrl: string; caption?: string; featured?: boolean }): Promise<{ ok: true; item: MyPortfolioItem } | { ok: false; error: string }> {
+  const vendor = await myVendorId()
+  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+  const put = await putCreatorImage(vendor.slug, 'work', input.dataUrl)
+  if (!put.ok) return put
+  const admin = createAdminClient()
+  const caption = input.caption?.trim() || null
+  const featured = input.featured ?? false
+  const { data, error } = await admin.from('vendor_portfolio_items')
+    .insert({ vendor_id: vendor.id, storage_path: put.path, caption, featured })
+    .select('id').single()
+  if (error || !data) return { ok: false, error: 'That did not save. Try again.' }
+  revalidatePath('/creator/account/portfolio'); revalidatePath(`/marketplace/${vendor.slug}`)
+  return { ok: true, item: { id: data.id as string, url: put.url, caption, featured } }
+}
+
+/** Edit a caption or toggle featured on one of the creator's own items. Vendor-scoped. */
+export async function updateMyPortfolioItem(input: { id: string; caption?: string; featured?: boolean }): Promise<{ ok: boolean; error?: string }> {
+  const vendor = await myVendorId()
+  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+  const admin = createAdminClient()
+  const patch: Record<string, unknown> = {}
+  if (input.caption !== undefined) patch.caption = input.caption.trim() || null
+  if (input.featured !== undefined) patch.featured = input.featured
+  if (!Object.keys(patch).length) return { ok: true }
+  const { error } = await admin.from('vendor_portfolio_items').update(patch).eq('id', input.id).eq('vendor_id', vendor.id)
+  if (error) return { ok: false, error: 'That did not save. Try again.' }
+  revalidatePath('/creator/account/portfolio'); revalidatePath(`/marketplace/${vendor.slug}`)
+  return { ok: true }
+}
+
+/** Delete one of the creator's own items (storage object + row). Vendor-scoped, so a forged id can't
+ *  reach another creator's work. */
+export async function deleteMyPortfolioItem(id: string): Promise<{ ok: boolean; error?: string }> {
+  const vendor = await myVendorId()
+  if (!vendor) return { ok: false, error: 'You are not set up as a creator yet.' }
+  const admin = createAdminClient()
+  const { data: item } = await admin.from('vendor_portfolio_items')
+    .select('id, storage_path, thumbnail_path').eq('id', id).eq('vendor_id', vendor.id).maybeSingle() as { data: { id: string; storage_path: string; thumbnail_path: string | null } | null }
+  if (!item) return { ok: false, error: 'That is not yours to delete.' }
+  await admin.storage.from(PORTFOLIO_BUCKET).remove([item.storage_path])
+  if (item.thumbnail_path) await admin.storage.from(PORTFOLIO_BUCKET).remove([item.thumbnail_path])
+  await admin.from('vendor_portfolio_items').delete().eq('id', id).eq('vendor_id', vendor.id)
+  revalidatePath('/creator/account/portfolio'); revalidatePath(`/marketplace/${vendor.slug}`)
+  return { ok: true }
 }
 
 /* ── the creator's MASTER CALENDAR — every dated thing in one place ──────────────────────── */
