@@ -38,6 +38,9 @@ export interface BookingRef {
   ruleId: string | null
   slotDate: string | null
   slotStart: string | null
+  /** 'HH:MM' end, when known. Lets the slot engine block OVERLAPPING starts (variable-length shoots).
+   *  Absent = point booking, blocking only the exact same start (the original, uniform-slot behavior). */
+  slotEnd?: string | null
   status: 'held' | 'confirmed' | 'needs_reschedule' | 'cancelled' | 'completed'
   holdExpiresAt: string | null
 }

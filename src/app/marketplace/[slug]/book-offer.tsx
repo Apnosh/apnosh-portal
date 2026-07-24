@@ -38,6 +38,9 @@ interface Props {
   tiers: Tier[]
   options: Option[]
   intake: Ask[]
+  /** This offer's own shoot length in minutes (a 4-hour photo day vs a 1-hour visit). null = use the
+   *  creator's default hours. Scheduled offers only; sizes the slot picker's grid. */
+  slotMinutes: number | null
 }
 
 const money = (c: number | null) => (c == null ? 'Quote' : `$${Math.round(c / 100).toLocaleString()}`)
@@ -47,9 +50,15 @@ const fmtTime = (hhmm: string) => {
   return `${h12}:${m[2]} ${ap}`
 }
 const fmtDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' })
+const fmtDuration = (mins: number) => {
+  const h = Math.floor(mins / 60), m = mins % 60
+  if (!h) return `${m} min`
+  if (!m) return `${h} hr`
+  return `${h} hr ${m} min`
+}
 
 export default function BookOffer(props: Props) {
-  const { vendorSlug, vendorName, listingSlug, title, mode, billingMonthly, turnaroundDays, basePriceCents, tiers, options, intake } = props
+  const { vendorSlug, vendorName, listingSlug, title, mode, billingMonthly, turnaroundDays, basePriceCents, tiers, options, intake, slotMinutes } = props
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [tierName, setTierName] = useState<string | null>(tiers[0]?.name ?? null)
@@ -69,8 +78,8 @@ export default function BookOffer(props: Props) {
   useEffect(() => {
     if (!open || mode !== 'scheduled' || schedule) return
     setLoadingSlots(true)
-    fetchCreatorSlots(vendorSlug).then((s) => { setSchedule(s); setLoadingSlots(false) }).catch(() => setLoadingSlots(false))
-  }, [open, mode, vendorSlug, schedule])
+    fetchCreatorSlots(vendorSlug, slotMinutes ?? undefined).then((s) => { setSchedule(s); setLoadingSlots(false) }).catch(() => setLoadingSlots(false))
+  }, [open, mode, vendorSlug, schedule, slotMinutes])
 
   const selectedTier = tiers.find((t) => t.name === tierName) ?? null
   const chosenOptions = options.filter((_, i) => selectedOpts.has(i)).map((o) => ({ label: o.label, priceDeltaCents: o.priceDeltaCents }))
@@ -188,6 +197,7 @@ export default function BookOffer(props: Props) {
                   {mode === 'scheduled' && (
                     <>
                       <p className="text-[11px] font-bold uppercase tracking-wider text-ink-3 mb-2">Pick a time</p>
+                      {schedule?.available && slotMinutes ? <p className="text-[12px] text-ink-2 mb-2">Each session is about {fmtDuration(slotMinutes)}.</p> : null}
                       {loadingSlots && <div className="flex items-center gap-2 text-[13px] text-ink-3 py-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading times…</div>}
                       {noAvail && <p className="text-[13px] text-ink-2">This creator has not opened their calendar yet. Check back soon.</p>}
                       {schedule?.available && (

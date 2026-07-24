@@ -370,6 +370,7 @@ export default async function VendorProfilePage({ params }: PageProps) {
                         tiers={pkg.tiers.map((t) => ({ name: t.name, priceCents: t.priceCents, deliverables: t.deliverables }))}
                         options={pkg.options.map((o) => ({ label: o.label, priceDeltaCents: o.priceDeltaCents }))}
                         intake={pkg.intake}
+                        slotMinutes={pkg.slotMinutes}
                       />
                     )}
                   </div>

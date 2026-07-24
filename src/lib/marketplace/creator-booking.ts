@@ -57,9 +57,10 @@ function parseMeta(note: string | null | undefined): CreatorBookingMeta | null {
   }
 }
 
-/** The open slots for a vendor — the product page's slot picker calls this. */
-export async function fetchCreatorSlots(vendorSlug: string): Promise<VendorSchedule> {
-  return getVendorScheduleBySlug(vendorSlug)
+/** The open slots for a vendor — the product page's slot picker calls this. An offer may pass its own
+ *  slot length (a 4-hour shoot vs a 1-hour visit) so the grid matches what that offer actually books. */
+export async function fetchCreatorSlots(vendorSlug: string, slotMinutes?: number): Promise<VendorSchedule> {
+  return getVendorScheduleBySlug(vendorSlug, undefined, undefined, slotMinutes)
 }
 
 /** Hold (or instantly confirm) a real open slot for the current restaurant. */
@@ -78,15 +79,19 @@ export async function holdCreatorBooking(input: HoldSlotInput): Promise<HoldSlot
   if (!found) return { ok: false, code: 'no_rule', error: 'This creator has not opened their calendar yet.' }
 
   try {
+    // Resolve the listing first (stable id + title + its own slot length, if it sets one).
+    const { data: listing } = await admin
+      .from('vendor_listings').select('id, title, details').eq('vendor_id', vendorId).eq('slug', input.listingSlug).maybeSingle()
+    // A per-offer slot length reshapes the grid; re-validate with the SAME override the picker used so
+    // the slot the buyer clicked (and the end we store) line up. Read from the listing, never the client.
+    const offerSlotMin = offerSlotMinutes((listing as { details?: unknown } | null)?.details)
+    const rule = offerSlotMin ? { ...found.rule, slotMinutes: offerSlotMin } : found.rule
+
     // Re-validate against the live engine: the exact (date, start) must be open this instant.
     const bookings = await bookingsForRule(found.rule.id)
-    const slot = computeOpenSlots(found.rule, bookings, new Date().toISOString(), 400)
+    const slot = computeOpenSlots(rule, bookings, new Date().toISOString(), 400)
       .find((s) => s.date === input.date && s.start === input.start)
     if (!slot) return { ok: false, code: 'slot_taken', error: 'That time was just taken. Pick another.' }
-
-    // Resolve the listing (for a stable id + a title to show later).
-    const { data: listing } = await admin
-      .from('vendor_listings').select('id, title').eq('vendor_id', vendorId).eq('slug', input.listingSlug).maybeSingle()
 
     const instant = found.confirmMode === 'instant'
     const meta: CreatorBookingMeta = {
@@ -137,6 +142,22 @@ function cleanOptions(options?: BookingOption[]): BookingOption[] {
   return options
     .map((o) => ({ label: (o.label ?? '').trim().slice(0, 120), priceDeltaCents: Math.max(0, Math.round(Number(o.priceDeltaCents) || 0)) }))
     .filter((o) => o.label)
+}
+
+/** An offer's own slot length (minutes) from its stored details, or undefined to use the creator's
+ *  default hours. Read from the LISTING, never the client, so a booked slot's grid can't be tampered. */
+function offerSlotMinutes(details: unknown): number | undefined {
+  if (!details || typeof details !== 'object') return undefined
+  const v = (details as { slotMinutes?: unknown }).slotMinutes
+  return typeof v === 'number' && v > 0 ? Math.round(v) : undefined
+}
+
+/** Minutes between an 'HH:MM' start and end, or undefined when either is missing/malformed. Lets a
+ *  reschedule keep a booking's original length instead of snapping to the rule's default slot. */
+function slotDurationMinutes(start: string | null, end: string | null): number | undefined {
+  const m = (t: string | null) => { const x = /^(\d{1,2}):(\d{2})$/.exec((t ?? '').trim()); return x ? Number(x[1]) * 60 + Number(x[2]) : NaN }
+  const s = m(start), e = m(end)
+  return Number.isFinite(s) && Number.isFinite(e) && e > s ? e - s : undefined
 }
 
 /** The current creator's incoming bookings (held = awaiting their yes, confirmed = on the calendar). */
@@ -320,7 +341,7 @@ export async function rescheduleCreatorBooking(input: { bookingId: string; date:
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { ok: false, error: 'Please sign in.' }
   const admin = createAdminClient()
-  const { data: b } = await admin.from('bookings').select('id, created_by, rule_id, status, client_id').eq('id', input.bookingId).maybeSingle()
+  const { data: b } = await admin.from('bookings').select('id, created_by, rule_id, status, client_id, slot_start, slot_end').eq('id', input.bookingId).maybeSingle()
   if (!b || !b.rule_id) return { ok: false, error: 'Booking not found.' }
   if (b.status === 'cancelled' || b.status === 'completed') return { ok: false, error: 'This booking can’t be changed.' }
   const { data: ruleRow } = await admin.from('availability_rules').select('*').eq('id', b.rule_id as string).maybeSingle()
@@ -330,7 +351,11 @@ export async function rescheduleCreatorBooking(input: { bookingId: string; date:
   const isVendor = !!vendor && ruleRow.scope_kind === 'vendor' && ruleRow.scope_id === vendor.id
   if (!isClient && !isVendor) return { ok: false, error: 'That booking is not yours.' }
   try {
-    const rule = rowToRule(ruleRow as Parameters<typeof rowToRule>[0])
+    const rule0 = rowToRule(ruleRow as Parameters<typeof rowToRule>[0])
+    // Keep the booking's original length when moving it (a 4-hour shoot stays 4 hours), instead of
+    // snapping to the rule's default slot. Falls back to the default when the old end is unknown.
+    const durMin = slotDurationMinutes(b.slot_start as string | null, b.slot_end as string | null)
+    const rule = durMin ? { ...rule0, slotMinutes: durMin } : rule0
     const bookings = await bookingsForRule(rule.id)
     const slot = computeOpenSlots(rule, bookings, new Date().toISOString(), 400).find((s) => s.date === input.date && s.start === input.start)
     if (!slot) return { ok: false, error: 'That time was just taken. Pick another.' }

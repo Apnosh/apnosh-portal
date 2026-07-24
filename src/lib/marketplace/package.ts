@@ -116,6 +116,9 @@ export interface CreatorPackage {
   intake: IntakeItem[]
   /** How this offer is delivered/booked. null = fall back to the category guess (legacy rows). */
   bookingShape: BookingShape | null
+  /** For an on-site (scheduled) offer, how long the shoot runs, in minutes. null = use the creator's
+   *  default hours slot length. Drives the slot picker's chunk size. Stored in details. */
+  slotMinutes: number | null
   /** The separate pieces this offer hands over. Empty = one handoff. When set, a booking mints one
    *  tracked delivery per item and splits the price across them. Stored in details.deliveries. */
   deliveries: Delivery[]
@@ -150,6 +153,7 @@ interface PackageDetails {
   bookingShape?: unknown
   categories?: unknown
   deliveries?: unknown
+  slotMinutes?: unknown
 }
 
 /** A URL-safe slug from a title. Deterministic, so the same title always maps to the same slug
@@ -250,6 +254,7 @@ export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
     bookingShape: p.bookingShape,
     categories: (p.categories.length ? p.categories : [p.category]).filter((c) => (PACKAGE_CATEGORIES as readonly string[]).includes(c)),
     deliveries: deliveriesToRow(p.deliveries),
+    slotMinutes: typeof p.slotMinutes === 'number' && p.slotMinutes > 0 ? Math.round(p.slotMinutes) : null,
   }
   return {
     ...(p.id ? { id: p.id } : {}),
@@ -315,6 +320,7 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
     : []
   const bookingShape: BookingShape | null = (['scheduled', 'async', 'recurring'] as const).includes(d.bookingShape as BookingShape)
     ? (d.bookingShape as BookingShape) : null
+  const slotMinutes = typeof d.slotMinutes === 'number' && d.slotMinutes > 0 ? Math.round(d.slotMinutes) : null
   const deliveries: Delivery[] = parseDeliveries(d.deliveries)
   const cat = (PACKAGE_CATEGORIES as readonly string[]).includes(row.category) ? (row.category as PackageCategory) : 'other'
   const parsedCats = Array.isArray(d.categories)
@@ -343,6 +349,7 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
     photos,
     intake,
     bookingShape,
+    slotMinutes,
     deliveries,
     active: row.active ?? true,
   }
@@ -387,6 +394,6 @@ export function emptyPackage(category: PackageCategory = 'videographer'): Creato
   return {
     slug: '', title: '', category, categories: [category], listingType: 'one_off', description: '', productId: null,
     priceCents: null, billingPeriod: 'one_time', deliverables: [], tiers: [], options: [],
-    turnaroundDays: null, revisions: null, photos: [], intake: [], bookingShape: 'scheduled', deliveries: [], active: false,
+    turnaroundDays: null, revisions: null, photos: [], intake: [], bookingShape: 'scheduled', slotMinutes: null, deliveries: [], active: false,
   }
 }

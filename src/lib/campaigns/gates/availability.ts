@@ -64,15 +64,22 @@ function windowsForDay(rule: AvailabilityRule, dayISO: string): Window[] {
   return (rule.weekly ?? {})[dow] ?? []
 }
 
-/** How many live bookings occupy a given (date, start): confirmed always, held only while unexpired. */
-function occupied(bookings: BookingRef[], ruleId: string, date: string, start: string, nowMs: number): number {
+/** How many live bookings occupy a candidate [start,end) on a day: confirmed always, held only while
+ *  unexpired. A booking at the exact same start always conflicts (the original behavior). When a
+ *  booking's own end is known, it ALSO blocks any candidate whose window overlaps it, so a 4-hour
+ *  shoot blocks the hours it spans, not just its start — this is what makes variable-length shoots on
+ *  one calendar safe. Bookings with no end stay point-based (unchanged for uniform campaign slots). */
+function occupied(bookings: BookingRef[], ruleId: string, date: string, start: string, end: string, nowMs: number): number {
+  const cS = toMinutes(start), cE = toMinutes(end)
   let n = 0
   for (const b of bookings) {
-    if (b.ruleId !== ruleId || b.slotDate !== date || b.slotStart !== start) continue
-    if (b.status === 'confirmed') { n++; continue }
-    if (b.status === 'held') {
-      const exp = b.holdExpiresAt ? Date.parse(b.holdExpiresAt) : 0
-      if (exp > nowMs) n++          // an unexpired hold still occupies; an expired one is ignored
+    if (b.ruleId !== ruleId || b.slotDate !== date) continue
+    const live = b.status === 'confirmed' || (b.status === 'held' && (b.holdExpiresAt ? Date.parse(b.holdExpiresAt) > nowMs : false))
+    if (!live) continue
+    if (b.slotStart === start) { n++; continue }
+    if (b.slotEnd && b.slotStart) {
+      const bS = toMinutes(b.slotStart), bE = toMinutes(b.slotEnd)
+      if (Number.isFinite(bS) && Number.isFinite(bE) && Number.isFinite(cS) && Number.isFinite(cE) && bS < cE && cS < bE) n++
     }
     // needs_reschedule / cancelled / completed never occupy a future slot
   }
@@ -103,7 +110,7 @@ export function computeOpenSlots(
     const dayISO = isoDay(cursor)
     for (const w of windowsForDay(rule, dayISO)) {
       for (const slot of slotsInWindow(w, rule.slotMinutes)) {
-        const remaining = Math.max(0, rule.capacity - occupied(bookings, rule.id, dayISO, slot.start, nowMs))
+        const remaining = Math.max(0, rule.capacity - occupied(bookings, rule.id, dayISO, slot.start, slot.end, nowMs))
         if (remaining > 0) {
           out.push({ ruleId: rule.id, date: dayISO, start: slot.start, end: slot.end, timezone: rule.timezone, remaining })
           if (out.length >= maxSlots) break

@@ -89,7 +89,7 @@ export async function bookingsForRule(ruleId: string): Promise<BookingRef[]> {
     const admin = createAdminClient()
     const { data, error } = await admin
       .from('bookings')
-      .select('rule_id, slot_date, slot_start, status, hold_expires_at')
+      .select('rule_id, slot_date, slot_start, slot_end, status, hold_expires_at')
       .eq('rule_id', ruleId)
       .in('status', ['held', 'confirmed'])
     if (error || !data) return []
@@ -97,6 +97,7 @@ export async function bookingsForRule(ruleId: string): Promise<BookingRef[]> {
       ruleId: (b.rule_id as string) ?? null,
       slotDate: (b.slot_date as string) ?? null,
       slotStart: (b.slot_start as string) ?? null,
+      slotEnd: (b.slot_end as string) ?? null,
       status: (b.status as BookingRef['status']) ?? 'held',
       holdExpiresAt: (b.hold_expires_at as string) ?? null,
     }))
@@ -106,11 +107,14 @@ export async function bookingsForRule(ruleId: string): Promise<BookingRef[]> {
 }
 
 /** The client-facing read: a vendor's open slots, or honest request-mode when nothing is published. */
-export async function getVendorSchedule(vendorId: string, nowISO = new Date().toISOString(), maxSlots = 60): Promise<VendorSchedule> {
+export async function getVendorSchedule(vendorId: string, nowISO = new Date().toISOString(), maxSlots = 60, slotMinutes?: number): Promise<VendorSchedule> {
   const found = await getVendorRule(vendorId)
   if (!found) return { available: false, reason: 'no_availability', timezone: null, confirmMode: 'request', ruleId: null, slots: [] }
+  // A specific offer can override the chunk size (a 4-hour photo day vs a 1-hour visit) without changing
+  // the creator's published hours; the overlap-aware engine keeps the mix from double-booking.
+  const rule = typeof slotMinutes === 'number' && slotMinutes > 0 ? { ...found.rule, slotMinutes } : found.rule
   const bookings = await bookingsForRule(found.rule.id)
-  const slots = computeOpenSlots(found.rule, bookings, nowISO, maxSlots)
+  const slots = computeOpenSlots(rule, bookings, nowISO, maxSlots)
   return {
     available: slots.length > 0,
     ...(slots.length ? {} : { reason: 'no_availability' as const }),
@@ -122,10 +126,10 @@ export async function getVendorSchedule(vendorId: string, nowISO = new Date().to
 }
 
 /** Same read, by slug — what the product page calls (it has the vendor slug). */
-export async function getVendorScheduleBySlug(vendorSlug: string, nowISO = new Date().toISOString(), maxSlots = 60): Promise<VendorSchedule> {
+export async function getVendorScheduleBySlug(vendorSlug: string, nowISO = new Date().toISOString(), maxSlots = 60, slotMinutes?: number): Promise<VendorSchedule> {
   const vendorId = await vendorIdForSlug(vendorSlug)
   if (!vendorId) return { available: false, reason: 'no_availability', timezone: null, confirmMode: 'request', ruleId: null, slots: [] }
-  return getVendorSchedule(vendorId, nowISO, maxSlots)
+  return getVendorSchedule(vendorId, nowISO, maxSlots, slotMinutes)
 }
 
 /** A sensible starter week for a creator who has not set hours yet (the editor seeds from this). */

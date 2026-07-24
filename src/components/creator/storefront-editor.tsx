@@ -48,6 +48,17 @@ const MODES: { id: DeliveryMode; label: string; sub: string; Icon: typeof Camera
   { id: 'quote', label: 'Custom quote', sub: 'No set price. They send details, you reply with a number.', Icon: MessageSquareText },
 ]
 
+/** How long an on-site booking holds the calendar. null = the creator's default hours slot length. */
+const SLOT_CHOICES: { label: string; minutes: number | null }[] = [
+  { label: 'My hours', minutes: null },
+  { label: '30 min', minutes: 30 },
+  { label: '1 hr', minutes: 60 },
+  { label: '90 min', minutes: 90 },
+  { label: '2 hr', minutes: 120 },
+  { label: '3 hr', minutes: 180 },
+  { label: '4 hr', minutes: 240 },
+]
+
 function modeOf(p: CreatorPackage): DeliveryMode {
   if (p.listingType === 'quote') return 'quote'
   // Prefer the authored shape; fall back to the category guess for legacy offers that never set one.
@@ -368,6 +379,24 @@ function OfferForm({ initial, onCancel, onSaved }: { initial: CreatorPackage; on
             <NumberInput value={p.revisions == null ? '' : String(p.revisions)} onChange={(v) => set({ revisions: wholeOrNull(v) })} placeholder="2" />
           </div>
         </div>
+        {mode === 'shoot' && (
+          <div style={{ marginTop: 14 }}>
+            <Label>Time on site</Label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+              {SLOT_CHOICES.map((c) => {
+                const active = (p.slotMinutes ?? null) === c.minutes
+                return (
+                  <button key={c.label} type="button" onClick={() => set({ slotMinutes: c.minutes })}
+                    style={{ padding: '8px 13px', borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                      border: `1px solid ${active ? GREEN : LINE}`, background: active ? GREEN : '#fff', color: active ? '#fff' : INK }}>
+                    {c.label}
+                  </button>
+                )
+              })}
+            </div>
+            <p style={{ fontSize: 12, color: FAINT, marginTop: 8 }}>How long each booking holds your calendar. Pick My hours to use your default slot length.</p>
+          </div>
+        )}
       </Section>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 22 }}>
