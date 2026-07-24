@@ -36,6 +36,8 @@ interface CreatorBookingMeta {
   listingTitle: string
   tierName: string | null
   intake: Record<string, string>
+  /** Add-ons the buyer chose — each adds to the resolved price (mirror of creator-booking's meta). */
+  options?: { label: string; priceDeltaCents: number }[]
   /** Which booking shape this is (absent = scheduled, the original bridge). */
   shape?: BookingShapeKind
   /** For quote jobs: the price the creator named and the restaurant accepted. Overrides the tier. */
@@ -107,11 +109,19 @@ function addDaysISO(iso: string | null, offset: number): string | null {
 /** The price the restaurant agreed to: an accepted quote wins, else the booked tier, else the
  *  listing's starting price, else 0 (an unpriced quote — the approval path flags it for staff). */
 function resolvePriceCents(meta: CreatorBookingMeta, listing: ListingRow | null): number {
+  // A quote is the creator's own final number — add-ons are already reflected in it, so it wins as-is.
   if (typeof meta.quotedCents === 'number' && meta.quotedCents > 0) return Math.round(meta.quotedCents)
   if (!listing) return 0
   const pkg = rowToPackage(listing)
   const tier = meta.tierName ? pkg.tiers.find((t) => t.name === meta.tierName) : null
-  return tier ? tier.priceCents : (startingPriceCents(pkg) ?? 0)
+  const base = tier ? tier.priceCents : (startingPriceCents(pkg) ?? 0)
+  // Price the chosen add-ons from the LISTING (matched by label), never the client-sent delta, so a
+  // forged request can't zero out an add-on it selected.
+  const addOns = (meta.options ?? []).reduce((s, o) => {
+    const real = pkg.options.find((po) => po.label === o.label)
+    return s + (real ? Math.max(0, real.priceDeltaCents) : 0)
+  }, 0)
+  return base + addOns
 }
 
 /**
@@ -168,6 +178,7 @@ export async function mintBookingWorkOrder(bookingId: string, opts?: { month?: n
     const baseTitle = (meta.tierName ? `${meta.listingTitle} · ${meta.tierName}` : meta.listingTitle) + monthTag
     const baseDueISO = opts?.dueDateISO ?? ((b.slot_date as string) ?? null)
     const intakeLines = Object.entries(meta.intake).filter(([, v]) => typeof v === 'string' && v.trim())
+    const optionsLine = (meta.options && meta.options.length) ? `Add-ons: ${meta.options.map((o) => o.label).join(', ')}.` : ''
     const dueWord = shape === 'scheduled' ? 'Shoot day' : shape === 'recurring' ? 'This month' : 'Deliver by'
     const shapeWord = shape === 'recurring' ? 'Monthly plan' : shape === 'quote' ? 'Custom job' : shape === 'async' ? 'Booked work' : 'Booked shoot'
 
@@ -178,6 +189,7 @@ export async function mintBookingWorkOrder(bookingId: string, opts?: { month?: n
         `${shapeWord}: ${pieceTitle}.`,
         dayLabel ? `${dueWord}: ${dayLabel}.` : '',
         ...intakeLines.map(([q, v]) => `${q}: ${v}.`),
+        optionsLine,
         'Deliver the finished work here when it is ready — the restaurant reviews and approves it.',
       ].filter(Boolean).join(' ')
       return {

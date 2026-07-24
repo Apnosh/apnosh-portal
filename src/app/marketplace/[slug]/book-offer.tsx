@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Calendar, Loader2, CheckCircle2, X, Clock, Repeat, MessageSquareText } from 'lucide-react'
+import { Calendar, Loader2, CheckCircle2, X, Clock, Repeat, MessageSquareText, Check } from 'lucide-react'
 import { fetchCreatorSlots, holdCreatorBooking, confirmAsyncBooking, startRecurringBooking, requestQuote } from '@/lib/marketplace/creator-booking'
 import type { VendorSchedule } from '@/lib/marketplace/creator-schedule-types'
 import type { OpenSlot } from '@/lib/campaigns/gates/types'
@@ -64,6 +64,7 @@ export default function BookOffer(props: Props) {
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [selDate, setSelDate] = useState<string | null>(null)
   const [selTime, setSelTime] = useState<string | null>(null)
+  const [selectedOpts, setSelectedOpts] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     if (!open || mode !== 'scheduled' || schedule) return
@@ -72,7 +73,9 @@ export default function BookOffer(props: Props) {
   }, [open, mode, vendorSlug, schedule])
 
   const selectedTier = tiers.find((t) => t.name === tierName) ?? null
-  const priceCents = mode === 'quote' ? null : (selectedTier ? selectedTier.priceCents : basePriceCents)
+  const chosenOptions = options.filter((_, i) => selectedOpts.has(i)).map((o) => ({ label: o.label, priceDeltaCents: o.priceDeltaCents }))
+  const extraCents = chosenOptions.reduce((s, o) => s + o.priceDeltaCents, 0)
+  const priceCents = mode === 'quote' ? null : ((selectedTier ? selectedTier.priceCents : (basePriceCents ?? 0)) + extraCents)
   const dates = schedule ? [...new Set(schedule.slots.map((s) => s.date))].sort() : []
   const timesForDate: OpenSlot[] = schedule && selDate ? schedule.slots.filter((s) => s.date === selDate) : []
 
@@ -88,19 +91,19 @@ export default function BookOffer(props: Props) {
     setSubmitting(true); setErr('')
     try {
       if (mode === 'scheduled') {
-        const r = await holdCreatorBooking({ vendorSlug, listingSlug, tierName: tn, date: selDate!, start: selTime!, intake: intakePayload })
+        const r = await holdCreatorBooking({ vendorSlug, listingSlug, tierName: tn, date: selDate!, start: selTime!, intake: intakePayload, options: chosenOptions })
         if (!r.ok) return fail(r)
         setDone({ kind: 'scheduled', confirmed: r.status === 'confirmed', when: `${fmtDate(r.date)} at ${fmtTime(r.start)}` })
       } else if (mode === 'async') {
-        const r = await confirmAsyncBooking({ vendorSlug, listingSlug, tierName: tn, intake: intakePayload })
+        const r = await confirmAsyncBooking({ vendorSlug, listingSlug, tierName: tn, intake: intakePayload, options: chosenOptions })
         if (!r.ok) return fail(r)
         setDone({ kind: 'async', confirmed: true, when: r.dueDate ? fmtDate(r.dueDate) : undefined })
       } else if (mode === 'recurring') {
-        const r = await startRecurringBooking({ vendorSlug, listingSlug, tierName: tn, intake: intakePayload })
+        const r = await startRecurringBooking({ vendorSlug, listingSlug, tierName: tn, intake: intakePayload, options: chosenOptions })
         if (!r.ok) return fail(r)
         setDone({ kind: 'recurring', confirmed: true, when: r.startDate ? fmtDate(r.startDate) : undefined })
       } else {
-        const r = await requestQuote({ vendorSlug, listingSlug, tierName: tn, intake: intakePayload })
+        const r = await requestQuote({ vendorSlug, listingSlug, tierName: tn, intake: intakePayload, options: chosenOptions })
         if (!r.ok) return fail(r)
         setDone({ kind: 'quote', confirmed: false })
       }
@@ -223,14 +226,34 @@ export default function BookOffer(props: Props) {
                   )}
                 </div>
 
-                {/* add-ons info */}
-                {options.length > 0 && (
+                {/* add-ons — selectable (each adds to the price) for priced offers; a quote lists them as requests */}
+                {options.length > 0 && mode !== 'quote' && (
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-ink-3 mb-2">Add-ons</p>
+                    <div className="flex flex-col gap-1.5">
+                      {options.map((o, i) => {
+                        const on = selectedOpts.has(i)
+                        return (
+                          <button key={i} type="button" onClick={() => setSelectedOpts((prev) => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n })}
+                            className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left ${on ? 'border-brand bg-brand-tint/30' : 'border-ink-6'}`}>
+                            <span className="flex items-center gap-2 text-[13px] text-ink">
+                              <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 ${on ? 'bg-brand' : 'border border-ink-6'}`}>{on && <Check className="w-3 h-3 text-white" />}</span>
+                              {o.label}
+                            </span>
+                            <span className="text-[13px] font-semibold text-ink tabular-nums">+{money(o.priceDeltaCents)}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+                {options.length > 0 && mode === 'quote' && (
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-wider text-ink-3 mb-1.5">Extras you can ask for</p>
                     <div className="flex flex-wrap gap-1.5">
                       {options.map((o, i) => <span key={i} className="text-[12px] text-ink-2 bg-ink-7/40 rounded-full px-2.5 py-1">{o.label} <span className="text-ink-3">+{money(o.priceDeltaCents)}</span></span>)}
                     </div>
-                    <p className="text-[11px] text-ink-3 mt-1.5">Mention any you want in the notes below and the creator will add them.</p>
+                    <p className="text-[11px] text-ink-3 mt-1.5">Mention any you want in the notes; the creator prices the quote.</p>
                   </div>
                 )}
 

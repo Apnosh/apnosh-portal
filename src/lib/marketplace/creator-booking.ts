@@ -22,7 +22,7 @@ import {
   currentVendor, getVendorRule, getVendorScheduleBySlug, vendorIdForSlug, bookingsForRule,
   CREATOR_GATE_KIND, type VendorSchedule,
 } from './creator-schedule'
-import type { HoldSlotInput, HoldSlotResult, IncomingBooking, ClientBooking, SimpleBookingResult, QuoteRequest } from './creator-schedule-types'
+import type { HoldSlotInput, HoldSlotResult, IncomingBooking, ClientBooking, SimpleBookingResult, QuoteRequest, BookingOption } from './creator-schedule-types'
 import { mintBookingWorkOrder, voidBookingWorkOrder, redateBookingWorkOrder, workOrdersForBookings } from './booking-work-order'
 import { rowToPackage, type ListingRow } from './package'
 
@@ -38,6 +38,8 @@ interface CreatorBookingMeta {
   listingTitle: string
   tierName: string | null
   intake: Record<string, string>
+  /** Add-ons the buyer chose — each adds to the price (except on a quote, which the creator prices). */
+  options?: BookingOption[]
   /** Booking shape (absent = scheduled, the original bridge). */
   shape?: 'scheduled' | 'async' | 'recurring' | 'quote'
   /** Quote jobs: the creator's named price (cents) + where the quote is. */
@@ -93,6 +95,7 @@ export async function holdCreatorBooking(input: HoldSlotInput): Promise<HoldSlot
       listingTitle: (listing?.title as string) ?? input.listingSlug,
       tierName: input.tierName ?? null,
       intake: cleanIntake(input.intake),
+      ...(cleanOptions(input.options).length ? { options: cleanOptions(input.options) } : {}),
     }
     const row = {
       client_id: cu.client_id as string,
@@ -126,6 +129,14 @@ function cleanIntake(intake?: Record<string, string>): Record<string, string> {
     if (typeof v === 'string' && v.trim()) out[k] = v.trim().slice(0, 500)
   }
   return out
+}
+
+/** Sanitize the chosen add-ons: trimmed label, a non-negative whole-cent delta, empties dropped. */
+function cleanOptions(options?: BookingOption[]): BookingOption[] {
+  if (!Array.isArray(options)) return []
+  return options
+    .map((o) => ({ label: (o.label ?? '').trim().slice(0, 120), priceDeltaCents: Math.max(0, Math.round(Number(o.priceDeltaCents) || 0)) }))
+    .filter((o) => o.label)
 }
 
 /** The current creator's incoming bookings (held = awaiting their yes, confirmed = on the calendar). */
@@ -392,11 +403,13 @@ function turnaroundDueISO(details: unknown): string {
   return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10)
 }
 
-function newBookingMeta(p: { vendorId: string; vendorSlug: string; listingId: string; listingSlug: string; listingTitle: string; tierName?: string | null; intake?: Record<string, string>; shape: CreatorBookingMeta['shape']; quoteStatus?: 'requested' | 'quoted' }): string {
+function newBookingMeta(p: { vendorId: string; vendorSlug: string; listingId: string; listingSlug: string; listingTitle: string; tierName?: string | null; intake?: Record<string, string>; options?: BookingOption[]; shape: CreatorBookingMeta['shape']; quoteStatus?: 'requested' | 'quoted' }): string {
   const meta: CreatorBookingMeta = {
     kind: 'creator', vendorId: p.vendorId, vendorSlug: p.vendorSlug, listingId: p.listingId,
     listingSlug: p.listingSlug, listingTitle: p.listingTitle, tierName: p.tierName ?? null,
-    intake: cleanIntake(p.intake), shape: p.shape, ...(p.quoteStatus ? { quoteStatus: p.quoteStatus } : {}),
+    intake: cleanIntake(p.intake), shape: p.shape,
+    ...(cleanOptions(p.options).length ? { options: cleanOptions(p.options) } : {}),
+    ...(p.quoteStatus ? { quoteStatus: p.quoteStatus } : {}),
   }
   return JSON.stringify(meta)
 }
@@ -411,12 +424,12 @@ async function notifyVendorPerson(admin: ReturnType<typeof createAdminClient>, v
 
 /** ASYNC (design/brief): a priced job with no calendar. Confirms + mints straight away, due by the
  *  creator's turnaround. Then deliver → the restaurant approves → it bills, exactly like a shoot. */
-export async function confirmAsyncBooking(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; intake?: Record<string, string> }): Promise<SimpleBookingResult> {
+export async function confirmAsyncBooking(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; intake?: Record<string, string>; options?: BookingOption[] }): Promise<SimpleBookingResult> {
   const r = await resolveBookingParties(input.vendorSlug, input.listingSlug)
   if (!r.ok) return { ok: false, needsLogin: r.needsLogin, error: r.error }
   const admin = createAdminClient()
   const dueISO = turnaroundDueISO(r.listing.details)
-  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, shape: 'async' })
+  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, options: input.options, shape: 'async' })
   const { data, error } = await admin.from('bookings').insert({
     client_id: r.clientId, gate_kind: CREATOR_GATE_KIND, slot_date: dueISO, timezone: 'America/Los_Angeles',
     status: 'confirmed', note, created_by: r.userId, updated_at: new Date().toISOString(),
@@ -430,12 +443,12 @@ export async function confirmAsyncBooking(input: { vendorSlug: string; listingSl
 
 /** RECURRING (monthly plan): confirms + mints MONTH 1 now; the recurring cron mints each later month.
  *  Honest by construction — every month is its own deliver → approve → bill (no silent auto-charge). */
-export async function startRecurringBooking(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; startDate?: string; intake?: Record<string, string> }): Promise<SimpleBookingResult> {
+export async function startRecurringBooking(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; startDate?: string; intake?: Record<string, string>; options?: BookingOption[] }): Promise<SimpleBookingResult> {
   const r = await resolveBookingParties(input.vendorSlug, input.listingSlug)
   if (!r.ok) return { ok: false, needsLogin: r.needsLogin, error: r.error }
   const admin = createAdminClient()
   const startISO = input.startDate && /^\d{4}-\d{2}-\d{2}$/.test(input.startDate) ? input.startDate : new Date().toISOString().slice(0, 10)
-  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, shape: 'recurring' })
+  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, options: input.options, shape: 'recurring' })
   const { data, error } = await admin.from('bookings').insert({
     client_id: r.clientId, gate_kind: CREATOR_GATE_KIND, slot_date: startISO, timezone: 'America/Los_Angeles',
     status: 'confirmed', note, created_by: r.userId, updated_at: new Date().toISOString(),
@@ -449,11 +462,11 @@ export async function startRecurringBooking(input: { vendorSlug: string; listing
 
 /** QUOTE (custom job): the restaurant describes it; NO price yet, NO work order. The creator names a
  *  price (setBookingQuote), the restaurant accepts (acceptBookingQuote), and only then does it mint. */
-export async function requestQuote(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; intake?: Record<string, string> }): Promise<SimpleBookingResult> {
+export async function requestQuote(input: { vendorSlug: string; listingSlug: string; tierName?: string | null; intake?: Record<string, string>; options?: BookingOption[] }): Promise<SimpleBookingResult> {
   const r = await resolveBookingParties(input.vendorSlug, input.listingSlug)
   if (!r.ok) return { ok: false, needsLogin: r.needsLogin, error: r.error }
   const admin = createAdminClient()
-  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, shape: 'quote', quoteStatus: 'requested' })
+  const note = newBookingMeta({ vendorId: r.vendorId, vendorSlug: input.vendorSlug, listingId: r.listing.id, listingSlug: input.listingSlug, listingTitle: r.listing.title, tierName: input.tierName, intake: input.intake, options: input.options, shape: 'quote', quoteStatus: 'requested' })
   const { data, error } = await admin.from('bookings').insert({
     client_id: r.clientId, gate_kind: CREATOR_GATE_KIND, slot_date: null, timezone: 'America/Los_Angeles',
     status: 'held', note, created_by: r.userId, updated_at: new Date().toISOString(),

@@ -31,6 +31,12 @@ export interface CreatorAvailabilityForm {
   active: boolean
 }
 
+/** One add-on the restaurant chose at booking — its label and the extra it adds to the price. */
+export interface BookingOption {
+  label: string
+  priceDeltaCents: number
+}
+
 /** The restaurant's slot pick, sent to hold a booking. */
 export interface HoldSlotInput {
   vendorSlug: string
@@ -39,6 +45,8 @@ export interface HoldSlotInput {
   date: string
   start: string
   intake?: Record<string, string>
+  /** Add-ons the buyer chose — each adds to the price (and the multi-delivery split). */
+  options?: BookingOption[]
 }
 
 export type HoldSlotResult =
