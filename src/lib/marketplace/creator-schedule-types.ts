@@ -117,6 +117,9 @@ export interface CalendarItem {
   title: string
   status: string
   kind: 'shoot' | 'work'
+  /** The booking this piece belongs to (for tapping through to the booking detail). null for a
+   *  campaign piece that isn't a marketplace booking. */
+  bookingId: string | null
 }
 
 /** One row in a creator's incoming list. */

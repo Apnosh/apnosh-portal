@@ -8,6 +8,8 @@
  */
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
+import { ChevronRight } from 'lucide-react'
 import type { CalendarItem } from '@/lib/marketplace/creator-schedule-types'
 
 const C = { green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7', amber: '#8a5a0c' }
@@ -93,19 +95,26 @@ export default function CreatorCalendar({ items }: { items: CalendarItem[] }) {
         <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 20, textAlign: 'center', fontSize: 13, color: C.mute }}>Nothing on this day.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-          {selItems.map((it) => (
-            <div key={it.id} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 54, textAlign: 'center', flexShrink: 0 }}>
-                {it.time
-                  ? <span style={{ fontSize: 11.5, fontWeight: 700, color: C.greenDk, whiteSpace: 'nowrap' }}>{fmtTime(it.time)}</span>
-                  : <span style={{ fontSize: 10.5, fontWeight: 700, color: C.amber, textTransform: 'uppercase' }}>Due</span>}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.title}</div>
-                <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1 }}>{it.kind === 'shoot' ? 'Shoot' : 'Deliver'}{it.status ? ` · ${statusLabel(it.status)}` : ''}</div>
-              </div>
-            </div>
-          ))}
+          {selItems.map((it) => {
+            const rowStyle: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit' }
+            const inner = (
+              <>
+                <div style={{ width: 54, textAlign: 'center', flexShrink: 0 }}>
+                  {it.time
+                    ? <span style={{ fontSize: 11.5, fontWeight: 700, color: C.greenDk, whiteSpace: 'nowrap' }}>{fmtTime(it.time)}</span>
+                    : <span style={{ fontSize: 10.5, fontWeight: 700, color: C.amber, textTransform: 'uppercase' }}>Due</span>}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.title}</div>
+                  <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1 }}>{it.kind === 'shoot' ? 'Shoot' : 'Deliver'}{it.status ? ` · ${statusLabel(it.status)}` : ''}</div>
+                </div>
+                {it.bookingId && <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />}
+              </>
+            )
+            return it.bookingId
+              ? <Link key={it.id} href={`/creator/bookings/${it.bookingId}`} style={rowStyle}>{inner}</Link>
+              : <div key={it.id} style={rowStyle}>{inner}</div>
+          })}
         </div>
       )}
     </div>

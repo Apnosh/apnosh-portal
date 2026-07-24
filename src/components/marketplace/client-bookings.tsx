@@ -12,7 +12,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { CalendarClock, Check, Loader2, ExternalLink, Camera, Repeat, FileText, Sparkles } from 'lucide-react'
-import { cancelCreatorBooking, acceptBookingQuote } from '@/lib/marketplace/creator-booking'
+import { cancelCreatorBooking, acceptBookingQuote, updateBookingIntake } from '@/lib/marketplace/creator-booking'
 import type { ClientBooking, BookingDeliverable } from '@/lib/marketplace/creator-schedule-types'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader } from '@/components/mvp/mvp-detail'
@@ -210,14 +210,8 @@ export default function ClientBookings({ initialBookings }: { initialBookings: C
                       <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', borderRadius: 99, padding: '3px 9px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em', textTransform: 'uppercase', background: tone.bg, color: tone.fg }}>{phase.label}</span>
                     </div>
 
-                    {/* What the restaurant told the creator (their answers to the offer's questions). */}
-                    {Object.entries(b.intake).filter(([, v]) => v).length > 0 && (
-                      <ul style={{ margin: '11px 0 0', padding: '11px 0 0', borderTop: `0.5px solid ${C.line}`, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        {Object.entries(b.intake).filter(([, v]) => v).map(([q, v], i) => (
-                          <li key={i} style={{ fontSize: 12, color: C.mute, display: 'flex', gap: 7 }}><span style={{ color: C.faint }}>•</span> <span><span style={{ color: C.ink, fontWeight: 600 }}>{q}</span> {v}</span></li>
-                        ))}
-                      </ul>
-                    )}
+                    {/* Requirements the restaurant filled in — viewable and editable any time. */}
+                    <ClientIntake bookingId={b.id} intake={b.intake} />
 
                     {/* Delivered → the review panel: see the work, approve, or ask for changes. */}
                     {phase.key === 'delivered' && b.deliverables.length <= 1 && (
@@ -381,6 +375,57 @@ function DeliverableRow({ d, busy, onApprove, onChanges }: { d: BookingDeliverab
       )}
       {d.status === 'approved' && link && (
         <a href={link} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 12, color: C.mute, textDecoration: 'none' }}><ExternalLink size={12} /> View work</a>
+      )}
+    </div>
+  )
+}
+
+/** The requirements the restaurant filled in for a booking — shown as question + answer, and editable
+ *  any time after booking (fill-anytime). Only the answers that exist can be edited; nothing to show
+ *  means nothing renders. Saves back into the booking's note via updateBookingIntake. */
+function ClientIntake({ bookingId, intake }: { bookingId: string; intake: Record<string, string> }) {
+  const [vals, setVals] = useState<Record<string, string>>(intake)
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [err, setErr] = useState('')
+  const entries = Object.entries(vals).filter(([, v]) => v)
+  if (!editing && entries.length === 0) return null
+
+  async function save() {
+    setSaving(true); setErr('')
+    const res = await updateBookingIntake({ bookingId, intake: vals })
+    setSaving(false)
+    if (res.ok) setEditing(false)
+    else setErr(res.error ?? 'Could not save.')
+  }
+
+  return (
+    <div style={{ margin: '11px 0 0', padding: '11px 0 0', borderTop: `0.5px solid ${C.line}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: editing ? 8 : 5 }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: C.faint }}>What you told them</span>
+        {!editing && <button onClick={() => setEditing(true)} style={{ fontSize: 12, fontWeight: 600, color: C.greenDk, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Edit</button>}
+      </div>
+      {editing ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          {Object.keys(vals).map((q) => (
+            <div key={q}>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.ink, marginBottom: 3 }}>{q}</label>
+              <textarea value={vals[q]} onChange={(e) => setVals({ ...vals, [q]: e.target.value })} rows={2} className="mvp-input"
+                style={{ width: '100%', boxSizing: 'border-box', borderRadius: 10, border: `0.5px solid ${C.line}`, padding: '8px 10px', fontSize: 13, color: C.ink, fontFamily: 'inherit', outline: 'none', resize: 'vertical' }} />
+            </div>
+          ))}
+          {err && <div style={{ fontSize: 12, color: C.coral }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={save} disabled={saving} style={{ ...BTN_PRIMARY, opacity: saving ? 0.5 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+            <button onClick={() => { setVals(intake); setEditing(false); setErr('') }} disabled={saving} style={BTN_TEXT}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {entries.map(([q, v], i) => (
+            <li key={i} style={{ fontSize: 12, color: C.mute, display: 'flex', gap: 7 }}><span style={{ color: C.faint }}>•</span> <span><span style={{ color: C.ink, fontWeight: 600 }}>{q}</span> {v}</span></li>
+          ))}
+        </ul>
       )}
     </div>
   )

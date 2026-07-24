@@ -180,10 +180,10 @@ function BookingCard({ b, accent, busy, onAccept, onReschedule, onCancel }: {
       <div style={{ padding: '13px 15px 14px 17px' }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <span style={{ width: 42, height: 42, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Camera size={19} color={C.greenDk} /></span>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <Link href={`/creator/bookings/${b.id}`} style={{ flex: 1, minWidth: 0, textDecoration: 'none', color: 'inherit' }}>
             <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{b.listingTitle}{b.tierName ? <span style={{ color: C.faint, fontWeight: 400 }}> · {b.tierName}</span> : null}</div>
             <div style={{ fontSize: 12.5, color: C.ink, fontWeight: 600, marginTop: 4, display: 'flex', alignItems: 'center', gap: 5 }}><CalendarClock size={13} color={C.faint} />{slotLabel(b.date, b.start)}</div>
-          </div>
+          </Link>
           {accent === 'confirmed' && <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', borderRadius: 99, padding: '3px 9px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.02em', textTransform: 'uppercase', background: C.greenSoft, color: C.greenDk }}>Confirmed</span>}
         </div>
 

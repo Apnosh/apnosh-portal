@@ -511,3 +511,79 @@ export async function acceptBookingQuote(bookingId: string): Promise<{ ok: boole
   revalidatePath('/dashboard/bookings')
   return { ok: true }
 }
+
+/* ── one booking's full detail + fill-anytime requirements ───────────────────────────────── */
+
+export interface CreatorBookingDetailDeliverable {
+  orderId: string
+  title: string
+  status: string
+  amountCents: number
+  dueDate: string | null
+  deliveredUrl: string | null
+}
+
+export interface CreatorBookingDetail {
+  id: string
+  status: string
+  shape: string
+  listingTitle: string
+  tierName: string | null
+  date: string | null
+  start: string | null
+  end: string | null
+  timezone: string | null
+  intake: Record<string, string>
+  deliverables: CreatorBookingDetailDeliverable[]
+  totalCents: number
+}
+
+/** Everything the creator needs to see about ONE of their bookings in one place: when it is, the
+ *  requirements the restaurant answered, every delivery + its state, and the total value. Scoped to
+ *  the creator's own vendor (via the note's vendorId), so a forged id can't read another creator's. */
+export async function getCreatorBookingDetail(bookingId: string): Promise<CreatorBookingDetail | null> {
+  const vendor = await currentVendor()
+  if (!vendor) return null
+  const admin = createAdminClient()
+  const { data: b } = await admin.from('bookings').select('id, status, slot_date, slot_start, slot_end, timezone, note').eq('id', bookingId).maybeSingle()
+  if (!b) return null
+  const meta = parseMeta(b.note as string | null)
+  if (!meta || meta.vendorId !== vendor.id) return null
+  const work = await workOrdersForBookings([bookingId])
+  const list = work[bookingId] ?? []
+  return {
+    id: b.id as string,
+    status: b.status as string,
+    shape: meta.shape ?? 'scheduled',
+    listingTitle: meta.listingTitle,
+    tierName: meta.tierName,
+    date: (b.slot_date as string) ?? null,
+    start: (b.slot_start as string) ?? null,
+    end: (b.slot_end as string) ?? null,
+    timezone: (b.timezone as string) ?? null,
+    intake: meta.intake ?? {},
+    deliverables: list.map((d) => ({ orderId: d.orderId, title: d.title, status: d.status, amountCents: d.amountCents, dueDate: d.dueDate, deliveredUrl: d.deliveredUrl })),
+    totalCents: list.reduce((s, d) => s + (d.amountCents || 0), 0),
+  }
+}
+
+/** The restaurant updates its own answers to the offer's questions on a booking, any time after
+ *  booking (fill-anytime requirements). Merges into the note's intake map. Scoped to the booking's
+ *  own client, so only the restaurant that booked it can edit. */
+export async function updateBookingIntake(input: { bookingId: string; intake: Record<string, string> }): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Please sign in.' }
+  const admin = createAdminClient()
+  const { data: cu } = await admin.from('client_users').select('client_id').eq('auth_user_id', user.id).maybeSingle()
+  if (!cu?.client_id) return { ok: false, error: 'No restaurant account is linked to your login.' }
+  const { data: b } = await admin.from('bookings').select('id, note, client_id').eq('id', input.bookingId).maybeSingle()
+  if (!b || b.client_id !== cu.client_id) return { ok: false, error: 'That booking is not yours.' }
+  const meta = parseMeta(b.note as string | null)
+  if (!meta) return { ok: false, error: 'That booking cannot be updated.' }
+  const next: CreatorBookingMeta = { ...meta, intake: { ...meta.intake, ...cleanIntake(input.intake) } }
+  const { error } = await admin.from('bookings').update({ note: JSON.stringify(next), updated_at: new Date().toISOString() }).eq('id', b.id)
+  if (error) return { ok: false, error: 'Could not save. Try again.' }
+  revalidatePath('/dashboard/bookings')
+  return { ok: true }
+}

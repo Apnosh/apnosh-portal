@@ -41,6 +41,7 @@ export async function calendarForCreator(creatorId: string): Promise<CalendarIte
       title: (o.title as string) || 'Work',
       status: (o.status as string) || '',
       kind: time ? ('shoot' as const) : ('work' as const),
+      bookingId: bId ?? null,
     }
   })
 }
