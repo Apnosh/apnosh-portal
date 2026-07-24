@@ -321,7 +321,8 @@ function OfferForm({ initial, onCancel, onSaved }: { initial: CreatorPackage; on
         )}
       </Section>
 
-      {/* Deliveries — the separate pieces this offer hands over, each tracked on its own */}
+      {/* Deliveries — offer-level, only when NOT tiered (a tiered offer sets deliveries per level). */}
+      {p.tiers.length === 0 && (
       <Section title="Separate deliveries" hint="List each piece you hand over on its own, like Reel 1, Reel 2. Leave it empty if it's one handoff. The price splits evenly across them, and each is delivered and approved on its own.">
         {p.deliveries.map((d, i) => (
           <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -334,6 +335,7 @@ function OfferForm({ initial, onCancel, onSaved }: { initial: CreatorPackage; on
           <Plus size={14} /> Add a delivery
         </button>
       </Section>
+      )}
 
       {/* 5 — Add-ons */}
       <Section title="Add-ons they can pick" hint="Optional extras, each with a price on top.">
@@ -541,6 +543,19 @@ function TierList({ tiers, recurring, onChange, onDropToSingle }: { tiers: Packa
               onChange={(k, v) => setTier(i, { deliverables: t.deliverables.map((d, m) => (m === k ? v : d)) })}
               onRemove={(k) => setTier(i, { deliverables: t.deliverables.filter((_, m) => m !== k) })}
               placeholder="3 vertical reels" tight />
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 600, color: MUTE, marginBottom: 6 }}>Separate deliveries (optional)</div>
+              {(t.deliveries ?? []).map((d, k) => (
+                <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ flex: 1 }}><TextInput value={d.label} onChange={(v) => setTier(i, { deliveries: (t.deliveries ?? []).map((x, n) => (n === k ? { ...x, label: v } : x)) })} placeholder="Reel 1" small /></div>
+                  <div style={{ width: 96 }}><NumberInput value={d.offsetDays == null ? '' : String(d.offsetDays)} onChange={(v) => setTier(i, { deliveries: (t.deliveries ?? []).map((x, n) => (n === k ? { ...x, offsetDays: wholeOrNull(v) } : x)) })} placeholder="days later" /></div>
+                  <IconBtn title="Remove" onClick={() => setTier(i, { deliveries: (t.deliveries ?? []).filter((_, n) => n !== k) })}><X size={16} color={FAINT} /></IconBtn>
+                </div>
+              ))}
+              <button type="button" onClick={() => setTier(i, { deliveries: [...(t.deliveries ?? []), { id: `del-${Date.now()}-${(t.deliveries ?? []).length}`, label: '', offsetDays: null }] })} style={linkBtn}>
+                <Plus size={14} /> Add a delivery
+              </button>
+            </div>
           </div>
         ))}
       </div>

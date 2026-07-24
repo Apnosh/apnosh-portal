@@ -207,7 +207,11 @@ export async function mintBookingWorkOrder(bookingId: string, opts?: { month?: n
     // shot shapes only — a recurring month always stays one order, keyed by month). The level price
     // splits evenly and cent-conserved, so the pieces together bill exactly the agreed price. The
     // per-delivery key uses `#d<n>` — distinct from the recurring `#<month>` so the two never collide.
-    const deliveries = (!month && listing) ? rowToPackage(listing as ListingRow).deliveries : []
+    // Prefer the booked LEVEL's own deliveries (so Standard=3 reels, Premium=5), else the offer-level
+    // deliveries, else a single handoff. Recurring months always stay one order.
+    const pkgForDeliveries = (!month && listing) ? rowToPackage(listing as ListingRow) : null
+    const bookedTier = pkgForDeliveries && meta.tierName ? pkgForDeliveries.tiers.find((t) => t.name === meta.tierName) : null
+    const deliveries = pkgForDeliveries ? ((bookedTier?.deliveries && bookedTier.deliveries.length) ? bookedTier.deliveries : pkgForDeliveries.deliveries) : []
     if (deliveries.length >= 2) {
       const amounts = splitCents(amountCents, deliveries.length)
       let firstId: string | null = null

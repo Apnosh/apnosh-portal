@@ -81,6 +81,9 @@ export interface PackageTier {
   deliverables: string[]
   /** One short line to tell this tier apart from the others. Optional. */
   note?: string
+  /** This level's own separate deliveries (so Standard can be 3 reels and Premium 5). When set on a
+   *  booked tier, these are what mint into tracked pieces; otherwise the offer-level deliveries apply. */
+  deliveries?: Delivery[]
 }
 
 /** The editor's model of a package. Everything a creator sets. */
@@ -201,6 +204,26 @@ export function validatePackage(p: CreatorPackage): string[] {
   return errs
 }
 
+/** Normalize a deliveries list for storage: trim labels, keep positive-integer offsets, drop empties. */
+function deliveriesToRow(list: Delivery[]): Array<{ id: string; label: string; offsetDays?: number }> {
+  return list
+    .map((d) => ({ id: d.id, label: d.label.trim(), ...(typeof d.offsetDays === 'number' && d.offsetDays > 0 ? { offsetDays: Math.round(d.offsetDays) } : {}) }))
+    .filter((d) => d.label)
+}
+
+/** Parse a deliveries array back from stored jsonb, tolerating any legacy/hand-written shape. */
+function parseDeliveries(v: unknown): Delivery[] {
+  if (!Array.isArray(v)) return []
+  return v.flatMap((x, i) => {
+    if (!x || typeof x !== 'object') return []
+    const xx = x as Record<string, unknown>
+    const label = typeof xx.label === 'string' ? xx.label : ''
+    if (!label.trim()) return []
+    const offset = typeof xx.offsetDays === 'number' && Number.isInteger(xx.offsetDays) && xx.offsetDays > 0 ? xx.offsetDays : null
+    return [{ id: typeof xx.id === 'string' ? xx.id : `del-${i}`, label, ...(offset != null ? { offsetDays: offset } : {}) }]
+  })
+}
+
 /** Turn an editor package into the vendor_listings row to write. Assumes validatePackage passed. */
 export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
   const details: PackageDetails = {
@@ -211,6 +234,7 @@ export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
       id: t.id, name: t.name.trim(), priceCents: t.priceCents,
       deliverables: t.deliverables.map((d) => d.trim()).filter(Boolean),
       ...(t.note && t.note.trim() ? { note: t.note.trim() } : {}),
+      ...(t.deliveries && t.deliveries.length ? { deliveries: deliveriesToRow(t.deliveries) } : {}),
     })),
     turnaroundDays: p.turnaroundDays,
     revisions: p.revisions,
@@ -225,9 +249,7 @@ export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
       .filter((q) => q.label),
     bookingShape: p.bookingShape,
     categories: (p.categories.length ? p.categories : [p.category]).filter((c) => (PACKAGE_CATEGORIES as readonly string[]).includes(c)),
-    deliveries: p.deliveries
-      .map((d) => ({ id: d.id, label: d.label.trim(), ...(typeof d.offsetDays === 'number' && d.offsetDays > 0 ? { offsetDays: Math.round(d.offsetDays) } : {}) }))
-      .filter((d) => d.label),
+    deliveries: deliveriesToRow(p.deliveries),
   }
   return {
     ...(p.id ? { id: p.id } : {}),
@@ -266,11 +288,13 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
         const name = typeof tt.name === 'string' ? tt.name : ''
         const priceCents = isPosInt(tt.priceCents) ? tt.priceCents : 0
         const tierDeliverables = Array.isArray(tt.deliverables) ? tt.deliverables.filter((x): x is string => typeof x === 'string') : []
+        const tierDeliveries = parseDeliveries(tt.deliveries)
         if (!name) return []
         return [{
           id: typeof tt.id === 'string' ? tt.id : `tier-${i}`,
           name, priceCents, deliverables: tierDeliverables,
           ...(typeof tt.note === 'string' && tt.note ? { note: tt.note } : {}),
+          ...(tierDeliveries.length ? { deliveries: tierDeliveries } : {}),
         }]
       })
     : []
@@ -291,16 +315,7 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
     : []
   const bookingShape: BookingShape | null = (['scheduled', 'async', 'recurring'] as const).includes(d.bookingShape as BookingShape)
     ? (d.bookingShape as BookingShape) : null
-  const deliveries: Delivery[] = Array.isArray(d.deliveries)
-    ? d.deliveries.flatMap((x, i) => {
-        if (!x || typeof x !== 'object') return []
-        const xx = x as Record<string, unknown>
-        const label = typeof xx.label === 'string' ? xx.label : ''
-        if (!label.trim()) return []
-        const offset = typeof xx.offsetDays === 'number' && Number.isInteger(xx.offsetDays) && xx.offsetDays > 0 ? xx.offsetDays : null
-        return [{ id: typeof xx.id === 'string' ? xx.id : `del-${i}`, label, ...(offset != null ? { offsetDays: offset } : {}) }]
-      })
-    : []
+  const deliveries: Delivery[] = parseDeliveries(d.deliveries)
   const cat = (PACKAGE_CATEGORIES as readonly string[]).includes(row.category) ? (row.category as PackageCategory) : 'other'
   const parsedCats = Array.isArray(d.categories)
     ? d.categories.filter((x): x is PackageCategory => typeof x === 'string' && (PACKAGE_CATEGORIES as readonly string[]).includes(x))
