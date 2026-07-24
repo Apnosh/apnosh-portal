@@ -12,7 +12,10 @@
     "sim:db": "tsx scripts/sim/db-e2e.ts",
     "sim:http": "tsx scripts/sim/http-e2e.ts",
     "sim:seed-creator": "tsx scripts/sim/seed-test-creator.ts",
-    "sim:all": "tsx scripts/sim/lifecycle.ts && tsx scripts/sim/db-e2e.ts"
+    "sim:all": "tsx scripts/sim/lifecycle.ts && tsx scripts/sim/db-e2e.ts",
+    "sim:creator": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-journey.ts",
+    "sim:creator-screens": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-screens.ts",
+    "sim:demo-creator": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-demo-seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
