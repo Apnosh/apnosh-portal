@@ -51,7 +51,7 @@ function buildOfferPackage(offer: NonNullable<CreatorOnboardingInput['offer']>):
   const title = (offer.customTitle ?? '').trim()
   if (!title) return null
   return {
-    slug: slugify(title), title, category: offer.category as PackageCategory,
+    slug: slugify(title), title, category: offer.category as PackageCategory, categories: [offer.category as PackageCategory],
     listingType: 'one_off', description: `${title} for restaurants.`,
     productId: null, priceCents, billingPeriod: 'one_time',
     deliverables: [title], tiers: [], options: [], turnaroundDays: null, revisions: null,

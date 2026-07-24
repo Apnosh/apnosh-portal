@@ -385,6 +385,7 @@ export function packageFromProduct(p: CreativeProduct): CreatorPackage {
     slug: slugify(p.name),
     title: p.name,
     category: p.craft,
+    categories: [p.craft],
     listingType: p.listingType,
     description: p.summary,
     productId: p.id,

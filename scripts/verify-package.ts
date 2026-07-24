@@ -24,7 +24,7 @@ function section(t: string) { console.log(`\n== ${t} ==`) }
 
 function pkg(over: Partial<CreatorPackage> = {}): CreatorPackage {
   return {
-    slug: '', title: 'Signature Reel Pack', category: 'videographer', listingType: 'one_off',
+    slug: '', title: 'Signature Reel Pack', category: 'videographer', categories: ['videographer'], listingType: 'one_off',
     description: 'Three short reels shot and edited at your restaurant.',
     productId: null,
     priceCents: 45000, billingPeriod: 'one_time',

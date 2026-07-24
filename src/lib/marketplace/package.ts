@@ -77,7 +77,11 @@ export interface CreatorPackage {
   id?: string
   slug: string
   title: string
+  /** Primary kind of work (the vendor_listings.category column, for the DB CHECK + dispatch). */
   category: PackageCategory
+  /** All the kinds of work this offer covers (a content day is photo AND video). categories[0] is
+   *  the primary and is kept equal to `category`. Stored in details.categories jsonb. */
+  categories: PackageCategory[]
   listingType: ListingType
   description: string
   /** The standard product this is an offering of, from the creative catalog. null = free-form. */
@@ -127,6 +131,7 @@ interface PackageDetails {
   photos?: unknown
   intake?: unknown
   bookingShape?: unknown
+  categories?: unknown
 }
 
 /** A URL-safe slug from a title. Deterministic, so the same title always maps to the same slug
@@ -146,7 +151,7 @@ export function validatePackage(p: CreatorPackage): string[] {
   const errs: string[] = []
   const tiered = p.tiers.length > 0
   if (!p.title.trim()) errs.push('Give your package a name.')
-  if (!PACKAGE_CATEGORIES.includes(p.category)) errs.push('Pick what kind of work this is.')
+  if (!p.categories.length) errs.push('Pick what kind of work this is.')
 
   if (p.listingType === 'quote') {
     // A quote is a single custom request: no set price and no tiers.
@@ -204,13 +209,14 @@ export function packageToRow(p: CreatorPackage, vendorId: string): ListingRow {
       }))
       .filter((q) => q.label),
     bookingShape: p.bookingShape,
+    categories: (p.categories.length ? p.categories : [p.category]).filter((c) => (PACKAGE_CATEGORIES as readonly string[]).includes(c)),
   }
   return {
     ...(p.id ? { id: p.id } : {}),
     vendor_id: vendorId,
     slug: p.slug || slugify(p.title),
     title: p.title.trim(),
-    category: p.category,
+    category: p.categories[0] ?? p.category,
     listing_type: p.listingType,
     description: p.description.trim(),
     // The column shows the "starting at" number: the lowest tier when tiered, else the base price.
@@ -268,13 +274,18 @@ export function rowToPackage(row: ListingRow): CreatorPackage {
   const bookingShape: BookingShape | null = (['scheduled', 'async', 'recurring'] as const).includes(d.bookingShape as BookingShape)
     ? (d.bookingShape as BookingShape) : null
   const cat = (PACKAGE_CATEGORIES as readonly string[]).includes(row.category) ? (row.category as PackageCategory) : 'other'
+  const parsedCats = Array.isArray(d.categories)
+    ? d.categories.filter((x): x is PackageCategory => typeof x === 'string' && (PACKAGE_CATEGORIES as readonly string[]).includes(x))
+    : []
+  const cats: PackageCategory[] = parsedCats.length ? parsedCats : [cat]
   const lt = (['one_off', 'package', 'subscription', 'quote'] as const).includes(row.listing_type as ListingType)
     ? (row.listing_type as ListingType) : 'one_off'
   return {
     id: row.id,
     slug: row.slug,
     title: row.title,
-    category: cat,
+    category: cats[0],
+    categories: cats,
     listingType: lt,
     description: row.description ?? '',
     productId: typeof d.productId === 'string' ? d.productId : null,
@@ -330,7 +341,7 @@ export function formatCents(cents: number | null): string {
 /** A blank package to seed the editor's "new" form. */
 export function emptyPackage(category: PackageCategory = 'videographer'): CreatorPackage {
   return {
-    slug: '', title: '', category, listingType: 'one_off', description: '', productId: null,
+    slug: '', title: '', category, categories: [category], listingType: 'one_off', description: '', productId: null,
     priceCents: null, billingPeriod: 'one_time', deliverables: [], tiers: [], options: [],
     turnaroundDays: null, revisions: null, photos: [], intake: [], bookingShape: 'scheduled', active: false,
   }

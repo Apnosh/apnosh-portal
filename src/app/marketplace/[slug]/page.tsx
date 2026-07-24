@@ -346,7 +346,8 @@ export default async function VendorProfilePage({ params }: PageProps) {
                     })()}
 
                     <p className="text-[11px] text-ink-3 mb-3">
-                      Category: {CATEGORY_LABELS[l.category] ?? l.category}
+                      {pkg.categories.length > 1 ? 'Categories: ' : 'Category: '}
+                      {pkg.categories.map((c) => CATEGORY_LABELS[c] ?? c).join(', ')}
                     </p>
 
                     {vendor.isApnosh ? (

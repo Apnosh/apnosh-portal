@@ -260,9 +260,22 @@ function OfferForm({ initial, onCancel, onSaved }: { initial: CreatorPackage; on
         <TextArea value={p.description} onChange={(v) => set({ description: v })} rows={3} placeholder="Three short reels shot and edited at your restaurant, ready to post." />
         <div style={{ height: 14 }} />
         <Label>What kind of work is this?</Label>
-        <Select value={p.category} onChange={(v) => set({ category: v as PackageCategory })}>
-          {PACKAGE_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
-        </Select>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {PACKAGE_CATEGORIES.map((c) => {
+            const on = p.categories.includes(c)
+            return (
+              <button key={c} type="button"
+                onClick={() => {
+                  const next = on ? p.categories.filter((x) => x !== c) : [...p.categories, c]
+                  set({ categories: next, category: next[0] ?? p.category })
+                }}
+                style={{ padding: '7px 12px', borderRadius: 999, border: `1.5px solid ${on ? GREEN : LINE}`, background: on ? '#eaf7f3' : '#fff', color: on ? GREEN_DK : INK, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                {CATEGORY_LABEL[c]}
+              </button>
+            )
+          })}
+        </div>
+        <div style={{ fontSize: 12, color: MUTE, marginTop: 6 }}>Pick all that fit. The first is your main one.</div>
       </Section>
 
       {/* 3 — Delivery mode */}
@@ -581,10 +594,6 @@ function NumberInput({ value, onChange, placeholder, prefix }: { value: string; 
         style={{ ...fieldStyle(), paddingLeft: prefix ? 12 + prefix.length * 8 : 12 }} />
     </div>
   )
-}
-
-function Select({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: ReactNode }) {
-  return <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...fieldStyle(), appearance: 'none', cursor: 'pointer' }}>{children}</select>
 }
 
 function IconBtn({ title, onClick, children }: { title: string; onClick: () => void; children: ReactNode }) {
