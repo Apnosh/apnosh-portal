@@ -16,6 +16,7 @@
 
 import React from 'react'
 import { GOODS, dayLabel, outcomeFor } from './data'
+import { Crowd } from './crowd'
 import type { FunnelStep } from './data'
 import {
   Avatar, Body, Btn, Card, DISPLAY, Display, Eyebrow, Rise, UI, money, type Tokens,
@@ -298,45 +299,34 @@ export function Reckoning({ C, jobs, picks, date, onAgain }: {
         </div>
       </Rise>
 
-      <Card C={C} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 17 }}>
-        {o.steps.map((s: FunnelStep, i: number) => {
-          const leak = i === o.leak
-          const pct = Math.max(3, Math.round((s.n / top) * 100))
-          const prev = i > 0 ? o.steps[i - 1].n : null
-          const lost = prev != null ? prev - s.n : null
-          return (
-            <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-                gap: 9 }}>
-                <span style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 500, color: C.ink2 }}>
-                  {s.label}
-                  {!s.measured && (
-                    <span style={{ color: C.brass, fontWeight: 700 }}> · your count</span>
-                  )}
-                </span>
-                <span style={{
-                  fontFamily: DISPLAY, fontSize: 26, lineHeight: 1,
-                  fontVariantNumeric: 'tabular-nums',
-                  color: leak ? C.ember : C.ink,
-                }}>{s.n.toLocaleString()}</span>
-              </div>
-              <div style={{ height: 9, borderRadius: 99, background: C.line2, overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', width: `${pct}%`, borderRadius: 99,
-                  background: leak ? C.ember : C.forest,
-                  // a number we did not measure ourselves is drawn hollower
-                  opacity: s.measured ? 1 : 0.5,
-                  transition: 'width .8s cubic-bezier(.2,.8,.3,1)',
-                }} />
-              </div>
-              {leak && lost != null && (
-                <div style={{ fontFamily: UI, fontSize: 11.5, color: C.ember, fontWeight: 600 }}>
-                  {lost} said yes and did not show
-                </div>
-              )}
-            </div>
-          )
-        })}
+      {/* The people, not a bar chart. Every figure here stands for people who actually did
+          something we counted, which is exactly why this drawing belongs on this side of the
+          night and nowhere in the plan builder. */}
+      <Card C={C} style={{ padding: '18px 6px 14px' }}>
+        <Crowd C={C} steps={o.steps} leak={o.leak} height={420} />
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16,
+          flexWrap: 'wrap', paddingTop: 10, borderTop: `1px solid ${C.line2}`, margin: '0 14px',
+        }}>
+          <Legend C={C} col={C.forest}>stayed with you</Legend>
+          <Legend C={C} col={C.ember}>walked away</Legend>
+        </div>
+        <div style={{
+          fontFamily: UI, fontSize: 11, color: C.faint, lineHeight: 1.5,
+          padding: '9px 16px 0', textAlign: 'center',
+        }}>
+          The top ring is reach and is drawn off-scale — 2,720 impressions and 12 covers cannot
+          share an axis. The three below it are proportional to each other.
+        </div>
+      </Card>
+
+      <Card C={C} style={{ padding: '15px 18px', display: 'flex', flexDirection: 'column', gap: 6,
+        borderColor: C.ember }}>
+        <Eyebrow C={C}>The drop</Eyebrow>
+        <div style={{ fontFamily: DISPLAY, fontSize: 30, color: C.ember, lineHeight: 1 }}>
+          {o.steps[o.leak - 1].n - o.steps[o.leak].n} people
+        </div>
+        <Body C={C} size={13}>said they were coming and did not show</Body>
       </Card>
 
       <Card C={C} style={{ padding: 19, display: 'flex', flexDirection: 'column', gap: 8,
@@ -361,5 +351,17 @@ export function Reckoning({ C, jobs, picks, date, onAgain }: {
 
       <Btn C={C} full onClick={onAgain}>Run it again with the reminder moved</Btn>
     </div>
+  )
+}
+
+
+function Legend({ C, col, children }: {
+  C: Tokens; col: string; children: React.ReactNode
+}) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+      <span style={{ width: 8, height: 8, borderRadius: 99, background: col }} />
+      <span style={{ fontFamily: UI, fontSize: 11.5, color: C.ink3 }}>{children}</span>
+    </span>
   )
 }
