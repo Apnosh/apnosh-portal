@@ -94,13 +94,17 @@ export interface CitationPlan {
    *  into six other places spreads the gap instead of closing it, so the card stops on this. */
   sourceMissing: string[]
   sourceReady: boolean
+  /** True when we could not READ the Google listing at all (expired token, revoked access, the API
+   *  refusing us). Distinct from a field Google genuinely does not hold: same blank source, opposite
+   *  meaning, and only one of them is the owner's to fix. */
+  sourceUnreadable: boolean
   directories: PlannedDirectory[]
   doneCount: number
   total: number
   headline: string
 }
 
-export function buildCitationPlan(source: SourceNap, fixed: string[] = []): CitationPlan {
+export function buildCitationPlan(source: SourceNap, fixed: string[] = [], sourceUnreadable = false): CitationPlan {
   const done = new Set(fixed)
   // Not-yet-done first, so the list opens on what is left rather than on past work.
   const directories: PlannedDirectory[] = DIRECTORIES
@@ -117,12 +121,16 @@ export function buildCitationPlan(source: SourceNap, fixed: string[] = []): Cita
 
   return {
     source,
-    sourceMissing,
-    sourceReady: sourceMissing.length === 0,
+    // A listing we could not read tells us nothing about what Google holds, so it reports no
+    // missing fields — it just is not ready. Saying "Google is missing your phone" because OUR
+    // read failed accuses the owner's listing of our problem.
+    sourceMissing: sourceUnreadable ? [] : sourceMissing,
+    sourceReady: !sourceUnreadable && sourceMissing.length === 0,
+    sourceUnreadable,
     directories,
     doneCount,
     total: DIRECTORIES.length,
-    headline: headlineFor(doneCount, DIRECTORIES.length, sourceMissing),
+    headline: headlineFor(doneCount, DIRECTORIES.length, sourceMissing, sourceUnreadable),
   }
 }
 
@@ -130,7 +138,10 @@ export function buildCitationPlan(source: SourceNap, fixed: string[] = []): Cita
  * Counted from what the owner told us, and worded so it never sounds like we looked.
  * "You have sorted 2 of 6" is true. "2 of 6 are correct" would not be.
  */
-export function headlineFor(doneCount: number, total: number, sourceMissing: string[]): string {
+export function headlineFor(doneCount: number, total: number, sourceMissing: string[], sourceUnreadable = false): string {
+  if (sourceUnreadable) {
+    return 'We could not read your Google listing just now, so there is nothing to copy from yet.'
+  }
   if (sourceMissing.length > 0) {
     return `Google is missing your ${joinWords(sourceMissing)}, so there is nothing for the others to copy yet.`
   }

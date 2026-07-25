@@ -88,7 +88,17 @@ export default function ListingsFix({ campaignId, initialFixed = [] }: { campaig
 
           {/* Everything downstream is copied from Google. An incomplete source would get
               copied faithfully into six more places. */}
-          {!plan.sourceReady && (
+          {/* Two different problems, two different asks. Reading the listing failed is OURS to fix
+              (reconnect); a field Google really does not hold is theirs. Saying the second when the
+              first happened tells an owner their listing is wrong when it is fine. */}
+          {plan.sourceUnreadable && (
+            <Note>
+              We could not read your Google listing just now, so we cannot show you what the other
+              sites should say. This is on our side, not yours. Reconnecting Google usually fixes it.{' '}
+              <a href="/dashboard/google-profile" style={{ color: C.greenDk, fontWeight: 650 }}>Reconnect Google</a>
+            </Note>
+          )}
+          {!plan.sourceUnreadable && !plan.sourceReady && (
             <Note>
               Your Google listing has no {joinWords(plan.sourceMissing)}. Fix that first, or the other
               sites have nothing correct to copy.{' '}

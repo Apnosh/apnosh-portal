@@ -50,8 +50,14 @@ export async function GET(req: NextRequest) {
     phone: (listing?.ok ? listing.fields.primaryPhone : '') ?? '',
   }
 
+  // Whether we could READ the listing at all, kept separate from what it contains. A failed read
+  // (expired or revoked token, Google refusing us) leaves the same blank fields as a genuinely
+  // incomplete listing, and the screen used to blame the owner's listing either way — telling a
+  // restaurant "Google is missing your phone" about a listing that has one.
+  const sourceUnreadable = !conn.data || !listing?.ok
+
   const fixedParam = req.nextUrl.searchParams.get('fixed')
   const fixed = fixedParam ? fixedParam.split(',').filter(Boolean) : []
 
-  return NextResponse.json(buildCitationPlan(source, fixed))
+  return NextResponse.json(buildCitationPlan(source, fixed, sourceUnreadable))
 }
