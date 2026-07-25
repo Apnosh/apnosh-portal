@@ -88,10 +88,21 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
   // navigates off the confirmation) — reopening the store must not re-checkout the same plan.
   const onPlaced = (campaignId: string, breakdown: Breakdown, bookedSlot: Hold | null = null) => { clearPlan(); setPlaced({ campaignId, breakdown, bookedSlot }) }
 
+  // Prepare the checkout exactly once. The `started` ref is the ONLY guard, on purpose.
+  //
+  // This used to also carry a `cancelled` flag set by the effect's cleanup, and the two together
+  // deadlocked the screen in development. React runs effects mount → cleanup → remount under Strict
+  // Mode (Next's dev default): the first run fired the fetch, the cleanup set cancelled = true, the
+  // second run saw the ref and skipped fetching, and then the in-flight response was DISCARDED by
+  // that stale flag. Nothing set `prep`, nothing set `error`, so the owner sat on "Getting your total
+  // ready..." forever with no way forward. It never reproduced in production, where effects run once.
+  //
+  // Since the body runs a single time for the life of the component, there is no later request to
+  // race and nothing to cancel — applying the result unconditionally is the correct behavior. A
+  // setState after unmount is a harmless no-op in React 18.
   useEffect(() => {
     if (started.current) return
     started.current = true
-    let cancelled = false
     ;(async () => {
       try {
         const res = await fetch('/api/checkout/prepare', {
@@ -101,12 +112,11 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
         })
         const j = (await res.json().catch(() => ({}))) as PrepareResult & { error?: string }
         if (!res.ok) throw new Error(j.error || 'Could not start checkout.')
-        if (!cancelled) setPrep(j)
+        setPrep(j)
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Could not start checkout.')
+        setError(e instanceof Error ? e.message : 'Could not start checkout.')
       }
     })()
-    return () => { cancelled = true }
   }, [clientId, draft])
 
   return (
