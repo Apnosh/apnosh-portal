@@ -303,7 +303,7 @@ export function Reckoning({ C, jobs, picks, date, onAgain }: {
           something we counted, which is exactly why this drawing belongs on this side of the
           night and nowhere in the plan builder. */}
       <Card C={C} style={{ padding: '18px 6px 14px' }}>
-        <Crowd C={C} steps={o.steps} leak={o.leak} goal={40} height={260} />
+        <Crowd C={C} steps={o.steps} leak={o.leak} goal={40} height={320} />
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 16,
           flexWrap: 'wrap', paddingTop: 10, borderTop: `1px solid ${C.line2}`, margin: '0 14px',
@@ -315,8 +315,9 @@ export function Reckoning({ C, jobs, picks, date, onAgain }: {
           fontFamily: UI, fontSize: 11, color: C.faint, lineHeight: 1.5,
           padding: '9px 16px 0', textAlign: 'center',
         }}>
-          The first gate is reach and is drawn off-scale — 2,720 impressions and 12 covers cannot
-          share an axis. The three after it are proportional to each other.
+          Thickness is people. The mouth is reach and is drawn off-scale, because 2,720
+          impressions and 12 covers cannot share an axis. Everything after it is one person per
+          pixel, so each band that peels off the top is exactly how many you lost.
         </div>
       </Card>
 
