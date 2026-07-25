@@ -129,10 +129,24 @@ export default function ListingsFix({ campaignId, initialFixed = [] }: { campaig
             This is the correct text and where to put it.
           </Fine>
 
+          {/* A greyed button with its reason in a box further up reads as broken, so say it here
+              too. The walkthrough hands over Google's exact text, so it genuinely cannot start
+              before we have that text — but the owner should never have to guess why. */}
           {worklist.length > 0
-            ? <Next onClick={() => { setI(0); setStep(1) }} disabled={!plan.sourceReady}>
-                {fixed.length > 0 ? 'Carry on' : 'Start with Yelp'}
-              </Next>
+            ? (
+              <>
+                <Next onClick={() => { setI(0); setStep(1) }} disabled={!plan.sourceReady}>
+                  {fixed.length > 0 ? 'Carry on' : `Start with ${worklist[0]?.label ?? 'the first one'}`}
+                </Next>
+                {!plan.sourceReady && (
+                  <Fine style={{ textAlign: 'center', marginTop: 8 }}>
+                    {plan.sourceUnreadable
+                      ? 'Waiting on your Google details. Reconnect Google above and this opens up.'
+                      : `Waiting on your ${joinWords(plan.sourceMissing)}. Add that to Google above and this opens up.`}
+                  </Fine>
+                )}
+              </>
+            )
             : <Fine style={{ textAlign: 'center', marginTop: 8 }}>You have been through all of them.</Fine>}
         </>
       )}
