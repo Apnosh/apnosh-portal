@@ -164,6 +164,9 @@ export const LANES: Record<LaneId, { name: string; note: string }> = {
 export type ArtKind =
   | 'photos' | 'poster' | 'event' | 'posts' | 'google' | 'reel'
   | 'text' | 'email' | 'clock' | 'listing' | 'stars' | 'menu'
+  /** Cover only. One full-bleed scene — six small identical frames read as images failing
+   *  to load, which is the last thing a shop front can afford. */
+  | 'cover'
 
 export interface Good {
   id: string
@@ -247,6 +250,9 @@ export const STAGE_LABEL: Record<Stage, string> = {
 export interface Campaign {
   id: string
   title: string
+  /** The cover's colour world. Each outcome gets its own, so the shelf reads as a set of
+   *  distinct things rather than one swatch repeated five times. */
+  hue: [string, string]
   /** What the owner is actually trying to make happen. Shown, not buried. */
   blurb: string
   stage: Stage
@@ -259,7 +265,7 @@ export interface Campaign {
 
 export const CAMPAIGNS: Campaign[] = [
   {
-    id: 'event', title: 'Fill a night', stage: 'door', dated: true,
+    id: 'event', hue: ['#2E1338', '#B54A93'], title: 'Fill a night', stage: 'door', dated: true,
     blurb: 'You have something on and you need people in the room for it.',
     goods: ['shootNight', 'poster', 'eventPage', 'posts', 'googlePost', 'reel', 'textBlast', 'reminder'],
     levels: {
@@ -269,7 +275,7 @@ export const CAMPAIGNS: Campaign[] = [
     },
   },
   {
-    id: 'found', title: 'Get discovered', stage: 'found', dated: false,
+    id: 'found', hue: ['#062830', '#2C93A8'], title: 'Get discovered', stage: 'found', dated: false,
     blurb: 'People nearby are searching for somewhere to eat and not finding you.',
     goods: ['gbpFix', 'listings', 'googlePost', 'reviewReplies'],
     levels: {
@@ -279,7 +285,7 @@ export const CAMPAIGNS: Campaign[] = [
     },
   },
   {
-    id: 'dish', title: 'Push a dish', stage: 'interest', dated: true,
+    id: 'dish', hue: ['#2F1206', '#DE7C25'], title: 'Push a dish', stage: 'interest', dated: true,
     blurb: 'One plate deserves more attention than the rest of the menu.',
     goods: ['shootFood', 'poster', 'storySet', 'posts', 'reel', 'googlePost'],
     levels: {
@@ -289,7 +295,7 @@ export const CAMPAIGNS: Campaign[] = [
     },
   },
   {
-    id: 'look', title: 'Look worth going to', stage: 'interest', dated: false,
+    id: 'look', hue: ['#08241A', '#3AA277'], title: 'Look worth going to', stage: 'interest', dated: false,
     blurb: 'Your feed and your listing look worse than your food is.',
     goods: ['menuShoot', 'shootFood', 'storySet', 'posts', 'menuOnline'],
     levels: {
@@ -299,7 +305,7 @@ export const CAMPAIGNS: Campaign[] = [
     },
   },
   {
-    id: 'back', title: 'Bring them back', stage: 'back', dated: false,
+    id: 'back', hue: ['#2B0C18', '#C85A73'], title: 'Bring them back', stage: 'back', dated: false,
     blurb: 'People come once and you never hear from them again.',
     goods: ['emailBlast', 'textBlast', 'reviewReplies', 'storySet'],
     levels: {

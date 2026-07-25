@@ -17,8 +17,10 @@
 import React from 'react'
 import { BENCH, GOODS, addDays, dayLabel, outcomeFor } from './data'
 import type { FunnelStep } from './data'
-import { Art, Avatar, Btn, Card, Label, money, type Tokens } from './kit'
-import { isLane, makerKind, makerName, priceOf, type Picks } from './screens-buy'
+import {
+  Art, Avatar, Body, Btn, Card, DISPLAY, Display, Eyebrow, Rise, UI, money, type Tokens,
+} from './kit'
+import { hueOf, isLane, makerKind, makerName, priceOf, type Picks } from './screens-buy'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    The job states. `waiting` is the one that does not exist in the real schema
@@ -136,40 +138,52 @@ export function Relay({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <div style={{ fontSize: 23, fontWeight: 770, letterSpacing: '-.03em', lineHeight: 1.1 }}>
-          It is being made
+      <Rise i={0}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          <Eyebrow C={C} tone="brass">Day {day} · goes live {dayLabel(date)}</Eyebrow>
+          <Display C={C} size={36}>It is being made</Display>
+          {/* Progress as a filled rule rather than a sentence — the one number that matters,
+              readable without reading. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginTop: 4 }}>
+            <div style={{ flex: 1, height: 4, borderRadius: 99, background: C.line, overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 99, background: C.forest,
+                width: `${Math.round((done / Math.max(1, jobs.length)) * 100)}%`,
+                transition: 'width .6s cubic-bezier(.2,.8,.3,1)',
+              }} />
+            </div>
+            <span style={{ fontFamily: UI, fontSize: 11.5, color: C.ink3, flexShrink: 0 }}>
+              {done} of {jobs.length}
+            </span>
+          </div>
         </div>
-        <div style={{ fontSize: 13, color: C.ink3 }}>
-          Day {day} · {done} of {jobs.length} finished · goes live {dayLabel(date)}
-        </div>
-      </div>
+      </Rise>
 
       {/* The thing the owner has to answer. Raised by the person downstream, about what they
           were handed. It goes to the owner, not back up to the photographer. */}
       {flagged && (
-        <Card C={C} style={{ padding: 15, display: 'flex', flexDirection: 'column', gap: 10,
-          background: C.goldWash, borderColor: C.gold }}>
-          <Label C={C}>Needs you</Label>
+        <Card C={C} style={{ padding: 19, display: 'flex', flexDirection: 'column', gap: 13,
+          background: C.brassSoft, borderColor: C.brass }}>
+          <Eyebrow C={C} tone="brass">Needs you</Eyebrow>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <Avatar name={makerName(picks[flagged.goodId] ?? null)}
               kind={makerKind(picks[flagged.goodId] ?? 'team')} C={C} size={26} />
-            <span style={{ fontSize: 13, fontWeight: 700 }}>
+            <span style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 600, color: C.ink2 }}>
               {makerName(picks[flagged.goodId] ?? null)} says
             </span>
           </div>
-          <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{flagged.flag}</div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 20, color: C.ink, lineHeight: 1.32 }}>
+            {flagged.flag}
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Btn C={C} size="sm" onClick={() => onResolve(flagged.goodId, 'proceed')}>
+            <Btn C={C} size="sm" tone="brass" onClick={() => onResolve(flagged.goodId, 'proceed')}>
               Use the other fifteen
             </Btn>
             <Btn C={C} size="sm" tone="quiet" onClick={() => onResolve(flagged.goodId, 'reshoot')}>
               Reshoot those three
             </Btn>
           </div>
-          <div style={{ fontSize: 11.5, color: C.ink3, lineHeight: 1.4 }}>
-            Your call either way. A reshoot costs a day.
-          </div>
+          <Body C={C} dim size={11.5}>Your call either way. A reshoot costs a day.</Body>
         </Card>
       )}
 
@@ -180,36 +194,43 @@ export function Relay({
           const pick = picks[j.goodId]
           const last = i === jobs.length - 1
           const tone =
-            j.state === 'done' ? C.green
-            : j.state === 'flagged' ? C.gold
-            : j.state === 'doing' ? C.sky
+            j.state === 'done' ? C.forest
+            : j.state === 'flagged' ? C.brass
+            : j.state === 'doing' ? C.brass
             : C.line
 
           return (
             <div key={j.goodId} style={{ display: 'flex', gap: 11 }}>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center',
                 flexShrink: 0, width: 18 }}>
-                <span style={{
-                  width: 11, height: 11, borderRadius: 99, marginTop: 5, flexShrink: 0,
-                  background: tone,
-                  boxShadow: j.state === 'doing' || j.state === 'flagged'
-                    ? `0 0 0 4px ${j.state === 'flagged' ? C.goldWash : C.greenWash}` : 'none',
-                }} />
-                {!last && <span style={{ flex: 1, width: 1.5, background: C.line, minHeight: 26 }} />}
+                <span style={{ position: 'relative', marginTop: 6, flexShrink: 0, width: 11, height: 11 }}>
+                  {(j.state === 'doing' || j.state === 'flagged') && (
+                    <span className="px-pulse" style={{
+                      position: 'absolute', inset: -5, borderRadius: 99, background: tone,
+                    }} />
+                  )}
+                  <span style={{
+                    position: 'relative', display: 'block', width: 11, height: 11, borderRadius: 99,
+                    background: tone,
+                  }} />
+                </span>
+                {!last && <span style={{ flex: 1, width: 1.5, background: C.line, minHeight: 30, marginTop: 4 }} />}
               </div>
 
-              <div style={{ flex: 1, paddingBottom: last ? 0 : 16, minWidth: 0 }}>
+              <div style={{ flex: 1, paddingBottom: last ? 0 : 22, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
                   gap: 9 }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 720, lineHeight: 1.3 }}>{g.name}</span>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 18, color: C.ink, lineHeight: 1.2 }}>
+                    {g.name}
+                  </span>
                   <span style={{
-                    fontSize: 10, fontWeight: 790, letterSpacing: '.05em', textTransform: 'uppercase',
-                    color: j.state === 'done' ? C.greenDk : j.state === 'flagged' ? C.gold : C.faint,
-                    flexShrink: 0,
+                    fontFamily: UI, fontSize: 9.5, fontWeight: 700, letterSpacing: '.13em',
+                    textTransform: 'uppercase', flexShrink: 0,
+                    color: j.state === 'done' ? C.forest : j.state === 'flagged' ? C.brass : C.faint,
                   }}>{STATE_WORD[j.state]}</span>
                 </div>
 
-                <div style={{ fontSize: 11.5, color: C.ink3, lineHeight: 1.4, marginTop: 1 }}>
+                <div style={{ fontFamily: UI, fontSize: 11.5, color: C.ink3, lineHeight: 1.45, marginTop: 3 }}>
                   {pick ? makerName(pick) : ''}
                   {j.state === 'waiting' && j.waitingOn.length > 0 && (
                     <> · cannot start until {GOODS[j.waitingOn[0]].name.toLowerCase()} lands</>
@@ -221,10 +242,11 @@ export function Relay({
                     hue here made Priya's photos come back generic green, which quietly breaks
                     the one promise the artwork carries: this is THEIR work. */}
                 {j.state === 'done' && (
-                  <div style={{ marginTop: 8, display: 'inline-flex', padding: 8, borderRadius: 10,
-                    background: C.line2 }}>
-                    <Art kind={g.art} C={C}
-                      hue={pick && !isLane(pick) ? BENCH.find((c) => c.id === pick)?.hue : undefined} />
+                  <div style={{
+                    marginTop: 11, borderRadius: 13, overflow: 'hidden',
+                    border: `1px solid ${C.line}`, boxShadow: C.lift,
+                  }}>
+                    <Art kind={g.art} C={C} hue={hueOf(pick)} h={116} />
                   </div>
                 )}
               </div>
@@ -240,9 +262,9 @@ export function Relay({
           <Btn C={C} full tone="quiet" onClick={onAdvance} disabled={!!flagged}>
             {flagged ? 'Answer the question above first' : 'Skip a day →'}
           </Btn>
-          <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', lineHeight: 1.4 }}>
-            Prototype control. In the real thing this happens without you watching.
-          </div>
+          <div style={{
+            fontFamily: UI, fontSize: 11, color: C.faint, textAlign: 'center', lineHeight: 1.45,
+          }}>Prototype control. In the real thing this happens without you watching.</div>
         </>
       )}
     </div>
@@ -262,16 +284,14 @@ export function Reckoning({ C, jobs, picks, date, onAgain }: {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <div style={{ fontSize: 23, fontWeight: 770, letterSpacing: '-.03em', lineHeight: 1.1 }}>
-          What actually happened
+      <Rise i={0}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Eyebrow C={C} tone="brass">{dayLabel(date)} · you spent {money(spent)}</Eyebrow>
+          <Display C={C} size={38}>What actually happened</Display>
         </div>
-        <div style={{ fontSize: 13, color: C.ink3 }}>
-          {dayLabel(date)} · you spent {money(spent)}
-        </div>
-      </div>
+      </Rise>
 
-      <Card C={C} style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 13 }}>
+      <Card C={C} style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 17 }}>
         {o.steps.map((s: FunnelStep, i: number) => {
           const leak = i === o.leak
           const pct = Math.max(3, Math.round((s.n / top) * 100))
@@ -281,25 +301,29 @@ export function Reckoning({ C, jobs, picks, date, onAgain }: {
             <div key={s.label} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
                 gap: 9 }}>
-                <span style={{ fontSize: 12.5, fontWeight: 660, color: C.ink2 }}>
+                <span style={{ fontFamily: UI, fontSize: 12.5, fontWeight: 500, color: C.ink2 }}>
                   {s.label}
                   {!s.measured && (
-                    <span style={{ fontSize: 10.5, color: C.gold, fontWeight: 700 }}> · your count</span>
+                    <span style={{ color: C.brass, fontWeight: 700 }}> · your count</span>
                   )}
                 </span>
-                <span style={{ fontSize: 15, fontWeight: 780, fontVariantNumeric: 'tabular-nums',
-                  color: leak ? C.rust : C.ink }}>{s.n.toLocaleString()}</span>
+                <span style={{
+                  fontFamily: DISPLAY, fontSize: 26, lineHeight: 1,
+                  fontVariantNumeric: 'tabular-nums',
+                  color: leak ? C.ember : C.ink,
+                }}>{s.n.toLocaleString()}</span>
               </div>
-              <div style={{ height: 8, borderRadius: 99, background: C.line2, overflow: 'hidden' }}>
+              <div style={{ height: 9, borderRadius: 99, background: C.line2, overflow: 'hidden' }}>
                 <div style={{
                   height: '100%', width: `${pct}%`, borderRadius: 99,
-                  background: leak ? C.rust : C.green,
-                  // dashed fill = a number we did not measure ourselves
-                  opacity: s.measured ? 1 : 0.55,
+                  background: leak ? C.ember : C.forest,
+                  // a number we did not measure ourselves is drawn hollower
+                  opacity: s.measured ? 1 : 0.5,
+                  transition: 'width .8s cubic-bezier(.2,.8,.3,1)',
                 }} />
               </div>
               {leak && lost != null && (
-                <div style={{ fontSize: 11, color: C.rust, fontWeight: 660 }}>
+                <div style={{ fontFamily: UI, fontSize: 11.5, color: C.ember, fontWeight: 600 }}>
                   {lost} said yes and did not show
                 </div>
               )}
@@ -308,21 +332,21 @@ export function Reckoning({ C, jobs, picks, date, onAgain }: {
         })}
       </Card>
 
-      <Card C={C} style={{ padding: 15, display: 'flex', flexDirection: 'column', gap: 5,
-        background: C.rustWash, borderColor: C.line }}>
-        <Label C={C}>Where it went wrong</Label>
-        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{o.why}</div>
+      <Card C={C} style={{ padding: 19, display: 'flex', flexDirection: 'column', gap: 8,
+        background: C.emberSoft, borderColor: C.line }}>
+        <Eyebrow C={C}>Where it went wrong</Eyebrow>
+        <div style={{ fontFamily: DISPLAY, fontSize: 19, color: C.ink, lineHeight: 1.35 }}>{o.why}</div>
       </Card>
 
-      <Card C={C} style={{ padding: 15, display: 'flex', flexDirection: 'column', gap: 5,
-        background: C.greenWash, borderColor: C.line }}>
-        <Label C={C}>One thing to change</Label>
-        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.5 }}>{o.fix}</div>
+      <Card C={C} style={{ padding: 19, display: 'flex', flexDirection: 'column', gap: 8,
+        background: C.forestSoft, borderColor: C.forest }}>
+        <Eyebrow C={C} tone="forest">One thing to change</Eyebrow>
+        <div style={{ fontFamily: DISPLAY, fontSize: 19, color: C.ink, lineHeight: 1.35 }}>{o.fix}</div>
       </Card>
 
-      <Card C={C} style={{ padding: '13px 15px', display: 'flex', flexDirection: 'column', gap: 5 }}>
-        <Label C={C}>What we cannot see</Label>
-        <div style={{ fontSize: 12.5, color: C.ink2, lineHeight: 1.5 }}>
+      <Card C={C} style={{ padding: 17, display: 'flex', flexDirection: 'column', gap: 7 }}>
+        <Eyebrow C={C}>What we cannot see</Eyebrow>
+        <div style={{ fontFamily: UI, fontSize: 12.5, color: C.ink2, lineHeight: 1.55 }}>
           Reach, taps and RSVPs are ours to count. Who actually walked through the door is not.
           That last number came from you. Connect your till and it stops being a guess.
         </div>

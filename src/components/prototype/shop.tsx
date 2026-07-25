@@ -13,7 +13,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { CAMPAIGNS, GOODS } from './data'
 import type { Campaign } from './data'
-import { TOKENS, type Mode, type Tokens } from './kit'
+import { DISPLAY, Motion, TOKENS, UI, type Mode, type Tokens } from './kit'
 import {
   Brief, Cast, Shelf, Spread, defaultPickFor, priceOf, type Pick, type Picks,
 } from './screens-buy'
@@ -28,6 +28,9 @@ function oneOffCampaign(goodId: string): Campaign {
   return {
     id: `one-${goodId}`,
     title: g.name,
+    // A single piece has no campaign of its own to borrow a colour world from, so it gets
+    // the house one: warm, neutral, and clearly not one of the five outcomes.
+    hue: ['#241d16', '#8a7350'],
     blurb: g.what,
     stage: 'found',
     dated: false,
@@ -129,16 +132,20 @@ export default function Shop() {
 
   return (
     <div style={{
-      minHeight: '100dvh', background: C.paper, color: C.ink,
-      fontFamily: "ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif",
+      minHeight: '100dvh', background: C.paper, color: C.ink, fontFamily: UI,
       WebkitFontSmoothing: 'antialiased',
+      // a soft warm bloom at the top, so the page has a light source rather than a flat fill
+      backgroundImage: mode === 'dark'
+        ? `radial-gradient(120% 46% at 50% -8%, ${C.brassSoft} 0%, transparent 62%)`
+        : `radial-gradient(120% 46% at 50% -8%, #FFFDF6 0%, transparent 62%)`,
     }}>
+      <Motion />
       {/* A phone column, because this is an owner surface and owners are on a phone. */}
-      <div style={{ maxWidth: 460, margin: '0 auto', padding: '14px 16px 60px' }}>
+      <div style={{ maxWidth: 460, margin: '0 auto', padding: '16px 18px 64px' }}>
 
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          gap: 10, paddingBottom: 14,
+          gap: 10, paddingBottom: 20,
         }}>
           <button type="button" onClick={restart}
             style={{
@@ -146,21 +153,24 @@ export default function Shop() {
               display: 'flex', alignItems: 'center', gap: 7, color: C.ink,
             }}>
             <span style={{
-              width: 22, height: 22, borderRadius: 7, background: C.green, color: '#fff',
+              width: 25, height: 25, borderRadius: 8, background: C.ink, color: C.paper,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 11, fontWeight: 820,
+              fontFamily: DISPLAY, fontSize: 14, lineHeight: 1,
             }}>A</span>
-            <span style={{ fontSize: 13, fontWeight: 740, letterSpacing: '-.01em' }}>Apnosh</span>
+            <span style={{ fontFamily: DISPLAY, fontSize: 17, letterSpacing: '-.01em' }}>Apnosh</span>
             <span style={{
-              fontSize: 9, fontWeight: 800, letterSpacing: '.09em', textTransform: 'uppercase',
-              color: C.gold, background: C.goldWash, padding: '2px 6px', borderRadius: 99,
+              fontFamily: UI, fontSize: 8.5, fontWeight: 700, letterSpacing: '.16em',
+              textTransform: 'uppercase', color: C.brass, border: `1px solid ${C.line}`,
+              padding: '3px 7px', borderRadius: 99,
             }}>Prototype</span>
           </button>
 
           <button type="button" onClick={() => setMode(mode === 'light' ? 'dark' : 'light')}
+            className="px-tap"
             style={{
               border: `1px solid ${C.line}`, background: C.card, cursor: 'pointer', borderRadius: 99,
-              width: 30, height: 30, fontSize: 13, lineHeight: 1, color: C.ink2, fontFamily: 'inherit',
+              width: 34, height: 34, fontSize: 14, lineHeight: 1, color: C.ink2, fontFamily: 'inherit',
+              boxShadow: C.lift,
             }} aria-label="Switch theme">
             {mode === 'light' ? '☾' : '☀'}
           </button>
@@ -232,8 +242,8 @@ export default function Shop() {
         )}
 
         <div style={{
-          marginTop: 30, paddingTop: 16, borderTop: `1px solid ${C.line}`,
-          fontSize: 11, color: C.faint, lineHeight: 1.55,
+          marginTop: 40, paddingTop: 18, borderTop: `1px solid ${C.line}`,
+          fontFamily: UI, fontSize: 10.5, color: C.faint, lineHeight: 1.6,
         }}>
           Every price, creator and number here is invented. Nothing forecasts a result: the shop
           shows what gets made, by whom and when, and the reckoning only counts things that
