@@ -100,7 +100,10 @@ const CSS = `
    2,000px of scrolling; as a rail it is one gesture and half a screen. */
 .px-rail { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory;
   -webkit-overflow-scrolling:touch; scrollbar-width:none; padding:2px 18px 6px;
-  margin:0 -18px; }
+  margin:0 -18px;
+  /* Without this the snap target aligns to the content edge, so the rail silently scrolls
+     itself 18px on load and eats its own lead-in — the first card sat flush to the screen. */
+  scroll-padding-left:18px; scroll-padding-right:18px; }
 .px-rail::-webkit-scrollbar { display:none }
 .px-rail > * { scroll-snap-align:start; flex:0 0 auto }
 .px-open { overflow:hidden; transition: max-height .34s cubic-bezier(.2,.8,.3,1), opacity .24s ease }

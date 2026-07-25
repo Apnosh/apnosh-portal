@@ -84,6 +84,16 @@ export function fallbacksFor(goodId: string, picks: Picks): string[] {
   return anyPresent ? [] : from.filter((id) => GOODS[id]).slice(0, 1)
 }
 
+/** One colour per trade. The run-up chip and the plan row use the same one, so a chip on
+ *  Wednesday and the row below it are obviously the same piece of work. */
+export const TRADE: Record<string, string> = {
+  photo: '#B54A93', design: '#DE7C25', video: '#9A5FC4',
+  social: '#2C93A8', copy: '#C85A73',
+}
+export function tradeColorOf(g: Good, C: Tokens): string {
+  return g.craft ? TRADE[g.craft] : C.brass
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    1 · THE SHELF
    ──────────────────────────────────────────────────────────────────────────── */
@@ -399,6 +409,102 @@ function Back({ C, onClick, children }: { C: Tokens; onClick: () => void; childr
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
+   THE RUN-UP — the weeks before the night, with each piece on the day it lands.
+   
+   This replaced the artefact photographs. A picture of a poster is a thing; the run-up is
+   what is HAPPENING — and it is the only drawing that is fully honest before a campaign has
+   run, because dates are facts and reach is a guess. It also puts the reminder's position on
+   screen, which is the exact mistake the reckoning caught.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+function RunUp({ C, campaign, picks, date, onJump }: {
+  C: Tokens; campaign: Campaign; picks: Picks; date: Date
+  onJump: (goodId: string) => void
+}) {
+  const live = campaign.goods.filter((id) => picks[id])
+  if (!live.length) return null
+
+  // One column per day that actually has something on it. Empty days are not information.
+  const byLead = new Map<number, string[]>()
+  live.forEach((id) => {
+    const l = GOODS[id].lead
+    if (!byLead.has(l)) byLead.set(l, [])
+    byLead.get(l)!.push(id)
+  })
+  const leads = [...byLead.keys()].sort((a, b) => b - a)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Eyebrow C={C} tone="brass">The run-up</Eyebrow>
+        <span style={{ flex: 1, height: 1, background: C.line }} />
+      </div>
+
+      <div className="px-rail" style={{ alignItems: 'stretch' }}>
+        {leads.map((lead) => {
+          const day = addDays(date, -lead)
+          const ids = byLead.get(lead)!
+          return (
+            <div key={lead} style={{
+              width: 108, display: 'flex', flexDirection: 'column', gap: 7,
+              paddingRight: 11, borderRight: `1px solid ${C.line2}`,
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingLeft: 2 }}>
+                <span style={{
+                  fontFamily: UI, fontSize: 9, fontWeight: 700, letterSpacing: '.13em',
+                  textTransform: 'uppercase', color: C.faint,
+                }}>
+                  {campaign.dated
+                    ? day.toLocaleDateString(undefined, { weekday: 'short' })
+                    : 'Day'}
+                </span>
+                <span style={{ fontFamily: DISPLAY, fontSize: 20, color: C.ink2, lineHeight: 1 }}>
+                  {campaign.dated ? day.getDate() : lead}
+                </span>
+              </div>
+              {ids.map((id) => (
+                <button key={id} type="button" onClick={() => onJump(id)} className="px-tap"
+                  style={{
+                    border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%',
+                    borderRadius: 9, padding: '7px 8px', fontFamily: UI, fontSize: 10.5,
+                    fontWeight: 600, lineHeight: 1.25, color: '#fff',
+                    background: tradeColorOf(GOODS[id], C),
+                  }}>
+                  {GOODS[id].name}
+                </button>
+              ))}
+            </div>
+          )
+        })}
+
+        {/* The night. Everything above is scheduled backwards from this. */}
+        <div style={{
+          width: 118, display: 'flex', flexDirection: 'column', gap: 7, justifyContent: 'flex-start',
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingLeft: 2 }}>
+            <span style={{
+              fontFamily: UI, fontSize: 9, fontWeight: 700, letterSpacing: '.13em',
+              textTransform: 'uppercase', color: C.brass,
+            }}>
+              {campaign.dated ? date.toLocaleDateString(undefined, { weekday: 'short' }) : 'Then'}
+            </span>
+            <span style={{ fontFamily: DISPLAY, fontSize: 20, color: C.brass, lineHeight: 1 }}>
+              {campaign.dated ? date.getDate() : 'on'}
+            </span>
+          </div>
+          <div style={{
+            borderRadius: 10, padding: '11px 9px', background: C.forest, color: '#fff',
+            fontFamily: DISPLAY, fontSize: 15, lineHeight: 1.2, textAlign: 'center',
+          }}>
+            {campaign.dated ? 'The night' : 'It runs'}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
    3 · THE SPREAD — the goods, in the order they get made.
    ──────────────────────────────────────────────────────────────────────────── */
 
@@ -442,6 +548,11 @@ export function Spread({
       </Rise>
 
       <Rise i={1}>
+        <RunUp C={C} campaign={campaign} picks={picks} date={date}
+          onJump={(id) => setExpanded(expanded === id ? null : id)} />
+      </Rise>
+
+      <Rise i={2}>
         <div style={{
           display: 'flex', gap: 3, background: C.paper2, borderRadius: 14, padding: 4,
           border: `1px solid ${C.line}`,
@@ -501,7 +612,7 @@ export function Spread({
           }
 
           return (
-            <Rise key={id} i={idx + 2}>
+            <Rise key={id} i={idx + 3}>
               <Card C={C} style={{ borderColor: gone.length ? C.brass : C.line }}>
                 <button type="button" className="px-tap"
                   onClick={() => setExpanded(open ? null : id)}
@@ -511,12 +622,13 @@ export function Spread({
                     padding: '11px 13px', background: 'none', border: 'none', cursor: 'pointer',
                     fontFamily: UI, color: C.ink, textAlign: 'left',
                   }}>
+                  {/* The photographs are gone. A picture of a poster told you what you get; it
+                      could never tell you what is happening. This marker is the same colour as
+                      that piece's chip in the run-up, so the strip and the list are one thing. */}
                   <span style={{
-                    width: 68, height: 50, borderRadius: 9, overflow: 'hidden', flexShrink: 0,
-                    border: `1px solid ${C.line}`,
-                  }}>
-                    <Art kind={g.art} C={C} hue={creator?.hue} h={50} />
-                  </span>
+                    width: 4, alignSelf: 'stretch', minHeight: 40, borderRadius: 99, flexShrink: 0,
+                    background: tradeColorOf(g, C),
+                  }} />
                   <span style={{ flex: 1, minWidth: 0, display: 'flex',
                     flexDirection: 'column', gap: 2 }}>
                     <span style={{ fontFamily: DISPLAY, fontSize: 17, lineHeight: 1.15,
@@ -549,11 +661,7 @@ export function Spread({
                 }}>
                   <div style={{ padding: '2px 13px 14px', display: 'flex',
                     flexDirection: 'column', gap: 11 }}>
-                    <div style={{ borderRadius: 12, overflow: 'hidden',
-                      border: `1px solid ${C.line}` }}>
-                      <Art kind={g.art} C={C} hue={creator?.hue} h={150} />
-                    </div>
-                    <Body C={C} size={12.5}>{g.what}</Body>
+                    <Body C={C} size={13}>{g.what}</Body>
 
                     {g.from && (
                       <div style={{
@@ -644,17 +752,9 @@ export function Spread({
       )}
 
       {nextUp && (
-        <Card C={C} style={{ overflow: 'hidden' }}>
-          <div style={{ position: 'relative' }}>
-            <Art kind={GOODS[nextUp.id].art} C={C} h={104} />
-            <div style={{ position: 'absolute', inset: 0, background: C.scrim }} />
-            <div style={{
-              position: 'absolute', left: 17, bottom: 12,
-              fontFamily: UI, fontSize: 9.5, fontWeight: 700, letterSpacing: '.14em',
-              textTransform: 'uppercase', color: 'rgba(255,255,255,.75)',
-            }}>What {money(nextUp.p)} more buys</div>
-          </div>
-          <div style={{ padding: '14px 17px 16px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+        <Card C={C}>
+          <div style={{ padding: '15px 17px 16px', display: 'flex', flexDirection: 'column', gap: 9 }}>
+            <Eyebrow C={C} tone="brass">What {money(nextUp.p)} more buys</Eyebrow>
             <div style={{ fontFamily: DISPLAY, fontSize: 20, color: C.ink }}>{GOODS[nextUp.id].name}</div>
             <Body C={C} dim size={12.5}>{GOODS[nextUp.id].what}</Body>
             <Btn C={C} tone="quiet" size="sm"

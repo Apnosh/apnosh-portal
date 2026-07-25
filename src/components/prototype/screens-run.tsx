@@ -15,12 +15,12 @@
  */
 
 import React from 'react'
-import { BENCH, GOODS, addDays, dayLabel, outcomeFor } from './data'
+import { GOODS, dayLabel, outcomeFor } from './data'
 import type { FunnelStep } from './data'
 import {
-  Art, Avatar, Body, Btn, Card, DISPLAY, Display, Eyebrow, Rise, UI, money, type Tokens,
+  Avatar, Body, Btn, Card, DISPLAY, Display, Eyebrow, Rise, UI, money, type Tokens,
 } from './kit'
-import { hueOf, isLane, makerKind, makerName, priceOf, type Picks } from './screens-buy'
+import { makerKind, makerName, priceOf, type Picks } from './screens-buy'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    The job states. `waiting` is the one that does not exist in the real schema
@@ -238,16 +238,23 @@ export function Relay({
                   {j.state === 'done' && j.doneDay != null && <> · finished day {j.doneDay}</>}
                 </div>
 
-                {/* Tinted by whoever made it, exactly as it looked in the shop. Dropping the
-                    hue here made Priya's photos come back generic green, which quietly breaks
-                    the one promise the artwork carries: this is THEIR work. */}
+                {/* No picture of the delivered work. A fake photograph of a poster was never
+                    proof that a poster exists, and it read as a broken image. What actually
+                    reassures an owner is the plain fact: it is done, by whom, on what day, and
+                    here is the thing itself when they want it. */}
                 {j.state === 'done' && (
-                  <div style={{
-                    marginTop: 11, borderRadius: 13, overflow: 'hidden',
-                    border: `1px solid ${C.line}`, boxShadow: C.lift,
-                  }}>
-                    <Art kind={g.art} C={C} hue={hueOf(pick)} h={116} />
-                  </div>
+                  <button type="button" className="px-tap"
+                    style={{
+                      marginTop: 9, display: 'inline-flex', alignItems: 'center', gap: 8,
+                      padding: '8px 13px', borderRadius: 99, cursor: 'pointer',
+                      border: `1px solid ${C.line}`, background: C.paper2,
+                      fontFamily: UI, fontSize: 11.5, fontWeight: 600, color: C.ink2,
+                    }}>
+                    <span style={{
+                      width: 6, height: 6, borderRadius: 99, background: C.forest, flexShrink: 0,
+                    }} />
+                    Open {g.name.toLowerCase()}
+                  </button>
                 )}
               </div>
             </div>
