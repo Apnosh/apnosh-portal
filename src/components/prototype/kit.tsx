@@ -88,6 +88,8 @@ const CSS = `
 @keyframes pxRise { from { opacity:0; transform: translateY(14px) } to { opacity:1; transform:none } }
 @keyframes pxFade { from { opacity:0 } to { opacity:1 } }
 @keyframes pxPulse { 0%,100% { opacity:.35; transform:scale(1) } 50% { opacity:.9; transform:scale(1.45) } }
+@keyframes pxFlow { to { stroke-dashoffset: -22 } }
+@keyframes pxGlow { 0%,100% { opacity:.25 } 50% { opacity:.6 } }
 @keyframes pxSheen { from { transform: translateX(-120%) } to { transform: translateX(220%) } }
 .px-rise { animation: pxRise .62s cubic-bezier(.16,.84,.34,1) both }
 .px-fade { animation: pxFade .5s ease both }
@@ -95,6 +97,8 @@ const CSS = `
 .px-tap { transition: transform .18s cubic-bezier(.2,.8,.3,1), box-shadow .22s ease, border-color .22s ease }
 .px-tap:active { transform: scale(.985) }
 .px-art { transition: transform .5s cubic-bezier(.2,.8,.3,1) }
+.px-flow { animation: pxFlow 1.5s linear infinite }
+.px-glow { animation: pxGlow 3s ease-in-out infinite }
 .px-card:hover .px-art { transform: scale(1.035) }
 /* A swipe rail: cards bleed to both edges and snap. Five campaigns stacked vertically was
    2,000px of scrolling; as a rail it is one gesture and half a screen. */
@@ -105,10 +109,12 @@ const CSS = `
      itself 18px on load and eats its own lead-in — the first card sat flush to the screen. */
   scroll-padding-left:18px; scroll-padding-right:18px; }
 .px-rail::-webkit-scrollbar { display:none }
+.px-scroll { scrollbar-width:none }
+.px-scroll::-webkit-scrollbar { display:none }
 .px-rail > * { scroll-snap-align:start; flex:0 0 auto }
 .px-open { overflow:hidden; transition: max-height .34s cubic-bezier(.2,.8,.3,1), opacity .24s ease }
 @media (prefers-reduced-motion: reduce) {
-  .px-rise, .px-fade, .px-pulse, .px-tap, .px-art, .px-open {
+  .px-rise, .px-fade, .px-pulse, .px-tap, .px-art, .px-open, .px-flow, .px-glow {
     animation: none !important; transition: none !important }
 }
 `

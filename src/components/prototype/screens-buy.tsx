@@ -417,14 +417,18 @@ function Back({ C, onClick, children }: { C: Tokens; onClick: () => void; childr
    screen, which is the exact mistake the reckoning caught.
    ──────────────────────────────────────────────────────────────────────────── */
 
-function RunUp({ C, campaign, picks, date, onJump }: {
+function RunUp({ C, campaign, picks, date, onJump, focus }: {
   C: Tokens; campaign: Campaign; picks: Picks; date: Date
-  onJump: (goodId: string) => void
+  onJump: (goodId: string) => void; focus: string | null
 }) {
   const live = campaign.goods.filter((id) => picks[id])
   if (!live.length) return null
 
-  // One column per day that actually has something on it. Empty days are not information.
+  /* ── LAYOUT ───────────────────────────────────────────────────────────────
+     x is time: one column per day that actually has something on it. Empty days
+     carry no information and only make the thing wider.
+     y is stacking within a day.
+     Node size is what it costs, so the eye lands on the expensive decision.  */
   const byLead = new Map<number, string[]>()
   live.forEach((id) => {
     const l = GOODS[id].lead
@@ -433,73 +437,148 @@ function RunUp({ C, campaign, picks, date, onJump }: {
   })
   const leads = [...byLead.keys()].sort((a, b) => b - a)
 
+  const COL = 112, PAD = 26, TOP = 44, ROW = 58
+  const maxStack = Math.max(...[...byLead.values()].map((v) => v.length))
+  const W = PAD * 2 + leads.length * COL + 96
+  // Reserve exactly the rows that are used. Forcing a minimum of two left a dead band under
+  // every plan where nothing stacks, which reads as a rendering fault rather than white space.
+  const H = TOP + maxStack * ROW + 22
+
+  const pos = new Map<string, { x: number; y: number; r: number }>()
+  const prices = live.map((id) => priceOf(id, picks[id]!))
+  const hi = Math.max(1, ...prices)
+  leads.forEach((lead, ci) => {
+    byLead.get(lead)!.forEach((id, ri) => {
+      const p = priceOf(id, picks[id]!)
+      pos.set(id, {
+        x: PAD + ci * COL + 30,
+        y: TOP + ri * ROW + 16,
+        // sqrt so a $300 piece is not sixteen times a $20 one, just clearly bigger
+        r: 13 + Math.round(Math.sqrt(p / hi) * 12),
+      })
+    })
+  })
+  const nightX = PAD + leads.length * COL + 34
+  const nightY = TOP + 16
+
+  /* Links are the point of the whole drawing: the poster CANNOT EXIST without the
+     photos, and until now nothing before purchase ever said so. */
+  const links: Array<{ from: string; to: string }> = []
+  live.forEach((id) => {
+    ;(GOODS[id].from ?? []).forEach((src) => {
+      if (picks[src]) links.push({ from: src, to: id })
+    })
+  })
+  // Anything nothing else depends on ends at the night.
+  const feeds = new Set(links.map((l) => l.from))
+  const leaves = live.filter((id) => !feeds.has(id))
+
+  const curve = (a: {x:number;y:number}, b: {x:number;y:number}) => {
+    const mx = (a.x + b.x) / 2
+    return `M${a.x} ${a.y} C ${mx} ${a.y}, ${mx} ${b.y}, ${b.x} ${b.y}`
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Eyebrow C={C} tone="brass">The run-up</Eyebrow>
+        <Eyebrow C={C} tone="brass">How it fits together</Eyebrow>
         <span style={{ flex: 1, height: 1, background: C.line }} />
       </div>
 
-      <div className="px-rail" style={{ alignItems: 'stretch' }}>
-        {leads.map((lead) => {
-          const day = addDays(date, -lead)
-          const ids = byLead.get(lead)!
-          return (
-            <div key={lead} style={{
-              width: 108, display: 'flex', flexDirection: 'column', gap: 7,
-              paddingRight: 11, borderRight: `1px solid ${C.line2}`,
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingLeft: 2 }}>
-                <span style={{
-                  fontFamily: UI, fontSize: 9, fontWeight: 700, letterSpacing: '.13em',
-                  textTransform: 'uppercase', color: C.faint,
-                }}>
+      <div className="px-scroll" style={{ overflowX: 'auto', margin: '0 -18px', padding: '0 18px' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H}
+          style={{ display: 'block', maxWidth: 'none' }}>
+          {/* day labels */}
+          {leads.map((lead, ci) => {
+            const d = addDays(date, -lead)
+            return (
+              <g key={lead}>
+                <text x={PAD + ci * COL + 30} y={20} textAnchor="middle" fontFamily={UI}
+                  fontSize="9" fontWeight="700" letterSpacing="1.4" fill={C.faint}>
                   {campaign.dated
-                    ? day.toLocaleDateString(undefined, { weekday: 'short' })
-                    : 'Day'}
-                </span>
-                <span style={{ fontFamily: DISPLAY, fontSize: 20, color: C.ink2, lineHeight: 1 }}>
-                  {campaign.dated ? day.getDate() : lead}
-                </span>
-              </div>
-              {ids.map((id) => (
-                <button key={id} type="button" onClick={() => onJump(id)} className="px-tap"
-                  style={{
-                    border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%',
-                    borderRadius: 9, padding: '7px 8px', fontFamily: UI, fontSize: 10.5,
-                    fontWeight: 600, lineHeight: 1.25, color: '#fff',
-                    background: tradeColorOf(GOODS[id], C),
-                  }}>
-                  {GOODS[id].name}
-                </button>
-              ))}
-            </div>
-          )
-        })}
+                    ? d.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()
+                    : 'DAY'}
+                </text>
+                <text x={PAD + ci * COL + 30} y={38} textAnchor="middle" fontFamily={DISPLAY}
+                  fontSize="17" fill={C.ink3}>
+                  {campaign.dated ? d.getDate() : lead}
+                </text>
+              </g>
+            )
+          })}
+          <text x={nightX} y={20} textAnchor="middle" fontFamily={UI} fontSize="9"
+            fontWeight="700" letterSpacing="1.4" fill={C.brass}>
+            {campaign.dated
+              ? date.toLocaleDateString(undefined, { weekday: 'short' }).toUpperCase()
+              : 'THEN'}
+          </text>
+          <text x={nightX} y={38} textAnchor="middle" fontFamily={DISPLAY} fontSize="17"
+            fill={C.brass}>{campaign.dated ? date.getDate() : '·'}</text>
 
-        {/* The night. Everything above is scheduled backwards from this. */}
-        <div style={{
-          width: 118, display: 'flex', flexDirection: 'column', gap: 7, justifyContent: 'flex-start',
-        }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1, paddingLeft: 2 }}>
-            <span style={{
-              fontFamily: UI, fontSize: 9, fontWeight: 700, letterSpacing: '.13em',
-              textTransform: 'uppercase', color: C.brass,
-            }}>
-              {campaign.dated ? date.toLocaleDateString(undefined, { weekday: 'short' }) : 'Then'}
-            </span>
-            <span style={{ fontFamily: DISPLAY, fontSize: 20, color: C.brass, lineHeight: 1 }}>
-              {campaign.dated ? date.getDate() : 'on'}
-            </span>
-          </div>
-          <div style={{
-            borderRadius: 10, padding: '11px 9px', background: C.forest, color: '#fff',
-            fontFamily: DISPLAY, fontSize: 15, lineHeight: 1.2, textAlign: 'center',
-          }}>
-            {campaign.dated ? 'The night' : 'It runs'}
-          </div>
-        </div>
+          {/* the leaves arriving at the night */}
+          {leaves.map((id) => {
+            const a = pos.get(id)!
+            return (
+              <path key={`n-${id}`} d={curve({ x: a.x + a.r, y: a.y }, { x: nightX - 22, y: nightY })}
+                stroke={C.line} strokeWidth="1.5" fill="none" />
+            )
+          })}
+
+          {/* the dependencies, with work visibly moving along them */}
+          {links.map((l, i) => {
+            const a = pos.get(l.from)!, b = pos.get(l.to)!
+            const on = focus === l.from || focus === l.to
+            const col = tradeColorOf(GOODS[l.from], C)
+            return (
+              <g key={i}>
+                <path d={curve({ x: a.x + a.r, y: a.y }, { x: b.x - b.r, y: b.y })}
+                  stroke={col} strokeWidth={on ? 3 : 2} fill="none" opacity={on ? 0.95 : 0.4} />
+                <path className="px-flow"
+                  d={curve({ x: a.x + a.r, y: a.y }, { x: b.x - b.r, y: b.y })}
+                  stroke={col} strokeWidth={on ? 3 : 2} fill="none" opacity=".95"
+                  strokeDasharray="3 19" strokeLinecap="round" />
+              </g>
+            )
+          })}
+
+          {/* the night */}
+          <circle className="px-glow" cx={nightX} cy={nightY} r="30" fill={C.forest} />
+          <circle cx={nightX} cy={nightY} r="19" fill={C.forest} />
+          <text x={nightX} y={nightY + 46} textAnchor="middle" fontFamily={DISPLAY}
+            fontSize="14" fill={C.ink}>{campaign.dated ? 'The night' : 'It runs'}</text>
+
+          {/* the pieces */}
+          {live.map((id) => {
+            const p = pos.get(id)!
+            const g = GOODS[id]
+            const col = tradeColorOf(g, C)
+            const on = focus === id
+            const words = g.name.split(' ')
+            const l1 = words.slice(0, 2).join(' ')
+            const l2 = words.slice(2).join(' ')
+            return (
+              <g key={id} onClick={() => onJump(id)} style={{ cursor: 'pointer' }}>
+                {on && <circle cx={p.x} cy={p.y} r={p.r + 7} fill={col} opacity=".22" />}
+                <circle cx={p.x} cy={p.y} r={p.r} fill={col} opacity={on ? 1 : 0.9} />
+                <text x={p.x} y={p.y + 4} textAnchor="middle" fontFamily={DISPLAY}
+                  fontSize="11" fill="#fff">{money(priceOf(id, picks[id]!))}</text>
+                <text x={p.x} y={p.y + p.r + 14} textAnchor="middle" fontFamily={UI}
+                  fontSize="9.5" fontWeight="600" fill={on ? C.ink : C.ink3}>{l1}</text>
+                {l2 && (
+                  <text x={p.x} y={p.y + p.r + 25} textAnchor="middle" fontFamily={UI}
+                    fontSize="9.5" fontWeight="600" fill={on ? C.ink : C.ink3}>{l2}</text>
+                )}
+              </g>
+            )
+          })}
+        </svg>
       </div>
+
+      <Body C={C} dim size={11.5} style={{ paddingLeft: 2 }}>
+        {links.length > 0
+          ? 'A line means one piece is built from another. Bigger circle, bigger cost.'
+          : 'Bigger circle, bigger cost. Nothing here depends on anything else.'}
+      </Body>
     </div>
   )
 }
@@ -548,7 +627,7 @@ export function Spread({
       </Rise>
 
       <Rise i={1}>
-        <RunUp C={C} campaign={campaign} picks={picks} date={date}
+        <RunUp C={C} campaign={campaign} picks={picks} date={date} focus={expanded}
           onJump={(id) => setExpanded(expanded === id ? null : id)} />
       </Rise>
 
