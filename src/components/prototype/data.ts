@@ -433,11 +433,13 @@ export function outcomeFor(goodCount: number): { steps: FunnelStep[]; leak: numb
   const said = Math.round(tapped * 0.43)
   const came = Math.round(said * 0.29)
   return {
+    // Short labels on purpose: at phone width the long ones collided with each other under
+    // the funnel. The prose underneath carries the full sentence.
     steps: [
       { label: 'Saw it', n: saw, measured: true },
-      { label: 'Tapped through', n: tapped, measured: true },
-      { label: 'Said they were coming', n: said, measured: true },
-      { label: 'Actually came', n: came, measured: false },
+      { label: 'Tapped', n: tapped, measured: true },
+      { label: 'Said yes', n: said, measured: true },
+      { label: 'Came in', n: came, measured: false },
     ],
     leak: 3,
     why: 'The top of this worked. Reach was strong and the tap rate beat your usual. You lost it between yes and the door.',
