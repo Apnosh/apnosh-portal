@@ -926,19 +926,25 @@ s.group('Live alternatives: a coming-soon page is never a dead end')
   s.check('the dark back shelf routes to live plays', liveAlternativesForStage('back').length > 0 && liveAlternativesForStage('back').every((id) => isBuyable(id)))
 }
 
-s.group('Dark shelves collapse into ONE honest Coming soon section')
+s.group('Coming-soon cards live in ONE section, never inside a category')
 {
   const rows = [
-    { id: 'aware', ids: ['gbp', 'listings', 'creator'] },                       // has live → stays
-    { id: 'orders', ids: ['promoevent', 'launch', 'ticket', 'catering', 'giftcard', 'slowoffer'] },  // all dark → folds
-    { id: 'back', ids: ['welcome', 'news', 'birthday', 'winback'] },            // all dark → folds
+    { id: 'aware', ids: ['gbp', 'listings', 'creator'] },                       // mixed → keeps only the live ones
+    { id: 'orders', ids: ['promoevent', 'launch', 'ticket', 'catering', 'giftcard', 'slowoffer'] },  // all dark → drops
+    { id: 'back', ids: ['welcome', 'news', 'birthday', 'winback'] },            // all dark → drops
   ]
   const { liveRows, soonIds } = collapseDarkShelves(rows, { buyable: (id) => isBuyable(id), hidden: () => false })
   s.eq('the shelf with live cards survives', JSON.stringify(liveRows.map((r) => r.id)), JSON.stringify(['aware']))
-  s.eq('both all-dark shelves fold into one deduped set', soonIds.length, 10)
-  s.check('every folded id is unbuyable (nothing live gets buried)', soonIds.every((id) => !isBuyable(id)))
+  // The crux: a MIXED shelf keeps only what can be bought. Its unbuyable card moves to the bottom.
+  s.check('a mixed shelf shows only buyable cards', liveRows[0].ids.every((id) => isBuyable(id)), JSON.stringify(liveRows[0].ids))
+  s.check("the mixed shelf's coming-soon card moved to the soon section", soonIds.includes('creator'))
+  s.eq('every unbuyable card across all shelves is gathered, deduped', soonIds.length, 11)
+  s.check('every gathered id is unbuyable (nothing live gets buried)', soonIds.every((id) => !isBuyable(id)))
+  s.check('no id is both on a shelf and in the soon list', liveRows.every((r) => r.ids.every((id) => !soonIds.includes(id))))
+  // A card that cannot be bought must never headline the store as a top pick either.
   const sugg = collapseDarkShelves([{ id: 'suggested', ids: ['welcome'] }], { buyable: () => false, hidden: () => false })
-  s.eq('the suggested row is never collapsed', sugg.liveRows.length, 1)
+  s.eq('an all-soon suggested row drops rather than heading the store', sugg.liveRows.length, 0)
+  s.eq('its card still shows up in the soon section', sugg.soonIds.length, 1)
   const hiddenAll = collapseDarkShelves([{ id: 'x', ids: ['a'] }], { buyable: () => false, hidden: () => true })
   s.eq('a fully-hidden row simply drops (no ghost shelf)', hiddenAll.liveRows.length + hiddenAll.soonIds.length, 0)
 }

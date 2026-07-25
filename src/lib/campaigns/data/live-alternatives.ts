@@ -53,11 +53,18 @@ export function liveAlternativesForStage(stage: string, overrides?: VisibilityOv
 export interface ShelfRow { id: string; ids: string[] }
 
 /**
- * Collapse ALL-dark goal shelves into ONE honest "Coming soon" section: a shelf whose
- * every visible card is unbuyable stops pretending to be a shopping aisle. Returns the
- * rows that still have something live plus the deduped id list for the one soon shelf.
- * Rows with no ids (or all hidden) simply drop. The 'suggested' row is never collapsed
- * (its ids are recommendation output, already availability-filtered upstream).
+ * Split the shelves into what can be BOUGHT and what is merely on the way.
+ *
+ * Every goal shelf keeps only its buyable cards; every unbuyable card, from any shelf, gathers into
+ * ONE "Coming soon" section at the bottom. So a category never mixes things you can buy with things
+ * you cannot: browsing "Get found" shows four real options, not four real ones followed by six greyed
+ * ones. What is not for sale yet is still visible and still opens, just in one honest place.
+ *
+ * (This used to fold only 100%-dark shelves and leave coming-soon cards sitting at the end of mixed
+ * ones, which is what made the aisles read half-real.)
+ *
+ * Returns the rewritten rows plus the deduped id list for the soon shelf. A row left with nothing
+ * live simply drops, so an all-unbuyable shelf still disappears exactly as before.
  */
 export function collapseDarkShelves(
   rows: readonly ShelfRow[],
@@ -68,12 +75,11 @@ export function collapseDarkShelves(
   for (const r of rows) {
     const vis = (r.ids ?? []).filter((id) => !fns.hidden(id))
     if (!vis.length) continue
-    const dark = r.id !== 'suggested' && vis.every((id) => !fns.buyable(id))
-    if (dark) {
-      for (const id of vis) if (!soonIds.includes(id)) soonIds.push(id)
-    } else {
-      liveRows.push(r)
-    }
+    const live = vis.filter((id) => fns.buyable(id))
+    // A coming-soon card is pulled out of its category wherever it appears, INCLUDING 'suggested' —
+    // a card that cannot be bought must never headline the store as a top pick.
+    for (const id of vis) if (!fns.buyable(id) && !soonIds.includes(id)) soonIds.push(id)
+    if (live.length) liveRows.push({ ...r, ids: live })
   }
   return { liveRows, soonIds }
 }

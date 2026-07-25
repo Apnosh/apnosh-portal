@@ -3326,22 +3326,24 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
             </>
           ) : (() => {
             const row = rowWithDb(ROWS.find((r) => r.id === lens));
-            const items = row ? orderIds(row.ids).map(catGet).filter(Boolean) : [];
-            const liveCount = items.filter((p) => buyableId(p.id)).length;
+            const visible = row ? orderIds(row.ids) : [];
+            // Only what can be bought shows inside a category. The rest lives in the one
+            // "Coming soon" section at the bottom of Browse, counted here so it is not a secret.
+            const items = visible.filter(buyableId).map(catGet).filter(Boolean);
+            const soonCount = visible.length - items.length;
             // A shelf with ZERO live plays says so and routes to the nearest live plays —
             // never a wall of grey cards pretending to be a store.
-            const detourIds = liveCount === 0 ? liveAlternativesForStage(lens, CONTENT_OVERRIDES) : [];
+            const detourIds = items.length === 0 ? liveAlternativesForStage(lens, CONTENT_OVERRIDES) : [];
             return (
               <div style={{ padding: "0 20px 6px" }}>
                 <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, color: TOKENS.ink, marginBottom: 3 }}>{row ? row.title : ""}</div>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 14 }}>{liveCount === 0 && items.length > 0 ? "Nothing here is ready to buy yet" : `${liveCount} of ${items.length} ready to buy`}</div>
-                {liveCount === 0 && detourIds.length > 0 && (
+                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: TOKENS.sub, marginBottom: 14 }}>{items.length === 0 ? "Nothing here is ready to buy yet" : `${items.length} ready to buy${soonCount > 0 ? ` · ${soonCount} more coming soon` : ""}`}</div>
+                {items.length === 0 && detourIds.length > 0 && (
                   <div style={{ marginBottom: 16 }}>
                     <div style={{ background: "#fdf6e9", border: "1px solid #f0dfb8", borderRadius: 14, padding: "11px 13px", marginBottom: 12, fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "#854f0b", lineHeight: 1.5 }}>Everything on this shelf is still being built. We only sell what really works. Here is what you can do today.</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                       {detourIds.map((id) => { const p = catGet(id); return p ? <PlanCardV key={id} p={p} onOpen={onOpen} full /> : null; })}
                     </div>
-                    <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TOKENS.faint, margin: "16px 0 0" }}>Coming soon on this shelf</div>
                   </div>
                 )}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -3367,12 +3369,15 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, recommended, recsLoading, in
 }
 
 function CategoryAll({ rowId, onBack, onOpen }) {
-  // '__soon' is the synthetic collapsed shelf (every all-dark row folded into one honest
-  // section) — recompute its ids the same way the browse does, so see-all matches.
-  const row = rowId === "__soon"
+  // '__soon' is the synthetic shelf that gathers every coming-soon card — recompute its ids the
+  // same way the browse does, so see-all matches. It is the ONE place they are listed.
+  const soonShelf = rowId === "__soon";
+  const row = soonShelf
     ? { title: "Coming soon", ids: collapseDarkShelves(ROWS.map(rowWithDb), { buyable: buyableId, hidden: hiddenId }).soonIds }
     : rowWithDb(ROWS.find((r) => r.id === rowId)) || { title: "Plans", ids: [] };
-  const items = row.ids.map(catGet).filter(Boolean);
+  // A real category lists only what can be bought; the soon shelf is all soon by definition.
+  const ids = soonShelf ? row.ids : orderIds(row.ids).filter(buyableId);
+  const items = ids.map(catGet).filter(Boolean);
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 24px" }}>
