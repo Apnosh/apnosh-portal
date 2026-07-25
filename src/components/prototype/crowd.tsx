@@ -1,21 +1,24 @@
 'use client'
 
 /**
- * THE CROWD — the reckoning, drawn as people moving left to right through a narrowing funnel.
+ * THE CROWD — the reckoning as a current of people, narrowing left to right.
  *
- * Same language as the portal's home dashboard: figures that mill inside a station, walk on to
- * the next, or peel away and fade in terracotta. Turned on its side, because a funnel that
- * narrows ACROSS reads as a funnel — the silhouette does the explaining, and the eye follows a
- * left-to-right story without being told to.
+ * The first horizontal pass drew four stations with figures milling inside them, and it did not
+ * read as flow at all: at any given moment one or two people were walking and the other sixty
+ * were standing still. Four bus stops, not a river.
  *
- * It is deliberately not used anywhere in the plan builder. Before a campaign runs, people
- * moving through stages is a FORECAST, and animating a forecast is a lie dressed as a
- * simulation. After it runs, every figure stands for people who actually did something we
- * counted. Same drawing, opposite honesty, decided only by which side of the night it sits on.
+ * So this is a genuine stream. People enter continuously at the left and are carried right at a
+ * steady pace. At each gate a share of them is turned away — they break off, fall out of the
+ * current and fade — and the survivors get squeezed toward the centre line as the walls close.
+ * Nobody stands still, so the density of each stretch IS the drop. You can see the crowd thin.
  *
- * Two scales, because one would misrepresent. Reach is off-scale on purpose and labelled — 2,720
- * impressions and 12 covers cannot share an axis without one of them vanishing. The stages after
- * it share ONE linear scale, so they stay honestly proportional to each other and to zero.
+ * Population per stretch settles proportional to cumulative survival, which falls out of the
+ * physics rather than being posed: with a constant intake and equal transit times, how many
+ * people are in a stretch is exactly how many got that far.
+ *
+ * Still not used anywhere in the plan builder. Before a campaign runs this is a forecast, and
+ * animating a forecast is a lie dressed as a simulation. After it runs every figure stands for
+ * people who actually did something we counted.
  */
 
 import React, { useEffect, useRef } from 'react'
@@ -23,26 +26,23 @@ import type { Tokens } from './kit'
 
 export interface CrowdStep { label: string; n: number; measured: boolean }
 
-interface Person {
-  st: number
-  state: 'mill' | 'walk' | 'leave'
-  th: number; om: number; rad: number
-  dwell: number; age: number
-  x: number; y: number; vx: number; vy: number
-  a: number; ph: number; sz: number; t: number
+interface Drop {
+  x: number; lane: number          // lane is -1..1 across the channel, before squeezing
+  y: number; vy: number
+  gate: number                     // next gate this person has yet to face
+  out: boolean; a: number
+  ph: number; sz: number; wob: number
 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a)
 
-export function Crowd({ C, steps, leak, goal, height = 250 }: {
+export function Crowd({ C, steps, leak, goal, height = 260 }: {
   C: Tokens; steps: CrowdStep[]; leak: number
-  /** The number the campaign was actually aiming at, so the last station has a denominator. */
+  /** What the campaign was aiming at, so the last gate has a denominator. */
   goal?: number
   height?: number
 }) {
   const cv = useRef<HTMLCanvasElement | null>(null)
-  const people = useRef<Person[]>([])
-  const layout = useRef<Array<{ x: number; cy: number; h: number }>>([])
 
   useEffect(() => {
     const canvas = cv.current
@@ -50,15 +50,24 @@ export function Crowd({ C, steps, leak, goal, height = 250 }: {
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let W = 0, H = 0, raf = 0
+    let W = 0, H = 0, raf = 0, spawnAcc = 0
     let reduce = false
     try { reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches } catch { /* fine */ }
 
-    const REACH_CAP = 26, PEOPLE_CAP = 13
-    const peopleCounts = steps.slice(1).map((s) => Math.max(0, s.n))
-    const per = Math.max(1, ...peopleCounts) / PEOPLE_CAP
-    const target = steps.map((s, i) =>
-      s.n <= 0 ? 0 : i === 0 ? REACH_CAP : Math.max(1, Math.round(s.n / per)))
+    /* Survival per gate, compressed for legibility. The real fall from 2,720 to 92 is 97%, and
+       at true ratio the rest of the funnel would hold nobody at all — the drawing would say
+       "everything failed" when three of the four stages worked. The printed numbers stay real
+       and the off-scale note says which one is which. */
+    const raw = steps.map((s) => Math.max(0, s.n))
+    const pass: number[] = []
+    for (let i = 0; i < raw.length - 1; i++) {
+      const r = raw[i] > 0 ? raw[i + 1] / raw[i] : 0
+      pass.push(Math.min(0.92, Math.max(0.16, Math.pow(r, 0.34))))
+    }
+
+    let gateX: number[] = []
+    let cy = 0, maxH = 0, x0 = 0, x1 = 0
+    const drops: Drop[] = []
 
     function measure() {
       const dpr = Math.min(window.devicePixelRatio || 1, 2)
@@ -67,38 +76,45 @@ export function Crowd({ C, steps, leak, goal, height = 250 }: {
       canvas!.width = Math.round(W * dpr)
       canvas!.height = Math.round(H * dpr)
       ctx!.setTransform(dpr, 0, 0, dpr, 0, 0)
-
-      const n = steps.length
       const padL = 46, padR = 46
-      const span = Math.max(60, W - padL - padR)
-      const cy = H * 0.44
-      const maxH = Math.min(H * 0.34, 74)
-      layout.current = steps.map((_, i) => {
-        const f = n > 1 ? i / (n - 1) : 0
-        return { x: padL + span * f, cy, h: maxH * (1 - 0.66 * f) }
-      })
+      x0 = padL; x1 = Math.max(padL + 60, W - padR)
+      cy = H * 0.44
+      maxH = Math.min(H * 0.33, 72)
+      const n = steps.length
+      gateX = steps.map((_, i) => x0 + (x1 - x0) * (n > 1 ? i / (n - 1) : 0))
     }
 
-    function seed() {
-      const out: Person[] = []
-      target.forEach((count, st) => {
-        for (let k = 0; k < count; k++) {
-          const S = layout.current[st]
-          const th = rnd(0, 6.28), rad = rnd(0.12, 0.95)
-          out.push({
-            st, state: 'mill', th, om: rnd(0.5, 1.1) * (Math.random() < 0.5 ? -1 : 1), rad,
-            dwell: rnd(1.4, 3.4), age: rnd(0, 1.4),
-            x: S.x + Math.cos(th) * 22 * rad, y: S.cy + Math.sin(th) * S.h * 0.78 * rad,
-            vx: 0, vy: 0, a: 1, ph: rnd(0, 6.28), sz: rnd(0.85, 1.2), t: 0,
-          })
-        }
-      })
-      people.current = out
+    /** Half-height of the channel at x — the funnel wall, and what squeezes the current. */
+    function halfAt(x: number) {
+      const f = Math.min(1, Math.max(0, (x - x0) / Math.max(1, x1 - x0)))
+      return maxH * (1 - 0.68 * f)
     }
 
-    measure(); seed()
+    measure()
     const ro = new ResizeObserver(() => { measure() })
     ro.observe(canvas)
+
+    const SPEED = 64          // px per second — a crossing takes about four seconds
+    const RATE = 7            // people entering per second
+
+    function spawn() {
+      const x = x0 - rnd(4, 26), lane = rnd(-0.95, 0.95)
+      drops.push({
+        x, lane,
+        y: cy + lane * halfAt(x) * 0.86,   // enter already across the channel, not on its spine
+        vy: 0, gate: 0, out: false, a: 1,
+        ph: rnd(0, 6.28), sz: rnd(0.82, 1.18), wob: rnd(0.5, 1.5),
+      })
+    }
+    for (let k = 0; k < 44; k++) {            // prime it so it opens mid-flow, never empty
+      spawn()
+      const d = drops[drops.length - 1]
+      d.x = rnd(x0 - 20, x1)
+      d.y = cy + d.lane * halfAt(d.x) * 0.86
+      for (let g = 0; g < gateX.length; g++) {
+        if (d.x > gateX[g]) d.gate = g + 1
+      }
+    }
 
     function figure(x: number, y: number, u: number, col: string, a: number) {
       if (a <= 0.02) return
@@ -119,108 +135,87 @@ export function Crowd({ C, steps, leak, goal, height = 250 }: {
       last = ts
       const t = ts / 1000
       ctx!.clearRect(0, 0, W, H)
-      const L = layout.current
-      if (!L.length) { raf = requestAnimationFrame(frame); return }
 
-      /* The silhouette. This is what makes it read as a funnel rather than four groups in a
-         row — the walls closing in do the explaining, so no label has to. */
+      // ── the channel ────────────────────────────────────────────────────────
       ctx!.beginPath()
-      ctx!.moveTo(L[0].x - 26, L[0].cy - L[0].h)
-      for (let i = 1; i < L.length; i++) {
-        const p = L[i - 1], q = L[i], mx = (p.x + q.x) / 2
-        ctx!.bezierCurveTo(mx, p.cy - p.h, mx, q.cy - q.h, q.x, q.cy - q.h)
-      }
-      const lastS = L[L.length - 1]
-      ctx!.lineTo(lastS.x + 20, lastS.cy - lastS.h)
-      ctx!.lineTo(lastS.x + 20, lastS.cy + lastS.h)
-      for (let i = L.length - 1; i > 0; i--) {
-        const q = L[i], p = L[i - 1], mx = (p.x + q.x) / 2
-        ctx!.bezierCurveTo(mx, q.cy + q.h, mx, p.cy + p.h, p.x, p.cy + p.h)
-      }
-      ctx!.lineTo(L[0].x - 26, L[0].cy + L[0].h)
+      ctx!.moveTo(x0 - 22, cy - halfAt(x0))
+      for (let x = x0; x <= x1; x += 6) ctx!.lineTo(x, cy - halfAt(x))
+      ctx!.lineTo(x1 + 18, cy - halfAt(x1))
+      ctx!.lineTo(x1 + 18, cy + halfAt(x1))
+      for (let x = x1; x >= x0; x -= 6) ctx!.lineTo(x, cy + halfAt(x))
+      ctx!.lineTo(x0 - 22, cy + halfAt(x0))
       ctx!.closePath()
-      ctx!.fillStyle = C.forest; ctx!.globalAlpha = 0.05; ctx!.fill()
-      ctx!.globalAlpha = 0.5; ctx!.strokeStyle = C.line; ctx!.lineWidth = 1; ctx!.stroke()
+      ctx!.fillStyle = C.forest; ctx!.globalAlpha = 0.055; ctx!.fill()
+      ctx!.globalAlpha = 0.45; ctx!.strokeStyle = C.line; ctx!.lineWidth = 1; ctx!.stroke()
       ctx!.globalAlpha = 1
 
-      // people
-      for (const p of people.current) {
-        const S = L[p.st]
-        if (p.state === 'mill') {
-          p.th += p.om * dt; p.age += dt
-          const tx = S.x + Math.cos(p.th) * 22 * p.rad
-          const ty = S.cy + Math.sin(p.th) * S.h * 0.78 * p.rad
-          p.x += (tx - p.x) * Math.min(1, dt * 4.5)
-          p.y += (ty - p.y) * Math.min(1, dt * 4.5)
-          if (p.age >= p.dwell) {
-            p.age = 0; p.dwell = rnd(1.4, 3.4)
-            if (p.st >= steps.length - 1) p.state = 'leave'
-            else {
-              const pass = (target[p.st + 1] || 0) / Math.max(1, target[p.st])
-              if (Math.random() < pass) { p.state = 'walk'; p.t = 0 }
-              else p.state = 'leave'
-            }
-            if (p.state === 'leave') {
-              // out through the floor, never backwards — leaving is a one-way door
-              p.vx = rnd(-8, 16); p.vy = rnd(26, 54); p.a = 1
-            }
-          }
-        } else if (p.state === 'walk') {
-          const T = L[p.st + 1]
-          p.t += dt / 0.95
-          // ease-in: they drift, then get pulled through the throat
-          const e = p.t < 1 ? p.t * p.t * (3 - 2 * p.t) : 1
-          p.x += ((S.x + (T.x - S.x) * e) - p.x) * Math.min(1, dt * 9)
-          p.y += ((S.cy + (T.cy - S.cy) * e) - p.y) * Math.min(1, dt * 7)
-          if (p.t >= 1) {
-            p.st += 1; p.state = 'mill'; p.th = rnd(0, 6.28); p.rad = rnd(0.12, 0.95)
-          }
+      // ── move everyone ──────────────────────────────────────────────────────
+      spawnAcc += dt * RATE
+      while (spawnAcc >= 1) { spawn(); spawnAcc -= 1 }
+
+      for (let i = drops.length - 1; i >= 0; i--) {
+        const d = drops[i]
+
+        if (d.out) {
+          // turned away: dropped out of the current, hard and quick, and gone.
+          d.x += SPEED * 0.18 * dt
+          d.vy += 150 * dt
+          d.y += d.vy * dt
+          d.a -= dt * 1.5
+          if (d.a <= 0 || d.y > H + 10) { drops.splice(i, 1); continue }
         } else {
-          p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 26 * dt; p.a -= dt * 0.66
-          if (p.a <= 0) {
-            p.st = 0; p.state = 'mill'; p.a = 1; p.age = 0
-            p.th = rnd(0, 6.28); p.rad = rnd(0.12, 0.95)
-            p.x = L[0].x; p.y = L[0].cy
+          // carried along, and pulled harder as the walls close in
+          const squeeze = 1 + (1 - halfAt(d.x) / maxH) * 0.7
+          d.x += SPEED * squeeze * dt
+          const h = halfAt(d.x)
+          const wob = reduce ? 0 : Math.sin(t * d.wob + d.ph) * h * 0.08
+          d.y += ((cy + d.lane * h * 0.86 + wob) - d.y) * Math.min(1, dt * 6)
+
+          // face the next gate exactly once
+          if (d.gate < gateX.length && d.x >= gateX[d.gate]) {
+            const g = d.gate
+            d.gate += 1
+            if (g > 0 && Math.random() > pass[g - 1]) {
+              d.out = true
+              // pushed out through the nearest wall, so leaving reads as leaving
+              d.vy = (d.lane >= 0 ? 1 : -1) * rnd(46, 84)
+            }
           }
+          if (d.x > x1 + 26) { drops.splice(i, 1); continue }
         }
-        const fx = reduce ? 0 : Math.sin(t * 0.7 + p.ph) * 1.5
-        const fy = reduce ? 0 : Math.cos(t * 0.5 + p.ph * 1.4) * 1.6
-        const col = p.state === 'leave' ? C.ember
-          : p.state === 'walk' ? C.ink3
-          : p.st === steps.length - 1 ? C.brass : C.forest
-        figure(p.x + fx, p.y + fy, 3.5 * p.sz, col, p.a)
+
+        const col = d.out ? C.ember
+          : d.gate >= steps.length ? C.brass
+          : C.forest
+        figure(d.x, d.y, 3.4 * d.sz, col, d.a)
       }
 
-      // the gates + their numbers
+      // ── gates, numbers, labels ─────────────────────────────────────────────
       steps.forEach((s, i) => {
-        const S = L[i]
+        const gx = gateX[i], h = halfAt(gx)
         ctx!.beginPath()
-        ctx!.ellipse(S.x, S.cy, 22, S.h, 0, 0, 6.2832)
+        ctx!.moveTo(gx, cy - h); ctx!.lineTo(gx, cy + h)
         ctx!.strokeStyle = i === leak ? C.ember : C.line
-        ctx!.lineWidth = 1
-        // a stage we did not measure ourselves is drawn broken, never solid
-        ctx!.setLineDash(s.measured ? [] : [4, 4])
-        ctx!.stroke(); ctx!.setLineDash([])
+        ctx!.lineWidth = i === leak ? 1.6 : 1
+        ctx!.setLineDash(s.measured ? [] : [4, 4])   // unmeasured is drawn broken, always
+        ctx!.globalAlpha = 0.85; ctx!.stroke()
+        ctx!.setLineDash([]); ctx!.globalAlpha = 1
 
-        /* Centre-anchoring every label pushed the end station's text off the canvas — the last
-           one is the widest ("12 of 40", "Actually came") and sits nearest the edge. The two
-           ends anchor inward so nothing can ever be clipped, whatever the numbers say. */
         const first = i === 0, endS = i === steps.length - 1
         ctx!.textAlign = first ? 'left' : endS ? 'right' : 'center'
-        const tx = first ? S.x - 24 : endS ? S.x + 20 : S.x
+        const tx = first ? gx - 22 : endS ? gx + 18 : gx
 
         ctx!.fillStyle = i === leak ? C.ember : C.ink
         ctx!.font = `500 ${endS ? 24 : 21}px ${DISPLAY_FF}`
-        ctx!.fillText(endS && goal ? `${s.n} of ${goal}` : s.n.toLocaleString(),
-          tx, S.cy - S.h - 16)
+        ctx!.fillText(endS && goal ? `${s.n} of ${goal}` : s.n.toLocaleString(), tx, cy - maxH - 14)
 
         ctx!.fillStyle = C.ink3
         ctx!.font = `600 10.5px ${UI_FF}`
-        ctx!.fillText(s.label, tx, S.cy + S.h + 22)
+        ctx!.fillText(s.label, tx, cy + maxH + 24)
         if (!s.measured) {
           ctx!.fillStyle = C.brass
           ctx!.font = `700 9px ${UI_FF}`
-          ctx!.fillText('YOUR COUNT', tx, S.cy + S.h + 36)
+          ctx!.fillText('YOUR COUNT', tx, cy + maxH + 38)
         }
       })
 
@@ -231,7 +226,7 @@ export function Crowd({ C, steps, leak, goal, height = 250 }: {
   }, [C, steps, leak, goal])
 
   return <canvas ref={cv} style={{ display: 'block', width: '100%', height }}
-    aria-label="The people this campaign reached, narrowing through interest and action to the goal" />
+    aria-label="A current of people narrowing from reach through interest and action to the goal" />
 }
 
 /* Canvas cannot read a CSS variable, so the two faces are named directly. They match kit.tsx. */
