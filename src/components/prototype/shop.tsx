@@ -15,11 +15,11 @@ import { CAMPAIGNS, GOODS } from './data'
 import type { Campaign } from './data'
 import { DISPLAY, Motion, TOKENS, UI, type Mode, type Tokens } from './kit'
 import {
-  Brief, Cast, Shelf, Spread, defaultPickFor, priceOf, type Pick, type Picks,
+  Brief, Browse, Cast, Shelf, Spread, defaultPickFor, priceOf, type Pick, type Picks,
 } from './screens-buy'
 import { Relay, Reckoning, allDone, buildJobs, tick, type Job } from './screens-run'
 
-type Step = 'shelf' | 'brief' | 'spread' | 'cast' | 'relay' | 'reckoning'
+type Step = 'shelf' | 'brief' | 'browse' | 'spread' | 'cast' | 'relay' | 'reckoning'
 type Level = 'lean' | 'standard' | 'full' | 'custom'
 
 /** A one-off is a real campaign with exactly one thing in it. Same machinery, smaller spread. */
@@ -177,7 +177,27 @@ export default function Shop() {
         </div>
 
         {step === 'shelf' && (
-          <Shelf C={C} onPick={openCampaign} onOneOff={openOneOff} />
+          <Shelf C={C} onPick={openCampaign} onOneOff={openOneOff}
+            onBrowse={() => { setPicks({}); setStep('browse') }} />
+        )}
+
+        {step === 'browse' && (
+          <Browse
+            C={C} picks={picks} onSet={setPick}
+            onBack={() => setStep('shelf')}
+            onDone={() => {
+              // Whatever they picked IS the campaign. Same spread, same relay, same reckoning.
+              const ids = Object.keys(picks).filter((id) => picks[id])
+              setCampaign({
+                id: 'own', hue: ['#241d16', '#8a7350'], title: 'Your own plan',
+                blurb: 'Everything you picked, scheduled in the right order.',
+                stage: 'found', dated: true, goods: ids,
+                levels: { lean: ids, standard: ids, full: ids },
+              })
+              setLevel('custom')
+              setStep('spread')
+            }}
+          />
         )}
 
         {step === 'brief' && campaign && (

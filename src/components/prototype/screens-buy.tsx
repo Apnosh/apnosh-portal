@@ -88,8 +88,9 @@ export function fallbacksFor(goodId: string, picks: Picks): string[] {
    1 · THE SHELF
    ──────────────────────────────────────────────────────────────────────────── */
 
-export function Shelf({ C, onPick, onOneOff }: {
+export function Shelf({ C, onPick, onOneOff, onBrowse }: {
   C: Tokens; onPick: (c: Campaign) => void; onOneOff: (goodId: string) => void
+  onBrowse: () => void
 }) {
   const [typed, setTyped] = useState('')
   let n = 0
@@ -143,69 +144,65 @@ export function Shelf({ C, onPick, onOneOff }: {
               </div>
             </Rise>
 
-            {camps.map((c) => {
-              const crew = crewOf(c)
-              const from = cheapestOf(c)
-              // A cover has to be a PHOTOGRAPH. Taking the first good gave "Get discovered"
-              // the wireframe search-result art, which reads as a loading skeleton on the shelf.
-              const cover = coverArtFor(c)
-              return (
-                <Rise key={c.id} i={n++}>
-                  <Card C={C} onClick={() => onPick(c)} label={`${c.title}, from ${money(from)}`}>
-                    {/* The cover. The colour field is the ground; the TYPE is the subject,
-                        which is what makes it read as designed rather than as a failed image. */}
+            <div className="px-rail">
+              {camps.map((c) => {
+                const crew = crewOf(c)
+                const from = cheapestOf(c)
+                const cover = coverArtFor(c)
+                return (
+                  <Card key={c.id} C={C} onClick={() => onPick(c)}
+                    label={`${c.title}, from ${money(from)}`}
+                    style={{ width: 268 }}>
                     <div style={{ position: 'relative' }}>
-                      <Art kind={cover} C={C} hue={c.hue} h={196} />
+                      <Art kind={cover} C={C} hue={c.hue} h={150} />
                       <div style={{
                         position: 'absolute', inset: 0,
-                        background: 'linear-gradient(to top, rgba(6,4,8,.72) 0%, rgba(6,4,8,.12) 58%, rgba(6,4,8,0) 100%)',
+                        background: 'linear-gradient(to top, rgba(6,4,8,.74) 0%, rgba(6,4,8,.1) 60%, rgba(6,4,8,0) 100%)',
                       }} />
                       <div style={{
-                        position: 'absolute', left: 20, right: 20, bottom: 17,
-                        display: 'flex', flexDirection: 'column', gap: 11,
+                        position: 'absolute', left: 15, right: 15, bottom: 13,
+                        display: 'flex', flexDirection: 'column', gap: 8,
                       }}>
                         <div style={{
-                          fontFamily: DISPLAY, fontSize: 34, fontWeight: 500, letterSpacing: '-.028em',
-                          lineHeight: 1, color: '#fff',
+                          fontFamily: DISPLAY, fontSize: 24, letterSpacing: '-.025em',
+                          lineHeight: 1.02, color: '#fff',
                         }}>{c.title}</div>
-                        {/* the brass rule: the one metal, doing the one job */}
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 12,
-                        }}>
-                          <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.28)' }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                          <span style={{ flex: 1, height: 1, background: 'rgba(255,255,255,.3)' }} />
                           <span style={{
-                            fontFamily: UI, fontSize: 9, fontWeight: 700, letterSpacing: '.18em',
-                            textTransform: 'uppercase', color: 'rgba(255,255,255,.6)',
+                            fontFamily: UI, fontSize: 8.5, fontWeight: 700, letterSpacing: '.16em',
+                            textTransform: 'uppercase', color: 'rgba(255,255,255,.62)',
                           }}>from</span>
                           <span style={{
-                            fontFamily: DISPLAY, fontSize: 24, color: '#fff', lineHeight: 1,
+                            fontFamily: DISPLAY, fontSize: 19, color: '#fff', lineHeight: 1,
                             fontVariantNumeric: 'tabular-nums',
                           }}>{money(from)}</span>
                         </div>
                       </div>
                     </div>
-
-                    <div style={{ padding: '14px 18px 16px', display: 'flex', flexDirection: 'column', gap: 11 }}>
-                      <Body C={C} size={13.5}>{c.blurb}</Body>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        {crew.map((w, i) => (
+                    <div style={{
+                      padding: '12px 15px 14px', display: 'flex', flexDirection: 'column', gap: 9,
+                    }}>
+                      <Body C={C} size={12.5} style={{ minHeight: 36 }}>{c.blurb}</Body>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                        {crew.slice(0, 3).map((w, i) => (
                           <React.Fragment key={w}>
-                            {i > 0 && <span style={{ fontSize: 10, color: C.faint }}>→</span>}
+                            {i > 0 && <span style={{ fontSize: 9, color: C.faint }}>→</span>}
                             <span style={{
-                              fontFamily: UI, fontSize: 10.5, fontWeight: 600, padding: '4px 9px',
+                              fontFamily: UI, fontSize: 9.5, fontWeight: 600, padding: '3px 8px',
                               borderRadius: 99, background: C.paper2, color: C.ink2,
                             }}>{w}</span>
                           </React.Fragment>
                         ))}
-                        <span style={{ fontFamily: UI, fontSize: 10.5, color: C.faint, marginLeft: 3 }}>
+                        <span style={{ fontFamily: UI, fontSize: 9.5, color: C.faint, marginLeft: 2 }}>
                           {c.goods.length} things
                         </span>
                       </div>
                     </div>
                   </Card>
-                </Rise>
-              )
-            })}
+                )
+              })}
+            </div>
 
             {/* One-offs. Deliberately small — the size of the thing IS the distinction. */}
             {singles.length > 0 && (
@@ -236,6 +233,38 @@ export function Shelf({ C, onPick, onOneOff }: {
           </div>
         )
       })}
+
+      {/* Build your own. Asked for from the very beginning and never actually built: until now
+          the only way to buy a single thing was the five "Just ..." rows, which is a shortcut,
+          not a parts bin. */}
+      <Rise i={n++}>
+        <Card C={C} onClick={onBrowse} label="Build your own from every piece"
+          style={{ padding: '18px 19px', display: 'flex', alignItems: 'center', gap: 15 }}>
+          <span style={{
+            width: 46, height: 46, borderRadius: 13, flexShrink: 0, background: C.paper2,
+            border: `1px solid ${C.line}`, display: 'grid', gridTemplateColumns: '1fr 1fr',
+            gap: 3, padding: 8,
+          }}>
+            {[0, 1, 2, 3].map((k) => (
+              <span key={k} style={{
+                borderRadius: 3,
+                background: k === 3 ? 'transparent' : C.brass,
+                border: k === 3 ? `1px dashed ${C.brass}` : 'none',
+                opacity: k === 3 ? 1 : 0.35 + k * 0.22,
+              }} />
+            ))}
+          </span>
+          <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+            <span style={{ fontFamily: DISPLAY, fontSize: 20, color: C.ink, lineHeight: 1.15 }}>
+              Build your own
+            </span>
+            <Body C={C} dim size={12.5}>
+              Every piece we make, priced on its own. Take one thing or twelve.
+            </Body>
+          </span>
+          <span style={{ fontSize: 17, color: C.faint, flexShrink: 0 }}>→</span>
+        </Card>
+      </Rise>
     </div>
   )
 }
@@ -389,6 +418,7 @@ export function Spread({
   const soft = live.filter((id) => fallbacksFor(id, picks).length)
   const out = campaign.goods.filter((id) => !picks[id])
   const ordered = [...campaign.goods].sort((a, b) => GOODS[b].lead - GOODS[a].lead)
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   const nextUp = useMemo(() => {
     if (!out.length) return null
@@ -431,123 +461,167 @@ export function Spread({
         </div>
       </Rise>
 
-      {ordered.map((id, idx) => {
-        const g = GOODS[id]
-        const pick = picks[id]
-        const gone = pick ? fallbacksFor(id, picks) : []
-        const lands = addDays(date, -g.lead)
-        const creator = pick && !isLane(pick) ? BENCH.find((c) => c.id === pick) : null
+      {/* The plan, whole, on one screen. Each row is a thumbnail, a name, who is on it and
+          what it costs; tap to open the detail and the casting. Big cards for eight goods
+          meant 2,600px of scrolling and no way to see your own plan at once. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {ordered.map((id, idx) => {
+          const g = GOODS[id]
+          const pick = picks[id]
+          const gone = pick ? fallbacksFor(id, picks) : []
+          const lands = addDays(date, -g.lead)
+          const creator = pick && !isLane(pick) ? BENCH.find((c) => c.id === pick) : null
+          const open = expanded === id
 
-        if (!pick) {
+          if (!pick) {
+            return (
+              <Rise key={id} i={idx + 2}>
+                <button type="button" onClick={() => onSet(id, defaultPickFor(g))} className="px-tap"
+                  style={{
+                    border: `1.5px dashed ${C.line}`, borderRadius: 15, background: 'none',
+                    cursor: 'pointer', padding: '13px 15px', fontFamily: UI, color: C.ink3,
+                    textAlign: 'left', display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+                  }}>
+                  <span style={{
+                    width: 26, height: 26, borderRadius: 99, border: `1.5px dashed ${C.line}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 15, flexShrink: 0,
+                  }}>+</span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontFamily: DISPLAY, fontSize: 16, color: C.ink2,
+                      display: 'block' }}>{g.name}</span>
+                    <span style={{ fontSize: 11.5 }}>not in this plan</span>
+                  </span>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 15, color: C.ink3 }}>
+                    {money(cheapestGood(id))}
+                  </span>
+                </button>
+              </Rise>
+            )
+          }
+
           return (
             <Rise key={id} i={idx + 2}>
-              <button type="button" onClick={() => onSet(id, defaultPickFor(g))} className="px-tap"
-                style={{
-                  border: `1.5px dashed ${C.line}`, borderRadius: 18, background: 'none',
-                  cursor: 'pointer', padding: '18px 18px', fontFamily: UI, color: C.ink3,
-                  textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 4, width: '100%',
-                }}>
-                <span style={{ fontFamily: DISPLAY, fontSize: 17, color: C.ink2 }}>+ {g.name}</span>
-                <span style={{ fontSize: 12, lineHeight: 1.45 }}>{g.what}</span>
-              </button>
-            </Rise>
-          )
-        }
-
-        return (
-          <Rise key={id} i={idx + 2}>
-            <Card C={C} style={{ borderColor: gone.length ? C.brass : C.line }}>
-              <div style={{ position: 'relative' }}>
-                <Art kind={g.art} C={C} hue={creator?.hue} h={158} />
-                <div style={{
-                  position: 'absolute', top: 13, left: 14,
-                  fontFamily: UI, fontSize: 9.5, fontWeight: 700, letterSpacing: '.13em',
-                  textTransform: 'uppercase', color: '#fff',
-                  background: 'rgba(0,0,0,.42)', backdropFilter: 'blur(6px)',
-                  padding: '5px 9px', borderRadius: 99,
-                }}>
-                  {campaign.dated ? dayLabel(lands) : `${g.lead} days in`}
-                </div>
-              </div>
-
-              <div style={{ padding: '15px 17px 17px', display: 'flex', flexDirection: 'column', gap: 11 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-                  <div style={{ fontFamily: DISPLAY, fontSize: 21, color: C.ink, lineHeight: 1.15 }}>
-                    {g.name}
-                  </div>
-                  <div style={{
-                    fontFamily: DISPLAY, fontSize: 21, color: priceOf(id, pick) === 0 ? C.forest : C.brass,
-                    flexShrink: 0, fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {priceOf(id, pick) === 0 ? 'free' : money(priceOf(id, pick))}
-                    {g.monthly && priceOf(id, pick) > 0
-                      ? <span style={{ fontFamily: UI, fontSize: 11 }}>/mo</span> : null}
-                  </div>
-                </div>
-
-                <Body C={C} size={13}>{g.what}</Body>
-
-                {g.from && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap',
-                    fontFamily: UI, fontSize: 11.5, lineHeight: 1.45, padding: '8px 11px',
-                    borderRadius: 10,
-                    background: gone.length ? C.brassSoft : C.paper2,
-                    color: gone.length ? C.brassInk : C.ink3,
-                  }}>
-                    <span style={{
-                      width: 5, height: 5, borderRadius: 99, flexShrink: 0,
-                      background: gone.length ? C.brass : C.forest,
-                    }} />
-                    {gone.length ? (
-                      <>
-                        Falls back to photos you already have
-                        <button type="button" onClick={() => onSet(gone[0], defaultPickFor(GOODS[gone[0]]))}
-                          style={{
-                            border: 'none', background: 'none', cursor: 'pointer', fontFamily: UI,
-                            fontSize: 11.5, fontWeight: 700, color: C.brass,
-                            textDecoration: 'underline', padding: 0,
-                          }}>
-                          Add {GOODS[gone[0]].name.toLowerCase()}
-                        </button>
-                      </>
-                    ) : (
-                      <>Made from {GOODS[g.from.find((f) => picks[f]) ?? g.from[0]].name.toLowerCase()}</>
-                    )}
-                  </div>
-                )}
-
+              <Card C={C} style={{ borderColor: gone.length ? C.brass : C.line }}>
                 <button type="button" className="px-tap"
-                  onClick={() => (g.craft ? onCast(id) : cycleLane(id, g, pick, onSet))}
+                  onClick={() => setExpanded(open ? null : id)}
+                  aria-expanded={open}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '10px 12px',
-                    borderRadius: 12, border: `1px solid ${C.line}`, background: C.paper2,
-                    cursor: 'pointer', fontFamily: UI, color: C.ink, textAlign: 'left',
+                    display: 'flex', alignItems: 'center', gap: 13, width: '100%',
+                    padding: '11px 13px', background: 'none', border: 'none', cursor: 'pointer',
+                    fontFamily: UI, color: C.ink, textAlign: 'left',
                   }}>
-                  <Avatar name={makerName(pick)} kind={makerKind(pick)} C={C} size={30} />
-                  <span style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, gap: 1 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.25 }}>{makerName(pick)}</span>
-                    <span style={{ fontSize: 11, color: C.ink3, lineHeight: 1.3 }}>
-                      {creator ? creator.style : isLane(pick) ? LANES[pick].note : ''}
+                  <span style={{
+                    width: 68, height: 50, borderRadius: 9, overflow: 'hidden', flexShrink: 0,
+                    border: `1px solid ${C.line}`,
+                  }}>
+                    <Art kind={g.art} C={C} hue={creator?.hue} h={50} />
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, display: 'flex',
+                    flexDirection: 'column', gap: 2 }}>
+                    <span style={{ fontFamily: DISPLAY, fontSize: 17, lineHeight: 1.15,
+                      color: C.ink }}>{g.name}</span>
+                    <span style={{
+                      fontSize: 11, color: gone.length ? C.brass : C.ink3, lineHeight: 1.3,
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                    }}>
+                      {campaign.dated ? dayLabel(lands) : `${g.lead} days in`} · {makerName(pick)}
+                      {gone.length ? ' · old photos' : ''}
                     </span>
                   </span>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: C.forest, flexShrink: 0 }}>
-                    {g.craft ? 'Change' : 'Swap'}
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 9, flexShrink: 0 }}>
+                    <span style={{
+                      fontFamily: DISPLAY, fontSize: 18, lineHeight: 1,
+                      color: priceOf(id, pick) === 0 ? C.forest : C.brass,
+                      fontVariantNumeric: 'tabular-nums',
+                    }}>
+                      {priceOf(id, pick) === 0 ? 'free' : money(priceOf(id, pick))}
+                    </span>
+                    <span style={{
+                      fontSize: 11, color: C.faint,
+                      transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .24s',
+                    }}>▾</span>
                   </span>
                 </button>
 
-                <button type="button" onClick={() => onSet(id, null)}
-                  style={{
-                    border: 'none', background: 'none', cursor: 'pointer', fontFamily: UI,
-                    fontSize: 11, fontWeight: 500, color: C.faint, padding: 2, alignSelf: 'flex-start',
-                  }}>
-                  I do not want this
-                </button>
-              </div>
-            </Card>
-          </Rise>
-        )
-      })}
+                <div className="px-open" style={{
+                  maxHeight: open ? 620 : 0, opacity: open ? 1 : 0,
+                }}>
+                  <div style={{ padding: '2px 13px 14px', display: 'flex',
+                    flexDirection: 'column', gap: 11 }}>
+                    <div style={{ borderRadius: 12, overflow: 'hidden',
+                      border: `1px solid ${C.line}` }}>
+                      <Art kind={g.art} C={C} hue={creator?.hue} h={150} />
+                    </div>
+                    <Body C={C} size={12.5}>{g.what}</Body>
+
+                    {g.from && (
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap',
+                        fontFamily: UI, fontSize: 11.5, lineHeight: 1.45, padding: '8px 11px',
+                        borderRadius: 10,
+                        background: gone.length ? C.brassSoft : C.paper2,
+                        color: gone.length ? C.brassInk : C.ink3,
+                      }}>
+                        <span style={{
+                          width: 5, height: 5, borderRadius: 99, flexShrink: 0,
+                          background: gone.length ? C.brass : C.forest,
+                        }} />
+                        {gone.length ? (
+                          <>
+                            Falls back to photos you already have
+                            <button type="button"
+                              onClick={() => onSet(gone[0], defaultPickFor(GOODS[gone[0]]))}
+                              style={{
+                                border: 'none', background: 'none', cursor: 'pointer', fontFamily: UI,
+                                fontSize: 11.5, fontWeight: 700, color: C.brass,
+                                textDecoration: 'underline', padding: 0,
+                              }}>
+                              Add {GOODS[gone[0]].name.toLowerCase()}
+                            </button>
+                          </>
+                        ) : (
+                          <>Made from {GOODS[g.from.find((f) => picks[f]) ?? g.from[0]].name.toLowerCase()}</>
+                        )}
+                      </div>
+                    )}
+
+                    <button type="button" className="px-tap"
+                      onClick={() => (g.craft ? onCast(id) : cycleLane(id, g, pick, onSet))}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 11, width: '100%',
+                        padding: '10px 12px', borderRadius: 12, border: `1px solid ${C.line}`,
+                        background: C.paper2, cursor: 'pointer', fontFamily: UI, color: C.ink,
+                        textAlign: 'left',
+                      }}>
+                      <Avatar name={makerName(pick)} kind={makerKind(pick)} C={C} size={30} />
+                      <span style={{ flex: 1, display: 'flex', flexDirection: 'column',
+                        minWidth: 0, gap: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{makerName(pick)}</span>
+                        <span style={{ fontSize: 11, color: C.ink3 }}>
+                          {creator ? creator.style : isLane(pick) ? LANES[pick].note : ''}
+                        </span>
+                      </span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: C.forest }}>
+                        {g.craft ? 'Change' : 'Swap'}
+                      </span>
+                    </button>
+
+                    <button type="button" onClick={() => { onSet(id, null); setExpanded(null) }}
+                      style={{
+                        border: 'none', background: 'none', cursor: 'pointer', fontFamily: UI,
+                        fontSize: 11, fontWeight: 500, color: C.faint, padding: 2,
+                        alignSelf: 'flex-start',
+                      }}>
+                      I do not want this
+                    </button>
+                  </div>
+                </div>
+              </Card>
+            </Rise>
+          )
+        })}
+      </div>
 
       {mine.length > 0 && (
         <Card C={C} style={{ padding: '17px 19px', display: 'flex', flexDirection: 'column', gap: 9,
@@ -857,5 +931,137 @@ function Fact({ children, C, muted }: { children: React.ReactNode; C: Tokens; mu
       fontFamily: UI, fontSize: 10.5, fontWeight: 600, padding: '4px 9px', borderRadius: 99,
       background: muted ? C.brassSoft : C.paper2, color: muted ? C.brassInk : C.ink3,
     }}>{children}</span>
+  )
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   5 · BUILD YOUR OWN — every piece, priced on its own.
+
+   Grouped by the trade that makes it, because that is the axis an owner can
+   actually reason about once they have left the outcome shelf: "I want a
+   photographer" is a thought people have. "I want a top-of-funnel asset" is not.
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const GROUPS: Array<{
+  key: string; label: string; note: string; ids: string[]; hue: [string, string]
+}> = [
+  // A colour per trade. Without this every unselected card fell back to the same green and
+  // the parts bin read as one long monotone shelf.
+  { key: 'shoot', label: 'Shot by a photographer', note: 'Someone comes to you',
+    hue: ['#2E1338', '#B54A93'], ids: ['shootNight', 'shootFood', 'menuShoot'] },
+  { key: 'made', label: 'Made by a designer', note: 'Built from your photos',
+    hue: ['#2F1206', '#DE7C25'], ids: ['poster', 'storySet', 'reel'] },
+  { key: 'posted', label: 'Put out for you', note: 'Written, scheduled, published',
+    hue: ['#062830', '#2C93A8'], ids: ['posts', 'googlePost', 'eventPage'] },
+  { key: 'sent', label: 'Sent to your people', note: 'To the list you already have',
+    hue: ['#2B0C18', '#C85A73'], ids: ['textBlast', 'emailBlast', 'reminder'] },
+  { key: 'found', label: 'So people can find you', note: 'Set up once, mostly',
+    hue: ['#08241A', '#3AA277'], ids: ['gbpFix', 'listings', 'reviewReplies', 'menuOnline'] },
+]
+
+export function Browse({ C, picks, onSet, onDone, onBack }: {
+  C: Tokens; picks: Picks
+  onSet: (goodId: string, pick: Pick | null) => void
+  onDone: () => void; onBack: () => void
+}) {
+  const chosen = Object.keys(picks).filter((id) => picks[id])
+  const total = chosen.reduce((sum, id) => sum + priceOf(id, picks[id]!), 0)
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 22, paddingBottom: 96 }}>
+      <Back C={C} onClick={onBack}>Everything else</Back>
+
+      <Rise i={0}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <Eyebrow C={C} tone="brass">Build your own</Eyebrow>
+          <Display C={C} size={36}>Every piece we make</Display>
+          <Body C={C} dim size={13.5}>
+            Take one thing or twelve. We will still schedule them in the right order.
+          </Body>
+        </div>
+      </Rise>
+
+      {GROUPS.map((grp, gi) => (
+        <Rise key={grp.key} i={gi + 1}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+              <Eyebrow C={C} tone="brass">{grp.label}</Eyebrow>
+              <span style={{ fontFamily: UI, fontSize: 10.5, color: C.faint }}>{grp.note}</span>
+            </div>
+
+            <div className="px-rail">
+              {grp.ids.map((id) => {
+                const g = GOODS[id]
+                const on = !!picks[id]
+                const price = on ? priceOf(id, picks[id]!) : cheapestGood(id)
+                return (
+                  <Card key={id} C={C} live={on}
+                    label={`${g.name}, ${money(price)}`}
+                    onClick={() => onSet(id, on ? null : defaultPickFor(g))}
+                    style={{ width: 208 }}>
+                    <div style={{ position: 'relative' }}>
+                      <Art kind={g.art} C={C} hue={hueOf(picks[id]) ?? grp.hue} h={112} />
+                      {on && (
+                        <span style={{
+                          position: 'absolute', top: 9, right: 9, width: 24, height: 24,
+                          borderRadius: 99, background: C.forest, color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 13, fontWeight: 700, boxShadow: C.lift,
+                        }}>✓</span>
+                      )}
+                    </div>
+                    <div style={{ padding: '11px 13px 13px', display: 'flex',
+                      flexDirection: 'column', gap: 6 }}>
+                      <div style={{ fontFamily: DISPLAY, fontSize: 16, color: C.ink,
+                        lineHeight: 1.15, minHeight: 37 }}>{g.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'baseline',
+                        justifyContent: 'space-between', gap: 8 }}>
+                        <span style={{ fontFamily: UI, fontSize: 10, color: C.faint }}>
+                          {on ? 'in your plan' : 'from'}
+                        </span>
+                        <span style={{
+                          fontFamily: DISPLAY, fontSize: 18, lineHeight: 1,
+                          color: on ? C.forest : C.brass, fontVariantNumeric: 'tabular-nums',
+                        }}>{money(price)}{g.monthly
+                          ? <span style={{ fontFamily: UI, fontSize: 9 }}>/mo</span> : null}</span>
+                      </div>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        </Rise>
+      ))}
+
+      <div style={{
+        position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,
+        display: 'flex', justifyContent: 'center', padding: '0 16px 16px', pointerEvents: 'none',
+      }}>
+        <div style={{
+          width: '100%', maxWidth: 428, pointerEvents: 'auto',
+          background: C.glass, backdropFilter: 'blur(26px) saturate(1.8)',
+          WebkitBackdropFilter: 'blur(26px) saturate(1.8)',
+          border: `1px solid ${C.line}`, borderRadius: 18, padding: '14px 18px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14,
+          boxShadow: C.liftHi,
+        }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Counter value={total} style={{
+              fontFamily: DISPLAY, fontSize: 30, color: C.ink, lineHeight: 1,
+            }} />
+            <span style={{
+              fontFamily: UI, fontSize: 11, color: C.ink3, lineHeight: 1.35,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {chosen.length === 0 ? 'Pick anything to start'
+                : `${chosen.length} ${chosen.length === 1 ? 'piece' : 'pieces'}`}
+            </span>
+          </div>
+          <Btn C={C} onClick={onDone} disabled={chosen.length === 0}>See the plan</Btn>
+        </div>
+      </div>
+    </div>
   )
 }

@@ -21,7 +21,7 @@
  *            it. At thumbnail size it reads as photography, which is the entire point of a shop.
  */
 
-import React, { useEffect, useRef, useState } from 'react'
+import React from 'react'
 import type { ArtKind } from './data'
 
 /* ─────────────────────────────────────────────────────────────────────────────
@@ -96,8 +96,17 @@ const CSS = `
 .px-tap:active { transform: scale(.985) }
 .px-art { transition: transform .5s cubic-bezier(.2,.8,.3,1) }
 .px-card:hover .px-art { transform: scale(1.035) }
+/* A swipe rail: cards bleed to both edges and snap. Five campaigns stacked vertically was
+   2,000px of scrolling; as a rail it is one gesture and half a screen. */
+.px-rail { display:flex; gap:12px; overflow-x:auto; scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch; scrollbar-width:none; padding:2px 18px 6px;
+  margin:0 -18px; }
+.px-rail::-webkit-scrollbar { display:none }
+.px-rail > * { scroll-snap-align:start; flex:0 0 auto }
+.px-open { overflow:hidden; transition: max-height .34s cubic-bezier(.2,.8,.3,1), opacity .24s ease }
 @media (prefers-reduced-motion: reduce) {
-  .px-rise, .px-fade, .px-pulse, .px-tap, .px-art { animation: none !important; transition: none !important }
+  .px-rise, .px-fade, .px-pulse, .px-tap, .px-art, .px-open {
+    animation: none !important; transition: none !important }
 }
 `
 
@@ -116,28 +125,20 @@ export function Rise({ i = 0, children, style }: {
   )
 }
 
-/** A price that counts to its new value, so changing the cast feels like it moved money. */
+/**
+ * The running total.
+ *
+ * This used to count up to its new value. Two attempts at that both displayed a price that
+ * lagged a full interaction behind: the cards beside it read $190 and $180 while the bar
+ * still said $0. The cause was state shadowing the prop through a ref that only settled when
+ * an animation frame ran to completion, which React's dev double-invoke reliably interrupts.
+ *
+ * A tween is decoration. A wrong price is a lie about what someone is being charged, and no
+ * amount of polish is worth carrying that risk in the one component whose entire job is to
+ * be correct. So it renders the prop, and the money is right by construction.
+ */
 export function Counter({ value, style }: { value: number; style?: React.CSSProperties }) {
-  const [shown, setShown] = useState(value)
-  const from = useRef(value)
-  useEffect(() => {
-    let raf = 0
-    const start = performance.now()
-    const a = from.current, b = value
-    if (a === b) return
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-    if (reduce) { from.current = b; setShown(b); return }
-    const step = (t: number) => {
-      const k = Math.min(1, (t - start) / 420)
-      const e = 1 - Math.pow(1 - k, 3)
-      setShown(Math.round(a + (b - a) * e))
-      if (k < 1) raf = requestAnimationFrame(step)
-      else from.current = b
-    }
-    raf = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(raf)
-  }, [value])
-  return <span style={{ fontVariantNumeric: 'tabular-nums', ...style }}>{money(shown)}</span>
+  return <span style={{ fontVariantNumeric: 'tabular-nums', ...style }}>{money(value)}</span>
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────
