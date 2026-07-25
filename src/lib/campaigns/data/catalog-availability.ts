@@ -128,7 +128,21 @@ function coerceAvailability(v: unknown): CardAvailability | null {
  * live/DB card (set 'coming_soon' / 'hidden'), and the store, the wrapper, and the server guard all
  * read the same answer.
  */
+/**
+ * Cards that USED to be built-ins and have since been removed from the catalog.
+ *
+ * They need naming because an unknown id falls through to 'live' — that default exists so a real DB
+ * campaign works, but it also means a deleted card keeps reporting as buyable. `delivery` did: it had
+ * no catalog entry, no price, and composed to an empty $0 campaign, yet the buy guard waved it
+ * through. Nothing reached it (it was off every shelf), but a stale link or an old draft would have.
+ *
+ * Retiring an id is one line here, and it wins over everything including a CMS override — a card that
+ * no longer exists cannot be switched back on from the admin.
+ */
+export const RETIRED_IDS: readonly string[] = ['delivery']
+
 export function availabilityFor(id: string, overrides?: VisibilityOverrideMap): CardAvailability {
+  if (RETIRED_IDS.includes(id)) return 'hidden'
   const o = overrides?.[id]
   const ov = o ? coerceAvailability(o.visibility) : null
   if (ov) return ov

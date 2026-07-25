@@ -14,13 +14,29 @@
 import { CREATE_CATALOG } from './create-catalog'
 import { isBuyable, type VisibilityOverrideMap } from './catalog-availability'
 
-/** Coming-soon bundles whose READY pieces are sellable on their own today. The catering push
- *  is blocked by ONE unbuilt email step; its photo feature + post are real, live products. */
+/** Coming-soon bundles whose pieces are sellable on their own — WHEN they are. The catering push is
+ *  blocked by one unbuilt email step; its photo feature + post are the pieces it unbundles into.
+ *
+ *  Read this through `unbundleFor`, never directly: the note promises "you can buy them today", and
+ *  whether that is true depends on the allowlist, which moves. It was briefly false — both pieces
+ *  were gated as coming-soon while this note still told owners to go buy them. */
 export const UNBUNDLED_TODAY: Record<string, { ids: string[]; note: string }> = {
   catering: {
     ids: ['dish', 'graphic'],
     note: 'The full catering push has an email step we are still building. Its two ready pieces, the dish feature and the post, are real and you can buy them today.',
   },
+}
+
+/**
+ * The unbundle note for a coming-soon card, or null when it would not be true right now. Honest by
+ * construction: the note only appears while EVERY piece it names can actually be bought, so the
+ * allowlist tightening can silence it but can never make it lie. It comes back on its own when
+ * those pieces go live.
+ */
+export function unbundleFor(id: string, overrides?: VisibilityOverrideMap): { ids: string[]; note: string } | null {
+  const u = UNBUNDLED_TODAY[id]
+  if (!u || !u.ids.length) return null
+  return u.ids.every((x) => isBuyable(x, overrides)) ? u : null
 }
 
 const STAPLES = ['dish', 'reel', 'gbp', 'gpost']

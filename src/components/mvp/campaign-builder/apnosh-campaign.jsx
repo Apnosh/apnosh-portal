@@ -10,7 +10,7 @@ import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-tu
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { contentFor } from "@/lib/campaigns/data/content-overrides";
 import { isBuyable, isHidden, comingSoonReason } from "@/lib/campaigns/data/catalog-availability";
-import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY } from "@/lib/campaigns/data/live-alternatives";
+import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, unbundleFor } from "@/lib/campaigns/data/live-alternatives";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
 import { whyFor } from "@/lib/campaigns/data/why-for";
 import { whatYouGet } from "@/lib/campaigns/builder/what-you-get";
@@ -3906,7 +3906,9 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const soonMsg = soonReason(itemId);
   // Coming-soon detours: the unbundle note (a bundle blocked by one unbuilt step still has
   // ready pieces) + live alternatives for the same goal, so this page is never a dead end.
-  const unbundle = soon ? UNBUNDLED_TODAY[itemId] : null;
+  // Via unbundleFor, not the raw map: the note says "you can buy them today", so it must only show
+  // while every piece it names really is buyable.
+  const unbundle = soon ? unbundleFor(itemId, CONTENT_OVERRIDES) : null;
   const altIds = soon ? liveAlternativesFor(itemId, CONTENT_OVERRIDES) : [];
   // "Tell me when it's ready": persisted server-side (catalog_interest + a staff page);
   // localStorage only remembers that THIS device already asked.

@@ -27,8 +27,8 @@ import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
 import { SERVICE_PLAYBOOKS, playbookNeedKeys } from '@/lib/campaigns/data/service-playbooks'
 import { assetGatesForDraft, resolveGates } from '@/lib/campaigns/gates/config'
 import { goalSlugForChip, budgetCapForChip } from '@/lib/goals/defaults'
-import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY } from '@/lib/campaigns/data/live-alternatives'
-import { isBuyable, BUILTIN_AVAILABILITY } from '@/lib/campaigns/data/catalog-availability'
+import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY, unbundleFor } from '@/lib/campaigns/data/live-alternatives'
+import { isBuyable, isHidden, BUILTIN_AVAILABILITY, FULLY_BUILT_LIVE, RETIRED_IDS } from '@/lib/campaigns/data/catalog-availability'
 import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { fitsBudget, isSellable, filterRecsByFacts, deliveryLedShape } from '@/lib/campaigns/planning/rank-facts'
 import { ITEM_PRICES } from '@/lib/campaigns/builder/item-prices'
@@ -733,9 +733,18 @@ s.group('Availability: merged carts carry all source ids; coming-soon ids get fl
   s.check('merged draft carries EVERY source id', JSON.stringify(cart.draft?.sourceCatalogIds) === JSON.stringify(['dish', 'giftcard']))
   const ids = draftSourceCatalogIds(cart.draft!)
   s.check('draftSourceCatalogIds reads the full list', JSON.stringify(ids) === JSON.stringify(['dish', 'giftcard']))
-  s.check('the coming-soon item is flagged even behind a live first item', JSON.stringify(unbuyableCatalogIds(ids)) === JSON.stringify(['giftcard']))
   s.check('a legacy draft (single sourceCatalogId) still resolves', JSON.stringify(draftSourceCatalogIds({ sourceCatalogId: 'giftcard' })) === JSON.stringify(['giftcard']))
-  s.eq('an all-live cart is clean', unbuyableCatalogIds(['dish', 'edit', 'reach']).length, 0)
+  // Read the live/soon examples OFF the allowlist instead of naming cards. These used to hardcode
+  // 'dish' as live; it was later gated coming-soon and the checks failed for no real reason.
+  const liveEg = FULLY_BUILT_LIVE[0]
+  const soonEg = Object.keys(BUILTIN_AVAILABILITY).find((id) => !isBuyable(id))!
+  s.check('the coming-soon item is flagged even behind a live first item',
+    JSON.stringify(unbuyableCatalogIds([liveEg, soonEg])) === JSON.stringify([soonEg]), `${liveEg} + ${soonEg}`)
+  s.eq('an all-live cart is clean', unbuyableCatalogIds([...FULLY_BUILT_LIVE]).length, 0)
+  // A card removed from the catalog must NOT slip through as buyable (it composes to an empty $0
+  // campaign). 'delivery' did exactly that until it was retired.
+  s.eq('a retired card is refused by the buy guard', unbuyableCatalogIds(['delivery']).length, 1)
+  s.check('a retired card is not buyable', !isBuyable('delivery'))
 }
 
 // ── Owner-sim fix 1a: the edit-footage ask keys off EVERY source id, any cart position ──
@@ -888,18 +897,21 @@ s.group('Budget chips: one question feeds the guard + the ranker')
 
 s.group('Ranker facts: never recommend what they cannot buy or afford')
 {
-  const deliveryMo = ITEM_PRICES['delivery']?.perMonth ?? 0
-  s.check('sanity: the delivery card has a real monthly price', deliveryMo > 0)
-  s.eq('a monthly card over the budget does not fit', fitsBudget('delivery', deliveryMo - 1), false)
-  s.eq('a monthly card at the budget fits', fitsBudget('delivery', deliveryMo), true)
-  s.eq('no budget known → everything fits (never worse than before)', fitsBudget('delivery', null), true)
+  // Pick a real monthly card off the price table rather than naming one. This group used to hardcode
+  // 'delivery', which was later deleted from the catalog entirely, so every check here failed.
+  const monthlyId = Object.keys(ITEM_PRICES).find((id) => ITEM_PRICES[id].perMonth > 0)!
+  const monthlyPrice = ITEM_PRICES[monthlyId].perMonth
+  s.check('sanity: there is a card with a real monthly price', monthlyPrice > 0, `${monthlyId} $${monthlyPrice}/mo`)
+  s.eq('a monthly card over the budget does not fit', fitsBudget(monthlyId, monthlyPrice - 1), false)
+  s.eq('a monthly card at the budget fits', fitsBudget(monthlyId, monthlyPrice), true)
+  s.eq('no budget known → everything fits (never worse than before)', fitsBudget(monthlyId, null), true)
   const oneTimeId = Object.keys(ITEM_PRICES).find((id) => ITEM_PRICES[id].oneTime > 0 && ITEM_PRICES[id].perMonth === 0)
   if (oneTimeId) s.eq('a one-time card always fits a monthly budget', fitsBudget(oneTimeId, 100), true)
-  s.eq('unknown availability → sellable (no filtering)', isSellable('delivery', {}), true)
+  s.eq('unknown availability → sellable (no filtering)', isSellable(monthlyId, {}), true)
   s.eq('a coming-soon id is not sellable', isSellable('giftcard', { buyable: new Set(['dish']) }), false)
-  const recs = [{ id: 'dish' }, { id: 'giftcard' }, { id: 'delivery' }]
+  const recs = [{ id: 'dish' }, { id: 'giftcard' }, { id: monthlyId }]
   s.eq('filterRecsByFacts drops unbuyable + over-budget, order preserved',
-    JSON.stringify(filterRecsByFacts(recs, { buyable: new Set(['dish', 'delivery']), budgetMonthly: 50 }).map((r) => r.id)),
+    JSON.stringify(filterRecsByFacts(recs, { buyable: new Set(['dish', monthlyId]), budgetMonthly: monthlyPrice - 1 }).map((r) => r.id)),
     JSON.stringify(['dish']))
   s.eq('ghost kitchens are delivery-led', deliveryLedShape('delivery_only', null), true)
   s.eq('ghost footprint is delivery-led', deliveryLedShape(null, 'ghost'), true)
@@ -909,10 +921,18 @@ s.group('Ranker facts: never recommend what they cannot buy or afford')
 // ── Owner-sim fix, Phase 5: coming-soon detours + dark shelves ──
 s.group('Live alternatives: a coming-soon page is never a dead end')
 {
-  const cat = liveAlternativesFor('catering')
-  s.eq('catering unbundles its two ready pieces FIRST', JSON.stringify(cat.slice(0, 2)), JSON.stringify(['dish', 'graphic']))
-  s.check('every unbundled id is genuinely live (drift guard)',
-    Object.values(UNBUNDLED_TODAY).flatMap((u) => u.ids).every((id) => isBuyable(id)))
+  // THE POINT of the unbundle note: it tells an owner "you can buy these pieces today". It must
+  // therefore only appear while every piece it names really is buyable. It briefly lied — both of
+  // catering's pieces were gated coming-soon while the note still sent owners to buy them.
+  for (const [id, u] of Object.entries(UNBUNDLED_TODAY)) {
+    const shown = unbundleFor(id)
+    const allLive = u.ids.every((x) => isBuyable(x))
+    s.check(`${id}: the unbundle note shows only when its pieces are really buyable`, !!shown === allLive,
+      `pieces ${u.ids.join('+')} live=${allLive}, note ${shown ? 'shown' : 'hidden'}`)
+    if (shown) s.check(`${id}: every piece the note names can be bought`, shown.ids.every((x) => isBuyable(x)))
+  }
+  s.check('a card whose pieces went coming-soon shows no note (rather than a false one)',
+    unbundleFor('catering') === null || UNBUNDLED_TODAY['catering'].ids.every((x) => isBuyable(x)))
   const soonIds = Object.keys(BUILTIN_AVAILABILITY).filter((id) => id !== 'reviews')   // 'reviews' is a plan-time alias, not a card
   const bad: string[] = []
   for (const id of soonIds) {
@@ -996,17 +1016,17 @@ s.group('Booking feeds the schedule: nothing posts before the shoot that makes i
   s.check('a no-shoot order never asks for a place', !noShoot.custom.some((c) => c.id === 'shoot-place'))
 }
 
-s.group('Delivery setup-only + TikTok off the sell surfaces')
+s.group('Retired cards leave nothing behind; TikTok off the sell surfaces')
 {
-  const full = draftFromBuilder({ itemId: 'delivery', status: 'approve', vals: {} })
-  const fullBill = summarize(full.items)
-  s.check('sanity: the full delivery card carries a monthly', fullBill.perMonth > 0)
-  const setup = draftFromBuilder({ itemId: 'delivery', status: 'approve', vals: { options: 'setup-only' } })
-  const setupBill = summarize(setup.items)
-  s.eq('setup-only bills NO monthly', setupBill.perMonth, 0)
-  s.eq('the one-time fix is unchanged', setupBill.oneTimeOnDelivery, fullBill.oneTimeOnDelivery)
-  s.check('the monthly line is opted out, not deleted (visible + reversible)',
-    setup.items.some((it) => it.serviceId === 'delivery-opt' && it.cadence.kind !== 'one-time' && it.optOut === 'have-it'))
+  // This group used to test the 'delivery' card's setup-only option. That card was REMOVED from the
+  // catalog, so what matters now is that it stays gone rather than half-existing: no price, no
+  // buildable plan, and refused by the buy guard.
+  for (const id of RETIRED_IDS) {
+    s.check(`${id}: no price row`, !ITEM_PRICES[id])
+    s.check(`${id}: builds no plan`, draftFromBuilder({ itemId: id, status: 'approve', vals: {} }).items.length === 0)
+    s.check(`${id}: cannot be bought`, !isBuyable(id))
+    s.check(`${id}: dropped from the browse`, isHidden(id))
+  }
   // TikTok is unsellable until the rail exists — no sell surface may promise it.
   const surfaces = JSON.stringify({ t: CAMPAIGN_TEMPLATES, c: SERVICE_CHANNELS, cc: CAMPAIGN_CONTENT })
   s.check('no sell surface mentions TikTok', !/tiktok/i.test(surfaces))
