@@ -300,6 +300,15 @@ export interface Situation {
   needs: readonly PlanQuestion[]
 }
 
+/**
+ * THE RULE FOR `sub`: it says more about the SITUATION. Never what we would do about it, and never
+ * the outcome they want.
+ *
+ * Two of these used to break it, and it was the main reason the list read as muddled: "Nobody
+ * around here knows us" was subtitled "Press, a look, a name people recognise" (our services) and
+ * "People come once and never again" was subtitled "The same faces, more often" (the goal). Scanning
+ * eleven cards is only fast when every sub-line is answering the same question.
+ */
 export const SITUATIONS: readonly Situation[] = [
   { v: 'opening', needs: ['assets', 'reach', 'avoid'], label: 'We are opening a new place', sub: 'A grand opening, or a relaunch', goal: 'opening', shape: 'date' },
   { v: 'event', needs: ['assets', 'reach', 'avoid'], label: 'We have something coming up', sub: 'A concert, a party, a one-off night', goal: 'event', shape: 'date' },
@@ -310,8 +319,8 @@ export const SITUATIONS: readonly Situation[] = [
   { v: 'checks', needs: ['promote', 'avoid'], label: 'We want bigger checks', sub: 'More from the guests already coming', goal: 'bigger-checks', shape: 'ongoing' },
   { v: 'catering', needs: ['assets', 'reach', 'avoid'], label: 'We want catering and parties', sub: 'Private events, big tables, offices', goal: 'catering', shape: 'ongoing' },
   { v: 'takeout', needs: ['promote', 'avoid'], label: 'We want to own our takeout', sub: 'Orders on our site, not the apps', goal: 'own-takeout', shape: 'ongoing' },
-  { v: 'known', needs: ['assets', 'promote', 'reach', 'avoid'], label: 'Nobody around here knows us', sub: 'Press, a look, a name people recognise', goal: 'get-known', shape: 'ongoing' },
-  { v: 'return', needs: ['avoid'], label: 'People come once and never again', sub: 'The same faces, more often', goal: 'regulars', shape: 'ongoing' },
+  { v: 'known', needs: ['assets', 'promote', 'reach', 'avoid'], label: 'Nobody around here knows us', sub: 'You have been open a while and the neighbourhood has not noticed', goal: 'get-known', shape: 'ongoing' },
+  { v: 'return', needs: ['avoid'], label: 'People come once and never again', sub: 'Plenty of first visits, hardly any second ones', goal: 'regulars', shape: 'ongoing' },
 ]
 
 export const situationByValue = (v: string) => SITUATIONS.find((x) => x.v === v)
@@ -340,22 +349,25 @@ export interface SituationGroup {
 }
 
 export const SITUATION_GROUPS: readonly SituationGroup[] = [
+  /* The three subs are deliberately parallel and deliberately positive. An earlier pass had
+   * "Nothing is broken, you want more of something", which makes the reader hold a negative in
+   * their head to work out what the group is FOR. Say what it is, never what it is not. */
   {
     key: 'coming-up',
     title: 'Something is coming up',
-    sub: 'There is a date, and you want people there',
+    sub: 'A date, and you want people there for it',
     situations: ['opening', 'event', 'new-thing'],
   },
   {
     key: 'off',
-    title: 'Something is off',
-    sub: 'It used to work better than it does now',
+    title: 'Something is not working',
+    sub: 'It is quieter, or worse, than it should be',
     situations: ['quiet', 'slow-shifts', 'reviews', 'return'],
   },
   {
     key: 'grow',
-    title: 'You want to grow a part of it',
-    sub: 'Nothing is broken, you want more of something',
+    title: 'You want more of something',
+    sub: 'One part of the business you want to build up',
     situations: ['checks', 'catering', 'takeout', 'known'],
   },
 ]

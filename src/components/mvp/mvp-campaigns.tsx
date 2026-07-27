@@ -85,10 +85,14 @@ export default function MvpCampaigns() {
           </div>
         )}
 
-        {/* Entry to the monthly marketing plan. Sits above the board rather than inside the
-            campaign list because it is not a campaign yet: it is the thing that makes one. Shown
-            in every state (including loading and empty) so a new owner with nothing on the board
-            still has a way in. */}
+        {/* Entry to the builder. Sits above the board rather than inside the campaign list because
+            it is not a campaign yet: it is the thing that makes one. Shown in every state
+            (including loading and empty) so a new owner with nothing on the board still has a way
+            in.
+
+            Not "a monthly marketing plan": the screen it opens builds grand openings and one-off
+            event nights as readily as anything recurring, and naming the door after one of them
+            told most owners this was not for them before they had opened it. */}
         <Link
           href="/dashboard/campaigns/monthly-plan"
           className="mvp-row"
@@ -103,10 +107,10 @@ export default function MvpCampaigns() {
           </span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
-              Create a monthly marketing plan
+              Start a campaign
             </span>
             <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
-              Built from what we already know about you. Three questions at most.
+              An opening, a slow night, a new dish. Three questions at most.
             </span>
           </span>
           <ChevronRight size={17} style={{ color: C.faint, flex: '0 0 auto' }} />

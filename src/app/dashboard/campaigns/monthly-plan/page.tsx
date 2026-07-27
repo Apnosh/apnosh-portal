@@ -14,7 +14,11 @@ import { MvpDetailHeader, MvpEmpty } from '@/components/mvp/mvp-detail'
 import MonthlyPlanFlow from '@/components/campaigns/monthly/monthly-plan-flow'
 import { getPlanInputs } from '@/lib/dashboard/get-plan-inputs'
 
-export const metadata = { title: 'Create a monthly marketing plan' }
+/* Named "New campaign", not "monthly marketing plan". The screen builds a grand opening, a concert
+ * night, a run of a new dish — none of which are monthly and none of which are a plan in the sense
+ * that phrase implies. The old title told the owner the answer before they had described the
+ * question, and quietly ruled out most of what they actually come here to do. */
+export const metadata = { title: 'New campaign' }
 
 export default async function MonthlyPlanPage() {
   const inputs = await getPlanInputs()
@@ -24,7 +28,7 @@ export default async function MonthlyPlanPage() {
       active="campaigns"
       header={
         <MvpDetailHeader
-          title="Your monthly marketing plan"
+          title="New campaign"
           subtitle={inputs ? 'Built from what we already know' : 'Setup needed'}
           backHref="/dashboard/campaigns"
           backLabel="Campaigns"

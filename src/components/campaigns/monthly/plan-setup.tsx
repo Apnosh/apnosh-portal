@@ -194,7 +194,10 @@ function Act({ n, of, title, sub, children }: { n: number; of: number; title: st
         <span style={{ width: 22, height: 22, borderRadius: 99, background: C.ink, color: '#fff', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           {n}
         </span>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', color: C.faint }}>{n} OF {of}</span>
+        {/* Only once the total is real. Before anything is picked there are no follow-ups yet, so
+            the honest count is "1 of 1" — which reads as a bug, and undersells a flow that is about
+            to ask two more things. Say nothing until we know. */}
+        {of > n && <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', color: C.faint }}>{n} OF {of}</span>}
       </div>
       <h2 style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, color: C.ink, lineHeight: 1.15, margin: '0 0 5px', letterSpacing: '-0.01em' }}>{title}</h2>
       <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: '0 0 16px' }}>{sub}</p>
@@ -405,9 +408,15 @@ export default function PlanSetup({
       >
         <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? '#fff' : soon ? C.mute : C.ink, lineHeight: 1.25, paddingRight: on ? 20 : 0 }}>{o.label}</span>
         <span style={{ display: 'block', fontSize: 11, color: on ? 'rgba(255,255,255,.85)' : C.mute, marginTop: 3, lineHeight: 1.35 }}>{o.sub}</span>
-        {soon
-          ? <span style={{ display: 'inline-block', marginTop: 7, fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: AMBER_DK, background: AMBER_SOFT, borderRadius: 6, padding: '2px 6px' }}>Not yet</span>
-          : fit.held > 0 && <span style={{ display: 'block', marginTop: 6, fontSize: 10.5, color: on ? 'rgba(255,255,255,.8)' : C.faint }}>{fit.ready} of {fit.ready + fit.held} ready today</span>}
+        {/* "23 of 26 ready today" used to sit here on any goal with held work. It went, because it
+         * answered a question nobody had yet: at pick time an owner does not know there are 26 of
+         * anything, so the line reads as a stock warning about the option they are considering.
+         * Worse, three of these cards share a goal, so it printed the SAME number on each and
+         * distinguished nothing. The honesty it was carrying is better placed on the plan screen,
+         * where each held line is named with the reason it is held. */}
+        {soon && (
+          <span style={{ display: 'inline-block', marginTop: 7, fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: AMBER_DK, background: AMBER_SOFT, borderRadius: 6, padding: '2px 6px' }}>Not yet</span>
+        )}
         {on && (
           <span style={{ position: 'absolute', top: 10, right: 10, width: 18, height: 18, borderRadius: 99, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <Check size={12} strokeWidth={3.2} color={g?.col ?? C.green} />
@@ -458,16 +467,19 @@ export default function PlanSetup({
     <div style={{ background: C.bg, minHeight: '100%', padding: '18px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{CSS}</style>
 
-      <div style={{ fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, color: C.ink, lineHeight: 1.1, letterSpacing: '-0.015em' }}>Design a campaign</div>
-      <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, marginBottom: 30, lineHeight: 1.5 }}>
-        {situations.length === 0
-          ? 'Tell us what you are after. We only ask what we do not already know.'
-          : gaps.length === 0
+      {/* Three headings used to stack here: the page header, a "Design a campaign" title, and the
+          question itself — a whole phone screen of throat-clearing before anything to act on. The
+          title is gone; what is left is the one line that tells them how much is still coming, and
+          that line only says something once there is something to say. */}
+      {situations.length > 0 && (
+        <div style={{ fontSize: 13.5, color: C.mute, marginBottom: 26, lineHeight: 1.5 }}>
+          {gaps.length === 0
             ? 'Nothing else to ask. We have the rest from your account and from what you wrote.'
             : gaps.length === 1
               ? 'One more question, then we build it.'
               : `${gaps.length} more questions, then we build it.`}
-      </div>
+        </div>
+      )}
 
       {/* 1 ── the situation, in their words. The shape falls out of it and is never asked about:
               an owner does not think "is this a dated moment", they think "we are opening". */}
@@ -476,8 +488,8 @@ export default function PlanSetup({
         of={1 + gaps.length}
         title={writing ? 'Tell us in your own words' : 'What is going on?'}
         sub={writing
-          ? 'A sentence or two is plenty. We read it back to you before anything gets built.'
-          : 'Pick whatever sounds like you. More than one is fine.'}
+          ? 'A sentence or two is plenty. Say the date if there is one, and anything you can put behind it.'
+          : 'Pick anything that sounds like your place. More than one is fine.'}
       >
         {/* ── the list, which is now the front door ─────────────────────────────────────────── */}
         {!writing && (
@@ -502,9 +514,9 @@ export default function PlanSetup({
                 padding: '13px 14px', fontFamily: "'Inter',system-ui,sans-serif",
               }}
             >
-              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 660, color: C.ink }}>None of these</span>
+              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 660, color: C.ink }}>None of these fit</span>
               <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 3, lineHeight: 1.4 }}>
-                Say it in your own words instead. We work out the rest.
+                Tell us in your own words instead.
               </span>
             </button>
           </>

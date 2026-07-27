@@ -24,7 +24,7 @@ export default function PreviewSetupPage() {
       active="campaigns"
       header={
         <MvpDetailHeader
-          title="Your monthly marketing plan"
+          title="New campaign"
           subtitle="Preview · Yellowbee Market & Cafe"
           backHref="/preview/campaign"
           backLabel="All screens"
