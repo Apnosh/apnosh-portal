@@ -317,6 +317,57 @@ export const SITUATIONS: readonly Situation[] = [
 export const situationByValue = (v: string) => SITUATIONS.find((x) => x.v === v)
 
 /**
+ * How the eleven situations are grouped on the first screen.
+ *
+ * WHY GROUP AT ALL. Eleven flat cards is a wall, and a wall gets skimmed rather than read. Three
+ * headed groups let someone find their own situation by first deciding which KIND of thing is
+ * happening to them, which is a much easier judgement than comparing eleven sentences.
+ *
+ * The grouping is by what prompted the owner to open this screen, NOT by our `shape` field. Shape
+ * (date / run / ongoing) is a scheduling consequence and means nothing to them; "something is
+ * coming up" versus "something is off" is how they would actually describe their week.
+ *
+ * Grouped here rather than in the component so a sim can assert that every situation appears in
+ * exactly one group. A new situation that nobody adds to a group would otherwise just vanish from
+ * the only screen that offers it, silently.
+ */
+export interface SituationGroup {
+  key: string
+  /** The owner's framing, not ours. */
+  title: string
+  sub: string
+  situations: readonly string[]
+}
+
+export const SITUATION_GROUPS: readonly SituationGroup[] = [
+  {
+    key: 'coming-up',
+    title: 'Something is coming up',
+    sub: 'There is a date, and you want people there',
+    situations: ['opening', 'event', 'new-thing'],
+  },
+  {
+    key: 'off',
+    title: 'Something is off',
+    sub: 'It used to work better than it does now',
+    situations: ['quiet', 'slow-shifts', 'reviews', 'return'],
+  },
+  {
+    key: 'grow',
+    title: 'You want to grow a part of it',
+    sub: 'Nothing is broken, you want more of something',
+    situations: ['checks', 'catering', 'takeout', 'known'],
+  },
+]
+
+/** Every situation, in the order the first screen shows them. Empty groups are impossible by test. */
+export const groupedSituations = (): { group: SituationGroup; items: Situation[] }[] =>
+  SITUATION_GROUPS.map((group) => ({
+    group,
+    items: group.situations.map((v) => situationByValue(v)).filter((x): x is Situation => !!x),
+  }))
+
+/**
  * What is still worth asking: relevant to what they picked, AND not already answered.
  *
  * `known` is everything we have from onboarding or from the description they just wrote. A good

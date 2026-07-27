@@ -15,7 +15,7 @@
  */
 
 import { Suite } from './lib'
-import { PLAN_GOALS, SHAPES, OWNER_ASSETS, candidatesForGoal, goalReadiness, goalsForShape, assetsCover, assetsBoost } from '../../src/lib/campaigns/data/plan-goals'
+import { PLAN_GOALS, SHAPES, SITUATIONS, OWNER_ASSETS, candidatesForGoal, goalReadiness, goalsForShape, groupedSituations, assetsCover, assetsBoost } from '../../src/lib/campaigns/data/plan-goals'
 import { GENERATED_CATALOG } from '../../src/lib/campaigns/data/catalog.generated'
 import {
   composeMonthlyPlan,
@@ -364,6 +364,32 @@ s.group('The stale ids are gone')
 const allIds = new Set(READY_GOALS.flatMap((g) => candidatesForGoal(g.key).map((c) => c.id)))
 for (const ghost of ['second-visit', 'offer-eng']) {
   s.check(`${ghost} is no longer named by any goal`, !allIds.has(ghost), 'it does not exist in the catalog, so ranking it did nothing')
+}
+
+/* ── the first screen offers every situation, exactly once ─────────────────────────────────────
+ *
+ * The situation list is now the front door rather than a shortcut under a divider, so a situation
+ * missing from every group is not a cosmetic gap: it is a thing an owner can no longer ask for, and
+ * nothing else in the app would report it. Listing one twice is just as bad, because the two cards
+ * toggle the same value and the second looks broken.
+ */
+s.group('Every situation appears on the first screen, exactly once')
+{
+  const grouped = groupedSituations()
+  const shown = grouped.flatMap((x) => x.items.map((i) => i.v))
+  const counts = new Map<string, number>()
+  for (const v of shown) counts.set(v, (counts.get(v) ?? 0) + 1)
+
+  for (const sit of SITUATIONS) {
+    const n = counts.get(sit.v) ?? 0
+    s.check(`${sit.v} is offered once (${n})`, n === 1, n === 0 ? 'in no group, so it is unreachable' : 'in more than one group')
+  }
+  const strays = [...counts.keys()].filter((v) => !SITUATIONS.some((x) => x.v === v))
+  s.check('no group names a situation that does not exist', strays.length === 0, strays.join(', '))
+  for (const { group, items } of grouped) {
+    s.check(`"${group.title}" has cards (${items.length})`, items.length > 0, 'an empty heading renders as a dead section')
+    s.check(`"${group.title}" says what it means`, group.sub.length > 12, group.sub)
+  }
 }
 
 s.report('Plan packing properties')

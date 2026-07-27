@@ -26,6 +26,7 @@ import {
   SITUATIONS,
   OWNER_ASSETS,
   goalReadiness,
+  groupedSituations,
   situationByValue,
   gapsFor,
   assetsCover,
@@ -348,6 +349,73 @@ export default function PlanSetup({
   const [reading, setReading] = useState(false)
   const [readErr, setReadErr] = useState<string | null>(null)
   const [readBack, setReadBack] = useState<{ summary: string; unsupported: string[] } | null>(null)
+
+  /* Which half of question 1 is on screen: the list of situations, or the free-text box.
+   *
+   * The list leads now. A blank box asking "what do you want to do?" is the highest-effort opening
+   * an interface can have, and it also implies we can do anything — which is why the old flow had
+   * to walk it back on the next screen with "we do not do flyers or radio". Naming what we handle
+   * up front is both easier to answer and more honest.
+   *
+   * It is also the only version that works today: reading the paragraph needs a model call, and
+   * that call is currently failing. With the list first, the box is the escape hatch rather than
+   * the front door, so an empty balance no longer blocks the main path.
+   *
+   * Anyone who already typed something keeps the box open across re-renders. */
+  const [writing, setWriting] = useState(false)
+
+  /**
+   * One situation card. Extracted so the three groups can each render their own slice without the
+   * card's rules (wrong shape, already full, not sold yet) getting copied three times and drifting.
+   */
+  const situationCard = (o: (typeof SITUATIONS)[number]) => {
+    const on = situations.includes(o.v)
+    const g = PLAN_GOALS.find((x) => x.key === o.goal)
+    const soon = g?.state !== 'ready'
+    /* A campaign has one shape. Once the first pick sets it, situations that would need a
+     * different one dim, so the rule is shown rather than asked. */
+    const wrongShape = !!shape && o.shape !== shape && !on
+    const full = situations.length >= 3 && !on
+    const blocked = soon || wrongShape || full
+    const fit = goalReadiness(o.goal)
+    return (
+      <button
+        key={o.v} type="button" className="ps-pick"
+        onClick={() => {
+          if (blocked) return
+          const next = on ? situations.filter((x) => x !== o.v) : [...situations, o.v]
+          const head = situationByValue(next[0] ?? '')
+          set({
+            situations: next,
+            goals: [...new Set(next.map((v) => situationByValue(v)!.goal))],
+            shape: head?.shape,
+            ...(head && (head.shape === 'ongoing') ? { when: undefined, until: undefined } : {}),
+          })
+        }}
+        disabled={blocked}
+        title={soon ? g?.soonWhy : wrongShape ? 'This is a different kind of campaign. Start it separately.' : undefined}
+        style={{
+          position: 'relative', textAlign: 'left', cursor: blocked ? 'default' : 'pointer', minHeight: 84,
+          border: `1.5px solid ${on ? (g?.col ?? C.green) : C.line}`,
+          background: on ? (g?.col ?? C.green) : soon ? '#fbfbfd' : '#fff',
+          opacity: wrongShape || full ? 0.42 : 1,
+          borderRadius: 16, padding: '13px 13px',
+          fontFamily: "'Inter',system-ui,sans-serif",
+        }}
+      >
+        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? '#fff' : soon ? C.mute : C.ink, lineHeight: 1.25, paddingRight: on ? 20 : 0 }}>{o.label}</span>
+        <span style={{ display: 'block', fontSize: 11, color: on ? 'rgba(255,255,255,.85)' : C.mute, marginTop: 3, lineHeight: 1.35 }}>{o.sub}</span>
+        {soon
+          ? <span style={{ display: 'inline-block', marginTop: 7, fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: AMBER_DK, background: AMBER_SOFT, borderRadius: 6, padding: '2px 6px' }}>Not yet</span>
+          : fit.held > 0 && <span style={{ display: 'block', marginTop: 6, fontSize: 10.5, color: on ? 'rgba(255,255,255,.8)' : C.faint }}>{fit.ready} of {fit.ready + fit.held} ready today</span>}
+        {on && (
+          <span style={{ position: 'absolute', top: 10, right: 10, width: 18, height: 18, borderRadius: 99, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Check size={12} strokeWidth={3.2} color={g?.col ?? C.green} />
+          </span>
+        )}
+      </button>
+    )
+  }
   const describe = async () => {
     const text = (a.described ?? '').trim()
     if (text.length < 12 || reading) return
@@ -403,8 +471,48 @@ export default function PlanSetup({
 
       {/* 1 ── the situation, in their words. The shape falls out of it and is never asked about:
               an owner does not think "is this a dated moment", they think "we are opening". */}
-      <Act n={1} of={1 + gaps.length} title="What do you want to do?" sub="Say it however you would say it out loud. We work out the rest and show you what we understood.">
-        {/* The description is the question. The cards below it are a shortcut, not the interface. */}
+      <Act
+        n={1}
+        of={1 + gaps.length}
+        title={writing ? 'Tell us in your own words' : 'What is going on?'}
+        sub={writing
+          ? 'A sentence or two is plenty. We read it back to you before anything gets built.'
+          : 'Pick whatever sounds like you. More than one is fine.'}
+      >
+        {/* ── the list, which is now the front door ─────────────────────────────────────────── */}
+        {!writing && (
+          <>
+            {groupedSituations().map(({ group, items }) => (
+              <div key={group.key} style={{ marginBottom: 17 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 660, color: C.ink, letterSpacing: '-0.012em' }}>{group.title}</div>
+                <div style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.4, margin: '2px 0 8px' }}>{group.sub}</div>
+                <Grid>{items.map(situationCard)}</Grid>
+              </div>
+            ))}
+
+            {/* The escape hatch. Deliberately NOT called "design your own": picking "it has gone
+                quiet" designs you a campaign too, so that label would imply the list is a set of
+                pre-made things and only the box is bespoke. It is the same builder either way —
+                the only difference is whether you found yourself in the list. */}
+            <button
+              type="button" onClick={() => setWriting(true)}
+              style={{
+                display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+                border: `1.5px dashed ${C.line}`, background: '#fff', borderRadius: 16,
+                padding: '13px 14px', fontFamily: "'Inter',system-ui,sans-serif",
+              }}
+            >
+              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 660, color: C.ink }}>None of these</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 3, lineHeight: 1.4 }}>
+                Say it in your own words instead. We work out the rest.
+              </span>
+            </button>
+          </>
+        )}
+
+        {/* ── the box, now reached on purpose rather than met on arrival ────────────────────── */}
+        {writing && (
+          <>
         <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '14px 15px 13px' }}>
           <textarea
             value={a.described ?? ''}
@@ -458,64 +566,21 @@ export default function PlanSetup({
           </div>
         )}
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 10px' }}>
-          <div style={{ flex: 1, height: '0.5px', background: C.line }} />
-          <span style={{ fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap' }}>or start from one of these</span>
-          <div style={{ flex: 1, height: '0.5px', background: C.line }} />
-        </div>
-        <Grid>
-          {SITUATIONS.map((o) => {
-            const on = situations.includes(o.v)
-            const g = PLAN_GOALS.find((x) => x.key === o.goal)
-            const soon = g?.state !== 'ready'
-            /* A campaign has one shape. Once the first pick sets it, situations that would need a
-             * different one dim, so the rule is shown rather than asked. */
-            const wrongShape = !!shape && o.shape !== shape && !on
-            const full = situations.length >= 3 && !on
-            const blocked = soon || wrongShape || full
-            const fit = goalReadiness(o.goal)
-            return (
-              <button
-                key={o.v} type="button" className="ps-pick"
-                onClick={() => {
-                  if (blocked) return
-                  const next = on ? situations.filter((x) => x !== o.v) : [...situations, o.v]
-                  const head = situationByValue(next[0] ?? '')
-                  set({
-                    situations: next,
-                    goals: [...new Set(next.map((v) => situationByValue(v)!.goal))],
-                    shape: head?.shape,
-                    ...(head && (head.shape === 'ongoing') ? { when: undefined, until: undefined } : {}),
-                  })
-                }}
-                disabled={blocked}
-                title={soon ? g?.soonWhy : wrongShape ? 'This is a different kind of campaign. Start it separately.' : undefined}
-                style={{
-                  position: 'relative', textAlign: 'left', cursor: blocked ? 'default' : 'pointer', minHeight: 84,
-                  border: `1.5px solid ${on ? (g?.col ?? C.green) : C.line}`,
-                  background: on ? (g?.col ?? C.green) : soon ? '#fbfbfd' : '#fff',
-                  opacity: wrongShape || full ? 0.42 : 1,
-                  borderRadius: 16, padding: '13px 13px',
-                  fontFamily: "'Inter',system-ui,sans-serif",
-                }}
-              >
-                <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? '#fff' : soon ? C.mute : C.ink, lineHeight: 1.25, paddingRight: on ? 20 : 0 }}>{o.label}</span>
-                <span style={{ display: 'block', fontSize: 11, color: on ? 'rgba(255,255,255,.85)' : C.mute, marginTop: 3, lineHeight: 1.35 }}>{o.sub}</span>
-                {soon
-                  ? <span style={{ display: 'inline-block', marginTop: 7, fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: AMBER_DK, background: AMBER_SOFT, borderRadius: 6, padding: '2px 6px' }}>Not yet</span>
-                  : fit.held > 0 && <span style={{ display: 'block', marginTop: 6, fontSize: 10.5, color: on ? 'rgba(255,255,255,.8)' : C.faint }}>{fit.ready} of {fit.ready + fit.held} ready today</span>}
-                {on && (
-                  <span style={{ position: 'absolute', top: 10, right: 10, width: 18, height: 18, borderRadius: 99, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <Check size={12} strokeWidth={3.2} color={g?.col ?? C.green} />
-                  </span>
-                )}
-              </button>
-            )
-          })}
-        </Grid>
+        {/* Leaving does not discard anything: `described` lives in answers, not in this toggle. */}
+        <button
+          type="button" onClick={() => setWriting(false)}
+          style={{
+            marginTop: 12, background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer',
+            fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13, fontWeight: 600, color: C.greenDk,
+          }}
+        >
+          ← Back to the list
+        </button>
+          </>
+        )}
 
-        {/* Nine cards going grey with no explanation is its own kind of confusing. Say why. */}
-        {picked.length > 0 && SITUATIONS.some((o) => o.shape !== shape) && (
+        {/* Cards going grey with no explanation is its own kind of confusing. Say why. */}
+        {!writing && picked.length > 0 && SITUATIONS.some((o) => o.shape !== shape) && (
           <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, marginTop: 10, padding: '0 2px' }}>
             {shape === 'ongoing'
               ? 'The greyed ones are for a set date, which is a different kind of campaign. Start one of those separately when you need it.'
@@ -523,8 +588,9 @@ export default function PlanSetup({
           </div>
         )}
 
-        {/* The one thing we will not sell, said in full rather than left as a greyed-out card. */}
-        {PLAN_GOALS.filter((g) => g.state !== 'ready' && g.soonWhy && SITUATIONS.some((o) => o.goal === g.key)).map((g) => (
+        {/* The one thing we will not sell, said in full rather than left as a greyed-out card.
+            Only alongside the list: in the write view it explains a card that is not on screen. */}
+        {!writing && PLAN_GOALS.filter((g) => g.state !== 'ready' && g.soonWhy && SITUATIONS.some((o) => o.goal === g.key)).map((g) => (
           <div key={g.key} style={{ display: 'flex', gap: 8, marginTop: 10, padding: '10px 12px', background: AMBER_SOFT, borderRadius: 12, fontSize: 12, color: AMBER_DK, lineHeight: 1.45 }}>
             <Ban size={14} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1 }} />
             <span><strong style={{ fontWeight: 600 }}>People come once and never again:</strong> {g.soonWhy}</span>
