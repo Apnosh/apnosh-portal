@@ -121,8 +121,19 @@ export interface SetupLane {
   proOnly?: boolean
   /** The "what you get" rows for THIS lane. Every lane must describe what that lane truly does. */
   whatYouGet: string[]
-  /** What the owner has to bring for this lane specifically, shown before purchase. */
-  requires?: string[]
+  /**
+   * Requirement ids from the library this lane needs, and the reason "what it takes" can be shown
+   * BEFORE purchase rather than discovered after it.
+   *
+   * Ids rather than prose on purpose. Two cards that both need the Google connection must name the
+   * same thing, or the vault cannot tell they are the same thing, and "collect once, forever"
+   * quietly becomes "collect once per card". The owner-facing wording comes from the library.
+   *
+   * It sits on the LANE, not the card, because this is exactly where the lanes differ: the free
+   * lane of a Google card needs the connection so we can read, and the done-for-you lane needs
+   * manager access on top so we can write.
+   */
+  needs?: readonly string[]
   ownerTask?: LaneOwnerTask
 }
 

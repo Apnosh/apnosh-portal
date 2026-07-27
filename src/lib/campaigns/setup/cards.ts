@@ -43,6 +43,7 @@ const GBP: SetupCard = {
       delivery: 'owner-applies',
       proof: 'reread',
       whatYouGet: ['A clear checklist of what to fix', 'We recheck it for you when you are done'],
+      needs: ['GOOGLE'],
       ownerTask: {
         title: 'Fix your Google profile',
         why: 'We walk you through it section by section, in plain words. It checks itself as you go.',
@@ -58,6 +59,7 @@ const GBP: SetupCard = {
       proof: 'read-back',
       proOnly: true,
       whatYouGet: ['AI drafts each fix for you', 'You review and apply, then we recheck'],
+      needs: ['GOOGLE', 'PHOTOS'],
       ownerTask: {
         title: 'Fix your Google profile',
         why: 'We walk you through it section by section, in plain words. It checks itself as you go.',
@@ -71,6 +73,7 @@ const GBP: SetupCard = {
       label: 'Done for you by Apnosh',
       delivery: 'we-write',
       proof: 'read-back',
+      needs: ['GOOGLE', 'GBP-MGR', 'PHOTOS', 'HOURS', 'ATTR'],
       whatYouGet: [`We fix all ${gbpPartCount()} parts of your profile`, 'We recheck it and show you what changed'],
     },
   ],
@@ -94,6 +97,7 @@ const FRICTION: SetupCard = {
         'You set them on Google yourself, at your own pace',
         'Mark it done when your links are live',
       ],
+      needs: ['LINKS'],
       ownerTask: {
         title: 'Set your order and booking buttons',
         why: 'We show you which buttons to change and where. You set them on Google yourself.',
@@ -113,6 +117,7 @@ const FRICTION: SetupCard = {
         'We fill in your own ordering and booking links for you to confirm',
         'We set them on Google and read it back to prove it took',
       ],
+      needs: ['GOOGLE', 'LINKS'],
       ownerTask: {
         title: 'Set your order and booking buttons',
         why: 'We read your listing, fill in your links, and set them on Google for you to confirm.',
@@ -126,6 +131,7 @@ const FRICTION: SetupCard = {
       label: 'Done for you by Apnosh',
       delivery: 'we-write',
       proof: 'read-back',
+      needs: ['GOOGLE', 'GBP-MGR', 'LINKS'],
       whatYouGet: whatYouGetForServices(['google-food-order']),
     },
   ],
@@ -150,6 +156,7 @@ const REVIEWSREPLY: SetupCard = {
         'You write and post each one on Google yourself',
         'Mark it done when you have caught up',
       ],
+      needs: ['GOOGLE'],
       ownerTask: {
         title: 'Reply to your reviews',
         why: 'We show you every review still waiting, worst first. You write and post each one.',
@@ -169,6 +176,7 @@ const REVIEWSREPLY: SetupCard = {
         'We draft each reply in your voice for you to edit',
         'You approve, and we post it to Google and prove it posted',
       ],
+      needs: ['GOOGLE', 'VOICE'],
       ownerTask: {
         title: 'Reply to your reviews',
         why: 'We draft each reply in your voice. You approve, and we post it and prove it posted.',
@@ -182,6 +190,7 @@ const REVIEWSREPLY: SetupCard = {
       label: 'Done for you by Apnosh',
       delivery: 'we-write',
       proof: 'read-back',
+      needs: ['GOOGLE', 'GBP-MGR', 'VOICE', 'ESCAL'],
       whatYouGet: whatYouGetForServices(['review-responses']),
     },
   ],
@@ -214,6 +223,7 @@ const LISTINGS: SetupCard = {
         'A link straight to the page that edits each site',
         'You claim and correct each one, and mark it done',
       ],
+      needs: ['NAP'],
       ownerTask: {
         title: 'Get listed everywhere',
         why: 'Your details in one place, and a link straight to the page that edits each site.',
@@ -235,6 +245,7 @@ const LISTINGS: SetupCard = {
         'One site at a time, with what usually trips people up on that one',
         'It remembers where you got to, so you can do a couple and come back',
       ],
+      needs: ['NAP', 'HOURS'],
       ownerTask: {
         title: 'Get listed everywhere',
         why: 'One site at a time, with the exact lines to copy and what usually trips people up.',
@@ -250,6 +261,7 @@ const LISTINGS: SetupCard = {
        * difference the copy has to earn. */
       delivery: 'we-operate',
       proof: 'owner-word',
+      needs: ['NAP', 'HOURS', 'AGREE'],
       whatYouGet: whatYouGetForServices(['listings-sync']),
     },
   ],

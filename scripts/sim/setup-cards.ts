@@ -18,6 +18,14 @@
  */
 
 import { Suite } from './lib'
+import {
+  REQUIREMENTS,
+  requirementById,
+  requirementFlaws,
+  isHollow,
+  intakeFor,
+  missingFrom,
+} from '../../src/lib/campaigns/setup/requirements'
 import { SETUP_CARDS, setupCardById } from '../../src/lib/campaigns/setup/cards'
 import { laneViolations, canBeDoneForYou, whatYouGetFor, laneOf } from '../../src/lib/campaigns/setup/types'
 import { SPACE, RADIUS, TEXT } from '../../src/components/mvp/tokens'
@@ -322,6 +330,78 @@ s.group('No file grows a new spacing or type value')
       )
     }
   }
+}
+
+/* ── the requirements library ───────────────────────────────────────────────────────────────────
+ * Phase 2's substrate. Three things have to hold or "collect once, forever" is a slogan:
+ * every requirement can actually prove what it claims, the intake genuinely dedupes across cards,
+ * and every id a lane names exists. The third is the one that rots silently: a typo in `needs`
+ * would just quietly drop a row from the intake and nobody would see the gap until a service
+ * failed for want of a credential nobody asked for. */
+s.group('Collect once, forever')
+{
+  const flaws = requirementFlaws()
+  s.check(
+    `requirements library is sound (${REQUIREMENTS.length} requirements, ${flaws.length} flaws)`,
+    flaws.length === 0,
+    flaws.join('; '),
+  )
+
+  /* Every id every lane names must exist. */
+  for (const card of SETUP_CARDS) {
+    for (const lane of card.lanes) {
+      for (const id of lane.needs ?? []) {
+        s.check(
+          `${card.id}/${lane.kind}: needs "${id}", which the library defines`,
+          !!requirementById(id),
+          'an unknown id is a row that silently never gets collected',
+        )
+      }
+    }
+  }
+
+  /* THE POINT OF THE WHOLE PHASE. Four cards, three of them wanting the Google connection.
+   * The owner connects Google once. */
+  const everything = SETUP_CARDS.flatMap((c) => c.lanes.flatMap((l) => [...(l.needs ?? [])]))
+  const googleAsks = everything.filter((id) => id === 'GOOGLE').length
+  const intake = intakeFor(everything)
+  const googleRows = intake.filter((r) => r.id === 'GOOGLE').length
+  s.check(
+    `intake dedupes: GOOGLE asked for ${googleAsks} times, collected once`,
+    googleAsks > 1 && googleRows === 1,
+    'if this is ever more than one row the owner reconnects Google per card',
+  )
+  s.check(
+    'intake has no duplicates at all',
+    new Set(intake.map((r) => r.id)).size === intake.length,
+  )
+
+  /* A prerequisite comes in whether or not anything asked for it, and comes in FIRST. */
+  const mgr = intakeFor(['GBP-MGR'])
+  s.check(
+    'intake pulls prerequisites: asking only for manager access brings the connection with it',
+    mgr.some((r) => r.id === 'GOOGLE') && mgr.length === 2,
+    mgr.map((r) => r.id).join(','),
+  )
+  s.check(
+    'and puts the prerequisite first',
+    mgr[0]?.id === 'GOOGLE',
+    mgr.map((r) => r.id).join(','),
+  )
+
+  /* The vault's whole job: what is already held is never asked for again. */
+  const still = missingFrom(everything, ['GOOGLE', 'NAP'])
+  s.check(
+    'what the vault already holds drops out of the intake',
+    !still.some((r) => r.id === 'GOOGLE' || r.id === 'NAP') && still.length === intake.length - 2,
+  )
+
+  /* The proof ladder reaches the UI. A fact the owner simply typed renders hollow; a credential
+   * we hold a token for does not. Same separation the execution columns already keep. */
+  s.check(
+    'a typed fact is hollow, a real connection is not',
+    isHollow(requirementById('NAP')!) && !isHollow(requirementById('GOOGLE')!),
+  )
 }
 
 s.report('Setup cards')
