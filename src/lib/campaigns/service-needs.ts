@@ -57,6 +57,23 @@ export function deriveServiceNeeds(
     })
   }
 
+  // ── the owner-run lanes of the get-measurable card ──
+  // Different from every task above it in one way that matters: there is no stamp to write. The
+  // other cards close on a field somebody sets. This one closes when the daily health probe sees
+  // real data on the pipe, so `done` reads the CONNECTION, and no owner (and no route of ours)
+  // can mark it done without the data being there.
+  const measureLine = (campaign.draft.items ?? []).find((it) => it.included && !it.optOut && it.serviceId === 'tracking' && it.producer === 'diy')
+  if (measureLine) {
+    push({
+      id: 'measure-setup', kind: 'action', group: 'Access',
+      title: 'Get measurable',
+      why: 'Search Console and Analytics, one at a time, with the exact steps for whoever hosts your site. It marks itself done when your data starts arriving.',
+      actionLabel: doneSetup.has('tracking') ? 'Open' : 'Start',
+      href: `/dashboard/measure?campaignId=${campaign.draft.id}`,
+      done: doneSetup.has('tracking'),
+    })
+  }
+
   // The owner-run lanes of the Google button card. Same shape as the gbp walkthrough
   // above: the campaign's deliverable IS the owner doing it, so the task points at the
   // screen that does it, and it is done when the buttons are actually live.

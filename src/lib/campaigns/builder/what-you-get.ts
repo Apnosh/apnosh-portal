@@ -22,19 +22,20 @@
  */
 
 import { shapeFor, buildSystem, isSystemGoal } from './compose-plan'
-import { serviceById, plainNameOf, cadenceOf } from '../catalog'
+import { serviceById, cadenceOf, plainNameOf } from '../catalog'
+import { MAX_ROWS, rowsFromComposition, whatYouGetForServices } from './service-rows'
+export { whatYouGetForServices } from './service-rows'
+import { setupCardById } from '../setup/cards'
+import { whatYouGetFor, type SetupLaneKind } from '../setup/types'
 
 /** The plan flow routes reviewsplan onto the 'reviews' system goal (builder-entry's
  *  SYSTEM_GOAL_ALIAS) — mirror it so this page describes the plan that actually ships. */
 const SYSTEM_ALIAS: Record<string, string> = { reviewsplan: 'reviews' }
 
-const MAX_ROWS = 4
 /** An option group shows the real bullets, but a very long list is capped so the page
  *  stays scannable — the full list still lives in the zone-4 "see what's included" expander. */
 const MAX_OPTION_ROWS = 5
 
-/** Beat labels use an em dash as a clause break; owner copy avoids em dashes, so soften it. */
-const plainLabel = (l: string) => l.replace(/\s+—\s+/g, ', ')
 
 /** A version lane a versioned card can be sold in. Today only gbp carries lanes. */
 export type WhatYouGetVersion = 'diy' | 'ai' | 'team'
@@ -151,52 +152,35 @@ function baseRows(itemId: string): string[] {
   return rowsFromComposition(shape.services ?? [], shape.seed.map(([, , label]) => label))
 }
 
-/** The shared composition → rows derivation: one service with no seed shows that
- *  service's REAL deliverable bullets; otherwise included services by plain name, then
- *  the seed beats' owner-facing labels, capped so the page stays scannable. */
-function rowsFromComposition(serviceIds: string[], seedLabels: string[]): string[] {
-  const services = serviceIds.map(serviceById).filter((s) => !!s)
-
-  // One real service and no content seed (gbp, welcome, qr, …): that service's own
-  // deliverable bullets ARE the composition — show them instead of one opaque row.
-  if (services.length === 1 && seedLabels.length === 0) {
-    const bullets = services[0].deliverables?.included ?? []
-    if (bullets.length) return bullets.slice(0, MAX_ROWS)
-  }
-
-  const rows: string[] = []
-  for (const s of services) {
-    const name = plainNameOf(s)
-    if (!rows.includes(name)) rows.push(name)
-  }
-  for (const label of seedLabels) {
-    const l = plainLabel(label)
-    if (!rows.includes(l)) rows.push(l)
-    if (rows.length >= MAX_ROWS) break
-  }
-  return rows.slice(0, MAX_ROWS)
-}
-
-/** What-you-get rows for a bare service list — the admin CMS preview path (Phase C2),
- *  where the campaign may not be registered (or even saved) yet. Identical derivation
- *  to a registered services-only DB campaign, so the preview shows the real page facts. */
-export function whatYouGetForServices(serviceIds: string[]): string[] {
-  return rowsFromComposition(serviceIds, [])
-}
-
 /**
  * The live "what you get" groups for the current selection. Returns at least the base
  * section; each selected option adds a titled group of that service's REAL deliverables.
  */
+/** `version` is typed loosely (it arrives from a URL and from stored drafts), so an unknown value
+ *  must land somewhere real rather than on an empty list. Done-for-you is the honest default: it is
+ *  what every one of the old per-card functions fell through to, and it is the version that
+ *  promises the most, so a mislabelled render over-describes rather than under-describes. */
+function laneOfVersion(v: WhatYouGetSelection['version']): SetupLaneKind {
+  return v === 'diy' || v === 'ai' || v === 'team' ? v : 'team'
+}
+
 export function whatYouGet(itemId: string, sel: WhatYouGetSelection = {}): WhatYouGetSection[] {
   const sections: WhatYouGetSection[] = []
 
   // BASE — framed by version for gbp (the only versioned card today), else the plain list.
-  const base = itemId === 'gbp' ? gbpBaseRows(sel.version)
-    : itemId === 'friction' ? orderBaseRows(sel.version)
-    : itemId === 'reviewsreply' ? reviewsBaseRows(sel.version)
-    : itemId === 'listings' ? listingsBaseRows(sel.version)
-    : baseRows(itemId)
+  // Setup cards read their rows from the card config (setup/cards.ts). This branch used to name
+  // four cards and call four hand-written functions, which is exactly the pile the setup engine
+  // was built to replace: a fifth card meant a fifth function, and the store silently rendered
+  // NOTHING for any card nobody remembered to add here.
+  //
+  // The four functions below are kept and still used as the golden source: scripts/sim/setup-cards
+  // freezes their output and asserts the config still produces it word for word, so this swap
+  // cannot have moved a syllable on a card that was already on sale.
+  //
+  // `?? 'team'` preserves the old default. Every one of those functions fell through to the
+  // done-for-you rows when no version was passed, and callers rely on it.
+  const setupCard = setupCardById(itemId)
+  const base = setupCard ? whatYouGetFor(setupCard, laneOfVersion(sel.version)) : baseRows(itemId)
   sections.push({ rows: base })
 
   // ADDED — one group per selected option, from the option service's real deliverables.

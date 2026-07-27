@@ -309,6 +309,16 @@ export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
     expectation: "A complete profile helps you show up in more nearby searches.",
     heroImage: null,
   },
+  measure: {
+    id: 'measure',
+    title: "Get measurable",
+    tagline: "See where your customers come from, and what they do",
+    description: "Search Console and Analytics set up on your site, so calls, directions, orders and bookings get counted as real results.",
+    promise: "The tools that count your calls, directions and orders, set up and proven to be working.",
+    why: "Without these, every other thing you try is a guess. You cannot tell what brought people in, so you cannot do more of it.",
+    expectation: "This one does not bring customers by itself. It tells you which of the others did.",
+    heroImage: null,
+  },
   reviewsreply: {
     id: 'reviewsreply',
     title: "Reply to reviews",

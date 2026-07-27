@@ -69,6 +69,19 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
     return v ? `Your listing was seen ${n(v)} times in the last 30 days. A complete profile turns more of those views into visits.` : null
   },
   listings: (s) => { const v = views(s); return v ? `People found you on Google ${n(v)} times last month. Matching info everywhere helps the other apps catch up.` : null },
+  /* The one card whose "why" is about what we CANNOT tell them. If a client has real Google
+   * numbers, that is precisely the proof that everything past the click is dark: we can see people
+   * heading for the website and nothing at all about what happened when they got there. Saying so
+   * with their own number is honest and specific; without one there is nothing true to say, so it
+   * falls back to the authored line like every other card. */
+  measure: (s) => {
+    const clicks = s.actions30d?.websiteClicks
+    if (typeof clicks === 'number' && clicks > 0) {
+      return `${n(clicks)} people tapped through to your website from Google last month. Right now we cannot tell you what any of them did next.`
+    }
+    const v = views(s)
+    return v ? `People found you on Google ${n(v)} times last month. Nothing yet counts what happens after they click.` : null
+  },
   localseo: (s) => { const v = views(s); return v ? `You showed up in ${n(v)} searches and map looks last month. This works on growing that number.` : null },
   gpost: (s) => { const v = views(s); return v ? `Your Google listing was seen ${n(v)} times in the last 30 days. A fresh post gives those people something new to see.` : null },
   website: (s) => {

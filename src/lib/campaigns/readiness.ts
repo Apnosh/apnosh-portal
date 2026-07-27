@@ -69,6 +69,15 @@ export async function getCampaignReadiness(campaignId: string): Promise<Readines
     ])
     if (((chanRes.data ?? []) as { channel?: string }[]).some((c) => c.channel === 'google_business_profile')) { doneSetup.add('gbp-setup'); doneSetup.add('review-claim') }
     if (((socRes.data ?? []) as { platform?: string }[]).some((s) => s.platform === 'instagram' || s.platform === 'facebook')) doneSetup.add('channel-connect')
+    // Get-measurable is done when BOTH pipes are live, not either. The card sells two tools that
+    // answer two different questions (how people find you, what they do once they arrive), so
+    // half of it working is half of it done. `status = 'active'` is the query filter above, and
+    // the health cron is what keeps that column honest by reading the real data path daily, so
+    // this is the one setup signal on the page that nobody can claim their way to.
+    {
+      const live = new Set(((chanRes.data ?? []) as { channel?: string }[]).map((c) => c.channel))
+      if (live.has('google_search_console') && live.has('google_analytics')) doneSetup.add('tracking')
+    }
     hasMenuItems = (menuRes.count ?? 0) > 0
     const pay = payRes.data as { default_payment_method_id?: string | null; payment_method_last4?: string | null } | null
     hasPaymentMethod = !!(pay && (pay.default_payment_method_id || pay.payment_method_last4))

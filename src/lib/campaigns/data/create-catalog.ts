@@ -58,6 +58,9 @@ const SOURCE = [
   { id: 'earlyaccess', title: 'Early access for regulars', goal: 'regulars', stages: ['back'] },
   { id: 'shoot', title: 'Book a photo and video shoot', goal: 'new-customers', stages: ['interest'] },
   { id: 'gbp', title: 'Polish your Google profile', goal: 'reviews', stages: ['aware', 'actions'] },
+  /* The setup before the setups: nothing else on this list can prove it worked without it. Sits in
+   * 'aware' because what it turns on is the first half of the funnel becoming countable at all. */
+  { id: 'measure', title: 'Get measurable', goal: 'new-customers', stages: ['aware'] },
   { id: 'reviewsreply', title: 'Reply to reviews', goal: 'reviews', stages: ['interest'] },
   { id: 'friction', title: 'Smooth out ordering', goal: 'new-customers', stages: ['actions'] },
   { id: 'giftcard', title: 'Push gift cards', goal: 'new-customers', stages: ['orders'] },

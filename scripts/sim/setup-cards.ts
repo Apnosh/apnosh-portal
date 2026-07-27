@@ -41,16 +41,63 @@ const LANES: SetupLaneKind[] = ['diy', 'ai', 'team']
 
 /* ── 1. equivalence with the code being replaced ─────────────────────────────────────────────── */
 
-s.group('Every lane says exactly what it says today')
+/* ── the golden ──────────────────────────────────────────────────────────────────────────────────
+ * WHAT THIS IS. Captured from the four hand-written per-card functions in what-you-get.ts on the
+ * day the store page stopped calling them and started reading the card config instead. Those four
+ * functions are still in the file, unused by the page, kept as the source of this table.
+ *
+ * WHY IT IS FROZEN TEXT RATHER THAN A CALL. The check used to compare the config against the live
+ * page, which was exactly right while the page had its own copy of the words. The moment the page
+ * started reading the config, that comparison became config == config: a test that can never fail
+ * and therefore protects nothing. Freezing the strings keeps the protection real. These four cards
+ * are on sale; their promises may not move because somebody edited a card config.
+ *
+ * 'default' is the no-version render, which every one of those functions answered with the
+ * done-for-you rows. Callers depend on it, so it is pinned too.
+ */
+const GOLDEN: Record<string, string[]> = {
+  'gbp/diy': ['A clear checklist of what to fix', 'We recheck it for you when you are done'],
+  'gbp/ai': ['AI drafts each fix for you', 'You review and apply, then we recheck'],
+  'gbp/team': ['We fix all 6 parts of your profile', 'We recheck it and show you what changed'],
+  'gbp/default': ['We fix all 6 parts of your profile', 'We recheck it and show you what changed'],
+  'friction/diy': ['We show you exactly which buttons to change, and where', 'You set them on Google yourself, at your own pace', 'Mark it done when your links are live'],
+  'friction/ai': ['We read your listing and tell you where the buttons go today', 'We fill in your own ordering and booking links for you to confirm', 'We set them on Google and read it back to prove it took'],
+  'friction/team': ['The Order button on your Google profile and Maps pointed to your own ordering page', 'Takeout and Delivery pointed to your own ordering wherever those links are yours to set', 'The Reserve button on Google and Maps pointed to your own booking', 'A test order and a test booking run all the way through before it goes live'],
+  'friction/default': ['The Order button on your Google profile and Maps pointed to your own ordering page', 'Takeout and Delivery pointed to your own ordering wherever those links are yours to set', 'The Reserve button on Google and Maps pointed to your own booking', 'A test order and a test booking run all the way through before it goes live'],
+  'reviewsreply/diy': ['We show you every review still waiting on a reply, worst first', 'You write and post each one on Google yourself', 'Mark it done when you have caught up'],
+  'reviewsreply/ai': ['We show you every review still waiting on a reply, worst first', 'We draft each reply in your voice for you to edit', 'You approve, and we post it to Google and prove it posted'],
+  'reviewsreply/team': ['A written reply to every review, drafted in your voice within minutes', 'Replies covering thank-yous, recovery for upset guests, and the public save', 'A real person approves and posts every reply, especially the tough ones', 'Reviews answered across all your platforms, not just Google'],
+  'reviewsreply/default': ['A written reply to every review, drafted in your voice within minutes', 'Replies covering thank-yous, recovery for upset guests, and the public save', 'A real person approves and posts every reply, especially the tough ones', 'Reviews answered across all your platforms, not just Google'],
+  'listings/diy': ['Your name, address and phone in one place, exactly as they should read', 'A link straight to the page that edits each site', 'You claim and correct each one, and mark it done'],
+  'listings/ai': ['The same three lines to copy, so every site ends up saying exactly the same thing', 'One site at a time, with what usually trips people up on that one', 'It remembers where you got to, so you can do a couple and come back'],
+  'listings/team': ['One master record of your hours, menu, and photos that we treat as the truth', 'Your info pushed out to Google, Yelp, Apple Maps, and Facebook so they match', 'Holiday and special hours updated across all four places', 'A person who catches and fixes any wrong hours or old menu before guests see it'],
+  'listings/default': ['One master record of your hours, menu, and photos that we treat as the truth', 'Your info pushed out to Google, Yelp, Apple Maps, and Facebook so they match', 'Holiday and special hours updated across all four places', 'A person who catches and fixes any wrong hours or old menu before guests see it'],
+}
+
+s.group('The four cards on sale still say exactly what they said')
+for (const [key, expected] of Object.entries(GOLDEN)) {
+  const [cardId, v] = key.split('/')
+  const rows = whatYouGet(cardId, v === 'default' ? {} : { version: v })[0]?.rows ?? []
+  const same = rows.length === expected.length && rows.every((r, i) => r === expected[i])
+  s.check(
+    `${key}: ${expected.length} row(s) unchanged`,
+    same,
+    same ? '' : `now:      ${JSON.stringify(rows)}\n        frozen:   ${JSON.stringify(expected)}`,
+  )
+}
+
+/* The new card has no golden, because it had no hand-written version to be identical to. What it
+ * must not do is render NOTHING, which is precisely what the store did for it before the page
+ * learned to read card configs. */
+s.group('Every setup card renders real rows in the store')
 for (const card of SETUP_CARDS) {
   for (const kind of LANES) {
+    const rows = whatYouGet(card.id, { version: kind })[0]?.rows ?? []
+    s.check(`${card.id}/${kind}: ${rows.length} row(s) on the product page`, rows.length > 0)
     const fromConfig = whatYouGetFor(card, kind)
-    const fromLive = whatYouGet(card.id, { version: kind })[0]?.rows ?? []
-    const same = fromConfig.length === fromLive.length && fromConfig.every((r, i) => r === fromLive[i])
     s.check(
-      `${card.id}/${kind}: ${fromConfig.length} row(s) match the live page`,
-      same,
-      same ? '' : `config: ${JSON.stringify(fromConfig)}\n        live:   ${JSON.stringify(fromLive)}`,
+      `${card.id}/${kind}: the page shows the card's own words`,
+      rows.length === fromConfig.length && rows.every((r, i) => r === fromConfig[i]),
     )
   }
 }
@@ -100,10 +147,26 @@ for (const card of SETUP_CARDS) {
     const both = !!t.verifiedField && !!t.claimedField
     s.check(`${card.id}/${lane.kind}: one kind of stamp`, !both,
       'a lane that can both prove and be told is how a self-claim gets laundered into a verified one')
-    s.check(
-      `${card.id}/${lane.kind}: stamp matches proof (${lane.proof})`,
-      lane.proof === 'owner-word' ? !!t.claimedField && !t.verifiedField : !!t.verifiedField,
-    )
+    /* THREE shapes, not two, and the third is the best one.
+     *
+     * owner-word  must stamp a self-reported field, and must never touch a verified one.
+     * probe       may stamp NOTHING, because the live state IS the record: get-measurable is done
+     *             when data is arriving, which is read fresh from the connection every time. A
+     *             stored flag would only be a cache of that, and a cache is something that can be
+     *             wrong. What it must never carry is a CLAIMED field, which would let a self-report
+     *             close a lane that promised a machine check.
+     * everything else must stamp a verified field, or nothing records that the work happened.
+     */
+    if (lane.proof === 'owner-word') {
+      s.check(`${card.id}/${lane.kind}: the owner's word stamps a self-reported field`,
+        !!t.claimedField && !t.verifiedField)
+    } else if (lane.proof === 'probe') {
+      s.check(`${card.id}/${lane.kind}: a probed lane is never closed by a self-report`,
+        !t.claimedField,
+        'the lane promises a machine check, so a claim must not be able to finish it')
+    } else {
+      s.check(`${card.id}/${lane.kind}: stamp matches proof (${lane.proof})`, !!t.verifiedField)
+    }
   }
 }
 

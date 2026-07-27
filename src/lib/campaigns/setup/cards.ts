@@ -16,7 +16,9 @@
  */
 
 import { serviceById } from '../catalog'
-import { whatYouGetForServices } from '../builder/what-you-get'
+// From service-rows, NOT what-you-get: what-you-get reads these card configs, so importing it
+// here would be a cycle, and cycles in module-level code crash on load order rather than on logic.
+import { whatYouGetForServices } from '../builder/service-rows'
 import type { SetupCard } from './types'
 
 /** The gbp profile's fixable parts, read from the real deliverables so the copy stays true if the
@@ -267,7 +269,83 @@ const LISTINGS: SetupCard = {
   ],
 }
 
-export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, LISTINGS]
+/* ── Getting measurable ─────────────────────────────────────────────────────────────────────────
+ * THE SETUP BEFORE THE SETUPS. Every card above quietly assumes this one is done: none of them can
+ * prove they worked without Search Console and Analytics behind them.
+ *
+ * Its platform shape is new, and it is the reason this card could never have been a copy of the
+ * Google ones. We can READ whether data is flowing, and there is a genuine independent probe (the
+ * health cron reads the actual data path daily). But we hold NO write access to the client's
+ * website, because their tag goes on their own site, on whatever host they happen to use. So
+ * `canWrite` is false and the law does the rest: no lane here may say "we-write". The paid lane is
+ * a person working inside access the client granted, which is what `we-operate` is for.
+ *
+ * The payoff is the best proof rung on any card we sell. The listings card ends in the owner's word
+ * because we cannot see inside Yelp. This one ends in data arriving, which nobody can claim their
+ * way to. */
+const MEASURE: SetupCard = {
+  id: 'measure',
+  serviceId: 'tracking',
+  platform: {
+    canRead: true,
+    canWrite: false,
+    hasProbe: true,
+    limitation: 'Your tracking tag goes on your own website, which we cannot change for you. So we tell you exactly what to do, or do it inside access you grant us, and then we watch for your data arriving.',
+  },
+  lanes: [
+    {
+      kind: 'diy',
+      label: 'You do it yourself, step by step',
+      delivery: 'owner-applies',
+      /* Not the owner's word, and not a re-read either: the daily health check watches real data
+       * come down the pipe. Done here is the strongest thing we can say anywhere. */
+      proof: 'probe',
+      whatYouGet: [
+        'We show you which of the two tools you have, and which you do not',
+        'The exact steps for your website host, not a generic help article',
+        'It marks itself done when your data starts arriving',
+      ],
+      needs: ['GOOGLE'],
+      ownerTask: {
+        title: 'Get measurable',
+        why: 'Search Console and Analytics, one at a time, with the exact steps for your website host.',
+        href: '/dashboard/measure',
+        actionLabel: 'Start',
+      },
+    },
+    {
+      kind: 'ai',
+      label: 'You do it with Apnosh AI, step by step',
+      delivery: 'owner-applies',
+      proof: 'probe',
+      proOnly: true,
+      whatYouGet: [
+        'We work out who hosts your site and give you that host\'s own path',
+        'The gotchas for your host, like the www-only trap that quietly halves your data',
+        'We watch for your data and tell you the moment it is really flowing',
+      ],
+      needs: ['GOOGLE', 'SITE'],
+      ownerTask: {
+        title: 'Get measurable',
+        why: 'We work out who hosts your site and walk you through that host\'s own path, gotchas included.',
+        href: '/dashboard/measure',
+        actionLabel: 'Start',
+      },
+    },
+    {
+      kind: 'team',
+      label: 'Done for you by Apnosh',
+      /* Hands inside their site admin, not an API call. There is no write path to somebody else's
+       * website and there never will be, so this is the honest mechanism. */
+      delivery: 'we-operate',
+      proof: 'probe',
+      needs: ['GOOGLE', 'SITE', 'LINKS'],
+      whatYouGet: whatYouGetForServices(['tracking']),
+    },
+  ],
+}
+
+export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, LISTINGS, MEASURE]
 
 export const setupCardById = (id: string): SetupCard | undefined =>
   SETUP_CARDS.find((c) => c.id === id)
