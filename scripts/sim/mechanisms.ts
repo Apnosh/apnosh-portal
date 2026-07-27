@@ -13,7 +13,7 @@
  */
 
 import { Suite } from './lib'
-import { MECHANISMS, mechanismsFor, composeMechanism, mechanismById } from '../../src/lib/campaigns/data/mechanisms'
+import { MECHANISMS, mechanismsFor, composeMechanism, mechanismById, reachNeeded } from '../../src/lib/campaigns/data/mechanisms'
 import { PLAN_GOALS, SHAPES, SITUATIONS } from '../../src/lib/campaigns/data/plan-goals'
 import { GENERATED_CATALOG } from '../../src/lib/campaigns/data/catalog.generated'
 import { isServiceReady } from '../../src/lib/campaigns/data/service-availability'
@@ -135,5 +135,42 @@ s.check('it makes turning up easy', plan.stages.easy.length >= 2)
 s.check(`it asks ${plan.yourMinutes} minutes of the owner's own time`, plan.yourMinutes > 0 && plan.yourMinutes < 400)
 s.check(`priced at $${plan.bill.start} + $${plan.bill.monthly}/mo + $${plan.bill.passThroughMonthly} pass-through`, plan.bill.start > 0)
 s.check('and the ad spend is named separately', plan.bill.passThroughMonthly > 0, 'paid-ads is in this plan, so its platform minimum must show')
+
+// ---------------------------------------------------------------- reach
+s.group('The cap sizes the reach, and the assumptions are visible')
+for (const m of MECHANISMS) {
+  const r = m.reach
+  s.check(`${m.id}: rates are possible (${(r.actRate * 100).toFixed(1)}% act, ${r.showRate * 100}% show)`,
+    r.actRate > 0 && r.actRate <= 1 && r.showRate > 0 && r.showRate <= 1)
+  s.check(`${m.id}: says why those numbers`, r.basis.length > 30, r.basis)
+}
+
+s.group('The funnel arithmetic holds')
+for (const m of MECHANISMS) {
+  const r = reachNeeded(m, m.cap.suggest)
+  s.check(`${m.id}: ${r.cap} ← ${r.actsNeeded} acts ← ${r.seenNeeded} seen`,
+    r.seenNeeded >= r.actsNeeded && r.actsNeeded >= r.cap,
+    'you can never need fewer people to see it than to act on it')
+  const bigger = reachNeeded(m, m.cap.suggest * 2)
+  s.check(`${m.id}: a bigger cap needs more reach`, bigger.seenNeeded > r.seenNeeded)
+}
+
+s.group('We never guess what we have not been told')
+for (const m of MECHANISMS.slice(0, 4)) {
+  const blind = reachNeeded(m, m.cap.suggest)
+  s.check(`${m.id}: no footfall given → no claim about their own reach`, blind.ownReach === null && blind.gap === null)
+  const told = reachNeeded(m, m.cap.suggest, { dailyFootfall: 300 })
+  s.check(`${m.id}: told 300/day → own reach counted, gap shrinks`,
+    told.ownReach !== null && told.gap !== null && told.gap < told.seenNeeded)
+}
+
+s.group('The rule chosen changes the reach needed, a lot')
+const opening = mechanismsFor(['opening'], 'date').map((m) => ({ id: m.id, seen: reachNeeded(m, m.cap.suggest).seenNeeded }))
+const spread = Math.max(...opening.map((x) => x.seen)) / Math.min(...opening.map((x) => x.seen))
+s.check(
+  `${Math.round(spread)}x between the cheapest and dearest rule to reach`,
+  spread > 5,
+  opening.map((x) => `${x.id}:${x.seen}`).join('  ') + ' — this is the number that should drive the choice, and it was invisible before',
+)
 
 s.report('Mechanisms')

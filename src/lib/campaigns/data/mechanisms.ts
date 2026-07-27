@@ -31,6 +31,16 @@
  * situations are. That is what makes two similar owners get consistent treatment, and it is the part
  * a model should not be improvising per request.
  *
+ * PLANNING ORDER IS NOT JOURNEY ORDER. The plan screen draws found -> reason -> easy because that
+ * is what happens to a stranger. Building it in that order is backwards, and the first version of
+ * this file made that mistake. You decide the REASON first, because everything downstream is a
+ * consequence of it: what the ad says, whether you need a claim page at all, and — the part that is
+ * genuinely computable — how many people have to see it.
+ *
+ *   1. reason   pick the rule and the cap. The only decision the owner has real authority over.
+ *   2. easy     mostly implied by the rule. Shown, not asked.
+ *   3. found    SIZED from the cap. Not "include some ads" but "you need about this much reach".
+ *
  * CLIENT-SAFE: pure data + resolvers, no server imports.
  */
 
@@ -105,6 +115,21 @@ export interface Mechanism {
   leading: { label: string; when: string; healthy: string } | null
   /** How the owner works out what the cap costs them. Never a number we invent. */
   costModel: string
+  /**
+   * How reach turns into the cap for THIS rule, as two stated rates.
+   *
+   * Both are assumptions and both are shown to the owner as assumptions, because a funnel number
+   * presented as fact is the same lie as a fabricated metric. An owner who knows their own numbers
+   * should be able to overwrite them and watch the plan resize.
+   */
+  reach: {
+    /** of the people who see it, roughly what share act. */
+    actRate: number
+    /** of the people who act, roughly what share actually turn up or redeem. 1 when acting IS the outcome. */
+    showRate: number
+    /** why these numbers and not others, in one line */
+    basis: string
+  }
   /** What it costs them beyond money. Said out loud, same rule as routes. */
   risks: readonly string[]
 }
@@ -172,6 +197,7 @@ export const MECHANISMS: readonly Mechanism[] = [
       healthy: 'Half your cap claimed with two weeks to go. Fewer than ten in week one means the reason is wrong, not the reach.',
     },
     costModel: 'Your cap times what one prize costs you, times how many actually redeem. Cap the number and you cap the bill.',
+    reach: { actRate: 0.01, showRate: 0.4, basis: 'A strong local offer converts around one in a hundred people who see it, and under half of claims turn into people standing there.' },
     risks: ['People who claim and never come. Overbook the claims against the cap.', 'It only works if the prize is worth leaving the house for.'],
   },
   {
@@ -192,6 +218,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Prizes handed out before doors', when: 'the day' },
     leading: null,
     costModel: 'Your cap times the prize. Fixed ceiling, known the day you choose it.',
+    reach: { actRate: 0.008, showRate: 1, basis: 'No claim step, so turning up IS the action. Fewer act, because there is nothing to do until the day.' },
     risks: ['Nothing to watch before the day. If it is going to fail you find out on the morning.', 'Consider claim-it-now instead if you want an early warning.'],
   },
   {
@@ -212,6 +239,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Cards issued', when: 'the day' },
     leading: { label: 'People asking about the card', when: 'from week two', healthy: 'Steady questions at the counter and in the comments' },
     costModel: 'A permanent margin point on a known number of people. Work it out as your discount times their expected yearly spend.',
+    reach: { actRate: 0.012, showRate: 0.5, basis: 'Status offers convert a little better than discounts, and the same claim-to-show drop applies.' },
     risks: ['It is forever. Price the perk at something you will still be happy with in three years.'],
   },
   {
@@ -232,6 +260,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Units sold', when: 'daily through the run' },
     leading: { label: 'Units sold per day', when: 'from day one', healthy: 'On pace to sell out a few days before the end' },
     costModel: 'Your unit cost times the run. Selling out is the point, so make fewer than you think.',
+    reach: { actRate: 0.02, showRate: 1, basis: 'Buying the thing is the action, and it runs over a window rather than one morning.' },
     risks: ['Selling out early leaves people annoyed. That is usually a good problem, but say the number up front.'],
   },
   {
@@ -252,6 +281,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Receipts handed in', when: 'daily' },
     leading: { label: 'Receipts in the first week', when: 'week one', healthy: 'Any at all. This one either catches or it does not, quickly.' },
     costModel: 'Your giveaway cost times how many come. Uncapped unless you set an end date, so set one.',
+    reach: { actRate: 0.005, showRate: 1, basis: 'Needs someone to remember a receipt, which is a high bar. Reach has to be large.' },
     risks: ['Naming a competitor in your marketing. Say "anywhere nearby" rather than naming names.'],
   },
   {
@@ -272,6 +302,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Covers on that night', when: 'weekly' },
     leading: { label: 'Week-on-week covers on the night', when: 'from week three', healthy: 'Growing by week four. Flat by week six means change the draw, not the marketing.' },
     costModel: 'Whatever the night itself costs to run, every week, indefinitely. This is the one that keeps costing.',
+    reach: { actRate: 0.015, showRate: 1, basis: 'Repetition does the work over weeks, so any one week converts modestly.' },
     risks: ['It takes six weeks before it means anything. Stopping at week three wastes the whole spend.'],
   },
   {
@@ -292,6 +323,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Covers inside the window', when: 'daily' },
     leading: { label: 'Covers in the window, week on week', when: 'from week two', healthy: 'Rising without the later hours falling' },
     costModel: 'Your discount times the covers that move. Watch that they move rather than simply arrive cheaper.',
+    reach: { actRate: 0.02, showRate: 1, basis: 'Mostly shifts people who were coming anyway, so it converts well and adds less.' },
     risks: ['Regulars who already came at 7 will now come at 5:30 and pay less. That is the real cost.'],
   },
   {
@@ -312,6 +344,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Pairs redeemed', when: 'daily' },
     leading: { label: 'Pairs in the first two weeks', when: 'week two', healthy: 'A handful. This one starts slow and compounds.' },
     costModel: 'Two giveaways per redemption, and only when a genuinely new person comes. Self-limiting.',
+    reach: { actRate: 0.03, showRate: 1, basis: 'Aimed at people who already like you, so it converts far better than cold reach.' },
     risks: ['Slow to start. It needs a month before it says anything.'],
   },
   {
@@ -332,6 +365,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Cards completed', when: 'monthly' },
     leading: { label: 'Cards started', when: 'from week one', healthy: 'Started cards climbing, with the first completions by week six' },
     costModel: 'One visit free in every N. A known share of revenue, paid only by people who came back.',
+    reach: { actRate: 0.04, showRate: 1, basis: 'Offered at the till to people already buying. Almost everyone takes the card.' },
     risks: ['Most of what you give away goes to people who were coming anyway.'],
   },
   {
@@ -352,6 +386,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Tagged posts', when: 'through the window' },
     leading: { label: 'Posts in the first few days', when: 'day three', healthy: 'A steady trickle. Zero by day three means the prize is too small.' },
     costModel: 'One prize, whatever you choose. The cheapest ceiling of any mechanism here.',
+    reach: { actRate: 0.01, showRate: 1, basis: 'Posting is a real ask. Most people who intend to never do it.' },
     risks: ['Entirely dependent on the prize being worth posting for. A free coffee is not.'],
   },
   {
@@ -372,6 +407,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Amount raised', when: 'monthly, published' },
     leading: { label: 'Mentions and shares', when: 'from week two', healthy: 'Being talked about by accounts that are not yours' },
     costModel: 'Your donation per unit, times volume. Publish the running total or it reads as a gimmick.',
+    reach: { actRate: 0.01, showRate: 1, basis: 'Rarely changes a purchase on its own. It changes who talks about you.' },
     risks: ['It only works if you actually publish the number, every time, including the small ones.'],
   },
   {
@@ -401,6 +437,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Asks made, and reviews landed', when: 'weekly' },
     leading: { label: 'Asks per week', when: 'from week one', healthy: 'Asks holding steady. If asks drop, reviews drop three weeks later.' },
     costModel: 'Free to run. The cost is your team remembering, every shift, forever.',
+    reach: { actRate: 0.25, showRate: 0.35, basis: 'Asked face to face, so a quarter say yes. Roughly a third of those actually post one.' },
     risks: ['It decays. Every review programme dies quietly when nobody is counting the asks.'],
   },
   {
@@ -428,6 +465,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Platters out, then bookings back', when: 'monthly' },
     leading: { label: 'Offices asking', when: 'from week two', healthy: 'A few a week. Zero after two weeks means they cannot find you, not that they do not want it.' },
     costModel: 'Your food cost per platter times the cap. One booked office usually pays for all of them.',
+    reach: { actRate: 0.02, showRate: 0.25, basis: 'Offices that ask for a platter are warm. A quarter turn into a booking, which is the number that matters.' },
     risks: ['Some take the free food and never book. Cap it and treat that as the cost of the channel.'],
   },
   {
@@ -448,6 +486,7 @@ export const MECHANISMS: readonly Mechanism[] = [
     count: { label: 'Seats filled', when: 'the night' },
     leading: { label: 'Replies against seats', when: 'from the invite going out', healthy: 'Twice as many replies as seats within three days' },
     costModel: 'Whatever you comp, times the seats. Fixed and small.',
+    reach: { actRate: 0.2, showRate: 0.6, basis: 'Sent to your own list, so a fifth reply. Reply-to-seat drop is the usual no-show rate.' },
     risks: ['Needs a list. With no list this is the wrong mechanism, and building one is the real first step.'],
   },
 ]
@@ -476,6 +515,56 @@ export interface MechanismLine {
   held: string | null
 }
 
+/**
+ * HOW MUCH REACH THE CAP ACTUALLY DEMANDS.
+ *
+ * This is what putting the reason first buys you. Once a rule and a cap exist, "get found" stops
+ * being "include some ads" and becomes an arithmetic problem with a stated answer: to collect a
+ * hundred you need roughly this many to act, which needs roughly this many to see it.
+ *
+ * Every rate is an assumption and is returned alongside its reasoning, because a funnel number
+ * presented as fact is the same dishonesty as a fabricated metric. An owner who knows their own
+ * conversion should overwrite it and watch the plan resize.
+ *
+ * `ownReach` is the honest counterweight to selling ads. A shop with 300 people a day walking past
+ * an eight-week window, plus a second location with its own counter, may already produce the whole
+ * requirement for free — and the plan should say so rather than quietly bill for reach they had.
+ */
+export interface ReachNeed {
+  cap: number
+  /** how many have to act (claim, ask, post) to land the cap */
+  actsNeeded: number
+  /** how many have to SEE it for that many to act */
+  seenNeeded: number
+  /** what the owner's own free channels plausibly deliver, when they told us their footfall */
+  ownReach: number | null
+  /** what is left for paid or borrowed reach to cover. null when we have not been told the footfall. */
+  gap: number | null
+  assumptions: { actRate: number; showRate: number; basis: string }
+}
+
+/** Reach the cap demands. `dailyFootfall` is what the owner told us about their existing places. */
+export function reachNeeded(
+  m: Mechanism,
+  cap: number,
+  opts: { dailyFootfall?: number; weeksOut?: number } = {},
+): ReachNeed {
+  const actsNeeded = Math.ceil(cap / Math.max(0.01, m.reach.showRate))
+  const seenNeeded = Math.ceil(actsNeeded / Math.max(0.0001, m.reach.actRate))
+  /* Window and counter reach the same people repeatedly, so a day of footfall is not a day of new
+   * eyes. A third is a deliberately conservative discount rather than a measured one. */
+  const weeks = opts.weeksOut ?? 6
+  const ownReach = opts.dailyFootfall != null ? Math.round(opts.dailyFootfall * weeks * 7 * 0.33) : null
+  return {
+    cap,
+    actsNeeded,
+    seenNeeded,
+    ownReach,
+    gap: ownReach == null ? null : Math.max(0, seenNeeded - ownReach),
+    assumptions: { actRate: m.reach.actRate, showRate: m.reach.showRate, basis: m.reach.basis },
+  }
+}
+
 export interface MechanismPlan {
   mechanism: Mechanism
   /** the rule with the chosen cap substituted in */
@@ -486,6 +575,8 @@ export interface MechanismPlan {
   bill: { start: number; monthly: number; passThroughMonthly: number }
   /** minutes of the owner's own time the free actions ask for */
   yourMinutes: number
+  /** how much reach the cap demands, and how much of it they may already have */
+  reach: ReachNeed
 }
 
 const lineOf = (id: string): MechanismLine | null => {
@@ -508,7 +599,10 @@ const lineOf = (id: string): MechanismLine | null => {
  * the reminder texts are part of the right plan and that we cannot send them, rather than have the
  * line quietly disappear and wonder later why nobody turned up.
  */
-export function composeMechanism(m: Mechanism, opts: { cap?: number; exclude?: readonly string[] } = {}): MechanismPlan {
+export function composeMechanism(
+  m: Mechanism,
+  opts: { cap?: number; exclude?: readonly string[]; dailyFootfall?: number; weeksOut?: number } = {},
+): MechanismPlan {
   const cap = opts.cap ?? m.cap.suggest
   const skip = new Set(opts.exclude ?? [])
   const pick = (ids: readonly string[]) =>
@@ -539,5 +633,6 @@ export function composeMechanism(m: Mechanism, opts: { cap?: number; exclude?: r
     freeActions: m.freeActions,
     bill: { start, monthly, passThroughMonthly },
     yourMinutes: m.freeActions.reduce((n, a) => n + a.minutes, 0),
+    reach: reachNeeded(m, cap, { dailyFootfall: opts.dailyFootfall, weeksOut: opts.weeksOut }),
   }
 }
