@@ -18,18 +18,16 @@ import React from 'react'
 import Link from 'next/link'
 import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react'
 
-export const C = {
-  green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
-  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2',
-  line: '#e6e6ea', coral: '#c0564f', coralSoft: '#fdeeee', bg: '#f5f5f7',
-}
-export const DISPLAY = "'Cal Sans','Inter',sans-serif"
+/* The palette, the display face and the amber trio all live in tokens.ts now, and are re-exported
+ * here so the 37 files already importing them from this module keep working. One place to change a
+ * colour; see that file for why the kit and the shell had drifted apart. */
+export { C, DISPLAY, AMBER, AMBER_DK, AMBER_SOFT } from './tokens'
+import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from './tokens'
+
+
 
 // Amber accent for "warning"/"due"/"pending" states (kept out of C so the core
 // token map stays the brand greens + coral). Soft bg + dark text for pills.
-export const AMBER = '#bd7e16'
-export const AMBER_DK = '#8a5a0c'
-export const AMBER_SOFT = '#fbf0da'
 
 export function MvpDetailHeader({ title, subtitle, backHref = '/dashboard/more', backLabel = 'More' }: { title: string; subtitle?: string; backHref?: string; backLabel?: string }) {
   return (

@@ -136,4 +136,58 @@ for (const card of SETUP_CARDS) {
   }
 }
 
+/* ── 4. the design stays adjustable in one place ─────────────────────────────────────────────────
+ *
+ * The behaviour checks above are only half of "consistent". The other half is that changing how a
+ * setup card LOOKS should be one edit, and that is a property of the source, not of the types — so
+ * it gets checked here rather than trusted.
+ *
+ * The kit already exists and already says why: without it the third card would "have made three
+ * versions of 'the look' that drift apart the first time anyone adjusts a radius." Four of the five
+ * walkthroughs use it. The flagship does not — gbp-fixer is 3,599 lines with its own everything —
+ * and it is the card the next nine will be told to copy. That is the trap.
+ *
+ * A RATCHET, not a wall. gbp-fixer cannot be rewritten in this pass, so its current weight is
+ * recorded and frozen: it may shrink, never grow. Every other walkthrough is held near zero. A new
+ * card built by copy-pasting the flagship fails immediately, with a message saying what to do.
+ */
+s.group('The look is adjustable in one place')
+{
+  const fs = require('node:fs') as typeof import('node:fs')
+  const read = (f: string) => fs.readFileSync(`src/components/mvp/${f}.tsx`, 'utf8')
+  const hexes = (src: string) => (src.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).length
+
+  /* Only tokens.ts may name a colour. The kit reads it; the shell re-exports it. */
+  const tokens = fs.readFileSync('src/components/mvp/tokens.ts', 'utf8')
+  s.check(`tokens.ts is the palette (${hexes(tokens)} colours)`, hexes(tokens) > 8)
+  for (const f of ['walkthrough-kit', 'mvp-detail']) {
+    s.check(`${f} declares no palette of its own`, !/export const C = \{/.test(read(f)),
+      'two files exporting a map called C is how the greens drifted apart in the first place')
+  }
+
+  /* The kit users, held near zero. A handful of one-off colours is tolerable; a private palette
+   * is not, and 3 is comfortably below the level where one starts. */
+  const KIT_USERS = ['order-buttons', 'review-replies', 'listings-fix', 'measure-setup'] as const
+  for (const f of KIT_USERS) {
+    const src = read(f)
+    s.check(`${f} draws from the kit`, src.includes("from './walkthrough-kit'"))
+    const n = hexes(src)
+    s.check(`${f}: ${n} hardcoded colour(s)`, n <= 3, 'past three it is a private palette, and it will drift')
+  }
+
+  /* The flagship, frozen where it is. This number may only ever go down. */
+  const GBP_FIXER_HEX_CEILING = 76
+  const n = hexes(read('gbp-fixer'))
+  s.check(
+    `gbp-fixer: ${n} hardcoded colours, ceiling ${GBP_FIXER_HEX_CEILING}`,
+    n <= GBP_FIXER_HEX_CEILING,
+    'the reference card is the one card that ignores the kit. It may shrink toward it, never grow away from it',
+  )
+  s.check(
+    'and no new walkthrough is heavier than the kit users',
+    KIT_USERS.every((f) => hexes(read(f)) < n),
+    'if a new card is approaching gbp-fixer it was built by copying the flagship instead of the kit',
+  )
+}
+
 s.report('Setup cards')

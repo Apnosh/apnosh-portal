@@ -18,13 +18,10 @@
 import React from 'react'
 import { ArrowLeft, Check, Loader2, Sparkles } from 'lucide-react'
 
-/** The palette. Lifted verbatim from order-buttons so nothing shifts visually. */
-export const C = {
-  green: '#4abd98', greenDk: '#2f8f70', greenSoft: '#eef8f4',
-  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2',
-  line: '#e6e6ea', bg: '#f5f5f7',
-  red: '#c0564f', redSoft: '#fdeeee', amber: '#e0a13a', amberSoft: '#fdf6e9',
-}
+/* The palette comes from tokens.ts now. This file used to declare its own, copied verbatim from
+ * order-buttons, which is exactly how it came to disagree with the portal shell on two greens. */
+export { C } from './tokens'
+import { C } from './tokens'
 
 export function Panel({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: '4px 16px 40px', maxWidth: 620, margin: '0 auto', fontFamily: 'Inter, sans-serif' }}>{children}</div>
