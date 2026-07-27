@@ -26,6 +26,9 @@ import {
   intakeFor,
   missingFrom,
 } from '../../src/lib/campaigns/setup/requirements'
+// proofRefusal is the vault's write-time guard, and it is a pure function precisely so it can be
+// hammered here without a database.
+import { proofRefusal } from '../../src/lib/campaigns/setup/vault-guard'
 import { SETUP_CARDS, setupCardById } from '../../src/lib/campaigns/setup/cards'
 import { laneViolations, canBeDoneForYou, whatYouGetFor, laneOf } from '../../src/lib/campaigns/setup/types'
 import { SPACE, RADIUS, TEXT } from '../../src/components/mvp/tokens'
@@ -401,6 +404,46 @@ s.group('Collect once, forever')
   s.check(
     'a typed fact is hollow, a real connection is not',
     isHollow(requirementById('NAP')!) && !isHollow(requirementById('GOOGLE')!),
+  )
+}
+
+s.group('The vault cannot launder a claim into a fact')
+{
+  /* THE ATTACK THIS STOPS. A route that stamps `proof: 'token'` for a requirement whose only
+   * collection method is "the owner typed it" would make an owner's say-so indistinguishable from
+   * a credential we hold, one write later. The separate claimed-vs-verified execution columns
+   * exist to prevent exactly that; a vault without this check would reopen it. */
+  const nap = requirementById('NAP')!      // owner types it. Best proof: owner-word.
+  const google = requirementById('GOOGLE')! // OAuth. Best proof: token.
+
+  s.check(
+    'a typed fact may not be recorded as a live API token',
+    proofRefusal(nap, 'token') !== null,
+  )
+  s.check(
+    'nor as a probe, nor as something we tried ourselves',
+    proofRefusal(nap, 'probe') !== null && proofRefusal(nap, 'our-side') !== null,
+  )
+  s.check(
+    "a typed fact recorded as the owner's word is fine",
+    proofRefusal(nap, 'owner-word') === null,
+  )
+  s.check(
+    'a real connection may be recorded at its own strength',
+    proofRefusal(google, 'token') === null,
+  )
+  s.check(
+    'and may be recorded WEAKER than it is, because under-claiming is never the lie',
+    proofRefusal(google, 'owner-word') === null,
+  )
+
+  /* Every requirement in the library must accept its own declared proof. If this fails the library
+   * and the guard disagree, and one of them is wrong. */
+  const selfRejecting = REQUIREMENTS.filter((r) => proofRefusal(r, r.proof) !== null)
+  s.check(
+    'every requirement accepts the proof it declares',
+    selfRejecting.length === 0,
+    selfRejecting.map((r) => r.id).join(','),
   )
 }
 

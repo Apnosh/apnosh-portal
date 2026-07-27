@@ -181,6 +181,19 @@ const HUMAN: Requirement[] = [
 
 export const REQUIREMENTS: readonly Requirement[] = [...ACCESS, ...FACTS, ...INTENT, ...HUMAN]
 
+/** Which of the four groups a requirement belongs to. Derived from the arrays above rather than
+ *  written on every row, so the grouping cannot drift from the file's own layout. */
+export type RequirementGroup = 'access' | 'facts' | 'intent' | 'human'
+
+const GROUP_OF = new Map<string, RequirementGroup>([
+  ...ACCESS.map((r) => [r.id, 'access'] as const),
+  ...FACTS.map((r) => [r.id, 'facts'] as const),
+  ...INTENT.map((r) => [r.id, 'intent'] as const),
+  ...HUMAN.map((r) => [r.id, 'human'] as const),
+])
+
+export const groupOf = (id: string): RequirementGroup | undefined => GROUP_OF.get(id)
+
 export const requirementById = (id: string): Requirement | undefined =>
   REQUIREMENTS.find((r) => r.id === id)
 
