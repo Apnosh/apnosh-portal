@@ -276,6 +276,9 @@ export const PLAN_GOALS: readonly PlanGoal[] = [
  * So the situation IS the first question, and the shape is derived. Picking one dims the situations
  * of a different shape, which shows the constraint instead of asking about it.
  */
+/** A question the builder can ask. Only these five reach the composer. */
+export type PlanQuestion = 'assets' | 'promote' | 'reach' | 'shift' | 'avoid'
+
 export interface Situation {
   v: string
   /** the sentence an owner would actually say */
@@ -283,25 +286,48 @@ export interface Situation {
   sub: string
   goal: PlanGoalKey
   shape: CampaignShape
-  /** true when this situation is about WHEN, so the shift chips are worth showing */
-  asksShift?: boolean
+  /**
+   * WHICH FOLLOW-UPS THIS SITUATION ACTUALLY NEEDS.
+   *
+   * Every version of this screen asked all five of everyone, which is how someone fixing their
+   * review score ended up picking menu items to promote and naming which nights are slow. A
+   * question that cannot change this particular plan is noise dressed as diligence, and the owner
+   * reads it as a form rather than as being understood.
+   *
+   * Relevance is only half the rule. A relevant question is still skipped when we already know the
+   * answer, either from onboarding or from what they just wrote.
+   */
+  needs: readonly PlanQuestion[]
 }
 
 export const SITUATIONS: readonly Situation[] = [
-  { v: 'opening', label: 'We are opening a new place', sub: 'A grand opening, or a relaunch', goal: 'opening', shape: 'date' },
-  { v: 'event', label: 'We have something coming up', sub: 'A concert, a party, a one-off night', goal: 'event', shape: 'date' },
-  { v: 'new-thing', label: 'We are putting something new on', sub: 'A new menu, a dish, a limited run', goal: 'more-new', shape: 'run' },
-  { v: 'quiet', label: 'It has gone quiet', sub: 'Fewer people are coming in than before', goal: 'more-new', shape: 'ongoing' },
-  { v: 'slow-shifts', label: 'Certain shifts are dead', sub: 'Some nights sit empty while others are fine', goal: 'more-new', shape: 'ongoing', asksShift: true },
-  { v: 'reviews', label: 'Our reviews need work', sub: 'Too few of them, or the wrong ones', goal: 'reviews', shape: 'ongoing' },
-  { v: 'checks', label: 'We want bigger checks', sub: 'More from the guests already coming', goal: 'bigger-checks', shape: 'ongoing' },
-  { v: 'catering', label: 'We want catering and parties', sub: 'Private events, big tables, offices', goal: 'catering', shape: 'ongoing' },
-  { v: 'takeout', label: 'We want to own our takeout', sub: 'Orders on our site, not the apps', goal: 'own-takeout', shape: 'ongoing' },
-  { v: 'known', label: 'Nobody around here knows us', sub: 'Press, a look, a name people recognise', goal: 'get-known', shape: 'ongoing' },
-  { v: 'return', label: 'People come once and never again', sub: 'The same faces, more often', goal: 'regulars', shape: 'ongoing' },
+  { v: 'opening', needs: ['assets', 'reach', 'avoid'], label: 'We are opening a new place', sub: 'A grand opening, or a relaunch', goal: 'opening', shape: 'date' },
+  { v: 'event', needs: ['assets', 'reach', 'avoid'], label: 'We have something coming up', sub: 'A concert, a party, a one-off night', goal: 'event', shape: 'date' },
+  { v: 'new-thing', needs: ['promote', 'assets', 'reach', 'avoid'], label: 'We are putting something new on', sub: 'A new menu, a dish, a limited run', goal: 'more-new', shape: 'run' },
+  { v: 'quiet', needs: ['promote', 'reach', 'avoid'], label: 'It has gone quiet', sub: 'Fewer people are coming in than before', goal: 'more-new', shape: 'ongoing' },
+  { v: 'slow-shifts', needs: ['shift', 'promote', 'avoid'], label: 'Certain shifts are dead', sub: 'Some nights sit empty while others are fine', goal: 'more-new', shape: 'ongoing' },
+  { v: 'reviews', needs: ['avoid'], label: 'Our reviews need work', sub: 'Too few of them, or the wrong ones', goal: 'reviews', shape: 'ongoing' },
+  { v: 'checks', needs: ['promote', 'avoid'], label: 'We want bigger checks', sub: 'More from the guests already coming', goal: 'bigger-checks', shape: 'ongoing' },
+  { v: 'catering', needs: ['assets', 'reach', 'avoid'], label: 'We want catering and parties', sub: 'Private events, big tables, offices', goal: 'catering', shape: 'ongoing' },
+  { v: 'takeout', needs: ['promote', 'avoid'], label: 'We want to own our takeout', sub: 'Orders on our site, not the apps', goal: 'own-takeout', shape: 'ongoing' },
+  { v: 'known', needs: ['assets', 'promote', 'reach', 'avoid'], label: 'Nobody around here knows us', sub: 'Press, a look, a name people recognise', goal: 'get-known', shape: 'ongoing' },
+  { v: 'return', needs: ['avoid'], label: 'People come once and never again', sub: 'The same faces, more often', goal: 'regulars', shape: 'ongoing' },
 ]
 
 export const situationByValue = (v: string) => SITUATIONS.find((x) => x.v === v)
+
+/**
+ * What is still worth asking: relevant to what they picked, AND not already answered.
+ *
+ * `known` is everything we have from onboarding or from the description they just wrote. A good
+ * description can empty this list entirely, and when it does the honest thing is to go straight to
+ * the plan rather than inventing a question to look thorough.
+ */
+export function gapsFor(situations: readonly string[], known: Partial<Record<PlanQuestion, boolean>>): PlanQuestion[] {
+  const wanted = new Set<PlanQuestion>()
+  for (const v of situations) for (const q of situationByValue(v)?.needs ?? []) wanted.add(q)
+  return [...wanted].filter((q) => !known[q])
+}
 
 /**
  * WHAT THE OWNER BRINGS.

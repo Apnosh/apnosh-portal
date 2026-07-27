@@ -27,6 +27,7 @@ import {
   OWNER_ASSETS,
   goalReadiness,
   situationByValue,
+  gapsFor,
   assetsCover,
   type PlanGoalKey,
   type CampaignShape,
@@ -289,7 +290,6 @@ export default function PlanSetup({
   /* Derived, never asked. The first pick fixes the shape and the rest must agree with it. */
   const shape = picked[0]?.shape
   const dated = shape === 'date' || shape === 'run'
-  const wantsShift = picked.some((x) => x.asksShift)
   const assets = a.assets ?? []
   /* Owner-supplied work is not bought again. Merged into `have`, so a covered service renders as
    * "you already have this" at zero through the path that is already tested. */
@@ -299,6 +299,31 @@ export default function PlanSetup({
   const reach = a.reach ?? 'local'
   const avoid = a.avoid ?? []
   const auto = a.auto ?? {}
+
+  /*
+   * WHAT IS LEFT TO ASK, rather than a fixed list everyone answers.
+   *
+   * A question survives two filters: it has to be able to change THIS plan (the situation says so),
+   * and we have to not already know the answer, either from onboarding or from the paragraph they
+   * just wrote. Someone fixing their review score was previously asked which menu items to promote
+   * and which nights are slow, neither of which touches a review plan.
+   *
+   * A good description can empty this list. When it does the honest move is to go straight to the
+   * plan, not to invent a question so the screen looks thorough.
+   */
+  const gaps = useMemo(
+    () => gapsFor(situations, {
+      assets: assets.length > 0,
+      promote: promote.length > 0 || !!auto.promote || isKnown(inputs.knownFor),
+      reach: false,
+      shift: shift.length > 0 || isKnown(inputs.slowDays),
+      avoid: false,
+    }),
+    [situations.join(','), assets.length, promote.length, auto.promote, shift.length, inputs],
+  )
+  const asks = (q: string) => gaps.includes(q as never)
+  /* Numbered by position among the questions that survived, so it never reads "3 of 2". */
+  const actN = (q: string) => gaps.indexOf(q as never) + 2
 
   const menu = inputs.menu.slice(0, 10)
   const g = goals.length ? goals : undefined
@@ -354,7 +379,7 @@ export default function PlanSetup({
 
   /* A description on its own is enough. If we could not parse it, a person reads it. */
   const goalsOk = auto.goals || situations.length > 0 || (a.described ?? '').trim().length >= 12
-  const promoteOk = auto.promote || promote.length > 0
+  const promoteOk = !gaps.includes('promote') || auto.promote || promote.length > 0
   /* A dated campaign without its date is not buildable: the whole schedule works backwards from it. */
   /* A dated campaign without its date is not buildable: the whole schedule works backwards from it.
    * "auto" means they handed the decision back, which resolves to an ongoing plan. */
@@ -367,12 +392,18 @@ export default function PlanSetup({
 
       <div style={{ fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, color: C.ink, lineHeight: 1.1, letterSpacing: '-0.015em' }}>Design a campaign</div>
       <div style={{ fontSize: 13.5, color: C.mute, marginTop: 6, marginBottom: 30, lineHeight: 1.5 }}>
-        Five questions. What we already knew is filled in, and anything you would rather not decide, we will.
+        {situations.length === 0
+          ? 'Tell us what you are after. We only ask what we do not already know.'
+          : gaps.length === 0
+            ? 'Nothing else to ask. We have the rest from your account and from what you wrote.'
+            : gaps.length === 1
+              ? 'One more question, then we build it.'
+              : `${gaps.length} more questions, then we build it.`}
       </div>
 
       {/* 1 ── the situation, in their words. The shape falls out of it and is never asked about:
               an owner does not think "is this a dated moment", they think "we are opening". */}
-      <Act n={1} of={5} title="What do you want to do?" sub="Say it however you would say it out loud. We work out the rest and show you what we understood.">
+      <Act n={1} of={1 + gaps.length} title="What do you want to do?" sub="Say it however you would say it out loud. We work out the rest and show you what we understood.">
         {/* The description is the question. The cards below it are a shortcut, not the interface. */}
         <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '14px 15px 13px' }}>
           <textarea
@@ -533,7 +564,7 @@ export default function PlanSetup({
         )}
 
         {/* Which shifts, asked only when they said shifts were the problem. */}
-        {wantsShift && (
+        {asks('shift') && (
           <div style={{ marginTop: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
               <Clock size={14} strokeWidth={2.2} color={C.mute} />
@@ -567,7 +598,17 @@ export default function PlanSetup({
 
       {/* 2 ── what the owner brings. Nothing captured this before, and both real event requests
               opened with it. */}
-      <Act n={2} of={5} title="What have you got to work with?" sub="Anything you already have, or could get easily. We build around it instead of billing you for it.">
+      {/* Nothing left to ask is a result, not an empty state. Say so and get out of the way. */}
+      {situations.length > 0 && gaps.length === 0 && (
+        <div style={{ display: 'flex', gap: 9, padding: '13px 14px', background: '#f0faf6', borderRadius: 16, marginBottom: 4 }}>
+          <Check size={15} strokeWidth={2.6} color={C.green} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>
+            That is everything we need. We already have the rest from your account and from what you wrote.
+          </span>
+        </div>
+      )}
+
+      {asks('assets') && <Act n={actN('assets')} of={1 + gaps.length} title="What have you got to work with?" sub="Anything you already have, or could get easily. We build around it instead of billing you for it.">
         <Grid>
           {OWNER_ASSETS.map((o) => {
             const on = assets.includes(o.v)
@@ -594,10 +635,10 @@ export default function PlanSetup({
             <span>Because you have your own, we will not charge you for {covered.length === 1 ? 'a shoot' : 'photography'}. It still shows on the plan, at zero.</span>
           </div>
         )}
-      </Act>
+      </Act>}
 
       {/* 3 ── what to promote */}
-      <Act n={3} of={5} title="What should we put in front of people?" sub="Your menu, and everything else worth showing. Pick as many as fit.">
+      {asks('promote') && <Act n={actN('promote')} of={1 + gaps.length} title="What should we put in front of people?" sub="Your menu, and everything else worth showing. Pick as many as fit.">
         {menu.length > 0 && (
           <>
             <GroupLabel>From your menu</GroupLabel>
@@ -628,10 +669,10 @@ export default function PlanSetup({
           </div>
         )}
         <DecideForMe on={!!auto.promote} resolves={autoPromote} onToggle={() => { setAuto('promote', !auto.promote); if (!auto.promote) set({ promote: [], auto: { ...auto, promote: true } }) }} />
-      </Act>
+      </Act>}
 
       {/* 4 ── who, and how far */}
-      <Act n={4} of={5} title="Who are you trying to reach?" sub="Who walks in, and how far you want to pull from. Both change the work.">
+      {asks('reach') && <Act n={actN('reach')} of={1 + gaps.length} title="Who are you trying to reach?" sub="Who walks in, and how far you want to pull from. Both change the work.">
         <GroupLabel>Who</GroupLabel>
         <Grid>
           {AUDIENCE.map((o) => (
@@ -652,10 +693,10 @@ export default function PlanSetup({
           </div>
         )}
         <DecideForMe on={!!auto.audience} resolves={autoAud} onToggle={() => { setAuto('audience', !auto.audience); if (!auto.audience) set({ audience: [], auto: { ...auto, audience: true } }) }} />
-      </Act>
+      </Act>}
 
       {/* 5 ── what to avoid */}
-      <Act n={5} of={5} title="Anything we should never do?" sub="Optional, and the one place a plan most often goes wrong. Pick anything that is off limits.">
+      {asks('avoid') && <Act n={actN('avoid')} of={1 + gaps.length} title="Anything we should never do?" sub="Optional, and the one place a plan most often goes wrong. Pick anything that is off limits.">
         <Grid>
           {AVOID.map((o) => {
             const on = avoid.includes(o.v)
@@ -679,7 +720,7 @@ export default function PlanSetup({
             )
           })}
         </Grid>
-      </Act>
+      </Act>}
 
       {connect.length > 0 && (
         <section style={{ marginBottom: 28 }}>
