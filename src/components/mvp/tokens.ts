@@ -51,6 +51,27 @@ export const C = {
    * some point; not worth guessing at now. */
   amber: '#e0a13a',
   amberSoft: '#fdf6e9',
+
+  /* ── roles the setup walkthroughs actually need ──────────────────────────────────────────────
+   * These came out of gbp-fixer, where they were loose hex values. They are named for the job they
+   * do rather than the colour they are, because the next card needs the same jobs: a status chip on
+   * a diagnosed section, an unfilled progress rail, and the two row states. */
+
+  /** A diagnosed section that works but could be better. A THIRD amber, and the honest note is that
+   *  nobody chose to have three: `amber` above is the kit's, `AMBER_DK` below is the shell's, and
+   *  this is the one the profile walkthrough has always used for its status chips. Unifying them is
+   *  a visible brand change, so they are named apart and left for an owner's eye rather than
+   *  merged on a guess. */
+  warnInk: '#9a6b17',
+  warnFill: '#faf1de',
+  /** A section we could not read at all. Deliberately grey, not amber: unknown is not a warning. */
+  unknownFill: '#f0f0f3',
+
+  /** The unfilled part of a progress rail. */
+  track: '#e9e9ee',
+  /** A tappable row, under the finger and under the pointer. */
+  rowActive: '#f1f5f4',
+  rowHover: '#f7faf9',
 } as const
 
 /** The display face. Falls back through Inter to the system stack. */

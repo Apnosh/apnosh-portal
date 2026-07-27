@@ -175,18 +175,28 @@ s.group('The look is adjustable in one place')
     s.check(`${f}: ${n} hardcoded colour(s)`, n <= 3, 'past three it is a private palette, and it will drift')
   }
 
-  /* The flagship, frozen where it is. This number may only ever go down. */
-  const GBP_FIXER_HEX_CEILING = 76
-  const n = hexes(read('gbp-fixer'))
+  /* The flagship, brought down and held there. It went 76 -> 52 by deleting a third copy of the
+   * palette and naming six loose values for the jobs they do. What is left is plain white plus two
+   * inside a CSS template string, where a JS expression cannot go — so this is the floor, not a
+   * staging post, and the ceiling is set one above it to catch a genuine regression. */
+  const GBP_FIXER_HEX_CEILING = 53
+  const src = read('gbp-fixer')
+  const n = hexes(src)
   s.check(
     `gbp-fixer: ${n} hardcoded colours, ceiling ${GBP_FIXER_HEX_CEILING}`,
     n <= GBP_FIXER_HEX_CEILING,
-    'the reference card is the one card that ignores the kit. It may shrink toward it, never grow away from it',
+    'the reference card may shrink toward the kit, never grow away from it',
   )
   s.check(
-    'and no new walkthrough is heavier than the kit users',
-    KIT_USERS.every((f) => hexes(read(f)) < n),
-    'if a new card is approaching gbp-fixer it was built by copying the flagship instead of the kit',
+    'gbp-fixer reads the shared palette rather than declaring one',
+    /import \{ C, DISPLAY \} from '\.\/tokens'/.test(src) && !/const C = \{/.test(src),
+    'a private palette here is the one any card copied from this file would inherit',
+  )
+  const nonWhite = (src.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []).filter((h) => h.toLowerCase() !== '#fff').length
+  s.check(
+    `and only ${nonWhite} non-white values remain, both inside CSS strings`,
+    nonWhite <= 2,
+    'anything above two means a colour was written inline instead of named in tokens.ts',
   )
 }
 

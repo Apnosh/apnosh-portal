@@ -74,6 +74,10 @@ import { Loader2, Check, ChevronDown, ChevronLeft, ChevronRight, Sparkles, Copy,
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 import { gbpFinishReadiness, GBP_FINISH_MIN_SCORE } from '@/lib/gbp-finish'
+/* The palette used to be declared here, a third copy alongside the portal shell's and the
+ * walkthrough kit's. Every value was identical to tokens.ts, so this swap cannot change a pixel —
+ * but it removes the copy that would have been inherited by any card built from this one. */
+import { C, DISPLAY } from './tokens'
 
 /* Wire types for GET /api/dashboard/gbp-diagnosis — mirrors GbpDiagnosis in
    src/lib/gbp-diagnose.ts (that module is server-only, so the shapes are
@@ -114,13 +118,6 @@ interface GbpDiagnosis {
   mapsUri?: string
 }
 
-const C = {
-  green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
-  ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2',
-  line: '#e6e6ea', bg: '#f5f5f7',
-  red: '#c0564f', redSoft: '#fdeeee', amber: '#e0a13a',
-}
-const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 const FIXER_CSS = `
 .mvp-row{transition:background .12s ease}
@@ -587,7 +584,7 @@ function Walkthrough({ diag, mode, taskDone, hasCampaignTask = false, aiLaneLock
           <span style={{ fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>{done} of {total} done</span>
           {!allDone && <span style={{ fontSize: 12.5, color: C.mute }}>Tap a section to see it</span>}
         </div>
-        <div style={{ height: 5, borderRadius: 99, background: '#e9e9ee', overflow: 'hidden' }}>
+        <div style={{ height: 5, borderRadius: 99, background: C.track, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${total ? Math.round((done / total) * 100) : 0}%`, background: C.green, borderRadius: 99, transition: 'width .4s ease' }} />
         </div>
       </div>
@@ -903,16 +900,16 @@ type ReviewPhase = { name: 'intro' } | { name: 'part'; index: number } | { name:
 /** Status chip for the part screens. Every word is plain and honest. */
 const AI_CHIP: Record<GbpSectionStatus, { word: string; color: string; bg: string }> = {
   good: { word: 'Looks good', color: C.greenDk, bg: C.greenSoft },
-  'needs-work': { word: 'Needs work', color: '#9a6b17', bg: '#faf1de' },
+  'needs-work': { word: 'Needs work', color: C.warnInk, bg: C.warnFill },
   missing: { word: 'Missing', color: C.red, bg: C.redSoft },
-  unknown: { word: 'Could not check', color: C.mute, bg: '#f0f0f3' },
+  unknown: { word: 'Could not check', color: C.mute, bg: C.unknownFill },
 }
 
 /** Intro chip: softer words for the chapter list (weak parts read the same). */
 const INTRO_CHIP: Record<GbpSectionStatus, { word: string; color: string; bg: string }> = {
   good: AI_CHIP.good,
-  'needs-work': { word: 'Could be better', color: '#9a6b17', bg: '#faf1de' },
-  missing: { word: 'Could be better', color: '#9a6b17', bg: '#faf1de' },
+  'needs-work': { word: 'Could be better', color: C.warnInk, bg: C.warnFill },
+  missing: { word: 'Could be better', color: C.warnInk, bg: C.warnFill },
   unknown: AI_CHIP.unknown,
 }
 
@@ -1248,7 +1245,7 @@ function SaveNoteLine({ note }: { note: SaveNote }) {
   const tone = note.tone === 'ok'
     ? { background: C.greenSoft, color: C.greenDk }
     : note.tone === 'pending'
-      ? { background: '#faf1de', color: '#9a6b17' }
+      ? { background: C.warnFill, color: C.warnInk }
       : { background: C.redSoft, color: C.red }
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginTop: 10, borderRadius: 10, padding: '9px 12px', fontSize: 12.5, lineHeight: 1.5, whiteSpace: 'pre-line', ...tone }}>
@@ -1777,7 +1774,7 @@ function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clien
             </button>
           )}
         </div>
-        <div style={{ height: 5, borderRadius: 99, background: '#e9e9ee', overflow: 'hidden' }}>
+        <div style={{ height: 5, borderRadius: 99, background: C.track, overflow: 'hidden' }}>
           <div style={{ height: '100%', width: `${Math.round(((index + 1) / total) * 100)}%`, background: C.green, borderRadius: 99, transition: 'width .4s ease' }} />
         </div>
       </div>
@@ -2352,7 +2349,7 @@ function PhotosEditor({ saving, serverNote, onCancel, onSave, initialFileName }:
       />
       {previewUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={previewUrl} alt="Your photo" style={{ display: 'block', marginTop: 10, width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 11, background: '#e9e9ee' }} />
+        <img src={previewUrl} alt="Your photo" style={{ display: 'block', marginTop: 10, width: '100%', maxHeight: 220, objectFit: 'cover', borderRadius: 11, background: C.track }} />
       )}
       {initialFileName && !previewUrl && (
         <div style={{ marginTop: 10, fontSize: 12.5, color: C.mute }}>{initialFileName}</div>
@@ -2591,7 +2588,7 @@ function PartDetail({ detail, summary }: { detail: GbpSectionDetail; summary: st
                 src={it.url}
                 alt=""
                 loading="lazy"
-                style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 9, display: 'block', background: '#e9e9ee' }}
+                style={{ width: '100%', aspectRatio: '1', objectFit: 'cover', borderRadius: 9, display: 'block', background: C.track }}
               />
             ))}
           </div>
