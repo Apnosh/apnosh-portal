@@ -102,6 +102,34 @@ export default function PreviewIndexView() {
           Screens 1 and 3 are two steps of the same setup flow; 4 through 8 are one plan screen you
           scroll. That is why several rows lead to the same place.
         </p>
+
+        {/* The setup cards are a different product from the campaign builder above, but they have
+            the same problem: reviewable only behind a login, so reviewed as screenshots. */}
+        <div style={{ marginTop: 22, paddingTop: 20, borderTop: `0.5px solid ${C.line}` }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.faint, marginBottom: 4 }}>
+            Setup cards
+          </div>
+          <p style={{ margin: '0 0 10px', fontSize: 13, color: C.mute, lineHeight: 1.5 }}>
+            The walkthroughs an owner runs after buying. Google profile is the one every other
+            service gets built from, so it is the one worth looking hardest at.
+          </p>
+          <Link
+            href="/preview/setup/gbp"
+            style={{ display: 'block', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 15, padding: '12px 13px', textDecoration: 'none' }}
+          >
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 9 }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 640, color: C.ink, letterSpacing: '-0.012em' }}>
+                Polish your Google profile
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 650, color: C.greenDk, background: C.greenSoft, padding: '3px 8px', borderRadius: 7, whiteSpace: 'nowrap' }}>
+                Open it
+              </span>
+            </div>
+            <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, marginTop: 3 }}>
+              All nine parts on a made-up profile, with every status on screen at once.
+            </div>
+          </Link>
+        </div>
       </div>
     </div>
   )
