@@ -326,58 +326,97 @@ export const SITUATIONS: readonly Situation[] = [
 export const situationByValue = (v: string) => SITUATIONS.find((x) => x.v === v)
 
 /**
- * How the eleven situations are grouped on the first screen.
+ * Read a situation out of the owner's own sentence, with no model involved.
  *
- * WHY GROUP AT ALL. Eleven flat cards is a wall, and a wall gets skimmed rather than read. Three
- * headed groups let someone find their own situation by first deciding which KIND of thing is
- * happening to them, which is a much easier judgement than comparing eleven sentences.
+ * WHY THIS EXISTS. The first screen is now one box: the owner describes their situation and we work
+ * out the rest. Everything downstream — which goals get composed, whether a date is asked for, which
+ * follow-ups are relevant — hangs off the situation, and the only thing that sets it is the parse.
+ * So a screen with a single box and a single model call is a screen with a single point of failure,
+ * and we have already watched that failure happen: the Anthropic balance ran dry and the front door
+ * stopped working, silently, for everyone.
  *
- * The grouping is by what prompted the owner to open this screen, NOT by our `shape` field. Shape
- * (date / run / ongoing) is a scheduling consequence and means nothing to them; "something is
- * coming up" versus "something is off" is how they would actually describe their week.
+ * This is the floor under that. It is deliberately dumb — weighted keyword counting, no cleverness —
+ * because its whole job is to be available when the smart thing is not. The model still runs first
+ * and still does better (it also reads the date, the assets and what we cannot do). This only
+ * catches the fall.
  *
- * Grouped here rather than in the component so a sim can assert that every situation appears in
- * exactly one group. A new situation that nobody adds to a group would otherwise just vanish from
- * the only screen that offers it, silently.
+ * Phrases are scored above single words: "gone quiet" is evidence, "quiet" on its own could be
+ * anything. A tie or a miss returns null, and null is honest — the screen then asks rather than
+ * guessing, which is the one thing a fallback must never get wrong.
  */
-export interface SituationGroup {
-  key: string
-  /** The owner's framing, not ours. */
-  title: string
-  sub: string
-  situations: readonly string[]
+interface Cue {
+  v: string
+  /** Multi-word phrases. Strong evidence, worth 3. */
+  phrases: readonly string[]
+  /** Single words. Weak evidence, worth 1. */
+  words: readonly string[]
 }
 
-export const SITUATION_GROUPS: readonly SituationGroup[] = [
-  /* The three subs are deliberately parallel and deliberately positive. An earlier pass had
-   * "Nothing is broken, you want more of something", which makes the reader hold a negative in
-   * their head to work out what the group is FOR. Say what it is, never what it is not. */
-  {
-    key: 'coming-up',
-    title: 'Something is coming up',
-    sub: 'A date, and you want people there for it',
-    situations: ['opening', 'event', 'new-thing'],
-  },
-  {
-    key: 'off',
-    title: 'Something is not working',
-    sub: 'It is quieter, or worse, than it should be',
-    situations: ['quiet', 'slow-shifts', 'reviews', 'return'],
-  },
-  {
-    key: 'grow',
-    title: 'You want more of something',
-    sub: 'One part of the business you want to build up',
-    situations: ['checks', 'catering', 'takeout', 'known'],
-  },
+const CUES: readonly Cue[] = [
+  { v: 'opening',
+    phrases: ['grand opening', 'new location', 'second location', 'another location', 'new place', 'new shop', 'new store', 'opening day', 'we open', 'we are opening', 'were opening', 'about to open', 're-open', 'reopen', 'relaunch'],
+    words: ['opening', 'launch'] },
+  { v: 'event',
+    phrases: ['live music', 'one off', 'one-off', 'guest chef', 'we have a', 'coming up on', 'ticketed'],
+    words: ['event', 'concert', 'party', 'dj', 'gig', 'anniversary', 'festival', 'show'] },
+  { v: 'new-thing',
+    phrases: ['new menu', 'new dish', 'new item', 'limited run', 'limited time', 'putting on', 'adding a', 'seasonal menu'],
+    words: ['special', 'seasonal', 'tasting'] },
+  { v: 'quiet',
+    phrases: ['gone quiet', 'slowed down', 'fewer people', 'less busy', 'not busy', 'no one is coming', 'nobody is coming', 'nobody comes', 'down on last', 'sales are down', 'super slow', 'really slow'],
+    words: ['quiet', 'slow', 'empty', 'dead', 'dropped'] },
+  { v: 'slow-shifts',
+    phrases: ['slow nights', 'dead nights', 'slow shifts', 'certain nights', 'some nights', 'mid week', 'midweek', 'week nights', 'weeknights', 'lunch service', 'lunch is', 'monday and tuesday', 'tuesdays and wednesdays'],
+    words: ['tuesday', 'wednesday', 'monday', 'weekday', 'lunches'] },
+  { v: 'reviews',
+    phrases: ['google reviews', 'bad reviews', 'more reviews', 'star rating', 'our rating', 'one star', 'review score'],
+    words: ['reviews', 'review', 'yelp', 'stars', 'rating', 'reputation'] },
+  { v: 'checks',
+    phrases: ['average check', 'bigger checks', 'spend more', 'order more', 'ticket size', 'per head', 'add ons', 'add-ons'],
+    words: ['upsell'] },
+  { v: 'catering',
+    phrases: ['private event', 'private events', 'large group', 'large groups', 'big tables', 'office lunch', 'office orders', 'corporate orders', 'book the space', 'private dining'],
+    words: ['catering', 'cater', 'banquet', 'functions'] },
+  { v: 'takeout',
+    phrases: ['our own site', 'our own website', 'off the apps', 'third party apps', 'delivery apps', 'online ordering', 'order direct', 'direct orders', 'commission fees'],
+    words: ['takeout', 'takeaway', 'doordash', 'ubereats', 'grubhub', 'deliveroo'] },
+  { v: 'known',
+    phrases: ['nobody knows', 'no one knows', 'never heard of', 'not on the map', 'get our name', 'build our name', 'brand awareness', 'get known', 'more people knew'],
+    words: ['unknown', 'press', 'awareness'] },
+  { v: 'return',
+    phrases: ['come back', 'coming back', 'come once', 'second visit', 'never return', 'do not return', 'repeat customers', 'repeat business', 'same faces', 'one time'],
+    words: ['regulars', 'loyalty', 'retention'] },
 ]
 
-/** Every situation, in the order the first screen shows them. Empty groups are impossible by test. */
-export const groupedSituations = (): { group: SituationGroup; items: Situation[] }[] =>
-  SITUATION_GROUPS.map((group) => ({
-    group,
-    items: group.situations.map((v) => situationByValue(v)).filter((x): x is Situation => !!x),
-  }))
+export interface SituationMatch {
+  situation: Situation
+  /** How much evidence there was. Useful for deciding whether to state it or ask. */
+  score: number
+}
+
+/**
+ * Best-effort situation from free text. Null when nothing scored, or when the top two tie —
+ * a coin-flip dressed as an answer is worse than admitting we did not follow.
+ */
+export function matchSituation(text: string): SituationMatch | null {
+  const hay = ' ' + text.toLowerCase().replace(/[^a-z0-9\s-]/g, ' ').replace(/\s+/g, ' ') + ' '
+  if (hay.trim().length < 3) return null
+
+  const scored = CUES.map((c) => {
+    let score = 0
+    for (const p of c.phrases) if (hay.includes(' ' + p + ' ') || hay.includes(' ' + p)) score += 3
+    for (const w of c.words) if (hay.includes(' ' + w + ' ') || hay.includes(' ' + w + 's ')) score += 1
+    return { v: c.v, score }
+  })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+
+  if (!scored.length) return null
+  if (scored.length > 1 && scored[0].score === scored[1].score) return null
+
+  const situation = situationByValue(scored[0].v)
+  return situation ? { situation, score: scored[0].score } : null
+}
 
 /**
  * What is still worth asking: relevant to what they picked, AND not already answered.

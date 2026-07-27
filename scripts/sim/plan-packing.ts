@@ -15,7 +15,7 @@
  */
 
 import { Suite } from './lib'
-import { PLAN_GOALS, SHAPES, SITUATIONS, OWNER_ASSETS, candidatesForGoal, goalReadiness, goalsForShape, groupedSituations, assetsCover, assetsBoost } from '../../src/lib/campaigns/data/plan-goals'
+import { PLAN_GOALS, SHAPES, SITUATIONS, OWNER_ASSETS, candidatesForGoal, goalReadiness, goalsForShape, matchSituation, situationByValue, assetsCover, assetsBoost } from '../../src/lib/campaigns/data/plan-goals'
 import { GENERATED_CATALOG } from '../../src/lib/campaigns/data/catalog.generated'
 import {
   composeMonthlyPlan,
@@ -366,30 +366,53 @@ for (const ghost of ['second-visit', 'offer-eng']) {
   s.check(`${ghost} is no longer named by any goal`, !allIds.has(ghost), 'it does not exist in the catalog, so ranking it did nothing')
 }
 
-/* ── the first screen offers every situation, exactly once ─────────────────────────────────────
+/* ── the fallback that keeps the one-box screen alive ──────────────────────────────────────────
  *
- * The situation list is now the front door rather than a shortcut under a divider, so a situation
- * missing from every group is not a cosmetic gap: it is a thing an owner can no longer ask for, and
- * nothing else in the app would report it. Listing one twice is just as bad, because the two cards
- * toggle the same value and the second looks broken.
+ * The first screen is a single box: the owner describes their situation, and the parse is the only
+ * thing that sets the goal and the shape everything downstream hangs off. That makes one API call a
+ * single point of failure for the whole builder, and it has already failed in exactly this way —
+ * an empty Anthropic balance took the front door out for everyone, silently.
+ *
+ * matchSituation is the floor under that, and these checks are what stop it rotting. It has to read
+ * the sentences owners actually send, and it has to return null rather than guess: a confident
+ * wrong read routes someone into a plan built for a problem they do not have, which is worse than
+ * admitting we did not follow.
  */
-s.group('Every situation appears on the first screen, exactly once')
+s.group('The no-model fallback reads what owners actually write')
 {
-  const grouped = groupedSituations()
-  const shown = grouped.flatMap((x) => x.items.map((i) => i.v))
-  const counts = new Map<string, number>()
-  for (const v of shown) counts.set(v, (counts.get(v) ?? 0) + 1)
+  const CASES: [string, string][] = [
+    ['opening', "We're opening our second location in Seattle on 12 September and I want a line out the door."],
+    ['event', 'We have a concert coming up next month and want the room full.'],
+    ['new-thing', "We're putting a new menu on for the spring."],
+    ['quiet', 'Our location is super slow now and no one is coming in.'],
+    ['slow-shifts', 'Mondays and Tuesdays are dead but the weekends are fine.'],
+    ['reviews', 'Our Google reviews need work, we have barely any.'],
+    ['checks', 'We want a bigger average check out of the guests already coming.'],
+    ['catering', 'We want more catering and private events, offices mostly.'],
+    ['takeout', 'We want people ordering on our own site instead of the delivery apps.'],
+    ['known', 'Nobody around here knows us. We need to get our name out.'],
+    ['return', 'People come once and never come back.'],
+  ]
+  for (const [want, text] of CASES) {
+    const got = matchSituation(text)
+    s.check(`"${text.slice(0, 42)}..." -> ${got?.situation.v ?? 'null'}`, got?.situation.v === want, `expected ${want}`)
+  }
+  s.check(
+    `all ${SITUATIONS.length} situations are reachable with no model`,
+    new Set(CASES.map(([w]) => w)).size === SITUATIONS.length,
+    'a situation no phrasing can reach is one an owner cannot ask for while the model is down',
+  )
+}
 
-  for (const sit of SITUATIONS) {
-    const n = counts.get(sit.v) ?? 0
-    s.check(`${sit.v} is offered once (${n})`, n === 1, n === 0 ? 'in no group, so it is unreachable' : 'in more than one group')
-  }
-  const strays = [...counts.keys()].filter((v) => !SITUATIONS.some((x) => x.v === v))
-  s.check('no group names a situation that does not exist', strays.length === 0, strays.join(', '))
-  for (const { group, items } of grouped) {
-    s.check(`"${group.title}" has cards (${items.length})`, items.length > 0, 'an empty heading renders as a dead section')
-    s.check(`"${group.title}" says what it means`, group.sub.length > 12, group.sub)
-  }
+s.group('It says nothing rather than guessing')
+for (const text of ['', '   ', 'hi', 'hello there', 'thanks', 'asdf asdf', 'we run a restaurant']) {
+  s.check(`"${text}" -> null`, matchSituation(text) === null, 'a confident wrong read is worse than no read at all')
+}
+
+s.group('Anything it returns is something the rest of the flow can use')
+for (const sit of SITUATIONS) {
+  const back = situationByValue(sit.v)
+  s.check(`${sit.v} carries a goal and a shape`, !!back?.goal && !!back?.shape)
 }
 
 s.report('Plan packing properties')

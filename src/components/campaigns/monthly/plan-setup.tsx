@@ -26,7 +26,7 @@ import {
   SITUATIONS,
   OWNER_ASSETS,
   goalReadiness,
-  groupedSituations,
+  matchSituation,
   situationByValue,
   gapsFor,
   assetsCover,
@@ -353,78 +353,26 @@ export default function PlanSetup({
   const [readErr, setReadErr] = useState<string | null>(null)
   const [readBack, setReadBack] = useState<{ summary: string; unsupported: string[] } | null>(null)
 
-  /* Which half of question 1 is on screen: the list of situations, or the free-text box.
-   *
-   * The list leads now. A blank box asking "what do you want to do?" is the highest-effort opening
-   * an interface can have, and it also implies we can do anything — which is why the old flow had
-   * to walk it back on the next screen with "we do not do flyers or radio". Naming what we handle
-   * up front is both easier to answer and more honest.
-   *
-   * It is also the only version that works today: reading the paragraph needs a model call, and
-   * that call is currently failing. With the list first, the box is the escape hatch rather than
-   * the front door, so an empty balance no longer blocks the main path.
-   *
-   * Anyone who already typed something keeps the box open across re-renders. */
-  const [writing, setWriting] = useState(false)
-
   /**
-   * One situation card. Extracted so the three groups can each render their own slice without the
-   * card's rules (wrong shape, already full, not sold yet) getting copied three times and drifting.
+   * Keep the flow moving when the model does not answer.
+   *
+   * The situation is what everything downstream hangs off, and with no list on this screen the
+   * parse is the only thing that sets it. That made one API call a single point of failure for the
+   * entire builder, and we have already watched it fail: an empty Anthropic balance took the front
+   * door out for everyone, quietly. matchSituation is the floor — worse than the model, and enough
+   * to keep going.
+   *
+   * It sets ONLY the situation. The date and the assets stay unset on purpose, because guessing
+   * those from keywords would be inventing answers rather than degrading gracefully; the follow-up
+   * questions ask for them instead, which is what those questions are for.
    */
-  const situationCard = (o: (typeof SITUATIONS)[number]) => {
-    const on = situations.includes(o.v)
-    const g = PLAN_GOALS.find((x) => x.key === o.goal)
-    const soon = g?.state !== 'ready'
-    /* A campaign has one shape. Once the first pick sets it, situations that would need a
-     * different one dim, so the rule is shown rather than asked. */
-    const wrongShape = !!shape && o.shape !== shape && !on
-    const full = situations.length >= 3 && !on
-    const blocked = soon || wrongShape || full
-    const fit = goalReadiness(o.goal)
-    return (
-      <button
-        key={o.v} type="button" className="ps-pick"
-        onClick={() => {
-          if (blocked) return
-          const next = on ? situations.filter((x) => x !== o.v) : [...situations, o.v]
-          const head = situationByValue(next[0] ?? '')
-          set({
-            situations: next,
-            goals: [...new Set(next.map((v) => situationByValue(v)!.goal))],
-            shape: head?.shape,
-            ...(head && (head.shape === 'ongoing') ? { when: undefined, until: undefined } : {}),
-          })
-        }}
-        disabled={blocked}
-        title={soon ? g?.soonWhy : wrongShape ? 'This is a different kind of campaign. Start it separately.' : undefined}
-        style={{
-          position: 'relative', textAlign: 'left', cursor: blocked ? 'default' : 'pointer', minHeight: 84,
-          border: `1.5px solid ${on ? (g?.col ?? C.green) : C.line}`,
-          background: on ? (g?.col ?? C.green) : soon ? '#fbfbfd' : '#fff',
-          opacity: wrongShape || full ? 0.42 : 1,
-          borderRadius: 16, padding: '13px 13px',
-          fontFamily: "'Inter',system-ui,sans-serif",
-        }}
-      >
-        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? '#fff' : soon ? C.mute : C.ink, lineHeight: 1.25, paddingRight: on ? 20 : 0 }}>{o.label}</span>
-        <span style={{ display: 'block', fontSize: 11, color: on ? 'rgba(255,255,255,.85)' : C.mute, marginTop: 3, lineHeight: 1.35 }}>{o.sub}</span>
-        {/* "23 of 26 ready today" used to sit here on any goal with held work. It went, because it
-         * answered a question nobody had yet: at pick time an owner does not know there are 26 of
-         * anything, so the line reads as a stock warning about the option they are considering.
-         * Worse, three of these cards share a goal, so it printed the SAME number on each and
-         * distinguished nothing. The honesty it was carrying is better placed on the plan screen,
-         * where each held line is named with the reason it is held. */}
-        {soon && (
-          <span style={{ display: 'inline-block', marginTop: 7, fontSize: 10, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: AMBER_DK, background: AMBER_SOFT, borderRadius: 6, padding: '2px 6px' }}>Not yet</span>
-        )}
-        {on && (
-          <span style={{ position: 'absolute', top: 10, right: 10, width: 18, height: 18, borderRadius: 99, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Check size={12} strokeWidth={3.2} color={g?.col ?? C.green} />
-          </span>
-        )}
-      </button>
-    )
+  const fallbackRead = (text: string) => {
+    const m = matchSituation(text)
+    if (!m) return false
+    set({ situations: [m.situation.v], goals: [m.situation.goal], shape: m.situation.shape })
+    return true
   }
+
   const describe = async () => {
     const text = (a.described ?? '').trim()
     if (text.length < 12 || reading) return
@@ -435,7 +383,7 @@ export default function PlanSetup({
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }),
       })
       const j = (await r.json()) as { ok?: boolean; reason?: string; result?: Record<string, unknown> }
-      if (!j.ok || !j.result) { setReadErr(String(j.reason ?? 'upstream')); setReadBack(null); return }
+      if (!j.ok || !j.result) { fallbackRead(text); setReadErr(String(j.reason ?? 'upstream')); setReadBack(null); return }
       const res = j.result as { situation: string | null; shape?: string; when: string | null; until: string | null; assets: string[]; summary: string; unsupported: string[] }
       setReadBack({ summary: res.summary, unsupported: res.unsupported ?? [] })
       const sit = res.situation ? situationByValue(res.situation) : undefined
@@ -446,6 +394,7 @@ export default function PlanSetup({
         ...(res.assets?.length ? { assets: res.assets } : {}),
       })
     } catch {
+      fallbackRead(text)
       setReadErr('unreachable')
     } finally {
       setReading(false)
@@ -482,49 +431,20 @@ export default function PlanSetup({
       )}
 
       {/* 1 ── the situation, in their words. The shape falls out of it and is never asked about:
-              an owner does not think "is this a dated moment", they think "we are opening". */}
+              an owner does not think "is this a dated moment", they think "we are opening".
+
+              ONE BOX, NO LIST. A picker stood here briefly and was wrong twice over: the eleven
+              entries were goals ("we want bigger checks") rather than the campaigns an owner would
+              recognise, and offering any list at all quietly reframes a bespoke builder as a
+              catalogue you choose from. What they describe is richer than anything a list can hold
+              — the date, the DJ they can book, the fact that they will do "whatever it takes" — and
+              all of it survives to the people doing the work. */}
       <Act
         n={1}
         of={1 + gaps.length}
-        title={writing ? 'Tell us in your own words' : 'What is going on?'}
-        sub={writing
-          ? 'A sentence or two is plenty. Say the date if there is one, and anything you can put behind it.'
-          : 'Pick anything that sounds like your place. More than one is fine.'}
+        title="What do you want to do?"
+        sub="Say it the way you would say it to a person. We work out the rest."
       >
-        {/* ── the list, which is now the front door ─────────────────────────────────────────── */}
-        {!writing && (
-          <>
-            {groupedSituations().map(({ group, items }) => (
-              <div key={group.key} style={{ marginBottom: 17 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 660, color: C.ink, letterSpacing: '-0.012em' }}>{group.title}</div>
-                <div style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.4, margin: '2px 0 8px' }}>{group.sub}</div>
-                <Grid>{items.map(situationCard)}</Grid>
-              </div>
-            ))}
-
-            {/* The escape hatch. Deliberately NOT called "design your own": picking "it has gone
-                quiet" designs you a campaign too, so that label would imply the list is a set of
-                pre-made things and only the box is bespoke. It is the same builder either way —
-                the only difference is whether you found yourself in the list. */}
-            <button
-              type="button" onClick={() => setWriting(true)}
-              style={{
-                display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
-                border: `1.5px dashed ${C.line}`, background: '#fff', borderRadius: 16,
-                padding: '13px 14px', fontFamily: "'Inter',system-ui,sans-serif",
-              }}
-            >
-              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 660, color: C.ink }}>None of these fit</span>
-              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 3, lineHeight: 1.4 }}>
-                Tell us in your own words instead.
-              </span>
-            </button>
-          </>
-        )}
-
-        {/* ── the box, now reached on purpose rather than met on arrival ────────────────────── */}
-        {writing && (
-          <>
         <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '14px 15px 13px' }}>
           <textarea
             value={a.described ?? ''}
@@ -552,6 +472,24 @@ export default function PlanSetup({
           </div>
         </div>
 
+        {/* What to put in, once, before they have written anything. A blank box is the highest-
+            effort thing an interface can ask for, and this is the cheapest way to lower it that is
+            not a list of options: it teaches the shape of a useful answer without offering one. */}
+        {(a.described ?? '').trim().length === 0 && (
+          <div style={{ marginTop: 10, padding: '0 3px' }}>
+            <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 5 }}>Worth mentioning, if it applies</div>
+            {[
+              'What is happening, in your words',
+              'When, if there is a date',
+              'Anything you can put behind it: a DJ, a giveaway, a space',
+            ].map((h) => (
+              <div key={h} style={{ display: 'flex', gap: 7, fontSize: 12.5, color: C.mute, lineHeight: 1.5, marginTop: 2 }}>
+                <span style={{ color: C.faint }}>·</span>{h}
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* What we understood, in their terms, above the picks it filled in. */}
         {readBack && (
           <div style={{ marginTop: 11, padding: '12px 13px', background: '#f0faf6', borderRadius: 14 }}>
@@ -567,45 +505,28 @@ export default function PlanSetup({
           </div>
         )}
 
-        {/* No model available. Two real paths, neither of which is "fill in a form instead". */}
+        {/* The model is unavailable, but the local matcher already worked out what this is, so the
+            flow continues. Say that plainly rather than dressing a degraded read as a full one:
+            the difference is real (no date, no assets read out of the text), and the owner should
+            know which one they got before they trust the plan on the other side. */}
         {readErr && (
           <div style={{ marginTop: 11, padding: '12px 13px', background: AMBER_SOFT, borderRadius: 14, fontSize: 12.5, color: AMBER_DK, lineHeight: 1.5 }}>
-            {readErr === 'no-credit' || readErr === 'no-key'
-              ? 'We cannot read that automatically right now. Your words are saved either way: pick the closest match below and we will build a plan now, or just carry on and a person on our team reads what you wrote.'
-              : readErr === 'too-short'
-                ? 'Give us a sentence or two more and we will read it back.'
-                : 'That did not go through. Pick the closest match below, or carry on and a person reads what you wrote.'}
+            {readErr === 'too-short'
+              ? 'Give us a sentence or two more and we will read it back.'
+              : situations.length > 0
+                ? 'We could not read that back in full just now, so we went on the words we recognised. Check the answers below, and add the date yourself if there is one. What you wrote is saved and reaches the team either way.'
+                : 'We could not read that one. Try saying it a different way, or carry on and a person on our team reads exactly what you wrote.'}
           </div>
         )}
 
-        {/* Leaving does not discard anything: `described` lives in answers, not in this toggle. */}
-        <button
-          type="button" onClick={() => setWriting(false)}
-          style={{
-            marginTop: 12, background: 'none', border: 'none', padding: '4px 2px', cursor: 'pointer',
-            fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13, fontWeight: 600, color: C.greenDk,
-          }}
-        >
-          ← Back to the list
-        </button>
-          </>
-        )}
-
-        {/* Cards going grey with no explanation is its own kind of confusing. Say why. */}
-        {!writing && picked.length > 0 && SITUATIONS.some((o) => o.shape !== shape) && (
-          <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, marginTop: 10, padding: '0 2px' }}>
-            {shape === 'ongoing'
-              ? 'The greyed ones are for a set date, which is a different kind of campaign. Start one of those separately when you need it.'
-              : 'The greyed ones keep running with no end date, which is a different kind of campaign. Start one of those separately when you need it.'}
-          </div>
-        )}
-
-        {/* The one thing we will not sell, said in full rather than left as a greyed-out card.
-            Only alongside the list: in the write view it explains a card that is not on screen. */}
-        {!writing && PLAN_GOALS.filter((g) => g.state !== 'ready' && g.soonWhy && SITUATIONS.some((o) => o.goal === g.key)).map((g) => (
-          <div key={g.key} style={{ display: 'flex', gap: 8, marginTop: 10, padding: '10px 12px', background: AMBER_SOFT, borderRadius: 12, fontSize: 12, color: AMBER_DK, lineHeight: 1.45 }}>
+        {/* The one thing we will not sell. It used to sit under the card list as a standing note;
+            with no list it fires on what we actually understood, which is when it matters. Someone
+            can still describe a retention problem in the box — the read is correct, and the answer
+            is that we do not sell it yet, said before they go any further rather than after. */}
+        {picked.map((p) => PLAN_GOALS.find((g) => g.key === p.goal)).filter((g) => g && g.state !== 'ready' && g.soonWhy).map((g) => (
+          <div key={g!.key} style={{ display: 'flex', gap: 8, marginTop: 11, padding: '10px 12px', background: AMBER_SOFT, borderRadius: 12, fontSize: 12, color: AMBER_DK, lineHeight: 1.45 }}>
             <Ban size={14} strokeWidth={2.2} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span><strong style={{ fontWeight: 600 }}>People come once and never again:</strong> {g.soonWhy}</span>
+            <span><strong style={{ fontWeight: 600 }}>That is the one thing we cannot do yet.</strong> {g!.soonWhy}</span>
           </div>
         ))}
 
