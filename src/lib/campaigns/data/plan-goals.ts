@@ -279,6 +279,51 @@ export const PLAN_GOALS: readonly PlanGoal[] = [
 /** A question the builder can ask. Only these five reach the composer. */
 export type PlanQuestion = 'assets' | 'promote' | 'reach' | 'shift' | 'avoid'
 
+/**
+ * The whole bank of follow-ups, and what each one actually changes about the plan.
+ *
+ * This exists so the model can CHOOSE the follow-ups for a particular brief instead of us running a
+ * fixed list per situation. Two openings are not the same campaign: one that says "12 September, we
+ * have DJs and giveaways, pull from the whole city" has already answered three of these, and one
+ * that says "we're opening soon" has answered none.
+ *
+ * It is a bank and not a blank page on purpose. A model inventing its own questions would collect
+ * answers nothing downstream can read, and the plan would be composed from five fields regardless.
+ * Choosing from a fixed five keeps the output structured while still letting the choice be genuinely
+ * per-brief.
+ *
+ * `changes` is written for the model, not the screen: it is the basis on which "is this worth asking
+ * about THIS campaign" can be judged, and it is the same text the prompt ships, so the rule the
+ * model is given can never drift from the rule this file states.
+ */
+export const PLAN_QUESTIONS: readonly { q: PlanQuestion; asks: string; changes: string }[] = [
+  {
+    q: 'assets',
+    asks: 'What they already have or can easily get: a DJ, something to give away, tickets, a room or patio, staff willing to be filmed, their own photos.',
+    changes: 'Anything they bring is not sold back to them, and some services become worth more because of it. Skip if they already listed what they have.',
+  },
+  {
+    q: 'promote',
+    asks: 'Which dish, room, night or offer the work should put in front of people.',
+    changes: 'Decides what the posts, ads and photographs are actually about. Skip if they already named the thing.',
+  },
+  {
+    q: 'reach',
+    asks: 'How far to pull people from, and who walks in.',
+    changes: 'Drops services that only work on a local address, and sizes how many people have to see it. Skip if they said the neighbourhood, the city, or named an audience.',
+  },
+  {
+    q: 'shift',
+    asks: 'Which shifts or nights are the empty ones.',
+    changes: 'Aims the same work at the shifts that sit empty instead of spreading it across the week. Only worth asking when the problem is uneven across the week.',
+  },
+  {
+    q: 'avoid',
+    asks: 'Anything off limits: no discounting, no filming staff, no paid ads.',
+    changes: 'Removes whole services before the plan is priced. Cheap to ask and expensive to get wrong, but skip it if they already said what they will not do.',
+  },
+]
+
 export interface Situation {
   v: string
   /** the sentence an owner would actually say */
@@ -425,10 +470,56 @@ export function matchSituation(text: string): SituationMatch | null {
  * description can empty this list entirely, and when it does the honest thing is to go straight to
  * the plan rather than inventing a question to look thorough.
  */
-export function gapsFor(situations: readonly string[], known: Partial<Record<PlanQuestion, boolean>>): PlanQuestion[] {
-  const wanted = new Set<PlanQuestion>()
-  for (const v of situations) for (const q of situationByValue(v)?.needs ?? []) wanted.add(q)
-  return [...wanted].filter((q) => !known[q])
+/**
+ * Take a model's chosen follow-ups and keep only what this codebase can actually act on.
+ *
+ * Lives here rather than in the route because it is vocabulary validation, and the vocabulary is
+ * defined in this file. It is also the part most worth testing: a question key we do not recognise
+ * renders nothing, and a repeated one renders the same step twice under different numbers, and both
+ * failures are invisible until an owner hits them.
+ */
+export function sanitizeAsk(raw: unknown): { q: PlanQuestion; why: string }[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<PlanQuestion>()
+  const out: { q: PlanQuestion; why: string }[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const q = (item as { q?: unknown }).q
+    if (!PLAN_QUESTIONS.some((p) => p.q === q)) continue
+    if (seen.has(q as PlanQuestion)) continue
+    seen.add(q as PlanQuestion)
+    const why = (item as { why?: unknown }).why
+    out.push({ q: q as PlanQuestion, why: typeof why === 'string' ? why.slice(0, 160) : '' })
+    if (out.length >= PLAN_QUESTIONS.length) break
+  }
+  return out
+}
+
+export function gapsFor(
+  situations: readonly string[],
+  known: Partial<Record<PlanQuestion, boolean>>,
+  /**
+   * What the model decided THIS brief still needs, if it got a look.
+   *
+   * `undefined` means no read happened (model down, or nothing described yet) and the situation's
+   * standing list is used. An empty array is a real answer and is honoured: it means the paragraph
+   * covered everything, and we go straight to building rather than inventing a question so the
+   * screen looks thorough.
+   */
+  chosen?: readonly PlanQuestion[],
+): PlanQuestion[] {
+  let wanted: PlanQuestion[]
+  if (chosen) {
+    wanted = [...new Set(chosen)]
+  } else {
+    const set = new Set<PlanQuestion>()
+    for (const v of situations) for (const q of situationByValue(v)?.needs ?? []) set.add(q)
+    wanted = [...set]
+  }
+  /* Still subtracted, whoever chose. The model does not see the account, so it can ask for the one
+   * thing onboarding already answered — and being asked something the portal demonstrably knows is
+   * the exact failure this whole module exists to prevent. */
+  return wanted.filter((q) => !known[q])
 }
 
 /**

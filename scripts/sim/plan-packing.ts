@@ -15,7 +15,7 @@
  */
 
 import { Suite } from './lib'
-import { PLAN_GOALS, SHAPES, SITUATIONS, OWNER_ASSETS, candidatesForGoal, goalReadiness, goalsForShape, matchSituation, situationByValue, assetsCover, assetsBoost } from '../../src/lib/campaigns/data/plan-goals'
+import { PLAN_GOALS, SHAPES, SITUATIONS, OWNER_ASSETS, PLAN_QUESTIONS, candidatesForGoal, gapsFor, goalReadiness, goalsForShape, matchSituation, sanitizeAsk, situationByValue, assetsCover, assetsBoost } from '../../src/lib/campaigns/data/plan-goals'
 import { GENERATED_CATALOG } from '../../src/lib/campaigns/data/catalog.generated'
 import {
   composeMonthlyPlan,
@@ -413,6 +413,63 @@ s.group('Anything it returns is something the rest of the flow can use')
 for (const sit of SITUATIONS) {
   const back = situationByValue(sit.v)
   s.check(`${sit.v} carries a goal and a shape`, !!back?.goal && !!back?.shape)
+}
+
+/* ── the follow-ups are chosen per brief, not run off a fixed list ─────────────────────────────
+ *
+ * Every situation used to carry a standing `needs` array, so two grand openings got the same three
+ * questions whether the owner had already named their date, their assets and their reach or none of
+ * them. The model now picks, and these are the properties that must hold whoever picked.
+ */
+s.group('The model chooses the follow-ups, and the rules still bind')
+{
+  const opening = situationByValue('opening')!
+  const standing = [...opening.needs]
+
+  const noRead = gapsFor(['opening'], {})
+  s.check(`no read -> the standing list (${noRead.join(', ')})`, noRead.join(',') === standing.join(','),
+    'a dead model must cost relevance, not the flow')
+
+  const chosen = gapsFor(['opening'], {}, ['reach'])
+  s.check('a chosen list replaces the standing one', chosen.join(',') === 'reach', chosen.join(','))
+
+  const none = gapsFor(['opening'], {}, [])
+  s.check('an empty choice is honoured, not treated as "no answer"', none.length === 0,
+    'the paragraph covering everything is a real outcome; inventing a question so the screen looks thorough is not')
+
+  const knownWins = gapsFor(['opening'], { reach: true }, ['reach', 'avoid'])
+  s.check('what we already know is still subtracted from the choice', knownWins.join(',') === 'avoid',
+    'the model cannot see the account, so it can ask for the one thing onboarding answered')
+
+  const deduped = gapsFor(['opening'], {}, ['avoid', 'avoid', 'reach'])
+  s.check('a repeated choice renders once', deduped.join(',') === 'avoid,reach', deduped.join(','))
+}
+
+s.group('Nothing outside the bank survives the trip')
+{
+  s.check('a made-up question id is dropped',
+    sanitizeAsk([{ q: 'budget', why: 'x' }, { q: 'reach', why: 'y' }]).map((x) => x.q).join(',') === 'reach')
+  s.check('junk shapes are dropped', sanitizeAsk([null, 'reach', 42, { why: 'no q' }]).length === 0)
+  s.check('a non-array is dropped', sanitizeAsk('reach').length === 0 && sanitizeAsk(undefined).length === 0)
+  s.check('duplicates collapse', sanitizeAsk([{ q: 'avoid', why: 'a' }, { q: 'avoid', why: 'b' }]).length === 1)
+  s.check('a missing reason is empty, never undefined',
+    sanitizeAsk([{ q: 'avoid' }])[0].why === '', 'the screen falls back to its own copy on empty, not on undefined')
+  s.check('a runaway reason is cut', sanitizeAsk([{ q: 'avoid', why: 'x'.repeat(500) }])[0].why.length === 160)
+  s.check(`never more than the ${PLAN_QUESTIONS.length} real questions`,
+    sanitizeAsk(PLAN_QUESTIONS.map((p) => ({ q: p.q, why: '' })).concat([{ q: 'reach', why: '' }])).length === PLAN_QUESTIONS.length)
+}
+
+s.group('The bank and the standing lists agree')
+{
+  for (const p of PLAN_QUESTIONS) {
+    s.check(`${p.q}: says what it changes`, p.changes.length > 30, p.changes)
+    s.check(`${p.q}: says what it asks for`, p.asks.length > 20, p.asks)
+  }
+  const bank = new Set(PLAN_QUESTIONS.map((p) => p.q))
+  for (const sit of SITUATIONS) {
+    const strays = sit.needs.filter((q) => !bank.has(q))
+    s.check(`${sit.v}: every standing need is a real question`, strays.length === 0, strays.join(', '))
+  }
 }
 
 s.report('Plan packing properties')

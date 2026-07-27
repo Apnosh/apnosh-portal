@@ -31,6 +31,7 @@ import {
   gapsFor,
   assetsCover,
   type PlanGoalKey,
+  type PlanQuestion,
   type CampaignShape,
 } from '@/lib/campaigns/data/plan-goals'
 import { excludedByReach, type Reach } from '@/lib/campaigns/data/monthly-plan'
@@ -50,6 +51,13 @@ export interface Answers {
   /** what the owner said, in their words. The goal and the shape both come from it. */
   situations?: string[]
   goals?: PlanGoalKey[]
+  /**
+   * The follow-ups the model judged THIS brief still needs, with its reason for each.
+   *
+   * Undefined means no read happened and the situation's standing list applies. An empty array is a
+   * real answer: the paragraph covered everything.
+   */
+  asked?: { q: PlanQuestion; why: string }[]
   /** A named slow stretch. Not a goal — a WHEN, layered on top of whichever goals were picked. */
   shift?: string[]
   budget?: number
@@ -328,16 +336,24 @@ export default function PlanSetup({
    * plan, not to invent a question so the screen looks thorough.
    */
   const gaps = useMemo(
-    () => gapsFor(situations, {
-      assets: assets.length > 0,
-      promote: promote.length > 0 || !!auto.promote || isKnown(inputs.knownFor),
-      reach: false,
-      shift: shift.length > 0 || isKnown(inputs.slowDays),
-      avoid: false,
-    }),
-    [situations.join(','), assets.length, promote.length, auto.promote, shift.length, inputs],
+    () => gapsFor(
+      situations,
+      {
+        assets: assets.length > 0,
+        promote: promote.length > 0 || !!auto.promote || isKnown(inputs.knownFor),
+        reach: false,
+        shift: shift.length > 0 || isKnown(inputs.slowDays),
+        avoid: false,
+      },
+      /* What the model decided this particular brief needs, when it got a look. Undefined falls
+       * back to the situation's standing list, so a dead model costs relevance, not the flow. */
+      a.asked ? a.asked.map((x) => x.q) : undefined,
+    ),
+    [situations.join(','), assets.length, promote.length, auto.promote, shift.length, inputs, a.asked],
   )
   const asks = (q: string) => gaps.includes(q as never)
+  /** The model's reason for asking this one, in the owner's own terms. Empty when it did not run. */
+  const whyAsk = (q: string) => a.asked?.find((x) => x.q === q)?.why ?? ''
   /* Numbered by position among the questions that survived, so it never reads "3 of 2". */
   const actN = (q: string) => gaps.indexOf(q as never) + 2
 
@@ -396,7 +412,11 @@ export default function PlanSetup({
       })
       const j = (await r.json()) as { ok?: boolean; reason?: string; result?: Record<string, unknown> }
       if (!j.ok || !j.result) { fallbackRead(text); setReadErr(String(j.reason ?? 'upstream')); setReadBack(null); return }
-      const res = j.result as { situation: string | null; shape?: string; when: string | null; until: string | null; assets: string[]; summary: string; unsupported: string[] }
+      const res = j.result as {
+        situation: string | null; shape?: string; when: string | null; until: string | null
+        assets: string[]; summary: string; unsupported: string[]
+        ask?: { q: PlanQuestion; why: string }[]
+      }
       setReadBack({ summary: res.summary, unsupported: res.unsupported ?? [] })
       const sit = res.situation ? situationByValue(res.situation) : undefined
       set({
@@ -404,6 +424,10 @@ export default function PlanSetup({
         ...(res.when ? { when: res.when } : {}),
         ...(res.until ? { until: res.until } : {}),
         ...(res.assets?.length ? { assets: res.assets } : {}),
+        /* Only when we actually understood the brief. Honouring an `ask` from a read that could not
+         * place the situation would let a stray [] skip every follow-up on a plan built from
+         * nothing. */
+        ...(sit && Array.isArray(res.ask) ? { asked: res.ask } : {}),
       })
     } catch {
       fallbackRead(text)
@@ -465,7 +489,7 @@ export default function PlanSetup({
         <textarea
           className="ps-say"
           value={a.described ?? ''}
-          onChange={(e) => { set({ described: e.target.value }); setReadBack(null); setReadErr(null) }}
+          onChange={(e) => { set({ described: e.target.value, asked: undefined }); setReadBack(null); setReadErr(null) }}
           placeholder="We're opening a second location in September and I want a line out the door on day one."
           rows={4}
           style={{
@@ -619,7 +643,7 @@ export default function PlanSetup({
         </div>
       )}
 
-      {asks('assets') && <Act n={actN('assets')} of={1 + gaps.length} title="What have you got to work with?" sub="Anything you already have, or could get easily. We build around it instead of billing you for it.">
+      {asks('assets') && <Act n={actN('assets')} of={1 + gaps.length} title="What have you got to work with?" sub={whyAsk('assets') || 'Anything you already have, or could get easily. We build around it instead of billing you for it.'}>
         <Grid>
           {OWNER_ASSETS.map((o) => {
             const on = assets.includes(o.v)
@@ -649,7 +673,7 @@ export default function PlanSetup({
       </Act>}
 
       {/* 3 ── what to promote */}
-      {asks('promote') && <Act n={actN('promote')} of={1 + gaps.length} title="What should we put in front of people?" sub="Your menu, and everything else worth showing. Pick as many as fit.">
+      {asks('promote') && <Act n={actN('promote')} of={1 + gaps.length} title="What should we put in front of people?" sub={whyAsk('promote') || 'Your menu, and everything else worth showing. Pick as many as fit.'}>
         {menu.length > 0 && (
           <>
             <GroupLabel>From your menu</GroupLabel>
@@ -683,7 +707,7 @@ export default function PlanSetup({
       </Act>}
 
       {/* 4 ── who, and how far */}
-      {asks('reach') && <Act n={actN('reach')} of={1 + gaps.length} title="Who are you trying to reach?" sub="Who walks in, and how far you want to pull from. Both change the work.">
+      {asks('reach') && <Act n={actN('reach')} of={1 + gaps.length} title="Who are you trying to reach?" sub={whyAsk('reach') || 'Who walks in, and how far you want to pull from. Both change the work.'}>
         <GroupLabel>Who</GroupLabel>
         <Grid>
           {AUDIENCE.map((o) => (
@@ -707,7 +731,7 @@ export default function PlanSetup({
       </Act>}
 
       {/* 5 ── what to avoid */}
-      {asks('avoid') && <Act n={actN('avoid')} of={1 + gaps.length} title="Anything we should never do?" sub="Optional, and the one place a plan most often goes wrong. Pick anything that is off limits.">
+      {asks('avoid') && <Act n={actN('avoid')} of={1 + gaps.length} title="Anything we should never do?" sub={whyAsk('avoid') || 'Optional, and the one place a plan most often goes wrong. Pick anything that is off limits.'}>
         <Grid>
           {AVOID.map((o) => {
             const on = avoid.includes(o.v)

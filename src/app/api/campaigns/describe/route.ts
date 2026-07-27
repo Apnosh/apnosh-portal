@@ -20,7 +20,7 @@
  * plan now, or send the words to a human who reads them. It never pretends to have understood.
  */
 import { NextResponse } from 'next/server'
-import { SITUATIONS, OWNER_ASSETS } from '@/lib/campaigns/data/plan-goals'
+import { SITUATIONS, OWNER_ASSETS, PLAN_QUESTIONS, sanitizeAsk, type PlanQuestion } from '@/lib/campaigns/data/plan-goals'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -39,6 +39,19 @@ export interface DescribeResult {
   summary: string
   /** what they asked for that we do not sell. Named, never dropped. */
   unsupported: string[]
+  /**
+   * WHICH FOLLOW-UPS THIS PARTICULAR BRIEF STILL NEEDS, and why each one.
+   *
+   * The point of reading the paragraph is not just to fill slots, it is to work out what is still
+   * missing. Two grand openings are not the same campaign: "12 September, we have DJs and
+   * giveaways, pull from the whole city" has answered three of the five already, while "we're
+   * opening soon" has answered none. Running the same fixed list at both is the thing that made
+   * this feel like a form.
+   *
+   * `why` quotes their own words back. It is what turns "here are three more questions" into
+   * evidence that something actually read what they wrote.
+   */
+  ask: { q: PlanQuestion; why: string }[]
 }
 
 const SYS = `You turn a restaurant owner's description of a marketing campaign into structured fields.
@@ -53,6 +66,9 @@ Return ONLY a JSON object, no prose, with exactly these keys:
   unsupported array of short phrases for things they asked for that are NOT in the situation or
               asset lists and are not marketing services a small agency would run (e.g. "print
               flyers", "sponsor a team", "radio spot"). [] if none.
+  ask         array of {"q": <question id>, "why": <one short sentence>} for the follow-ups THIS
+              brief still needs. Ordered most important first. [] if the paragraph already covers
+              everything.
 
 Rules:
 - Pick the situation that matches their PRIMARY intent, not an incidental mention.
@@ -60,12 +76,27 @@ Rules:
   season is "run"; anything with no end is "ongoing".
 - Never invent a date. If they say "next month" with no day, return null and let them pick.
 - assets are things the OWNER already has or can get, never things we would sell them.
-- Be conservative. A null the owner corrects is better than a confident wrong answer.`
+- Be conservative. A null the owner corrects is better than a confident wrong answer.
+
+Choosing "ask" is the most important thing you do here:
+- Only ids from the question list. Never invent a question; nothing downstream can read one.
+- Leave out anything they already answered, even loosely. If they named what they can put behind
+  it, do not ask about assets. If they said the neighbourhood or the whole city, do not ask about
+  reach. Asking someone something they just told you is the failure to avoid.
+- Leave out anything that cannot change THIS campaign. Do not ask which shifts are empty for a
+  grand opening; there is no trading history to be uneven.
+- Fewer is better. Three is a lot. Zero is a valid and good answer.
+- "why" is one short sentence addressed to the owner, in plain words, referring to what they wrote.
+  Good: "You said DJs and giveaways, but not how far out you want to pull people from."
+  Bad: "To better tailor your marketing plan."`
 
 function buildPrompt(text: string): string {
   const sits = SITUATIONS.map((s) => `  ${s.v} = ${s.label} (${s.sub})`).join('\n')
   const assets = OWNER_ASSETS.map((a) => `  "${a.v}"`).join('\n')
-  return `Situation ids:\n${sits}\n\nAsset strings (use these exactly):\n${assets}\n\nThe owner wrote:\n"""${text}"""`
+  /* Shipped from PLAN_QUESTIONS rather than restated here, so the rule the model is judging against
+   * cannot drift from the rule the rest of the codebase states. */
+  const qs = PLAN_QUESTIONS.map((q) => `  ${q.q} — ${q.asks}\n      changes: ${q.changes}`).join('\n')
+  return `Situation ids:\n${sits}\n\nAsset strings (use these exactly):\n${assets}\n\nQuestions you may ask for:\n${qs}\n\nThe owner wrote:\n"""${text}"""`
 }
 
 export async function POST(req: Request) {
@@ -131,6 +162,12 @@ export async function POST(req: Request) {
   const iso = (v: unknown) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null)
   const shape = validSit ? (SITUATIONS.find((s) => s.v === validSit)!.shape) : null
 
+  /*
+   * Same rule as the ids: the model does not get to widen the vocabulary. Kept in plan-goals with
+   * the vocabulary it validates against, and tested there.
+   */
+  const validAsk = sanitizeAsk(parsed.ask)
+
   return NextResponse.json({
     ok: true,
     result: {
@@ -142,6 +179,7 @@ export async function POST(req: Request) {
       assets: validAssets,
       summary: typeof parsed.summary === 'string' ? parsed.summary.slice(0, 200) : '',
       unsupported: (Array.isArray(parsed.unsupported) ? parsed.unsupported : []).slice(0, 6).map((x) => String(x).slice(0, 80)),
+      ask: validAsk,
     } satisfies DescribeResult,
   })
 }
