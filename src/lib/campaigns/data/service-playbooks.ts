@@ -423,6 +423,95 @@ export const SERVICE_PLAYBOOKS: Record<string, ServicePlaybook> = {
     },
   },
 
+  // ── "Tracking & analytics baseline" (tracking). THE measuring stick: every other line on the
+  //    plan is judged against what this installs, so it runs first and it has to be right.
+  //    handlerWhy in the catalog says it plainly: "Mis-wired tracking poisons every later decision."
+  //
+  //    Scope is drawn against neighbours the same way gbp-setup is: this stands the measurement up
+  //    ONCE (tags, results, labelled links, a before-snapshot). The recurring monthly read is
+  //    `reporting`; the attribution links each published piece gets are the publish rail's job. The
+  //    five steps below are the catalog's five promised deliverables, one each, so an operator
+  //    finishing the checklist has delivered exactly what was sold — no more, and nothing missing.
+  'tracking': {
+    serviceId: 'tracking',
+    steps: [
+      {
+        id: 'intake',
+        label: 'Get access to your site and your Google account',
+        lead: 'Collect the access only the owner can give, before any wiring starts.',
+        actions: [
+          'Get access to the website (site tool login, or the web person to contact)',
+          'Get access to the Google account the business uses, for Analytics and Search Console',
+          'Confirm the phone number guests actually call, so calls can be counted',
+          'Get the online ordering link and the reservations link, if there are any',
+          'Confirm which locations and domains are in scope',
+        ],
+        actor: 'client',
+        needsInput: 'analytics-access',
+        proof: 'note',
+      },
+      {
+        id: 'install',
+        label: 'Install analytics and the tracking tags',
+        lead: 'Put the counting tools on the site so traffic can be seen at all.',
+        actions: [
+          'Create or connect Google Analytics (GA4) on the business Google account',
+          'Install the GA4 tag on every page of the site, including the menu and order pages',
+          'Connect Google Search Console and confirm the domain is verified',
+          'Confirm the tag fires on a real phone and a real desktop, not just the preview',
+          'Filter out office and agency traffic so the numbers are guests, not us',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'results',
+        label: 'Count calls, directions, orders and reservations as real results',
+        lead: 'A visit is not a result. Wire the four things that mean money.',
+        actions: [
+          'Set up a conversion for calls from the website and from the Google listing',
+          'Set up a conversion for directions requests',
+          'Set up a conversion for a completed online order, or the click out to the ordering page',
+          'Set up a conversion for a completed reservation, or the click out to the booking page',
+          'Trigger each one by hand and confirm it lands in the reports',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'labels',
+        label: 'Label every link so each move can be judged on its own',
+        lead: 'Without labels, every result is credited to nobody.',
+        actions: [
+          'Agree a single naming scheme for labelled links and write it down',
+          'Label the links on the Google profile, the social bios, and the email footer',
+          'Confirm a labelled link shows up correctly in the reports',
+          'Hand the scheme to whoever posts, so future links stay labelled',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+      {
+        id: 'baseline',
+        label: 'Capture the before picture and hand it over',
+        lead: 'Write down where they started, or nothing later can be proven.',
+        actions: [
+          'Record the last 90 days of visits, calls, directions and orders where history exists',
+          'Note plainly which numbers have no history yet and start from today',
+          'Save the starting Google listing views and search terms',
+          'Deliver the baseline as one short page the owner can actually read',
+          'Point out the two or three numbers worth watching, and what good looks like',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: 'Your baseline report and analytics access',
+      metricLabel: 'The measuring stick itself',
+    },
+  },
+
   // ── "Get listed everywhere" (listings-sync). Claim and standardize the business across Yelp,
   //    Apple Maps, Facebook, Bing, and more, then clean up duplicates. Listing propagation is a
   //    real external wait (up to a week), carried as the gate. ──

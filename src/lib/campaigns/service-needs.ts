@@ -190,6 +190,38 @@ export function deriveServiceNeeds(
           push({ id: 'ad-access', kind: 'input', group: 'Access', field: 'adAccess', inputType: 'text', title: 'Your ad accounts', why: 'We run your ads from your own Meta and Google ad accounts. Tell us what you have, or write "none" and we set them up with you.', placeholder: 'e.g. we have Meta Business. Or: none', value: exec.adAccess ?? '', done: !!exec.adAccess })
           push({ id: 'ad-targeting', kind: 'input', group: 'Info', field: 'adTargeting', inputType: 'text', title: 'Who should your ads reach?', why: 'Your ads spend real money. Tell us the area and the people to aim at.', placeholder: 'e.g. families within 5 miles of downtown', value: exec.adTargeting ?? '', done: !!exec.adTargeting })
           break
+        case 'analytics-access':
+          // The measuring stick needs three things and no new columns: the Google account (an
+          // action, not a field — it is a connect flow), a way onto the website to place the tag,
+          // and the two links that turn a click into a countable result. Ordering and booking links
+          // are shared with the Google-button card on purpose: same fact, asked once.
+          push({
+            id: 'analytics-access', kind: 'action', group: 'Access',
+            title: 'Connect your Google account',
+            why: 'Analytics and Search Console live on your Google account. Without them we are guessing at where your guests come from.',
+            actionLabel: 'Connect', href: CONNECT_HREF, done: false,
+          })
+          push({
+            id: 'site-access', kind: 'input', group: 'Access', field: 'siteAccess', inputType: 'text',
+            title: 'Who runs your website?',
+            why: 'The tracking tag goes on your site. Name your website tool or the person who manages it, and we reach out and handle the rest.',
+            placeholder: 'e.g. Wix, GoDaddy, or your web person\'s email',
+            value: exec.siteAccess ?? '', done: !!exec.siteAccess,
+          })
+          push({
+            id: 'ordering-link', kind: 'input', group: 'Access', field: 'orderingLink', inputType: 'text',
+            title: 'Your online ordering link',
+            why: 'So a completed order counts as a real result, not just another visit.',
+            placeholder: 'e.g. yourplace.toasttab.com or your own order page',
+            value: exec.orderingLink ?? '', done: !!exec.orderingLink, optional: true,
+          })
+          push({
+            id: 'booking-link', kind: 'input', group: 'Access', field: 'bookingLink', inputType: 'text',
+            title: 'Your reservations link',
+            why: 'So a booking counts too. OpenTable, Resy, Yelp and your own booking page all work.',
+            value: exec.bookingLink ?? '', done: !!exec.bookingLink, optional: true,
+          })
+          break
         case 'onSiteContact':
           // Covered by the shoot rail below (same field, richer group) — nothing extra to ask here.
           break

@@ -15,7 +15,11 @@
     "sim:all": "tsx scripts/sim/lifecycle.ts && tsx scripts/sim/db-e2e.ts",
     "sim:creator": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-journey.ts",
     "sim:creator-screens": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-screens.ts",
-    "sim:demo-creator": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-demo-seed.ts"
+    "sim:demo-creator": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/creator-demo-seed.ts",
+    "sim:plan": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/monthly-plan-e2e.ts",
+    "sim:packing": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/plan-packing.ts",
+    "sim:services": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/service-completeness.ts",
+    "smoke:plan": "tsx scripts/smoke-render-slow-nights.tsx"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",

@@ -42,3 +42,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 supabase/.temp/
+
+# Throwaway probe scripts. One-off analyses, not part of the product.
+# Anything worth keeping graduates to scripts/sim/ as a real suite.
+scripts/tmp/

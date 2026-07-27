@@ -37,7 +37,10 @@ export async function updateSession(request: NextRequest) {
   const isDashboard = path.startsWith('/dashboard')
   const isAdminRoute = path.startsWith('/admin')
   const isOnboarding = path.startsWith('/onboarding')
-  const isClientRoute = path.startsWith('/client')
+  // Trailing slash, deliberately. Without it this also swallowed /client-agreement — the public
+  // service terms — and sent anyone trying to read them before signing up to a login screen, which
+  // is the exact opposite of the point. Same trick already used for /creator/ below.
+  const isClientRoute = path.startsWith('/client/')
   const isWorkRoute = path.startsWith('/work') || path.startsWith('/marketplace')
   // The protected creator surfaces all live under /creator/* — the trailing slash keeps /creator-signup
   // (the public signup) out of this, so an unauthenticated creator can actually reach it.
