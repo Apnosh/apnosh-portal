@@ -182,7 +182,17 @@ const CSS = `
   border:2.5px solid #4abd98; box-shadow:0 2px 10px rgba(0,0,0,.16); }
 .ps-pick { transition: transform .12s ease, border-color .12s ease, background .12s ease; }
 .ps-pick:active { transform: scale(.975); }
-@media (prefers-reduced-motion: reduce) { .ps-pick { transition:none } }
+
+/* The first question is a page you write on, not a form field on a card. No border, no fill, no
+   focus ring — the caret is the only affordance it needs, and anything else competes with the
+   sentence being written. */
+.ps-say { -webkit-appearance:none; appearance:none; }
+.ps-say::placeholder { color:#c3c3c8; }
+.ps-say:focus { outline:none; }
+.ps-go { transition: opacity .18s ease, transform .12s ease; }
+.ps-go:active:not(:disabled) { transform: scale(.985); }
+
+@media (prefers-reduced-motion: reduce) { .ps-pick, .ps-go { transition:none } }
 `
 
 /* ────────────────────────────────────────────────────────────────────────────────── bits ── */
@@ -190,17 +200,19 @@ const CSS = `
 function Act({ n, of, title, sub, children }: { n: number; of: number; title: string; sub: string; children: React.ReactNode }) {
   return (
     <section style={{ marginBottom: 38 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
-        <span style={{ width: 22, height: 22, borderRadius: 99, background: C.ink, color: '#fff', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          {n}
-        </span>
-        {/* Only once the total is real. Before anything is picked there are no follow-ups yet, so
-            the honest count is "1 of 1" — which reads as a bug, and undersells a flow that is about
-            to ask two more things. Say nothing until we know. */}
-        {of > n && <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', color: C.faint }}>{n} OF {of}</span>}
-      </div>
-      <h2 style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, color: C.ink, lineHeight: 1.15, margin: '0 0 5px', letterSpacing: '-0.01em' }}>{title}</h2>
-      <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: '0 0 16px' }}>{sub}</p>
+      {/* The whole marker, not just the count, waits until there is a sequence to be inside. On the
+          opening screen there are no follow-ups yet, so a badge reading "1" and a count reading
+          "1 OF 1" are both furniture around a question that has not been answered. */}
+      {of > n && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
+          <span style={{ width: 22, height: 22, borderRadius: 99, background: C.ink, color: '#fff', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {n}
+          </span>
+          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', color: C.faint }}>{n} OF {of}</span>
+        </div>
+      )}
+      <h2 style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, lineHeight: 1.12, margin: '0 0 6px', letterSpacing: '-0.024em' }}>{title}</h2>
+      <p style={{ fontSize: 14, color: C.mute, lineHeight: 1.5, margin: '0 0 22px', maxWidth: '30ch' }}>{sub}</p>
       {children}
     </section>
   )
@@ -445,50 +457,45 @@ export default function PlanSetup({
         title="What do you want to do?"
         sub="Say it the way you would say it to a person. We work out the rest."
       >
-        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '14px 15px 13px' }}>
-          <textarea
-            value={a.described ?? ''}
-            onChange={(e) => { set({ described: e.target.value }); setReadBack(null); setReadErr(null) }}
-            placeholder={'e.g. We are opening our second location on Mission St in September. I want a line out the door on day one. We can get DJs, do giveaways, whatever it takes.'}
-            rows={5}
-            style={{
-              width: '100%', border: 'none', outline: 'none', resize: 'vertical', background: 'none',
-              fontFamily: "'Inter',system-ui,sans-serif", fontSize: 15, lineHeight: 1.5, color: C.ink, minHeight: 96,
-            }}
-          />
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8, paddingTop: 10, borderTop: `0.5px solid ${C.line}` }}>
-            <span style={{ fontSize: 11.5, color: C.faint }}>Anything you write reaches the people doing the work.</span>
-            <button
-              type="button" onClick={describe} disabled={reading || (a.described ?? '').trim().length < 12}
-              style={{
-                flexShrink: 0, height: 34, padding: '0 14px', borderRadius: 17, border: 'none', cursor: 'pointer',
-                background: (a.described ?? '').trim().length < 12 ? C.bg : C.ink,
-                color: (a.described ?? '').trim().length < 12 ? C.faint : '#fff',
-                fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13, fontWeight: 600,
-              }}
-            >
-              {reading ? 'Reading...' : 'Read this back'}
-            </button>
-          </div>
-        </div>
+        {/* No card, no border, no fill. The sentence they are writing is the only thing on the
+            screen with any weight, so it gets the page rather than a field on top of one, and it is
+            set at reading size rather than form-input size. A bulleted "worth mentioning" list used
+            to sit under here teaching the format; the placeholder already does that in one line,
+            and the list was three more things to read before you could start. */}
+        <textarea
+          className="ps-say"
+          value={a.described ?? ''}
+          onChange={(e) => { set({ described: e.target.value }); setReadBack(null); setReadErr(null) }}
+          placeholder="We're opening a second location in September and I want a line out the door on day one."
+          rows={4}
+          style={{
+            width: '100%', border: 'none', outline: 'none', resize: 'none', background: 'transparent',
+            padding: 0, margin: 0, display: 'block',
+            fontFamily: "'Inter',system-ui,sans-serif", fontSize: 19, lineHeight: 1.5,
+            letterSpacing: '-0.011em', color: C.ink, minHeight: 132,
+          }}
+        />
 
-        {/* What to put in, once, before they have written anything. A blank box is the highest-
-            effort thing an interface can ask for, and this is the cheapest way to lower it that is
-            not a list of options: it teaches the shape of a useful answer without offering one. */}
-        {(a.described ?? '').trim().length === 0 && (
-          <div style={{ marginTop: 10, padding: '0 3px' }}>
-            <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 5 }}>Worth mentioning, if it applies</div>
-            {[
-              'What is happening, in your words',
-              'When, if there is a date',
-              'Anything you can put behind it: a DJ, a giveaway, a space',
-            ].map((h) => (
-              <div key={h} style={{ display: 'flex', gap: 7, fontSize: 12.5, color: C.mute, lineHeight: 1.5, marginTop: 2 }}>
-                <span style={{ color: C.faint }}>·</span>{h}
-              </div>
-            ))}
-          </div>
-        )}
+        {/* Full width, and quiet until there is something to send. The old control was a 34px pill
+            tucked in a footer beside a caption, which made the one action on the screen the
+            smallest thing on it. */}
+        <button
+          type="button" className="ps-go" onClick={describe}
+          disabled={reading || (a.described ?? '').trim().length < 12}
+          style={{
+            width: '100%', height: 50, marginTop: 8, borderRadius: 25, border: 'none',
+            cursor: (a.described ?? '').trim().length < 12 ? 'default' : 'pointer',
+            background: (a.described ?? '').trim().length < 12 ? '#ececee' : C.green,
+            color: (a.described ?? '').trim().length < 12 ? C.faint : '#fff',
+            fontFamily: "'Inter',system-ui,sans-serif", fontSize: 16, fontWeight: 620, letterSpacing: '-0.01em',
+          }}
+        >
+          {reading ? 'Reading…' : 'Continue'}
+        </button>
+
+        <div style={{ fontSize: 12, color: C.faint, textAlign: 'center', marginTop: 11, lineHeight: 1.45 }}>
+          Anything you write reaches the people doing the work.
+        </div>
 
         {/* What we understood, in their terms, above the picks it filled in. */}
         {readBack && (
@@ -592,7 +599,12 @@ export default function PlanSetup({
           </div>
         )}
 
-        <DecideForMe on={!!auto.goals} resolves={autoGoal} onToggle={() => { setAuto('goals', !auto.goals); if (!auto.goals) set({ situations: [], goals: [], shape: undefined, auto: { ...auto, goals: true } }) }} />
+        {/* Held back until there is something written. On an empty screen a dashed "Decide for me"
+            card is a second, competing offer next to the only thing we want them to do, and it is
+            answering a question they have not been asked yet. */}
+        {((a.described ?? '').trim().length > 0 || situations.length > 0 || !!auto.goals) && (
+          <DecideForMe on={!!auto.goals} resolves={autoGoal} onToggle={() => { setAuto('goals', !auto.goals); if (!auto.goals) set({ situations: [], goals: [], shape: undefined, auto: { ...auto, goals: true } }) }} />
+        )}
       </Act>
 
       {/* 2 ── what the owner brings. Nothing captured this before, and both real event requests
@@ -721,7 +733,9 @@ export default function PlanSetup({
         </Grid>
       </Act>}
 
-      {connect.length > 0 && (
+      {/* Also waits. Connecting Facebook is a real ask, but it is not the first thing someone came
+          here to do, and on a blank screen it turns one question into a to-do list. */}
+      {situations.length > 0 && connect.length > 0 && (
         <section style={{ marginBottom: 28 }}>
           <GroupLabel>Worth connecting</GroupLabel>
           {connect.map((c) => (
@@ -737,6 +751,11 @@ export default function PlanSetup({
         </section>
       )}
 
+      {/* A second, optional box on the same screen as the first one is just confusing: two places
+          to type, and the smaller one carries a caption explaining which is which. It appears once
+          the first question is answered, which is also the only point at which "anything else" is a
+          question that can be understood. */}
+      {situations.length > 0 && (
       <section style={{ marginBottom: 26 }}>
         <GroupLabel>Anything else</GroupLabel>
         <div style={{ fontSize: 12, color: C.faint, marginBottom: 9, lineHeight: 1.45 }}>
@@ -751,7 +770,11 @@ export default function PlanSetup({
           />
         </div>
       </section>
+      )}
 
+      {/* Also waits. Before the first question is answered this is a second, dead button sitting
+          under the live one, saying what is still missing — which is everything. */}
+      {situations.length > 0 && (
       <button
         type="button" onClick={() => onBuild({ ...a, shape, situations, goals, shift, assets, promote, audience, reach, avoid })} disabled={!ready}
         style={{
@@ -770,10 +793,13 @@ export default function PlanSetup({
               : 'Pick something to promote, or let us decide'}
         {ready && <ArrowRight size={18} />}
       </button>
+      )}
 
-      <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, padding: '13px 4px 0', textAlign: 'center' }}>
-        You pick when each piece goes out after the plan is built, not now.
-      </div>
+      {situations.length > 0 && (
+        <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, padding: '13px 4px 0', textAlign: 'center' }}>
+          You pick when each piece goes out after the plan is built, not now.
+        </div>
+      )}
     </div>
   )
 }
