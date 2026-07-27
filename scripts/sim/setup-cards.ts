@@ -200,4 +200,62 @@ s.group('The look is adjustable in one place')
   )
 }
 
+/* ── 5. a walkthrough is always mounted in the portal shell ──────────────────────────────────────
+ *
+ * The walkthrough components carry no width of their own, deliberately: the phone-shaped MvpShell
+ * is what holds them to a column and gives them the header and the bottom nav. Mount one without
+ * it and on a desktop window it fills the screen edge to edge.
+ *
+ * That is not hypothetical. The first version of /preview/setup/gbp did exactly this, and the
+ * reason it went unnoticed is the part worth encoding: at 375px the shell makes no visible
+ * difference, so a mobile-width check — the only kind anyone runs on a mobile-first portal — cannot
+ * see the mistake. A rule catches it; looking does not.
+ *
+ * The check follows the sibling-wrapper pattern on purpose. The bare route imported the walkthrough
+ * into a `preview-view.tsx` next to the page, so a naive "does this file mount the shell" test
+ * would have passed the very page that was broken.
+ */
+s.group('Every walkthrough is mounted in the portal shell')
+{
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+
+  const WALKTHROUGHS = ['gbp-fixer', 'order-buttons', 'review-replies', 'listings-fix', 'measure-setup']
+
+  /** Every page.tsx under src/app, however deep. */
+  const pages: string[] = []
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, e.name)
+      if (e.isDirectory()) walk(p)
+      else if (e.name === 'page.tsx') pages.push(p)
+    }
+  }
+  walk('src/app')
+
+  /** A route "renders a walkthrough" if the page or anything beside it imports one. */
+  const rendersWalkthrough = (pagePath: string): string | null => {
+    const dir = path.dirname(pagePath)
+    for (const f of fs.readdirSync(dir)) {
+      if (!f.endsWith('.tsx')) continue
+      const src = fs.readFileSync(path.join(dir, f), 'utf8')
+      const hit = WALKTHROUGHS.find((w) => src.includes(`components/mvp/${w}'`))
+      if (hit) return hit
+    }
+    return null
+  }
+
+  const hosts = pages.map((p) => ({ p, w: rendersWalkthrough(p) })).filter((x) => x.w)
+  s.check(`${hosts.length} route(s) render a setup walkthrough`, hosts.length >= 6, hosts.map((h) => h.p).join(', '))
+
+  for (const { p, w } of hosts) {
+    const src = fs.readFileSync(p, 'utf8')
+    s.check(
+      `${p.replace('src/app', '')} (${w}) mounts MvpShell`,
+      src.includes('MvpShell'),
+      'without the shell this fills a desktop window, and a 375px check cannot tell',
+    )
+  }
+}
+
 s.report('Setup cards')
