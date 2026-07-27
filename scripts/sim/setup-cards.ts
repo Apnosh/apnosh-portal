@@ -20,6 +20,7 @@
 import { Suite } from './lib'
 import { SETUP_CARDS, setupCardById } from '../../src/lib/campaigns/setup/cards'
 import { laneViolations, canBeDoneForYou, whatYouGetFor, laneOf } from '../../src/lib/campaigns/setup/types'
+import { SPACE, RADIUS, TEXT } from '../../src/components/mvp/tokens'
 import type { SetupLaneKind } from '../../src/lib/campaigns/setup/types'
 import { whatYouGet } from '../../src/lib/campaigns/builder/what-you-get'
 import { gbpLaneFromDoer } from '../../src/lib/campaigns/builder/adapter'
@@ -255,6 +256,71 @@ s.group('Every walkthrough is mounted in the portal shell')
       src.includes('MvpShell'),
       'without the shell this fills a desktop window, and a 375px check cannot tell',
     )
+  }
+}
+
+/* ── 6. spacing and type stop drifting ───────────────────────────────────────────────────────────
+ *
+ * The colour drift was two files disagreeing on one hex. This is a different shape: across the kit
+ * and the five walkthroughs there are 12 distinct border radii, 12 gaps, 16 top margins and 20 font
+ * sizes — a continuum rather than a scale, with 11 and 12 and 13 pixels of radius doing one job and
+ * 12, 12.5, 13, 13.5 point type doing another. The kit itself, which exists to prevent this, has
+ * three radii inside 9KB.
+ *
+ * NOTHING IS RENUMBERED, and the checks below are shaped around that. Snapping 13 to 12 changes
+ * roughly six hundred renders across screens that mostly sit behind a login, so it is a visible
+ * change to the whole portal and wants an owner's eye rather than a refactor's confidence.
+ *
+ * What is enforced instead: the scales exist and are coherent, and the count of distinct values in
+ * each file may not grow. New work agrees with old work by default because the scales were derived
+ * from the values already dominant; a new card that invents a fourteenth radius fails.
+ */
+s.group('The scales exist and are coherent')
+{
+  const ordered = (o: Record<string, number>) => {
+    const v = Object.values(o)
+    return v.every((n, i) => i === 0 || n > v[i - 1])
+  }
+  s.check(`SPACE has ${Object.keys(SPACE).length} steps, ascending`, ordered(SPACE), JSON.stringify(SPACE))
+  s.check(`RADIUS has ${Object.keys(RADIUS).length} steps, ascending`, ordered(RADIUS), JSON.stringify(RADIUS))
+  s.check(`TEXT has ${Object.keys(TEXT).length} steps, ascending`, ordered(TEXT), JSON.stringify(TEXT))
+  for (const [name, scale] of [['SPACE', SPACE], ['RADIUS', RADIUS], ['TEXT', TEXT]] as const) {
+    const v = Object.values(scale)
+    s.check(`${name} has no duplicate steps`, new Set(v).size === v.length, 'two names for one value is how a scale rots')
+  }
+  /* Derived from the code, not invented: the workhorse values must already be the common ones. */
+  s.check('RADIUS.md is the value 11/12/13 collapse to', RADIUS.md === 12)
+  s.check('TEXT.md is the most used size in the walkthroughs', TEXT.md === 13)
+}
+
+s.group('No file grows a new spacing or type value')
+{
+  const fs = require('node:fs') as typeof import('node:fs')
+  /* Today's counts, frozen. These may fall; they may not rise. gbp-fixer is the worst by a distance
+   * and is the one carrying the most unreviewed design debt. */
+  const CEILINGS: Record<string, { borderRadius: number; gap: number; fontSize: number }> = {
+    'walkthrough-kit': { borderRadius: 6, gap: 4, fontSize: 10 },
+    'gbp-fixer': { borderRadius: 8, gap: 9, fontSize: 16 },
+    'order-buttons': { borderRadius: 2, gap: 3, fontSize: 3 },
+    'review-replies': { borderRadius: 5, gap: 4, fontSize: 4 },
+    'listings-fix': { borderRadius: 3, gap: 3, fontSize: 4 },
+    'measure-setup': { borderRadius: 4, gap: 5, fontSize: 3 },
+  }
+  const distinct = (src: string, prop: string) => {
+    const out = new Set<string>()
+    for (const m of src.matchAll(new RegExp(`${prop}:\\s*([0-9]+(?:\\.[0-9]+)?)`, 'g'))) out.add(m[1])
+    return out.size
+  }
+  for (const [file, caps] of Object.entries(CEILINGS)) {
+    const src = fs.readFileSync(`src/components/mvp/${file}.tsx`, 'utf8')
+    for (const prop of ['borderRadius', 'gap', 'fontSize'] as const) {
+      const n = distinct(src, prop)
+      s.check(
+        `${file}: ${n} distinct ${prop} (ceiling ${caps[prop]})`,
+        n <= caps[prop],
+        `a new value here is a new thing to keep in sync. Use SPACE / RADIUS / TEXT from tokens.ts`,
+      )
+    }
   }
 }
 

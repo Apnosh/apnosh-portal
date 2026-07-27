@@ -77,6 +77,63 @@ export const C = {
 /** The display face. Falls back through Inter to the system stack. */
 export const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
+/* ── spacing, radius and type ────────────────────────────────────────────────────────────────────
+ *
+ * WHAT WAS THERE. Across the kit and the five walkthroughs: 12 distinct border radii, 12 gaps, 16
+ * top margins and 20 font sizes. Not a scale, a continuum — 11 and 12 and 13 pixels of radius doing
+ * the same job, 12 and 12.5 and 13 and 13.5 point type doing the same job. The walkthrough kit,
+ * which exists to stop exactly this, has radii of 11, 12 and 13 inside its own 9KB.
+ *
+ * WHY NOTHING IS RENUMBERED. The colour merge was safe because every value was identical, so the
+ * swap could not move a pixel. Spacing is the opposite: snapping 13 to 12 changes the render, about
+ * six hundred times, across surfaces that mostly sit behind a login where nobody can look at the
+ * result. That is a visible change to the whole portal and it wants an owner's eye, not a
+ * refactor's confidence.
+ *
+ * SO THIS IS FOR WHAT COMES NEXT. The scales below are derived from the values already dominant in
+ * the code rather than invented, so new work agrees with old work by default instead of fighting
+ * it. Existing numbers stay exactly as they are, and a ratchet in scripts/sim/setup-cards.ts stops
+ * the count of distinct values growing. Normalising what is already there is a separate decision.
+ */
+
+/** Gaps, margins and padding. Derived from the dominant real values (6 and 7 and 8 carry most of
+ *  the work today, so this stays close to them rather than imposing a 4-point grid nothing uses). */
+export const SPACE = {
+  xs: 4,
+  sm: 6,
+  md: 8,
+  lg: 12,
+  xl: 16,
+  xxl: 24,
+} as const
+
+/** Corners. `md` is the workhorse: 11, 12 and 13 together account for 68 of the 135 radii in the
+ *  walkthroughs today, and they are indistinguishable, so they collapse to one value going
+ *  forward. `pill` is a fully round end, which is a real and separate intent. */
+export const RADIUS = {
+  sm: 8,
+  md: 12,
+  lg: 16,
+  pill: 999,
+} as const
+
+/** Type sizes, one per role. Twenty sizes were doing the work of about six.
+ *  `md` is 13 because 13 is the single most used size in the walkthroughs. */
+export const TEXT = {
+  /** Labels and chips. */
+  xs: 11,
+  /** Secondary and helper lines. */
+  sm: 12.5,
+  /** Body. */
+  md: 13,
+  /** A lead line, or a row title. */
+  lg: 15,
+  /** Section headings. */
+  xl: 17,
+  /** The one big line at the top of a screen. */
+  hero: 22,
+} as const
+
 /** Amber for warning / due / pending states in the portal shell. Kept out of `C` so the core token
  *  map stays the brand greens plus coral, which is how the shell has always read. */
 export const AMBER = '#bd7e16'
