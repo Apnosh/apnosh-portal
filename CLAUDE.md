@@ -169,3 +169,24 @@ States: `draft` → `internal_review` → `client_review` → `approved` → `sc
 - **Mobile-first responsive** — all client-facing pages must work on phone screens
 - **Industry-agnostic** — no restaurant-specific fields or copy; industry is a tag, not a schema
 - **Plain English copy** — no jargon, no "leverage your synergies"; write like a human
+
+## The strategist-flow constitution (2026-07-28)
+
+Laws for the plan→route→checkout flow. Full plan: docs/STRATEGIST-FLOW-PLAN.md. Tool↔catalog map:
+docs/TOOL-CATALOG-RECONCILIATION.md. Every law is enforced in scripts/sim/setup-cards.ts or its
+successor — a law without a failing test is a comment.
+
+1. **The platform law**: a lane may not promise what the platform cannot do (`laneViolations`).
+2. **The orphan rule**: a genuinely useful move is never silently dropped because we cannot sell
+   it — it ships as DIY or AI guide.
+3. **No orphan without a guide**: `serviceable: false` is only legal with a real guide behind it.
+4. **Record the allocation at mint**: composed plan, routing, prices, signals seen, outcome stub.
+   The first cohort is the only training set that will ever exist.
+5. **Vault writes are acceptance criteria**: campaign #2 must ask less than campaign #1
+   (`satisfyRequirement` on every connect/mark-done path).
+6. **AI failure is loud and graceful**: every AI surface has a stated degraded mode (pattern:
+   plan-setup's `matchSituation` floor) and credit/auth failure alerts admin. Silent blanks are
+   prohibited.
+7. **Cite your source**: plan numbers carry data maturity — "our estimate" until n ≥ 5.
+8. **Verified and claimed never share a field**: server-stamped and owner-stamped completion live
+   in separate columns; owner-word renders hollow, never solid.
