@@ -84,6 +84,12 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
    * job and needs neither of the two numbers this signals bundle carries. Deferring to the authored
    * line beats a vaguer version of what the card itself says on the next screen. */
   deliverymenu: () => null,
+  loyalty: () => null,
+  /* Both management cards could honestly use the views number when it exists: an active profile is
+   * what keeps those views coming. Kept authored-only until the cards are buyable, so a
+   * personalised pitch never fronts a door that does not open. */
+  gbpmgmt: () => null,
+  socialmgmt: () => null,
   pos: () => null,
   emaildeliver: () => null,
   measure: (s) => {

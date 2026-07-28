@@ -32,7 +32,7 @@ import { proofRefusal } from '../../src/lib/campaigns/setup/vault-guard'
 import { SETUP_CARDS, setupCardById } from '../../src/lib/campaigns/setup/cards'
 import { laneViolations, canBeDoneForYou, whatYouGetFor, laneOf } from '../../src/lib/campaigns/setup/types'
 import { SPACE, RADIUS, TEXT } from '../../src/components/mvp/tokens'
-import type { SetupLaneKind } from '../../src/lib/campaigns/setup/types'
+import type { SetupLaneKind, SetupCard } from '../../src/lib/campaigns/setup/types'
 import { whatYouGet } from '../../src/lib/campaigns/builder/what-you-get'
 import { gbpLaneFromDoer } from '../../src/lib/campaigns/builder/adapter'
 
@@ -510,6 +510,37 @@ s.group('The vault cannot launder a claim into a fact')
     selfRejecting.length === 0,
     selfRejecting.map((r) => r.id).join(','),
   )
+}
+
+s.group('Consulting is inherently human')
+{
+  /* No consulting card ships yet; the shape must still be proven against its own failure modes,
+   * because a guard first exercised by the card it should have caught is a guard that never
+   * worked. Both attacks are the same one: consulting quietly growing a cheaper self-serve lane. */
+  const base = {
+    id: 'fake-consult', serviceId: 'x', kind: 'consulting' as const,
+    platform: { canRead: false, canWrite: false, limitation: 'a person is the product, there is no platform to have access to' },
+  }
+  const honest: SetupCard = {
+    ...base,
+    lanes: [{ kind: 'team', label: 'A session with us', delivery: 'we-operate', proof: 'owner-word', whatYouGet: ['A real person, booked'] }],
+  }
+  s.check('a team-only, we-operate consulting card is legal', laneViolations(honest).length === 0, laneViolations(honest).join('; '))
+
+  const diyConsult: SetupCard = {
+    ...base,
+    lanes: [
+      ...honest.lanes,
+      { kind: 'diy', label: 'Do the workshop yourself', delivery: 'owner-applies', proof: 'owner-word', whatYouGet: ['A worksheet'], ownerTask: { title: 'x', why: 'x', href: '/x', actionLabel: 'x', claimedField: 'x' } },
+    ],
+  }
+  s.check('a consulting card refuses a DIY lane', laneViolations(diyConsult).some((v) => v.includes('consulting')))
+
+  const apiConsult: SetupCard = {
+    ...base,
+    lanes: [{ kind: 'team', label: 'x', delivery: 'owner-applies', proof: 'owner-word', whatYouGet: ['x'], ownerTask: { title: 'x', why: 'x', href: '/x', actionLabel: 'x', claimedField: 'x' } }],
+  }
+  s.check('and refuses any delivery that is not a person', laneViolations(apiConsult).some((v) => v.includes('person')))
 }
 
 s.report('Setup cards')

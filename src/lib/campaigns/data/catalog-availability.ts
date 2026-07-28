@@ -54,7 +54,10 @@ export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsr
  *  card and the product page so "coming soon" is never a mystery. No em dashes, 5th-grade words. */
 export const COMING_SOON_REASON: Record<string, string> = {
   // Email + text sends have no delivery rail yet (no ESP/SMS integration in the codebase).
-  send: 'Email and text sending is coming soon. We will not sell it until it really works.',
+  // ONE build unlocks all of these at once: the send rail is a single piece of plumbing that nine
+  // cards are waiting on, and the copy says so, because "coming soon" nine times reads like nine
+  // separate delays when it is one.
+  send: 'Email and text sending is one piece of plumbing we are finishing. When it is done, all of our email and text campaigns turn on together.',
   // A campaign that is mostly buildable but includes an email or text step we cannot deliver.
   partialSend: 'This one includes email or text steps we are still building. Coming soon.',
   // No real creator network — the creator pool resolves to the Apnosh team, so we will not sell it
@@ -71,6 +74,10 @@ export const COMING_SOON_REASON: Record<string, string> = {
   creative: 'We are making this one better right now. Coming soon.',
   // Local ads need the client's ad account connected, which is not wired yet.
   ads: 'This needs your ad account connected, which is coming soon.',
+  // Monthly management subscriptions: we will not bill month over month for posting until the
+  // publishing pipes are genuinely connected and proven. Selling the subscription first and wiring
+  // the pipe second is how a client pays for a month of nothing.
+  manage: 'We run this for you month to month only once the posting pipes are truly connected. We are wiring them now. Coming soon.',
   // Website + local-search fixes: only part is self-serve today (the Google side), the rest is
   // a real site rebuild. Held back until the whole thing is one clean flow.
   site: 'We are still building this into one clean flow. Coming soon.',
@@ -107,6 +114,12 @@ const COMING_SOON_GROUP: Record<string, keyof typeof COMING_SOON_REASON> = {
   website: 'site', localseo: 'site',
   // The till hookup. Real demand, no integration yet.
   pos: 'pos',
+  // Loyalty needs the POS talking to us (points and punches live in the till) AND the send rail
+  // (the rewards have to reach people). Grouped under pos because that is the harder half.
+  loyalty: 'pos',
+  // Monthly management: priced services (gbp-posts $85/mo, social-mgmt $475/mo) held until the
+  // publish rails are real.
+  gbpmgmt: 'manage', socialmgmt: 'manage',
 }
 
 /**

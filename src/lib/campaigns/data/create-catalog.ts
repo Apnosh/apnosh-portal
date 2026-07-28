@@ -69,6 +69,12 @@ const SOURCE = [
    * find it saying "coming soon" instead of concluding we do not do it. Gated by the allowlist
    * (catalog-availability), which defaults everything not fully built to coming_soon. */
   { id: 'pos', title: 'Hook up your POS', goal: 'regulars', stages: ['back', 'actions'] },
+  /* Three more from the tool-list reconciliation (2026-07-28): each has a PRICED service in the
+   * catalog and had zero store presence, so an owner looking for it concluded we do not do it.
+   * All gated coming-soon by the allowlist until their delivery rail is real. */
+  { id: 'loyalty', title: 'Start a loyalty program', goal: 'regulars', stages: ['back'] },
+  { id: 'gbpmgmt', title: 'Keep your Google profile active', goal: 'new-customers', stages: ['aware'] },
+  { id: 'socialmgmt', title: 'Run your social media', goal: 'new-customers', stages: ['aware', 'interest'] },
   { id: 'deliverymenu', title: 'Price your delivery menu', goal: 'new-customers', stages: ['orders'] },
   { id: 'reviewsreply', title: 'Reply to reviews', goal: 'reviews', stages: ['interest'] },
   { id: 'friction', title: 'Smooth out ordering', goal: 'new-customers', stages: ['actions'] },

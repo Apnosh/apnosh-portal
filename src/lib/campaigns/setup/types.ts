@@ -142,6 +142,17 @@ export interface SetupCard {
   id: string
   /** The catalog service this card composes to. */
   serviceId: string
+  /**
+   * CONSULTING marks a card whose product is booked human judgment: a workshop, a strategy
+   * session, crisis on-call. The tool-list reconciliation (2026-07-28) surfaced these as a unit
+   * type the engine could not express, and the rule they carry is the builder doc's own:
+   * consulting is inherently human, so it may not grow a DIY or an AI lane. A workshop with a
+   * self-serve version is a guide wearing a consultant's price, and `laneViolations` refuses it.
+   *
+   * Absent means a normal setup card. No consulting card exists yet; the shape is here so the
+   * first one (Staff Ask Workshop, Strategy Session) starts law-checked instead of bespoke.
+   */
+  kind?: 'consulting'
   /** What the platform lets us do. Every lane below is checked against it. */
   platform: PlatformAccess
   lanes: SetupLane[]
@@ -210,6 +221,20 @@ export function laneViolations(card: SetupCard): string[] {
 
   const kinds = card.lanes.map((l) => l.kind)
   if (new Set(kinds).size !== kinds.length) out.push(`${card.id}: the same lane twice`)
+
+  /* Consulting is inherently human. The product is a person's judgment in a session, so a DIY or
+   * AI lane on one is a contradiction in terms, and the delivery has to be hands. */
+  if (card.kind === 'consulting') {
+    for (const lane of card.lanes) {
+      if (lane.kind !== 'team') {
+        out.push(`${card.id}/${lane.kind}: consulting cannot be done by the owner or an AI, that is what makes it consulting`)
+      }
+      if (lane.delivery !== 'we-operate') {
+        out.push(`${card.id}/${lane.kind}: consulting delivers by a person, not "${lane.delivery}"`)
+      }
+    }
+    if (!card.lanes.length) out.push(`${card.id}: a consulting card with nobody to consult`)
+  }
 
   return out
 }
