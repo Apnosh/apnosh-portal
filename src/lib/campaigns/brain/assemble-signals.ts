@@ -102,6 +102,26 @@ async function readAvgItemPrice(clientId: string): Promise<number | null> {
   return Math.round((cents.reduce((a, b) => a + b, 0) / cents.length)) / 100
 }
 
+/** The business concept: the stored shape when a strategist set one, else derived from the same
+ *  onboarding facts the goals layer derives it from. Honestly missing when we hold NEITHER a
+ *  stored shape nor any style/price input — defaultShapeFor would answer 'casual' on a blank,
+ *  and a fabricated default is exactly what a Reading exists to prevent. */
+async function readConcept(clientId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('businesses')
+    .select('shape_concept, service_styles, price_range')
+    .eq('client_id', clientId)
+    .maybeSingle()
+  if (!data) return null
+  if (data.shape_concept) return String(data.shape_concept)
+  const styles = Array.isArray(data.service_styles) ? (data.service_styles as string[]) : []
+  const price = (data.price_range as string | null) ?? null
+  if (!styles.length && !price) return null
+  const { inferShapeFromOnboarding } = await import('@/lib/goals/defaults')
+  return inferShapeFromOnboarding({ service_styles: styles, price_range: price }).concept
+}
+
 /** Total social reach across platforms over the last 30 days, from the sync-fed daily rows. */
 async function readSocialReach(clientId: string): Promise<number | null> {
   const admin = createAdminClient()
@@ -131,7 +151,7 @@ export interface AssembledBrain {
 export async function assembleBrain(clientId: string): Promise<AssembledBrain> {
   const s = emptySignals()
 
-  const [profile, planning, history, channels, priceRange, searchTerms, monthlyVisitors, brandVoice, avgItemPrice, socialReach] = await Promise.all([
+  const [profile, planning, history, channels, priceRange, searchTerms, monthlyVisitors, brandVoice, avgItemPrice, socialReach, concept] = await Promise.all([
     safe(() => getCampaignProfile(clientId)),
     safe(() => assembleSignals(clientId)),
     safe(() => getPlanningHistory(clientId)),
@@ -142,6 +162,7 @@ export async function assembleBrain(clientId: string): Promise<AssembledBrain> {
     safe(() => readBrandVoice(clientId)),
     safe(() => readAvgItemPrice(clientId)),
     safe(() => readSocialReach(clientId)),
+    safe(() => readConcept(clientId)),
   ])
 
   if (profile) {
@@ -192,6 +213,7 @@ export async function assembleBrain(clientId: string): Promise<AssembledBrain> {
   s.brandVoice = reading(brandVoice)
   s.avgItemPrice = reading(avgItemPrice)
   s.socialReach30d = reading(socialReach)
+  s.concept = reading(concept)
 
   // Measured lift from this business's own outcomes (win-rate per service). Partial by nature
   // (only services with outcome rows), and blendLift falls back to the prior for the rest.

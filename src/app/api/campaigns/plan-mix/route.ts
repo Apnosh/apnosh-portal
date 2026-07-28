@@ -109,6 +109,8 @@ export async function GET(req: NextRequest) {
       ...(lead ? { lead } : {}),
       ...(budget ? {} : { suggestedTier: suggested }),
       snapshot,
+      // The concept for the split-priors advisory on the review screen (advisory only).
+      ...(val(brain.concept) ? { concept: val(brain.concept) } : {}),
       // Cite-your-source (law 7): what the ranking rests on. 'measured' only when this business's
       // own outcome history is deep enough to mean something; everything else is our estimate.
       basis: Object.values(measured).some((m) => m.n >= 5) ? 'measured' : 'estimate',

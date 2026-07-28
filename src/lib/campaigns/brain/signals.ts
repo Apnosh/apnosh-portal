@@ -44,6 +44,9 @@ export interface BrainSignals {
   avgItemPrice: Reading<number>
   /** Total social reach over the last 30 days, summed across platforms. */
   socialReach30d: Reading<number>
+  /** The business concept (qsr/casual/fine_dining/bar/cafe/...) — the live archetype vocabulary
+   *  from the goals layer. Split priors and, later, the router key on it. */
+  concept: Reading<string>
 }
 
 /** An all-missing signal set — the honest starting point and the safe default when we know nothing. */
@@ -55,7 +58,7 @@ export function emptySignals(): BrainSignals {
     hasList: missing(), listSize: missing(), lapsedCount: missing(), connectedChannels: missing(), slowNights: missing(),
     droppedServiceIds: missing(), workingServiceIds: missing(),
     monthlyBudget: missing(),
-    brandVoice: missing(), avgItemPrice: missing(), socialReach30d: missing(),
+    brandVoice: missing(), avgItemPrice: missing(), socialReach30d: missing(), concept: missing(),
   }
 }
 

@@ -17,6 +17,8 @@ import type { LucideIcon } from 'lucide-react'
 import { MapPin, Globe, LineChart, BarChart3, Video, QrCode, Tag, Utensils, MessageCircle, Home, Store, ArrowLeftRight, Newspaper, Share2, UserPlus, RotateCcw, Mail, MessageSquare, Award, Cake, Gift, Crown, CalendarCheck, Users } from 'lucide-react'
 import { C, GRAD, money } from '@/components/campaigns/ui'
 import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
+import { checkSplit } from '@/lib/campaigns/builder/split-priors'
+import type { Concept } from '@/lib/goals/types'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { aggregateGoLive, addBusinessDays } from '@/lib/campaigns/aggregate-golive'
@@ -301,7 +303,7 @@ type Stop =
   | { kind: 'add'; id: string; label: string; onAdd: () => void }
   | { kind: 'endcap'; id: string }
 
-export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, reasons, diagnosis, diagnosisSource, doneSetup, onConfirm, onBack }: {
+export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, reasons, diagnosis, diagnosisSource, doneSetup, concept, onConfirm, onBack }: {
   itemId: string
   vals: Record<string, unknown>
   restaurant: string
@@ -310,6 +312,8 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   error?: string | null
   /** Setup serviceIds the restaurant already has (from CampaignProfile.doneSetup) — skipped in the go-live estimate. */
   doneSetup?: string[]
+  /** The business concept (qsr/casual/fine_dining/...) from plan-mix, for the split-priors advisory. */
+  concept?: string | null
   /** The owner's monthly marketing budget (dollars). 0 = none set → no budget signal. */
   monthlyCap?: number
   /** The result the brain built this plan to move, e.g. "fuller tables on your slow nights". */
@@ -404,6 +408,14 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
     return removed.size ? out.filter((it) => !removed.has(it.serviceId ?? '')) : out
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [beats, initial.items, removed, addedMoves, serviceQty])
+
+  // Split-priors advisories (advisory only, law 7): where this plan's monthly spend leans thin
+  // against places like this one. Computed on the LIVE items so owner edits move it, capped at 2,
+  // and silent for non-system plans, blank concepts, or all-one-time plans.
+  const splitAdvisories = useMemo(() => {
+    const titles = Object.fromEntries((initial.stages ?? []).map((st) => [st.stage, st.title]))
+    return checkSplit(items, initial.moves, (concept ?? null) as Concept | null, initial.goalKey ?? itemId, titles)
+  }, [items, initial.moves, initial.stages, initial.goalKey, itemId, concept])
 
   const camp = useMemo<SavedCampaign>(() => ({
     clientId: '', draft: { ...initial, items, brief: initial.brief ? { ...initial.brief, contentBeats: editedBeats } : initial.brief }, phase: 'build', status: 'draft', shippedAt: null,
@@ -722,7 +734,18 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
               diagnosis={diagnosis ?? null} diagnosisSource={diagnosisSource ?? null}
             />
           ) : (
+            <>
+            {splitAdvisories.length > 0 && (
+              <div style={{ margin: '0 0 10px' }}>
+                {splitAdvisories.map((a) => (
+                  <div key={a.stage} style={{ background: '#fdf6e9', borderRadius: 12, padding: '10px 13px', fontSize: 12.5, color: '#1d1d1f', lineHeight: 1.5, marginBottom: 6 }}>
+                    {a.line}
+                  </div>
+                ))}
+              </div>
+            )}
             <Summary creatives={creatives} services={services} bill={bill} sched={sched} doneSetup={doneSetup} onPiece={openPiece} monthlyCap={monthlyCap} firstMonth={firstMonth} overBudget={overBudget} canTrim={canTrim} onTrim={() => trimToFit(trimIds)} />
+            </>
           )}
         </div>
 
