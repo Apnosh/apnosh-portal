@@ -49,6 +49,7 @@ import type { PricedService } from './priced-catalog'
 import { isServiceReady, serviceNotYetReason } from './service-availability'
 import { stepOf, type MonthlyStepKey } from './monthly-plan'
 import type { PlanGoalKey, CampaignShape } from './plan-goals'
+import { guideMoveByKey, type GuideMove } from './guide-moves'
 
 /* ── free actions ───────────────────────────────────────────────────────────────────────── */
 
@@ -57,21 +58,26 @@ import type { PlanGoalKey, CampaignShape } from './plan-goals'
  *
  * Half the strongest moves for a grand opening cost nothing: paper the storefront, tell the
  * customers already standing in your other shop, post in the neighbourhood group, be there at 5:45
- * so the queue has a beginning. No catalog service is priced at zero and nothing in LineItem can
- * carry an instruction or a time estimate, so until this type existed the builder was structurally
- * incapable of recommending the best plan.
+ * so the queue has a beginning. The CONTENT of these moves lives in one place only — GUIDE_MOVES
+ * (guide-moves.ts), the same record the campaign guide rail renders — so a mechanism carries a
+ * REFERENCE, not a second copy that drifts (law 3: a flag is only legal with a real guide behind
+ * it; the mechanisms sim enforces every ref resolves).
  *
+ * `stage` and `blocks` stay on the ref because they are mechanism context: the same move can
+ * serve different stages in different mechanisms, and what it blocks is specific to this rule.
  * `blocks` is the part that stops these being read as homework. A two-minute task holding up a
  * $1,295 package is the single most common reason paid work sits still.
  */
-export interface FreeAction {
-  id: string
-  label: string
-  /** why it is worth doing, in owner words */
-  why: string
-  minutes: number
+export interface FreeRef {
+  guideKey: string
   stage: MonthlyStepKey
   /** what stalls or under-performs if it is skipped */
+  blocks?: string
+}
+
+/** A ref resolved through GUIDE_MOVES for rendering: the guide's content plus this mechanism's context. */
+export interface ResolvedFreeMove extends GuideMove {
+  stage: MonthlyStepKey
   blocks?: string
 }
 
@@ -105,7 +111,7 @@ export interface Mechanism {
     reason: readonly string[]
     easy: readonly string[]
   }
-  freeActions: readonly FreeAction[]
+  freeActions: readonly FreeRef[]
   /** Countable by construction. Not a lift calculation. */
   count: { label: string; when: string }
   /**
@@ -134,43 +140,25 @@ export interface Mechanism {
   risks: readonly string[]
 }
 
-/* ── shared free actions ────────────────────────────────────────────────────────────────── */
+/* ── shared free-move refs (content lives in GUIDE_MOVES) ───────────────────────────────── */
 
-const OWN_COUNTER: FreeAction = {
-  id: 'own-counter', label: 'Tell the customers you already have', stage: 'found', minutes: 30,
-  why: 'A card in every bag, a sign at the register, a line in the staff script. The people already standing in your shop are the highest-converting audience you will ever reach, and reaching them is free.',
+const OWN_COUNTER: FreeRef = {
+  guideKey: 'own-counter', stage: 'found',
   blocks: 'Skip this and the paid ads are doing work your own counter would have done better',
 }
-const NEIGHBOURHOOD: FreeAction = {
-  id: 'neighbourhood', label: 'Post in the neighbourhood groups', stage: 'found', minutes: 40,
-  why: 'Nextdoor, the local Facebook group, the neighbourhood subreddit. This is where openings actually spread locally, and it costs an evening.',
-}
-const STOREFRONT: FreeAction = {
-  id: 'storefront', label: 'Put it in your window', stage: 'found', minutes: 20,
-  why: 'The date, the rule, and a code to scan. Everyone who walks past sees it every day until you open.',
-}
-const SEED_LINE: FreeAction = {
-  id: 'seed-line', label: 'Get the first twenty there yourself', stage: 'easy', minutes: 45,
-  why: 'Staff, family, suppliers, your loudest regulars, fifteen minutes early. A line does not start itself, and twenty people is the photo that pulls the next eighty.',
+const NEIGHBOURHOOD: FreeRef = { guideKey: 'neighbourhood', stage: 'found' }
+const STOREFRONT: FreeRef = { guideKey: 'storefront', stage: 'found' }
+const SEED_LINE: FreeRef = {
+  guideKey: 'seed-line', stage: 'easy',
   blocks: 'An empty pavement at the start time is the one failure you cannot recover from',
 }
-const EXPECTATIONS: FreeAction = {
-  id: 'expectations', label: 'Say what the wait is actually like', stage: 'easy', minutes: 15,
-  why: 'Covered or not, how long, is there coffee, can I bring a kid, when am I out. People do not fear queuing. They fear queuing badly.',
-}
-const BRING_FRIEND: FreeAction = {
-  id: 'bring-friend', label: 'Let them bring someone', stage: 'easy', minutes: 10,
-  why: 'One person becomes two, and nobody has to stand on their own.',
-}
-const REMIND_TWICE: FreeAction = {
-  id: 'remind-twice', label: 'Remind them twice, yourself', stage: 'easy', minutes: 20,
-  why: 'The night before and again on the morning. We cannot send texts for you yet, so this one is genuinely yours to do, and it is the highest-leverage message in the whole plan.',
+const EXPECTATIONS: FreeRef = { guideKey: 'expectations', stage: 'easy' }
+const BRING_FRIEND: FreeRef = { guideKey: 'bring-friend', stage: 'easy' }
+const REMIND_TWICE: FreeRef = {
+  guideKey: 'remind-twice', stage: 'easy',
   blocks: 'Without it a real share of the people who signed up simply forget',
 }
-const ASK_REGULARS: FreeAction = {
-  id: 'ask-regulars', label: 'Ask ten regulars in person', stage: 'found', minutes: 30,
-  why: 'Not a post. Ask them, by name, to come. It is the highest-converting invitation that exists and it is free.',
-}
+const ASK_REGULARS: FreeRef = { guideKey: 'ask-regulars', stage: 'found' }
 
 /* ── the twelve ─────────────────────────────────────────────────────────────────────────── */
 
@@ -428,11 +416,8 @@ export const MECHANISMS: readonly Mechanism[] = [
       easy: ['review-claim', 'listings-sync'],
     },
     freeActions: [
-      { id: 'ask-script', label: 'Agree the one sentence your team says', stage: 'reason', minutes: 20,
-        why: 'One sentence, said the same way by everyone, at the moment the plates are cleared. Consistency beats charm here.',
-        blocks: 'Without a script the asking quietly stops after two weeks' },
-      { id: 'ask-count', label: 'Count the asks, not the reviews', stage: 'easy', minutes: 10,
-        why: 'A tally by the till. Reviews follow asks at a fairly steady rate, so the asks are the number you can actually control.' },
+      { guideKey: 'ask-script', stage: 'reason', blocks: 'Without a script the asking quietly stops after two weeks' },
+      { guideKey: 'ask-count', stage: 'easy' },
     ],
     count: { label: 'Asks made, and reviews landed', when: 'weekly' },
     leading: { label: 'Asks per week', when: 'from week one', healthy: 'Asks holding steady. If asks drop, reviews drop three weeks later.' },
@@ -456,11 +441,8 @@ export const MECHANISMS: readonly Mechanism[] = [
       easy: ['landing-page', 'site-menu'],
     },
     freeActions: [
-      { id: 'walk-the-block', label: 'Walk into ten offices yourself', stage: 'found', minutes: 90,
-        why: 'Reception desks within four blocks. A card and a face beats any ad you could buy for the same money.' },
-      { id: 'catering-followup', label: 'Ring them a week after the platter', stage: 'easy', minutes: 30,
-        why: 'The platter opens the door. The call is what turns it into a standing order, and almost nobody makes it.',
-        blocks: 'Skip this and the free food was a donation' },
+      { guideKey: 'walk-the-block', stage: 'found' },
+      { guideKey: 'catering-followup', stage: 'easy', blocks: 'Skip this and the free food was a donation' },
     ],
     count: { label: 'Platters out, then bookings back', when: 'monthly' },
     leading: { label: 'Offices asking', when: 'from week two', healthy: 'A few a week. Zero after two weeks means they cannot find you, not that they do not want it.' },
@@ -571,7 +553,7 @@ export interface MechanismPlan {
   rule: string
   cap: number
   stages: { found: MechanismLine[]; reason: MechanismLine[]; easy: MechanismLine[] }
-  freeActions: readonly FreeAction[]
+  freeActions: readonly ResolvedFreeMove[]
   bill: { start: number; monthly: number; passThroughMonthly: number }
   /** minutes of the owner's own time the free actions ask for */
   yourMinutes: number
@@ -625,14 +607,23 @@ export function composeMechanism(
     }
   }
 
+  // Resolve the free-move refs through GUIDE_MOVES. An unknown key is dropped rather than
+  // rendered empty (law 3), but the mechanisms sim makes a dangling ref a build failure first.
+  const freeActions = m.freeActions
+    .map((r): ResolvedFreeMove | null => {
+      const g = guideMoveByKey(r.guideKey)
+      return g ? { ...g, stage: r.stage, ...(r.blocks ? { blocks: r.blocks } : {}) } : null
+    })
+    .filter((a): a is ResolvedFreeMove => !!a)
+
   return {
     mechanism: m,
     rule: m.rule.replace('{cap}', String(cap)),
     cap,
     stages,
-    freeActions: m.freeActions,
+    freeActions,
     bill: { start, monthly, passThroughMonthly },
-    yourMinutes: m.freeActions.reduce((n, a) => n + a.minutes, 0),
+    yourMinutes: freeActions.reduce((n, a) => n + a.minutes, 0),
     reach: reachNeeded(m, cap, { dailyFootfall: opts.dailyFootfall, weeksOut: opts.weeksOut }),
   }
 }

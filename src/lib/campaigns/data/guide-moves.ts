@@ -91,6 +91,79 @@ export const GUIDE_MOVES: Record<string, GuideMove> = {
       { label: 'Use it next time', detail: 'That is the entire mechanic. The visit after you first greet someone by name is the one that makes them a regular.' },
     ],
   },
+  'seed-line': {
+    key: 'seed-line',
+    title: 'Get the first twenty there yourself',
+    why: 'A line does not start itself. Twenty people at the start time is the photo that pulls the next eighty.',
+    minutes: 45,
+    steps: [
+      { label: 'Write the twenty down', detail: 'Staff, family, suppliers, your loudest regulars. Names on paper; "some people will come" is how a pavement ends up empty.' },
+      { label: 'Give them a time fifteen minutes early', detail: 'Tell them 5:45 for a 6:00 start, personally. The line has to exist before the first stranger walks past it.' },
+      { label: 'Take the photo', detail: 'The queue at minute one is the best content the whole opening produces. Post it while it is still true.' },
+    ],
+  },
+  expectations: {
+    key: 'expectations',
+    title: 'Say what the wait is actually like',
+    why: 'People do not fear queuing. They fear queuing badly.',
+    minutes: 15,
+    steps: [
+      { label: 'Answer the five questions', detail: 'Covered or not, how long, is there coffee, can I bring a kid, when am I out. One post and one sign, same words.' },
+      { label: 'Put it where the decision happens', detail: 'On the event page and at the door. The person deciding whether to come is not standing in your shop yet.' },
+    ],
+  },
+  'bring-friend': {
+    key: 'bring-friend',
+    title: 'Let them bring someone',
+    why: 'One person becomes two, and nobody has to stand on their own.',
+    minutes: 10,
+    steps: [
+      { label: 'Say plus-one in every invite', detail: 'Add "bring someone" to the post, the sign and the message. People act on it only when it is said out loud.' },
+      { label: 'Tell the staff the rule counts for two', detail: 'One sentence at the shift start, so nobody at the door turns away the friend the invite promised.' },
+    ],
+  },
+  'ask-script': {
+    key: 'ask-script',
+    title: 'Agree the one sentence your team says',
+    why: 'One sentence, said the same way by everyone, at the moment the plates are cleared. Consistency beats charm here.',
+    minutes: 20,
+    steps: [
+      { label: 'Write it word for word', detail: 'Something like "If you enjoyed it, a Google review really helps us." Ten words, no improvising, no pressure.' },
+      { label: 'Pick the one moment', detail: 'Clearing plates or bringing the bill. The same moment every time is what keeps it happening in week six.' },
+      { label: 'Put it where they stand', detail: 'A small card at the till or the pass. The script dies the day it lives only in memory.' },
+    ],
+  },
+  'ask-count': {
+    key: 'ask-count',
+    title: 'Count the asks, not the reviews',
+    why: 'Reviews follow asks at a fairly steady rate, so the asks are the number you can actually control.',
+    minutes: 10,
+    steps: [
+      { label: 'Put a tally by the till', detail: 'A stroke per ask, any shift, no exceptions. Paper is fine; the point is that it is visible.' },
+      { label: 'Read it once a week', detail: 'Asks holding steady is the health check. If asks drop, reviews drop about three weeks later.' },
+    ],
+  },
+  'walk-the-block': {
+    key: 'walk-the-block',
+    title: 'Walk into ten offices yourself',
+    why: 'Reception desks within four blocks. A card and a face beats any ad you could buy for the same money.',
+    minutes: 90,
+    steps: [
+      { label: 'List the ten', detail: 'Offices within four blocks with a real reception desk. Mid-morning is when reception has time to talk.' },
+      { label: 'Bring the card and the offer', detail: 'A menu, a card, and the free-platter line. Ask who books lunches; that name is the whole visit.' },
+      { label: 'Note the name before the next door', detail: 'Who you spoke to, at which office, and what they said. The follow-up call depends on this list existing.' },
+    ],
+  },
+  'catering-followup': {
+    key: 'catering-followup',
+    title: 'Ring them a week after the platter',
+    why: 'The platter opens the door. The call is what turns it into a standing order, and almost nobody makes it.',
+    minutes: 30,
+    steps: [
+      { label: 'Diary the call when the platter leaves', detail: 'Seven days later, to the name you collected. If it is not in the diary the call never happens.' },
+      { label: 'Ask one question', detail: '"Would a monthly order make lunches easier?" Then stop talking. The platter already made the argument.' },
+    ],
+  },
 }
 
 /**

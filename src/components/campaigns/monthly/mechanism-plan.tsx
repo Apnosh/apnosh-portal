@@ -27,7 +27,7 @@ import {
   composeMechanism,
   type Mechanism,
   type MechanismPlan,
-  type FreeAction,
+  type ResolvedFreeMove,
 } from '@/lib/campaigns/data/mechanisms'
 import type { CampaignShape } from '@/lib/campaigns/data/plan-goals'
 
@@ -50,13 +50,13 @@ function Stage({ n, title, sub, children }: { n: string; title: string; sub: str
   )
 }
 
-function FreeRow({ a }: { a: FreeAction }) {
+function FreeRow({ a }: { a: ResolvedFreeMove }) {
   return (
     <div style={{ background: '#f0faf6', borderRadius: 13, padding: '11px 13px', display: 'flex', gap: 9 }}>
       <Check size={14} strokeWidth={2.6} color={C.green} style={{ flexShrink: 0, marginTop: 2 }} />
       <div style={{ minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-          <span style={{ fontSize: 13.5, fontWeight: 640, color: C.ink, lineHeight: 1.25 }}>{a.label}</span>
+          <span style={{ fontSize: 13.5, fontWeight: 640, color: C.ink, lineHeight: 1.25 }}>{a.title}</span>
           <span style={{ fontSize: 11, color: C.green, fontWeight: 650, whiteSpace: 'nowrap' }}>{a.minutes} min · you</span>
         </div>
         <div style={{ fontSize: 11.5, color: C.mute, lineHeight: 1.45, marginTop: 3 }}>{a.why}</div>
@@ -112,7 +112,7 @@ export default function MechanismPlan({
     [chosen, cap, dailyFootfall],
   )
   const r = plan.reach
-  const free = (stage: FreeAction['stage']) => plan.freeActions.filter((a) => a.stage === stage)
+  const free = (stage: ResolvedFreeMove['stage']) => plan.freeActions.filter((a) => a.stage === stage)
 
   const pick = (m: Mechanism) => { setChosen(m); setCap(m.cap.suggest) }
   const step = (d: number) => setCap((c) => Math.max(1, Math.round((c + d * Math.max(1, Math.round(c * 0.1))) / 5) * 5))
@@ -183,7 +183,7 @@ export default function MechanismPlan({
       <Stage n="2" title="How they take it up" sub="Decided by the rule, not by you. This is what has to exist for someone to say yes.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {plan.stages.easy.map((l) => <PaidRow key={l.id} l={l} />)}
-          {free('easy').map((a) => <FreeRow key={a.id} a={a} />)}
+          {free('easy').map((a) => <FreeRow key={a.key} a={a} />)}
         </div>
       </Stage>
 
@@ -223,7 +223,7 @@ export default function MechanismPlan({
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-          {free('found').map((a) => <FreeRow key={a.id} a={a} />)}
+          {free('found').map((a) => <FreeRow key={a.key} a={a} />)}
           {plan.stages.found.map((l) => <PaidRow key={l.id} l={l} />)}
         </div>
       </Stage>
@@ -232,7 +232,7 @@ export default function MechanismPlan({
       <Stage n="4" title="What you get for it" sub="What is worth showing people, once they are looking.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {plan.stages.reason.map((l) => <PaidRow key={l.id} l={l} />)}
-          {free('reason').map((a) => <FreeRow key={a.id} a={a} />)}
+          {free('reason').map((a) => <FreeRow key={a.key} a={a} />)}
         </div>
       </Stage>
 

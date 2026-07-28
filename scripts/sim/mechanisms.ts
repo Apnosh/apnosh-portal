@@ -17,6 +17,7 @@ import { MECHANISMS, mechanismsFor, composeMechanism, mechanismById, reachNeeded
 import { PLAN_GOALS, SHAPES, SITUATIONS } from '../../src/lib/campaigns/data/plan-goals'
 import { GENERATED_CATALOG } from '../../src/lib/campaigns/data/catalog.generated'
 import { isServiceReady } from '../../src/lib/campaigns/data/service-availability'
+import { GUIDE_MOVES } from '../../src/lib/campaigns/data/guide-moves'
 
 const s = new Suite()
 const CAT = GENERATED_CATALOG as unknown as { id: string; prices?: { amount?: number; kind?: string }[] }[]
@@ -108,13 +109,18 @@ for (const m of MECHANISMS) {
   s.check(`${m.id}: the rule reads as a sentence`, !p.rule.includes('{cap}') && p.rule.endsWith('.'), p.rule)
 }
 
-s.group('The free steps are real asks, not filler')
+s.group('The free steps are real asks, not filler (refs resolved through GUIDE_MOVES)')
 for (const m of MECHANISMS) {
-  s.check(`${m.id}: ${m.freeActions.length} free step(s)`, m.freeActions.length > 0)
-  const bad = m.freeActions.filter((a) => !a.minutes || a.minutes > 120 || !a.why || a.why.length < 30)
-  s.check(`${m.id}: each has a real time and a real reason`, bad.length === 0, bad.map((a) => a.id).join(', '))
+  // Law 3 at build time: a mechanism may only reference a move a real guide exists for. A
+  // dangling ref would silently render nothing, which is exactly the failure this refuses.
+  const dangling = m.freeActions.filter((r) => !GUIDE_MOVES[r.guideKey])
+  s.check(`${m.id}: every ref resolves`, dangling.length === 0, dangling.map((r) => r.guideKey).join(', '))
+  const resolved = composeMechanism(m).freeActions
+  s.check(`${m.id}: ${resolved.length} free step(s)`, resolved.length > 0 && resolved.length === m.freeActions.length)
+  const bad = resolved.filter((a) => !a.minutes || a.minutes > 120 || !a.why || a.why.length < 30 || a.steps.length < 2)
+  s.check(`${m.id}: each has a real time, reason and 2+ steps`, bad.length === 0, bad.map((a) => a.key).join(', '))
 }
-const everyFree = MECHANISMS.flatMap((m) => m.freeActions)
+const everyFree = MECHANISMS.flatMap((m) => composeMechanism(m).freeActions)
 s.check(
   'at least one free step warns what it holds up',
   everyFree.some((a) => !!a.blocks),

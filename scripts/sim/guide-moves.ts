@@ -35,7 +35,11 @@ s.group('Law 3: every emittable key has a real guide behind it')
     // silently emitted zero guides.
     s.check(`${goal}: is a real system goal id`, isSystemGoal(goal))
   }
+  // EVERY move in the record, mapped or not: a mechanism ref can reach any of them, so a
+  // 1-step move anywhere is illegal (a mutant proved the per-goal loop above missed unmapped ones).
   for (const g of Object.values(GUIDE_MOVES)) {
+    s.check(`${g.key}: 2+ real steps`, g.steps.length >= 2 && g.steps.every((st) => st.label.length > 3 && st.detail.length > 20))
+    s.check(`${g.key}: honest minutes (5..120)`, g.minutes >= 5 && g.minutes <= 120)
     s.check(`${g.key}: no em dash in owner copy`, !g.why.includes('—') && g.steps.every((st) => !st.detail.includes('—')))
   }
 }
