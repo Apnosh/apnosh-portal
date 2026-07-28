@@ -14,6 +14,7 @@
  *
  * Pure data, client-safe. Rendered in the LineCard drawer pre- and post-ship.
  */
+import type { MonthlyStepKey } from './monthly-plan'
 
 export interface GuideMove {
   key: string
@@ -195,6 +196,28 @@ export function guideMovesFor(goal: string): { move: GuideMove; stage: string }[
     .map((e) => ({ move: GUIDE_MOVES[e.key], stage: e.stage }))
     .filter((x): x is { move: GuideMove; stage: string } => !!x.move)
     .slice(0, 3)
+}
+
+/**
+ * Which guide moves ride the MONTHLY plan's draft, per funnel step. The Record type IS the
+ * vocabulary pin: keying this by a card id ('firstvisit') or a goal key ('more-new') is a compile
+ * error, not a silent zero — the drift that shipped twice in the goal-keyed maps cannot happen
+ * here. 'reason' is honestly empty (no owner-run move genuinely serves "give them a reason"
+ * better than the paid work does); ≤2 per step, ≤5 total — a plan drowning in homework stops
+ * being a plan.
+ */
+export const GUIDE_MOVES_FOR_MONTHLY: Record<MonthlyStepKey, { key: string }[]> = {
+  found: [{ key: 'storefront' }, { key: 'neighbourhood' }],
+  reason: [],
+  easy: [{ key: 'expectations' }],
+  back: [{ key: 'greet-by-name' }, { key: 'ask-regulars' }],
+}
+
+export function guideMovesForMonthly(step: MonthlyStepKey): GuideMove[] {
+  return (GUIDE_MOVES_FOR_MONTHLY[step] ?? [])
+    .map((e) => GUIDE_MOVES[e.key])
+    .filter((g): g is GuideMove => !!g)
+    .slice(0, 2)
 }
 
 export const guideMoveByKey = (key: string | undefined): GuideMove | undefined =>

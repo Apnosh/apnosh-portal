@@ -119,7 +119,12 @@ async function main() {
       .select('service_id, price, cadence, included')
       .eq('campaign_id', campaignId)
     const items = rows ?? []
-    s.eq('every line persisted', items.length, plan.lines.length)
+    // The draft now also carries guide-only owner moves ($0, serviceable:false) beyond the
+    // composed lines — law 2: the free work no longer evaporates at Start.
+    const guideRows = items.filter((i) => String(i.service_id).startsWith('guide:'))
+    s.eq('every composed line persisted', items.length - guideRows.length, plan.lines.length)
+    s.check(`guide moves persisted (${guideRows.length})`, guideRows.length > 0 && guideRows.length <= 5)
+    s.check('every guide row bills zero', guideRows.every((r) => Number(r.price) === 0))
 
     let dbOnce = 0
     let dbMonthly = 0

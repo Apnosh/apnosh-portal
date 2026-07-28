@@ -139,9 +139,12 @@ export function lineItemToRow(campaignId: string, clientId: string, it: LineItem
   // owner_mode (migration 202): only the owner-run gbp lanes set it, so a legacy line
   // never references the column and inserts work unchanged pre-202.
   if (it.ownerMode !== undefined) row.owner_mode = it.ownerMode
-  // Guide-only rail: written only when set, so pre-migration DBs never see the column.
-  if (it.serviceable !== undefined) row.serviceable = it.serviceable
-  if (it.guideKey !== undefined) row.guide_key = it.guideKey
+  // Guide-only rail (migration 232, applied): ALWAYS written, explicitly. A supabase batch
+  // insert null-fills keys missing from some rows, so "only when set" turned one guide row in a
+  // draft into serviceable=null on every normal row beside it — straight into the not-null
+  // constraint. The monthly-plan e2e caught it; explicit values keep the batch uniform.
+  row.serviceable = it.serviceable ?? true
+  row.guide_key = it.guideKey ?? null
   if (it.brief !== undefined) row.brief = it.brief ?? null
   if (it.postISO !== undefined) row.post_iso = it.postISO ?? null
   return row

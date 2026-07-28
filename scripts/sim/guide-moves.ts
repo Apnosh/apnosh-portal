@@ -10,12 +10,13 @@
  * Run: npx tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/guide-moves.ts
  */
 import { Suite } from './lib'
-import { GUIDE_MOVES, GUIDE_MOVES_FOR_GOAL, guideMovesFor } from '../../src/lib/campaigns/data/guide-moves'
+import { GUIDE_MOVES, GUIDE_MOVES_FOR_GOAL, GUIDE_MOVES_FOR_MONTHLY, guideMovesFor, guideMovesForMonthly } from '../../src/lib/campaigns/data/guide-moves'
 import { isSystemGoal } from '../../src/lib/campaigns/builder/compose-plan'
 import { lineTotal, summarize, type LineItem } from '../../src/lib/campaigns/types'
 import { draftFromBuilder } from '../../src/lib/campaigns/builder/adapter'
 import { mintableServiceLine } from '../../src/lib/campaigns/service-work-orders'
 import { lineItemToRow, rowToLineItem } from '../../src/lib/campaigns/server'
+import { MONTHLY_STEPS, composeMonthlyPlan, toCampaignDraft } from '../../src/lib/campaigns/data/monthly-plan'
 
 const s = new Suite()
 
@@ -99,6 +100,40 @@ s.group('Round-trip: a saved guide line cannot come back billable')
   const normal: LineItem = { ...guide, id: 'li-1', serviceId: 'gbp-posts', producer: 'team', serviceable: undefined, guideKey: undefined, price: 150 }
   const nback = rowToLineItem(lineItemToRow('c1', 'cl1', normal, 0) as Record<string, unknown>)
   s.check('a normal line stays serviceable (undefined, not false)', nback.serviceable !== false && nback.guideKey === undefined)
+}
+
+s.group('The monthly plan hands out homework honestly')
+{
+  // The mapping's keys are typed Record<MonthlyStepKey, ...> — the compiler is the vocabulary
+  // pin — but belt to those braces: every key resolves and the caps hold.
+  const stepKeys = new Set(MONTHLY_STEPS.map((st) => st.stage as string))
+  let total = 0
+  for (const [step, entries] of Object.entries(GUIDE_MOVES_FOR_MONTHLY)) {
+    s.check(`${step}: is a real monthly step`, stepKeys.has(step))
+    s.check(`${step}: <= 2 moves`, entries.length <= 2)
+    for (const e of entries) s.check(`${step}/${e.key}: resolves`, !!GUIDE_MOVES[e.key])
+    total += guideMovesForMonthly(step as never).length
+  }
+  s.check(`<= 5 across the plan (${total})`, total <= 5)
+
+  // A composed plan's draft carries the guide items; the composer's own output does not.
+  const plan = composeMonthlyPlan(800, [], {}, ['more-new', 'regulars'], 'local')
+  s.check('MonthlyPlan.lines untouched (no guide ids)', !plan.lines.some((l) => l.id.startsWith('guide')))
+  const draft = toCampaignDraft(plan.lines, { budgetMonthly: 800, name: 'sim' })
+  const items = draft.items as LineItem[]
+  // Found by the guide:<key> id, NOT the serviceable flag — so an emission that loses the flag
+  // fails the honesty checks below instead of vanishing from the filter (a mutant proved the
+  // flag-keyed filter let exactly that slip through as a vacuous pass).
+  const guides = items.filter((it) => (it.serviceId ?? '').startsWith('guide:'))
+  s.check(`draft carries guide items (${guides.length}, <= 5)`, guides.length > 0 && guides.length <= 5)
+  s.check('every one is flagged unserviceable', guides.every((it) => it.serviceable === false))
+  s.check('every one: $0, diy, resolvable', guides.every((it) =>
+    lineTotal(it) === 0 && it.producer === 'diy' && !!GUIDE_MOVES[it.guideKey ?? '']))
+  s.check('every one sits on a step the plan covers', guides.every((it) => plan.lines.some((l) => String(l.stage) === String(it.stage))))
+  s.check('none of them mint', guides.every((it) => !mintableServiceLine(it as never)))
+  const withB = summarize(items)
+  const withoutB = summarize(items.filter((it) => it.serviceable !== false))
+  s.check('the bill is byte-identical with and without them', JSON.stringify(withB) === JSON.stringify(withoutB))
 }
 
 s.report('Guide moves')

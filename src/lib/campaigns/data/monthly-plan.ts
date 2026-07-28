@@ -31,6 +31,7 @@ import { SEND_DEPS } from '../builder/build-from-atoms'
 import { etaLabelFor } from './service-turnaround'
 import { passthroughMonthlyMinimumCents, plainCostNote } from '../builder/item-prices'
 import { signalTilt, type MonthlySignals } from './monthly-signals'
+import { guideMovesForMonthly } from './guide-moves'
 
 /* ── the four steps a stranger moves through ────────────────────────────────────────────── */
 
@@ -677,6 +678,33 @@ export function toCampaignDraft(
     lock: 'editable' as const,
   }))
 
+  /* GUIDE-ONLY MOVES (laws 2+3): the owner's own moves ride the draft as $0 serviceable:false
+   * lines — before this, the free work simply evaporated at Start. Appended to the DRAFT, not to
+   * MonthlyPlan.lines: the dial screen and the composer's output are untouched, which is what
+   * keeps the absent-signals golden trivially true. lineTotal zeroes them, mintableServiceLine
+   * refuses them, the LineCard drawer renders their steps. Emitted per funnel step the plan
+   * actually covers, so a plan with no found work does not hand out found homework. */
+  const coveredSteps = new Set(lines.filter((l) => !l.have).map((l) => l.stage))
+  const guideItems = MONTHLY_STEPS.filter((st) => coveredSteps.has(st.stage)).flatMap((st) =>
+    guideMovesForMonthly(st.stage).map((g) => ({
+      id: `mp-guide-${g.key}`,
+      serviceId: `guide:${g.key}`,
+      name: g.title,
+      plain: g.why,
+      does: 'You do this one, with our guide',
+      stage: st.stage,
+      price: 0,
+      cadence: { kind: 'one-time' as const },
+      eta: `${g.minutes} min`,
+      why: g.why,
+      included: true,
+      lock: 'editable' as const,
+      producer: 'diy' as const,
+      serviceable: false,
+      guideKey: g.key,
+    })),
+  )
+
   return {
     id: 'new',
     name: opts.name ?? 'Monthly marketing plan',
@@ -684,7 +712,7 @@ export function toCampaignDraft(
     path: 'strategist',
     phase: 'review',
     budgetMonthly: opts.budgetMonthly,
-    items,
+    items: [...items, ...guideItems],
     planned: true,
     ...(opts.goalKey ? { goalKey: opts.goalKey } : {}),
     ...(opts.brief ? { brief: opts.brief } : {}),
