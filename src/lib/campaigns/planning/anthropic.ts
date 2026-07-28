@@ -60,31 +60,34 @@ export function failClassForStatus(status: number, body?: string): import('./ai-
 export async function callStructuredOutput<T>(opts: StructuredCall): Promise<T | null> {
   const started = Date.now()
   const kind = opts.tag?.kind ?? 'unknown'
-  const finish = (
+  /**
+   * AWAITED, deliberately, after measuring the alternative: a fire-and-forget insert dies with
+   * the process — proven by 9 successful A/B calls that left 0 log rows — and on serverless the
+   * response returning freezes the lambda the same way. One ~50ms insert under a call that takes
+   * seconds is the price of the log actually existing. It still can only warn, never throw.
+   */
+  const finish = async (
     result: T | null,
     outcome: { responseText: string | null; failClass?: import('./ai-log').FailClass; tokensIn?: number; tokensOut?: number },
-  ): T | null => {
-    // Dynamic import so this transport stays importable in contexts that never call it, and
-    // fire-and-forget so logging can never slow or fail a planning call.
-    void import('./ai-log')
-      .then(({ logAiCall, alertAiFailure }) => {
-        void logAiCall({
-          kind,
-          clientId: opts.tag?.clientId ?? null,
-          model: MODEL,
-          system: opts.system,
-          user: opts.user,
-          schemaName: opts.tag?.schemaName,
-          responseText: outcome.responseText,
-          ok: result !== null,
-          failClass: result === null ? outcome.failClass ?? 'unparseable' : undefined,
-          latencyMs: Date.now() - started,
-          tokensIn: outcome.tokensIn,
-          tokensOut: outcome.tokensOut,
-        })
-        if (result === null && outcome.failClass) void alertAiFailure(outcome.failClass, kind)
+  ): Promise<T | null> => {
+    try {
+      const { logAiCall, alertAiFailure } = await import('./ai-log')
+      await logAiCall({
+        kind,
+        clientId: opts.tag?.clientId ?? null,
+        model: MODEL,
+        system: opts.system,
+        user: opts.user,
+        schemaName: opts.tag?.schemaName,
+        responseText: outcome.responseText,
+        ok: result !== null,
+        failClass: result === null ? outcome.failClass ?? 'unparseable' : undefined,
+        latencyMs: Date.now() - started,
+        tokensIn: outcome.tokensIn,
+        tokensOut: outcome.tokensOut,
       })
-      .catch(() => {})
+      if (result === null && outcome.failClass) await alertAiFailure(outcome.failClass, kind)
+    } catch { /* the log may be down; the answer still ships */ }
     return result
   }
 
