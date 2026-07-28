@@ -27,6 +27,8 @@ import type { CampaignProfile } from '@/lib/campaigns/builder/campaign-profile'
 import type { Diagnosis } from '@/lib/campaigns/planning/types'
 import { summarize, type LineItem, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
 import CampaignPlanFlow from '@/components/campaigns/plan-flow/campaign-plan-flow'
+import PlanGatePanel from '@/components/campaigns/plan-flow/plan-gate-panel'
+import { planGates, type PlanGate } from '@/lib/campaigns/builder/plan-gates'
 import PlanAnalyzing from '@/components/campaigns/plan-flow/plan-analyzing'
 import CampaignCheckout from './campaign-checkout'
 // apnosh-campaign is intentionally .jsx (untyped design code). TS infers a
@@ -123,6 +125,10 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   // summary, then persists + ships on confirm. Overlays the builder so its madlib state
   // survives a Back.
   const [plan, setPlan] = useState<PlanPayload | null>(null)
+  // Refuse-severity gates: the strategist declined to compose. Holds the payload so the
+  // one-tap adjust can patch vals and re-run. Advise-severity gates ride above the plan.
+  const [gated, setGated] = useState<{ gates: PlanGate[]; payload: PlanPayload } | null>(null)
+  const [adviseGates, setAdviseGates] = useState<PlanGate[]>([])
   const [planBusy, setPlanBusy] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
   const [planOutcome, setPlanOutcome] = useState<string | null>(null)
@@ -356,6 +362,28 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
     const goalId = SYSTEM_GOAL_ALIAS[p.itemId] ?? p.itemId
     const brainGoal = resolveBrainGoal(goalId)
     const vals = applyProfile(applyList(p.vals))
+
+    // THE GATE, before anything composes (plan-gates.ts): a doomed date or an under-floor budget
+    // gets the honest panel instead of a plan that was never going to happen. Advise-severity
+    // rides into the plan screen as a note; refuse-severity stops here.
+    const rawDate = String(vals.date ?? '')
+    const parsedDate = rawDate && !Number.isNaN(Date.parse(rawDate)) ? new Date(rawDate).toISOString().slice(0, 10) : null
+    const rawBudget = Number(String(vals.budget ?? '').replace(/[^0-9.]/g, ''))
+    const gates = planGates({
+      goal: brainGoal ?? goalId,
+      dateISO: parsedDate,
+      budgetMonthly: Number.isFinite(rawBudget) && rawBudget > 0 ? rawBudget : null,
+      todayISO: new Date().toISOString().slice(0, 10),
+    })
+    const refusals = gates.filter((g) => g.severity === 'refuse')
+    setAdviseGates(gates.filter((g) => g.severity === 'advise'))
+    if (refusals.length) {
+      setGated({ gates: refusals, payload: { itemId: p.itemId, vals } })
+      setPlan(null)
+      return
+    }
+    setGated(null)
+
     setPlan({ itemId: goalId, vals })
     setPlanOutcome(null)
     setPlanLead(null)
@@ -495,6 +523,27 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
           onDone={() => setAnalyzing(false)}
         />
       )}
+      {gated && (
+        <PlanGatePanel
+          gates={gated.gates}
+          onAdjust={(g) => {
+            if (!g.adjust) return
+            const patched = { ...gated.payload.vals, [g.adjust.kind === 'date' ? 'date' : 'budget']: g.adjust.value }
+            setGated(null)
+            void handlePlan({ itemId: gated.payload.itemId, vals: patched })
+          }}
+          onBack={() => setGated(null)}
+        />
+      )}
+      {adviseGates.length > 0 && plan && !analyzing && (
+        <div style={{ maxWidth: 620, margin: '0 auto', padding: '10px 16px 0' }}>
+          {adviseGates.map((g) => (
+            <div key={g.key} style={{ background: '#fdf6e9', borderRadius: 12, padding: '10px 13px', fontSize: 13, color: '#1d1d1f', lineHeight: 1.5, marginBottom: 8 }}>
+              <b>{g.headline}</b> {g.whatFits}
+            </div>
+          ))}
+        </div>
+      )}
       {plan && !analyzing && client?.id && (
         <CampaignPlanFlow
           itemId={plan.itemId}
@@ -511,7 +560,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
           diagnosisSource={planDiagnosis?.source ?? null}
           doneSetup={profile?.doneSetup ?? []}
           onConfirm={onConfirm}
-          onBack={() => { setPlan(null); setPlanError(null); setPlanOutcome(null); setPlanLead(null); setPlanReasons(null); setPlanDiagnosis(null); setPlanTailored(null) }}
+          onBack={() => { setPlan(null); setPlanError(null); setPlanOutcome(null); setPlanLead(null); setPlanReasons(null); setPlanDiagnosis(null); setPlanTailored(null); setAdviseGates([]) }}
         />
       )}
       {checkout && client?.id && (
