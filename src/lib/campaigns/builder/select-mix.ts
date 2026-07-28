@@ -246,6 +246,7 @@ export async function selectMixForGoal(goal: PlanGoal, tier: Tier, signals: MixS
     user: buildUser(goal, tier, signals, cands),
     schema: PROPOSAL_SCHEMA,
     maxTokens: 1400,
+    tag: { kind: 'select-mix', schemaName: 'proposal' },
     ...(opts?.timeoutMs ? { timeoutMs: opts.timeoutMs } : {}),
   })
   const keep = (parsed?.keep ?? []).filter((k) => k && typeof k.serviceId === 'string')

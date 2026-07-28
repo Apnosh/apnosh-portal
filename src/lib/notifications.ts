@@ -30,6 +30,8 @@ export type NotificationKind =
   | 'campaign_wrapped'
   | 'invoice_reminder'
   | 'work_offer'
+  // AI transport failure (key dead, credits out, rate limited) — the loud half of law 6.
+  | 'ai_failure'
   | 'booking_reminder'
 
 export interface NotificationRow {

@@ -101,6 +101,7 @@ export async function diagnose(ctx: PlanningContext): Promise<DiagnoseResult> {
     user: buildUserMessage(ctx),
     schema: DIAGNOSIS_SCHEMA,
     maxTokens: 1200,
+      tag: { kind: 'diagnose', schemaName: 'diagnosis' },
   })
   const diagnosis = coerce(parsed)
   return diagnosis ? { diagnosis, source: 'ai' } : { diagnosis: rulesDiagnosis(ctx), source: 'rules' }

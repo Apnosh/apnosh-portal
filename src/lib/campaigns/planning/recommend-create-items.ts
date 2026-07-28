@@ -67,7 +67,7 @@ const catalogBlock = (facts: RankerFacts) => CREATE_CATALOG
 
 async function aiRecommend(ctx: PlanningContext, moment: UpcomingMoment | undefined, active: ActivePlans, facts: RankerFacts): Promise<ItemRec[] | null> {
   const user = `${signalsBlock(ctx, moment, active, facts)}\n\nCATALOG:\n${catalogBlock(facts)}\n\nRecommend the best campaigns for this restaurant, strongest first.`
-  const parsed = await callStructuredOutput<{ recommended: ItemRec[] }>({ system: SYSTEM, user, schema: SCHEMA, maxTokens: 1000 })
+  const parsed = await callStructuredOutput<{ recommended: ItemRec[] }>({ system: SYSTEM, user, schema: SCHEMA, maxTokens: 1000, tag: { kind: 'recommend-items', schemaName: 'item-recs' } })
   if (!parsed?.recommended) return null
   const seen = new Set<string>()
   const out: ItemRec[] = []
