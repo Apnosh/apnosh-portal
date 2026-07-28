@@ -83,8 +83,17 @@ DESCRIBE / PICK → INTAKE → THE PLAN → ADJUST → HOW IT'S DONE → TIMELIN
   sim 53). Lesson worth keeping: BOTH the guide map and the priors floors shipped keyed by card
   ids while their call sites passed goalKey — silently zero everywhere until the sim's emission
   check caught it. Both sims now pin map keys to isSystemGoal.
-- **1c NEXT**: fold composeMonthlyPlan onto the brain; convert monthly FreeActions to the guide
-  rail.
+- **1c SHIPPED** (2026-07-28, 3 commits): FreeActions deleted, mechanisms carry FreeRefs
+  resolved through GUIDE_MOVES (7 new moves authored; one content source) · composeMonthlyPlan
+  joined the one brain: MonthlySignals (proven losers/winners, rating, listing health, list,
+  complaints) steer ranking BELOW leverage, safe route structural (thin data → no signals
+  object → deep-equal to the pre-signals engine, sim golden), all three dial anchors thread the
+  same signals · the monthly draft carries ≤5 guide-only owner moves (Record<MonthlyStepKey>
+  is the compile-time vocabulary pin). The e2e caught a real ship-stopper: supabase batch
+  inserts null-fill non-uniform keys, so one guide row made serviceable=null on every neighbor
+  row → lineItemToRow now writes serviceable/guide_key explicitly on every row. Task #194 (the
+  two planning brains) closed: one signal source, one guide content source.
+- **Phase 2 NEXT**: the router (routing.ts, hands-on question, per-move lane adjust).
 
 ## Phase 2 — the router (2-3 sessions)
 
