@@ -16,7 +16,7 @@
  * the sole money-fit layer.
  *
  * NOTE: this is the focused-campaign composer for the madlib create flow. The async
- * AI planning brain (planning/buildPlan, sequence.ts) is a different product
+ * AI planning brain (the deleted Brain-1 pipeline; its diagnose+recommend surfaces live on) is a different product
  * (whole-operation, server-only) and is intentionally untouched.
  */
 
