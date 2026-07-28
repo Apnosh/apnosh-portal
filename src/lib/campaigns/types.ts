@@ -165,6 +165,22 @@ export interface PlanMove {
   qty?: number
 }
 
+/**
+ * The compose-time allocation capture (strategist-flow law 4). Stamped by draftFromBuilder the
+ * moment the plan is composed, BEFORE any owner edit, and carried on the draft untouched until
+ * the create POST moves it into plan_allocations. `signals` is what the strategist actually saw
+ * (from the plan-mix snapshot); null when the plan composed without a brain call, in which case
+ * the server records a mint-time fetch with `signals_at: 'mint'` and never pretends otherwise.
+ */
+export interface AllocationCapture {
+  /** The items exactly as composed, pre-edit. The other half of the disagreement log. */
+  composed: LineItem[]
+  /** BrainSignals as serialized by the plan-mix snapshot. Opaque here; the brain owns the shape. */
+  signals: unknown | null
+  route: string | null
+  capturedAt: string
+}
+
 export interface CampaignDraft {
   id: string
   name: string
@@ -208,6 +224,8 @@ export interface CampaignDraft {
   /** The ordered stage labels for the system plan (goal-defined; the plan flow renders stages in
    *  this order, grouping `moves` by stage). */
   stages?: PlanStage[]
+  /** Compose-time capture for the allocation record. Never rendered; consumed at create. */
+  allocation?: AllocationCapture
 }
 
 /* ── Campaign brief ───────────────────────────────────────────────────

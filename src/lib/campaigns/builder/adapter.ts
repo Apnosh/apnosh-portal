@@ -34,6 +34,9 @@ function toLocalISODay(d: Date): string {
 function specFromVals(vals: Record<string, unknown>): Record<string, string> {
   const spec: Record<string, string> = {}
   for (const [k, v] of Object.entries(vals || {})) {
+    // The plan-mix snapshot rides vals as an object for the allocation capture; it is not a slot
+    // value and must never be stringified into brief.spec.
+    if (k === 'allocSnapshot') continue
     if (v == null || v === '') continue
     let str: string
     if (Array.isArray(v)) str = v.join(', ')
@@ -168,5 +171,14 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
     // A staged SYSTEM plan: the moves drive the staged render in the plan flow, ordered by stages.
     ...(moves && moves.length ? { moves } : {}),
     ...(stages && stages.length ? { stages } : {}),
+    // The compose-time allocation capture (law 4): the items EXACTLY as composed, before the owner
+    // touches anything, plus the plan-mix snapshot when the brain drove this composition. Deep-copied
+    // so review-screen edits (which spread and mutate items) can never reach back into it.
+    allocation: {
+      composed: JSON.parse(JSON.stringify(items)) as LineItem[],
+      signals: (vals as { allocSnapshot?: { signals?: unknown } }).allocSnapshot?.signals ?? null,
+      route: (vals as { allocSnapshot?: { route?: string } }).allocSnapshot?.route ?? null,
+      capturedAt: new Date().toISOString(),
+    },
   }
 }

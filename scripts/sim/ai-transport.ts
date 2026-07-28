@@ -37,6 +37,13 @@ async function run() {
     s.check(`HTTP ${status} → null`, out === null)
   }
 
+  s.group('The real out-of-credits shape degrades gracefully')
+  {
+    mockFetch(() => jsonResponse(400, { type: 'error', error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing.' } }))
+    const out = await callStructuredOutput<{ a: number }>({ system: 's', user: 'u', schema: {}, tag: { kind: 'sim' } })
+    s.check('the exact live 400-credit response returns null, never throws', out === null)
+  }
+
   s.group('Success and garbage both resolve correctly')
   {
     mockFetch(() => jsonResponse(200, {
@@ -59,6 +66,11 @@ async function run() {
   {
     s.check('401 is a dead key', failClassForStatus(401) === 'http-401')
     s.check('402 is out of credits, never lumped into 5xx', failClassForStatus(402) === 'http-402')
+    // The case that actually happens: Anthropic answers 400 with "credit balance is too low"
+    // (probed live 2026-07-28). Status alone would file the one outage that already bit us
+    // under log-only 5xx.
+    s.check('400 + "credit balance" body is out of credits', failClassForStatus(400, '{"error":{"message":"Your credit balance is too low to access the Anthropic API."}}') === 'http-402')
+    s.check('a plain 400 without that body stays 5xx-class', failClassForStatus(400, '{"error":{"message":"bad schema"}}') === 'http-5xx')
     s.check('429 is rate limiting', failClassForStatus(429) === 'http-429')
     s.check('everything else is 5xx', failClassForStatus(500) === 'http-5xx' && failClassForStatus(529) === 'http-5xx')
   }

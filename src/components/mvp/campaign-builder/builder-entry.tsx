@@ -382,12 +382,16 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
           : Promise.resolve(null),
       ])
       if (mixRes.status === 'fulfilled') {
-        const j = (await mixRes.value.json().catch(() => ({}))) as { mix?: string[]; reasons?: Record<string, string>; source?: string; route?: string; outcome?: string; lead?: string; suggestedTier?: { tier?: string } }
+        const j = (await mixRes.value.json().catch(() => ({}))) as { mix?: string[]; reasons?: Record<string, string>; source?: string; route?: string; outcome?: string; lead?: string; suggestedTier?: { tier?: string }; snapshot?: unknown }
         const next: Record<string, unknown> = { ...vals }
         if (Array.isArray(j.mix) && j.mix.length) next.aiMix = j.mix.join(',')
+        // The compose-time snapshot for the allocation record (law 4): what the strategist saw,
+        // stamped onto the draft by the adapter and never rendered. Threaded even when the mix is
+        // empty, because a safe-routed plan is still an allocation the record should explain.
+        if (j.snapshot) next.allocSnapshot = j.snapshot
         // No budget entered → size the plan with the brain's suggested tier instead of defaulting to Standard.
         if (!budget.trim() && !String(vals.tier ?? '').trim() && j.suggestedTier?.tier) next.tier = j.suggestedTier.tier
-        if (next.aiMix || next.tier) setPlan({ itemId: goalId, vals: next })
+        if (next.aiMix || next.tier || next.allocSnapshot) setPlan({ itemId: goalId, vals: next })
         if (typeof j.outcome === 'string') setPlanOutcome(j.outcome)
         // The cold-start reason the brain shaped the lead, e.g. "Led with reviews because your rating is 4.1…".
         if (typeof j.lead === 'string') setPlanLead(j.lead)

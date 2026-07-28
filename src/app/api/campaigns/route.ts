@@ -62,6 +62,10 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supa.auth.getUser()
   try {
     const id = await createCampaign(clientId, user?.id ?? null, draft)
+    // Law 4: the compose-time half of the allocation record. Fire-and-forget by contract — an
+    // audit row may never break an order — but awaited so serverless teardown cannot drop it.
+    const { recordComposeAllocation } = await import('@/lib/campaigns/allocation-record')
+    await recordComposeAllocation(id, clientId, draft)
     return NextResponse.json({ id })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'create failed' }, { status: 500 })

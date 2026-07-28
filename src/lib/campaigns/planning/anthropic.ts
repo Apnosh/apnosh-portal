@@ -36,9 +36,14 @@ export interface StructuredCall {
 
 const MODEL = 'claude-opus-4-8'
 
-/** HTTP status → failure class, pure so the sim can pin it. 402 is the out-of-credits status that
- *  went unnoticed for days; it must never be lumped into a generic bucket. */
-export function failClassForStatus(status: number): import('./ai-log').FailClass {
+/** HTTP status + body → failure class, pure so the sim can pin it.
+ *
+ *  MEASURED, NOT ASSUMED: Anthropic returns **400 invalid_request_error** for an exhausted credit
+ *  balance ("Your credit balance is too low..."), not 402. Probed live 2026-07-28. Classifying by
+ *  status alone filed the exact outage this system exists to catch under log-only 5xx, so the body
+ *  is part of the classification. 402 stays mapped in case the API ever starts using it. */
+export function failClassForStatus(status: number, body?: string): import('./ai-log').FailClass {
+  if (body && /credit balance/i.test(body)) return 'http-402'
   return status === 401 ? 'http-401' : status === 402 ? 'http-402' : status === 429 ? 'http-429' : 'http-5xx'
 }
 
@@ -104,7 +109,8 @@ export async function callStructuredOutput<T>(opts: StructuredCall): Promise<T |
       signal: ctrl.signal,
     })
     if (!res.ok) {
-      const failClass = failClassForStatus(res.status)
+      const errBody = await res.text().catch(() => '')
+      const failClass = failClassForStatus(res.status, errBody)
       return finish(null, { responseText: null, failClass })
     }
     const data = await res.json()

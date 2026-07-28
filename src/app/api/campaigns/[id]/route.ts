@@ -171,6 +171,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'update failed' }, { status: 500 })
   }
+
+  // Law 4, the mint half: stamp the finals (and choices) onto the allocation record the create
+  // step opened, or write the whole record as an honestly-flagged mint-time fallback. Awaited so
+  // serverless teardown cannot drop it; internally it can only warn, never throw.
+  if (justShipped) {
+    const { finalizeAllocation } = await import('@/lib/campaigns/allocation-record')
+    const finalItems = (Array.isArray(body.items) ? (body.items as LineItem[]) : campaign.draft.items)
+    const bodyChoices = (body.fields as { producer_choices?: Record<string, PieceProducer> } | undefined)?.producer_choices
+    await finalizeAllocation({
+      campaignId: id,
+      clientId: campaign.clientId,
+      goal: campaign.draft.goalKey ?? campaign.draft.sourceCatalogId ?? 'unknown',
+      finalItems,
+      choices: { ...(campaign.producerChoices ?? {}), ...(bodyChoices ?? {}) },
+    })
+  }
   // Keep the in-memory campaign authoritative for materialize + mint: the ship
   // re-sends the owner's last-seen creator picks, covering a swallowed save.
   if (body.fields?.creator_choices && typeof body.fields.creator_choices === 'object') {

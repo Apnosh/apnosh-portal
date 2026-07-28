@@ -47,8 +47,13 @@ export async function GET(req: NextRequest) {
   try {
     const { signals: brain, measured } = await assembleBrain(clientId)
 
+    // The compose-time snapshot for the allocation record (law 4): what the strategist actually
+    // saw, timestamped at the moment it saw it. Rides the response so the adapter can stamp it on
+    // the draft; days may pass between now and mint.
+    const snapshot = { signals: brain, route: planRoute(brain), at: new Date().toISOString() }
+
     // Data-richness routing: without enough real signal, keep the deterministic plan.
-    if (planRoute(brain) === 'safe') return NextResponse.json({ mix: [], source: 'rules', route: 'safe' })
+    if (planRoute(brain) === 'safe') return NextResponse.json({ mix: [], source: 'rules', route: 'safe', snapshot })
 
     // Tier: an explicit budget wins; otherwise suggest one from the profile (owner confirms in UI).
     const suggested = suggestTier({
@@ -66,6 +71,14 @@ export async function GET(req: NextRequest) {
       hasList: val(brain.hasList),
       neighborhood: val(brain.neighborhood),
       monthlyBudget: val(brain.monthlyBudget),
+      // S6 widening: the six signals the AI selection was blind to. Each is null when missing,
+      // and buildUser only renders a line for what is present.
+      cuisine: val(brain.cuisine),
+      searchTerms: val(brain.searchTerms),
+      monthlyVisitors: val(brain.monthlyVisitors),
+      slowNights: val(brain.slowNights),
+      complaintThemes: val(brain.complaintThemes),
+      listSize: val(brain.listSize),
     }
     const excludeIds = [...(val(brain.droppedServiceIds) ?? [])]
     // No CONFIRMED list → never propose a send: a send with no audience is an actively wrong plan.
@@ -95,6 +108,10 @@ export async function GET(req: NextRequest) {
       outcome: ranked.outcome.label,
       ...(lead ? { lead } : {}),
       ...(budget ? {} : { suggestedTier: suggested }),
+      snapshot,
+      // Cite-your-source (law 7): what the ranking rests on. 'measured' only when this business's
+      // own outcome history is deep enough to mean something; everything else is our estimate.
+      basis: Object.values(measured).some((m) => m.n >= 5) ? 'measured' : 'estimate',
     })
   } catch {
     return NextResponse.json({ mix: [], source: 'rules' })

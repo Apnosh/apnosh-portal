@@ -30,6 +30,20 @@ export interface MixSignals {
   neighborhood: string | null
   /** The owner's rough monthly comfort, advisory only. */
   monthlyBudget: number | null
+  /* ── S6 widening (Phase 1a): the situation the selection call was previously blind to. Every
+   * field is null when missing and the prompt renders nothing for it — the model is never shown
+   * a fabricated value. ── */
+  cuisine?: string | null
+  /** What people actually type into Google to find this place (top synced queries). */
+  searchTerms?: string[] | null
+  /** Website visitors over the last 30 days. */
+  monthlyVisitors?: number | null
+  /** Days the owner marked slow. */
+  slowNights?: string[] | null
+  /** Recurring negative review themes. */
+  complaintThemes?: string[] | null
+  /** People on the guest list, when one exists. */
+  listSize?: number | null
 }
 
 export interface MixCandidate {
@@ -162,6 +176,12 @@ How to choose:
 const SYSTEM_GOAL_GUIDANCE = `
 - Some services overlap; do not pick both of a pair unless each clearly earns its place: friend-hook (a first-visit bring-a-friend pass) vs referral (an ongoing referral loop for regulars); reminder-send (a one-off book-now nudge) vs vip-comms (VIP early-access sends); event-pkg (a single event) vs bar-events (a committed weekly series).`
 
+/** Exported for the S6 prompt-diff harness: the owner reviews old-vs-new prompt text per persona
+ *  before the widened prompt goes live. Not used by any UI. */
+export function buildUserPrompt(goal: PlanGoal, tier: Tier, s: MixSignals, cands: MixCandidate[]): string {
+  return buildUser(goal, tier, s, cands)
+}
+
 function buildUser(goal: PlanGoal, tier: Tier, s: MixSignals, cands: MixCandidate[]): string {
   const L: string[] = []
   L.push(`GOAL: ${GOAL_LABEL[goal]} (budget level: ${tier}).`)
@@ -171,7 +191,14 @@ function buildUser(goal: PlanGoal, tier: Tier, s: MixSignals, cands: MixCandidat
   L.push(`- Google listing completeness: ${s.presence != null ? `${s.presence}%` : 'unknown'}`)
   L.push(`- Guest list: ${s.hasList == null ? 'unknown' : s.hasList ? 'has an email/text list' : 'no guest list yet'}`)
   if (s.neighborhood) L.push(`- Neighborhood: ${s.neighborhood}`)
+  if (s.cuisine) L.push(`- Cuisine: ${s.cuisine}`)
   if (s.monthlyBudget) L.push(`- Rough monthly comfort: about $${s.monthlyBudget} (advisory)`)
+  // The widened situation (S6). Only what is present is shown; absence renders nothing.
+  if (s.listSize) L.push(`- List size: about ${s.listSize.toLocaleString()} people`)
+  if (s.slowNights?.length) L.push(`- Owner-marked slow days: ${s.slowNights.join(', ')}`)
+  if (s.complaintThemes?.length) L.push(`- Recurring review complaints: ${s.complaintThemes.join('; ')}`)
+  if (s.searchTerms?.length) L.push(`- What people search to find them: ${s.searchTerms.slice(0, 6).join(', ')}`)
+  if (s.monthlyVisitors) L.push(`- Website visitors last 30 days: ${s.monthlyVisitors.toLocaleString()}`)
   L.push('')
   const hasCosts = cands.some((c) => c.monthlyLoad != null)
   L.push(hasCosts ? 'CANDIDATES (choose serviceIds from here only; ~$/mo is the running cost):' : 'CANDIDATES (choose serviceIds from here only):')
