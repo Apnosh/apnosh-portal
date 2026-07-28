@@ -74,6 +74,10 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
    * heading for the website and nothing at all about what happened when they got there. Saying so
    * with their own number is honest and specific; without one there is nothing true to say, so it
    * falls back to the authored line like every other card. */
+  /* Nothing in the signals bundle can see DNS, and inventing a spam-rate number would be exactly
+   * the fabrication this file exists to prevent. So this one always defers to the authored line:
+   * the card's own diagnosis is where the real, specific answer comes from, and it is one tap away. */
+  emaildeliver: () => null,
   measure: (s) => {
     const clicks = s.actions30d?.websiteClicks
     if (typeof clicks === 'number' && clicks > 0) {

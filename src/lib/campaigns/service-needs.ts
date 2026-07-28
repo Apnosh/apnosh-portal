@@ -57,6 +57,24 @@ export function deriveServiceNeeds(
     })
   }
 
+  // ── the owner-run lanes of the land-in-the-inbox card ──
+  // Like get-measurable, this closes on a probe rather than a stamp: the records are public, so we
+  // re-read them. Unlike it, there is nothing to connect first, which is why this task can be
+  // finished by an owner who has granted us nothing at all.
+  const emailLine = (campaign.draft.items ?? []).find((it) => it.included && !it.optOut && it.serviceId === 'email-found' && it.producer === 'diy')
+  if (emailLine) {
+    push({
+      id: 'email-deliver', kind: 'action', group: 'Access',
+      title: 'Land in the inbox',
+      why: 'We read what your domain says today, hand you the exact record to add, and then look again to prove it took.',
+      actionLabel: exec.emailDeliverableAt ? 'Open' : 'Start',
+      href: `/dashboard/email?campaignId=${campaign.draft.id}`,
+      // Stamped only by POST /api/campaigns/:id/email-verified, which re-runs the lookups
+      // itself. Not owner-writable, so this cannot be a self-claim.
+      done: !!exec.emailDeliverableAt,
+    })
+  }
+
   // ── the owner-run lanes of the get-measurable card ──
   // Different from every task above it in one way that matters: there is no stamp to write. The
   // other cards close on a field somebody sets. This one closes when the daily health probe sees

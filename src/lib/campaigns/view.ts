@@ -116,6 +116,23 @@ export interface CampaignExecution {
    *  full, successful, every-section-good read. NOT in the owner PATCH whitelist, so it
    *  cannot be forged or cleared through the API — same guarantee as wrapUpSentAt. */
   gbpFixedAt?: string
+  /** ISO stamp: the domain's SPF and DMARC records were read live and both passed. Server-written
+   *  ONLY, by POST /api/campaigns/:id/email-verified, which re-runs the DNS lookups itself. NOT in
+   *  the owner PATCH whitelist, so it cannot be forged.
+   *
+   *  Deliberately has NO "finished anyway" companion, unlike gbpFinishedWithGaps. A Google profile
+   *  can be good enough with a section still improvable and the owner is the judge; deliverability
+   *  is not a judgement call, so there is no state where we record this as done while the records
+   *  are failing. */
+  emailDeliverableAt?: string
+  /** The domain those records were read at, so a later reader can tell WHAT was verified rather
+   *  than only that something was. */
+  emailCheckedDomain?: string
+  /** True when a DKIM signature was actually found. False means we could not see one, which is
+   *  NOT the same as there not being one: the selector is chosen by the sending provider and DNS
+   *  cannot be enumerated. Recorded as its own fact so the completion never reads as a claim that
+   *  all three records were confirmed. */
+  emailDkimConfirmed?: boolean
   /** ISO stamp: the owner's Google order buttons went live and read back correct. Written
    *  by the apply route after it verifies against a fresh listing read, never on the
    *  strength of a request that did not throw. Not in the owner PATCH whitelist, so it

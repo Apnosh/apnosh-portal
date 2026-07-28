@@ -61,6 +61,9 @@ const SOURCE = [
   /* The setup before the setups: nothing else on this list can prove it worked without it. Sits in
    * 'aware' because what it turns on is the first half of the funnel becoming countable at all. */
   { id: 'measure', title: 'Get measurable', goal: 'new-customers', stages: ['aware'] },
+  /* Sits in 'back' because everything it unblocks is a message to someone who already came:
+   * the welcome, the newsletter, the win-back. */
+  { id: 'emaildeliver', title: 'Land in the inbox', goal: 'regulars', stages: ['back'] },
   { id: 'reviewsreply', title: 'Reply to reviews', goal: 'reviews', stages: ['interest'] },
   { id: 'friction', title: 'Smooth out ordering', goal: 'new-customers', stages: ['actions'] },
   { id: 'giftcard', title: 'Push gift cards', goal: 'new-customers', stages: ['orders'] },

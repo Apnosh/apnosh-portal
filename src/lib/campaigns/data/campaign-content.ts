@@ -309,6 +309,16 @@ export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
     expectation: "A complete profile helps you show up in more nearby searches.",
     heroImage: null,
   },
+  emaildeliver: {
+    id: 'emaildeliver',
+    title: "Land in the inbox",
+    tagline: "Stop your email going to spam before you send any",
+    description: "The three records that tell Gmail your email is really from you, checked and fixed so your messages reach people.",
+    promise: "Your domain set up so the email you send reaches people instead of their spam folder.",
+    why: "Gmail checks your domain before it shows anyone your email. If those checks fail, your best offer never gets read.",
+    expectation: "This does not get you more email addresses. It makes sure the ones you have actually see you.",
+    heroImage: null,
+  },
   measure: {
     id: 'measure',
     title: "Get measurable",

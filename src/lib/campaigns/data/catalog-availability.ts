@@ -40,15 +40,15 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * someone forgot to gate it. To make one buyable you add its id here, which is the same moment
  * you would be signing off that it is done.
  *
- * The five: the 3-lane setup walkthroughs (Google profile, order buttons, review replies,
- * get-listed, get-measurable) — each has a real diagnosis, a real owner walkthrough, and a
+ * The six: the 3-lane setup walkthroughs (Google profile, order buttons, review replies,
+ * get-listed, get-measurable, land-in-the-inbox) — each has a real diagnosis, a real owner walkthrough, and a
  * verifier.
  *
  * 'measure' earns its place on the strongest proof of the five. It reads live connection status,
  * and the health cron re-proves that daily by pulling down the actual data path, so "done" here is
  * data arriving rather than anybody's say-so.
  */
-export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure']
+export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver']
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
  *  card and the product page so "coming soon" is never a mystery. No em dashes, 5th-grade words. */

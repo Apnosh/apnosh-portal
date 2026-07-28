@@ -295,7 +295,7 @@ s.group('Every walkthrough is mounted in the portal shell')
   const fs = require('node:fs') as typeof import('node:fs')
   const path = require('node:path') as typeof import('node:path')
 
-  const WALKTHROUGHS = ['gbp-fixer', 'order-buttons', 'review-replies', 'listings-fix', 'measure-setup']
+  const WALKTHROUGHS = ['gbp-fixer', 'order-buttons', 'review-replies', 'listings-fix', 'measure-setup', 'email-fix']
 
   /** Every page.tsx under src/app, however deep. */
   const pages: string[] = []
@@ -379,6 +379,7 @@ s.group('No file grows a new spacing or type value')
     'review-replies': { borderRadius: 5, gap: 4, fontSize: 4 },
     'listings-fix': { borderRadius: 3, gap: 3, fontSize: 4 },
     'measure-setup': { borderRadius: 4, gap: 5, fontSize: 3 },
+    'email-fix': { borderRadius: 3, gap: 4, fontSize: 6 },
   }
   const distinct = (src: string, prop: string) => {
     const out = new Set<string>()

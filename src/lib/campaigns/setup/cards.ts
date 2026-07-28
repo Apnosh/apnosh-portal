@@ -345,7 +345,80 @@ const MEASURE: SetupCard = {
   ],
 }
 
-export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, LISTINGS, MEASURE]
+/* ── Landing in the inbox ───────────────────────────────────────────────────────────────────────
+ * The best read position of any card we sell, and the one that needed the least to earn it: SPF and
+ * DMARC are public DNS, so we can diagnose a restaurant's email from a cold start with no login, no
+ * connection and nothing granted. The check is the same one Gmail runs before deciding whether
+ * their email lands.
+ *
+ * Same platform shape as get-measurable, for the same reason: the records live at the registrar
+ * where the domain was bought, and we hold no write access there. `canWrite` false, so the law
+ * refuses a we-write lane and the paid lane is hands inside access the client grants.
+ *
+ * THE LIMITATION IS NAMED BECAUSE IT IS REAL. DKIM sits under a selector only the sending provider
+ * knows, and DNS cannot be enumerated, so a miss is "we could not check" and never "you do not have
+ * one". lib/email/deliverability.ts enforces that; the copy here has to match it. */
+const EMAILDELIVER: SetupCard = {
+  id: 'emaildeliver',
+  serviceId: 'email-found',
+  platform: {
+    canRead: true,
+    canWrite: false,
+    hasProbe: true,
+    limitation: 'These records live where you bought your domain, which we cannot change for you. So we read what is there, tell you exactly what to add, and then look again to prove it took.',
+  },
+  lanes: [
+    {
+      kind: 'diy',
+      label: 'You do it yourself, step by step',
+      delivery: 'owner-applies',
+      proof: 'probe',
+      whatYouGet: [
+        'We read what your domain says today, the same way Gmail reads it',
+        'The exact record to add, and where it goes at your domain company',
+        'We look again and show you it took, so nobody has to take your word for it',
+      ],
+      needs: ['DNS'],
+      ownerTask: {
+        title: 'Land in the inbox',
+        why: 'We read what your domain says today and hand you the exact record to add, one at a time.',
+        href: '/dashboard/email',
+        actionLabel: 'Start',
+      },
+    },
+    {
+      kind: 'ai',
+      label: 'You do it with Apnosh AI, step by step',
+      delivery: 'owner-applies',
+      proof: 'probe',
+      proOnly: true,
+      whatYouGet: [
+        'We work out which records are wrong and write the replacement for you to paste',
+        'The steps for your own domain company, including what usually trips people up there',
+        'We keep checking until it is really live, which can take a day',
+      ],
+      needs: ['DNS', 'ESP'],
+      ownerTask: {
+        title: 'Land in the inbox',
+        why: 'We write the exact records for you to paste, with the steps for your own domain company.',
+        href: '/dashboard/email',
+        actionLabel: 'Start',
+      },
+    },
+    {
+      kind: 'team',
+      label: 'Done for you by Apnosh',
+      /* A person working in the registrar the client gave us access to. There is no API that edits
+       * somebody else's DNS, and there is not going to be one. */
+      delivery: 'we-operate',
+      proof: 'probe',
+      needs: ['DNS', 'ESP', 'AGREE'],
+      whatYouGet: whatYouGetForServices(['email-found']),
+    },
+  ],
+}
+
+export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, LISTINGS, MEASURE, EMAILDELIVER]
 
 export const setupCardById = (id: string): SetupCard | undefined =>
   SETUP_CARDS.find((c) => c.id === id)
