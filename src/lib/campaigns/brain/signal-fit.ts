@@ -142,6 +142,44 @@ export function signalFit(play: AtomPlay, signals: BrainSignals): { delta: numbe
     fire(-30, 'On a lean budget we skip paid and lead with free, high-ROI moves.')
   }
 
+  /* ── S5 (Phase 1a): the widened signals earn their keep. Same discipline as R1-R10: gated on
+   * usable(), bounded, and each rule consumes a signal that was previously assembled and dropped
+   * or newly fed. brandVoice and cuisine are deliberately NOT here — they shape words, not
+   * selection, and belong to the MixSignals prompt (S6). ── */
+
+  // R11 — owner-marked slow nights pull the demand levers forward: sends into the list and paid
+  // reach are the two moves that can point at a specific quiet night.
+  if (usable(signals.slowNights) && (cls === 'capture-send' || cls === 'paid')) {
+    const days = signals.slowNights.value.join(' and ')
+    fire(15, `You told us ${days} run slow, so the moves that can fill a specific night come forward.`)
+  }
+
+  // R12 — list MAGNITUDE, on top of R5's yes/no: a real audience makes sends worth more, and a
+  // meaningful lapsed pool makes them urgent. Small on purpose; R5/R6 stay the deciders.
+  if (usable(signals.listSize) && signals.listSize.value >= 500 && cls === 'capture-send') {
+    fire(15, `Your list is ${signals.listSize.value.toLocaleString()} people, a real audience worth sending to.`)
+  }
+  if (usable(signals.lapsedCount) && signals.lapsedCount.value >= 100 && cls === 'capture-send') {
+    fire(10, `${signals.lapsedCount.value.toLocaleString()} past guests have gone quiet, and a send is how they come back.`)
+  }
+
+  // R13 — menu-priced band, ONLY when priceRange is missing: the average ticket answers the same
+  // craft-vs-volume question from harder data, but firing both would double-count one fact.
+  if (!usable(signals.priceRange) && usable(signals.avgItemPrice)) {
+    const avg = signals.avgItemPrice.value
+    if (avg >= 28) {
+      if (cls === 'paid') fire(-25, 'Your menu prices say craft wins here, so great photos lead over paid blasts.')
+      if (cls === 'content') fire(20, 'Your menu prices say craft wins here, so great photos lead.')
+    } else if (avg > 0 && avg <= 14) {
+      if (cls === 'paid') fire(25, 'Your menu prices say volume wins here, so paid reach and sampling lead.')
+    }
+  }
+
+  // R14 — social reach that already exists is a working channel: feed it.
+  if (usable(signals.socialReach30d) && signals.socialReach30d.value >= 5000 && cls === 'content') {
+    fire(10, `Your posts reached ${signals.socialReach30d.value.toLocaleString()} people last month, so content keeps leading.`)
+  }
+
   delta = Math.max(TOTAL_MIN, Math.min(TOTAL_MAX, delta))
   return reason ? { delta, reason } : { delta }
 }
