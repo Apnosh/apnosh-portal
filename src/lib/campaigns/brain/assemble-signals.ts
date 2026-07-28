@@ -41,6 +41,80 @@ async function readPriceRange(clientId: string): Promise<string | null> {
   return (data as { price_range?: string | null } | null)?.price_range ?? null
 }
 
+/* ── the widened pipe (Phase 1a S4) ─────────────────────────────────────────────────────────────
+ * Every reader below is a cheap read of a cron-fed table or an onboarding fact — nothing here
+ * calls Google live, because this runs on the plan-mix hot path. That is also why gbpScore from
+ * the live listing-health read did NOT make this list: it costs seconds of Google round-trips and
+ * duplicates listingCompleteness, which the profile already carries and signal-fit already uses. */
+
+const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000
+
+/** What people actually type into Google to find this place, from the synced gbp_metrics rollup.
+ *  Fills the searchTerms core key that had no reader since the day it was typed. */
+async function readSearchTerms(clientId: string): Promise<string[] | null> {
+  const { getGbpAnalytics } = await import('@/lib/dashboard/get-gbp-analytics')
+  const summary = await getGbpAnalytics(clientId, '30d')
+  const terms = (summary.topQueries ?? []).slice(0, 10).map((q) => q.query).filter(Boolean)
+  return terms.length ? terms : null
+}
+
+/** Website visitors over the last 30 days, from the GA4-synced daily table. The other core key
+ *  that was typed and never fed. */
+async function readMonthlyVisitors(clientId: string): Promise<number | null> {
+  const admin = createAdminClient()
+  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString().slice(0, 10)
+  const { data } = await admin
+    .from('website_metrics')
+    .select('visitors')
+    .eq('client_id', clientId)
+    .gte('date', cutoff)
+  const total = (data ?? []).reduce((n, r) => n + (Number((r as { visitors?: number }).visitors) || 0), 0)
+  return total > 0 ? total : null
+}
+
+/** The owner's brand words + tone from onboarding. Absent for most; honest when it is. */
+async function readBrandVoice(clientId: string): Promise<string[] | null> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('businesses')
+    .select('brand_voice_words, brand_tone')
+    .eq('client_id', clientId)
+    .maybeSingle()
+  if (!data) return null
+  const words = Array.isArray(data.brand_voice_words) ? (data.brand_voice_words as unknown[]).map(String).filter(Boolean) : []
+  if (data.brand_tone) words.push(String(data.brand_tone))
+  return words.length ? words : null
+}
+
+/** Average priced item in dollars. menu_items stores price_cents, NULLABLE (a plain bagel has no
+ *  price), and there is no food-cost column anywhere — which is why no reading claims one. */
+async function readAvgItemPrice(clientId: string): Promise<number | null> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('menu_items')
+    .select('price_cents')
+    .eq('client_id', clientId)
+    .eq('kind', 'item')
+    .not('price_cents', 'is', null)
+    .limit(200)
+  const cents = (data ?? []).map((r) => Number((r as { price_cents?: number }).price_cents)).filter((n) => n > 0)
+  if (!cents.length) return null
+  return Math.round((cents.reduce((a, b) => a + b, 0) / cents.length)) / 100
+}
+
+/** Total social reach across platforms over the last 30 days, from the sync-fed daily rows. */
+async function readSocialReach(clientId: string): Promise<number | null> {
+  const admin = createAdminClient()
+  const cutoff = new Date(Date.now() - THIRTY_DAYS_MS).toISOString().slice(0, 10)
+  const { data } = await admin
+    .from('social_metrics')
+    .select('reach')
+    .eq('client_id', clientId)
+    .gte('date', cutoff)
+  const total = (data ?? []).reduce((n, r) => n + (Number((r as { reach?: number }).reach) || 0), 0)
+  return total > 0 ? total : null
+}
+
 export interface AssembledBrain {
   signals: BrainSignals
   /** Per-serviceId measured lift from THIS business's own outcome history, so the live plan can
@@ -57,12 +131,17 @@ export interface AssembledBrain {
 export async function assembleBrain(clientId: string): Promise<AssembledBrain> {
   const s = emptySignals()
 
-  const [profile, planning, history, channels, priceRange] = await Promise.all([
+  const [profile, planning, history, channels, priceRange, searchTerms, monthlyVisitors, brandVoice, avgItemPrice, socialReach] = await Promise.all([
     safe(() => getCampaignProfile(clientId)),
     safe(() => assembleSignals(clientId)),
     safe(() => getPlanningHistory(clientId)),
     safe(() => getConnectedTargets(clientId)),
     safe(() => readPriceRange(clientId)),
+    safe(() => readSearchTerms(clientId)),
+    safe(() => readMonthlyVisitors(clientId)),
+    safe(() => readBrandVoice(clientId)),
+    safe(() => readAvgItemPrice(clientId)),
+    safe(() => readSocialReach(clientId)),
   ])
 
   if (profile) {
@@ -106,8 +185,13 @@ export async function assembleBrain(clientId: string): Promise<AssembledBrain> {
 
   if (priceRange) s.priceRange = reading(priceRange)
 
-  // searchTerms, monthlyVisitors are not surfaced by any reader yet, so they stay
-  // honestly missing until a reader provides them (a later enrichment).
+  // The two core keys that sat unpopulated since the type was written, now fed from cron tables,
+  // and the three S4 enrichment readings. reading(null) stays honestly missing.
+  s.searchTerms = reading(searchTerms)
+  s.monthlyVisitors = reading(monthlyVisitors)
+  s.brandVoice = reading(brandVoice)
+  s.avgItemPrice = reading(avgItemPrice)
+  s.socialReach30d = reading(socialReach)
 
   // Measured lift from this business's own outcomes (win-rate per service). Partial by nature
   // (only services with outcome rows), and blendLift falls back to the prior for the rest.

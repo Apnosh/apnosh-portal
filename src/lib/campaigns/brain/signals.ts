@@ -35,6 +35,15 @@ export interface BrainSignals {
   workingServiceIds: Reading<string[]>
   // budget
   monthlyBudget: Reading<number>
+
+  /* ── widened 2026-07-28 (Phase 1a S4). Deliberately NOT in CORE_KEYS: these sharpen a plan that
+   * is already being tailored; they do not by themselves justify the tailored path. ── */
+  /** The owner's brand words + tone from onboarding, for voice-aware copy decisions. */
+  brandVoice: Reading<string[]>
+  /** Average priced menu-item price in dollars, for deal/price-positioning plays. */
+  avgItemPrice: Reading<number>
+  /** Total social reach over the last 30 days, summed across platforms. */
+  socialReach30d: Reading<number>
 }
 
 /** An all-missing signal set — the honest starting point and the safe default when we know nothing. */
@@ -46,6 +55,7 @@ export function emptySignals(): BrainSignals {
     hasList: missing(), listSize: missing(), lapsedCount: missing(), connectedChannels: missing(), slowNights: missing(),
     droppedServiceIds: missing(), workingServiceIds: missing(),
     monthlyBudget: missing(),
+    brandVoice: missing(), avgItemPrice: missing(), socialReach30d: missing(),
   }
 }
 

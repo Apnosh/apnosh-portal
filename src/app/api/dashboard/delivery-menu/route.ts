@@ -25,10 +25,16 @@ export async function GET(req: NextRequest) {
   const rate = Number.isFinite(rawRate) && rawRate > 0.01 && rawRate < 0.6 ? rawRate : 0.30
 
   const admin = createAdminClient()
+  // The real schema: price_cents (nullable — a plain bagel has no price) and NO food-cost column.
+  // The first version of this select asked for `price` and `food_cost`, neither of which exists,
+  // so the card errored on every real menu. Caught by the S4 signal-reader work reading the same
+  // table.
   const { data, error } = await admin
     .from('menu_items')
-    .select('id, name, price, food_cost')
+    .select('id, name, price_cents')
     .eq('client_id', clientId)
+    .eq('kind', 'item')
+    .not('price_cents', 'is', null)
     .limit(200)
 
   if (error) return NextResponse.json({ error: 'We could not read your menu.' }, { status: 500 })
@@ -37,10 +43,10 @@ export async function GET(req: NextRequest) {
     .map((r) => ({
       id: String(r.id),
       name: String(r.name ?? ''),
-      price: Number(r.price ?? 0),
-      // food_cost may not exist on every deployment's menu_items; a missing column comes back
-      // undefined and the report is honest about what that costs the advice.
-      foodCost: typeof r.food_cost === 'number' && r.food_cost > 0 ? r.food_cost : undefined,
+      price: (Number(r.price_cents) || 0) / 100,
+      // No food-cost column exists in the schema, so no item carries one and the report says
+      // plainly that the advice protects percentage, not dollars. When a costs column ships,
+      // this is the one line that changes.
     }))
     .filter((i) => i.name && i.price > 0)
 
