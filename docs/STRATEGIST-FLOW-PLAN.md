@@ -71,6 +71,21 @@ DESCRIBE / PICK → INTAKE → THE PLAN → ADJUST → HOW IT'S DONE → TIMELIN
 - Plan review: "the Walk" 3-act screen (designed); adjust/swap APIs (built).
 - **[v2]** Log every strategist call verbatim from day one (Phase 0's table).
 
+### Progress (2026-07-28)
+
+- **1a SHIPPED** (S1-S6): brain-routing golden 63 · dead Brain-1 deleted · migrations 230/231
+  applied · AI call log with loud failure + dedupe (400-credit body classified) · pipe widened
+  6→12 MixSignals · compose-time allocation snapshot (signals_at provenance) · old/new prompt
+  A/B run live, owner-approved.
+- **1b SHIPPED** (A: plan gates refuse-not-apologize, fire pre-compose, boundary-pinned sim 31 ·
+  B: stage-spend rollup + split priors with "Our estimate." cite, sim 132 · C: guide-only rail
+  serviceable:false, 6 guide moves, mint predicate extracted + negative-proven, migration 232,
+  sim 53). Lesson worth keeping: BOTH the guide map and the priors floors shipped keyed by card
+  ids while their call sites passed goalKey — silently zero everywhere until the sim's emission
+  check caught it. Both sims now pin map keys to isSystemGoal.
+- **1c NEXT**: fold composeMonthlyPlan onto the brain; convert monthly FreeActions to the guide
+  rail.
+
 ## Phase 2 — the router (2-3 sessions)
 
 - `routing.ts`, pure, sim-proven: per move → available lanes + a default. Inputs: platform law,
