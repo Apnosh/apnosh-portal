@@ -18,7 +18,7 @@ import type { SavedCampaign, CampaignProgress } from './view'
 export type { SavedCampaign } from './view'
 
 // ── row → domain ─────────────────────────────────────────────
-function rowToLineItem(r: Record<string, unknown>): LineItem {
+export function rowToLineItem(r: Record<string, unknown>): LineItem {
   return {
     id: r.id as string,
     serviceId: r.service_id as string,
@@ -41,6 +41,10 @@ function rowToLineItem(r: Record<string, unknown>): LineItem {
     qty: (r.qty as number) ?? undefined,
     producer: (r.producer as LineItem['producer']) ?? undefined,
     ownerMode: (r.owner_mode as LineItem['ownerMode']) ?? undefined,
+    // Guide-only rail (migration 232). A pre-migration row has no column and reads undefined,
+    // which correctly means "a normal line".
+    serviceable: r.serviceable === false ? false : undefined,
+    guideKey: (r.guide_key as string) ?? undefined,
     brief: (r.brief as LineItem['brief']) ?? undefined,
     postISO: (r.post_iso as string) ?? undefined,
     lock: (r.lock as LineItem['lock']) ?? 'editable',
@@ -104,7 +108,7 @@ function rowToSaved(c: Record<string, unknown>, items: LineItem[], brief: Campai
 }
 
 // ── domain → row ─────────────────────────────────────────────
-function lineItemToRow(campaignId: string, clientId: string, it: LineItem, position: number) {
+export function lineItemToRow(campaignId: string, clientId: string, it: LineItem, position: number) {
   const row: Record<string, unknown> = {
     campaign_id: campaignId,
     client_id: clientId,
@@ -135,6 +139,9 @@ function lineItemToRow(campaignId: string, clientId: string, it: LineItem, posit
   // owner_mode (migration 202): only the owner-run gbp lanes set it, so a legacy line
   // never references the column and inserts work unchanged pre-202.
   if (it.ownerMode !== undefined) row.owner_mode = it.ownerMode
+  // Guide-only rail: written only when set, so pre-migration DBs never see the column.
+  if (it.serviceable !== undefined) row.serviceable = it.serviceable
+  if (it.guideKey !== undefined) row.guide_key = it.guideKey
   if (it.brief !== undefined) row.brief = it.brief ?? null
   if (it.postISO !== undefined) row.post_iso = it.postISO ?? null
   return row

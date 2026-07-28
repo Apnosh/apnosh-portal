@@ -39,7 +39,18 @@ export interface ServiceWorkOrder {
 
 /** A service line is anything the plan sells that is NOT a content piece (those go through the content
  *  spine, work-orders.ts). Content pieces carry a serviceId prefixed 'content-'. */
+/** The one predicate that decides whether a line mints staff work. Exported so the sim can prove
+ *  it refuses guide-only lines and empty ids — a mint filter nothing can hammer is a comment. */
+export function mintableServiceLine(it: { included: boolean; optOut?: unknown; producer?: string; serviceable?: boolean; serviceId: string }): boolean {
+  return it.included && !it.optOut && it.producer !== 'diy' && it.serviceable !== false && isServiceLine(it.serviceId)
+}
+
 function isServiceLine(serviceId: string): boolean {
+  // An EMPTY or missing serviceId is not a service line; before this guard it slipped through
+  // (''.startsWith('content-') is false) and would have minted a phantom work order with no
+  // service behind it. Guide-only synthetic ids (guide:*) are excluded by the serviceable flag
+  // at the call site, but the empty case is this function's own hole to close.
+  if (!serviceId) return false
   return !serviceId.startsWith('content-')
 }
 
@@ -83,7 +94,8 @@ export async function mintServiceWorkOrders(campaign: SavedCampaign, shipISO: st
   // does it themselves), and a real service (not a content piece). An opted-out line is not billed, so
   // it must never mint phantom work. An owner-run line (producer 'diy' — the free self-serve gbp
   // version) bills $0 and the OWNER does the work, so it must never mint a staff order either.
-  const items = (campaign.draft.items ?? []).filter((it) => it.included && !it.optOut && it.producer !== 'diy' && isServiceLine(it.serviceId))
+  // serviceable === false is the guide-only rail (laws 2+3): the owner's own move, never staff work.
+  const items = (campaign.draft.items ?? []).filter(mintableServiceLine)
   if (!items.length) return { minted: 0, expected: 0 }
 
   const rows = items.map((it) => {

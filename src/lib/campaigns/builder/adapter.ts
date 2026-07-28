@@ -10,6 +10,7 @@
  */
 
 import type { CampaignDraft, BuildPath, LineItem } from '../types'
+import { guideMovesFor } from '../data/guide-moves'
 import { composeCampaign } from '../campaign-composer'
 import { summarize } from '../types'
 import { composePlanForGoal, mapAudience, ITEM_SHAPE } from './compose-plan'
@@ -143,6 +144,36 @@ export function draftFromBuilder({ itemId, vals }: BuilderInput): CampaignDraft 
         : it
     ))
   }
+  // GUIDE-ONLY MOVES (laws 2+3): the moves worth recommending that nobody can buy, appended for
+  // system plans only. Each bills zero by construction (lineTotal), never mints (serviceable
+  // false + the mint guard), and carries its guide into the LineCard drawer. Distinct synthetic
+  // serviceIds (guide:<key>) so removal, dedupe and stage attribution treat them as separate
+  // lines; none of them collide with a catalog id.
+  if (moves && moves.length) {
+    // Keyed by the CARD id (firstvisit/nights/…) — the system-goal vocabulary — NOT goalKey,
+    // which is the display vocabulary ('new-customers'). The guide-moves sim pins this.
+    const guides = guideMovesFor(itemId)
+    items = [
+      ...items,
+      ...guides.map(({ move }): LineItem => ({
+        id: `li-guide-${move.key}`,
+        serviceId: `guide:${move.key}`,
+        name: move.title,
+        plain: move.why,
+        does: 'You do this one, with our guide',
+        stage: 'foundation',
+        price: 0,
+        cadence: { kind: 'one-time' },
+        eta: `${move.minutes} min`,
+        included: true,
+        lock: 'editable',
+        producer: 'diy',
+        serviceable: false,
+        guideKey: move.key,
+      })),
+    ]
+  }
+
   const bill = summarize(items)
   const path: BuildPath = 'strategist'  // owner approves, Apnosh builds
 

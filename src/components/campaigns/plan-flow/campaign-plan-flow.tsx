@@ -414,8 +414,10 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   // and silent for non-system plans, blank concepts, or all-one-time plans.
   const splitAdvisories = useMemo(() => {
     const titles = Object.fromEntries((initial.stages ?? []).map((st) => [st.stage, st.title]))
-    return checkSplit(items, initial.moves, (concept ?? null) as Concept | null, initial.goalKey ?? itemId, titles)
-  }, [items, initial.moves, initial.stages, initial.goalKey, itemId, concept])
+    // itemId, not goalKey: the floors are keyed by the card id (firstvisit/nights/…); goalKey is
+    // the display vocabulary ('new-customers') and matches nothing in BASE_FLOORS.
+    return checkSplit(items, initial.moves, (concept ?? null) as Concept | null, itemId, titles)
+  }, [items, initial.moves, initial.stages, itemId, concept])
 
   const camp = useMemo<SavedCampaign>(() => ({
     clientId: '', draft: { ...initial, items, brief: initial.brief ? { ...initial.brief, contentBeats: editedBeats } : initial.brief }, phase: 'build', status: 'draft', shippedAt: null,

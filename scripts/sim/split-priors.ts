@@ -90,4 +90,18 @@ s.group('Concept tweaks change the advice where they should')
   s.check('a bar gains the slow-night draw floor', bar.some((f) => f.stage === 'draw' && f.floor === 0.2))
 }
 
+s.group('Vocabulary pin: floors are keyed by the CARD ids the call site passes')
+{
+  // The exact drift that shipped in the guide rail: the call site passed goalKey
+  // ('new-customers'), the map spoke card ids, and the feature silently never fired. checkSplit
+  // is called with itemId now; this pins that every system card id actually has floors, and
+  // that the display vocabulary matches nothing.
+  for (const id of ['firstvisit', 'nights', 'regulars', 'reviews']) {
+    s.check(`${id}: has base floors`, floorsFor(null, id).length > 0)
+  }
+  for (const wrong of ['new-customers', 'slow-nights']) {
+    s.check(`display key '${wrong}' matches nothing`, floorsFor(null, wrong).length === 0)
+  }
+}
+
 s.report('Split priors')

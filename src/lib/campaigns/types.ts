@@ -132,6 +132,14 @@ export interface LineItem {
    *  drafts each fix (Pro-gated). Undefined on team lines and legacy owner-run lines
    *  (which resolve to the checklist). Persists on campaign_line_items.owner_mode. */
   ownerMode?: 'diy' | 'ai'
+  /**
+   * False = a GUIDE-ONLY move (laws 2+3): the strategist recommends it, nobody can buy it, the
+   * owner does it with our guide. Bills zero by construction, never mints work, and must carry a
+   * guideKey into GUIDE_MOVES or the sim refuses the build. Absent means true (a normal line).
+   */
+  serviceable?: boolean
+  /** Key into src/lib/campaigns/data/guide-moves.ts. Present exactly when serviceable is false. */
+  guideKey?: string
   /** The add-piece brief for this piece (Content Menu). */
   brief?: PieceBrief
   /** This piece's own post date, ISO (Content Menu). v1 uses the campaign date. */
@@ -313,6 +321,8 @@ export interface CampaignReceipt { creatives: ReceiptCreative[]; services: LineI
 /** A line's charge at its current quantity (per-occurrence lines multiply). A piece
  *  the owner makes themselves (producer 'diy') is always free — they do the work. */
 export function lineTotal(it: LineItem): number {
+  // A guide-only move is the owner's own work by definition; a price on it would be a lie.
+  if (it.serviceable === false) return 0
   if (it.producer === 'diy') return 0
   if (it.cadence.kind === 'per-occurrence') return it.price * Math.max(1, it.qty ?? 1)
   return it.price

@@ -11,6 +11,7 @@
 import { useState } from 'react'
 import { lineTotal, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
 import { BREAKDOWNS, STEP_WHO } from '@/lib/campaigns/data/service-breakdowns'
+import { guideMoveByKey } from '@/lib/campaigns/data/guide-moves'
 import { C, money, stageHex, handlerMeta, cadenceLabel, cadenceSub } from './ui'
 
 const OPT_LABEL: Record<OptOutReason, string> = { 'have-it': 'I have this', diy: 'I’ll do it myself' }
@@ -30,6 +31,8 @@ export default function LineCard({
   const recommended = !item.included
   const hex = stageHex(item.stage)
   const breakdown = BREAKDOWNS[item.serviceId]
+  // A guide-only move (serviceable false): the owner's own move, with our steps in the drawer.
+  const guide = item.serviceable === false ? guideMoveByKey(item.guideKey) : undefined
   const h = handlerMeta(item.handler, item.optOut === 'diy')
   const dim = off || recommended
 
@@ -52,8 +55,17 @@ export default function LineCard({
           </div>
         </button>
         <div style={{ flex: 'none', textAlign: 'right' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: off ? C.faint : C.ink }}>{off ? '$0' : cadenceLabel(item)}</div>
-          <div style={{ fontSize: 9.5, color: C.faint }}>{off ? OPT_LABEL[item.optOut!] : cadenceSub(item)}</div>
+          {guide ? (
+            <>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.greenDk }}>you</div>
+              <div style={{ fontSize: 9.5, color: C.faint }}>{guide.minutes} min</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: off ? C.faint : C.ink }}>{off ? '$0' : cadenceLabel(item)}</div>
+              <div style={{ fontSize: 9.5, color: C.faint }}>{off ? OPT_LABEL[item.optOut!] : cadenceSub(item)}</div>
+            </>
+          )}
         </div>
         <span aria-hidden style={{ flex: 'none', fontSize: 15, color: C.faint, transition: 'transform .15s', transform: open ? 'rotate(90deg)' : 'none' }}>›</span>
       </div>
@@ -61,6 +73,20 @@ export default function LineCard({
       {/* drawer */}
       {open && (
         <div style={{ padding: '10px 12px 12px 27px', borderTop: `1px solid ${C.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {guide && (
+            <div>
+              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, marginBottom: 5 }}>How to do it</div>
+              {guide.steps.map((st, i) => (
+                <div key={st.label} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  <span style={{ flex: 'none', width: 16, height: 16, borderRadius: 99, background: C.greenSoft, color: C.greenDk, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>{i + 1}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 650, color: C.ink, lineHeight: 1.35 }}>{st.label}</div>
+                    <div style={{ fontSize: 11.5, color: C.ink2, lineHeight: 1.45 }}>{st.detail}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           {item.metric && (
             <p style={{ margin: 0, fontSize: 11.5, color: C.greenDk, lineHeight: 1.4 }}>📈 <b>We measure:</b> {item.metric.label} — {item.metric.expect}</p>
           )}

@@ -261,7 +261,7 @@ export function planCampaignPieces(campaign: SavedCampaign, shipISO: string): Pl
   // back to the catalog default only if no line is found.
   const priceByType = new Map<string, number>()
   for (const it of items) {
-    const m = /^content-(.+)$/.exec(it.serviceId)
+    const m = /^content-(.+)$/.exec(it.serviceId ?? '')
     if (m && typeof it.price === 'number') priceByType.set(m[1], it.price)
   }
   // Every on-site piece of a campaign shares ONE visit (the owner's "batch into one

@@ -336,7 +336,9 @@ export function servicesSettingUp(s: SavedCampaign, nowMs = Date.now()): boolean
  *  so without this signal it would read "Live · running" forever after the owner finished
  *  its only deliverable. */
 export function ownerRunWorkDone(s: SavedCampaign): boolean {
-  const lines = (s.draft.items ?? []).filter((it) => it.included && !it.optOut)
+  // Guide-only moves are the owner's own homework, not deliverables with completion signals:
+  // counting them here would make a finished self-serve gbp plan read unfinished forever.
+  const lines = (s.draft.items ?? []).filter((it) => it.included && !it.optOut && it.serviceable !== false)
   if (!lines.length || lines.some((it) => it.producer !== 'diy')) return false
   const ex = s.execution ?? {}
   return lines.every((it) => it.serviceId === 'gbp-setup' && !!ex.gbpFixedAt?.trim())
