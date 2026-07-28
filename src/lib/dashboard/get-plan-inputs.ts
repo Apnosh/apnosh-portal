@@ -22,6 +22,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient, SupabaseClient } from '@supabase/supabase-js'
 import type { GoalKey } from '@/lib/campaigns/types'
 import { known, missing, type PlanInputs, type ChannelState, type Input } from '@/lib/campaigns/data/plan-inputs'
+import type { MonthlySignals } from '@/lib/campaigns/data/monthly-signals'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AdminDb = SupabaseClient<any, 'public', any>
@@ -92,6 +93,26 @@ function slowDaysFrom(v: unknown): string[] | null {
     .filter(([, state]) => String(state).toLowerCase() === 'slow')
     .map(([day]) => day)
   return days.length ? days : null
+}
+
+/**
+ * The brain, consulted once for the monthly composer (Phase 1c: the one-brain consolidation).
+ * Fails to SAFE, never to error: thin data, an unauthenticated caller, or any assembly failure
+ * all return undefined, and the composer then behaves exactly as it did before signals existed.
+ * Deliberately not folded into PlanInputs — that type is what the form shows and asks; this is
+ * composer steering.
+ */
+export async function getMonthlySignals(): Promise<MonthlySignals | undefined> {
+  try {
+    const auth = await requireClientUser()
+    if (!auth) return undefined
+    const { assembleBrain } = await import('@/lib/campaigns/brain/assemble-signals')
+    const { deriveMonthlySignals } = await import('@/lib/campaigns/brain/derive-monthly')
+    const { signals } = await assembleBrain(auth.clientId)
+    return deriveMonthlySignals(signals, new Date().toISOString())
+  } catch {
+    return undefined
+  }
 }
 
 export async function getPlanInputs(): Promise<PlanInputs | null> {

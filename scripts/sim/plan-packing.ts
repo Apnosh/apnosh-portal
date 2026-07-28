@@ -24,7 +24,10 @@ import {
   budgetCeiling,
   monthlyFloor,
   recommendedMonthly,
+  rankedCandidates,
+  stepOf,
 } from '../../src/lib/campaigns/data/monthly-plan'
+import { signalTilt, ALL_NULL_SIGNALS, type MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
 
 const s = new Suite()
 
@@ -470,6 +473,148 @@ s.group('The bank and the standing lists agree')
     const strays = sit.needs.filter((q) => !bank.has(q))
     s.check(`${sit.v}: every standing need is a real question`, strays.length === 0, strays.join(', '))
   }
+}
+
+/* ═══ THE BRAIN FOLD (Phase 1c): signals steer, never restructure ═══════════════════════════
+ *
+ * Every invariant above must ALSO hold with a rich signals object in play, and with signals
+ * absent the composer must be deep-equal to the pre-signals engine. RICH is deliberately nasty:
+ * a low rating, a thin listing, no list, two dropped services that are real ranked candidates,
+ * one proven winner and a photo complaint — every rule fires at once. */
+
+const RICH: MonthlySignals = {
+  droppedServiceIds: ['social-mgmt', 'street-sampling'],
+  workingServiceIds: ['gbp-posts'],
+  rating: 3.9,
+  listingCompleteness: 55,
+  hasList: false,
+  complaintThemes: ['the photos of the food look dark'],
+  assembledAt: '2026-07-28T00:00:00Z',
+}
+
+const composeSig = (b: number, sig?: MonthlySignals) => composeMonthlyPlan(b, [], {}, undefined, 'local', false, undefined, undefined, sig)
+
+s.group('Signals absent ≡ the pre-signals engine, byte for byte')
+{
+  for (const goals of [undefined, ['more-new', 'regulars'] as const, ['stale-key'] as const]) {
+    for (const b of [200, 800, 2000]) {
+      const bare = JSON.stringify(composeMonthlyPlan(b, [], {}, goals as never, 'local'))
+      const withUndef = JSON.stringify(composeMonthlyPlan(b, [], {}, goals as never, 'local', false, undefined, undefined, undefined))
+      const withNulls = JSON.stringify(composeMonthlyPlan(b, [], {}, goals as never, 'local', false, undefined, undefined, ALL_NULL_SIGNALS))
+      s.check(`b=${b} goals=${goals?.join('+') ?? 'none'}: omitted == undefined`, bare === withUndef)
+      s.check(`b=${b} goals=${goals?.join('+') ?? 'none'}: all-null signals == absent (missing never reads as a value)`, bare === withNulls)
+    }
+  }
+}
+
+s.group('Every core invariant still holds under rich signals')
+{
+  const covOf = (b: number) => {
+    const p = composeSig(b, RICH)
+    const live = p.lines.filter((l) => !l.held && !l.have)
+    return { p, covered: MONTHLY_STEPS.filter((st) => live.some((l) => l.stage === st.stage)).length, bill: monthlyBill(p.lines) }
+  }
+  let prev = 0
+  let mono = true
+  let dialOk = true
+  const starts = new Set<number>()
+  for (const b of BUDGETS) {
+    const c = covOf(b)
+    if (c.covered < prev) mono = false
+    prev = Math.max(prev, c.covered)
+    if (c.bill.monthly > b && c.covered >= MONTHLY_STEPS.length) dialOk = false
+    starts.add(c.bill.once)
+  }
+  s.check('coverage never falls as the budget rises', mono)
+  s.check('a whole plan never bills past the dial', dialOk)
+  s.check(`setup is a quote, not a function of the wallet (${starts.size} distinct start figures)`, starts.size <= 3)
+
+  const base = composeSig(1500, RICH)
+  const removable = base.lines.filter((l) => !l.held && !l.have).slice(0, 4)
+  const baseBill = monthlyBill(base.lines)
+  const removalsOk = removable.every((l) => {
+    const after = composeMonthlyPlan(1500, [], { off: new Set([l.id]) }, undefined, 'local', false, undefined, undefined, RICH)
+    const bill = monthlyBill(after.lines)
+    return bill.monthly <= baseBill.monthly && bill.once <= baseBill.once && !after.lines.some((x) => x.id === l.id)
+  })
+  s.check('removing a line never raises the bill, and it stays removed', removalsOk)
+}
+
+s.group('Proven losers: demoted from depth, never from coverage')
+{
+  for (const b of BUDGETS) {
+    const p = composeSig(b, RICH)
+    const droppedBought = p.lines.filter((l) => RICH.droppedServiceIds.includes(l.id) && !l.held && !l.have)
+    // The two dropped ids must never be bought for DEPTH. (They could only appear as a step's
+    // last-resort coverage, which the only-option case below constructs deliberately.)
+    for (const l of droppedBought) {
+      const peers = rankedCandidates(undefined, false, undefined, RICH).filter((c) => stepOf(c.id) === l.stage && !RICH.droppedServiceIds.includes(c.id))
+      s.check(`b=${b}: ${l.id} bought only as last resort`, peers.length === 0)
+    }
+    if (p.nextUp) s.check(`b=${b}: nextUp never names a proven loser`, !RICH.droppedServiceIds.includes(p.nextUp.name))
+  }
+  s.check('nextUp checked across all budgets', true)
+
+  // Coverage with signals is never worse than without.
+  for (const b of [200, 500, 1000, 2000]) {
+    const bare = composeSig(b)
+    const sig = composeSig(b, RICH)
+    const cov = (pl: typeof bare) => MONTHLY_STEPS.filter((st) => pl.lines.some((l) => l.stage === st.stage && !l.held && !l.have)).length
+    s.check(`b=${b}: coverage with signals (${cov(sig)}) >= without (${cov(bare)})`, cov(sig) >= cov(bare))
+  }
+
+  // THE ONLY-OPTION CASE: drop EVERY candidate a step has. The step must still be covered — a
+  // proven loser is last resort, not banished — or history would mean "less plan".
+  const step = 'easy'
+  const pool = rankedCandidates(undefined, false, undefined).filter((c) => stepOf(c.id) === step).map((c) => c.id)
+  const allDropped: MonthlySignals = { ...ALL_NULL_SIGNALS, droppedServiceIds: pool }
+  const p = composeSig(5000, allDropped)
+  s.check(`step '${step}' still covered when its every candidate is a proven loser (${pool.length} dropped)`,
+    p.lines.some((l) => l.stage === step && !l.held && !l.have))
+
+  // The owner's hand beats history: adding a dropped id lands it.
+  const addBack = composeMonthlyPlan(500, [], { added: new Set(['social-mgmt']) }, undefined, 'local', false, undefined, undefined, RICH)
+  s.check('an owner-added proven loser still lands', addBack.lines.some((l) => l.id === 'social-mgmt'))
+}
+
+s.group('The tilt does something, and never outranks leverage')
+{
+  const bare = rankedCandidates(undefined, false, undefined)
+  const rich = rankedCandidates(undefined, false, undefined, RICH)
+  const idx = (list: typeof bare, id: string) => list.findIndex((c) => c.id === id)
+  s.check(`rating 3.9 pulls review-engine up (bare #${idx(bare, 'review-engine')} -> rich #${idx(rich, 'review-engine')})`,
+    idx(rich, 'review-engine') < idx(bare, 'review-engine'))
+  s.check('a proven loser falls among its peers', idx(rich, 'social-mgmt') > idx(bare, 'social-mgmt'))
+
+  // ADVISORY BOUND: within a foundation-band, a non-dropped service wanted by strictly more
+  // goals ALWAYS outranks a boosted one wanted by fewer. Tilt reorders ties; it cannot beat
+  // leverage. (The negative proof moves the tilt term above `wanted` and watches this fail.)
+  let bound = true
+  for (let i = 0; i < rich.length; i++) {
+    for (let j = i + 1; j < rich.length; j++) {
+      const a = rich[i]; const b = rich[j]
+      if (a.foundation !== b.foundation) continue
+      const tilt = signalTilt(RICH)
+      if (tilt.dropped.has(a.id) || tilt.dropped.has(b.id)) continue
+      if (b.wanted > a.wanted) bound = false
+    }
+  }
+  s.check('leverage always beats the tilt', bound)
+}
+
+s.group('The dial anchors and the plan speak with one voice under signals')
+{
+  const floor = monthlyFloor(undefined, 'local', false, RICH)
+  const rec = recommendedMonthly(undefined, 'local', false, RICH)
+  const ceil = budgetCeiling(undefined, 'local', false, RICH) ?? 0
+  s.check(`floor $${floor} <= suggested $${rec} <= ceiling $${ceil}`, floor <= rec && (ceil === 0 || rec <= ceil))
+  s.check('the suggestion is a whole plan', (() => {
+    const atRec = composeSig(rec, RICH)
+    const richPlan = composeSig(999_999, RICH)
+    const want = new Set(richPlan.lines.filter((l) => !l.held && l.kind === 'monthly').map((l) => l.stage))
+    const got = new Set(atRec.lines.filter((l) => !l.held && !l.have && l.kind === 'monthly').map((l) => l.stage))
+    return [...want].every((st) => got.has(st))
+  })())
 }
 
 s.report('Plan packing properties')

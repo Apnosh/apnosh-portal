@@ -15,6 +15,7 @@
 import { config } from 'dotenv'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { composeMonthlyPlan, monthlyBill, toCampaignDraft } from '@/lib/campaigns/data/monthly-plan'
+import type { MonthlySignals } from '@/lib/campaigns/data/monthly-signals'
 import { buildOrderSnapshot } from '@/lib/agreements/order-snapshot'
 import { CLIENT_AGREEMENT_VERSION } from '@/lib/agreements/client-agreement'
 import { createCampaign } from '@/lib/campaigns/server'
@@ -27,6 +28,18 @@ config({ path: '.env.local' })
 /** A real client to hang the throwaway campaign off (FK-safe). Same one db-e2e.ts uses. */
 const TEST_CLIENT = '2535fe50-0d78-411f-a59f-cfffbbd239b5'
 const TEST_NAME = 'SIM_MONTHLY_PLAN_DELETE_ME'
+const TEST_NAME_SIG = 'SIM_MONTHLY_PLAN_SIGNALS_DELETE_ME'
+
+/** The brain fold (Phase 1c): a signals-steered plan must survive Postgres the same way. */
+const SIGNALS: MonthlySignals = {
+  droppedServiceIds: ['social-mgmt'],
+  workingServiceIds: ['gbp-posts'],
+  rating: 3.9,
+  listingCompleteness: 55,
+  hasList: false,
+  complaintThemes: ['photos look dark'],
+  assembledAt: '2026-07-28T00:00:00Z',
+}
 
 const k = (value: unknown, source: string) => ({ value, source })
 const INPUTS = {
@@ -52,6 +65,7 @@ async function main() {
   await a.from('campaigns').delete().eq('name', TEST_NAME)
 
   let campaignId = ''
+  let sigId = ''
   try {
     /* ── compose, exactly as the screen does ─────────────────────────── */
     s.group('compose')
@@ -150,10 +164,37 @@ async function main() {
       `reviews: ${ids(reviewsOnly).join(', ')}`,
     )
     s.check('a reviews plan carries review work', ids(reviewsOnly).some((i) => i.startsWith('review')), null)
+
+    /* ── the brain fold: a signals-steered plan through the same write path ── */
+    s.group('signals-steered plan survives Postgres')
+    await a.from('campaigns').delete().eq('name', TEST_NAME_SIG)
+    const sigPlan = composeMonthlyPlan(800, [], {}, goals, undefined, false, undefined, undefined, SIGNALS)
+    const sigScreen = monthlyBill(sigPlan.lines)
+    s.check('signals plan composes', sigPlan.lines.length > 0, `${sigPlan.lines.length} lines`)
+    s.check('the proven loser is not bought for depth', !sigPlan.lines.some((l) => l.id === 'social-mgmt' && !l.held && !l.have), null)
+    const sigDraft = toCampaignDraft(sigPlan.lines, { budgetMonthly: 800, goalKey: goals[0], name: TEST_NAME_SIG })
+    sigId = await createCampaign(TEST_CLIENT, null, sigDraft as unknown as CampaignDraft)
+    s.check('createCampaign returned an id', !!sigId, sigId)
+    const { data: sigRows } = await a
+      .from('campaign_line_items')
+      .select('service_id, price, cadence, included')
+      .eq('campaign_id', sigId)
+    let sOnce = 0
+    let sMonthly = 0
+    for (const it of sigRows ?? []) {
+      if (!it.included) continue
+      const kind = (it.cadence as { kind?: string } | null)?.kind
+      if (kind === 'recurring') sMonthly += Number(it.price)
+      else sOnce += Number(it.price)
+    }
+    s.eq('DB once == screen once (signals)', sOnce, sigScreen.once)
+    s.eq('DB monthly == screen monthly (signals)', sMonthly, sigScreen.monthly)
   } finally {
     // teardown — cascade takes the line items and the snapshot
     if (campaignId) await a.from('campaigns').delete().eq('id', campaignId)
+    if (sigId) await a.from('campaigns').delete().eq('id', sigId)
     await a.from('campaigns').delete().eq('name', TEST_NAME)
+    await a.from('campaigns').delete().eq('name', TEST_NAME_SIG)
   }
 
   const ok = s.report('DB e2e — monthly marketing plan')

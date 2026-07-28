@@ -29,6 +29,7 @@ import {
   type MonthlyLine,
   type MonthlyStepKey,
 } from '@/lib/campaigns/data/monthly-plan'
+import type { MonthlySignals } from '@/lib/campaigns/data/monthly-signals'
 import { startMonthlyPlan } from '@/lib/dashboard/get-plan-inputs'
 import { CLIENT_AGREEMENT_VERSION, CLIENT_AGREEMENT_SUMMARY } from '@/lib/agreements/client-agreement'
 import { buildOrderSnapshot } from '@/lib/agreements/order-snapshot'
@@ -183,6 +184,7 @@ function ServiceCard({ line, action, onToggle }: { line: MonthlyLine; action: 'r
 
 export default function MonthlyPlanFlow({
   inputs,
+  signals,
   initialPhase = 'setup',
   initialAnswers,
   initialStep = null,
@@ -190,6 +192,9 @@ export default function MonthlyPlanFlow({
 }: {
   /** Everything we already know. Read server-side by getPlanInputs so the form asks almost nothing. */
   inputs: PlanInputs
+  /** The brain's flattened read of THIS business, fetched once server-side. Absent on thin data
+   *  (the safe route) and the composer behaves exactly as it did before signals existed. */
+  signals?: MonthlySignals
   initialPhase?: 'setup' | 'build'
   initialAnswers?: Answers
   initialStep?: string | null
@@ -223,12 +228,15 @@ export default function MonthlyPlanFlow({
   /* What the owner already has is never bought again. assetsCover feeds the `have` path, which
    * already renders a covered line at zero and excludes it from both numbers. */
   const have = useMemo(() => assetsCover(a.assets), [a.assets?.join(',')])
+  /* The dial anchors compose with the SAME signals as the live plan — anchors that composed
+   * without them could name a floor the actual plan can never hit. signals is server-constant,
+   * so the dep is just the prop reference. */
   const suggested = useMemo(
-    () => recommendedMonthly(goals, a.reach, hasShift),
-    [goals?.join(','), a.reach, hasShift],
+    () => recommendedMonthly(goals, a.reach, hasShift, signals),
+    [goals?.join(','), a.reach, hasShift, signals],
   )
-  const floor = useMemo(() => monthlyFloor(goals, a.reach, hasShift), [goals?.join(','), a.reach, hasShift])
-  const ceiling = useMemo(() => budgetCeiling(goals, a.reach, hasShift), [goals?.join(','), a.reach, hasShift])
+  const floor = useMemo(() => monthlyFloor(goals, a.reach, hasShift, signals), [goals?.join(','), a.reach, hasShift, signals])
+  const ceiling = useMemo(() => budgetCeiling(goals, a.reach, hasShift, signals), [goals?.join(','), a.reach, hasShift, signals])
   /* Until the owner moves it, the dial IS the recommendation and follows it. Onboarding's stored
    * budget is deliberately not used to size the plan — it is what they could spend, not what the
    * work costs, and letting it anchor the plan is the thing we removed. */
@@ -240,8 +248,8 @@ export default function MonthlyPlanFlow({
   }, [floor, suggested, ceiling])
 
   const plan = useMemo(
-    () => composeMonthlyPlan(budget, have, { off, added }, goals, a.reach, hasShift, a.avoid, a.assets),
-    [budget, have, off, added, goals?.join(','), a.reach, hasShift, a.avoid?.join(','), a.assets?.join(',')],
+    () => composeMonthlyPlan(budget, have, { off, added }, goals, a.reach, hasShift, a.avoid, a.assets, signals),
+    [budget, have, off, added, goals?.join(','), a.reach, hasShift, a.avoid?.join(','), a.assets?.join(','), signals],
   )
   const bill = plan.quote
   const state = chainStateOf(MONTHLY_STEPS, plan.lines as never)

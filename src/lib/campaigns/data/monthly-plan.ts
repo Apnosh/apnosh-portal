@@ -30,6 +30,7 @@ import { PLAN_GOALS, candidatesForGoal, shiftCandidates, assetsBoost, type Candi
 import { SEND_DEPS } from '../builder/build-from-atoms'
 import { etaLabelFor } from './service-turnaround'
 import { passthroughMonthlyMinimumCents, plainCostNote } from '../builder/item-prices'
+import { signalTilt, type MonthlySignals } from './monthly-signals'
 
 /* ── the four steps a stranger moves through ────────────────────────────────────────────── */
 
@@ -153,7 +154,7 @@ export interface Ranked {
  * owner who says "regulars and reviews" gets review-engine and review-responses pulled up rather
  * than the services that merely appear everywhere.
  */
-export function rankedCandidates(goals?: readonly string[], shift = false, assets?: readonly string[]): Ranked[] {
+export function rankedCandidates(goals?: readonly string[], shift = false, assets?: readonly string[], signals?: MonthlySignals): Ranked[] {
   const all = GOAL_CANDIDATES()
   const acc = new Map<string, Ranked>()
   let lists = goals?.length ? goals.map((g) => all[g]).filter(Boolean) : Object.values(all)
@@ -181,11 +182,25 @@ export function rankedCandidates(goals?: readonly string[], shift = false, asset
    * past the budget.
    */
   const boosted = new Set(assetsBoost(assets))
+  /*
+   * THE BRAIN'S TILT (monthly-signals.ts), in strict rank order below the structural terms:
+   *   - notDropped sits AFTER foundation, BEFORE wanted: a proven loser falls to last among its
+   *     peers, but a dropped foundation still outranks growth — history reorders, it never
+   *     reshapes the funnel, so more history can never mean less plan.
+   *   - the boost/demote tilt sits BELOW wanted and BELOW assets: what the owner explicitly told
+   *     us beats what we inferred, and leverage beats both. Signals reorder ties only.
+   * The tilt is budget-blind by construction (one fixed answer per signals object), which is what
+   * keeps the ranking identical at every dial position. With signals undefined every new term
+   * compares 0 and this sort is byte-identical to the pre-signals chain (sim golden).
+   */
+  const tilt = signalTilt(signals)
   return [...acc.values()].sort(
     (a, b) =>
       Number(b.foundation) - Number(a.foundation) ||
+      Number(tilt.dropped.has(a.id)) - Number(tilt.dropped.has(b.id)) ||
       b.wanted - a.wanted ||
       Number(boosted.has(b.id)) - Number(boosted.has(a.id)) ||
+      (Number(tilt.boost.has(b.id)) - Number(tilt.demote.has(b.id))) - (Number(tilt.boost.has(a.id)) - Number(tilt.demote.has(a.id))) ||
       a.best - b.best ||
       a.id.localeCompare(b.id),
   )
@@ -377,6 +392,7 @@ export function composeMonthlyPlan(
   shift = false,
   avoid?: readonly string[],
   assets?: readonly string[],
+  signals?: MonthlySignals,
 ): MonthlyPlan {
   const added = edits.added ?? new Set<string>()
   const haveSet = new Set(have)
@@ -390,7 +406,11 @@ export function composeMonthlyPlan(
   let start = 0
   let nextUp: { name: string; addlMonthly: number } | null = null
 
-  const ranked = rankedCandidates(goals, shift, assets)
+  const ranked = rankedCandidates(goals, shift, assets, signals)
+  /* Proven losers (measured HERE): still eligible for coverage — the demotion in the ranking
+   * means the walk-down only reaches one as last resort — but never bought for DEPTH. We do not
+   * deepen a plan with work this business already watched flop. */
+  const droppedHere = signalTilt(signals).dropped
 
   /*
    * WHAT WE CAN ACTUALLY DELIVER, INCLUDING THE SECOND-ORDER CASE.
@@ -511,6 +531,7 @@ export function composeMonthlyPlan(
    * owner deliberately choosing it.
    */
   for (const c of ranked) {
+    if (droppedHere.has(c.id)) continue
     const s = svc(c.id)
     if (s && deliverable(c.id) && !taken.has(c.id) && recurringOf(s) === 0) continue
     const r = consider(c.id)
@@ -681,8 +702,8 @@ export function toCampaignDraft(
  */
 /** The dial past which there is no more ongoing work to buy. Setup is not capped by the dial, so
  *  this is now purely a monthly figure — which is what the slider was always claiming to be. */
-export function budgetCeiling(goals?: readonly string[], reach?: Reach, shift = false): number | null {
-  const at = (b: number) => composeMonthlyPlan(b, [], {}, goals, reach, shift).quote.monthly
+export function budgetCeiling(goals?: readonly string[], reach?: Reach, shift = false, signals?: MonthlySignals): number | null {
+  const at = (b: number) => composeMonthlyPlan(b, [], {}, goals, reach, shift, undefined, undefined, signals).quote.monthly
   const top = at(100000)
   for (const b of [100, 200, 300, 500, 800, 1200, 1600, 2000, 3000, 4000, 6000, 8000, 10000]) {
     if (at(b) >= top) return b
@@ -695,8 +716,8 @@ export function budgetCeiling(goals?: readonly string[], reach?: Reach, shift = 
  * is a thing to say out loud rather than a thing to quietly sell. Derived from the cheapest ongoing
  * work we can actually deliver, so it moves when the catalog does.
  */
-export function monthlyFloor(goals?: readonly string[], reach?: Reach, shift = false): number {
-  const rich = composeMonthlyPlan(100000, [], {}, goals, reach, shift)
+export function monthlyFloor(goals?: readonly string[], reach?: Reach, shift = false, signals?: MonthlySignals): number {
+  const rich = composeMonthlyPlan(100000, [], {}, goals, reach, shift, undefined, undefined, signals)
   const prices = rich.lines.filter((l) => !l.held && l.kind === 'monthly').map((l) => l.amount)
   return prices.length ? Math.min(...prices) : 0
 }
@@ -708,13 +729,16 @@ export function monthlyFloor(goals?: readonly string[], reach?: Reach, shift = f
  * results argue for more is the opposite of anchoring on someone's maximum and packing it: the
  * number goes UP only once there is evidence, and the owner is the one who moves it.
  */
-export function recommendedMonthly(goals?: readonly string[], reach?: Reach, shift = false): number {
-  const rich = composeMonthlyPlan(100000, [], {}, goals, reach, shift)
+/* All three dial anchors thread the SAME signals as the live plan. If they composed without,
+ * a dropped service that happens to be the cheapest recurring line would make the floor name a
+ * price the actual plan can never hit, and the recommendation would converge on the wrong dial. */
+export function recommendedMonthly(goals?: readonly string[], reach?: Reach, shift = false, signals?: MonthlySignals): number {
+  const rich = composeMonthlyPlan(100000, [], {}, goals, reach, shift, undefined, undefined, signals)
   const wantSteps = new Set(rich.lines.filter((l) => !l.held && l.kind === 'monthly').map((l) => l.stage))
-  const ceiling = budgetCeiling(goals, reach, shift) ?? 3000
+  const ceiling = budgetCeiling(goals, reach, shift, signals) ?? 3000
   let step = 25
   for (let b = step; b <= ceiling; b += step) {
-    const p = composeMonthlyPlan(b, [], {}, goals, reach, shift)
+    const p = composeMonthlyPlan(b, [], {}, goals, reach, shift, undefined, undefined, signals)
     const got = new Set(p.lines.filter((l) => !l.held && !l.have && l.kind === 'monthly').map((l) => l.stage))
     if ([...wantSteps].every((st) => got.has(st))) return b
     if (b >= 500) step = 50

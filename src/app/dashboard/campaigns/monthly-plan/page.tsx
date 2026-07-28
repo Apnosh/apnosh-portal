@@ -12,7 +12,7 @@
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpEmpty } from '@/components/mvp/mvp-detail'
 import MonthlyPlanFlow from '@/components/campaigns/monthly/monthly-plan-flow'
-import { getPlanInputs } from '@/lib/dashboard/get-plan-inputs'
+import { getPlanInputs, getMonthlySignals } from '@/lib/dashboard/get-plan-inputs'
 
 /* Named "New campaign", not "monthly marketing plan". The screen builds a grand opening, a concert
  * night, a run of a new dish — none of which are monthly and none of which are a plan in the sense
@@ -21,7 +21,9 @@ import { getPlanInputs } from '@/lib/dashboard/get-plan-inputs'
 export const metadata = { title: 'New campaign' }
 
 export default async function MonthlyPlanPage() {
-  const inputs = await getPlanInputs()
+  // The brain is consulted once, here; the flow recomposes client-side against this snapshot.
+  // signals is undefined on thin data (the safe route) and the composer runs exactly as before.
+  const [inputs, signals] = await Promise.all([getPlanInputs(), getMonthlySignals()])
 
   return (
     <MvpShell
@@ -36,7 +38,7 @@ export default async function MonthlyPlanPage() {
       }
     >
       {inputs ? (
-        <MonthlyPlanFlow inputs={inputs} />
+        <MonthlyPlanFlow inputs={inputs} signals={signals} />
       ) : (
         <div style={{ padding: '24px 14px' }}>
           <MvpEmpty
