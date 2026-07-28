@@ -77,6 +77,14 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
   /* Nothing in the signals bundle can see DNS, and inventing a spam-rate number would be exactly
    * the fabrication this file exists to prevent. So this one always defers to the authored line:
    * the card's own diagnosis is where the real, specific answer comes from, and it is one tap away. */
+  /* Not built yet, so the product page shows the authored line and a coming-soon reason. A
+   * personalised "why" for something nobody can buy would be a sales pitch for a door that does
+   * not open. */
+  /* The real "why" is their own menu against their own commission rate, which is the card's whole
+   * job and needs neither of the two numbers this signals bundle carries. Deferring to the authored
+   * line beats a vaguer version of what the card itself says on the next screen. */
+  deliverymenu: () => null,
+  pos: () => null,
   emaildeliver: () => null,
   measure: (s) => {
     const clicks = s.actions30d?.websiteClicks

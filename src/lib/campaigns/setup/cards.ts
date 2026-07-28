@@ -418,7 +418,88 @@ const EMAILDELIVER: SetupCard = {
   ],
 }
 
-export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, LISTINGS, MEASURE, EMAILDELIVER]
+/* ── Pricing the delivery menu ──────────────────────────────────────────────────────────────────
+ * THE SECOND CARD WITH NO PLATFORM AT ALL, and it proves the listings shape generalises. We hold no
+ * API to DoorDash, Uber Eats or Grubhub: we cannot read their menu and we cannot change a price. So
+ * `canRead` and `canWrite` are both false, there is no probe, and every lane closes on the owner's
+ * word.
+ *
+ * What makes it worth selling anyway is that the hard part was never the typing. It is knowing what
+ * the new number should BE, which is arithmetic on their own menu, their own food costs and the
+ * rate on their own statement. That is the AI guide shape the get-listed card established, applied
+ * to a job where the guidance is genuinely the product.
+ *
+ * The team lane is `we-operate`: a person in the client's own app dashboard, typing. There is no
+ * API to hide behind and the price has to buy hands. */
+const DELIVERYMENU: SetupCard = {
+  id: 'deliverymenu',
+  serviceId: 'delivery-opt',
+  platform: {
+    canRead: false,
+    canWrite: false,
+    hasProbe: false,
+    limitation: 'The delivery apps give us no way to read or change your menu, so every lane here ends with you or us typing the new prices into their dashboard, and with you telling us it is done.',
+  },
+  lanes: [
+    {
+      kind: 'diy',
+      label: 'You do it yourself, step by step',
+      delivery: 'owner-applies',
+      proof: 'owner-word',
+      whatYouGet: [
+        'Every dish with the price to charge on the app, worked out from your own menu',
+        'The dishes that lose money even at the highest price we would ask a guest to pay',
+        'You type them in yourself, and mark it done',
+      ],
+      needs: ['MENU'],
+      ownerTask: {
+        title: 'Price your delivery menu',
+        why: 'Every dish with the price to charge on the app, worked out from your own menu and what the app takes.',
+        href: '/dashboard/delivery-menu',
+        actionLabel: 'Start',
+        claimedField: 'deliveryMenuSelfDoneAt',
+      },
+    },
+    {
+      kind: 'ai',
+      label: 'You do it with Apnosh AI, step by step',
+      delivery: 'owner-applies',
+      proof: 'owner-word',
+      proOnly: true,
+      whatYouGet: [
+        'The same prices, plus what you keep per dish before and after',
+        'Which dishes to pull off delivery instead of repricing',
+        'It remembers where you got to, so you can do a few and come back',
+      ],
+      needs: ['MENU', 'COSTS'],
+      ownerTask: {
+        title: 'Price your delivery menu',
+        why: 'The new price per dish, what you keep before and after, and which ones to pull instead.',
+        href: '/dashboard/delivery-menu',
+        actionLabel: 'Start',
+        claimedField: 'deliveryMenuSelfDoneAt',
+      },
+    },
+    {
+      kind: 'team',
+      label: 'Done for you by Apnosh',
+      delivery: 'we-operate',
+      proof: 'owner-word',
+      needs: ['MENU', 'COSTS', 'DELIV', 'AGREE'],
+      /* Written out rather than derived. `delivery-opt` lives in the atom catalog and the turnaround
+       * table but has no entry in the PRICED catalog, so whatYouGetForServices returns nothing for
+       * it, and a team lane that promises nothing is what the store used to ship silently. The sim
+       * caught it; these are the rows until that service is priced properly. */
+      whatYouGet: [
+        'We work out the right price for every dish on every app you sell on',
+        'We type them into your app dashboards for you',
+        'We tell you which dishes to pull, and why they cannot be saved with a price',
+      ],
+    },
+  ],
+}
+
+export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, LISTINGS, MEASURE, EMAILDELIVER, DELIVERYMENU]
 
 export const setupCardById = (id: string): SetupCard | undefined =>
   SETUP_CARDS.find((c) => c.id === id)

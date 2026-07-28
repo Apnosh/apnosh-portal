@@ -124,6 +124,10 @@ export interface CampaignExecution {
    *  can be good enough with a section still improvable and the owner is the judge; deliverability
    *  is not a judgement call, so there is no state where we record this as done while the records
    *  are failing. */
+  /** ISO stamp: the owner says they typed the new delivery prices into the apps. Owner-writable by
+   *  design, because there is no API to check it with. A claim, kept in a claimed-shaped field, and
+   *  rendered hollow. */
+  deliveryMenuSelfDoneAt?: string
   emailDeliverableAt?: string
   /** The domain those records were read at, so a later reader can tell WHAT was verified rather
    *  than only that something was. */

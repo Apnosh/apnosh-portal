@@ -57,6 +57,23 @@ export function deriveServiceNeeds(
     })
   }
 
+  // ── the owner-run lanes of the delivery-menu card ──
+  // Closes on the owner's word, and there is no honest alternative: the delivery apps give us no
+  // way to read a menu, so nobody on our side can confirm a price was typed in. Claimed field,
+  // hollow check, same as the get-listed card.
+  const deliveryLine = (campaign.draft.items ?? []).find((it) => it.included && !it.optOut && it.serviceId === 'delivery-opt' && it.producer === 'diy')
+  if (deliveryLine) {
+    push({
+      id: 'delivery-menu', kind: 'action', group: 'Content',
+      title: 'Price your delivery menu',
+      why: 'Every dish with the price to charge on the app, worked out from your own menu and what the app takes. Type them in and mark it done.',
+      actionLabel: 'Start',
+      href: `/dashboard/delivery-menu?campaignId=${campaign.draft.id}`,
+      done: !!exec.deliveryMenuSelfDoneAt,
+      markDoneField: 'deliveryMenuSelfDoneAt',
+    })
+  }
+
   // ── the owner-run lanes of the land-in-the-inbox card ──
   // Like get-measurable, this closes on a probe rather than a stamp: the records are public, so we
   // re-read them. Unlike it, there is nothing to connect first, which is why this task can be

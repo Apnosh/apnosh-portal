@@ -48,7 +48,7 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * and the health cron re-proves that daily by pulling down the actual data path, so "done" here is
  * data arriving rather than anybody's say-so.
  */
-export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver']
+export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu']
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
  *  card and the product page so "coming soon" is never a mystery. No em dashes, 5th-grade words. */
@@ -74,6 +74,10 @@ export const COMING_SOON_REASON: Record<string, string> = {
   // Website + local-search fixes: only part is self-serve today (the Google side), the rest is
   // a real site rebuild. Held back until the whole thing is one clean flow.
   site: 'We are still building this into one clean flow. Coming soon.',
+  // POS: every till vendor is a different integration, and a half-connected one silently reports
+  // the wrong sales, which is worse than no numbers at all. Named plainly because most restaurants
+  // run their marketing off the POS, so "coming soon" has to be believable, not a brush-off.
+  pos: 'Your till talks to us differently depending on who makes it. We are building those one at a time, and we will not connect yours until the numbers it sends are right.',
 }
 
 /** Which reason group each bookmarked built-in belongs to (drives COMING_SOON_REASON). */
@@ -101,6 +105,8 @@ const COMING_SOON_GROUP: Record<string, keyof typeof COMING_SOON_REASON> = {
   reach: 'ads',
   // Website + local search: part-Google, part site rebuild, not one flow yet.
   website: 'site', localseo: 'site',
+  // The till hookup. Real demand, no integration yet.
+  pos: 'pos',
 }
 
 /**
