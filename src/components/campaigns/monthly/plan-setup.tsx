@@ -35,7 +35,7 @@ import {
   type PlanQuestion,
   type CampaignShape,
 } from '@/lib/campaigns/data/plan-goals'
-import { excludedByReach, type Reach } from '@/lib/campaigns/data/monthly-plan'
+import { excludedByReach, datedAnchors, monthlyFloor, budgetCeiling, type Reach } from '@/lib/campaigns/data/monthly-plan'
 import type { GoalKey } from '@/lib/campaigns/types'
 
 export interface Answers {
@@ -327,9 +327,9 @@ export default function PlanSetup({
 }) {
   const seed: Answers = {
     goals: isKnown(inputs.goal) ? [ONBOARDING_GOAL[String(inputs.goal.value)] ?? 'more-new'] : [],
-    /* Carried through untouched. Never asked, and no longer used to size anything here — the plan
-     * is built first and priced after, so the money question belongs on the plan, not in intake. */
-    budget: isKnown(inputs.budget) ? (inputs.budget.value as number) : undefined,
+    /* Deliberately NOT seeded from onboarding: `budget` now means "the owner typed a number into
+     * THIS flow's optional last question". What they could spend months ago must not size this
+     * plan — the old bug this module was rewritten to remove. */
     promote: isKnown(inputs.knownFor) ? (inputs.knownFor.value as string[]) : [],
     audience: isKnown(inputs.audience) ? (inputs.audience.value as string[]) : [],
     reach: 'local',
@@ -441,11 +441,15 @@ export default function PlanSetup({
    * question every campaign gets: when it starts. Dated campaigns answer that with their date;
    * ongoing ones default to as-soon-as-possible.
    */
-  type QStep = 'start' | PlanQuestion
+  type QStep = 'start' | 'money' | PlanQuestion
   const answered = situations.length > 0 || !!auto.goals
   const [editDesc, setEditDesc] = useState(false)
   const [qi, setQi] = useState(0)
-  const qlist: QStep[] = answered ? ['start', ...gaps] : []
+  /* The money question comes LAST, on purpose: only once every other answer is in can the range
+   * we show be the real one, and a number given here opens the plan already sized to it. The
+   * default hands the sizing back to us — the plan is still built to the job, never to a wallet. */
+  const [wantBudget, setWantBudget] = useState(() => initialAnswers?.budget != null)
+  const qlist: QStep[] = answered ? ['start', ...gaps, 'money'] : []
   const q: QStep | null = qlist.length ? qlist[Math.min(qi, qlist.length - 1)] : null
   const last = qi >= qlist.length - 1
   const showHero = !answered || editDesc
@@ -454,7 +458,21 @@ export default function PlanSetup({
       ? (shape === 'date' ? !!a.when : shape === 'run' ? !!a.when : (a.start === 'asap' || (!!a.start && a.start !== '')))
       : q === 'promote'
         ? promote.length > 0 || !!auto.promote
-        : true
+        : q === 'money'
+          ? (!wantBudget || (a.budget != null && a.budget > 0))
+          : true
+
+  /* The honest range for the money question, from the same anchors the plan screen uses. */
+  const moneyRange = useMemo(() => {
+    if (q !== 'money') return null
+    if (dated) {
+      const A = datedAnchors(goals.length ? goals : undefined, reach, shift.length > 0, avoid, assets, undefined)
+      return { lo: A.floor, hi: A.ceiling, per: 'all-in' as const }
+    }
+    const lo = monthlyFloor(goals.length ? goals : undefined, reach, shift.length > 0, undefined)
+    const hi = budgetCeiling(goals.length ? goals : undefined, reach, shift.length > 0, undefined)
+    return { lo, hi: hi ?? lo * 4, per: 'a month' as const }
+  }, [q, dated, goals.join(','), reach, shift.length, avoid?.join(','), assets.join(',')])
 
   /**
    * Keep the flow moving when the model does not answer.
@@ -541,6 +559,7 @@ export default function PlanSetup({
     else if (asks('promote')) sheetLines.push({ text: 'What to promote', ghost: true })
     if (asks('reach')) sheetLines.push({ text: `Reaching ${REACH.find((r) => r.v === reach)?.label.toLowerCase() ?? 'the neighbourhood'}` })
     if (avoid.length > 0) sheetLines.push({ text: `Never: ${avoid.slice(0, 2).join(', ').toLowerCase()}${avoid.length > 2 ? '…' : ''}` })
+    if (a.budget != null) sheetLines.push({ text: `Built to about $${a.budget.toLocaleString('en-US')}${dated ? '' : ' a month'}` })
   }
 
   return (
@@ -743,6 +762,38 @@ export default function PlanSetup({
                     onChange={(e) => set({ start: e.target.value })}
                     style={{ width: '100%', height: 48, marginTop: 9, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 12px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }}
                   />
+                )}
+              </>
+            )}
+          </Act>
+        )}
+
+        {/* money ── asked LAST and optional, so the range shown is the real one and a given
+            number opens the plan already sized to it. The default hands sizing back to us. */}
+        {q === 'money' && (
+          <Act n={qi + 2} of={1 + qlist.length} title="Do you have a budget in mind?" sub="Optional. Skip it and we size the plan to the job. You can always move the number on the plan itself.">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <Card on={!wantBudget} label="You size it for me" sub="We build what this campaign needs and show you the price" badge="Recommended" onClick={() => { setWantBudget(false); set({ budget: undefined }) }} />
+              <Card on={wantBudget} label="I have a number" sub={dated ? 'The launch gets built to fit it' : 'The monthly plan gets built to fit it'} onClick={() => setWantBudget(true)} />
+            </div>
+            {wantBudget && (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', padding: '0 14px', height: 50 }}>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 18, color: C.mute }}>$</span>
+                  <input
+                    inputMode="numeric" aria-label="Your budget" autoFocus
+                    value={a.budget != null ? a.budget.toLocaleString('en-US') : ''}
+                    onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); set({ budget: n ? Number(n) : undefined }) }}
+                    placeholder={moneyRange ? Math.round((moneyRange.lo + moneyRange.hi) / 2).toLocaleString('en-US') : '1,000'}
+                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: DISPLAY, fontSize: 18, color: C.ink }}
+                  />
+                  <span style={{ fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap' }}>{dated ? 'for the launch' : 'a month'}</span>
+                </div>
+                {moneyRange && (
+                  <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, marginTop: 8 }}>
+                    Campaigns like this run ${moneyRange.lo.toLocaleString('en-US')} to ${moneyRange.hi.toLocaleString('en-US')} {moneyRange.per === 'all-in' ? 'all-in' : 'a month'}.
+                    We build to your number and show what a little more would add.
+                  </div>
                 )}
               </>
             )}

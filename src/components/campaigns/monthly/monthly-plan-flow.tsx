@@ -256,15 +256,20 @@ export default function MonthlyPlanFlow({
     () => (anchors ? anchors.ceiling : budgetCeiling(goals, a.reach, hasShift, signals)),
     [anchors, goals?.join(','), a.reach, hasShift, signals],
   )
-  /* Until the owner moves it, the dial IS the recommendation and follows it. Onboarding's stored
-   * budget is deliberately not used to size the plan — it is what they could spend, not what the
-   * work costs, and letting it anchor the plan is the thing we removed. */
-  const [movedDial, setMovedDial] = useState(false)
-  const budget = movedDial && a.budget != null ? a.budget : suggested
+  /* `a.budget` now means "a number the owner deliberately gave" — typed into intake's optional
+   * last question, or set by moving this dial. Given one, the plan OPENS already sized to it,
+   * clamped to the honest rails; below the floor or past the ceiling we say so out loud instead
+   * of silently billing something else. No number → the dial opens on the recommendation.
+   * (Onboarding's stored budget still never anchors anything.) */
+  const rawBudget = a.budget
+  const budget = rawBudget != null
+    ? Math.min(Math.max(rawBudget, floor), ceiling ?? Math.max(rawBudget, floor))
+    : suggested
   const stops = useMemo(() => {
     const top = ceiling ?? suggested
-    return [...new Set([floor, suggested, ...DIAL_STOPS.filter((v) => v > floor && v < top), top])].sort((x, y) => x - y)
-  }, [floor, suggested, ceiling])
+    /* The owner's own number is always a real stop, so the thumb sits exactly where they set it. */
+    return [...new Set([floor, suggested, budget, ...DIAL_STOPS.filter((v) => v > floor && v < top), top])].sort((x, y) => x - y)
+  }, [floor, suggested, ceiling, budget])
 
   const plan = useMemo(
     () => composeMonthlyPlan(budget, have, { off, added }, goals, a.reach, hasShift, a.avoid, a.assets, signals, { dated: isDated }),
@@ -402,7 +407,7 @@ export default function MonthlyPlanFlow({
             <span style={{ fontSize: 12.5, color: C.mute }}>{isDated ? 'Want a bigger or smaller launch?' : 'Want more or less each month?'}</span>
             {budget !== suggested && (
               <button
-                type="button" onClick={() => { setMovedDial(false); setA({ ...a, budget: suggested }) }}
+                type="button" onClick={() => setA({ ...a, budget: undefined })}
                 style={{ background: 'none', border: 'none', padding: 0, fontSize: 12, color: C.green, fontWeight: 500, cursor: 'pointer' }}
               >
                 Back to suggested
@@ -412,7 +417,7 @@ export default function MonthlyPlanFlow({
           <input
             type="range" min={0} max={stops.length - 1} step={1}
             value={Math.max(0, stops.indexOf(budget))}
-            onChange={(e) => { setMovedDial(true); setA({ ...a, budget: stops[Number(e.target.value)] }) }}
+            onChange={(e) => setA({ ...a, budget: stops[Number(e.target.value)] })}
             className="mp-slider" aria-label={isDated ? 'Total for the launch' : 'Ongoing work each month'}
             style={{ marginTop: 6, ['--mp-track' as string]: `linear-gradient(90deg, ${C.green} ${(Math.max(0, stops.indexOf(budget)) / Math.max(1, stops.length - 1)) * 100}%, #e9e9ee ${(Math.max(0, stops.indexOf(budget)) / Math.max(1, stops.length - 1)) * 100}%)` }}
           />
@@ -420,6 +425,14 @@ export default function MonthlyPlanFlow({
             <span>${floor.toLocaleString('en-US')}</span>
             <span>${(ceiling ?? suggested).toLocaleString('en-US')}</span>
           </div>
+          {/* Their number was outside the honest rails: say where we set it and why, out loud. */}
+          {rawBudget != null && rawBudget !== budget && (
+            <div style={{ marginTop: 9, padding: '9px 11px', background: AMBER_SOFT, borderRadius: 10, fontSize: 12, color: AMBER_DK, lineHeight: 1.5 }}>
+              You said about {usd(rawBudget)}. {rawBudget < floor
+                ? `The smallest plan that covers every step is ${usd(floor)}, so we set it there. Take pieces out below to go lower.`
+                : `Past ${usd(budget)} the extra would go unspent, so we set it there.`}
+            </div>
+          )}
           {/* Money that is not ours. Shown next to the fee, never folded into it. */}
           {bill.passThroughMonthly > 0 && (
             <div style={{ marginTop: 10, padding: '9px 11px', background: C.bg, borderRadius: 10 }}>
