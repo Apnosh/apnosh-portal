@@ -156,6 +156,30 @@ DESCRIBE / PICK → INTAKE → THE PLAN → ADJUST → HOW IT'S DONE → TIMELIN
     fills, so campaign #2 asks less than campaign #1.
 - Ship mints work orders + creator bookings (bridges exist); readiness rail takes over.
 
+### Phase 4 progress (2026-07-28) — THE PLAN OF RECORD IS COMPLETE
+
+- **SHIPPED** (2 commits). scripts/sim/strategist-e2e.ts drives the whole chain against the
+  real DB: describe (matchSituation floor, refuses to guess) → compose (gbp owner-run draft w/
+  genuine compose snapshot) → route (zero violations) → bill (both gate branches: $0 ships
+  without Stripe; unpaid billable REFUSED — the money honesty asserted) → create
+  (+recordComposeAllocation) → one-shot ship claim → finalizeAllocation + materialize + mint.
+  LAW 4 verified end to end for the first time: one plan_allocations row, composed unchanged
+  by ship, final_items stamped, signals_at never laundered; all-diy ship mints zero. Teardown
+  handles the SET-NULL orphan tables. 25 checks.
+- scripts/sim/goldens.ts: the grand-opening shape golden (production before amplification,
+  law 3, held-never-billed, route-clean — each predicate proven against a doctored plan), the
+  3-week-lead refusal whose one-tap alternative passes its own gate on re-run + the prefilled
+  strategist thread, and the system plan's journey order + lean-⊂-standard spine. 18 checks.
+- **Full battery at completion: 15 suites, 1,648 checks, all green** (goldens 18 · vault 30 ·
+  lane-routing 100 · guide-moves 107 · plan-packing 365 · plan-gates 31 · split-priors 132 ·
+  brain-routing 63 · ai-transport 25 · setup-cards 388 · mechanisms 297 · parity 24 ·
+  strategist-e2e 25 · vault-db-e2e 13 · monthly-plan-e2e 30).
+- **Remaining threads (all tracked, none blocking the flow):** the ops flip for real money
+  (Stripe keys + CAMPAIGN_CHECKOUT_ENABLED + CHECKOUT_REQUIRED_SINCE, owner) · autopay #192 ·
+  Connect vendor onboarding #193 · creator lane on service lines · gbp doer-slot collapse ·
+  ServicePicker→LaneOffer convergence · law-7 n≥5 "verified median" upgrade when outcomes
+  accumulate · outcome backfill into plan_allocations.
+
 ## Phase 4 — prove it, continuously
 
 - Headless sim drives describe→checkout→mint end to end.
