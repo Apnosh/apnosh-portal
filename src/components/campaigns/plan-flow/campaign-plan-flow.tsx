@@ -279,6 +279,9 @@ type CardNode =
       variant: 'service'; Icon: LucideIcon; title: string; deliverable: string; priceShort: string;
       spine: boolean; included: string[]; pieces?: { label: string; qty: number; each: number }[];
       channels?: string[]; onOpen: () => void; onRemove?: () => void; readOnly?: boolean
+      /** The router's per-line adjust (Phase 2) — built at node construction, rendered in the
+       *  expanded body. Absent for read-only / owner-run-gbp nodes. */
+      laneRow?: React.ReactNode
       /** The AI's one-line reason THIS service is in THIS restaurant's plan (selectMix). Partial:
        *  dependency-added services have none — the card falls back to the catalog description. */
       reason?: string
@@ -635,6 +638,14 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
               } : undefined,
               onOpen: () => setSheet({ kind: 'service', id: m.serviceId }),
               onRemove: () => removeMove(m.serviceId, info.plain),
+              laneRow: (() => {
+                const liveLine = items.find((it) => it.serviceId === m.serviceId)
+                if (!liveLine) return undefined
+                const base = initial.items.find((x) => x.serviceId === m.serviceId)?.price ?? liveLine.price
+                const route = routeForItem({ ...liveLine, producer: 'team', price: base }, { supply })
+                const currentLane: Lane = liveLine.producer === 'diy' ? (liveLine.ownerMode === 'ai' ? 'ai' : 'diy') : ((liveLine.producer as Lane) ?? 'team')
+                return <LaneRow route={route} current={currentLane} onPick={(lane) => setLaneChoices((c) => ({ ...c, [m.serviceId]: lane }))} />
+              })(),
             },
           })
         })
@@ -1112,6 +1123,7 @@ function PathCard({ node, delay }: { node: CardNode; delay: number }) {
                 </div>
               </div>
             )}
+            {!isContent && node.laneRow && <div style={{ marginTop: 12 }}>{node.laneRow}</div>}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 11 }}>
               <span style={{ fontSize: 11.5, color: C.faint }}>{isContent ? (node.d ? `Goes out ${node.d.postLabel}` : '') : node.priceShort}</span>
               {isContent
