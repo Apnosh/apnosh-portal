@@ -562,6 +562,7 @@ export default function MonthlyPlanFlow({
               shape: a.shape,
               when: a.when,
               until: a.until,
+              start: a.start,
               assets: a.assets,
               promote: a.promote,
               audience: a.audience,

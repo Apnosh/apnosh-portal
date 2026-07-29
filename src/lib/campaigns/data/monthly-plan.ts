@@ -647,6 +647,8 @@ export function toCampaignDraft(
       shape?: string
       when?: string
       until?: string
+      /** 'asap' or an ISO date — when an ongoing plan should begin. */
+      start?: string
       assets?: string[]
       promote?: string[]
       audience?: string[]

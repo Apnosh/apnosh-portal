@@ -18,7 +18,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ArrowRight, MessageSquare, Link2, Check, Users, Star, Moon, TrendingUp, Wand2, Ban, Store, Megaphone, Clock } from 'lucide-react'
+import { ArrowRight, MessageSquare, Link2, Check, Users, Star, Moon, TrendingUp, Wand2, Ban, Store, Megaphone } from 'lucide-react'
 import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
 import { DESK, DeskKeyframes, PlanSheet, paperGround, type PlanSheetLine } from '@/components/campaigns/desk/ui'
 import { connectRecommendations, isKnown, type PlanInputs } from '@/lib/campaigns/data/plan-inputs'
@@ -43,6 +43,9 @@ export interface Answers {
   shape?: CampaignShape
   /** The day it happens (shape 'date'), or the start (shape 'run'). ISO yyyy-mm-dd. */
   when?: string
+  /** When an ongoing plan should begin: 'asap' (the default) or an ISO date. Dated campaigns
+   *  carry their timing in `when`/`until` instead. */
+  start?: string
   /** The end of a run. There is no such column yet, so this is captured and carried, not scheduled. */
   until?: string
   /** What the owner brings: a DJ, a giveaway, tickets, their own photos. */
@@ -239,10 +242,8 @@ const CSS = `
 function Act({ n, of, title, sub, children }: { n: number; of: number; title: string; sub: string; children: React.ReactNode }) {
   return (
     <section style={{ marginBottom: 38 }}>
-      {/* The whole marker, not just the count, waits until there is a sequence to be inside. On the
-          opening screen there are no follow-ups yet, so a badge reading "1" and a count reading
-          "1 OF 1" are both furniture around a question that has not been answered. */}
-      {of > n && (
+      {/* The marker waits until there is a sequence to be inside: a lone "1 OF 1" is furniture. */}
+      {of > 1 && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
           {/* The desk's ink stage plate: a square, not a chip. */}
           <span style={{ width: 24, height: 24, borderRadius: 7, background: DESK.ink, color: DESK.paper, fontFamily: DISPLAY, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -332,6 +333,7 @@ export default function PlanSetup({
     promote: isKnown(inputs.knownFor) ? (inputs.knownFor.value as string[]) : [],
     audience: isKnown(inputs.audience) ? (inputs.audience.value as string[]) : [],
     reach: 'local',
+    start: 'asap',
     avoid: [],
     auto: {},
     ...initialAnswers,
@@ -386,8 +388,6 @@ export default function PlanSetup({
   const asks = (q: string) => gaps.includes(q as never)
   /** The model's reason for asking this one, in the owner's own terms. Empty when it did not run. */
   const whyAsk = (q: string) => a.asked?.find((x) => x.q === q)?.why ?? ''
-  /* Numbered by position among the questions that survived, so it never reads "3 of 2". */
-  const actN = (q: string) => gaps.indexOf(q as never) + 2
 
   const menu = inputs.menu.slice(0, 10)
   const g = goals.length ? goals : undefined
@@ -433,6 +433,28 @@ export default function PlanSetup({
       if (n >= s.length) clearInterval(iv)
     }, 40)
   }
+
+  /*
+   * ONE QUESTION PER SCREEN. Once the description is read, the hero collapses to a small quote
+   * card and the follow-ups arrive one at a time: a plate, one question, its options, Next. The
+   * list is still gapsFor's honest output — a good description keeps this short — plus the one
+   * question every campaign gets: when it starts. Dated campaigns answer that with their date;
+   * ongoing ones default to as-soon-as-possible.
+   */
+  type QStep = 'start' | PlanQuestion
+  const answered = situations.length > 0 || !!auto.goals
+  const [editDesc, setEditDesc] = useState(false)
+  const [qi, setQi] = useState(0)
+  const qlist: QStep[] = answered ? ['start', ...gaps] : []
+  const q: QStep | null = qlist.length ? qlist[Math.min(qi, qlist.length - 1)] : null
+  const last = qi >= qlist.length - 1
+  const showHero = !answered || editDesc
+  const nextOk =
+    q === 'start'
+      ? (shape === 'date' ? !!a.when : shape === 'run' ? !!a.when : (a.start === 'asap' || (!!a.start && a.start !== '')))
+      : q === 'promote'
+        ? promote.length > 0 || !!auto.promote
+        : true
 
   /**
    * Keep the flow moving when the model does not answer.
@@ -510,6 +532,9 @@ export default function PlanSetup({
     if (dated) sheetLines.push(a.when
       ? { text: new Date(a.when + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) + (shape === 'run' && a.until ? ` to ${new Date(a.until + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}` : '') }
       : { text: shape === 'run' ? 'The start date' : 'The date', ghost: true })
+    else sheetLines.push(a.start && a.start !== 'asap'
+      ? { text: `Starts ${new Date(a.start + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}` }
+      : { text: 'Starts as soon as you approve' })
     if (assets.length > 0 && !assets.includes('Nothing yet')) sheetLines.push({ text: `Working with what you have: ${assets.slice(0, 2).join(', ').toLowerCase()}${assets.length > 2 ? '…' : ''}` })
     else if (asks('assets')) sheetLines.push({ text: 'What you bring', ghost: true })
     if (promote.length > 0 || auto.promote) sheetLines.push({ text: auto.promote ? 'Promoting: we pick from your menu' : `Promoting ${promote.slice(0, 2).join(', ')}${promote.length > 2 ? '…' : ''}` })
@@ -523,39 +548,13 @@ export default function PlanSetup({
       <style>{CSS}</style>
       <DeskKeyframes />
 
-      {/* Three headings used to stack here: the page header, a "Design a campaign" title, and the
-          question itself — a whole phone screen of throat-clearing before anything to act on. The
-          title is gone; what is left is the one line that tells them how much is still coming, and
-          that line only says something once there is something to say. */}
-      {situations.length > 0 && (
-        <div style={{ fontSize: 13.5, color: C.mute, marginBottom: 26, lineHeight: 1.5 }}>
-          {gaps.length === 0
-            ? 'Nothing else to ask. We have the rest from your account and from what you wrote.'
-            : gaps.length === 1
-              ? 'One more question, then we build it.'
-              : `${gaps.length} more questions, then we build it.`}
-        </div>
-      )}
-
-      {/* 1 ── the situation, in their words. The shape falls out of it and is never asked about:
-              an owner does not think "is this a dated moment", they think "we are opening".
-
-              ONE BOX, NO LIST. A picker stood here briefly and was wrong twice over: the eleven
-              entries were goals ("we want bigger checks") rather than the campaigns an owner would
-              recognise, and offering any list at all quietly reframes a bespoke builder as a
-              catalogue you choose from. What they describe is richer than anything a list can hold
-              — the date, the DJ they can book, the fact that they will do "whatever it takes" — and
-              all of it survives to the people doing the work. */}
+      {/* 1 ── the situation, in their words. Shown until the read lands, and again on Edit; once
+              answered it collapses to the quote card in the question walk below, so the owner is
+              never scrolled past their own finished answer. */}
+      {showHero && (
       <section style={{ marginBottom: 38, position: 'relative' }}>
         {/* A soft mint aurora behind the opening moment: depth, not decoration. */}
         <div aria-hidden style={{ position: 'absolute', inset: '-18px -14px auto', height: 260, background: 'radial-gradient(420px 220px at 50% -40px, rgba(74,189,152,0.12), transparent 70%)', pointerEvents: 'none' }} />
-
-        {gaps.length > 0 && situations.length > 0 && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7, position: 'relative' }}>
-            <span style={{ width: 24, height: 24, borderRadius: 7, background: DESK.ink, color: DESK.paper, fontFamily: DISPLAY, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</span>
-            <span style={{ fontFamily: DESK.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '.12em', color: DESK.mute }}>1 OF {1 + gaps.length}</span>
-          </div>
-        )}
 
         <div className="ps-hero1" style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10, position: 'relative' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill={DESK.mintDeep} aria-hidden><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
@@ -613,7 +612,7 @@ export default function PlanSetup({
             tucked in a footer beside a caption, which made the one action on the screen the
             smallest thing on it. */}
         <button
-          type="button" className="ps-go" onClick={describe}
+          type="button" className="ps-go" onClick={async () => { await describe(); setEditDesc(false); setQi(0) }}
           disabled={reading || (a.described ?? '').trim().length < 12}
           style={{
             width: '100%', height: 50, marginTop: 8, borderRadius: 25, border: 'none',
@@ -671,46 +670,88 @@ export default function PlanSetup({
           </div>
         ))}
 
-        {/* The date, asked only once something dated has been picked, and worded for that thing. */}
-        {dated && (
-          <div style={{ marginTop: 14, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 15px' }}>
+        {/* Held back until there is something written. On an empty screen a dashed "Decide for me"
+            card is a second, competing offer next to the only thing we want them to do, and it is
+            answering a question they have not been asked yet. */}
+        {((a.described ?? '').trim().length > 0 || situations.length > 0 || !!auto.goals) && (
+          <DecideForMe on={!!auto.goals} resolves={autoGoal} onToggle={() => { setAuto('goals', !auto.goals); if (!auto.goals) set({ situations: [], goals: [], shape: undefined, auto: { ...auto, goals: true } }) }} />
+        )}
+      </section>
+      )}
+
+      {/* ── the question walk: what you said, collapsed, then one question at a time ── */}
+      {!showHero && q && (
+      <section style={{ marginBottom: 26 }}>
+        {/* What they wrote, folded to a quote card. Tap to reopen the sheet and change it. */}
+        <button
+          type="button" onClick={() => setEditDesc(true)}
+          style={{
+            width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start',
+            background: '#fff', border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '11px 13px',
+            marginBottom: 22, fontFamily: "'Inter',system-ui,sans-serif", boxShadow: '0 1px 3px rgba(22,33,28,0.05)',
+          }}
+        >
+          <span aria-hidden style={{ color: DESK.mintDeep, fontFamily: DISPLAY, fontWeight: 700, fontSize: 16, lineHeight: '18px' }}>&ldquo;</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{
+              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              fontSize: 13, color: DESK.ink, lineHeight: 1.45,
+            }}>{auto.goals && !(a.described ?? '').trim() ? autoGoal : (a.described ?? '').trim()}</span>
+            {readBack?.unsupported && readBack.unsupported.length > 0 && (
+              <span style={{ display: 'block', fontSize: 11.5, color: AMBER_DK, marginTop: 4, lineHeight: 1.4 }}>
+                We do not do {readBack.unsupported.join(', ')}. The rest we can.
+              </span>
+            )}
+          </span>
+          <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: DESK.mintDeep, marginTop: 1 }}>Edit</span>
+        </button>
+
+        <div key={q} className="ps-hero2">
+        {/* start ── every campaign gets the clock question. Dated campaigns answer it with their
+            date; ongoing ones default honestly to as-soon-as-possible. */}
+        {q === 'start' && (
+          <Act n={qi + 2} of={1 + qlist.length}
+            title={shape === 'date' ? (picked[0]?.v === 'opening' ? 'When do you open?' : 'When is it?') : shape === 'run' ? 'How long is it on for?' : 'When should this start?'}
+            sub={shape === 'date' ? 'Everything is worked backwards from this, so the last push lands on the day.' : shape === 'run' ? 'The day it starts, and the day it comes off.' : 'We build the same plan either way. This just sets the clock.'}
+          >
             {shape === 'date' ? (
+              <input
+                aria-label="The date" type="date" value={a.when ?? ''} onChange={(e) => set({ when: e.target.value })}
+                style={{ width: '100%', height: 48, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 12px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }}
+              />
+            ) : shape === 'run' ? (
               <>
-                <label htmlFor="ps-when" style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink, marginBottom: 3 }}>
-                  {picked[0]?.v === 'opening' ? 'When do you open?' : 'When is it?'}
-                </label>
-                <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.45, marginBottom: 9 }}>Everything is worked backwards from this, so the last push lands on the day.</div>
-                <input
-                  id="ps-when" type="date" value={a.when ?? ''} onChange={(e) => set({ when: e.target.value })}
-                  style={{ width: '100%', height: 44, border: `1px solid ${C.line}`, borderRadius: 12, padding: '0 12px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }}
-                />
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, marginBottom: 3 }}>How long is it on for?</div>
-                <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.45, marginBottom: 9 }}>The day it starts, and the day it comes off.</div>
                 <div style={{ display: 'flex', gap: 9 }}>
                   <input aria-label="Starts" type="date" value={a.when ?? ''} onChange={(e) => set({ when: e.target.value })}
-                    style={{ flex: 1, minWidth: 0, height: 44, border: `1px solid ${C.line}`, borderRadius: 12, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
+                    style={{ flex: 1, minWidth: 0, height: 48, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
                   <input aria-label="Ends" type="date" value={a.until ?? ''} onChange={(e) => set({ until: e.target.value })}
-                    style={{ flex: 1, minWidth: 0, height: 44, border: `1px solid ${C.line}`, borderRadius: 12, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
+                    style={{ flex: 1, minWidth: 0, height: 48, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
                 </div>
                 <div style={{ fontSize: 11.5, color: AMBER_DK, background: AMBER_SOFT, borderRadius: 9, padding: '8px 10px', marginTop: 9, lineHeight: 1.45 }}>
                   We record the end date and the team works to it. The automatic schedule counts back from the start, so a long run gets checked by a person.
                 </div>
               </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  <Card on={a.start === 'asap'} label="As soon as possible" sub="We start the moment you approve the plan" badge="Recommended" onClick={() => set({ start: 'asap' })} />
+                  <Card on={a.start !== 'asap'} label="On a date" sub="Pick the day the work should begin" onClick={() => set({ start: a.start === 'asap' ? '' : a.start })} />
+                </div>
+                {a.start !== 'asap' && (
+                  <input
+                    aria-label="Start date" type="date" value={a.start && a.start !== 'asap' ? a.start : ''}
+                    onChange={(e) => set({ start: e.target.value })}
+                    style={{ width: '100%', height: 48, marginTop: 9, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 12px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }}
+                  />
+                )}
+              </>
             )}
-          </div>
+          </Act>
         )}
 
-        {/* Which shifts, asked only when they said shifts were the problem. */}
-        {asks('shift') && (
-          <div style={{ marginTop: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-              <Clock size={14} strokeWidth={2.2} color={C.mute} />
-              <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>Which ones?</span>
-            </div>
-            <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.45, marginBottom: 10 }}>Naming them aims the same work at the shifts that sit empty.</div>
+        {/* shift ── which shifts, its own screen when they said shifts are the problem. */}
+        {q === 'shift' && (
+          <Act n={qi + 2} of={1 + qlist.length} title="Which shifts need filling?" sub={whyAsk('shift') || 'Naming them aims the same work at the shifts that sit empty.'}>
             <Grid>
               {SHIFTS.map((o) => {
                 const on = shift.includes(o.v)
@@ -730,30 +771,10 @@ export default function PlanSetup({
                 )
               })}
             </Grid>
-          </div>
+          </Act>
         )}
 
-        {/* Held back until there is something written. On an empty screen a dashed "Decide for me"
-            card is a second, competing offer next to the only thing we want them to do, and it is
-            answering a question they have not been asked yet. */}
-        {((a.described ?? '').trim().length > 0 || situations.length > 0 || !!auto.goals) && (
-          <DecideForMe on={!!auto.goals} resolves={autoGoal} onToggle={() => { setAuto('goals', !auto.goals); if (!auto.goals) set({ situations: [], goals: [], shape: undefined, auto: { ...auto, goals: true } }) }} />
-        )}
-      </section>
-
-      {/* 2 ── what the owner brings. Nothing captured this before, and both real event requests
-              opened with it. */}
-      {/* Nothing left to ask is a result, not an empty state. Say so and get out of the way. */}
-      {situations.length > 0 && gaps.length === 0 && (
-        <div style={{ display: 'flex', gap: 9, padding: '13px 14px', background: '#f0faf6', borderRadius: 16, marginBottom: 4 }}>
-          <Check size={15} strokeWidth={2.6} color={C.green} style={{ flexShrink: 0, marginTop: 2 }} />
-          <span style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>
-            That is everything we need. We already have the rest from your account and from what you wrote.
-          </span>
-        </div>
-      )}
-
-      {asks('assets') && <Act n={actN('assets')} of={1 + gaps.length} title="What have you got to work with?" sub={whyAsk('assets') || 'Anything you already have, or could get easily. We build around it instead of billing you for it.'}>
+        {q === 'assets' && <Act n={qi + 2} of={1 + qlist.length} title="What have you got to work with?" sub={whyAsk('assets') || 'Anything you already have, or could get easily. We build around it instead of billing you for it.'}>
         <Grid>
           {OWNER_ASSETS.map((o) => {
             const on = assets.includes(o.v)
@@ -783,7 +804,7 @@ export default function PlanSetup({
       </Act>}
 
       {/* 3 ── what to promote */}
-      {asks('promote') && <Act n={actN('promote')} of={1 + gaps.length} title="What should we put in front of people?" sub={whyAsk('promote') || 'Your menu, and everything else worth showing. Pick as many as fit.'}>
+        {q === 'promote' && <Act n={qi + 2} of={1 + qlist.length} title="What should we put in front of people?" sub={whyAsk('promote') || 'Your menu, and everything else worth showing. Pick as many as fit.'}>
         {menu.length > 0 && (
           <>
             <GroupLabel>From your menu</GroupLabel>
@@ -817,7 +838,7 @@ export default function PlanSetup({
       </Act>}
 
       {/* 4 ── who, and how far */}
-      {asks('reach') && <Act n={actN('reach')} of={1 + gaps.length} title="Who are you trying to reach?" sub={whyAsk('reach') || 'Who walks in, and how far you want to pull from. Both change the work.'}>
+        {q === 'reach' && <Act n={qi + 2} of={1 + qlist.length} title="Who are you trying to reach?" sub={whyAsk('reach') || 'Who walks in, and how far you want to pull from. Both change the work.'}>
         <GroupLabel>Who</GroupLabel>
         <Grid>
           {AUDIENCE.map((o) => (
@@ -841,7 +862,7 @@ export default function PlanSetup({
       </Act>}
 
       {/* 5 ── what to avoid */}
-      {asks('avoid') && <Act n={actN('avoid')} of={1 + gaps.length} title="Anything we should never do?" sub={whyAsk('avoid') || 'Optional, and the one place a plan most often goes wrong. Pick anything that is off limits.'}>
+        {q === 'avoid' && <Act n={qi + 2} of={1 + qlist.length} title="Anything we should never do?" sub={whyAsk('avoid') || 'Optional, and the one place a plan most often goes wrong. Pick anything that is off limits.'}>
         <Grid>
           {AVOID.map((o) => {
             const on = avoid.includes(o.v)
@@ -867,73 +888,76 @@ export default function PlanSetup({
         </Grid>
       </Act>}
 
-      {/* Also waits. Connecting Facebook is a real ask, but it is not the first thing someone came
-          here to do, and on a blank screen it turns one question into a to-do list. */}
-      {situations.length > 0 && connect.length > 0 && (
-        <section style={{ marginBottom: 28 }}>
-          <GroupLabel>Worth connecting</GroupLabel>
-          {connect.map((c) => (
-            <a key={c.key} href={c.href} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', textDecoration: 'none', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 14px', marginBottom: 9 }}>
-              <Link2 size={16} style={{ color: C.greenDk, flex: '0 0 auto', marginTop: 2 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, marginBottom: 2 }}>{c.name}</div>
-                <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5 }}>{c.costOfMissing}</div>
-              </div>
-              <span style={{ flex: '0 0 auto', fontSize: 13, fontWeight: 700, color: C.greenDk, marginTop: 1 }}>Connect</span>
-            </a>
-          ))}
-        </section>
-      )}
+        {/* The last stop also carries the optional extras, so they are seen exactly once. */}
+        {last && connect.length > 0 && (
+          <div style={{ marginBottom: 4 }}>
+            <GroupLabel>Worth connecting</GroupLabel>
+            {connect.map((c) => (
+              <a key={c.key} href={c.href} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', textDecoration: 'none', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 14px', marginBottom: 9 }}>
+                <Link2 size={16} style={{ color: C.greenDk, flex: '0 0 auto', marginTop: 2 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, marginBottom: 2 }}>{c.name}</div>
+                  <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5 }}>{c.costOfMissing}</div>
+                </div>
+                <span style={{ flex: '0 0 auto', fontSize: 13, fontWeight: 700, color: C.greenDk, marginTop: 1 }}>Connect</span>
+              </a>
+            ))}
+          </div>
+        )}
+        {last && (
+          <div style={{ marginBottom: 8 }}>
+            <GroupLabel>Anything else</GroupLabel>
+            <div style={{ fontSize: 12, color: C.faint, marginBottom: 9, lineHeight: 1.45 }}>
+              Optional. The plan is built from your answers above; this goes to the people who do the work.
+            </div>
+            <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <MessageSquare size={16} style={{ color: C.faint, flex: '0 0 auto', marginTop: 9 }} />
+              <textarea
+                className="mvp-input" value={a.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} rows={3}
+                placeholder="A big date coming up, something that flopped before, anything we should know."
+                style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '8px 2px', fontSize: 16, border: 'none', outline: 'none', background: 'transparent', color: C.ink, resize: 'vertical', fontFamily: "'Inter',system-ui,sans-serif", lineHeight: 1.5 }}
+              />
+            </div>
+          </div>
+        )}
+        </div>
 
-      {/* A second, optional box on the same screen as the first one is just confusing: two places
-          to type, and the smaller one carries a caption explaining which is which. It appears once
-          the first question is answered, which is also the only point at which "anything else" is a
-          question that can be understood. */}
-      {situations.length > 0 && (
-      <section style={{ marginBottom: 26 }}>
-        <GroupLabel>Anything else</GroupLabel>
-        <div style={{ fontSize: 12, color: C.faint, marginBottom: 9, lineHeight: 1.45 }}>
-          Optional. The plan is built from your answers above; this goes to the people who do the work.
+        {/* One step back, one step forward. The forward button is the only loud thing here. */}
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button
+            type="button" className="ps-go"
+            onClick={() => (qi === 0 ? setEditDesc(true) : setQi(qi - 1))}
+            style={{
+              flexShrink: 0, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer',
+              border: `1.5px solid ${DESK.line}`, background: '#fff', color: DESK.ink2,
+              fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14.5, fontWeight: 600,
+            }}
+          >
+            Back
+          </button>
+          <button
+            type="button" className="ps-go"
+            disabled={!nextOk || (last && !ready)}
+            onClick={() => (last ? onBuild({ ...a, shape, situations, goals, shift, assets, promote, audience, reach, avoid }) : setQi(qi + 1))}
+            style={{
+              flex: 1, height: 50, borderRadius: 25, border: 'none',
+              cursor: nextOk && (!last || ready) ? 'pointer' : 'default',
+              background: nextOk && (!last || ready) ? DESK.grad : '#DDD9CE', color: '#fff',
+              boxShadow: nextOk && (!last || ready) ? '0 10px 26px rgba(46,154,120,0.32)' : 'none',
+              fontFamily: "'Inter',system-ui,sans-serif", fontSize: 16, fontWeight: 650, letterSpacing: '-0.01em',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            }}
+          >
+            {last ? 'Build my plan' : 'Next'}
+            <ArrowRight size={17} />
+          </button>
         </div>
-        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-          <MessageSquare size={16} style={{ color: C.faint, flex: '0 0 auto', marginTop: 9 }} />
-          <textarea
-            className="mvp-input" value={a.notes ?? ''} onChange={(e) => set({ notes: e.target.value })} rows={3}
-            placeholder="A big date coming up, something that flopped before, anything we should know."
-            style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '8px 2px', fontSize: 16, border: 'none', outline: 'none', background: 'transparent', color: C.ink, resize: 'vertical', fontFamily: "'Inter',system-ui,sans-serif", lineHeight: 1.5 }}
-          />
-        </div>
+        {last && (
+          <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, padding: '13px 4px 4px', textAlign: 'center' }}>
+            You pick when each piece goes out after the plan is built, not now.
+          </div>
+        )}
       </section>
-      )}
-
-      {/* Also waits. Before the first question is answered this is a second, dead button sitting
-          under the live one, saying what is still missing — which is everything. */}
-      {situations.length > 0 && (
-      <button
-        type="button" onClick={() => onBuild({ ...a, shape, situations, goals, shift, assets, promote, audience, reach, avoid })} disabled={!ready}
-        style={{
-          width: '100%', height: 52, borderRadius: 26, border: 'none',
-          background: ready ? DESK.grad : '#DDD9CE', color: '#fff', fontSize: 16.5, fontWeight: 700,
-          boxShadow: ready ? '0 10px 26px rgba(46,154,120,0.32)' : 'none',
-          cursor: ready ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          fontFamily: "'Inter',system-ui,sans-serif",
-        }}
-      >
-        {ready
-          ? 'Build my plan'
-          : !goalsOk
-            ? 'Tell us what you want to do'
-            : !shapeOk
-              ? (shape === 'date' ? 'Add the date' : 'Add the start date')
-              : 'Pick something to promote, or let us decide'}
-        {ready && <ArrowRight size={18} />}
-      </button>
-      )}
-
-      {situations.length > 0 && (
-        <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, padding: '13px 4px 18px', textAlign: 'center' }}>
-          You pick when each piece goes out after the plan is built, not now.
-        </div>
       )}
 
       {/* The plan sheet rides the bottom edge while there are answers to show, growing a line at a
