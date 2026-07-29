@@ -20,6 +20,8 @@ import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { checkSplit } from '@/lib/campaigns/builder/split-priors'
 import { applyLaneDefaults, routeForItem, stampLane, type HandsOn, type Lane } from '@/lib/campaigns/builder/routing'
 import LaneRow from '@/components/campaigns/lane-row'
+import { DESK, YouSlip, ReceiptFrame, ReceiptRule, ReceiptTotal } from '@/components/campaigns/desk/ui'
+import { guideMovesFor } from '@/lib/campaigns/data/guide-moves'
 import type { CreatorSupply } from '@/lib/campaigns/data/creator-supply'
 import type { Concept } from '@/lib/goals/types'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
@@ -37,7 +39,7 @@ import ServicePicker from '@/components/campaigns/content-menu/service-picker'
 import { TYPE_ICON } from '@/components/campaigns/content-menu/add-piece-modal'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
-const PAPER = '#FBFAF8'
+const PAPER = DESK.paper
 const isContent = (it: LineItem) => /^content-/.test(it.serviceId ?? '')
 const typeOf = (it: LineItem) => (it.serviceId ?? '').replace(/^content-/, '')
 const serviceLabel = (p: PieceProducer, creatorName?: string) =>
@@ -307,6 +309,7 @@ type Stop =
   | { kind: 'card'; id: string; node: CardNode }
   | { kind: 'amp'; id: string; Icon: ComponentType<{ size?: number; color?: string }>; title: string; dateLabel: string; desc: string; priceLabel?: string }
   | { kind: 'add'; id: string; label: string; onAdd: () => void }
+  | { kind: 'you'; id: string; minutes: number; text: string }
   | { kind: 'endcap'; id: string }
 
 export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, reasons, diagnosis, diagnosisSource, doneSetup, concept, supply, onConfirm, onBack }: {
@@ -649,6 +652,11 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
             },
           })
         })
+        // The owner's own moves for THIS stage (laws 2+3): dashed mint slips on the walk itself,
+        // so free work reads as part of the plan, not homework stapled on.
+        for (const g of guideMovesFor(itemId).filter((x) => x.stage === sg.stage)) {
+          out.push({ kind: 'you', id: `you-${g.move.key}`, minutes: g.move.minutes, text: g.move.title })
+        }
         out.push({ kind: 'add', id: `add-${sg.stage}`, label: 'Add a service here', onAdd: () => setAddPicker(sg.stage) })
       })
     } else {
@@ -752,7 +760,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: C.bg, display: 'flex', justifyContent: 'center' }}>
       <style>{KEYFRAMES}</style>
-      <div style={{ width: '100%', maxWidth: 480, background: step === 'review' ? PAPER : '#fff', display: 'flex', flexDirection: 'column', height: '100dvh', boxShadow: '0 0 40px rgba(0,0,0,0.06)' }}>
+      <div style={{ width: '100%', maxWidth: 480, background: PAPER, backgroundImage: 'radial-gradient(rgba(22,33,28,0.028) 1px, transparent 1px)', backgroundSize: '22px 22px', display: 'flex', flexDirection: 'column', height: '100dvh', boxShadow: '0 0 40px rgba(0,0,0,0.06)' }}>
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '13px 15px', borderBottom: `1px solid ${C.line}`, background: step === 'review' ? 'rgba(255,255,255,0.6)' : '#fff' }}>
           <button onClick={step === 'summary' ? () => setStep('review') : onBack} aria-label="Back" style={{ display: 'inline-flex', background: 'none', border: 'none', color: C.mute, cursor: 'pointer', padding: 0 }}><ChevronLeft size={22} /></button>
           <div style={{ flex: 1, fontSize: 12, fontWeight: 700, letterSpacing: '.04em', color: C.mute }}>{step === 'review' ? 'YOUR PLAN' : 'ORDER SUMMARY'}</div>
@@ -1015,6 +1023,12 @@ function PathStop({ stop, confirming, stopCount, durationLabel, delay }: { stop:
   if (stop.kind === 'hero' || stop.kind === 'chapter') return null // chapters render via the section loop
   if (stop.kind === 'card') return <PathCard node={stop.node} delay={delay} />
   if (stop.kind === 'amp') return <AmpCard Icon={stop.Icon} title={stop.title} dateLabel={stop.dateLabel} desc={stop.desc} priceLabel={stop.priceLabel} />
+  if (stop.kind === 'you') return (
+    <div className="pf-card" style={{ position: 'relative', paddingLeft: 44, marginBottom: 9 }}>
+      <span style={{ position: 'absolute', left: 21, top: 14, width: 11, height: 11, borderRadius: 6, background: 'transparent', border: `2px dashed ${DESK.mint}`, boxShadow: `0 0 0 4px ${PAPER}` }} />
+      <YouSlip minutes={stop.minutes}>{stop.text}. Guide inside once you ship.</YouSlip>
+    </div>
+  )
   if (stop.kind === 'add') return (
     <div style={{ position: 'relative', paddingLeft: 44, marginBottom: 14 }}>
       <span style={{ position: 'absolute', left: 19, top: 14, width: 12, height: 12, borderRadius: 6, border: `1.5px dashed ${C.faint}`, background: PAPER }} />
@@ -1032,7 +1046,8 @@ function ChapterStation({ chapter, hasSpine, delay }: { chapter: Extract<Stop, {
   const arrival = badge === 'arrival'
   return (
     <div className="pf-up" style={{ position: 'relative', paddingLeft: 44, marginTop: 18, animationDelay: `${delay}s` }}>
-      <span style={{ position: 'absolute', left: arrival ? 10 : 11, top: 0, width: arrival ? 32 : 30, height: arrival ? 32 : 30, borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, background: arrival ? BRAND_GRAD : tone.bg, color: arrival ? '#fff' : tone.fg, boxShadow: arrival ? `0 0 0 4px ${PAPER}, 0 0 16px rgba(22,163,74,.45)` : `0 0 0 4px ${PAPER}, 0 0 14px ${tone.fg}55` }}>
+      {/* The stage plate: numbered ink block, the desk language. Arrival keeps the mint seal. */}
+      <span style={{ position: 'absolute', left: 11, top: 0, width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: DISPLAY, fontSize: 13.5, fontWeight: 700, background: arrival ? BRAND_GRAD : DESK.ink, color: arrival ? '#fff' : PAPER, boxShadow: arrival ? `0 0 0 4px ${PAPER}, 0 0 16px rgba(46,154,120,.45)` : `0 0 0 4px ${PAPER}` }}>
         {badge === 'setup' ? <Flag size={14} /> : arrival ? <DoorOpen size={15} /> : badge}
       </span>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -1069,7 +1084,9 @@ function PathCard({ node, delay }: { node: CardNode; delay: number }) {
   return (
     <div className="pf-card" style={{ position: 'relative', paddingLeft: 44 }}>
       <span className={pulse ? 'pf-pulse' : undefined} style={{ position: 'absolute', left: 21, top: 21, width: 11, height: 11, borderRadius: 6, background: dotColor, boxShadow: `0 0 0 4px ${PAPER}, 0 0 10px ${dotColor}55` }} />
-      <div className="pf-up" style={{ background: '#fff', border: '1px solid #ededf0', borderRadius: 14, boxShadow: `${E1}, ${INSET_HI}`, padding: '10px 12px', marginBottom: 9, animationDelay: `${delay}s` }}>
+      <div className="pf-up" style={{ position: 'relative', background: '#fff', border: `1.5px solid ${DESK.line}`, borderRadius: 14, boxShadow: '0 1px 3px rgba(22,33,28,0.05)', padding: '10px 12px 10px 20px', marginBottom: 9, overflow: 'hidden', animationDelay: `${delay}s` }}>
+        {/* the ticket's perforated stub edge */}
+        <span aria-hidden style={{ position: 'absolute', left: 8, top: 6, bottom: 6, borderLeft: `2px dashed ${DESK.line}`, pointerEvents: 'none' }} />
         {/* the compact row — the service/piece "header"; tap to expand */}
         <button onClick={() => { if (!readOnly) setOpen((o) => !o) }} disabled={readOnly} style={{ display: 'flex', gap: 11, alignItems: 'center', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: readOnly ? 'default' : 'pointer', WebkitTapHighlightColor: 'transparent' }}>
           {isContent ? <ContentTile node={node} /> : (
@@ -1501,26 +1518,26 @@ function HandsOnControl({ value, onChange }: { value: HandsOn | null; onChange: 
   ]
   return (
     <div style={{ margin: '0 0 12px' }}>
-      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.04em', color: C.mute, marginBottom: 7 }}>HOW HANDS-ON DO YOU WANT TO BE?</div>
-      <div style={{ display: 'flex', gap: 6 }}>
+      <div style={{ fontSize: 11, fontWeight: 750, letterSpacing: '.1em', textTransform: 'uppercase', color: DESK.mute, marginBottom: 8 }}>How hands-on do you want to be?</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 0 }}>
         {OPTS.map((o) => {
           const on = value === o.v
           return (
             <button
               key={o.v}
               onClick={() => onChange(o.v)}
+              title={o.sub}
               style={{
-                flex: 1, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
-                border: `1.5px solid ${on ? C.green : C.line}`, background: on ? '#f0faf6' : '#fff',
-                borderRadius: 12, padding: '9px 10px',
+                cursor: 'pointer', fontFamily: 'inherit', marginRight: 6, marginBottom: 8,
+                border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
+                color: on ? DESK.mintDeep : DESK.ink, borderRadius: 999, padding: '9px 15px',
+                fontSize: 13.5, fontWeight: 650,
               }}
-            >
-              <div style={{ fontSize: 12.5, fontWeight: 650, color: on ? C.green : C.ink, lineHeight: 1.25 }}>{o.label}</div>
-              <div style={{ fontSize: 10.5, color: C.mute, lineHeight: 1.35, marginTop: 3 }}>{o.sub}</div>
-            </button>
+            >{o.label}</button>
           )
         })}
       </div>
+      {value && <div className="dk-ink" style={{ fontSize: 11.5, color: DESK.mute, marginTop: 2 }}>{OPTS.find((o) => o.v === value)?.sub}</div>}
     </div>
   )
 }
@@ -1555,9 +1572,10 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
   ].filter(Boolean) as { key: string; Icon: LucideIcon; fg: string; label: string; sub: string; total: number; suffix: string }[])
   return (
     <div>
-      <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, margin: '0 0 3px' }}>What you&rsquo;re getting</div>
-      <div style={{ fontSize: 11.5, color: C.mute, marginBottom: 11 }}>Grouped by setup, the content we make, and what runs each month. Tap a group to see every piece.</div>
-      <div style={{ border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden' }}>
+      <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, margin: '0 0 3px' }}>Your order</div>
+      <div style={{ fontSize: 11.5, color: C.mute, marginBottom: 11 }}>Every line names who does it. Tap a group to see each piece.</div>
+      <ReceiptFrame style={{ marginBottom: 2 }}>
+      <div style={{ margin: '-14px -16px' }}>
         {priceGroups.map((g, gi) => {
           const isOpen = openG[g.key] ?? false
           return (
@@ -1568,7 +1586,7 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{g.label}</div>
                   <div style={{ fontSize: 11, color: C.faint }}>{g.sub}</div>
                 </div>
-                <span style={{ fontSize: 14, fontWeight: 700, color: g.total === 0 ? C.green : C.ink, flexShrink: 0 }}>{g.total === 0 ? 'Free' : `${money(g.total)}${g.suffix}`}</span>
+                <span style={{ fontFamily: "'SF Mono',ui-monospace,Menlo,monospace", fontSize: 13, fontWeight: 700, color: g.total === 0 ? DESK.mintDeep : C.ink, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{g.total === 0 ? '$0 · you' : `${money(g.total)}${g.suffix}`}</span>
                 <ChevronDown size={16} color={C.faint} style={{ flexShrink: 0, transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform .2s' }} />
               </button>
               {isOpen && (
@@ -1580,13 +1598,13 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
                         <div style={{ fontSize: 12.5, fontWeight: 500, lineHeight: 1.3 }}>{c.label}</div>
                         <div style={{ fontSize: 10.5, color: C.greenDk, marginTop: 1 }}>Made by {serviceLabel(c.producer, c.creatorName)} ›</div>
                       </div>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: c.cents === 0 ? C.green : C.ink, flexShrink: 0 }}>{c.cents === 0 ? 'Free' : money(c.cents / 100)}</span>
+                      <span style={{ fontFamily: "'SF Mono',ui-monospace,Menlo,monospace", fontSize: 12, fontWeight: 600, color: c.cents === 0 ? DESK.mintDeep : C.ink, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{c.cents === 0 ? '$0' : money(c.cents / 100)}</span>
                     </button>
                   ) })}
                   {(g.key === 'setup' ? setupSvc : g.key === 'monthly' ? monthlySvc : perOccSvc).map((it) => (
                     <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px 10px 26px', borderTop: `1px solid ${C.line}` }}>
                       <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.plain || it.name}</div>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{it.cadence.kind === 'recurring' ? `${money(it.price)}/mo` : money(lineTotal(it))}</span>
+                      <span style={{ fontFamily: "'SF Mono',ui-monospace,Menlo,monospace", fontSize: 12, fontWeight: 600, color: C.ink, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{it.cadence.kind === 'recurring' ? `${money(it.price)}/mo` : money(lineTotal(it))}</span>
                     </div>
                   ))}
                 </div>
@@ -1599,10 +1617,12 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
             You skipped {bill.optedOutCount} {bill.optedOutCount === 1 ? 'piece' : 'pieces'}, saved {money(bill.optedOutSaved)}
           </div>
         )}
-        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px', borderTop: `1.5px solid ${C.line}`, fontSize: 13.5, fontWeight: 700 }}>
-          <span>Total</span><span>{money(bill.oneTimeOnDelivery)}{bill.perMonth > 0 ? ` + ${money(bill.perMonth)}/mo` : ''}</span>
+        <div style={{ padding: '4px 13px 13px' }}>
+          <ReceiptRule />
+          <ReceiptTotal label="Today" big={money(bill.oneTimeOnDelivery)} small={bill.perMonth > 0 ? `then ${money(bill.perMonth)}/mo` : undefined} />
         </div>
       </div>
+      </ReceiptFrame>
       {monthlyCap > 0 && (Math.round(overBudget) >= 1 ? (
         <div style={{ background: '#FEF4E4', border: '1px solid #F3D7A4', borderRadius: 12, padding: '12px 13px', margin: '12px 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 700, color: '#8A5A12', marginBottom: 4 }}><Wallet size={14} /> A little over your budget</div>

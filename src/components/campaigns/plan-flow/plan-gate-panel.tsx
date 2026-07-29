@@ -16,6 +16,7 @@
 import Link from 'next/link'
 import { ArrowLeft, MessageCircle } from 'lucide-react'
 import { C, SPACE, RADIUS, TEXT, DISPLAY } from '@/components/mvp/tokens'
+import { DESK, DeskKeyframes, Stamp, paperGround } from '@/components/campaigns/desk/ui'
 import { talkToUsHref, type PlanGate } from '@/lib/campaigns/builder/plan-gates'
 
 export default function PlanGatePanel({ gates, onAdjust, onBack }: {
@@ -25,7 +26,8 @@ export default function PlanGatePanel({ gates, onAdjust, onBack }: {
   onBack: () => void
 }) {
   return (
-    <div style={{ maxWidth: 620, margin: '0 auto', padding: '18px 16px 40px', fontFamily: 'Inter, sans-serif' }}>
+    <div style={{ maxWidth: 620, margin: '0 auto', padding: '18px 16px 40px', fontFamily: 'Inter, sans-serif', ...paperGround, minHeight: '100dvh' }}>
+      <DeskKeyframes />
       <button
         onClick={onBack}
         style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', color: C.mute, fontSize: TEXT.md, fontWeight: 600, cursor: 'pointer', padding: 0, marginBottom: SPACE.xl, fontFamily: 'inherit' }}
@@ -42,7 +44,11 @@ export default function PlanGatePanel({ gates, onAdjust, onBack }: {
       </div>
 
       {gates.map((g) => (
-        <div key={g.key} style={{ border: `1px solid ${C.line}`, borderRadius: RADIUS.lg, padding: SPACE.xl, marginBottom: SPACE.lg, background: '#fff' }}>
+        <div key={g.key} style={{ border: `1px solid ${DESK.amberLine}`, borderRadius: RADIUS.lg, padding: SPACE.xl, marginBottom: SPACE.lg, background: DESK.amberWash }}>
+          {/* Honesty as a designed moment: the plan gets stamped, like a real desk. */}
+          <div style={{ textAlign: 'center', marginBottom: SPACE.md }}>
+            <Stamp>{g.key === 'lead-time' ? 'Too soon' : 'Not enough'}</Stamp>
+          </div>
           <div style={{ fontSize: TEXT.lg, fontWeight: 650, color: C.ink, lineHeight: 1.4, marginBottom: SPACE.sm }}>
             {g.headline}
           </div>
