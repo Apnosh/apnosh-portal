@@ -1,4 +1,5 @@
--- The requirement vault: collect once, forever.
+-- Migration 233 — the requirement vault: collect once, forever.
+-- (Promoted verbatim from supabase/manual/2026-07-27-requirement-vault.sql, now deleted.)
 --
 -- Every setup card names the requirement ids it needs (src/lib/campaigns/setup/requirements.ts).
 -- Four cards between them ask for the Google connection eight times. The owner should connect
