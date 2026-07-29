@@ -25,6 +25,7 @@ import {
   recommendedMonthly,
   monthlyFloor,
   budgetCeiling,
+  datedAnchors,
   addablesForStep,
   toCampaignDraft,
   type MonthlyLine,
@@ -233,15 +234,28 @@ export default function MonthlyPlanFlow({
   /* What the owner already has is never bought again. assetsCover feeds the `have` path, which
    * already renders a covered line at zero and excludes it from both numbers. */
   const have = useMemo(() => assetsCover(a.assets), [a.assets?.join(',')])
+  /* A dated campaign (an opening, an event) is one-time work: its dial is the LAUNCH TOTAL and
+   * its depth is the goal's own priority ladder. An ongoing plan keeps the monthly dial. */
+  const isDated = a.shape === 'date' || a.shape === 'run'
   /* The dial anchors compose with the SAME signals as the live plan — anchors that composed
    * without them could name a floor the actual plan can never hit. signals is server-constant,
    * so the dep is just the prop reference. */
-  const suggested = useMemo(
-    () => recommendedMonthly(goals, a.reach, hasShift, signals),
-    [goals?.join(','), a.reach, hasShift, signals],
+  const anchors = useMemo(
+    () => (isDated ? datedAnchors(goals, a.reach, hasShift, a.avoid, a.assets, signals) : null),
+    [isDated, goals?.join(','), a.reach, hasShift, a.avoid?.join(','), a.assets?.join(','), signals],
   )
-  const floor = useMemo(() => monthlyFloor(goals, a.reach, hasShift, signals), [goals?.join(','), a.reach, hasShift, signals])
-  const ceiling = useMemo(() => budgetCeiling(goals, a.reach, hasShift, signals), [goals?.join(','), a.reach, hasShift, signals])
+  const suggested = useMemo(
+    () => (anchors ? anchors.recommended : recommendedMonthly(goals, a.reach, hasShift, signals)),
+    [anchors, goals?.join(','), a.reach, hasShift, signals],
+  )
+  const floor = useMemo(
+    () => (anchors ? anchors.floor : monthlyFloor(goals, a.reach, hasShift, signals)),
+    [anchors, goals?.join(','), a.reach, hasShift, signals],
+  )
+  const ceiling = useMemo(
+    () => (anchors ? anchors.ceiling : budgetCeiling(goals, a.reach, hasShift, signals)),
+    [anchors, goals?.join(','), a.reach, hasShift, signals],
+  )
   /* Until the owner moves it, the dial IS the recommendation and follows it. Onboarding's stored
    * budget is deliberately not used to size the plan — it is what they could spend, not what the
    * work costs, and letting it anchor the plan is the thing we removed. */
@@ -253,8 +267,8 @@ export default function MonthlyPlanFlow({
   }, [floor, suggested, ceiling])
 
   const plan = useMemo(
-    () => composeMonthlyPlan(budget, have, { off, added }, goals, a.reach, hasShift, a.avoid, a.assets, signals),
-    [budget, have, off, added, goals?.join(','), a.reach, hasShift, a.avoid?.join(','), a.assets?.join(','), signals],
+    () => composeMonthlyPlan(budget, have, { off, added }, goals, a.reach, hasShift, a.avoid, a.assets, signals, { dated: isDated }),
+    [budget, have, off, added, goals?.join(','), a.reach, hasShift, a.avoid?.join(','), a.assets?.join(','), signals, isDated],
   )
   const bill = plan.quote
   const state = chainStateOf(MONTHLY_STEPS, plan.lines as never)
@@ -385,7 +399,7 @@ export default function MonthlyPlanFlow({
         <ReceiptRule />
         <div style={{ padding: '2px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 12.5, color: C.mute }}>Want more or less each month?</span>
+            <span style={{ fontSize: 12.5, color: C.mute }}>{isDated ? 'Want a bigger or smaller launch?' : 'Want more or less each month?'}</span>
             {budget !== suggested && (
               <button
                 type="button" onClick={() => { setMovedDial(false); setA({ ...a, budget: suggested }) }}
@@ -399,7 +413,7 @@ export default function MonthlyPlanFlow({
             type="range" min={0} max={stops.length - 1} step={1}
             value={Math.max(0, stops.indexOf(budget))}
             onChange={(e) => { setMovedDial(true); setA({ ...a, budget: stops[Number(e.target.value)] }) }}
-            className="mp-slider" aria-label="Ongoing work each month"
+            className="mp-slider" aria-label={isDated ? 'Total for the launch' : 'Ongoing work each month'}
             style={{ marginTop: 6, ['--mp-track' as string]: `linear-gradient(90deg, ${C.green} ${(Math.max(0, stops.indexOf(budget)) / Math.max(1, stops.length - 1)) * 100}%, #e9e9ee ${(Math.max(0, stops.indexOf(budget)) / Math.max(1, stops.length - 1)) * 100}%)` }}
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: C.faint, marginTop: -2 }}>
@@ -420,16 +434,24 @@ export default function MonthlyPlanFlow({
               </div>
             </div>
           )}
-          <div style={{ fontSize: 12.5, color: bill.nothingRecurs ? AMBER_DK : C.mute, lineHeight: 1.45, marginTop: 7 }}>
-            {bill.nothingRecurs
-              ? 'Nothing keeps running at this level. We would set you up and then stop, which is not worth your money.'
-              : budget <= floor
-                ? 'The smallest amount that keeps anything running. Below it we could set you up and then nothing would happen.'
+          <div style={{ fontSize: 12.5, color: bill.nothingRecurs && !isDated ? AMBER_DK : C.mute, lineHeight: 1.45, marginTop: 7 }}>
+            {isDated
+              ? budget <= floor
+                ? 'The smallest launch that still covers every step. It works, but the day itself gets no extra push.'
                 : ceiling && budget >= ceiling
-                  ? 'That is everything we can genuinely run for you today. We do not go higher, because the extra would go unspent.'
+                  ? 'Everything we can genuinely throw at this date. We do not go higher, because the extra would go unspent.'
                   : budget === suggested
-                    ? 'What we built you: the smallest plan that covers every step. Run it, see what it does, then move this with real numbers in front of you.'
-                    : 'The setup is one-time work you keep. Pause any time and the monthly part stops.'}
+                    ? 'The launch we would run for this date: the press push, the creator visit, and the countdown, on top of the foundations.'
+                    : 'One-time work for the moment. Anything monthly stops when you pause it.'
+              : bill.nothingRecurs
+                ? 'Nothing keeps running at this level. We would set you up and then stop, which is not worth your money.'
+                : budget <= floor
+                  ? 'The smallest amount that keeps anything running. Below it we could set you up and then nothing would happen.'
+                  : ceiling && budget >= ceiling
+                    ? 'That is everything we can genuinely run for you today. We do not go higher, because the extra would go unspent.'
+                    : budget === suggested
+                      ? 'What we built you: the smallest plan that covers every step. Run it, see what it does, then move this with real numbers in front of you.'
+                      : 'The setup is one-time work you keep. Pause any time and the monthly part stops.'}
           </div>
         </div>
       </ReceiptFrame>
@@ -464,7 +486,7 @@ export default function MonthlyPlanFlow({
         <div style={{ marginTop: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '13px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
           <TrendingUp size={16} style={{ color: C.greenDk, flex: '0 0 auto', marginTop: 1 }} />
           <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5 }}>
-            <b style={{ color: C.ink }}>{usd(plan.nextUp.addlMonthly)} more a month</b> would add {plan.nextUp.name}, the next
+            <b style={{ color: C.ink }}>{usd(plan.nextUp.addlMonthly)} more {isDated ? 'in the launch budget' : 'a month'}</b> would add {plan.nextUp.name}, the next
             most useful thing your budget did not reach.
           </div>
         </div>

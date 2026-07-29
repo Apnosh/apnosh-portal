@@ -24,6 +24,7 @@ import {
   budgetCeiling,
   monthlyFloor,
   recommendedMonthly,
+  datedAnchors,
   rankedCandidates,
   stepOf,
 } from '../../src/lib/campaigns/data/monthly-plan'
@@ -614,6 +615,63 @@ s.group('The dial anchors and the plan speak with one voice under signals')
     const want = new Set(richPlan.lines.filter((l) => !l.held && l.kind === 'monthly').map((l) => l.stage))
     const got = new Set(atRec.lines.filter((l) => !l.held && !l.have && l.kind === 'monthly').map((l) => l.stage))
     return [...want].every((st) => got.has(st))
+  })())
+}
+
+/*
+ * DATED MODE — the launch dial has to actually buy the launch.
+ *
+ * The defect this locks out: an opening composed the SAME plan at $550 and at $2,000, because
+ * depth only ever bought monthly work and an opening's ladder (press push, creator collab, event
+ * posts, sampling) is one-time. The dial was scenery. In dated mode the budget is the launch
+ * total and depth packs the goal's own authored priorities while it holds.
+ */
+s.group('dated mode: the launch dial buys the launch')
+{
+  const goals = ['opening'] as const
+  const at = (b: number) => composeMonthlyPlan(b, [], {}, goals, 'local', false, undefined, undefined, undefined, { dated: true })
+  const billedIds = (p: ReturnType<typeof at>) => p.lines.filter((l) => !l.held && !l.have).map((l) => l.id)
+  const total = (p: ReturnType<typeof at>) => p.quote.start + p.quote.monthly
+
+  const A = datedAnchors(goals, 'local', false)
+  s.check(`anchors are ordered (floor $${A.floor} <= recommended $${A.recommended} <= ceiling $${A.ceiling})`,
+    A.floor <= A.recommended && A.recommended <= A.ceiling && A.floor > 0)
+  s.check('the dial DOES something: floor and ceiling plans differ', (() => {
+    return JSON.stringify(billedIds(at(A.floor))) !== JSON.stringify(billedIds(at(A.ceiling)))
+  })())
+  s.check('billed lines are monotonic in budget across the anchors', (() => {
+    const f = billedIds(at(A.floor)).length
+    const r = billedIds(at(A.recommended)).length
+    const c = billedIds(at(A.ceiling)).length
+    return f <= r && r <= c
+  })())
+  s.check('the recommended launch carries a moment piece the floor does not (press outreach)', (() => {
+    const f = new Set(billedIds(at(A.floor)))
+    const r = new Set(billedIds(at(A.recommended)))
+    return !f.has('pr-media') && r.has('pr-media')
+  })())
+  s.check('the ceiling reaches the whole ladder (creator collab + sampling)', (() => {
+    const c = new Set(billedIds(at(A.ceiling)))
+    return c.has('creator-collab') && c.has('street-sampling')
+  })())
+  s.check('the launch total never exceeds the dial (the promise holds)', (() => {
+    for (const b of [A.floor, A.recommended, A.ceiling]) if (total(at(b)) > b) return false
+    return true
+  })())
+  s.check('the floor is coverage: its total equals the coverage-only compose', total(at(A.floor)) === A.floor)
+  s.check('reach still excludes address-bound work at any dated budget', (() => {
+    const p = composeMonthlyPlan(A.ceiling, [], {}, goals, 'anywhere', false, undefined, undefined, undefined, { dated: true })
+    return !p.lines.some((l) => l.id === 'street-sampling' || l.id === 'local-seo')
+  })())
+  s.check('MUTATION GUARD: ongoing mode is untouched by the dated flag machinery', (() => {
+    const plain = composeMonthlyPlan(550, [], {}, goals, 'local', false)
+    const explicit = composeMonthlyPlan(550, [], {}, goals, 'local', false, undefined, undefined, undefined, { dated: false })
+    return JSON.stringify(plain.lines.map((l) => l.id)) === JSON.stringify(explicit.lines.map((l) => l.id))
+  })())
+  s.check('ongoing mode still freezes an opening at coverage (the documented months-only rule)', (() => {
+    const a = composeMonthlyPlan(550, [], {}, goals, 'local', false)
+    const b = composeMonthlyPlan(2000, [], {}, goals, 'local', false)
+    return JSON.stringify(a.lines.map((l) => l.id)) === JSON.stringify(b.lines.map((l) => l.id))
   })())
 }
 

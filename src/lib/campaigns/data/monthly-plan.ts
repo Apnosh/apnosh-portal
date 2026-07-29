@@ -394,7 +394,18 @@ export function composeMonthlyPlan(
   avoid?: readonly string[],
   assets?: readonly string[],
   signals?: MonthlySignals,
+  /**
+   * DATED MODE (an opening, an event): the campaign IS one-time work, so the "months only" depth
+   * rule below is exactly backwards for it — it froze the plan at coverage regardless of budget,
+   * and the dial did nothing. In dated mode the budget is the LAUNCH TOTAL (setup plus the first
+   * month of anything ongoing) and depth packs the goal's own authored priority ladder while that
+   * total holds. `priorityCap` limits depth to candidates at or above that rung (used by the dial
+   * anchors); -1 means coverage only. Ongoing plans are byte-identical to before.
+   */
+  opts?: { dated?: boolean; priorityCap?: number },
 ): MonthlyPlan {
+  const dated = opts?.dated ?? false
+  const cap = opts?.priorityCap
   const added = edits.added ?? new Set<string>()
   const haveSet = new Set(have)
   /* Reach rules out address-bound work; avoid rules out work the owner has told us not to do. Both
@@ -461,7 +472,11 @@ export function composeMonthlyPlan(
       return 'taken'
     }
     const r = recurringOf(s)
-    if (load + r > budgetMonthly && !(required && r === 0)) return 'unaffordable'
+    if (dated) {
+      /* The launch total is the promise: setup plus the first month of anything ongoing. Coverage
+       * (`required`) is the quote itself and is always taken — the floor anchor reports its cost. */
+      if (!required && start + load + (startOf(s) + r) > budgetMonthly) return 'unaffordable'
+    } else if (load + r > budgetMonthly && !(required && r === 0)) return 'unaffordable'
     chosen.push({ s, have: false })
     taken.add(id)
     load += r
@@ -533,12 +548,18 @@ export function composeMonthlyPlan(
    */
   for (const c of ranked) {
     if (droppedHere.has(c.id)) continue
+    /* Dated depth honors the goal's authored ladder: the anchor computations cap the rung. */
+    if (dated && cap != null && c.best > cap) continue
     const s = svc(c.id)
-    if (s && deliverable(c.id) && !taken.has(c.id) && recurringOf(s) === 0) continue
+    /* The months-only rule holds for ongoing plans; a dated campaign's depth IS one-time work. */
+    if (!dated && s && deliverable(c.id) && !taken.has(c.id) && recurringOf(s) === 0) continue
     const r = consider(c.id)
     if (r === 'unaffordable' && !nextUp) {
       const svcx = svc(c.id)!
-      const short = Math.max(5, Math.ceil((recurringOf(svcx) - (budgetMonthly - load)) / 5) * 5)
+      const gap = dated
+        ? startOf(svcx) + recurringOf(svcx) - (budgetMonthly - start - load)
+        : recurringOf(svcx) - (budgetMonthly - load)
+      const short = Math.max(5, Math.ceil(gap / 5) * 5)
       nextUp = { name: svcx.name, addlMonthly: short }
     }
   }
@@ -762,6 +783,31 @@ export function monthlyFloor(goals?: readonly string[], reach?: Reach, shift = f
 /* All three dial anchors thread the SAME signals as the live plan. If they composed without,
  * a dropped service that happens to be the cheapest recurring line would make the floor name a
  * price the actual plan can never hit, and the recommendation would converge on the wrong dial. */
+/**
+ * Dial anchors for a DATED campaign, in launch-total dollars (setup plus the first month of any
+ * ongoing work). Floor = coverage only, the smallest honest launch. Recommended = coverage plus
+ * the goal's moment-making rungs (authored priority 6 and up the ladder: the press push, the
+ * creator collab, the launch graphic). Ceiling = everything the goal's ladder can genuinely use —
+ * past it the extra money would go unspent, and we say so.
+ */
+export function datedAnchors(
+  goals?: readonly string[],
+  reach?: Reach,
+  shift = false,
+  avoid?: readonly string[],
+  assets?: readonly string[],
+  signals?: MonthlySignals,
+): { floor: number; recommended: number; ceiling: number } {
+  const total = (priorityCap?: number) => {
+    const q = composeMonthlyPlan(1e9, [], {}, goals, reach, shift, avoid, assets, signals, { dated: true, priorityCap }).quote
+    return q.start + q.monthly
+  }
+  const floor = total(-1)
+  const recommended = Math.max(floor, total(6))
+  const ceiling = Math.max(recommended, total())
+  return { floor, recommended, ceiling }
+}
+
 export function recommendedMonthly(goals?: readonly string[], reach?: Reach, shift = false, signals?: MonthlySignals): number {
   const rich = composeMonthlyPlan(100000, [], {}, goals, reach, shift, undefined, undefined, signals)
   const wantSteps = new Set(rich.lines.filter((l) => !l.held && l.kind === 'monthly').map((l) => l.stage))
