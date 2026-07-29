@@ -159,6 +159,17 @@ export async function POST(req: NextRequest) {
 
   const allOk = verified.every((v) => v.ok)
 
+  // Law 5: an applied-and-read-back link is an 'our-side' fact the vault holds forever —
+  // it silently upgrades any earlier owner-typed row. Awaited; never throws.
+  if (allOk) {
+    const ordering = verified.find((v) => /order/i.test(v.button))?.now ?? undefined
+    const booking = verified.find((v) => /reserv|book/i.test(v.button))?.now ?? undefined
+    if (ordering || booking) {
+      const { recordSignal } = await import('@/lib/campaigns/setup/vault-bridge')
+      await recordSignal(clientId, { kind: 'links', ordering: ordering ?? undefined, booking: booking ?? undefined, via: 'gbp-applied' })
+    }
+  }
+
   // Stamp the campaign task done, but ONLY on a verified read-back. Stamping on "the
   // request did not throw" is what makes a progress bar lie, and this write path had
   // exactly that bug an hour ago. Server-written, not in the owner PATCH whitelist.

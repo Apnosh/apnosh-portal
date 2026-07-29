@@ -53,6 +53,16 @@ export async function POST(req: NextRequest) {
   }
 
   const bill = checkoutBill(draft)
+  // Law 5, the read: what this client has already given us, so checkout's "what we will need
+  // from you" ticks the held items instead of re-promising to collect them. Best-effort — an
+  // unreadable vault omits the key and the surface renders the all-unheld honest default.
+  const vault = await (async () => {
+    try {
+      const { heldRequirementsUnion } = await import('@/lib/campaigns/setup/vault-bridge')
+      const held = await heldRequirementsUnion(clientId)
+      return { held: held.map((h) => h.requirement), hollow: held.filter((h) => h.hollow).map((h) => h.requirement) }
+    } catch { return undefined }
+  })()
   // Pre-checkout gates (Phase 4a): resolve the shoot booking gate (admin can turn it off/required/
   // optional per campaign) + any admin agreement/input gates. Never throws.
   const gates = await resolveGatesForDraft(draft, { clientId }).catch(() => ({ booking: null, custom: [] }))
@@ -66,6 +76,7 @@ export async function POST(req: NextRequest) {
       breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
       monthlyCents: 0,
       gates,
+      ...(vault ? { vault } : {}),
     })
   }
 
@@ -123,6 +134,7 @@ export async function POST(req: NextRequest) {
         monthlyCents: bill.perMonthCents,
         savedCard,
         gates,
+        ...(vault ? { vault } : {}),
       })
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })
@@ -172,6 +184,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       paymentIntentId: pi.id,
       clientSecret: pi.client_secret,
+      ...(vault ? { vault } : {}),
       publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
       breakdown: {
         subtotalCents: bill.subtotalCents,

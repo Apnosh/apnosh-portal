@@ -13,7 +13,9 @@
  * Stripe and ships directly.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
+import { needsForDraftItems } from '@/lib/campaigns/setup/draft-needs'
+import { WhatItTakes } from '@/components/mvp/what-it-takes'
 import { loadStripe, type StripeAddressElementChangeEvent } from '@stripe/stripe-js'
 import { Elements, AddressElement, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import { saveAndShip } from '@/lib/campaigns/builder/ship'
@@ -50,6 +52,8 @@ interface PrepareResult {
   monthlyCents?: number
   savedCard?: SavedCard | null
   gates?: ResolvedGates
+  /** Law 5: what this client has already given us — held requirement ids (hollow = owner-word). */
+  vault?: { held: string[]; hollow: string[] }
 }
 
 export interface CampaignCheckoutProps {
@@ -79,6 +83,7 @@ function stripePromiseFor(key: string) {
 
 export default function CampaignCheckout({ clientId, draft, restaurant, producerChoices, initialGateAnswers, onSuccess, onCancel }: CampaignCheckoutProps) {
   const [prep, setPrep] = useState<PrepareResult | null>(null)
+  const checkoutNeeds = useMemo(() => needsForDraftItems(draft.items), [draft.items])
   const [error, setError] = useState<string | null>(null)
   // Set once the order is placed (paid + shipped) — flips the whole overlay to the confirmation.
   const [placed, setPlaced] = useState<{ campaignId: string; breakdown: Breakdown; bookedSlot: Hold | null } | null>(null)
@@ -137,6 +142,14 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
             <Header onBack={onCancel} />
             {error && !prep && <ErrorBox message={error} onBack={onCancel} />}
             {!error && !prep && <Loading />}
+            {/* What we will need from you — derived from the draft's own lane picks, with the
+              * items this client already gave us ticked (hollow when owner-word). No vault in
+              * the response → the all-unheld render, which is today's honest statement. */}
+            {prep && checkoutNeeds.length > 0 && (
+              <div style={{ margin: '0 0 14px' }}>
+                <WhatItTakes needs={checkoutNeeds} held={prep.vault?.held ?? []} heldHollow={prep.vault?.hollow ?? []} />
+              </div>
+            )}
             {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} onPlaced={onPlaced} />}
             {prep && !prep.free && prep.clientSecret && prep.publishableKey && (
               <Elements

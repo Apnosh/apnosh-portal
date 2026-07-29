@@ -105,5 +105,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Law 5: the DNS probe passed on THIS domain — a client-scoped fact the vault holds, so the
+  // next campaign's email work does not re-run the ask. Awaited; never throws.
+  const { recordSignal } = await import('@/lib/campaigns/setup/vault-bridge')
+  await recordSignal(campaign.clientId, { kind: 'dns-verified', domain })
+
   return NextResponse.json({ ok: true, verifiedAt: nowIso })
 }

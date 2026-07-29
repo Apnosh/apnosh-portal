@@ -192,6 +192,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.fields?.creator_choices && typeof body.fields.creator_choices === 'object') {
     campaign.creatorChoices = body.fields.creator_choices as Record<string, string>
   }
+  // Law 5, the write-back: an owner-typed fact on the ready page fills the CLIENT-scoped vault,
+  // so the next campaign's execution is seeded with it instead of re-asking. Awaited (teardown
+  // drops un-awaited writes) but recordSignal never throws — the save must not fail over the vault.
+  if (body.fields?.execution) {
+    const d = body.fields.execution as Record<string, string>
+    const { recordSignal } = await import('@/lib/campaigns/setup/vault-bridge')
+    if (d.orderingLink?.trim() || d.bookingLink?.trim()) {
+      await recordSignal(campaign.clientId, { kind: 'links', ordering: d.orderingLink?.trim() || undefined, booking: d.bookingLink?.trim() || undefined, via: 'owner-typed' })
+    }
+    if (d.photoUrls?.trim()) {
+      await recordSignal(campaign.clientId, { kind: 'photos', urls: d.photoUrls.trim() })
+    }
+  }
   // Regenerate the briefs only when a brief-relevant input actually changed
   // (vs the pre-update execution), so an unrelated/no-op save costs nothing.
   if (body.fields?.execution) {
