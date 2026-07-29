@@ -37,6 +37,19 @@ const TOKENS = {
   pageBg: "#2b2d31",
 };
 
+/* The Strategist's Desk ground (matches src/components/campaigns/desk/ui.tsx — keep in sync). */
+const DESKJ = {
+  paper: "#F7F5F0", ink: "#16211C", ink2: "#4A554F", mute: "#8A948D", line: "#E4E0D6",
+  mint: "#4ABD98", mintDeep: "#2E9A78", mintWash: "#EAF6F1", mintLine: "rgba(74,189,152,0.35)",
+  amber: "#B7791F", amberWash: "#FBF3E4",
+  grad: "linear-gradient(135deg,#4ABD98,#2E9A78)",
+};
+const paperBg = {
+  background: DESKJ.paper,
+  backgroundImage: "radial-gradient(rgba(22,33,28,0.028) 1px, transparent 1px)",
+  backgroundSize: "22px 22px",
+};
+
 /* Per-goal gradients (135deg, light -> deep) */
 const G = {
   launch: ["#f6a23a", "#ee4c2c"],
@@ -430,7 +443,7 @@ const DirIcon = {
    ============================================================ */
 function Picker({ onClose, onPick, onSomethingElse, onDirect }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 20px 30px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 22 }}>
@@ -494,7 +507,7 @@ function SomethingElse({ onBack, restaurant, onApprove, onMarketer }) {
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 22 }}>
@@ -578,7 +591,7 @@ function SomethingElse({ onBack, restaurant, onApprove, onMarketer }) {
    ============================================================ */
 function Direct({ onBack, onPickPart }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 28px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 22 }}>
@@ -622,7 +635,7 @@ function Direct({ onBack, onPickPart }) {
    fire-and-forget save that showed "added" before the write confirmed. */
 function SavingScreen() {
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 40px" }}>
         <div style={{ width: 52, height: 52, borderRadius: 26, border: `4px solid ${TOKENS.mintTint}`, borderTopColor: TOKENS.mintDark, animation: "aspin 0.8s linear infinite", marginBottom: 22 }} />
         <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 19, fontWeight: 600, color: TOKENS.ink }}>Saving your plan</div>
@@ -636,7 +649,7 @@ function SavingScreen() {
    "added". Nothing was charged; they can retry or go back to the plan. */
 function SaveError({ onRetry, onBack }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ paddingTop: 4, marginBottom: 22 }}>
           <CircleBtn onClick={onBack}>
@@ -1395,7 +1408,7 @@ function StrategistBrief({ restaurant, onBack, onSent }) {
   const [avoid, setAvoid] = useState("");
   const [call, setCall] = useState(false);
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 20 }}>
@@ -1450,7 +1463,7 @@ function ExpressOrder({ partId, onBack, onOrder }) {
   const [qty, setQty] = useState(1);
   const total = m.price * qty;
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 16 }}>
@@ -1647,7 +1660,7 @@ function GoalNights({ goalId, restaurant, onBack, onApprove, onStrategist }) {
   else leadTxt = "A weekly special";
   const planLine = `${leadTxt} on ${nightsTxt}, and we'll spread the word every week.`;
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 14px" }}>
         <div style={{ paddingTop: 4, marginBottom: 16 }}>
@@ -1910,7 +1923,7 @@ const ongoingById = (id) => ONGOING_GROUPS.flatMap((g) => g.items).find((i) => i
 
 function PlanPicker({ onBack, onPick }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "0 20px 30px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 20 }}>
@@ -1937,7 +1950,7 @@ function PlanPicker({ onBack, onPick }) {
 function PlanStub({ goalId, onBack }) {
   const g = ongoingById(goalId) || { title: "This plan" };
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fff" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ padding: "4px 20px 0" }}>
         <CircleBtn onClick={onBack}>
@@ -2021,7 +2034,7 @@ function Campaigns({ items = [], onHome, onCreate, onCampaigns, onOpen }) {
 function CampaignDetail({ camp, onBack }) {
   const c = camp || { name: "This", goal: "nights", status: "draft", kind: "campaign" };
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ padding: "4px 20px 0" }}>
         <CircleBtn onClick={onBack}>
@@ -2538,7 +2551,7 @@ function CreatorProductPage({ card, restaurant, onBack, onBook, onHoldSlot, onCr
   const ctaLabel = isQuote ? "Get a quote" : shape === "scheduled" ? "Pick a time" : shape === "recurring" ? "Choose a start date" : "Continue";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 12 }}>
         {/* HERO — same shape as the campaign product page. */}
         <div style={{ position: "relative", background: "linear-gradient(168deg, #fbfaf4 0%, #f2f8f4 54%, #e7f3ed 100%)", padding: "14px 20px 26px", overflow: "hidden" }}>
@@ -2723,7 +2736,7 @@ function CreatorBookingPanel({ card, tier, shape, recurring, isQuote, per, vendo
   const cta = isQuote ? "Request a quote" : shape === "scheduled" && !noAvail ? (data && data.confirmMode === "instant" ? "Book this time" : "Request this time") : shape === "recurring" ? "Start plan" : noAvail ? "Send request" : "Book it";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       {/* HEADER */}
       <div style={{ padding: "14px 20px", borderBottom: `1px solid ${TOKENS.line}`, background: "#fff", display: "flex", alignItems: "center", gap: 12 }}>
         <button onClick={onBack} aria-label="Back" className="apnpress" style={{ width: 34, height: 34, borderRadius: 17, border: "none", background: "rgba(20,35,28,0.06)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -2899,14 +2912,14 @@ function CreatorProfilePage({ vendorSlug, onBack, onCreatorProfile, onOpenOfferi
   }, [vendorSlug, onCreatorProfile]);
 
   if (state.loading) {
-    return <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    return <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <ProfileTopBar onBack={onBack} />
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>Loading profile…</div>
     </div>;
   }
   const p = state.data;
   if (!p) {
-    return <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    return <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <ProfileTopBar onBack={onBack} />
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub }}>This creator isn’t available.</div>
     </div>;
@@ -2931,7 +2944,7 @@ function CreatorProfilePage({ vendorSlug, onBack, onCreatorProfile, onOpenOfferi
   const shapeCTA = (s) => s === "scheduled" ? "Book a time" : s === "recurring" ? "Start a plan" : "Get started";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 12 }}>
         {/* 01 IDENTITY */}
         <div style={{ position: "relative", background: "linear-gradient(168deg, #fbfaf4 0%, #f2f8f4 54%, #e7f3ed 100%)", padding: "14px 20px 24px", overflow: "hidden" }}>
@@ -3351,7 +3364,7 @@ function CategoryAll({ rowId, onBack, onOpen }) {
   const ids = soonShelf ? row.ids : orderIds(row.ids).filter(buyableId);
   const items = ids.map(catGet).filter(Boolean);
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 24px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 18 }}>
           <CircleBtn onClick={onBack}>
@@ -3389,7 +3402,7 @@ function PlanDetail({ itemId, onBack, onAdd, onMarketer }) {
   const how = DETAIL_HOW[p.type] || DETAIL_HOW.plan;
   const get = DETAIL_GET[p.type] || DETAIL_GET.plan;
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto" }}>
         <div style={{ position: "relative", background: gType(p.type), padding: "16px 20px 26px" }}>
@@ -3439,7 +3452,7 @@ function FeaturedDetail({ onClose, onEvent, onDeal, onPost }) {
     </button>
   );
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <StatusBar />
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 28px" }}>
         <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 2, marginBottom: 6 }}>
@@ -3937,7 +3950,7 @@ function ProductPage({ itemId, signals, tier, clientId, restaurant, initialDoer,
   const analytics = analyticsToTrack(p, effStages);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 12 }}>
         {/* ── HERO — premium, warm, light. gbp shows the owner's REAL Google listing as the product
               shot; every other card lifts its own art. One bold outcome headline + a confident price,
@@ -4492,7 +4505,8 @@ function hidePresetSlots(cfg, preset) {
   return { ...cfg, lead, slots };
 }
 
-function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, preset, onBack, onGenerate }) {
+/** Exported (as MadlibBuilder) for /preview/campaign/madlib — fixture verification without an account. */
+export function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, preset, onBack, onGenerate }) {
   const p = catGet(itemId) || CATALOG[0];
   const baseCfg = QL[itemId] || { lead: "Set up {thing}.", slots: { thing: { k: "text", v: p.title.toLowerCase() } } };
   const rawCfg = preset ? hidePresetSlots(baseCfg, preset) : baseCfg;
@@ -4504,7 +4518,8 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
   const cfg = listLocked
     ? { ...rawCfg, slots: { ...rawCfg.slots, list: { k: "pick", v: "social only", o: ["social only"] } } }
     : rawCfg;
-  const c1 = (TYPE_G[p.type] || TYPE_G.plan)[1];
+  // The desk's one accent: every editor control runs mint, whatever the campaign type.
+  const c1 = DESKJ.mintDeep;
   const [vals, setVals] = useState(() => {
     // A dish/menu slot defaults to the owner's FEATURED dish (their signature) when they marked one,
     // else the first menu item — their real menu, never a placeholder.
@@ -4523,7 +4538,7 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
   const [editing, setEditing] = useState(null);
   const [mq, setMq] = useState("");
   const [cq, setCq] = useState("");
-  const addPillStyle = { display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", borderRadius: 22, padding: "9px 14px", border: "1.5px dashed rgba(255,255,255,0.55)", background: "rgba(255,255,255,0.08)", color: "#fff", fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, WebkitTapHighlightColor: "transparent" };
+  const addPillStyle = { display: "inline-flex", alignItems: "center", gap: 6, cursor: "pointer", borderRadius: 22, padding: "9px 14px", border: `1.5px dashed ${DESKJ.mintLine}`, background: DESKJ.mintWash, color: DESKJ.mintDeep, fontFamily: "Inter, sans-serif", fontSize: 13, fontWeight: 600, WebkitTapHighlightColor: "transparent" };
   const removeBtn = { marginTop: 10, height: 40, width: "100%", borderRadius: 20, border: `1.5px solid ${TOKENS.line}`, background: "#fff", color: TOKENS.sub, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13.5, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" };
   const getField = (k) => cfg.slots[k] || (cfg.extras && cfg.extras.find((e) => e.id === k)) || null;
   const has = (k) => { const v = vals[k]; return Array.isArray(v) ? v.length > 0 : (v !== null && v !== undefined && v.toString().trim().length > 0); };
@@ -4626,42 +4641,42 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
   };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type), position: "relative" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg, position: "relative" }}>
       <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 22px 24px", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, paddingTop: 4, marginBottom: 24 }}>
-          <CircleBtn onClick={onBack} dark>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
+          <CircleBtn onClick={onBack}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={DESKJ.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg>
           </CircleBtn>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: "#fff" }}>{p.title}</div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 18, fontWeight: 600, color: DESKJ.ink }}>{p.title}</div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 16 }}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 1.4, color: "rgba(255,255,255,0.92)", textTransform: "uppercase" }}>Here's a starting point</span>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill={DESKJ.mintDeep}><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
+          <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 1.4, color: DESKJ.ink2, textTransform: "uppercase" }}>Here's a starting point</span>
         </div>
         <div style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 25, lineHeight: 1.42, letterSpacing: -0.3 }}>
           {parts.map((part, i) => {
             const m = part.match(/^\{([a-z]+)\}$/);
-            if (!m) return <span key={i} style={{ color: editing ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.92)", transition: "color 200ms ease" }}>{part}</span>;
+            if (!m) return <span key={i} style={{ color: editing ? "rgba(22,33,28,0.4)" : DESKJ.ink, transition: "color 200ms ease" }}>{part}</span>;
             const k = m[1], isActive = editing === k, isFilled = filled(k);
             return (
               <span key={i} onClick={() => setEditing(isActive ? null : k)} style={{
-                cursor: "pointer", color: isActive ? "#fff" : editing ? "rgba(255,255,255,0.5)" : "#fff",
+                cursor: "pointer", color: isActive ? DESKJ.ink : editing ? "rgba(22,33,28,0.4)" : DESKJ.ink,
                 textDecoration: "underline", textDecorationStyle: isFilled ? "solid" : "dashed", textDecorationThickness: 2, textUnderlineOffset: 4,
-                textDecorationColor: isActive ? "#fff" : "rgba(255,255,255,0.7)", transition: "color 200ms ease",
+                textDecorationColor: isActive ? DESKJ.mintDeep : "rgba(46,154,120,0.55)", transition: "color 200ms ease",
               }}>{fmt(k)}</span>
             );
           })}
           {activeExtras.map((e) => (
             <span key={e.id} onClick={() => setEditing(e.id)} style={{
-              cursor: "pointer", color: editing === e.id ? "#fff" : editing ? "rgba(255,255,255,0.5)" : "#fff",
+              cursor: "pointer", color: editing === e.id ? DESKJ.ink : editing ? "rgba(22,33,28,0.4)" : DESKJ.ink,
               textDecoration: "underline", textDecorationStyle: "solid", textDecorationThickness: 2, textUnderlineOffset: 4,
-              textDecorationColor: editing === e.id ? "#fff" : "rgba(255,255,255,0.7)", transition: "color 200ms ease",
+              textDecorationColor: editing === e.id ? DESKJ.mintDeep : "rgba(46,154,120,0.55)", transition: "color 200ms ease",
             }}>{e.clause(vals[e.id])}</span>
           ))}
-          <span style={{ color: editing ? "rgba(255,255,255,0.5)" : "rgba(255,255,255,0.92)", transition: "color 200ms ease" }}>.</span>
+          <span style={{ color: editing ? "rgba(22,33,28,0.4)" : DESKJ.ink, transition: "color 200ms ease" }}>.</span>
         </div>
         {s ? (
-          <div style={{ marginTop: 20, background: "#fff", borderRadius: 16, padding: 14, boxShadow: "0 12px 30px rgba(0,0,0,0.18)" }}>
+          <div style={{ marginTop: 20, background: "#fff", border: `1px solid ${DESKJ.line}`, borderRadius: 16, padding: 14, boxShadow: "0 10px 24px rgba(22,33,28,0.08)" }}>
             <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, color: TOKENS.faint, textTransform: "uppercase", marginBottom: 12 }}>{s.label ? s.label : s.k === "multi" ? "Pick any that fit" : "Change this"}</div>
             {editor()}
             {isExtra && <button onClick={() => { setV(Array.isArray(vals[editing]) ? [] : ""); close(); }} style={removeBtn}>Remove</button>}
@@ -4677,28 +4692,28 @@ function Builder({ itemId, menu, monthlyCommitment = 0, liveCount = 0, monthlyCa
                 ))}
               </div>
             )}
-            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.8)", marginTop: 14 }}>Tap anything underlined to change it.</div>
-            {listLocked && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.7)", marginTop: 8 }}>Connect your email list to add email and text.</div>}
+            <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: DESKJ.mute, marginTop: 14 }}>Tap anything underlined to change it.</div>
+            {listLocked && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: DESKJ.mute, marginTop: 8 }}>Connect your email list to add email and text.</div>}
           </>
         )}
       </div>
       <div style={{ flexShrink: 0, padding: "12px 22px 20px" }}>
         {itemId === "gbp" && (gbpLaneOf(vals.doer) === "diy" || gbpLaneOf(vals.doer) === "ai")
-          ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
-          : feeIncludedLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: "rgba(255,255,255,0.92)", textAlign: "center", marginBottom: 10 }}>{(ITEM_PRICES[itemId]?.perMonth > 0)
+          ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: DESKJ.ink2, textAlign: "center", marginBottom: 10 }}>Free. You do the work yourself, and we guide you step by step.</div>
+          : feeIncludedLabel(itemId) && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, color: DESKJ.ink2, textAlign: "center", marginBottom: 10 }}>{(ITEM_PRICES[itemId]?.perMonth > 0)
               ? <>About {feeIncludedLabel(itemId)}. You add your card at checkout. Cancel monthly services anytime.</>
               : <>About {feeIncludedLabel(itemId)}. You pay once at checkout.</>}</div>}
         {priceNotes(itemId).map((n) => (
-          <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.85)", textAlign: "center", marginTop: -4, marginBottom: 10 }}>Plus {plainCostNote(n)}</div>
+          <div key={n} style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: DESKJ.mute, textAlign: "center", marginTop: -4, marginBottom: 10 }}>Plus {plainCostNote(n)}</div>
         ))}
         {(() => { const m = monthlyTotalLine(itemId, monthlyCommitment, liveCount, monthlyCap); if (!m) return null;
           return m.warn
-            ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: "#fff", background: "rgba(0,0,0,0.2)", borderRadius: 10, padding: "8px 12px", textAlign: "center", marginBottom: 10 }}>{m.text}</div>
-            : <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: "rgba(255,255,255,0.85)", textAlign: "center", marginBottom: 10 }}>{m.text}</div>;
+            ? <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: DESKJ.amber, background: DESKJ.amberWash, border: "1px solid rgba(183,121,31,0.25)", borderRadius: 10, padding: "8px 12px", textAlign: "center", marginBottom: 10 }}>{m.text}</div>
+            : <div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: DESKJ.mute, textAlign: "center", marginBottom: 10 }}>{m.text}</div>;
         })()}
-        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: ready ? "pointer" : "default", background: ready ? "#fff" : "rgba(255,255,255,0.45)", color: ready ? c1 : "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease" }}>
+        <button onClick={() => ready && onGenerate(vals)} disabled={!ready} style={{ width: "100%", height: 54, borderRadius: 27, border: "none", cursor: ready ? "pointer" : "default", background: ready ? DESKJ.grad : "#D8DDD6", color: "#fff", fontFamily: "'Cal Sans', Poppins, sans-serif", fontWeight: 600, fontSize: 16.5, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent", transition: "background 150ms ease", boxShadow: ready ? "0 10px 26px rgba(46,154,120,0.35)" : "none" }}>
           Build my plan
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={ready ? c1 : "#fff"} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
         </button>
       </div>
     </div>
@@ -4715,12 +4730,12 @@ function Generating({ itemId, onDone }) {
     return () => { clearInterval(iv); clearTimeout(t); };
   }, []);
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: gType(p.type) }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <style>{`@keyframes aspin{to{transform:rotate(360deg)}}`}</style>
       <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 40px" }}>
-        <div style={{ width: 58, height: 58, borderRadius: 29, border: "4px solid rgba(255,255,255,0.3)", borderTopColor: "#fff", animation: "aspin 0.8s linear infinite", marginBottom: 26 }} />
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: "#fff", marginBottom: 10, textAlign: "center" }}>Building your plan</div>
-        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: "rgba(255,255,255,0.9)", textAlign: "center", minHeight: 20 }}>{lines[li]}</div>
+        <div style={{ width: 58, height: 58, borderRadius: 29, border: `4px solid ${DESKJ.line}`, borderTopColor: DESKJ.mintDeep, animation: "aspin 0.8s linear infinite", marginBottom: 26 }} />
+        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 22, fontWeight: 600, color: DESKJ.ink, marginBottom: 10, textAlign: "center" }}>Building your plan</div>
+        <div style={{ fontFamily: "Inter, sans-serif", fontSize: 14.5, color: DESKJ.ink2, textAlign: "center", minHeight: 20 }}>{lines[li]}</div>
       </div>
     </div>
   );
@@ -4953,7 +4968,7 @@ function QuickCheck({ itemId, restaurant, menu, budgetDefault = 0, onBuild, onBa
   });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 20px 16px" }}>
         <div style={{ paddingTop: 4, marginBottom: 2 }}>
           <CircleBtn onClick={onBack}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#3a3a3a" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M15 5l-7 7 7 7" /></svg></CircleBtn>
@@ -5329,7 +5344,7 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#fbfcfb" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", ...paperBg }}>
       {header(empty ? "Your cart" : `Your cart · ${items.length} ${items.length === 1 ? "item" : "items"}`, onBack)}
       <div style={{ flex: 1, overflowY: "auto", padding: "0 18px 16px" }}>
         {droppedNote && (
