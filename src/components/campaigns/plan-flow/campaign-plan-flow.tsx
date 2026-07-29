@@ -18,7 +18,8 @@ import { MapPin, Globe, LineChart, BarChart3, Video, QrCode, Tag, Utensils, Mess
 import { C, GRAD, money } from '@/components/campaigns/ui'
 import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { checkSplit } from '@/lib/campaigns/builder/split-priors'
-import { applyLaneDefaults, type HandsOn } from '@/lib/campaigns/builder/routing'
+import { applyLaneDefaults, routeForItem, stampLane, type HandsOn, type Lane } from '@/lib/campaigns/builder/routing'
+import LaneRow from '@/components/campaigns/lane-row'
 import type { CreatorSupply } from '@/lib/campaigns/data/creator-supply'
 import type { Concept } from '@/lib/goals/types'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
@@ -363,6 +364,9 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
    * availability, never composition. Content pieces keep ServicePicker as their one authority
    * (the piece pipeline reads `choices`), so defaults here touch non-content lines only. */
   const [handsOn, setHandsOn] = useState<HandsOn | null>(null)
+  /* Explicit per-line lane picks (LaneRow taps), keyed by serviceId. An explicit pick beats the
+   * hands-on default: stamped FIRST, and applyLaneDefaults then skips anything not team-based. */
+  const [laneChoices, setLaneChoices] = useState<Record<string, Lane>>({})
   const [step, setStep] = useState<'review' | 'summary'>('review')
   const [picker, setPicker] = useState<{ type: string; keys: string[]; producer: PieceProducer; creatorName?: string } | null>(null)
   const [sheet, setSheet] = useState<{ kind: 'piece'; id: string } | { kind: 'service'; id: string } | { kind: 'field'; field: 'feature' | 'offer' } | null>(null)
@@ -414,15 +418,21 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
     for (const a of addedMoves) { const s = serviceById(a.serviceId); if (s) out.push(...serviceToLines(s, `li-add-${a.serviceId}`).map(applyQty)) }
     // Drop any move the owner removed (system plans) — its line(s) leave the bill everywhere.
     const kept = removed.size ? out.filter((it) => !removed.has(it.serviceId ?? '')) : out
-    // The hands-on answer, applied as per-line lane DEFAULTS (Phase 2). Service lines only —
+    // Explicit LaneRow picks first: the owner's hand, stamped through the one encoder. The line's
+    // current price IS the pristine base here (the memo re-derives from initial every render).
+    const picked = kept.map((it) => {
+      const lane = it.serviceId ? laneChoices[it.serviceId] : undefined
+      return lane ? stampLane(it, lane, it.price) : it
+    })
+    // Then the hands-on answer as per-line lane DEFAULTS (Phase 2). Service lines only —
     // content pieces keep ServicePicker as their single authority. applyLaneDefaults skips any
-    // line whose producer is an explicit pick (the gbp doer stamp survives untouched).
-    if (!handsOn) return kept
-    const services = applyLaneDefaults(kept.filter((it) => !(it.serviceId ?? '').startsWith('content-')), { handsOn, supply })
+    // line whose producer is an explicit non-team pick (gbp doer stamps + LaneRow diy/ai picks).
+    if (!handsOn) return picked
+    const services = applyLaneDefaults(picked.filter((it) => !(it.serviceId ?? '').startsWith('content-')), { handsOn, supply })
     let si = 0
-    return kept.map((it) => ((it.serviceId ?? '').startsWith('content-') ? it : services[si++]))
+    return picked.map((it) => ((it.serviceId ?? '').startsWith('content-') ? it : services[si++]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beats, initial.items, removed, addedMoves, serviceQty, handsOn, supply])
+  }, [beats, initial.items, removed, addedMoves, serviceQty, handsOn, supply, laneChoices])
 
   // Split-priors advisories (advisory only, law 7): where this plan's monthly spend leans thin
   // against places like this one. Computed on the LIVE items so owner edits move it, capped at 2,
@@ -815,7 +825,15 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
         )}
         {sheet?.kind === 'service' && (() => {
           const sid = sheet.id; const info = moveInfo(sid)
-          return <ServiceSheet Icon={moveIcon(sid)} plain={info.plain} deliverable={info.deliverable} pieces={info.pieces} charge={info.charge} billing={info.billing} included={info.included} spine={spineIds.has(sid)} reason={reasons?.[sid]} onRemove={() => { removeMove(sid, info.plain); setSheet(null) }} onClose={() => setSheet(null)} />
+          // The router's per-line adjust (Phase 2): remove / drop to DIY / AI walkthrough. The
+          // live line (post-stamp) gives the current lane; the route derives from the pristine
+          // shape so the offers never depend on the current pick.
+          const liveLine = items.find((it) => it.serviceId === sid)
+          const route = liveLine ? routeForItem({ ...liveLine, producer: 'team', price: initial.items.find((x) => x.serviceId === sid)?.price ?? liveLine.price }, { supply }) : null
+          const currentLane: Lane = liveLine?.producer === 'diy' ? (liveLine.ownerMode === 'ai' ? 'ai' : 'diy') : ((liveLine?.producer as Lane) ?? 'team')
+          return <ServiceSheet Icon={moveIcon(sid)} plain={info.plain} deliverable={info.deliverable} pieces={info.pieces} charge={info.charge} billing={info.billing} included={info.included} spine={spineIds.has(sid)} reason={reasons?.[sid]}
+            laneRow={route && liveLine ? <LaneRow route={route} current={currentLane} onPick={(lane) => setLaneChoices((c) => ({ ...c, [sid]: lane }))} /> : null}
+            onRemove={() => { removeMove(sid, info.plain); setSheet(null) }} onClose={() => setSheet(null)} />
         })()}
         {sheet?.kind === 'field' && (
           <FieldSheet field={sheet.field} value={sheet.field === 'feature' ? planFeat : planOffer} dishes={dishes} onDone={(v) => applyPlanField(sheet.field, v)} onClose={() => setSheet(null)} />
@@ -1153,8 +1171,8 @@ function PathSkeleton() {
 }
 
 /* ── A service detail sheet — the deliverable, what's included, the charge, and Remove (one place) ── */
-function ServiceSheet({ Icon, plain, deliverable, pieces, charge, billing, included, spine, reason, onRemove, onClose }: {
-  Icon: LucideIcon; plain: string; deliverable: string; pieces?: { label: string; qty: number; each: number }[]; charge: string; billing: string; included?: string[]; spine?: boolean; reason?: string; onRemove: () => void; onClose: () => void
+function ServiceSheet({ Icon, plain, deliverable, pieces, charge, billing, included, spine, reason, laneRow, onRemove, onClose }: {
+  Icon: LucideIcon; plain: string; deliverable: string; pieces?: { label: string; qty: number; each: number }[]; charge: string; billing: string; included?: string[]; spine?: boolean; reason?: string; laneRow?: React.ReactNode; onRemove: () => void; onClose: () => void
 }) {
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(20,20,25,0.5)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
@@ -1176,6 +1194,7 @@ function ServiceSheet({ Icon, plain, deliverable, pieces, charge, billing, inclu
               <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.5, borderLeft: `3px solid ${C.greenDk}`, paddingLeft: 10 }}>{reason}</div>
             </div>
           )}
+          {laneRow && <div style={{ marginBottom: 12 }}>{laneRow}</div>}
           {deliverable && <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>{deliverable}</div>}
           {pieces && pieces.length ? <div style={{ fontSize: 13, color: C.greenDk, marginTop: 9 }}>{pieces.map((p) => `${p.qty} × ${p.label} (~${money(p.each)} ea)`).join('  ·  ')}</div> : null}
           {included && included.length ? (

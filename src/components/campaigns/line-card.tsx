@@ -13,6 +13,8 @@ import { lineTotal, type LineItem, type OptOutReason } from '@/lib/campaigns/typ
 import { BREAKDOWNS, STEP_WHO } from '@/lib/campaigns/data/service-breakdowns'
 import { guideMoveByKey } from '@/lib/campaigns/data/guide-moves'
 import { C, money, stageHex, handlerMeta, cadenceLabel, cadenceSub } from './ui'
+import { routeForItem, type Lane as LaneT } from '@/lib/campaigns/builder/routing'
+import LaneRow from './lane-row'
 
 const OPT_LABEL: Record<OptOutReason, string> = { 'have-it': 'I have this', diy: 'I’ll do it myself' }
 
@@ -133,6 +135,29 @@ export default function LineCard({
             </div>
           )}
 
+          {/* The router's lane transparency (Phase 2): all four lanes, honest reasons on the
+           * closed ones. Where a REAL diy lane exists (law 3: a guided setup card), the diy chip
+           * routes through the existing persisted opt-out rail — the un-guided freeform escape
+           * below is hidden for those lines so the guided path is the only self-serve door. */}
+          {!recommended && !guide && (() => {
+            const route = routeForItem(item)
+            const diyOffer = route.lanes.find((o) => o.lane === 'diy')
+            const current: LaneT = item.optOut === 'diy' || item.producer === 'diy'
+              ? (item.ownerMode === 'ai' ? 'ai' : 'diy')
+              : ((item.producer === 'creator' || item.producer === 'ai' ? item.producer : 'team') as LaneT)
+            const pick = onToggleOptOut && diyOffer?.available
+              ? (lane: LaneT) => {
+                  if (lane === 'diy' && item.optOut !== 'diy') onToggleOptOut('diy')
+                  if (lane === 'team' && item.optOut === 'diy') onToggleOptOut('diy')
+                }
+              : undefined
+            return (
+              <div style={{ paddingTop: 2 }}>
+                <LaneRow route={route} current={current} onPick={pick} />
+              </div>
+            )
+          })()}
+
           {/* actions */}
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, paddingTop: 2 }}>
             {recommended ? (
@@ -140,6 +165,8 @@ export default function LineCard({
             ) : (
               <>
                 {(['have-it', 'diy'] as OptOutReason[]).map((r) => {
+                  // The guided diy lane replaces the freeform escape where one exists (law 3).
+                  if (r === 'diy' && routeForItem(item).lanes.find((o) => o.lane === 'diy')?.available) return null
                   const on = item.optOut === r
                   return (
                     <button key={r} type="button" onClick={() => onToggleOptOut?.(r)} style={{

@@ -39,6 +39,17 @@ export function handlerMeta(handler?: LineItem['handler'], diy?: boolean): { lab
   }
 }
 
+/** Router-lane display meta (Phase 2). Beside handlerMeta, not replacing it — the handler chip
+ *  ships on live surfaces; this is the vocabulary the LaneRow speaks. */
+export function laneMeta(lane: 'team' | 'creator' | 'diy' | 'ai'): { label: string; icon: string; hex: string } {
+  switch (lane) {
+    case 'diy': return { label: 'You', icon: '🙋', hex: '#6b7280' }
+    case 'ai': return { label: 'AI', icon: '✨', hex: '#8b5cf6' }
+    case 'creator': return { label: 'Creator', icon: '🎥', hex: '#d97706' }
+    case 'team': return { label: 'Apnosh', icon: '◆', hex: '#2e9a78' }
+  }
+}
+
 /** The headline price label for a line at its current quantity. */
 export function cadenceLabel(it: LineItem): string {
   if (it.cadence.kind === 'recurring') return `${money(it.price)}/mo`

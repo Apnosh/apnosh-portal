@@ -23,6 +23,8 @@ import { isServiceReady, serviceNotYetReason } from '../../src/lib/campaigns/dat
 import { draftFromBuilder, gbpLaneFromDoer } from '../../src/lib/campaigns/builder/adapter'
 import { AI_DRAFT_CENTS } from '../../src/lib/campaigns/catalog'
 import type { LineItem, PieceProducer } from '../../src/lib/campaigns/types'
+import { mintableServiceLine } from '../../src/lib/campaigns/service-work-orders'
+import { lineTotal } from '../../src/lib/campaigns/types'
 
 const s = new Suite()
 
@@ -208,6 +210,24 @@ s.group('Defaults: hands-on biases, never overrides, never double-asks')
     const a = after.find((x) => x.id === it.id)
     return JSON.stringify(a) === JSON.stringify(it)
   }))
+}
+
+s.group('A stamped lane has the mint consequences it promises')
+{
+  const svc = line('gbp-setup', { price: 249 })
+  s.check('team-stamped service line mints', mintableServiceLine(stampLane(svc, 'team', 249)))
+  s.check('diy-stamped service line never mints and bills $0', (() => {
+    const d = stampLane(svc, 'diy', 249)
+    return !mintableServiceLine(d) && lineTotal(d) === 0
+  })())
+  s.check('ai-stamped service line (owner walkthrough) never mints and bills $0', (() => {
+    const a = stampLane(svc, 'ai', 249)
+    return !mintableServiceLine(a) && lineTotal(a) === 0
+  })())
+  s.check('round trip back to team mints again at full price', (() => {
+    const back = stampLane(stampLane(svc, 'diy', 249), 'team', 249)
+    return mintableServiceLine(back) && lineTotal(back) === 249
+  })())
 }
 
 s.group('Supply enriches copy, never availability')
