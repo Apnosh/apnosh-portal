@@ -222,6 +222,18 @@ export async function createCampaign(clientId: string, createdBy: string | null,
   if (error || !c) throw new Error(error?.message ?? 'Failed to create campaign')
   const campaignId = c.id as string
 
+  // Law 5, the payoff: seed this campaign's execution with the facts the client-scoped vault
+  // already holds (ordering/booking links, photo urls), so campaign #2's asks render genuinely
+  // pre-answered — the VALUE is in the pipe (the brief AI and playbooks read execution), not a
+  // green light over an empty one. Best-effort and awaited; a failed seed just means we ask.
+  try {
+    const { vaultFactSeeds } = await import('./setup/vault-bridge')
+    const seeds = await vaultFactSeeds(clientId)
+    if (Object.keys(seeds).length) {
+      await admin.from('campaigns').update({ execution: seeds }).eq('id', campaignId)
+    }
+  } catch { /* an unseeded campaign asks, which is safe */ }
+
   if (draft.items.length) {
     const { error: liErr } = await admin.from('campaign_line_items').insert(draft.items.map((it, i) => lineItemToRow(campaignId, clientId, it, i)))
     if (liErr) throw new Error(`line items: ${liErr.message}`)

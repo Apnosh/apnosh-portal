@@ -20,6 +20,8 @@ import { needsForDraftItems } from '../../src/lib/campaigns/setup/draft-needs'
 import { SETUP_CARDS } from '../../src/lib/campaigns/setup/cards'
 import { stampLane } from '../../src/lib/campaigns/builder/routing'
 import type { LineItem } from '../../src/lib/campaigns/types'
+import { deriveServiceNeeds } from '../../src/lib/campaigns/service-needs'
+import type { SavedCampaign } from '../../src/lib/campaigns/view'
 
 const s = new Suite()
 
@@ -100,6 +102,46 @@ s.group('needsForDraftItems: the lane decides the asks, the router\'s encoding d
   const all = needsForDraftItems([line(), stampLane(line({ id: 'li-2' }), 'diy', 249)])
   s.check('union dedupes and every id is a library id', new Set(all).size === all.length && all.every((id) => !!requirementById(id)))
   s.check('intakeFor accepts the derived union (prereq ordering resolves)', intakeFor(all).length >= all.length)
+}
+
+s.group('ACCEPTANCE: campaign #2 asks strictly less than campaign #1')
+{
+  const svcLine = (serviceId: string, id: string): LineItem => ({
+    id, serviceId, name: serviceId, plain: '', does: '', stage: 'foundation', price: 100,
+    cadence: { kind: 'one-time' }, eta: '', included: true, lock: 'editable', producer: 'team',
+  })
+  const fixture = (execution: Record<string, string>): SavedCampaign => ({
+    clientId: 'c1',
+    draft: {
+      id: 'camp', name: 'fixture', intent: 'one-off', path: 'strategist', budgetMonthly: 0,
+      items: [svcLine('google-food-order', 'li-1'), svcLine('gbp-setup', 'li-2')],
+    },
+    phase: 'live', status: 'shipped', shippedAt: null, confirmedAt: undefined,
+    createdAt: '', updatedAt: '', creatorChoices: {}, producerChoices: {},
+    creativeControl: 'handoff', execution,
+  } as unknown as SavedCampaign)
+  const opts = { doneSetup: new Set<string>(), hasMenuItems: true, hasAddress: true, hasPaymentMethod: true }
+  const asks = (execution: Record<string, string>) =>
+    deriveServiceNeeds(fixture(execution), { ...opts, exec: execution }).filter((i) => !i.done).map((i) => i.id).sort()
+
+  // Campaign #1: empty vault, empty execution — the full ask list.
+  const first = asks({})
+  s.check(`campaign #1 asks for the links + photos (${first.join(', ')})`,
+    first.includes('ordering-link') && first.includes('gbp-photos'))
+
+  // Campaign #2: execution seeded from a (fixture) vault — the exact object vaultFactSeeds
+  // returns when LINKS + PHOTOS are held.
+  const SEEDS = { orderingLink: 'https://order.example.com', bookingLink: 'https://book.example.com', photoUrls: 'https://p1.jpg' }
+  const second = asks(SEEDS)
+  s.check('campaign #2 no longer asks for the seeded facts',
+    !second.includes('ordering-link') && !second.includes('booking-link') && !second.includes('gbp-photos'))
+  s.check(`campaign #2's asks are a STRICT subset (${second.length} < ${first.length})`,
+    second.length < first.length && second.every((id) => first.includes(id)))
+
+  // NEGATIVE PROOF: seeding from an EMPTY vault changes nothing — the seed is the load-bearing
+  // difference, not the fixture's shape.
+  const unseeded = asks({})
+  s.check('an empty vault seeds nothing: the ask sets are equal', JSON.stringify(unseeded) === JSON.stringify(first))
 }
 
 s.report('The vault')
