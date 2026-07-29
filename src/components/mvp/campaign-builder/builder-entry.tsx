@@ -15,6 +15,7 @@ import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { resolveBrainGoal } from '@/lib/campaigns/builder/compose-plan'
 import { CREATE_CATALOG_IDS } from '@/lib/campaigns/data/create-catalog'
 import type { WhySignals } from '@/lib/campaigns/data/why-for'
+import type { CreatorSupply } from '@/lib/campaigns/data/creator-supply'
 import type { ContentOverrideMap } from '@/lib/campaigns/data/content-overrides'
 import { registerDbCampaigns, type DbCampaign } from '@/lib/campaigns/data/db-campaigns'
 import type { CreatorStoreCard as CreatorStoreCardT } from '@/lib/marketplace/store-cards'
@@ -131,6 +132,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
   const [adviseGates, setAdviseGates] = useState<PlanGate[]>([])
   // The business concept from plan-mix, for the split-priors advisory on the review screen.
   const [planConcept, setPlanConcept] = useState<string | null>(null)
+  const [planSupply, setPlanSupply] = useState<CreatorSupply | null>(null)
   const [planBusy, setPlanBusy] = useState(false)
   const [planError, setPlanError] = useState<string | null>(null)
   const [planOutcome, setPlanOutcome] = useState<string | null>(null)
@@ -412,7 +414,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
           : Promise.resolve(null),
       ])
       if (mixRes.status === 'fulfilled') {
-        const j = (await mixRes.value.json().catch(() => ({}))) as { mix?: string[]; reasons?: Record<string, string>; source?: string; route?: string; outcome?: string; lead?: string; suggestedTier?: { tier?: string }; snapshot?: unknown; concept?: string }
+        const j = (await mixRes.value.json().catch(() => ({}))) as { mix?: string[]; reasons?: Record<string, string>; source?: string; route?: string; outcome?: string; lead?: string; suggestedTier?: { tier?: string }; snapshot?: unknown; concept?: string; supply?: unknown }
         const next: Record<string, unknown> = { ...vals }
         if (Array.isArray(j.mix) && j.mix.length) next.aiMix = j.mix.join(',')
         // The compose-time snapshot for the allocation record (law 4): what the strategist saw,
@@ -420,6 +422,8 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
         // empty, because a safe-routed plan is still an allocation the record should explain.
         if (j.snapshot) next.allocSnapshot = j.snapshot
         if (typeof j.concept === 'string') setPlanConcept(j.concept)
+        // The router's supply picture (Phase 2): counts per craft, defaults + copy only.
+        if (j.supply && typeof j.supply === 'object') setPlanSupply(j.supply as CreatorSupply)
         // No budget entered → size the plan with the brain's suggested tier instead of defaulting to Standard.
         if (!budget.trim() && !String(vals.tier ?? '').trim() && j.suggestedTier?.tier) next.tier = j.suggestedTier.tier
         if (next.aiMix || next.tier || next.allocSnapshot) setPlan({ itemId: goalId, vals: next })
@@ -563,6 +567,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
           diagnosisSource={planDiagnosis?.source ?? null}
           doneSetup={profile?.doneSetup ?? []}
           concept={planConcept}
+          supply={planSupply ?? undefined}
           onConfirm={onConfirm}
           onBack={() => { setPlan(null); setPlanError(null); setPlanOutcome(null); setPlanLead(null); setPlanReasons(null); setPlanDiagnosis(null); setPlanTailored(null); setAdviseGates([]) }}
         />

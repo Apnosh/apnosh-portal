@@ -210,4 +210,19 @@ s.group('Defaults: hands-on biases, never overrides, never double-asks')
   }))
 }
 
+s.group('Supply enriches copy, never availability')
+{
+  const reel = line('content-reel', { price: 150 })
+  const bare = routeForItem(reel)
+  const withSupply = routeForItem(reel, { supply: { countByCraft: { Video: 2 }, assembledAt: 'x' } })
+  const creatorBare = bare.lanes.find((o) => o.lane === 'creator')!
+  const creatorSup = withSupply.lanes.find((o) => o.lane === 'creator')!
+  s.check('availability identical with and without supply',
+    bare.lanes.every((o, i) => o.available === withSupply.lanes[i].available))
+  s.check('with supply: the count shows', creatorSup.note === '2 local creators near you')
+  s.check('without supply: the honest same-price line', creatorBare.note === 'Same price. A local creator makes it.')
+  const zero = routeForItem(reel, { supply: { countByCraft: {}, assembledAt: 'x' } })
+  s.check('zero-count supply: no claim, still available', zero.lanes.find((o) => o.lane === 'creator')!.available === true)
+}
+
 s.report('Lane routing')

@@ -23,6 +23,7 @@ import { DEFAULT_PLATFORM_FEE } from './work-orders-core'
 import { creatorById, type Disc } from './creators'
 import { skillIdsForDispatch } from '@/lib/marketplace/creator-skills'
 import { createNotification } from '@/lib/notifications'
+import type { CreatorSupply } from './data/creator-supply'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DISCIPLINES: Disc[] = ['Video', 'Photo', 'Social', 'Design']
@@ -99,6 +100,38 @@ export async function bestVendorForDiscipline(d: Disc, excludeIds: string[] = []
   }
   if (error || !data) return null
   return { id: data.id as string, name: (data.name as string) || 'A vendor', personId: (data.person_id as string | null) ?? null }
+}
+
+/**
+ * The client-safe supply picture for the router: how many real, bookable creators per craft.
+ * Fetched ONCE (rides the plan-mix response) and passed down like MonthlySignals. undefined on
+ * any failure — supply never gates lane availability (the pool fallback is shipped truth), it
+ * only biases defaults and enriches copy, so a failed fetch must change nothing.
+ */
+export async function creatorSupplySummary(): Promise<CreatorSupply | undefined> {
+  try {
+    const admin = createAdminClient()
+    const fetchVendors = (cols: string) =>
+      admin.from('vendors').select(cols).eq('bookable', true).not('person_id', 'is', null)
+    let { data, error } = await fetchVendors('crafts, craft')
+    if (error && (error as { code?: string }).code === '42703') {
+      ;({ data, error } = await fetchVendors('craft'))
+    }
+    if (error || !data) return undefined
+    const rows = data as unknown as { crafts?: string[] | null; craft?: string | null }[]
+    const countByCraft: Partial<Record<Disc, number>> = {}
+    for (const d of ['Video', 'Photo', 'Social', 'Design'] as const) {
+      const skillIds = new Set(skillIdsForDispatch(d))
+      const n = rows.filter((v) => {
+        if (Array.isArray(v.crafts) && v.crafts.length) return v.crafts.some((c) => skillIds.has(c))
+        return v.craft === d
+      }).length
+      if (n > 0) countByCraft[d] = n
+    }
+    return { countByCraft, assembledAt: new Date().toISOString() }
+  } catch {
+    return undefined
+  }
 }
 
 export type AssignedVendors = Map<Disc, LiveVendor>

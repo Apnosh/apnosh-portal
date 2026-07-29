@@ -19,6 +19,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { selectMixForGoal, type MixSignals } from '@/lib/campaigns/builder/select-mix'
 import { tierFor, isSystemGoal, planLeadHeadline } from '@/lib/campaigns/builder/compose-plan'
 import { assembleBrain } from '@/lib/campaigns/brain/assemble-signals'
+import { creatorSupplySummary } from '@/lib/campaigns/vendor-supply'
 import { planRoute } from '@/lib/campaigns/brain/signals'
 import { suggestTier } from '@/lib/campaigns/brain/suggest-tier'
 import { brainRankedMix, rankMixByLift } from '@/lib/campaigns/brain/rank'
@@ -45,7 +46,12 @@ export async function GET(req: NextRequest) {
   if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
 
   try {
-    const { signals: brain, measured } = await assembleBrain(clientId)
+    const [{ signals: brain, measured }, supply] = await Promise.all([
+      assembleBrain(clientId),
+      // The router's supply picture (Phase 2). Rides this response so the plan flow gets it with
+      // zero extra fetches; undefined on failure — supply never gates lane availability.
+      creatorSupplySummary(),
+    ])
 
     // The compose-time snapshot for the allocation record (law 4): what the strategist actually
     // saw, timestamped at the moment it saw it. Rides the response so the adapter can stamp it on
@@ -53,7 +59,7 @@ export async function GET(req: NextRequest) {
     const snapshot = { signals: brain, route: planRoute(brain), at: new Date().toISOString() }
 
     // Data-richness routing: without enough real signal, keep the deterministic plan.
-    if (planRoute(brain) === 'safe') return NextResponse.json({ mix: [], source: 'rules', route: 'safe', snapshot })
+    if (planRoute(brain) === 'safe') return NextResponse.json({ mix: [], source: 'rules', route: 'safe', snapshot, ...(supply ? { supply } : {}) })
 
     // Tier: an explicit budget wins; otherwise suggest one from the profile (owner confirms in UI).
     const suggested = suggestTier({
@@ -109,6 +115,7 @@ export async function GET(req: NextRequest) {
       ...(lead ? { lead } : {}),
       ...(budget ? {} : { suggestedTier: suggested }),
       snapshot,
+      ...(supply ? { supply } : {}),
       // The concept for the split-priors advisory on the review screen (advisory only).
       ...(val(brain.concept) ? { concept: val(brain.concept) } : {}),
       // Cite-your-source (law 7): what the ranking rests on. 'measured' only when this business's

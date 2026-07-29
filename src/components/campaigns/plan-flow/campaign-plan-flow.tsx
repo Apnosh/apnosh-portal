@@ -18,6 +18,8 @@ import { MapPin, Globe, LineChart, BarChart3, Video, QrCode, Tag, Utensils, Mess
 import { C, GRAD, money } from '@/components/campaigns/ui'
 import { draftFromBuilder } from '@/lib/campaigns/builder/adapter'
 import { checkSplit } from '@/lib/campaigns/builder/split-priors'
+import { applyLaneDefaults, type HandsOn } from '@/lib/campaigns/builder/routing'
+import type { CreatorSupply } from '@/lib/campaigns/data/creator-supply'
 import type { Concept } from '@/lib/goals/types'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
@@ -303,7 +305,7 @@ type Stop =
   | { kind: 'add'; id: string; label: string; onAdd: () => void }
   | { kind: 'endcap'; id: string }
 
-export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, reasons, diagnosis, diagnosisSource, doneSetup, concept, onConfirm, onBack }: {
+export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, monthlyCap = 0, outcome, lead, reasons, diagnosis, diagnosisSource, doneSetup, concept, supply, onConfirm, onBack }: {
   itemId: string
   vals: Record<string, unknown>
   restaurant: string
@@ -314,6 +316,8 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   doneSetup?: string[]
   /** The business concept (qsr/casual/fine_dining/...) from plan-mix, for the split-priors advisory. */
   concept?: string | null
+  /** The router's creator-supply picture from plan-mix. Defaults + copy only, never availability. */
+  supply?: CreatorSupply
   /** The owner's monthly marketing budget (dollars). 0 = none set → no budget signal. */
   monthlyCap?: number
   /** The result the brain built this plan to move, e.g. "fuller tables on your slow nights". */
@@ -355,6 +359,10 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   const [planFeat, setPlanFeat] = useState(seedFeat)
   const [planOffer, setPlanOffer] = useState(seedOffer)
   const [choices, setChoices] = useState<Record<string, PieceProducer>>({})
+  /* The hands-on answer (Phase 2, the router): biases each SERVICE line's default lane — never
+   * availability, never composition. Content pieces keep ServicePicker as their one authority
+   * (the piece pipeline reads `choices`), so defaults here touch non-content lines only. */
+  const [handsOn, setHandsOn] = useState<HandsOn | null>(null)
   const [step, setStep] = useState<'review' | 'summary'>('review')
   const [picker, setPicker] = useState<{ type: string; keys: string[]; producer: PieceProducer; creatorName?: string } | null>(null)
   const [sheet, setSheet] = useState<{ kind: 'piece'; id: string } | { kind: 'service'; id: string } | { kind: 'field'; field: 'feature' | 'offer' } | null>(null)
@@ -405,9 +413,16 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
     // Services the owner added: each becomes real line item(s) so it counts in the bill.
     for (const a of addedMoves) { const s = serviceById(a.serviceId); if (s) out.push(...serviceToLines(s, `li-add-${a.serviceId}`).map(applyQty)) }
     // Drop any move the owner removed (system plans) — its line(s) leave the bill everywhere.
-    return removed.size ? out.filter((it) => !removed.has(it.serviceId ?? '')) : out
+    const kept = removed.size ? out.filter((it) => !removed.has(it.serviceId ?? '')) : out
+    // The hands-on answer, applied as per-line lane DEFAULTS (Phase 2). Service lines only —
+    // content pieces keep ServicePicker as their single authority. applyLaneDefaults skips any
+    // line whose producer is an explicit pick (the gbp doer stamp survives untouched).
+    if (!handsOn) return kept
+    const services = applyLaneDefaults(kept.filter((it) => !(it.serviceId ?? '').startsWith('content-')), { handsOn, supply })
+    let si = 0
+    return kept.map((it) => ((it.serviceId ?? '').startsWith('content-') ? it : services[si++]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [beats, initial.items, removed, addedMoves, serviceQty])
+  }, [beats, initial.items, removed, addedMoves, serviceQty, handsOn, supply])
 
   // Split-priors advisories (advisory only, law 7): where this plan's monthly spend leans thin
   // against places like this one. Computed on the LIVE items so owner edits move it, capped at 2,
@@ -420,7 +435,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
   }, [items, initial.moves, initial.stages, itemId, concept])
 
   const camp = useMemo<SavedCampaign>(() => ({
-    clientId: '', draft: { ...initial, items, brief: initial.brief ? { ...initial.brief, contentBeats: editedBeats } : initial.brief }, phase: 'build', status: 'draft', shippedAt: null,
+    clientId: '', draft: { ...initial, items, brief: initial.brief ? { ...initial.brief, contentBeats: editedBeats, spec: { ...(initial.brief.spec ?? {}), ...(handsOn ? { handsOn } : {}) } } : initial.brief }, phase: 'build', status: 'draft', shippedAt: null,
     createdAt: '', updatedAt: '', creatorChoices: {}, producerChoices: choices, creativeControl: 'handoff', execution: {},
   }), [initial, items, editedBeats, choices])
 
@@ -737,6 +752,7 @@ export default function CampaignPlanFlow({ itemId, vals, menu, busy, error, mont
             />
           ) : (
             <>
+            <HandsOnControl value={handsOn} onChange={setHandsOn} />
             {splitAdvisories.length > 0 && (
               <div style={{ margin: '0 0 10px' }}>
                 {splitAdvisories.map((a) => (
@@ -1440,6 +1456,44 @@ function ChipBtn({ label, onTap }: { label: string; onTap: () => void }) {
 const sheetInput: React.CSSProperties = { width: '100%', marginTop: 8, boxSizing: 'border-box', border: `1px solid ${C.line}`, borderRadius: 10, padding: '9px 11px', fontSize: 13, outline: 'none' }
 
 /* ── Order summary (step 3) — the price ─────────────────────── */
+/**
+ * The hands-on question — three options at "how it's done" (the order summary, where who-does-
+ * what and the money live). It biases each service line's DEFAULT lane and nothing else: not
+ * availability, not the plan, not a line the owner (or the gbp doer slot) already routed. No
+ * answer = do-it-for-me behavior, so the control starts unanswered rather than pre-claiming.
+ */
+function HandsOnControl({ value, onChange }: { value: HandsOn | null; onChange: (v: HandsOn) => void }) {
+  const OPTS: { v: HandsOn; label: string; sub: string }[] = [
+    { v: 'hands_on', label: 'I’ll do what I can', sub: 'Saves the most. More homework.' },
+    { v: 'mix', label: 'Let AI draft the easy stuff', sub: 'You approve everything.' },
+    { v: 'hands_off', label: 'Do it all for me', sub: 'We run every line.' },
+  ]
+  return (
+    <div style={{ margin: '0 0 12px' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.04em', color: C.mute, marginBottom: 7 }}>HOW HANDS-ON DO YOU WANT TO BE?</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {OPTS.map((o) => {
+          const on = value === o.v
+          return (
+            <button
+              key={o.v}
+              onClick={() => onChange(o.v)}
+              style={{
+                flex: 1, textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit',
+                border: `1.5px solid ${on ? C.green : C.line}`, background: on ? '#f0faf6' : '#fff',
+                borderRadius: 12, padding: '9px 10px',
+              }}
+            >
+              <div style={{ fontSize: 12.5, fontWeight: 650, color: on ? C.green : C.ink, lineHeight: 1.25 }}>{o.label}</div>
+              <div style={{ fontSize: 10.5, color: C.mute, lineHeight: 1.35, marginTop: 3 }}>{o.sub}</div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthlyCap, firstMonth, overBudget, canTrim, onTrim }: {
   creatives: { key: string; type: string; label: string; producer: PieceProducer; cents: number; creatorName?: string }[]
   services: LineItem[]
