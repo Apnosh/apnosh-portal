@@ -15,8 +15,9 @@
  */
 
 import { useMemo, useState } from 'react'
-import { ChevronLeft, Check, Clock, ArrowRight, Plus, Minus, TrendingUp, Loader2, Inbox, BarChart3, Hammer } from 'lucide-react'
+import { ChevronLeft, Check, Clock, Plus, Minus, TrendingUp, Inbox, BarChart3, Hammer } from 'lucide-react'
 import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
+import { DESK, DeskKeyframes, ReceiptFrame, ReceiptRule, SealButton, paperGround } from '@/components/campaigns/desk/ui'
 import {
   MONTHLY_STEPS,
   composeMonthlyPlan,
@@ -126,12 +127,16 @@ function ServiceCard({ line, action, onToggle }: { line: MonthlyLine; action: 'r
   return (
     <div
       style={{
+        position: 'relative', overflow: 'hidden',
         background: '#fff',
-        border: `${line.extra ? 1 : 0.5}px solid ${line.extra ? C.green : C.line}`,
-        borderRadius: 16, padding: '14px 14px 13px', marginBottom: 10,
+        border: `${line.extra ? 1.5 : 1}px solid ${line.extra ? DESK.mint : DESK.line}`,
+        borderRadius: 14, padding: '14px 14px 13px 22px', marginBottom: 10,
         display: 'flex', gap: 12, alignItems: 'flex-start',
+        boxShadow: '0 1px 3px rgba(22,33,28,0.04)',
       }}
     >
+      {/* The ticket's perforated stub edge. */}
+      <span aria-hidden style={{ position: 'absolute', left: 9, top: 6, bottom: 6, borderLeft: `2px dashed ${line.extra ? DESK.mintLine : DESK.line}` }} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, marginBottom: 6 }}>
           <span style={{ flex: 1, fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: muted ? C.mute : C.ink, lineHeight: 1.2 }}>
@@ -267,9 +272,11 @@ export default function MonthlyPlanFlow({
   const toggleAdded = flip(added, setAdded)
 
   const body: React.CSSProperties = {
-    background: C.bg, minHeight: '100%', padding: '16px 14px 28px',
+    ...paperGround, minHeight: '100%', padding: '16px 14px 28px',
     fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box',
   }
+  // Remounts the seal after a failed start so it can be pressed again.
+  const [attempt, setAttempt] = useState(0)
 
   /* ── 1. setup: show what we know, ask only the gaps ───────────────────────────────── */
   if (phase === 'setup') {
@@ -295,12 +302,13 @@ export default function MonthlyPlanFlow({
 
     return (
       <div style={body}>
+        <DeskKeyframes />
         <Back onClick={() => setOpenStep(null)} label="The plan" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
           <span style={{
-            width: 26, height: 26, borderRadius: 99,
-            background: live.length ? step.col : '#f0f0f3', color: live.length ? '#fff' : C.faint,
-            fontSize: 12.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            width: 26, height: 26, borderRadius: 8,
+            background: live.length ? DESK.ink : '#E9E5DA', color: live.length ? DESK.paper : C.faint,
+            fontFamily: DISPLAY, fontSize: 12.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             {step.n}
           </span>
@@ -360,20 +368,22 @@ export default function MonthlyPlanFlow({
       </div>
 
       <style>{MP_CSS}</style>
-      {/* The only place money is mentioned in the whole flow. */}
-      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden', margin: '16px 0 20px' }}>
-        <div style={{ display: 'flex' }}>
-          <div style={{ flex: 1, padding: '15px 15px 13px' }}>
-            <div style={{ fontSize: 11, color: C.faint, letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 5 }}>To start</div>
-            <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, lineHeight: 1 }}>{usd(bill.start)}</div>
+      <DeskKeyframes />
+      {/* The only place money is mentioned in the whole flow — and it is a receipt. */}
+      <ReceiptFrame style={{ margin: '16px 0 20px' }}>
+        <div style={{ display: 'flex', margin: '0 -4px' }}>
+          <div style={{ flex: 1, padding: '2px 4px 10px' }}>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, color: DESK.mute, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>To start</div>
+            <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: DESK.ink, lineHeight: 1 }}>{usd(bill.start)}</div>
           </div>
-          <div style={{ width: '0.5px', background: C.line }} />
-          <div style={{ flex: 1, padding: '15px 15px 13px' }}>
-            <div style={{ fontSize: 11, color: C.faint, letterSpacing: '.06em', textTransform: 'uppercase', marginBottom: 5 }}>Then a month</div>
-            <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.green, lineHeight: 1 }}>{usd(bill.monthly)}</div>
+          <div style={{ width: 1, borderLeft: `1.5px dashed ${DESK.line}` }} />
+          <div style={{ flex: 1, padding: '2px 4px 10px 14px' }}>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, color: DESK.mute, letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 700, marginBottom: 5 }}>Then a month</div>
+            <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: DESK.mintDeep, lineHeight: 1 }}>{usd(bill.monthly)}</div>
           </div>
         </div>
-        <div style={{ padding: '12px 15px 13px', borderTop: `0.5px solid ${C.line}` }}>
+        <ReceiptRule />
+        <div style={{ padding: '2px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 12.5, color: C.mute }}>Want more or less each month?</span>
             {budget !== suggested && (
@@ -422,7 +432,7 @@ export default function MonthlyPlanFlow({
                     : 'The setup is one-time work you keep. Pause any time and the monthly part stops.'}
           </div>
         </div>
-      </div>
+      </ReceiptFrame>
 
       <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 2px 12px' }}>
         What happens to someone who has never heard of you
@@ -533,10 +543,14 @@ export default function MonthlyPlanFlow({
         </span>
       </label>
 
-      <button
-        type="button"
+      {/* Approval as a physical act: press and hold the seal. Disabled until the terms above are
+          ticked; a failed start remounts it so it can be pressed again. */}
+      <div style={{ textAlign: 'center' }}>
+      <SealButton
+        key={attempt}
+        label={'Hold to\nstart'}
         disabled={starting || !accepted}
-        onClick={async () => {
+        onSealed={async () => {
           setStarting(true)
           setStartErr(null)
           const draft = toCampaignDraft(plan.lines, {
@@ -571,18 +585,14 @@ export default function MonthlyPlanFlow({
           else {
             setStartErr(res.error)
             setStarting(false)
+            setAttempt((n) => n + 1)
           }
         }}
-        style={{
-          width: '100%', height: 48, borderRadius: 14, border: 'none', marginTop: 18,
-          background: starting || !accepted ? '#bfe7da' : C.green, color: '#fff', fontSize: 16, fontWeight: 700,
-          cursor: starting || !accepted ? 'default' : 'pointer', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', gap: 8, fontFamily: "'Inter',system-ui,sans-serif",
-        }}
-      >
-        {starting ? <Loader2 size={17} /> : null}
-        {starting ? 'Starting your plan' : accepted ? 'Start this plan' : 'Accept the terms to start'}
-      </button>
+      />
+      <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.5, marginTop: 2, fontFamily: "'Inter',system-ui,sans-serif" }}>
+        {starting ? 'Starting your plan…' : accepted ? 'Press and hold. This starts the work.' : 'Accept the terms above to start.'}
+      </div>
+      </div>
 
       <div style={{ marginTop: 12, display: 'flex', gap: 9, alignItems: 'flex-start', padding: '0 4px', fontSize: 12, color: C.faint, lineHeight: 1.5 }}>
         <Check size={15} style={{ color: C.green, flex: '0 0 auto', marginTop: 1 }} />

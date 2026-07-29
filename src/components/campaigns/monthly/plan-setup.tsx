@@ -20,6 +20,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowRight, MessageSquare, Link2, Check, Users, Star, Moon, TrendingUp, Wand2, Ban, Store, Megaphone, Clock } from 'lucide-react'
 import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
+import { DESK, DeskKeyframes, PlanSheet, paperGround, type PlanSheetLine } from '@/components/campaigns/desk/ui'
 import { connectRecommendations, isKnown, type PlanInputs } from '@/lib/campaigns/data/plan-inputs'
 import {
   PLAN_GOALS,
@@ -213,10 +214,11 @@ function Act({ n, of, title, sub, children }: { n: number; of: number; title: st
           "1 OF 1" are both furniture around a question that has not been answered. */}
       {of > n && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
-          <span style={{ width: 22, height: 22, borderRadius: 99, background: C.ink, color: '#fff', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {/* The desk's ink stage plate: a square, not a chip. */}
+          <span style={{ width: 24, height: 24, borderRadius: 7, background: DESK.ink, color: DESK.paper, fontFamily: DISPLAY, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {n}
           </span>
-          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.1em', color: C.faint }}>{n} OF {of}</span>
+          <span style={{ fontFamily: DESK.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '.12em', color: DESK.mute }}>{n} OF {of}</span>
         </div>
       )}
       <h2 style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, lineHeight: 1.12, margin: '0 0 6px', letterSpacing: '-0.024em' }}>{title}</h2>
@@ -448,9 +450,27 @@ export default function PlanSetup({
   const shapeOk = auto.goals || (!!shape && (shape === 'ongoing' || !!a.when))
   const ready = shapeOk && goalsOk && promoteOk
 
+  /* The desk's plan sheet: the plan visibly inking itself at the bottom as answers land. Solid
+   * dots are answers we have; dashed ghosts are what is still open. Appears with the first
+   * answer, like everything else on this screen. */
+  const sheetLines: PlanSheetLine[] = []
+  if (situations.length > 0 || auto.goals) {
+    sheetLines.push({ text: auto.goals ? autoGoal : picked.map((p) => p.label).join(' + '), strong: true })
+    if (dated) sheetLines.push(a.when
+      ? { text: new Date(a.when + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) + (shape === 'run' && a.until ? ` to ${new Date(a.until + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })}` : '') }
+      : { text: shape === 'run' ? 'The start date' : 'The date', ghost: true })
+    if (assets.length > 0 && !assets.includes('Nothing yet')) sheetLines.push({ text: `Working with what you have: ${assets.slice(0, 2).join(', ').toLowerCase()}${assets.length > 2 ? '…' : ''}` })
+    else if (asks('assets')) sheetLines.push({ text: 'What you bring', ghost: true })
+    if (promote.length > 0 || auto.promote) sheetLines.push({ text: auto.promote ? 'Promoting: we pick from your menu' : `Promoting ${promote.slice(0, 2).join(', ')}${promote.length > 2 ? '…' : ''}` })
+    else if (asks('promote')) sheetLines.push({ text: 'What to promote', ghost: true })
+    if (asks('reach')) sheetLines.push({ text: `Reaching ${REACH.find((r) => r.v === reach)?.label.toLowerCase() ?? 'the neighbourhood'}` })
+    if (avoid.length > 0) sheetLines.push({ text: `Never: ${avoid.slice(0, 2).join(', ').toLowerCase()}${avoid.length > 2 ? '…' : ''}` })
+  }
+
   return (
-    <div style={{ background: C.bg, minHeight: '100%', padding: '18px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+    <div style={{ ...paperGround, minHeight: '100%', padding: '18px 14px 0', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       <style>{CSS}</style>
+      <DeskKeyframes />
 
       {/* Three headings used to stack here: the page header, a "Design a campaign" title, and the
           question itself — a whole phone screen of throat-clearing before anything to act on. The
@@ -509,8 +529,9 @@ export default function PlanSetup({
           style={{
             width: '100%', height: 50, marginTop: 8, borderRadius: 25, border: 'none',
             cursor: (a.described ?? '').trim().length < 12 ? 'default' : 'pointer',
-            background: (a.described ?? '').trim().length < 12 ? '#ececee' : C.green,
-            color: (a.described ?? '').trim().length < 12 ? C.faint : '#fff',
+            background: (a.described ?? '').trim().length < 12 ? '#DDD9CE' : DESK.grad,
+            color: (a.described ?? '').trim().length < 12 ? '#fff' : '#fff',
+            boxShadow: (a.described ?? '').trim().length < 12 ? 'none' : '0 10px 26px rgba(46,154,120,0.32)',
             fontFamily: "'Inter',system-ui,sans-serif", fontSize: 16, fontWeight: 620, letterSpacing: '-0.01em',
           }}
         >
@@ -802,8 +823,9 @@ export default function PlanSetup({
       <button
         type="button" onClick={() => onBuild({ ...a, shape, situations, goals, shift, assets, promote, audience, reach, avoid })} disabled={!ready}
         style={{
-          width: '100%', height: 52, borderRadius: 15, border: 'none',
-          background: ready ? C.green : '#bfe7da', color: '#fff', fontSize: 16.5, fontWeight: 700,
+          width: '100%', height: 52, borderRadius: 26, border: 'none',
+          background: ready ? DESK.grad : '#DDD9CE', color: '#fff', fontSize: 16.5, fontWeight: 700,
+          boxShadow: ready ? '0 10px 26px rgba(46,154,120,0.32)' : 'none',
           cursor: ready ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
           fontFamily: "'Inter',system-ui,sans-serif",
         }}
@@ -820,9 +842,19 @@ export default function PlanSetup({
       )}
 
       {situations.length > 0 && (
-        <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, padding: '13px 4px 0', textAlign: 'center' }}>
+        <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, padding: '13px 4px 18px', textAlign: 'center' }}>
           You pick when each piece goes out after the plan is built, not now.
         </div>
+      )}
+
+      {/* The plan sheet rides the bottom edge while there are answers to show, growing a line at a
+          time. Bleeds to the screen edge so it reads as a sheet sliding up, not another card. */}
+      {sheetLines.length > 0 ? (
+        <div style={{ position: 'sticky', bottom: 0, margin: '0 -14px 0', zIndex: 3 }}>
+          <PlanSheet title="Your plan so far" lines={sheetLines} />
+        </div>
+      ) : (
+        <div style={{ height: 28 }} />
       )}
     </div>
   )
