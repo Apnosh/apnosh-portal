@@ -123,6 +123,28 @@ DESCRIBE / PICK → INTAKE → THE PLAN → ADJUST → HOW IT'S DONE → TIMELIN
 - Owner adjusts per line: remove / drop to DIY to save / upgrade to a creator.
 - Sim enforces laws 1 and 2 against mutated implementations (the guard must be proven to fail).
 
+### Phase 3 progress (2026-07-28)
+
+- **SHIPPED** (3 commits). Exploration overturned the premise: feat/campaign-checkout was
+  ALREADY merged (Stripe PaymentElement + Tax, ship billing gate, G1 covered_by_checkout guard
+  + money-guard sim — all live, kill-switched by CAMPAIGN_CHECKOUT_ENABLED). The build was law
+  5: the vault genuinely fills. vault-bridge.ts — connections DERIVED at read (GOOGLE/META/
+  MENU/NAP/HOURS from live tables, revocation free, no backfill) ∪ vault rows (what actions
+  alone know: DNS probe, GBP-applied links our-side, owner-typed links/photos owner-word;
+  recordSignal awaited-never-throws, never downgrades). Three write sites wired (ready-page
+  PATCH, order-links apply, email-verified). Checkout prepare returns vault{held,hollow};
+  CampaignCheckout renders WhatItTakes from the draft's own lane picks. createCampaign seeds
+  execution from vaultFactSeeds — the ACCEPTANCE criterion sim-proven: campaign #2's asks are a
+  STRICT subset of #1's, negative-proved (empty vault ⇒ equal sets). Migration 233 promotes the
+  manual SQL (table already live in prod — the e2e ran green against it). vault sim 30 (33×4
+  proof-ceiling matrix + mutation) + vault-db-e2e 13 (real Postgres).
+- Both phase acceptance criteria now hold: allocation record at mint (law 4, Phase 1a) + vault
+  writes as acceptance gate (law 5, this phase).
+- Ops to go live with real money (owner): verify migrations 215/217/220 applied · Stripe keys
+  (STRIPE_SECRET_KEY, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY, STRIPE_WEBHOOK_SECRET) ·
+  CAMPAIGN_CHECKOUT_ENABLED='true' · CHECKOUT_REQUIRED_SINCE at the go-live instant ·
+  STRIPE_CONNECT_PAYOUTS decision for money-out.
+
 ## Phase 3 — commitment (1-2 sessions, assembly)
 
 - Order summary by billing rail → dated timeline from the turnaround critical path (numbers
