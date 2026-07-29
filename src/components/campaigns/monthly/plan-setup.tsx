@@ -196,12 +196,42 @@ const CSS = `
    focus ring — the caret is the only affordance it needs, and anything else competes with the
    sentence being written. */
 .ps-say { -webkit-appearance:none; appearance:none; }
-.ps-say::placeholder { color:#c3c3c8; }
+.ps-say::placeholder { color:#B7B2A6; }
 .ps-say:focus { outline:none; }
-.ps-go { transition: opacity .18s ease, transform .12s ease; }
+.ps-go { transition: opacity .18s ease, transform .12s ease, box-shadow .25s ease, background .25s ease; }
 .ps-go:active:not(:disabled) { transform: scale(.985); }
 
-@media (prefers-reduced-motion: reduce) { .ps-pick, .ps-go { transition:none } }
+/* The stationery sheet the owner writes on: faint ruled baselines, a deep soft float off the
+   paper desk, and a mint glow the moment the pen touches it. */
+.ps-sheet {
+  background:
+    repeating-linear-gradient(to bottom, transparent 0, transparent 33px, rgba(22,33,28,0.055) 33px, rgba(22,33,28,0.055) 34px),
+    #FFFFFF;
+  background-position: 0 18px;
+  border: 1px solid #E4E0D6;
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(22,33,28,0.05), 0 28px 56px -28px rgba(22,33,28,0.28);
+  transition: box-shadow .3s ease, border-color .3s ease;
+}
+.ps-sheet:focus-within {
+  border-color: rgba(74,189,152,0.55);
+  box-shadow: 0 1px 2px rgba(22,33,28,0.05), 0 28px 56px -26px rgba(46,154,120,0.30), 0 0 0 4px rgba(74,189,152,0.10);
+}
+
+/* The staged entrance: mark, title, sheet laid down one after another. */
+@keyframes psRise { from { opacity:0; transform: translateY(14px) } to { opacity:1; transform:none } }
+.ps-hero1 { animation: psRise .55s cubic-bezier(.2,.7,.2,1) both }
+.ps-hero2 { animation: psRise .55s cubic-bezier(.2,.7,.2,1) .08s both }
+.ps-hero3 { animation: psRise .55s cubic-bezier(.2,.7,.2,1) .16s both }
+.ps-hero4 { animation: psRise .55s cubic-bezier(.2,.7,.2,1) .26s both }
+
+.ps-chip { transition: transform .12s ease, border-color .15s ease, background .15s ease; }
+.ps-chip:active { transform: scale(.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ps-pick, .ps-go, .ps-chip { transition:none }
+  .ps-hero1, .ps-hero2, .ps-hero3, .ps-hero4 { animation:none }
+}
 `
 
 /* ────────────────────────────────────────────────────────────────────────────────── bits ── */
@@ -383,6 +413,27 @@ export default function PlanSetup({
   const [readErr, setReadErr] = useState<string | null>(null)
   const [readBack, setReadBack] = useState<{ summary: string; unsupported: string[] } | null>(null)
 
+  /* The blank-page cure: real examples that write themselves into the sheet when tapped.
+   * Editable the moment they land, so they are a running start, never a template. */
+  const reduce = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const EXAMPLES = [
+    'We are opening a second location in September and want a line out the door on day one.',
+    'Tuesday and Wednesday nights are dead. I want those tables full.',
+    'We are launching a new brunch menu next month and nobody knows about it yet.',
+  ]
+  const typeExample = (s: string) => {
+    setReadBack(null); setReadErr(null)
+    if (reduce) { setA((prev) => ({ ...prev, described: s, asked: undefined })); return }
+    /* Paced by the clock, not the tick count, so browser timer throttling can slow the frames
+     * but never the finish: the sentence is always fully on the sheet within about a second. */
+    const t0 = Date.now()
+    const iv = setInterval(() => {
+      const n = Math.min(s.length, Math.round((Date.now() - t0) * 0.11))
+      setA((prev) => ({ ...prev, described: s.slice(0, n), asked: undefined }))
+      if (n >= s.length) clearInterval(iv)
+    }, 40)
+  }
+
   /**
    * Keep the flow moving when the model does not answer.
    *
@@ -495,30 +546,68 @@ export default function PlanSetup({
               catalogue you choose from. What they describe is richer than anything a list can hold
               — the date, the DJ they can book, the fact that they will do "whatever it takes" — and
               all of it survives to the people doing the work. */}
-      <Act
-        n={1}
-        of={1 + gaps.length}
-        title="What do you want to do?"
-        sub="Say it the way you would say it to a person. We work out the rest."
-      >
-        {/* No card, no border, no fill. The sentence they are writing is the only thing on the
-            screen with any weight, so it gets the page rather than a field on top of one, and it is
-            set at reading size rather than form-input size. A bulleted "worth mentioning" list used
-            to sit under here teaching the format; the placeholder already does that in one line,
-            and the list was three more things to read before you could start. */}
-        <textarea
-          className="ps-say"
-          value={a.described ?? ''}
-          onChange={(e) => { set({ described: e.target.value, asked: undefined }); setReadBack(null); setReadErr(null) }}
-          placeholder="We're opening a second location in September and I want a line out the door on day one."
-          rows={4}
-          style={{
-            width: '100%', border: 'none', outline: 'none', resize: 'none', background: 'transparent',
-            padding: 0, margin: 0, display: 'block',
-            fontFamily: "'Inter',system-ui,sans-serif", fontSize: 19, lineHeight: 1.5,
-            letterSpacing: '-0.011em', color: C.ink, minHeight: 132,
-          }}
-        />
+      <section style={{ marginBottom: 38, position: 'relative' }}>
+        {/* A soft mint aurora behind the opening moment: depth, not decoration. */}
+        <div aria-hidden style={{ position: 'absolute', inset: '-18px -14px auto', height: 260, background: 'radial-gradient(420px 220px at 50% -40px, rgba(74,189,152,0.12), transparent 70%)', pointerEvents: 'none' }} />
+
+        {gaps.length > 0 && situations.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7, position: 'relative' }}>
+            <span style={{ width: 24, height: 24, borderRadius: 7, background: DESK.ink, color: DESK.paper, fontFamily: DISPLAY, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>1</span>
+            <span style={{ fontFamily: DESK.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '.12em', color: DESK.mute }}>1 OF {1 + gaps.length}</span>
+          </div>
+        )}
+
+        <div className="ps-hero1" style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10, position: 'relative' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill={DESK.mintDeep} aria-hidden><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
+          <span style={{ fontFamily: DESK.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: DESK.mintDeep }}>New campaign</span>
+        </div>
+        <h2 className="ps-hero2" style={{ fontFamily: DISPLAY, fontSize: 32, fontWeight: 650, color: DESK.ink, lineHeight: 1.08, margin: '0 0 8px', letterSpacing: '-0.028em', position: 'relative' }}>
+          Describe your campaign
+        </h2>
+        <p className="ps-hero2" style={{ fontSize: 14, color: DESK.ink2, lineHeight: 1.5, margin: '0 0 20px', maxWidth: '32ch', position: 'relative' }}>
+          Say it the way you would say it out loud. We work out the rest.
+        </p>
+
+        {/* The writing surface is the hero: a sheet of stationery laid on the desk. Faint ruled
+            baselines under the words, a deep soft float, a mint glow when the pen touches it. */}
+        <div className="ps-sheet ps-hero3" style={{ position: 'relative', padding: '18px 20px 16px' }}>
+          <textarea
+            className="ps-say"
+            value={a.described ?? ''}
+            onChange={(e) => { set({ described: e.target.value, asked: undefined }); setReadBack(null); setReadErr(null) }}
+            placeholder="I want to do a fundraiser night where part of every check goes to the local food bank."
+            rows={4}
+            style={{
+              width: '100%', border: 'none', outline: 'none', resize: 'none', background: 'transparent',
+              padding: 0, margin: 0, display: 'block',
+              fontFamily: "'Inter',system-ui,sans-serif", fontSize: 19, lineHeight: '34px',
+              letterSpacing: '-0.011em', color: DESK.ink, minHeight: 136,
+            }}
+          />
+        </div>
+
+        {/* Three real briefs that type themselves onto the sheet. Gone the moment there is a word
+            on it: a running start, never a template. */}
+        {(a.described ?? '').trim().length === 0 && situations.length === 0 && (
+          <div className="ps-hero4" style={{ marginTop: 12, position: 'relative' }}>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: DESK.mute, marginBottom: 8 }}>Or start from one of these</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {EXAMPLES.map((s) => (
+                <button
+                  key={s} type="button" className="ps-chip" onClick={() => typeExample(s)}
+                  style={{
+                    textAlign: 'left', cursor: 'pointer', display: 'flex', gap: 9, alignItems: 'flex-start',
+                    border: '1.5px dashed rgba(74,189,152,0.4)', background: 'rgba(234,246,241,0.6)',
+                    borderRadius: 13, padding: '10px 13px', fontFamily: "'Inter',system-ui,sans-serif",
+                  }}
+                >
+                  <span aria-hidden style={{ color: DESK.mintDeep, fontWeight: 700, fontSize: 13, lineHeight: '19px' }}>&ldquo;</span>
+                  <span style={{ fontSize: 13, color: DESK.ink2, lineHeight: 1.45 }}>{s.replace(/\.$/, '')}&rdquo;</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Full width, and quiet until there is something to send. The old control was a 34px pill
             tucked in a footer beside a caption, which made the one action on the screen the
@@ -650,7 +739,7 @@ export default function PlanSetup({
         {((a.described ?? '').trim().length > 0 || situations.length > 0 || !!auto.goals) && (
           <DecideForMe on={!!auto.goals} resolves={autoGoal} onToggle={() => { setAuto('goals', !auto.goals); if (!auto.goals) set({ situations: [], goals: [], shape: undefined, auto: { ...auto, goals: true } }) }} />
         )}
-      </Act>
+      </section>
 
       {/* 2 ── what the owner brings. Nothing captured this before, and both real event requests
               opened with it. */}
