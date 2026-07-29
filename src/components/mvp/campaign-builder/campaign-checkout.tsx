@@ -25,6 +25,7 @@ import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
 import { draftNeedsShoot } from '@/lib/campaigns/gates/derive'
 import { summarize, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
 import type { ResolvedGates, CustomGate } from '@/lib/campaigns/gates/config'
+import { DeskKeyframes, Stamp, SealButton, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, paperGround } from '@/components/campaigns/desk/ui'
 
 const MINT = '#4abd98'
 const MINT_DARK = '#3f7d6a'
@@ -33,7 +34,6 @@ const INK = '#14231c'
 const SUB = '#6b746e'
 const FAINT = '#9aa39d'
 const LINE = 'rgba(20,35,28,0.10)'
-const BG = '#fbfcfb'
 
 function fmt(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
@@ -125,7 +125,8 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
   }, [clientId, draft])
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: BG, display: 'flex', justifyContent: 'center' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, ...paperGround, display: 'flex', justifyContent: 'center' }}>
+      <DeskKeyframes />
       <div style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', height: '100%' }}>
         {placed ? (
           <Confirmation
@@ -212,15 +213,6 @@ function ErrorBox({ message, onBack }: { message: string; onBack: () => void }) 
   )
 }
 
-function BillRow({ label, value, strong, muted }: { label: string; value: string; strong?: boolean; muted?: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, padding: strong ? '11px 0 0' : '7px 0' }}>
-      <span style={{ fontFamily: 'Inter, sans-serif', fontSize: strong ? 14 : 13, fontWeight: strong ? 700 : 400, color: muted ? SUB : INK }}>{label}</span>
-      <span style={{ fontFamily: strong ? "'Cal Sans', Poppins, sans-serif" : 'Inter, sans-serif', fontSize: strong ? 19 : 13, fontWeight: strong ? 700 : 600, color: muted ? SUB : INK, whiteSpace: 'nowrap', letterSpacing: strong ? -0.3 : 0 }}>{value}</span>
-    </div>
-  )
-}
-
 function BillCard({ b, monthlyCents, taxPending, costNotes, setupOnly, adSpendMinCents = 0 }: { b: Breakdown; monthlyCents: number; taxPending: boolean; costNotes?: string[]; setupOnly?: boolean; adSpendMinCents?: number }) {
   // ONE real monthly total including known ad-spend minimums — never a surprise later.
   const adTotalLine = monthlyCents > 0 && adSpendMinCents > 0
@@ -229,38 +221,34 @@ function BillCard({ b, monthlyCents, taxPending, costNotes, setupOnly, adSpendMi
   if (setupOnly) {
     // Monthly-only order: no one-time charge, the subscription bills the card starting today.
     return (
-      <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '13px 16px 15px', marginBottom: 16 }}>
-        <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>Order summary</div>
-        <BillRow label="Monthly services" value={`${fmt(monthlyCents)}/mo`} />
+      <ReceiptFrame style={{ marginBottom: 16 }}>
+        <ReceiptRow label="Monthly services" amount={`${fmt(monthlyCents)}/mo`} />
         {(costNotes ?? []).map((n) => (
           <div key={n} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, padding: '2px 0 4px' }}>Plus {n}</div>
         ))}
-        <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}>
-          <BillRow label="First month, billed today" value={fmt(monthlyCents)} strong />
-        </div>
+        <ReceiptRule />
+        <ReceiptTotal label="Today" big={fmt(monthlyCents)} small="first month" />
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Your card is billed {fmt(monthlyCents)} each month starting today. Cancel anytime.</div>
         {adTotalLine}
-      </div>
+      </ReceiptFrame>
     )
   }
   return (
-    <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '13px 16px 15px', marginBottom: 16 }}>
-      <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>Order summary</div>
-      <BillRow label="Subtotal" value={fmt(b.subtotalCents)} />
-      <BillRow label="Service fee (10%)" value={fmt(b.serviceFeeCents)} />
-      <BillRow label="Tax" value={taxPending ? 'Enter address' : fmt(b.taxCents)} muted={taxPending} />
-      {monthlyCents > 0 && <BillRow label="Monthly services" value={`${fmt(monthlyCents)}/mo`} muted />}
+    <ReceiptFrame style={{ marginBottom: 16 }}>
+      <ReceiptRow label="Subtotal" amount={fmt(b.subtotalCents)} />
+      <ReceiptRow label="Service fee (10%)" amount={fmt(b.serviceFeeCents)} />
+      <ReceiptRow label="Tax" amount={taxPending ? 'Enter address' : fmt(b.taxCents)} muted={taxPending} />
+      {monthlyCents > 0 && <ReceiptRow label="Monthly services" amount={`${fmt(monthlyCents)}/mo`} muted />}
       {/* Pass-through costs in plain words, from the catalog's own notes — the consent
           below must be informed, so real extra spend is on the bill, not in fine print. */}
       {(costNotes ?? []).map((n) => (
         <div key={n} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, padding: '2px 0 4px' }}>Plus {n}</div>
       ))}
-      <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}>
-        <BillRow label="Total due today" value={fmt(b.totalCents)} strong />
-      </div>
+      <ReceiptRule />
+      <ReceiptTotal label="Due today" big={fmt(b.totalCents)} small={monthlyCents > 0 ? `then ${fmt(monthlyCents)}/mo` : undefined} />
       {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Monthly services bill {fmt(monthlyCents)}/mo to this card starting today, as a separate charge. Cancel anytime.</div>}
       {adTotalLine}
-    </div>
+    </ReceiptFrame>
   )
 }
 
@@ -807,9 +795,12 @@ function PayForm({ clientId, draft, restaurant, producerChoices, initialGateAnsw
   )
 }
 
-function FreeCheckout({ clientId, draft, producerChoices, gates, initialGateAnswers, onPlaced }: { clientId: string; initialGateAnswers?: Record<string, string>; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; gates?: ResolvedGates; onPlaced: (id: string, breakdown: Breakdown) => void }) {
+/** Exported for /preview/campaign/checkout (fixture verification without an account). */
+export function FreeCheckout({ clientId, draft, producerChoices, gates, initialGateAnswers, onPlaced }: { clientId: string; initialGateAnswers?: Record<string, string>; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; gates?: ResolvedGates; onPlaced: (id: string, breakdown: Breakdown) => void }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Increments on every failed attempt: remounts the seal so a failed order can be re-sealed.
+  const [attempt, setAttempt] = useState(0)
   const customGates = gates?.custom ?? []
   // Seeded from the cart, where these questions are now asked ON the item. Checkout keeps
   // the state (gateExecutionPatch persists it, gateBlocking gates the pay button) but must
@@ -828,23 +819,26 @@ function FreeCheckout({ clientId, draft, producerChoices, gates, initialGateAnsw
       // Surface the server's own reason when it has one (e.g. a coming-soon 409), never a mystery.
       const msg = e instanceof Error && e.message ? e.message : ''
       setError(msg || 'That didn’t go through. Nothing was ordered. Try again.'); setBusy(false)
+      setAttempt((a) => a + 1)
     }
   }
   return (
     <>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 16px' }}>
-        <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '14px 16px', marginBottom: 16 }}>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 6 }}>Order summary</div>
-          <BillRow label="Total due today" value="Free" strong />
+        <ReceiptFrame style={{ marginBottom: 16 }}>
+          <ReceiptTotal label="Today" big="Free" />
           {/* The free path only fires when there is NO monthly bill (a monthly-only cart goes
               through the card + consent path instead), so this bill is genuinely $0. */}
-        </div>
+        </ReceiptFrame>
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: SUB, lineHeight: 1.5, marginBottom: 16 }}>Everything in this plan is on you to run, so there’s nothing to pay now. Placing the order starts your campaign.</div>
         <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
       </div>
-      <div style={{ flexShrink: 0, background: '#fff', borderTop: `1px solid ${LINE}`, boxShadow: '0 -10px 28px rgba(20,40,30,0.10)', padding: '11px 18px calc(12px + env(safe-area-inset-bottom))' }}>
-        {error && <div role="alert" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#b3462e', textAlign: 'center', marginBottom: 8 }}>{error}</div>}
-        <button onClick={place} disabled={busy || blocked} style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || blocked ? 'default' : 'pointer', background: busy ? MINT_DARK : (blocked ? FAINT : MINT), color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: blocked ? 'none' : '0 8px 22px rgba(74,189,152,0.42)' }}>{busy ? 'Placing your order…' : blocked ? (blockedGate(customGates, gateAnswers) ? 'This cannot be ordered yet' : 'Answer the questions above') : 'Place order'}</button>
+      <div style={{ flexShrink: 0, textAlign: 'center', padding: '2px 18px calc(14px + env(safe-area-inset-bottom))' }}>
+        {error && <div role="alert" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#b3462e', textAlign: 'center', marginBottom: 4 }}>{error}</div>}
+        <SealButton key={attempt} label={'Hold to\nplace order'} disabled={busy || blocked} onSealed={place} />
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 2 }}>
+          {busy ? 'Placing your order…' : blocked ? (blockedGate(customGates, gateAnswers) ? 'This cannot be ordered yet' : 'Answer the questions above') : 'Press and hold. This starts your campaign.'}
+        </div>
       </div>
     </>
   )
@@ -856,7 +850,7 @@ function FreeCheckout({ clientId, draft, producerChoices, gates, initialGateAnsw
  * what was actually paid, and the handoff into the "A few things from you" setup page. The go-live
  * estimate is the real one (goLivePhraseFor over the ordered items), not an invented date.
  */
-function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSlot, onSetup, onViewCampaign }: {
+export function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSlot, onSetup, onViewCampaign }: {
   restaurant?: string
   draft: CampaignDraft
   breakdown: Breakdown
@@ -900,11 +894,9 @@ function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSlot, onS
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '28px 18px 16px' }}>
-        {/* success moment */}
+        {/* success moment: the stamp thunks down (dk-stamp keyframes render at the overlay root) */}
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <div style={{ width: 62, height: 62, margin: '0 auto 12px', borderRadius: '50%', background: `linear-gradient(135deg, ${MINT}, ${MINT_DARK})`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 12px 30px -8px rgba(74,189,152,0.55)' }}>
-            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-          </div>
+          <div style={{ marginBottom: 14 }}><Stamp mint>Approved</Stamp></div>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 24, fontWeight: 700, color: INK, letterSpacing: -0.4 }}>Order confirmed</div>
           <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: SUB, marginTop: 4 }}>{restaurant ? `${restaurant}’s campaign is on the way.` : 'Your campaign is on the way.'}</div>
         </div>
@@ -929,28 +921,29 @@ function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSlot, onS
           ))}
         </div>
 
-        {/* what you paid */}
-        <div style={{ background: '#fff', border: `1px solid ${LINE}`, borderRadius: 18, padding: '14px 16px', marginBottom: 14 }}>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 15, fontWeight: 600, color: INK, marginBottom: 8 }}>{free || setupOnly ? 'Order summary' : 'Paid today'}</div>
+        {/* what you paid — the receipt, kept */}
+        <ReceiptFrame style={{ marginBottom: 14 }}>
           {setupOnly ? (
             <>
-              <BillRow label="Monthly services" value={`${fmt(monthlyCents)}/mo`} />
-              <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}><BillRow label="First month, billed today" value={fmt(monthlyCents)} strong /></div>
+              <ReceiptRow label="Monthly services" amount={`${fmt(monthlyCents)}/mo`} />
+              <ReceiptRule />
+              <ReceiptTotal label="Billed today" big={fmt(monthlyCents)} small="first month" />
             </>
           ) : free ? (
-            <BillRow label="Total" value="Free" strong />
+            <ReceiptTotal label="Paid today" big="Free" />
           ) : (
             <>
-              <BillRow label="Subtotal" value={fmt(breakdown.subtotalCents)} />
-              {breakdown.serviceFeeCents > 0 && <BillRow label="Service fee (10%)" value={fmt(breakdown.serviceFeeCents)} />}
-              {breakdown.taxCents > 0 && <BillRow label="Tax" value={fmt(breakdown.taxCents)} />}
-              <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 4 }}><BillRow label="Total paid" value={fmt(breakdown.totalCents)} strong /></div>
+              <ReceiptRow label="Subtotal" amount={fmt(breakdown.subtotalCents)} />
+              {breakdown.serviceFeeCents > 0 && <ReceiptRow label="Service fee (10%)" amount={fmt(breakdown.serviceFeeCents)} />}
+              {breakdown.taxCents > 0 && <ReceiptRow label="Tax" amount={fmt(breakdown.taxCents)} />}
+              <ReceiptRule />
+              <ReceiptTotal label="Paid today" big={fmt(breakdown.totalCents)} small={monthlyCents > 0 ? `then ${fmt(monthlyCents)}/mo` : undefined} />
             </>
           )}
           {/* Every path with a monthly took a card + consent at checkout (paid orders save the card
               on the charge; monthly-only orders save it on a SetupIntent) — say exactly what bills. */}
           {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{setupOnly ? 'Billed to your card each month starting today. Cancel anytime.' : `Plus ${fmt(monthlyCents)}/mo in monthly services, billed to this card starting today.`}</div>}
-        </div>
+        </ReceiptFrame>
 
         {/* needs-you handoff */}
         <div style={{ background: MINT_TINT, borderRadius: 16, padding: '13px 15px', display: 'flex', gap: 11, alignItems: 'flex-start' }}>
