@@ -504,5 +504,10 @@ export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, L
 export const setupCardById = (id: string): SetupCard | undefined =>
   SETUP_CARDS.find((c) => c.id === id)
 
+/** The card that composes to a catalog SERVICE, for callers holding a line item. The router
+ *  (builder/routing.ts) reads lane truth through this — it never re-derives platform facts. */
+export const setupCardByServiceId = (serviceId: string): SetupCard | undefined =>
+  SETUP_CARDS.find((c) => c.serviceId === serviceId)
+
 /** The card ids the engine now describes. Grows by one every time a service is finished. */
 export const SETUP_CARD_IDS: readonly string[] = SETUP_CARDS.map((c) => c.id)
