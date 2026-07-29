@@ -95,6 +95,26 @@ DESCRIBE / PICK → INTAKE → THE PLAN → ADJUST → HOW IT'S DONE → TIMELIN
   two planning brains) closed: one signal source, one guide content source.
 - **Phase 2 NEXT**: the router (routing.ts, hands-on question, per-move lane adjust).
 
+### Phase 2 progress (2026-07-28)
+
+- **SHIPPED** (4 commits): builder/routing.ts — per composed line, all four lanes (Lane ≡
+  PieceProducer, SetupLaneKind ⊂ Lane compile-pinned) with honest availability (team=rail law;
+  diy=law 3 via law-clean setup-card lanes or the guide rail; ai=card/manifest; creator=content
+  pieces only, the one shape with a mint path — sim-pinned out for services), existing prices
+  only (creator = same-price swap, said so), and a hands-on-biased default. routeViolations =
+  laws 1+2 as arithmetic (the laneViolations pattern), with one narrow honest exception: a
+  rail-held line legally has zero lanes because held-and-unbilled IS its law-2 surface (the
+  landing-less list — the send five — is pinned and may only shrink). stampLane is the one
+  producer/price/ownerMode encoder. creatorSupplySummary rides the plan-mix response (copy +
+  default bias only, never availability). Hands-on control on the order summary; LaneRow inline
+  in expanded service nodes (browser verification caught the ServiceSheet being unreachable) +
+  the LineCard drawer (guided diy replaces the freeform escape where a card exists).
+  /preview/campaign/lanes = the real flow on fixtures, no login. lane-routing sim 100 checks
+  incl. mutated-card + doctored-route + held-abuse proofs. Verified live: hands-on and You taps
+  move the bill exactly as stamped.
+- Deferred (unchanged): creator on service lines (needs service→craft + dispatch bridge) ·
+  collapsing the gbp jsx doer slot · ServicePicker→LaneOffer convergence.
+
 ## Phase 2 — the router (2-3 sessions)
 
 - `routing.ts`, pure, sim-proven: per move → available lanes + a default. Inputs: platform law,
