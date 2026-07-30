@@ -30,19 +30,19 @@ export const WALK_TITLES: Record<string, string> = {
 }
 
 export const WALK_SUBS: Record<string, string> = {
-  date: 'We work backwards from this day, so the last push lands on it.',
+  date: 'We work backwards from this day.',
   'date.run': 'The day it starts, and the day it comes off.',
-  start: 'We build the same plan either way. This just sets the clock.',
-  money: 'Optional. Skip it and we size the plan to the job. You can always move the number on the plan itself.',
-  'money.confirm': 'You wrote about {amount}. Confirm it or change it. Nothing is sized until you do.',
-  offer: 'This goes out exactly as you set it here. We never guess money.',
-  capacity: 'A full room needs the room ready. Tell us what runs out first, and who tells the staff.',
-  target: 'We track {metric} for campaigns like this. Falling short partway, we flag it and adjust.',
-  shift: 'Naming them aims the work at the tables that sit empty.',
-  assets: 'Pick anything you already have. We build around it, and you are never billed for it.',
+  start: 'This just sets the clock.',
+  money: 'Optional. Skip it and we size the plan to the job.',
+  'money.confirm': 'You wrote {amount}. Confirm or change it.',
+  offer: 'It goes out exactly as you set it.',
+  capacity: 'The team plans around what runs out first.',
+  target: 'We track this and flag it if the run falls short.',
+  shift: 'The work aims at the shifts you name.',
+  assets: 'You are never billed for what you already have.',
   promote: 'Pick one to three. We lead with your first pick.',
-  reach: 'Ads and listings stop at this line. Wider costs more to reach the same person.',
-  avoid: 'Optional, and the one place a plan most often goes wrong. Pick anything that is off limits.',
+  reach: 'Ads and listings stop at this line.',
+  avoid: 'Optional. Anything picked stays off, everywhere.',
 }
 
 /** Card labels, restate prefixes, escape links: the small print of the walk. */
@@ -64,7 +64,7 @@ export const WALK_LINES: Record<string, string> = {
   'restate.promote': 'Leading with',
   'restate.shift': 'Fixing',
   'restate.avoid': 'Never',
-  'run.note': 'We record the end date and the team works to it. The automatic schedule counts back from the start, so a long run gets checked by a person.',
+  'run.note': 'The team works to the end date. A person checks long runs.',
 }
 
 /**

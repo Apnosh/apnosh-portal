@@ -273,7 +273,7 @@ function DecideForMe({ on, resolves, onToggle }: { on: boolean; resolves: string
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 13.5, fontWeight: on ? 700 : 600, color: on ? C.greenDk : C.ink }}>Decide for me</span>
           <span style={{ display: 'block', fontSize: 11.5, color: on ? C.greenDk : C.mute, marginTop: 3, lineHeight: 1.4 }}>
-            {on ? `We will use: ${resolves}` : 'We will pick from what you have already told us.'}
+            {on ? `We will use: ${resolves}` : 'We pick from what you told us.'}
           </span>
         </span>
       </button>
@@ -435,6 +435,8 @@ export default function PlanSetup({
   )
   /* The avoid question's free line, for the personal deal-breakers no chip covers. */
   const [avoidText, setAvoidText] = useState('')
+  /* The plan sheet folds to one bar (owner: as simple as possible). Tap to read it. */
+  const [sheetOpen, setSheetOpen] = useState(false)
   /* The deal composer's in-progress picks. Composed sentences round-trip through offerTerms;
    * anything unparseable (a paragraph read, or the escape) shows as free text instead. */
   const [deal, setDeal] = useState<Deal>(() => parseDeal(a.offerTerms) ?? { kind: 'pct', amount: 20, scope: '' })
@@ -557,10 +559,8 @@ export default function PlanSetup({
     if (qi === 0) {
       const what = readBack?.summary ?? (picked[0] ? picked[0].label.toLowerCase().replace(/^we are /, 'so you are ') : null)
       const count = qlist.length
-      /* Credit the paragraph for what it answered — the honest version of "this will be quick". */
-      const took = readKeys.filter((k) => k !== 'situation' && k !== 'until').length
-      const takeLine = took > 0 ? `You answered ${took === 1 ? 'one thing' : `${took} things`} in writing already. ` : ''
-      return `${what ? what.replace(/\.?$/, '.') + ' ' : ''}${takeLine}We can build this. ${count} quick ${count === 1 ? 'answer' : 'answers'} and it is ready.`
+      /* One line, once: the read-back plus the honest count. Everything else was noise. */
+      return `${what ? what.replace(/\.?$/, '.') + ' ' : ''}${count} quick ${count === 1 ? 'answer' : 'answers'}.`
     }
     const prev = qlist[qi - 1]
     switch (prev) {
@@ -935,6 +935,7 @@ export default function PlanSetup({
       {!showHero && q && (
       <section style={{ marginBottom: 26 }}>
         {/* What they wrote, folded to a quote card. Tap to reopen the sheet and change it. */}
+        {qi === 0 && (
         <button
           type="button" onClick={() => setEditDesc(true)}
           style={{
@@ -957,6 +958,7 @@ export default function PlanSetup({
           </span>
           <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: DESK.mintDeep, marginTop: 1 }}>Edit</span>
         </button>
+        )}
 
         {/* WHAT THE PARAGRAPH ANSWERED (Ledger Tier 2), each with its way back. These questions
             were dropped from the walk because the owner already answered them in writing — the
@@ -964,7 +966,7 @@ export default function PlanSetup({
             chip; tapping one reopens that question with the read answer preselected. */}
         {qi === 0 && readChips.length > 0 && (
           <div style={{ margin: '-12px 0 22px' }}>
-            <div style={{ fontSize: 12, color: '#86868B', marginBottom: 7 }}>From what you wrote we took — tap to change:</div>
+            <div style={{ fontSize: 12, color: '#86868B', marginBottom: 7 }}>From what you wrote:</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
               {readChips.map((c) => (
                 <button
@@ -993,7 +995,7 @@ export default function PlanSetup({
               type="button" onClick={() => setShowFacts(!showFacts)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: "'Inter',system-ui,sans-serif" }}
             >
-              <span style={{ fontSize: 12.5, color: '#86868B' }}>Built from what we already know about you</span>
+              <span style={{ fontSize: 12.5, color: '#86868B' }}>What we already know</span>
               <span style={{ fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep }}>{showFacts ? 'Hide' : 'Show'}</span>
             </button>
             {showFacts && (
@@ -1019,7 +1021,7 @@ export default function PlanSetup({
 
         <div key={q} className="ps-hero2">
         {/* The strategist speaks first: acknowledge what was just said, then ask the next thing. */}
-        {say && (
+        {say && qi === 0 && (
           <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 18 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill={DESK.mintDeep} aria-hidden style={{ flexShrink: 0, marginTop: 3 }}>
               <path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" />
@@ -1196,7 +1198,7 @@ export default function PlanSetup({
             {/* the coupon: the deal as a guest will read it. The one decorated element, on purpose. */}
             {a.offerTerms && (
               <div style={{ border: `1.5px dashed ${C.green}`, borderRadius: 14, padding: '12px 15px', marginTop: 12, background: '#fff' }}>
-                <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3, fontWeight: 700 }}>Your deal, as guests see it</div>
+                <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3, fontWeight: 700 }}>As guests see it</div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: C.ink, letterSpacing: '-0.01em' }}>{a.offerTerms}</div>
                 {(a.offerLimit || a.offerExpiry) && (
                   <div style={{ fontSize: 10.5, color: C.mute, marginTop: 4 }}>{[a.offerLimit, a.offerExpiry ? `Ends: ${a.offerExpiry}` : ''].filter(Boolean).join(' · ')}</div>
@@ -1295,7 +1297,7 @@ export default function PlanSetup({
                 {CARDS.map((c) => (
                   <Card
                     key={c.key} on={!ownTarget && a.successTarget === c.v} label={c.label} badge={c.badge}
-                    sub={`${c.v.toLocaleString('en-US')} ${targetSug.metric}${c.key === 'suggested' ? `. ${targetSug.basis[0].toUpperCase()}${targetSug.basis.slice(1)}.` : ''}`}
+                    sub={`${c.v.toLocaleString('en-US')} ${targetSug.metric}`}
                     onClick={() => { setOwnTarget(false); set({ successTarget: c.v }) }}
                   />
                 ))}
@@ -1373,7 +1375,7 @@ export default function PlanSetup({
           {OWNER_ASSETS.filter((o) => o.v !== 'Nothing yet').map((o) => {
             const on = assets.includes(o.v)
             /* The payoff swaps in on selection: honesty reads as visible money and strength. */
-            const line = on ? (ASSET_PAYOFF[o.v] ?? o.sub) : o.sub
+            const line = on ? (ASSET_PAYOFF[o.v] ?? o.sub) : undefined
             return (
               <button
                 key={o.v} type="button" className="ps-pick"
@@ -1385,7 +1387,7 @@ export default function PlanSetup({
                 }}
               >
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: on ? C.green : C.ink }}>{o.label}</span>
-                <span style={{ display: 'block', fontSize: 11, color: on ? C.greenDk : C.mute, marginTop: 2, lineHeight: 1.35, fontWeight: on ? 600 : 400 }}>{line}</span>
+                {line && <span style={{ display: 'block', fontSize: 11, color: C.greenDk, marginTop: 2, lineHeight: 1.35, fontWeight: 600 }}>{line}</span>}
               </button>
             )
           })}
@@ -1424,7 +1426,7 @@ export default function PlanSetup({
               <GroupLabel>{g.group}</GroupLabel>
               <Grid>
                 {g.items.map((o) => (
-                  <Card key={o.v} on={promote.includes(o.v)} label={o.label} sub={o.sub}
+                  <Card key={o.v} on={promote.includes(o.v)} label={o.label}
                     dim={auto.promote} onClick={() => set({ promote: flip3(promote, o.v), auto: { ...auto, promote: false } })} />
                 ))}
               </Grid>
@@ -1435,7 +1437,7 @@ export default function PlanSetup({
             type="button" onClick={() => setMorePromote(true)}
             style={{ width: '100%', marginTop: 10, background: '#fff', border: '1.5px dashed rgba(0,0,0,0.12)', borderRadius: 14, padding: '11px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}
           >
-            More to show: the bar, the patio, happy hour, the story…
+            More to show
           </button>
         )}
         {promote.length > 0 && !auto.promote && (
@@ -1525,7 +1527,6 @@ export default function PlanSetup({
                 }}
               >
                 <span style={{ display: 'block', fontSize: 13.5, fontWeight: on ? 700 : 600, color: on ? '#c0564f' : C.ink, lineHeight: 1.25, paddingRight: on ? 20 : 0 }}>{o.label}</span>
-                <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 3, lineHeight: 1.35 }}>{o.sub}</span>
                 {on && (
                   <span style={{ position: 'absolute', top: 10, right: 10, width: 18, height: 18, borderRadius: 99, background: '#c0564f', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Ban size={11} strokeWidth={3} />
@@ -1580,7 +1581,7 @@ export default function PlanSetup({
           <div style={{ marginBottom: 8 }}>
             <GroupLabel>Anything else</GroupLabel>
             <div style={{ fontSize: 12, color: C.faint, marginBottom: 9, lineHeight: 1.45 }}>
-              Optional. The plan is built from your answers above; this goes to the people who do the work.
+              Optional. Goes straight to the team.
             </div>
             <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <MessageSquare size={16} style={{ color: C.faint, flex: '0 0 auto', marginTop: 9 }} />
@@ -1624,11 +1625,7 @@ export default function PlanSetup({
             <ArrowRight size={17} />
           </button>
         </div>
-        {last && (
-          <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, padding: '13px 4px 4px', textAlign: 'center' }}>
-            You pick when each piece goes out after the plan is built, not now.
-          </div>
-        )}
+
       </section>
       )}
 
@@ -1636,7 +1633,26 @@ export default function PlanSetup({
           time. Bleeds to the screen edge so it reads as a sheet sliding up, not another card. */}
       {sheetLines.length > 0 ? (
         <div style={{ position: 'sticky', bottom: 0, margin: '0 -14px 0', zIndex: 3 }}>
-          <PlanSheet title="Your plan so far" lines={sheetLines} />
+          {sheetOpen ? (
+            <div onClick={() => setSheetOpen(false)} style={{ cursor: 'pointer' }}>
+              <PlanSheet title="Your plan so far" lines={sheetLines} />
+            </div>
+          ) : (
+            <button
+              type="button" onClick={() => setSheetOpen(true)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                background: '#fff', border: 'none', borderTop: '0.5px solid rgba(0,0,0,0.08)',
+                borderRadius: '16px 16px 0 0', padding: '13px 20px', cursor: 'pointer',
+                boxShadow: '0 -4px 16px rgba(0,0,0,0.05)', fontFamily: APPLE,
+              }}
+            >
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: '#6E6E73' }}>Your plan so far</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: DESK.mintDeep }}>
+                {sheetLines.filter((l) => !l.ghost).length} things
+              </span>
+            </button>
+          )}
         </div>
       ) : (
         <div style={{ height: 28 }} />
