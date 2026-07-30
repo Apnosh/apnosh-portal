@@ -20,7 +20,7 @@
 import { useMemo, useState } from 'react'
 import { ArrowRight, MessageSquare, Link2, Check, Users, Star, Moon, TrendingUp, Wand2, Ban, Store, Megaphone } from 'lucide-react'
 import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
-import { DESK, DeskKeyframes, PlanSheet, paperGround, type PlanSheetLine } from '@/components/campaigns/desk/ui'
+import { DESK, DeskKeyframes, PlanSheet, type PlanSheetLine } from '@/components/campaigns/desk/ui'
 import { connectRecommendations, isKnown, type PlanInputs } from '@/lib/campaigns/data/plan-inputs'
 import {
   PLAN_GOALS,
@@ -199,37 +199,35 @@ const CSS = `
    focus ring — the caret is the only affordance it needs, and anything else competes with the
    sentence being written. */
 .ps-say { -webkit-appearance:none; appearance:none; }
-.ps-say::placeholder { color:#B7B2A6; }
+.ps-say::placeholder { color:#C7C7CC; }
 .ps-say:focus { outline:none; }
 .ps-go { transition: opacity .18s ease, transform .12s ease, box-shadow .25s ease, background .25s ease; }
 .ps-go:active:not(:disabled) { transform: scale(.985); }
 
-/* The stationery sheet the owner writes on: faint ruled baselines, a deep soft float off the
-   paper desk, and a mint glow the moment the pen touches it. */
+/* The writing surface, Apple-clean: a white card floating on light gray, one hairline border,
+   one soft shadow, and a quiet mint ring only when the caret is inside. No texture. */
 .ps-sheet {
-  background:
-    repeating-linear-gradient(to bottom, transparent 0, transparent 33px, rgba(22,33,28,0.055) 33px, rgba(22,33,28,0.055) 34px),
-    #FFFFFF;
-  background-position: 0 18px;
-  border: 1px solid #E4E0D6;
-  border-radius: 18px;
-  box-shadow: 0 1px 2px rgba(22,33,28,0.05), 0 28px 56px -28px rgba(22,33,28,0.28);
-  transition: box-shadow .3s ease, border-color .3s ease;
+  background: #FFFFFF;
+  border: 0.5px solid rgba(0,0,0,0.08);
+  border-radius: 22px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 12px 32px rgba(0,0,0,0.06);
+  transition: box-shadow .35s cubic-bezier(.25,.1,.25,1), border-color .35s cubic-bezier(.25,.1,.25,1);
 }
 .ps-sheet:focus-within {
-  border-color: rgba(74,189,152,0.55);
-  box-shadow: 0 1px 2px rgba(22,33,28,0.05), 0 28px 56px -26px rgba(46,154,120,0.30), 0 0 0 4px rgba(74,189,152,0.10);
+  border-color: rgba(74,189,152,0.45);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 12px 32px rgba(0,0,0,0.06), 0 0 0 4px rgba(74,189,152,0.12);
 }
 
-/* The staged entrance: mark, title, sheet laid down one after another. */
-@keyframes psRise { from { opacity:0; transform: translateY(14px) } to { opacity:1; transform:none } }
-.ps-hero1 { animation: psRise .55s cubic-bezier(.2,.7,.2,1) both }
-.ps-hero2 { animation: psRise .55s cubic-bezier(.2,.7,.2,1) .08s both }
-.ps-hero3 { animation: psRise .55s cubic-bezier(.2,.7,.2,1) .16s both }
-.ps-hero4 { animation: psRise .55s cubic-bezier(.2,.7,.2,1) .26s both }
+/* The staged entrance, on Apple timing: quick, weightless, done. */
+@keyframes psRise { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform:none } }
+.ps-hero1 { animation: psRise .4s cubic-bezier(.25,.1,.25,1) both }
+.ps-hero2 { animation: psRise .4s cubic-bezier(.25,.1,.25,1) .06s both }
+.ps-hero3 { animation: psRise .4s cubic-bezier(.25,.1,.25,1) .12s both }
+.ps-hero4 { animation: psRise .4s cubic-bezier(.25,.1,.25,1) .2s both }
 
-.ps-chip { transition: transform .12s ease, border-color .15s ease, background .15s ease; }
-.ps-chip:active { transform: scale(.97); }
+.ps-chip { transition: transform .12s ease, background .15s ease, box-shadow .15s ease; }
+.ps-chip:active { transform: scale(.98); }
+.ps-chip:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
 
 @media (prefers-reduced-motion: reduce) {
   .ps-pick, .ps-go, .ps-chip { transition:none }
@@ -563,7 +561,7 @@ export default function PlanSetup({
   }
 
   return (
-    <div style={{ ...paperGround, minHeight: '100%', padding: '18px 14px 0', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ background: '#F5F5F7', minHeight: '100%', padding: '18px 14px 0', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       <style>{CSS}</style>
       <DeskKeyframes />
 
@@ -571,18 +569,14 @@ export default function PlanSetup({
               answered it collapses to the quote card in the question walk below, so the owner is
               never scrolled past their own finished answer. */}
       {showHero && (
-      <section style={{ marginBottom: 38, position: 'relative' }}>
-        {/* A soft mint aurora behind the opening moment: depth, not decoration. */}
-        <div aria-hidden style={{ position: 'absolute', inset: '-18px -14px auto', height: 260, background: 'radial-gradient(420px 220px at 50% -40px, rgba(74,189,152,0.12), transparent 70%)', pointerEvents: 'none' }} />
-
-        <div className="ps-hero1" style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10, position: 'relative' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill={DESK.mintDeep} aria-hidden><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-          <span style={{ fontFamily: DESK.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '.16em', textTransform: 'uppercase', color: DESK.mintDeep }}>New campaign</span>
+      <section style={{ marginBottom: 38, position: 'relative', paddingTop: 26 }}>
+        <div className="ps-hero1" style={{ marginBottom: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: '#86868B' }}>New campaign</span>
         </div>
-        <h2 className="ps-hero2" style={{ fontFamily: DISPLAY, fontSize: 32, fontWeight: 650, color: DESK.ink, lineHeight: 1.08, margin: '0 0 8px', letterSpacing: '-0.028em', position: 'relative' }}>
+        <h2 className="ps-hero2" style={{ fontFamily: DISPLAY, fontSize: 34, fontWeight: 700, color: '#1D1D1F', lineHeight: 1.07, margin: '0 0 10px', letterSpacing: '-0.03em' }}>
           Describe your campaign
         </h2>
-        <p className="ps-hero2" style={{ fontSize: 14, color: DESK.ink2, lineHeight: 1.5, margin: '0 0 20px', maxWidth: '32ch', position: 'relative' }}>
+        <p className="ps-hero2" style={{ fontSize: 15, color: '#6E6E73', lineHeight: 1.5, margin: '0 0 24px', maxWidth: '34ch', letterSpacing: '-0.01em' }}>
           Say it the way you would say it out loud. We work out the rest.
         </p>
 
@@ -607,20 +601,20 @@ export default function PlanSetup({
         {/* Three real briefs that type themselves onto the sheet. Gone the moment there is a word
             on it: a running start, never a template. */}
         {(a.described ?? '').trim().length === 0 && situations.length === 0 && (
-          <div className="ps-hero4" style={{ marginTop: 12, position: 'relative' }}>
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, letterSpacing: '.14em', textTransform: 'uppercase', color: DESK.mute, marginBottom: 8 }}>Or start from one of these</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+          <div className="ps-hero4" style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#86868B', marginBottom: 9 }}>Try one of these</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {EXAMPLES.map((s) => (
                 <button
                   key={s} type="button" className="ps-chip" onClick={() => typeExample(s)}
                   style={{
-                    textAlign: 'left', cursor: 'pointer', display: 'flex', gap: 9, alignItems: 'flex-start',
-                    border: '1.5px dashed rgba(74,189,152,0.4)', background: 'rgba(234,246,241,0.6)',
-                    borderRadius: 13, padding: '10px 13px', fontFamily: "'Inter',system-ui,sans-serif",
+                    textAlign: 'left', cursor: 'pointer',
+                    border: '0.5px solid rgba(0,0,0,0.08)', background: '#FFFFFF',
+                    borderRadius: 14, padding: '12px 15px', fontFamily: "'Inter',system-ui,sans-serif",
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
                   }}
                 >
-                  <span aria-hidden style={{ color: DESK.mintDeep, fontWeight: 700, fontSize: 13, lineHeight: '19px' }}>&ldquo;</span>
-                  <span style={{ fontSize: 13, color: DESK.ink2, lineHeight: 1.45 }}>{s.replace(/\.$/, '')}&rdquo;</span>
+                  <span style={{ fontSize: 13.5, color: '#1D1D1F', lineHeight: 1.45, letterSpacing: '-0.01em' }}>{s.replace(/\.$/, '')}</span>
                 </button>
               ))}
             </div>
@@ -634,18 +628,17 @@ export default function PlanSetup({
           type="button" className="ps-go" onClick={async () => { await describe(); setEditDesc(false); setQi(0) }}
           disabled={reading || (a.described ?? '').trim().length < 12}
           style={{
-            width: '100%', height: 50, marginTop: 8, borderRadius: 25, border: 'none',
+            width: '100%', height: 50, marginTop: 16, borderRadius: 25, border: 'none',
             cursor: (a.described ?? '').trim().length < 12 ? 'default' : 'pointer',
-            background: (a.described ?? '').trim().length < 12 ? '#DDD9CE' : DESK.grad,
-            color: (a.described ?? '').trim().length < 12 ? '#fff' : '#fff',
-            boxShadow: (a.described ?? '').trim().length < 12 ? 'none' : '0 10px 26px rgba(46,154,120,0.32)',
-            fontFamily: "'Inter',system-ui,sans-serif", fontSize: 16, fontWeight: 620, letterSpacing: '-0.01em',
+            background: (a.described ?? '').trim().length < 12 ? '#E8E8ED' : DESK.mint,
+            color: (a.described ?? '').trim().length < 12 ? '#AEAEB2' : '#fff',
+            fontFamily: "'Inter',system-ui,sans-serif", fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em',
           }}
         >
           {reading ? 'Reading…' : 'Continue'}
         </button>
 
-        <div style={{ fontSize: 12, color: C.faint, textAlign: 'center', marginTop: 11, lineHeight: 1.45 }}>
+        <div style={{ fontSize: 12, color: '#86868B', textAlign: 'center', marginTop: 12, lineHeight: 1.45 }}>
           Anything you write reaches the people doing the work.
         </div>
 
