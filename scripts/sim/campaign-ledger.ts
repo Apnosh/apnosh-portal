@@ -19,7 +19,7 @@ import {
   type LedgerAnswers, type LedgerField, type LedgerKey,
 } from '../../src/lib/campaigns/data/campaign-ledger'
 import { known, missing, type PlanInputs } from '../../src/lib/campaigns/data/plan-inputs'
-import { sanitizeRead, relevantAssets } from '../../src/lib/campaigns/data/plan-goals'
+import { sanitizeRead, relevantAssets, credibleDate, monthHintFrom } from '../../src/lib/campaigns/data/plan-goals'
 import { WALK_TITLES, WALK_SUBS, WALK_LINES, OPTIONAL_QUESTION_SUBS, fill } from '../../src/lib/campaigns/data/walk-copy'
 import { goalWorkDays, feasibilityFor, classifyDay } from '../../src/lib/campaigns/data/date-feasibility'
 import { dealSentence, parseDeal, targetPresets } from '../../src/lib/campaigns/data/deal-composer'
@@ -268,6 +268,16 @@ s.group('sanitizeRead: bounds and shapes')
   s.eq('a $2 budget is out of bounds', sanitizeRead({ budget: q(2, '$2 a month') }, TEXT, []), {})
   s.eq('a $90,000 budget is out of bounds', sanitizeRead({ budget: q(90000, '$90,000') }, TEXT, []), {})
   s.check('a string budget parses', sanitizeRead({ budget: q('$2,000', 'we can spend') }, TEXT, []).budget === 2000)
+  /* THE DAY MUST BE THEIRS (owner catch 2026-07-30): "in September" is a month, not a date. */
+  s.check('"in September" cannot become September 1st', credibleDate('2026-09-01', 'we are opening our second location in September') === false)
+  s.check('"September 12th" keeps its day', credibleDate('2026-09-12', 'opening September 12th 2026') === true)
+  s.check('"September 1st" genuinely stated keeps day one', credibleDate('2026-09-01', 'grand opening September 1st') === true)
+  s.check('a year never vouches for a day (2026 is not day 2)', credibleDate('2026-09-02', 'opening in 2026') === false)
+  s.check('a read ISO start with no day in the text is dropped', sanitizeRead({ start: { value: '2026-09-01', quote: 'in September' } }, 'we are opening in September', []).start === undefined)
+  s.check('a read ISO start with its day in the text survives', sanitizeRead({ start: { value: '2026-09-12', quote: 'starting September 12' } }, 'starting September 12', []).start === '2026-09-12')
+  s.check('"in September" yields the September month hint', monthHintFrom('we are opening in September', '2026-07-30') === '2026-09')
+  s.check('a month already past rolls to next year', monthHintFrom('back in January it was slow', '2026-07-30') === '2027-01')
+  s.check('no month, no hint', monthHintFrom('we are opening soon', '2026-07-30') === null)
   s.check("start accepts 'asap' and ISO, nothing else",
     sanitizeRead({ start: q('asap', 'asap really') }, TEXT, []).start === 'asap'
     && sanitizeRead({ start: q('2026-09-01', 'starting 2026-09-01') }, TEXT, []).start === '2026-09-01'

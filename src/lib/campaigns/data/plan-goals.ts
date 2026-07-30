@@ -774,6 +774,36 @@ export interface DescribeRead {
   offerExpiry?: string
 }
 
+/**
+ * A full date is only credible when its DAY appears as a number in the owner's own text
+ * (owner catch, 2026-07-30: "in September" was being coerced to "September 1st"). Digit runs
+ * are compared whole, so day 2 never sneaks in via "2026". A month with no day is not a date;
+ * it is a month, and the screen should ask with the calendar opened there.
+ */
+export function credibleDate(iso: string | null | undefined, text: string): boolean {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false
+  const day = Number(iso.slice(8))
+  const runs = (text.match(/\d+/g) ?? []).map(Number)
+  return runs.includes(day)
+}
+
+const MONTH_NAMES = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december']
+
+/**
+ * The month they wrote, when they wrote one ("in September"), local and deterministic — no
+ * model involved, so the calendar opens on their month whether or not the read behaved. A
+ * month already past this year means next year. Returns 'YYYY-MM' or null.
+ */
+export function monthHintFrom(text: string, todayISO: string): string | null {
+  const t = text.toLowerCase()
+  const idx = MONTH_NAMES.findIndex((m) => t.includes(m))
+  if (idx < 0) return null
+  const y = Number(todayISO.slice(0, 4))
+  const cur = Number(todayISO.slice(5, 7))
+  const year = idx + 1 < cur ? y + 1 : y
+  return `${year}-${String(idx + 1).padStart(2, '0')}`
+}
+
 /** Normalize for the quote-in-text check: case, curly quotes, collapsed whitespace. */
 const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim()
 
@@ -809,7 +839,7 @@ export function sanitizeRead(raw: unknown, text: string, menuNames: readonly str
   if (Number.isFinite(n) && n >= 50 && n <= 50000) out.budget = n
 
   const start = backed('start')
-  if (start === 'asap' || (typeof start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(start))) out.start = start
+  if (start === 'asap' || (typeof start === 'string' && credibleDate(start, text))) out.start = start
 
   const reach = backed('reach')
   if (REACH_OPTIONS.some((o) => o.v === reach)) out.reach = reach as DescribeRead['reach']

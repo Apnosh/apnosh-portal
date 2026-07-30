@@ -29,17 +29,20 @@ export default function WalkCalendar({
   value,
   onChange,
   goal,
+  hintMonth,
 }: {
   value?: string
   onChange: (dayISO: string) => void
   /** The goal whose work has to fit before the day. Tints derive from its real turnarounds. */
   goal: string
+  /** 'YYYY-MM' from the paragraph ("in September"): a month is not a date, but it IS where the
+   *  calendar should open and ask. */
+  hintMonth?: string
 }) {
   const todayISO = iso(new Date())
   const f = feasibilityFor(goal, todayISO)
-  /* Open on the month that holds the answer, else the first comfortable day, so the first
-   * screenful contains good days rather than a wall of gray. */
-  const anchor = value ?? f.firstComfortable
+  /* Open on the answer's month, else the month they wrote, else the first comfortable day. */
+  const anchor = value ?? (hintMonth ? `${hintMonth}-15` : f.firstComfortable)
   const [ym, setYm] = useState(() => anchor.slice(0, 7))
   const [y, m] = ym.split('-').map(Number)
 

@@ -21,7 +21,7 @@
  */
 import { NextResponse } from 'next/server'
 import {
-  SITUATIONS, OWNER_ASSETS, PLAN_QUESTIONS, sanitizeAsk, sanitizeRead,
+  SITUATIONS, OWNER_ASSETS, PLAN_QUESTIONS, sanitizeAsk, sanitizeRead, credibleDate, monthHintFrom,
   SHIFT_OPTIONS, AUDIENCE_OPTIONS, REACH_OPTIONS, AVOID_OPTIONS, PROMOTE_OTHER_OPTIONS,
   type PlanQuestion, type DescribeRead,
 } from '@/lib/campaigns/data/plan-goals'
@@ -56,6 +56,11 @@ export interface DescribeResult {
    * evidence that something actually read what they wrote.
    */
   ask: { q: PlanQuestion; why: string }[]
+  /**
+   * "In September" is a month, not a date. When the model names a day the owner never wrote,
+   * the day is dropped and the month survives here, so the calendar opens on it and ASKS.
+   */
+  whenHint: string | null
   /**
    * THE WIDE READ (Campaign Ledger Phase 2): everything else the paragraph already answered —
    * budget, reach, shifts, avoid list, audience, promote subject, start, offer economics. Each
@@ -209,6 +214,15 @@ export async function POST(req: Request) {
    */
   const validAsk = sanitizeAsk(parsed.ask)
 
+  /* THE DAY MUST BE THEIRS (owner catch): a full date only survives when its day-of-month
+   * appears as a number in the text. A coerced "September 1st" from "in September" becomes a
+   * month hint instead — the calendar opens there and asks. */
+  const rawWhen = iso(parsed.when)
+  const when = rawWhen && credibleDate(rawWhen, text) ? rawWhen : null
+  const until = ((u) => (u && credibleDate(u, text) ? u : null))(iso(parsed.until))
+  /* Local month scan, not the model: their month anchors the calendar either way. */
+  const whenHint = when ? null : monthHintFrom(text, new Date().toISOString().slice(0, 10))
+
   /* The wide read, through the evidence law: no quote in their text, no field. Pure and
    * sim-locked in plan-goals, so this route cannot loosen it. */
   const read = sanitizeRead((parsed as { read?: unknown }).read, text, menu)
@@ -222,8 +236,9 @@ export async function POST(req: Request) {
       situation: validSit,
       // The situation owns the shape. A model disagreeing with our own table is the model being wrong.
       shape,
-      when: iso(parsed.when),
-      until: iso(parsed.until),
+      when,
+      until,
+      whenHint,
       assets: validAssets,
       summary: typeof parsed.summary === 'string' ? parsed.summary.slice(0, 200) : '',
       unsupported: (Array.isArray(parsed.unsupported) ? parsed.unsupported : []).slice(0, 6).map((x) => String(x).slice(0, 80)),

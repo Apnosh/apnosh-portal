@@ -91,6 +91,8 @@ export interface Answers {
    * Phase 3 uses it to remove already-answered questions from the walk.
    */
   readKeys?: string[]
+  /** UI anchor only, never a ledger field: the month they wrote when no day was stated. */
+  whenHint?: string
   /** ASKED provenance for defaults-shaped answers: keys the owner explicitly tapped in the walk.
    *  Distinguishes "chose ASAP" (asked) from "never saw the question" (defaulted, said out loud
    *  on the plan). */
@@ -746,6 +748,7 @@ export default function PlanSetup({
         assets: string[]; summary: string; unsupported: string[]
         ask?: { q: PlanQuestion; why: string }[]
         read?: DescribeRead
+        whenHint?: string | null
       }
       setReadBack({ summary: res.summary, unsupported: res.unsupported ?? [] })
       const sit = res.situation ? situationByValue(res.situation) : undefined
@@ -768,6 +771,7 @@ export default function PlanSetup({
       set({
         ...(sit ? { situations: [sit.v], goals: [sit.goal], shape: sit.shape } : {}),
         ...(res.when ? { when: res.when } : {}),
+        ...(res.whenHint ? { whenHint: res.whenHint } : {}),
         ...(res.until ? { until: res.until } : {}),
         ...(res.assets?.length ? { assets: res.assets } : {}),
         ...(rd.budget != null ? { budget: rd.budget } : {}),
@@ -1072,6 +1076,7 @@ export default function PlanSetup({
               <WalkCalendar
                 goal={picked[0]?.goal ?? goals[0] ?? 'more-new'}
                 value={a.when}
+                hintMonth={a.whenHint}
                 onChange={(day) => set({ when: day, readKeys: readKeys.filter((k) => k !== 'when'), touched: [...new Set([...(a.touched ?? []), 'start'])] })}
               />
             ) : shape === 'run' ? (
