@@ -209,21 +209,17 @@ const CSS = `
 
 /* ────────────────────────────────────────────────────────────────────────────────── bits ── */
 
+/* Apple-clean plate (owner request 2026-07-30): no chip furniture, the system face carrying the
+ * title, the counter a whisper above it. Matches the describe screen's tokens exactly. */
+const APPLE = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif"
 function Act({ n, of, title, sub, children }: { n: number; of: number; title: string; sub: string; children: React.ReactNode }) {
   return (
     <section style={{ marginBottom: 38 }}>
-      {/* The marker waits until there is a sequence to be inside: a lone "1 OF 1" is furniture. */}
       {of > 1 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 7 }}>
-          {/* The desk's ink stage plate: a square, not a chip. */}
-          <span style={{ width: 24, height: 24, borderRadius: 7, background: DESK.ink, color: DESK.paper, fontFamily: DISPLAY, fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {n}
-          </span>
-          <span style={{ fontFamily: DESK.mono, fontSize: 10.5, fontWeight: 700, letterSpacing: '.12em', color: DESK.mute }}>{n} OF {of}</span>
-        </div>
+        <div style={{ fontFamily: APPLE, fontSize: 11, fontWeight: 600, letterSpacing: '.09em', color: '#AEAEB2', marginBottom: 8 }}>{n} OF {of}</div>
       )}
-      <h2 style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, lineHeight: 1.12, margin: '0 0 6px', letterSpacing: '-0.024em' }}>{title}</h2>
-      <p style={{ fontSize: 14, color: C.mute, lineHeight: 1.5, margin: '0 0 22px', maxWidth: '30ch' }}>{sub}</p>
+      <h2 style={{ fontFamily: APPLE, fontSize: 25, fontWeight: 700, color: '#1D1D1F', lineHeight: 1.15, margin: '0 0 6px', letterSpacing: '-0.022em' }}>{title}</h2>
+      <p style={{ fontFamily: APPLE, fontSize: 14, color: '#6E6E73', lineHeight: 1.5, margin: '0 0 20px', maxWidth: '32ch' }}>{sub}</p>
       {children}
     </section>
   )
@@ -235,8 +231,9 @@ function Card({ on, label, sub, badge, dim, onClick }: { on: boolean; label: str
       type="button" onClick={onClick} className="ps-pick" disabled={dim}
       style={{
         position: 'relative', textAlign: 'left', cursor: dim ? 'default' : 'pointer', opacity: dim ? 0.4 : 1,
-        border: `1.5px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff',
-        borderRadius: 15, padding: '11px 12px', fontFamily: "'Inter',system-ui,sans-serif",
+        border: `1.5px solid ${on ? C.green : 'rgba(0,0,0,0.07)'}`, background: on ? C.greenSoft : '#fff',
+        borderRadius: 16, padding: '12px 13px', fontFamily: APPLE,
+        boxShadow: on ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
       }}
     >
       <span style={{ display: 'block', fontSize: 13.5, fontWeight: on ? 700 : 600, color: on ? C.greenDk : C.ink, lineHeight: 1.25, paddingRight: on ? 20 : 0 }}>{label}</span>
@@ -268,8 +265,8 @@ function DecideForMe({ on, resolves, onToggle }: { on: boolean; resolves: string
         type="button" onClick={onToggle} className="ps-pick"
         style={{
           width: '100%', textAlign: 'left', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start',
-          border: `1.5px ${on ? 'solid' : 'dashed'} ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff',
-          borderRadius: 15, padding: '12px 13px', fontFamily: "'Inter',system-ui,sans-serif",
+          border: `1.5px ${on ? 'solid' : 'dashed'} ${on ? C.green : 'rgba(0,0,0,0.10)'}`, background: on ? C.greenSoft : '#fff',
+          borderRadius: 16, padding: '12px 13px', fontFamily: APPLE,
         }}
       >
         <Wand2 size={16} style={{ color: on ? C.greenDk : C.faint, flex: '0 0 auto', marginTop: 1 }} />
@@ -1049,9 +1046,9 @@ export default function PlanSetup({
               <>
                 <div style={{ display: 'flex', gap: 9 }}>
                   <input aria-label="Starts" type="date" value={a.when ?? ''} onChange={(e) => set({ when: e.target.value })}
-                    style={{ flex: 1, minWidth: 0, height: 48, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
+                    style={{ flex: 1, minWidth: 0, height: 48, border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
                   <input aria-label="Ends" type="date" value={a.until ?? ''} onChange={(e) => set({ until: e.target.value })}
-                    style={{ flex: 1, minWidth: 0, height: 48, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
+                    style={{ flex: 1, minWidth: 0, height: 48, border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
                 </div>
                 <div style={{ fontSize: 11.5, color: AMBER_DK, background: AMBER_SOFT, borderRadius: 9, padding: '8px 10px', marginTop: 9, lineHeight: 1.45 }}>
                   {WL['run.note']}
@@ -1095,8 +1092,8 @@ export default function PlanSetup({
             </div>
             {wantBudget && (
               <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', padding: '0 14px', height: 50 }}>
-                  <span style={{ fontFamily: DISPLAY, fontSize: 18, color: C.mute }}>$</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10, border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', padding: '0 14px', height: 50 }}>
+                  <span style={{ fontFamily: APPLE, fontWeight: 600, fontSize: 18, color: '#6E6E73' }}>$</span>
                   <input
                     inputMode="numeric" aria-label="Your budget" autoFocus
                     value={a.budget != null ? a.budget.toLocaleString('en-US') : ''}
@@ -1106,7 +1103,7 @@ export default function PlanSetup({
                       set({ budget: n ? Number(n) : undefined, readKeys: readKeys.filter((k) => k !== 'budget') })
                     }}
                     placeholder={moneyRange ? Math.round((moneyRange.lo + moneyRange.hi) / 2).toLocaleString('en-US') : '1,000'}
-                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: DISPLAY, fontSize: 18, color: C.ink }}
+                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: APPLE, fontWeight: 600, fontSize: 18, color: '#1D1D1F' }}
                   />
                   <span style={{ fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap' }}>{dated ? 'for the launch' : 'a month'}</span>
                 </div>
@@ -1149,7 +1146,7 @@ export default function PlanSetup({
                 value={a.offerTerms ?? ''} aria-label="The offer" autoFocus
                 onChange={(e) => set({ offerTerms: e.target.value || undefined, readKeys: readKeys.filter((k) => k !== 'offerTerms') })}
                 placeholder="Say the deal in your own words"
-                style={{ width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px', border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink }}
+                style={{ width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink }}
               />
             ) : (
               <>
@@ -1157,7 +1154,7 @@ export default function PlanSetup({
                 <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                   {DEAL_KINDS.map((k) => (
                     <button key={k.v} type="button" className="ps-pick" onClick={() => setDealAnd({ ...deal, kind: k.v })}
-                      style={{ flex: 1, cursor: 'pointer', background: deal.kind === k.v ? '#f0faf6' : '#fff', border: `1.5px solid ${deal.kind === k.v ? C.green : DESK.line}`, borderRadius: 11, padding: '9px 4px', fontSize: 12.5, fontWeight: 700, color: deal.kind === k.v ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
+                      style={{ flex: 1, cursor: 'pointer', background: deal.kind === k.v ? '#f0faf6' : '#fff', border: `1.5px solid ${deal.kind === k.v ? C.green : 'rgba(0,0,0,0.08)'}`, borderRadius: 11, padding: '9px 4px', fontSize: 12.5, fontWeight: 700, color: deal.kind === k.v ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
                       {k.label}
                     </button>
                   ))}
@@ -1167,7 +1164,7 @@ export default function PlanSetup({
                   <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                     {(DEAL_KINDS.find((k) => k.v === deal.kind)?.amounts ?? []).map((n) => (
                       <button key={n} type="button" className="ps-pick" onClick={() => setDealAnd({ ...deal, amount: n })}
-                        style={{ flex: 1, cursor: 'pointer', background: deal.amount === n ? '#f0faf6' : '#fff', border: `1.5px solid ${deal.amount === n ? C.green : DESK.line}`, borderRadius: 11, padding: '9px 4px', fontSize: 12.5, fontWeight: 700, color: deal.amount === n ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
+                        style={{ flex: 1, cursor: 'pointer', background: deal.amount === n ? '#f0faf6' : '#fff', border: `1.5px solid ${deal.amount === n ? C.green : 'rgba(0,0,0,0.08)'}`, borderRadius: 11, padding: '9px 4px', fontSize: 12.5, fontWeight: 700, color: deal.amount === n ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
                         {deal.kind === 'pct' ? `${n}%` : `$${n}`}
                       </button>
                     ))}
@@ -1177,12 +1174,12 @@ export default function PlanSetup({
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {['everything', ...menu.slice(0, 6).map((m) => m.name)].map((sc) => (
                     <button key={sc} type="button" className="ps-pick" onClick={() => { setDealScopeOther(false); setDealAnd({ ...deal, scope: sc }) }}
-                      style={{ cursor: 'pointer', background: !dealScopeOther && deal.scope === sc ? '#f0faf6' : '#fff', border: `1.5px solid ${!dealScopeOther && deal.scope === sc ? C.green : DESK.line}`, borderRadius: 99, padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: !dealScopeOther && deal.scope === sc ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
+                      style={{ cursor: 'pointer', background: !dealScopeOther && deal.scope === sc ? '#f0faf6' : '#fff', border: `1.5px solid ${!dealScopeOther && deal.scope === sc ? C.green : 'rgba(0,0,0,0.08)'}`, borderRadius: 99, padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: !dealScopeOther && deal.scope === sc ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
                       {sc === 'everything' ? 'Everything' : sc}
                     </button>
                   ))}
                   <button type="button" className="ps-pick" onClick={() => { setDealScopeOther(true); setDealAnd({ ...deal, scope: '' }) }}
-                    style={{ cursor: 'pointer', background: '#fff', border: `1.5px dashed ${dealScopeOther ? C.green : DESK.line}`, borderRadius: 99, padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: dealScopeOther ? C.greenDk : C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}>
+                    style={{ cursor: 'pointer', background: '#fff', border: `1.5px dashed ${dealScopeOther ? C.green : 'rgba(0,0,0,0.12)'}`, borderRadius: 99, padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: dealScopeOther ? C.greenDk : C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}>
                     Something else
                   </button>
                 </div>
@@ -1191,7 +1188,7 @@ export default function PlanSetup({
                     value={deal.scope} aria-label="What the deal covers" autoFocus
                     onChange={(e) => setDealAnd({ ...deal, scope: e.target.value })}
                     placeholder="weekday lunches, the tasting menu…"
-                    style={{ width: '100%', boxSizing: 'border-box', height: 44, marginTop: 8, padding: '0 13px', border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13.5, color: C.ink }}
+                    style={{ width: '100%', boxSizing: 'border-box', height: 44, marginTop: 8, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13.5, color: C.ink }}
                   />
                 )}
               </>
@@ -1215,7 +1212,7 @@ export default function PlanSetup({
                 <input
                   key={f.k} value={a[f.k] ?? ''} placeholder={f.ph} aria-label={f.ph}
                   onChange={(e) => set({ [f.k]: e.target.value || undefined, readKeys: readKeys.filter((k) => k !== f.k) })}
-                  style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', height: 42, padding: '0 12px', border: `1.5px solid ${DESK.line}`, borderRadius: 12, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 12.5, color: C.ink }}
+                  style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', height: 42, padding: '0 12px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 12, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 12.5, color: C.ink }}
                 />
               ))}
             </div>
@@ -1256,7 +1253,7 @@ export default function PlanSetup({
                           key={c} type="button" className="ps-pick" onClick={() => toggle(c)}
                           style={{
                             cursor: 'pointer', background: on ? '#f0faf6' : '#fff',
-                            border: `1.5px solid ${on ? C.green : DESK.line}`, borderRadius: 99,
+                            border: `1.5px solid ${on ? C.green : 'rgba(0,0,0,0.08)'}`, borderRadius: 99,
                             padding: '8px 13px', fontFamily: "'Inter',system-ui,sans-serif",
                             fontSize: 12.5, fontWeight: 600, color: on ? C.greenDk : C.ink,
                           }}
@@ -1273,7 +1270,7 @@ export default function PlanSetup({
                     placeholder={WL['capacity.who.ph']}
                     style={{
                       width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px',
-                      border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none',
+                      border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none',
                       fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink,
                     }}
                   />
@@ -1309,7 +1306,7 @@ export default function PlanSetup({
                     inputMode="numeric" aria-label="Success target" autoFocus
                     value={a.successTarget != null ? a.successTarget.toLocaleString('en-US') : ''}
                     onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); set({ successTarget: n ? Number(n) : undefined }) }}
-                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: DISPLAY, fontSize: 17, color: C.ink }}
+                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: APPLE, fontWeight: 600, fontSize: 17, color: '#1D1D1F' }}
                   />
                   <span style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap' }}>{targetSug.metric}</span>
                 </div>
@@ -1336,7 +1333,7 @@ export default function PlanSetup({
                     key={d.v} type="button" className="ps-pick" aria-label={d.v} aria-pressed={on}
                     onClick={() => set({ shift: flip(shift, d.v) })}
                     style={{
-                      aspectRatio: '0.9', cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`,
+                      aspectRatio: '0.9', cursor: 'pointer', border: `1.5px solid ${on ? C.green : 'rgba(0,0,0,0.08)'}`,
                       background: on ? '#f0faf6' : '#fff', borderRadius: 11, fontSize: 13, fontWeight: 800,
                       color: on ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif",
                     }}
@@ -1353,7 +1350,7 @@ export default function PlanSetup({
                   <button
                     key={o.v} type="button" className="ps-pick" onClick={() => set({ shift: flip(shift, o.v) })}
                     style={{
-                      cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`,
+                      cursor: 'pointer', border: `1.5px solid ${on ? C.green : 'rgba(0,0,0,0.08)'}`,
                       background: on ? '#f0faf6' : '#fff', borderRadius: 99, padding: '8px 13px',
                       fontSize: 12.5, fontWeight: 600, color: on ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif",
                     }}
@@ -1382,7 +1379,7 @@ export default function PlanSetup({
                 key={o.v} type="button" className="ps-pick"
                 onClick={() => set({ assets: flip(assets.filter((x) => x !== 'Nothing yet'), o.v) })}
                 style={{
-                  textAlign: 'left', cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`,
+                  textAlign: 'left', cursor: 'pointer', border: `1.5px solid ${on ? C.green : 'rgba(0,0,0,0.08)'}`,
                   background: on ? '#f0faf6' : '#fff', borderRadius: 14, padding: '11px 12px',
                   fontFamily: "'Inter',system-ui,sans-serif",
                 }}
@@ -1436,7 +1433,7 @@ export default function PlanSetup({
         ) : (
           <button
             type="button" onClick={() => setMorePromote(true)}
-            style={{ width: '100%', marginTop: 10, background: '#fff', border: `1.5px dashed ${C.line}`, borderRadius: 14, padding: '11px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}
+            style={{ width: '100%', marginTop: 10, background: '#fff', border: '1.5px dashed rgba(0,0,0,0.12)', borderRadius: 14, padding: '11px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}
           >
             More to show: the bar, the patio, happy hour, the story…
           </button>
@@ -1494,7 +1491,7 @@ export default function PlanSetup({
               <button
                 key={o.v} type="button" className="ps-pick" onClick={() => set({ audience: flip(audience, o.v), auto: { ...auto, audience: false } })}
                 style={{
-                  cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`, opacity: auto.audience ? 0.45 : 1,
+                  cursor: 'pointer', border: `1.5px solid ${on ? C.green : 'rgba(0,0,0,0.08)'}`, opacity: auto.audience ? 0.45 : 1,
                   background: on ? '#f0faf6' : '#fff', borderRadius: 99, padding: '8px 13px',
                   fontSize: 12.5, fontWeight: 600, color: on ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif",
                 }}
@@ -1523,7 +1520,7 @@ export default function PlanSetup({
                 key={o.v} type="button" className="ps-pick" onClick={() => set({ avoid: flip(avoid, o.v) })}
                 style={{
                   position: 'relative', textAlign: 'left', cursor: 'pointer',
-                  border: `1.5px solid ${on ? '#c0564f' : C.line}`, background: on ? '#fdeeee' : '#fff',
+                  border: `1.5px solid ${on ? '#c0564f' : 'rgba(0,0,0,0.08)'}`, background: on ? '#fdeeee' : '#fff',
                   borderRadius: 15, padding: '11px 12px', fontFamily: "'Inter',system-ui,sans-serif",
                 }}
               >
@@ -1554,7 +1551,7 @@ export default function PlanSetup({
           onKeyDown={(e) => { if (e.key === 'Enter' && avoidText.trim()) { set({ avoid: [...avoid, avoidText.trim()] }); setAvoidText('') } }}
           onBlur={() => { if (avoidText.trim()) { set({ avoid: [...avoid, avoidText.trim()] }); setAvoidText('') } }}
           placeholder="Anything else we should never do? Type it and press enter."
-          style={{ width: '100%', boxSizing: 'border-box', height: 44, marginTop: 10, padding: '0 13px', border: `1.5px solid ${C.line}`, borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13, color: C.ink }}
+          style={{ width: '100%', boxSizing: 'border-box', height: 44, marginTop: 10, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13, color: C.ink }}
         />
         {avoid.length > 0 && (
           <div style={{ fontSize: 12.5, color: C.ink, marginTop: 10 }}>
@@ -1604,8 +1601,8 @@ export default function PlanSetup({
             onClick={() => (qi === 0 ? setEditDesc(true) : setQi(qi - 1))}
             style={{
               flexShrink: 0, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer',
-              border: `1.5px solid ${DESK.line}`, background: '#fff', color: DESK.ink2,
-              fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14.5, fontWeight: 600,
+              border: '1px solid rgba(0,0,0,0.10)', background: '#fff', color: '#1D1D1F',
+              fontFamily: APPLE, fontSize: 14.5, fontWeight: 600,
             }}
           >
             Back
@@ -1617,9 +1614,9 @@ export default function PlanSetup({
             style={{
               flex: 1, height: 50, borderRadius: 25, border: 'none',
               cursor: nextOk && (!last || ready) ? 'pointer' : 'default',
-              background: nextOk && (!last || ready) ? DESK.grad : '#DDD9CE', color: '#fff',
-              boxShadow: nextOk && (!last || ready) ? '0 10px 26px rgba(46,154,120,0.32)' : 'none',
-              fontFamily: "'Inter',system-ui,sans-serif", fontSize: 16, fontWeight: 650, letterSpacing: '-0.01em',
+              background: nextOk && (!last || ready) ? DESK.mint : '#E8E8ED',
+              color: nextOk && (!last || ready) ? '#fff' : '#AEAEB2',
+              fontFamily: APPLE, fontSize: 16, fontWeight: 600, letterSpacing: '-0.01em',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
             }}
           >
@@ -1650,7 +1647,7 @@ export default function PlanSetup({
 
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.faint, margin: '18px 0 8px 2px' }}>
+    <div style={{ fontFamily: APPLE, fontSize: 11, fontWeight: 600, letterSpacing: '.07em', textTransform: 'uppercase', color: '#86868B', margin: '18px 0 8px 2px' }}>
       {children}
     </div>
   )
