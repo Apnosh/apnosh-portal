@@ -32,6 +32,7 @@ import {
   situationByValue,
   gapsFor,
   assetsCover,
+  relevantAssets,
   SHIFT_DAYS,
   SHIFT_PARTS,
   AUDIENCE_OPTIONS,
@@ -281,6 +282,37 @@ function DecideForMe({ on, resolves, onToggle }: { on: boolean; resolves: string
   )
 }
 
+/** The type-your-own line every pick-list carries (owner rule: suggestions never box you in). */
+function AddOwn({ placeholder, onAdd }: { placeholder: string; onAdd: (v: string) => void }) {
+  const [t, setT] = useState('')
+  const commit = () => { const v = t.trim(); if (v) { onAdd(v); setT('') } }
+  return (
+    <input
+      value={t} aria-label={placeholder}
+      onChange={(e) => setT(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter') commit() }}
+      onBlur={commit}
+      placeholder={placeholder}
+      style={{ width: '100%', boxSizing: 'border-box', height: 44, marginTop: 10, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: APPLE, fontSize: 13, color: '#1D1D1F' }}
+    />
+  )
+}
+
+/** Their own answers, as removable chips. */
+function OwnChips({ values, onRemove }: { values: string[]; onRemove: (v: string) => void }) {
+  if (!values.length) return null
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 10 }}>
+      {values.map((v) => (
+        <button key={v} type="button" onClick={() => onRemove(v)}
+          style={{ cursor: 'pointer', background: '#f0faf6', border: `1.5px solid ${'#4ABD98'}`, borderRadius: 99, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#2E9A78', fontFamily: APPLE }}>
+          {v} ×
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /* ───────────────────────────────────────────────────────────────────────────────── screen ── */
 
 export default function PlanSetup({
@@ -433,8 +465,6 @@ export default function PlanSetup({
   const [morePromote, setMorePromote] = useState(
     () => menu.length === 0 || (a.promote ?? []).some((v) => PROMOTE_OTHER.some((g) => g.items.some((i) => i.v === v))),
   )
-  /* The avoid question's free line, for the personal deal-breakers no chip covers. */
-  const [avoidText, setAvoidText] = useState('')
   /* The plan sheet folds to one bar (owner: as simple as possible). Tap to read it. */
   const [sheetOpen, setSheetOpen] = useState(false)
   /* The deal composer's in-progress picks. Composed sentences round-trip through offerTerms;
@@ -1372,7 +1402,7 @@ export default function PlanSetup({
 
         {q === 'assets' && <Act n={qi + 2} of={1 + qlist.length} title={WT.assets} sub={whyAsk('assets') || WS.assets}>
         <Grid>
-          {OWNER_ASSETS.filter((o) => o.v !== 'Nothing yet').map((o) => {
+          {relevantAssets(situations).map((v) => OWNER_ASSETS.find((o) => o.v === v)!).map((o) => {
             const on = assets.includes(o.v)
             /* The payoff swaps in on selection: honesty reads as visible money and strength. */
             const line = on ? (ASSET_PAYOFF[o.v] ?? o.sub) : undefined
@@ -1392,6 +1422,8 @@ export default function PlanSetup({
             )
           })}
         </Grid>
+        <OwnChips values={assets.filter((v) => !OWNER_ASSETS.some((o) => o.v === v))} onRemove={(v) => set({ assets: assets.filter((x) => x !== v) })} />
+        <AddOwn placeholder={WL['own.ph']} onAdd={(v) => set({ assets: [...assets.filter((x) => x !== 'Nothing yet'), v] })} />
         <button
           type="button"
           onClick={() => set({ assets: assets.includes('Nothing yet') ? [] : ['Nothing yet'] })}
@@ -1440,6 +1472,11 @@ export default function PlanSetup({
             More to show
           </button>
         )}
+        <OwnChips
+          values={promote.filter((v) => !menu.some((m) => m.name === v) && !PROMOTE_OTHER.some((g) => g.items.some((i) => i.v === v)))}
+          onRemove={(v) => set({ promote: promote.filter((x) => x !== v) })}
+        />
+        <AddOwn placeholder={WL['own.ph']} onAdd={(v) => { if (promote.length < 3) set({ promote: [...promote, v], auto: { ...auto, promote: false } }) }} />
         {promote.length > 0 && !auto.promote && (
           <div style={{ fontSize: 12.5, color: C.ink, marginTop: 11 }}>
             {WL['restate.promote']}: <b style={{ color: DESK.mintDeep }}>{promote[0]}</b>
@@ -1509,6 +1546,8 @@ export default function PlanSetup({
             fixed address people walk into: {dropped.join(', ')}. You are not charged for them.
           </div>
         )}
+        <OwnChips values={audience.filter((v) => !AUDIENCE.some((o) => o.v === v))} onRemove={(v) => set({ audience: audience.filter((x) => x !== v) })} />
+        <AddOwn placeholder={WL['own.ph']} onAdd={(v) => set({ audience: [...audience, v], auto: { ...auto, audience: false } })} />
         <DecideForMe on={!!auto.audience} resolves={autoAud} onToggle={() => { setAuto('audience', !auto.audience); if (!auto.audience) set({ audience: [], auto: { ...auto, audience: true } }) }} />
       </Act>}
 
@@ -1546,14 +1585,7 @@ export default function PlanSetup({
             ))}
           </div>
         )}
-        <input
-          value={avoidText} aria-label="Anything else to avoid"
-          onChange={(e) => setAvoidText(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && avoidText.trim()) { set({ avoid: [...avoid, avoidText.trim()] }); setAvoidText('') } }}
-          onBlur={() => { if (avoidText.trim()) { set({ avoid: [...avoid, avoidText.trim()] }); setAvoidText('') } }}
-          placeholder="Anything else we should never do? Type it and press enter."
-          style={{ width: '100%', boxSizing: 'border-box', height: 44, marginTop: 10, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13, color: C.ink }}
-        />
+        <AddOwn placeholder={WL['own.ph']} onAdd={(v) => set({ avoid: [...avoid, v] })} />
         {avoid.length > 0 && (
           <div style={{ fontSize: 12.5, color: C.ink, marginTop: 10 }}>
             {WL['restate.avoid']}: <b style={{ color: '#c0564f' }}>{avoid.map((v) => v.toLowerCase()).join(', ')}.</b>

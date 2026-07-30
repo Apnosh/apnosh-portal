@@ -65,6 +65,7 @@ export const WALK_LINES: Record<string, string> = {
   'restate.shift': 'Fixing',
   'restate.avoid': 'Never',
   'run.note': 'The team works to the end date. A person checks long runs.',
+  'own.ph': 'Or type your own and press enter',
 }
 
 /**

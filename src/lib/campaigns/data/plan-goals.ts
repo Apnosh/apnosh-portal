@@ -574,6 +574,28 @@ export function assetsBoost(assets?: readonly string[]): string[] {
   return [...new Set((assets ?? []).flatMap((v) => assetByValue(v)?.boosts ?? []))]
 }
 
+/**
+ * TAILORED SUGGESTIONS (owner, 2026-07-30): the asset list ordered by how much THIS campaign
+ * can use each one. No new data: an asset matters here exactly when its covers/boosts intersect
+ * the picked situations' candidate services. A DJ leads for an event, a room leads for
+ * catering, and the order is honest because it derives from the same tables that price and
+ * rank the work. Ties keep the authored order. 'Nothing yet' never ranks (it is the escape).
+ */
+export function relevantAssets(situations: readonly string[]): string[] {
+  const svc = new Set(
+    situations.flatMap((v) => {
+      const sit = situationByValue(v)
+      return sit ? candidatesForGoal(sit.goal).map((c) => c.id) : []
+    }),
+  )
+  const score = (a: OwnerAsset) => [...(a.covers ?? []), ...(a.boosts ?? [])].filter((id) => svc.has(id)).length
+  return OWNER_ASSETS
+    .filter((a) => a.v !== 'Nothing yet')
+    .map((a, i) => ({ v: a.v, s: score(a), i }))
+    .sort((x, y) => y.s - x.s || x.i - y.i)
+    .map((x) => x.v)
+}
+
 /** Goals worth offering for a shape. A grand opening is not an ongoing programme. */
 export function goalsForShape(shape?: CampaignShape): readonly PlanGoal[] {
   if (!shape) return PLAN_GOALS

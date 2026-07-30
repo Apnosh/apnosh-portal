@@ -19,7 +19,7 @@ import {
   type LedgerAnswers, type LedgerField, type LedgerKey,
 } from '../../src/lib/campaigns/data/campaign-ledger'
 import { known, missing, type PlanInputs } from '../../src/lib/campaigns/data/plan-inputs'
-import { sanitizeRead } from '../../src/lib/campaigns/data/plan-goals'
+import { sanitizeRead, relevantAssets } from '../../src/lib/campaigns/data/plan-goals'
 import { WALK_TITLES, WALK_SUBS, WALK_LINES, OPTIONAL_QUESTION_SUBS, fill } from '../../src/lib/campaigns/data/walk-copy'
 import { goalWorkDays, feasibilityFor, classifyDay } from '../../src/lib/campaigns/data/date-feasibility'
 import { dealSentence, parseDeal, targetPresets } from '../../src/lib/campaigns/data/deal-composer'
@@ -422,6 +422,22 @@ s.group('Target presets: careful under, ambitious over, never zero')
   s.eq('anchored at 200', tp, { careful: 140, suggested: 200, ambitious: 300 })
   const tiny = targetPresets(1)
   s.check('a tiny anchor never collapses to zero', tiny.careful >= 1 && tiny.ambitious >= 2)
+}
+
+/* ── 13. Tailored suggestions: the asset order derives from this campaign's own services ──── */
+
+s.group('relevantAssets: ordered by what THIS campaign can use, from existing data')
+{
+  const rank = (sit: string, v: string) => relevantAssets([sit]).indexOf(v)
+  s.check('an event leads with the DJ', rank('event', 'A DJ or live music') === 0)
+  s.check('catering leads with the room', rank('catering', 'A private room or patio') === 0)
+  s.check('reviews leads with own photos, staff on camera next', rank('reviews', 'Our own photos or video') === 0 && rank('reviews', 'Staff happy to be on camera') === 1)
+  s.check('the room matters more to catering than to reviews', rank('catering', 'A private room or patio') < rank('reviews', 'A private room or patio'))
+  for (const sit of ['event', 'catering', 'reviews', 'opening', 'known']) {
+    const r = relevantAssets([sit])
+    s.check(`${sit}: every real asset appears exactly once, Nothing yet never does`, r.length === 8 && new Set(r).size === 8 && !r.includes('Nothing yet'))
+  }
+  s.check('an unknown situation keeps the authored order', relevantAssets(['nope'])[0] === 'A DJ or live music')
 }
 
 const ok = s.report('Campaign ledger (Phases 1-3 + walk design)')
