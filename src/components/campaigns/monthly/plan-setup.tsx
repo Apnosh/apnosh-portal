@@ -46,6 +46,7 @@ import { excludedByReach, datedAnchors, monthlyFloor, budgetCeiling, type Reach 
 import { offerApplies, demandSpikeApplies, suggestedTarget } from '@/lib/campaigns/data/campaign-ledger'
 import { WALK_TITLES as WT, WALK_SUBS as WS, WALK_LINES as WL, ASSET_PAYOFF, CAPACITY_CHIPS, fill } from '@/lib/campaigns/data/walk-copy'
 import WalkCalendar from './walk-calendar'
+import { DEAL_KINDS, dealSentence, parseDeal, targetPresets, type Deal } from '@/lib/campaigns/data/deal-composer'
 import type { GoalKey } from '@/lib/campaigns/types'
 
 export interface Answers {
@@ -437,6 +438,18 @@ export default function PlanSetup({
   )
   /* The avoid question's free line, for the personal deal-breakers no chip covers. */
   const [avoidText, setAvoidText] = useState('')
+  /* The deal composer's in-progress picks. Composed sentences round-trip through offerTerms;
+   * anything unparseable (a paragraph read, or the escape) shows as free text instead. */
+  const [deal, setDeal] = useState<Deal>(() => parseDeal(a.offerTerms) ?? { kind: 'pct', amount: 20, scope: '' })
+  const [dealFree, setDealFree] = useState(() => !!a.offerTerms && !parseDeal(a.offerTerms))
+  const [dealScopeOther, setDealScopeOther] = useState(false)
+  const setDealAnd = (d: Deal) => {
+    setDeal(d)
+    const line = dealSentence(d)
+    set({ offerTerms: line ?? undefined, readKeys: readKeys.filter((k) => k !== 'offerTerms') })
+  }
+  /* The target's own-number input, opened only on request; the cards are the main path. */
+  const [ownTarget, setOwnTarget] = useState(false)
   /* The start screen only shows when the paragraph did not already answer it: a read date (dated
    * shapes) or a read start (ongoing) is held, and the law is never to ask what is held. The
    * read-back chips below the recap are the correction path. Money ALWAYS shows — a read budget
@@ -1109,28 +1122,88 @@ export default function PlanSetup({
             default (owner rule): the walk cannot pass this screen without them. */}
         {q === 'offer' && (
           <Act n={qi + 2} of={1 + qlist.length} title={WT.offer} sub={WS.offer}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {([
-                { k: 'offerTerms' as const, label: 'The offer', ph: '20% off all sandwiches', req: true },
-                { k: 'offerLimit' as const, label: 'Any limit', ph: 'First 100 customers, one per table…', req: false },
-                { k: 'offerExpiry' as const, label: 'When it ends', ph: 'Opening week, end of August…', req: false },
-              ]).map((f) => (
-                <div key={f.k}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: C.mute, marginBottom: 5 }}>
-                    {f.label}{f.req ? '' : '  ·  optional'}
-                  </div>
-                  <input
-                    value={a[f.k] ?? ''} placeholder={f.ph} aria-label={f.label}
-                    onChange={(e) => set({ [f.k]: e.target.value || undefined, readKeys: readKeys.filter((k) => k !== f.k) })}
-                    style={{
-                      width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px',
-                      border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none',
-                      fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink,
-                    }}
-                  />
+            {dealFree ? (
+              /* The escape, for the genuinely odd deal. One line, still never guessed. */
+              <input
+                value={a.offerTerms ?? ''} aria-label="The offer" autoFocus
+                onChange={(e) => set({ offerTerms: e.target.value || undefined, readKeys: readKeys.filter((k) => k !== 'offerTerms') })}
+                placeholder="Say the deal in your own words"
+                style={{ width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px', border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink }}
+              />
+            ) : (
+              <>
+                {/* the shape */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                  {DEAL_KINDS.map((k) => (
+                    <button key={k.v} type="button" className="ps-pick" onClick={() => setDealAnd({ ...deal, kind: k.v })}
+                      style={{ flex: 1, cursor: 'pointer', background: deal.kind === k.v ? '#f0faf6' : '#fff', border: `1.5px solid ${deal.kind === k.v ? C.green : DESK.line}`, borderRadius: 11, padding: '9px 4px', fontSize: 12.5, fontWeight: 700, color: deal.kind === k.v ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
+                      {k.label}
+                    </button>
+                  ))}
                 </div>
+                {/* the amount, only for shapes that have one */}
+                {(deal.kind === 'pct' || deal.kind === 'usd') && (
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    {(DEAL_KINDS.find((k) => k.v === deal.kind)?.amounts ?? []).map((n) => (
+                      <button key={n} type="button" className="ps-pick" onClick={() => setDealAnd({ ...deal, amount: n })}
+                        style={{ flex: 1, cursor: 'pointer', background: deal.amount === n ? '#f0faf6' : '#fff', border: `1.5px solid ${deal.amount === n ? C.green : DESK.line}`, borderRadius: 11, padding: '9px 4px', fontSize: 12.5, fontWeight: 700, color: deal.amount === n ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
+                        {deal.kind === 'pct' ? `${n}%` : `$${n}`}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {/* what it covers: their menu first */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {['everything', ...menu.slice(0, 6).map((m) => m.name)].map((sc) => (
+                    <button key={sc} type="button" className="ps-pick" onClick={() => { setDealScopeOther(false); setDealAnd({ ...deal, scope: sc }) }}
+                      style={{ cursor: 'pointer', background: !dealScopeOther && deal.scope === sc ? '#f0faf6' : '#fff', border: `1.5px solid ${!dealScopeOther && deal.scope === sc ? C.green : DESK.line}`, borderRadius: 99, padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: !dealScopeOther && deal.scope === sc ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif" }}>
+                      {sc === 'everything' ? 'Everything' : sc}
+                    </button>
+                  ))}
+                  <button type="button" className="ps-pick" onClick={() => { setDealScopeOther(true); setDealAnd({ ...deal, scope: '' }) }}
+                    style={{ cursor: 'pointer', background: '#fff', border: `1.5px dashed ${dealScopeOther ? C.green : DESK.line}`, borderRadius: 99, padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: dealScopeOther ? C.greenDk : C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}>
+                    Something else
+                  </button>
+                </div>
+                {dealScopeOther && (
+                  <input
+                    value={deal.scope} aria-label="What the deal covers" autoFocus
+                    onChange={(e) => setDealAnd({ ...deal, scope: e.target.value })}
+                    placeholder="weekday lunches, the tasting menu…"
+                    style={{ width: '100%', boxSizing: 'border-box', height: 44, marginTop: 8, padding: '0 13px', border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13.5, color: C.ink }}
+                  />
+                )}
+              </>
+            )}
+            {/* the coupon: the deal as a guest will read it. The one decorated element, on purpose. */}
+            {a.offerTerms && (
+              <div style={{ border: `1.5px dashed ${C.green}`, borderRadius: 14, padding: '12px 15px', marginTop: 12, background: '#fff' }}>
+                <div style={{ fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase', color: C.greenDk, marginBottom: 3, fontWeight: 700 }}>Your deal, as guests see it</div>
+                <div style={{ fontSize: 17, fontWeight: 800, color: C.ink, letterSpacing: '-0.01em' }}>{a.offerTerms}</div>
+                {(a.offerLimit || a.offerExpiry) && (
+                  <div style={{ fontSize: 10.5, color: C.mute, marginTop: 4 }}>{[a.offerLimit, a.offerExpiry ? `Ends: ${a.offerExpiry}` : ''].filter(Boolean).join(' · ')}</div>
+                )}
+              </div>
+            )}
+            {/* the fine print, where fine print belongs */}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              {([
+                { k: 'offerLimit' as const, ph: 'Any limit? First 100…' },
+                { k: 'offerExpiry' as const, ph: 'When it ends? Opening week…' },
+              ]).map((f) => (
+                <input
+                  key={f.k} value={a[f.k] ?? ''} placeholder={f.ph} aria-label={f.ph}
+                  onChange={(e) => set({ [f.k]: e.target.value || undefined, readKeys: readKeys.filter((k) => k !== f.k) })}
+                  style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', height: 42, padding: '0 12px', border: `1.5px solid ${DESK.line}`, borderRadius: 12, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 12.5, color: C.ink }}
+                />
               ))}
             </div>
+            <button
+              type="button" onClick={() => { setDealFree(!dealFree); if (!dealFree) set({ offerTerms: undefined }) }}
+              style={{ display: 'block', margin: '12px auto 0', background: 'none', border: 'none', padding: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: C.faint, fontFamily: "'Inter',system-ui,sans-serif" }}
+            >
+              {dealFree ? 'Back to the quick picks' : WL['offer.escape']}
+            </button>
           </Act>
         )}
 
@@ -1191,22 +1264,44 @@ export default function PlanSetup({
 
         {/* target ── every campaign gets one number to hit, on the metric its recipe already
             tracks. Suggested so the owner confirms rather than invents; never revenue. */}
-        {q === 'target' && targetSug && (
-          <Act n={qi + 2} of={1 + qlist.length} title={WT.target} sub={fill(WS.target, { metric: targetSug.metric })}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', padding: '0 14px', height: 50 }}>
-              <input
-                inputMode="numeric" aria-label="Success target"
-                value={a.successTarget != null ? a.successTarget.toLocaleString('en-US') : ''}
-                onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); set({ successTarget: n ? Number(n) : undefined }) }}
-                style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: DISPLAY, fontSize: 18, color: C.ink }}
-              />
-              <span style={{ fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap' }}>{targetSug.metric}</span>
-            </div>
-            <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, marginTop: 8 }}>
-              We suggested {targetSug.value.toLocaleString('en-US')} — {targetSug.basis}. Change it if you know your number.
-            </div>
-          </Act>
-        )}
+        {q === 'target' && targetSug && (() => {
+          const tp = targetPresets(targetSug.value)
+          const CARDS = [
+            { key: 'careful', label: 'Careful', v: tp.careful },
+            { key: 'suggested', label: 'Suggested', v: tp.suggested, badge: 'Suggested' },
+            { key: 'ambitious', label: 'Ambitious', v: tp.ambitious },
+          ]
+          return (
+            <Act n={qi + 2} of={1 + qlist.length} title={WT.target} sub={fill(WS.target, { metric: targetSug.metric })}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {CARDS.map((c) => (
+                  <Card
+                    key={c.key} on={!ownTarget && a.successTarget === c.v} label={c.label} badge={c.badge}
+                    sub={`${c.v.toLocaleString('en-US')} ${targetSug.metric}${c.key === 'suggested' ? `. ${targetSug.basis[0].toUpperCase()}${targetSug.basis.slice(1)}.` : ''}`}
+                    onClick={() => { setOwnTarget(false); set({ successTarget: c.v }) }}
+                  />
+                ))}
+              </div>
+              {ownTarget && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 9, border: `1.5px solid ${C.green}`, borderRadius: 13, background: '#fff', padding: '0 14px', height: 48 }}>
+                  <input
+                    inputMode="numeric" aria-label="Success target" autoFocus
+                    value={a.successTarget != null ? a.successTarget.toLocaleString('en-US') : ''}
+                    onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); set({ successTarget: n ? Number(n) : undefined }) }}
+                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: DISPLAY, fontSize: 17, color: C.ink }}
+                  />
+                  <span style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap' }}>{targetSug.metric}</span>
+                </div>
+              )}
+              <button
+                type="button" onClick={() => setOwnTarget(!ownTarget)}
+                style={{ display: 'block', margin: '11px auto 0', background: 'none', border: 'none', padding: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600, color: ownTarget ? DESK.mintDeep : C.faint, fontFamily: "'Inter',system-ui,sans-serif" }}
+              >
+                {ownTarget ? 'Back to the suggestions' : 'My own number'}
+              </button>
+            </Act>
+          )
+        })()}
 
         {/* shift ── which shifts, its own screen when they said shifts are the problem. */}
         {q === 'shift' && (

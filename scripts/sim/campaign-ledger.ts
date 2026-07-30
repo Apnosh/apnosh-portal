@@ -22,6 +22,7 @@ import { known, missing, type PlanInputs } from '../../src/lib/campaigns/data/pl
 import { sanitizeRead } from '../../src/lib/campaigns/data/plan-goals'
 import { WALK_TITLES, WALK_SUBS, WALK_LINES, OPTIONAL_QUESTION_SUBS, fill } from '../../src/lib/campaigns/data/walk-copy'
 import { goalWorkDays, feasibilityFor, classifyDay } from '../../src/lib/campaigns/data/date-feasibility'
+import { dealSentence, parseDeal, targetPresets } from '../../src/lib/campaigns/data/deal-composer'
 import { afterBusinessDays } from '../../src/lib/campaigns/builder/plan-gates'
 import type { MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
 import { SITUATIONS } from '../../src/lib/campaigns/data/plan-goals'
@@ -385,5 +386,38 @@ s.group('Date feasibility: tints derive from real turnarounds, same split as the
   s.check('a goal with no turnaround data gets the honest 10-day floor, never zero', goalWorkDays('definitely-not-a-goal') === 10)
 }
 
-const ok = s.report('Campaign ledger (Phases 1-3 + walk copy + calendar)')
+/* ── 12. The deal composer: no composed deal can be vague (design plan P4) ────────────────── */
+
+s.group('Deal composer: compose/parse round-trip, nothing vague')
+{
+  const DEALS = [
+    { kind: 'pct' as const, amount: 20, scope: 'all sandwiches' },
+    { kind: 'usd' as const, amount: 10, scope: 'everything' },
+    { kind: 'free' as const, scope: 'drink with any entree' },
+    { kind: 'bogo' as const, scope: 'tacos' },
+  ]
+  for (const d of DEALS) {
+    const line = dealSentence(d)
+    s.check(`${d.kind}: composes a concrete sentence`, !!line && line.length > 5, line)
+    const back = parseDeal(line ?? undefined)
+    s.check(`${d.kind}: parses back to the same deal`, !!back && back.kind === d.kind && back.scope === d.scope && (back.amount ?? null) === (d.amount ?? null))
+    s.check(`${d.kind}: no em dash in the coupon line`, !/[—–]/.test(line ?? ''))
+  }
+  s.check('an empty scope cannot compose', dealSentence({ kind: 'pct', amount: 20, scope: '  ' }) === null)
+  s.check('a zero or absurd percent cannot compose', dealSentence({ kind: 'pct', amount: 0, scope: 'x' }) === null && dealSentence({ kind: 'pct', amount: 100, scope: 'x' }) === null)
+  s.check('free text from the escape does not false-parse', parseDeal('buy my cousin a boat and eat free forever') === null)
+  /* The redemption-cap round trip: a composed limit still caps suggestedTarget. */
+  const capped = suggestedTarget({ situations: ['opening'], described: '20% off', offerLimit: 'First 150 customers' })
+  s.check('a composed limit caps the suggested target', capped?.value === 150)
+}
+
+s.group('Target presets: careful under, ambitious over, never zero')
+{
+  const tp = targetPresets(200)
+  s.eq('anchored at 200', tp, { careful: 140, suggested: 200, ambitious: 300 })
+  const tiny = targetPresets(1)
+  s.check('a tiny anchor never collapses to zero', tiny.careful >= 1 && tiny.ambitious >= 2)
+}
+
+const ok = s.report('Campaign ledger (Phases 1-3 + walk design)')
 process.exit(ok ? 0 : 1)
