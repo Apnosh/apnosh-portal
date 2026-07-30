@@ -124,4 +124,18 @@ Not a new brain: the composer, ladders, tilt rules, gates and vault stay. This i
 contract that guarantees the composer is always fed everything it can use — which is what makes
 "the perfect campaign for exactly what was described" a checkable claim instead of a slogan.
 
-Status: PLANNED 2026-07-29. Phases 0 of 5 complete.
+Status: Phases 1-2 of 5 complete.
+
+- **Phase 1 SHIPPED** (2026-07-29, 3cf592f): campaign-ledger.ts (`ledgerFor` + tiers + owner
+  rules encoded), readKeys provenance, amendment fields on Answers + brief, sim (96 checks).
+- **Phase 2 SHIPPED** (2026-07-30): the wide describe read. The route extracts budget, reach,
+  shift, avoid, audience, promote, start and the offer fields, each behind the evidence law
+  (`sanitizeRead` in plan-goals: quote must appear verbatim in the owner's text, values must
+  survive our own vocabularies — both sim-locked, 120 checks total). The walk drops read
+  questions; every take renders as a chip under the recap with tap-to-reopen (the reopened
+  question arrives with the read answer preselected); budget prefills the money screen but
+  always gets its explicit confirm tap ("nothing is sized until you do"). Live-verified: a
+  grand-opening paragraph answered 8 fields and left a 1-question walk.
+
+Next: Phase 3 (need-driven asking, conditional offer/capacity questions, success target with
+suggested number), then the PILOT GATE with the two test clients before Phase 4.

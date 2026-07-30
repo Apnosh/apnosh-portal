@@ -19,6 +19,7 @@ import {
   type LedgerAnswers, type LedgerField, type LedgerKey,
 } from '../../src/lib/campaigns/data/campaign-ledger'
 import { known, missing, type PlanInputs } from '../../src/lib/campaigns/data/plan-inputs'
+import { sanitizeRead } from '../../src/lib/campaigns/data/plan-goals'
 import type { MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
 import { SITUATIONS } from '../../src/lib/campaigns/data/plan-goals'
 
@@ -207,5 +208,77 @@ s.group('ledgerHoles: only consumed-today missing fields count')
   s.check('a dated campaign with no date IS a hole', new Set(ledgerHoles(ledgerFor(RICH_INPUTS, SIGNALS, { ...OFFER_DATED, when: undefined, readKeys: ['situation'] })).map((f) => f.key)).has('when'))
 }
 
-const ok = s.report('Campaign ledger (Phase 1)')
+/* ── 8. Phase 2: the wide describe read + the evidence law ────────────────────────────────── */
+
+s.group('sanitizeRead: the evidence law — no quote in the text, no field')
+{
+  const TEXT = 'Grand opening Sept 12. We have about $2,000 for it, 20% off all sandwiches for the first 100 customers, want the whole city to know. Tuesdays are dead.'
+  const MENU = ['Spicy Chicken Sandwich', 'Garlic Fries']
+  const q = (value: unknown, quote: string) => ({ value, quote })
+
+  const good = sanitizeRead({
+    budget: q(2000, 'about $2,000'),
+    reach: q('city', 'the whole city'),
+    shift: q(['Monday to Wednesday'], 'Tuesdays are dead'),
+    offerTerms: q('20% off all sandwiches', '20% off all sandwiches'),
+    offerLimit: q('first 100 customers', 'first 100 customers'),
+    promote: q(['Spicy Chicken Sandwich'], 'sandwiches'),
+  }, TEXT, MENU)
+  s.eq('a fully-backed read survives intact', good, {
+    budget: 2000, reach: 'city', shift: ['Monday to Wednesday'],
+    promote: ['Spicy Chicken Sandwich'], offerTerms: '20% off all sandwiches', offerLimit: 'first 100 customers',
+  })
+
+  s.eq('an invented quote kills the field', sanitizeRead({ budget: q(2000, 'we discussed five grand') }, TEXT, MENU), {})
+  s.eq('a paraphrased quote kills the field', sanitizeRead({ reach: q('city', 'citywide reach') }, TEXT, MENU), {})
+  s.eq('a missing quote kills the field', sanitizeRead({ budget: { value: 2000 } }, TEXT, MENU), {})
+  s.check('case and curly quotes do not break a real quote', sanitizeRead({ budget: q(2000, 'About $2,000') }, TEXT, MENU).budget === 2000)
+}
+
+s.group('sanitizeRead: the model may not widen the vocabulary')
+{
+  const TEXT = 'no discounts ever, families mostly, and push the karaoke machine'
+  const q = (value: unknown, quote: string) => ({ value, quote })
+  s.eq('an off-list avoid value vanishes', sanitizeRead({ avoid: q(['Coupons'], 'no discounts ever') }, TEXT, []), {})
+  s.check('the on-list neighbour survives', sanitizeRead({ avoid: q(['Discounts and deals', 'Coupons'], 'no discounts ever') }, TEXT, []).avoid?.length === 1)
+  s.eq('an off-list audience vanishes', sanitizeRead({ audience: q(['Millennials'], 'families mostly') }, TEXT, []), {})
+  s.check('the mapped audience survives', sanitizeRead({ audience: q(['Families with kids'], 'families mostly') }, TEXT, []).audience?.[0] === 'Families with kids')
+  s.eq('promote not on the menu or the promote list vanishes', sanitizeRead({ promote: q(['the karaoke machine'], 'push the karaoke machine') }, TEXT, ['Pad Thai']), {})
+  s.check('a promote-list value needs no menu', sanitizeRead({ promote: q(['Happy hour'], 'push the karaoke machine') }, TEXT, []).promote?.[0] === 'Happy hour')
+  s.eq('an off-list reach vanishes', sanitizeRead({ reach: q('nationwide', 'push the karaoke machine') }, TEXT, []), {})
+}
+
+s.group('sanitizeRead: bounds and shapes')
+{
+  const TEXT = 'we can spend $2 a month or maybe $90,000, starting 2026-09-01, asap really'
+  const q = (value: unknown, quote: string) => ({ value, quote })
+  s.eq('a $2 budget is out of bounds', sanitizeRead({ budget: q(2, '$2 a month') }, TEXT, []), {})
+  s.eq('a $90,000 budget is out of bounds', sanitizeRead({ budget: q(90000, '$90,000') }, TEXT, []), {})
+  s.check('a string budget parses', sanitizeRead({ budget: q('$2,000', 'we can spend') }, TEXT, []).budget === 2000)
+  s.check("start accepts 'asap' and ISO, nothing else",
+    sanitizeRead({ start: q('asap', 'asap really') }, TEXT, []).start === 'asap'
+    && sanitizeRead({ start: q('2026-09-01', 'starting 2026-09-01') }, TEXT, []).start === '2026-09-01'
+    && sanitizeRead({ start: q('next tuesday', 'starting') }, TEXT, []).start === undefined)
+  s.eq('garbage in, empty out', sanitizeRead('not an object', TEXT, []), {})
+}
+
+s.group('Ledger: wide-read fields classify read, and flip to asked without provenance')
+{
+  const WIDE: LedgerAnswers = {
+    ...AWARENESS,
+    reach: 'city', budget: 2000, avoid: ['Discounts and deals'], promote: ['Spicy Chicken Sandwich'],
+    readKeys: ['situation', 'reach', 'budget', 'avoid', 'promote', 'shift', 'start'],
+  }
+  const rows = byKey(ledgerFor(RICH_INPUTS, SIGNALS, WIDE))
+  s.check('read reach classifies read, not defaulted', rows.get('reach')?.tier === 'read')
+  s.check('read budget classifies read (confirm tap does not change the source)', rows.get('budget')?.tier === 'read')
+  s.check('read avoid classifies read', rows.get('avoid')?.tier === 'read')
+  s.check('read promote classifies read', rows.get('promote')?.tier === 'read')
+  s.check('read shift classifies read', rows.get('shift')?.tier === 'read')
+  s.check("a read 'asap' start classifies read, not defaulted", rows.get('start')?.tier === 'read')
+  const noProv = byKey(ledgerFor(RICH_INPUTS, SIGNALS, { ...WIDE, readKeys: ['situation'] }))
+  s.check('same answers without provenance classify asked/defaulted', noProv.get('reach')?.tier === 'asked' && noProv.get('budget')?.tier === 'asked' && noProv.get('start')?.tier === 'defaulted')
+}
+
+const ok = s.report('Campaign ledger (Phases 1-2)')
 process.exit(ok ? 0 : 1)

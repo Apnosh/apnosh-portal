@@ -141,14 +141,17 @@ export function ledgerFor(
   const dated = a.shape === 'date' || a.shape === 'run'
   row({ key: 'when', label: dated ? 'The date' : 'The date (not a dated campaign)', tier: a.when ? (wasRead(a, 'when') ? 'read' : 'asked') : dated ? 'missing' : 'known', value: a.when, consumedBy: ['schedule (works backwards)', 'lead-time gate'] })
   if (a.shape === 'run') row({ key: 'until', label: 'Run end', tier: a.until ? (wasRead(a, 'until') ? 'read' : 'asked') : 'missing', value: a.until, consumedBy: ['run window (team works to it)'] })
-  if (!dated) row({ key: 'start', label: 'When it starts', tier: a.start && a.start !== LEDGER_DEFAULTS.start ? 'asked' : 'defaulted', value: a.start ?? LEDGER_DEFAULTS.start, consumedBy: ['brief.start', 'schedule'] })
+  if (!dated) row({ key: 'start', label: 'When it starts', tier: a.start && wasRead(a, 'start') ? 'read' : a.start && a.start !== LEDGER_DEFAULTS.start ? 'asked' : 'defaulted', value: a.start ?? LEDGER_DEFAULTS.start, consumedBy: ['brief.start', 'schedule'] })
   /* Presence, not length: an empty array is "answered with none" — a real answer, not a hole. */
   row({ key: 'assets', label: 'What you bring', tier: a.assets ? (wasRead(a, 'assets') ? 'read' : 'asked') : 'missing', value: a.assets, consumedBy: ['never-billed coverage', 'ranking boost'] })
-  row({ key: 'promote', label: 'What to promote', tier: a.promote?.length || a.auto?.promote ? 'asked' : 'missing', value: a.auto?.promote ? 'auto' : a.promote, consumedBy: ['content briefs'] })
-  row({ key: 'reach', label: 'How far to reach', tier: a.reach && a.reach !== LEDGER_DEFAULTS.reach ? 'asked' : 'defaulted', value: a.reach ?? LEDGER_DEFAULTS.reach, consumedBy: ['address-bound exclusions'] })
-  row({ key: 'shift', label: 'Which shifts', tier: a.shift ? 'asked' : 'missing', value: a.shift, consumedBy: ['night work layered on the goal'] })
-  row({ key: 'avoid', label: 'Never do', tier: a.avoid ? 'asked' : 'missing', value: a.avoid, consumedBy: ['service exclusions', 'tone constraints'] })
-  row({ key: 'budget', label: 'Budget', tier: a.budget != null ? 'asked' : 'missing', value: a.budget, consumedBy: ['plan size (incl. dated launch mode)'] })
+  row({ key: 'promote', label: 'What to promote', tier: a.promote?.length && wasRead(a, 'promote') ? 'read' : a.promote?.length || a.auto?.promote ? 'asked' : 'missing', value: a.auto?.promote ? 'auto' : a.promote, consumedBy: ['content briefs'] })
+  row({ key: 'reach', label: 'How far to reach', tier: a.reach && wasRead(a, 'reach') ? 'read' : a.reach && a.reach !== LEDGER_DEFAULTS.reach ? 'asked' : 'defaulted', value: a.reach ?? LEDGER_DEFAULTS.reach, consumedBy: ['address-bound exclusions'] })
+  row({ key: 'shift', label: 'Which shifts', tier: a.shift ? (wasRead(a, 'shift') ? 'read' : 'asked') : 'missing', value: a.shift, consumedBy: ['night work layered on the goal'] })
+  row({ key: 'avoid', label: 'Never do', tier: a.avoid ? (wasRead(a, 'avoid') ? 'read' : 'asked') : 'missing', value: a.avoid, consumedBy: ['service exclusions', 'tone constraints'] })
+  /* A read budget still classifies 'read' after its confirm tap — the confirmation is the money
+   * rule (nothing sizes without the tap), not a change of source. Typing a new number flips the
+   * provenance to asked in the screen. */
+  row({ key: 'budget', label: 'Budget', tier: a.budget != null ? (wasRead(a, 'budget') ? 'read' : 'asked') : 'missing', value: a.budget, consumedBy: ['plan size (incl. dated launch mode)'] })
   row({ key: 'notes', label: 'Anything else', tier: a.notes != null ? 'asked' : 'missing', value: a.notes, consumedBy: ['the team, verbatim'] })
 
   /* ── Owner amendments: conditional fields, in the ledger only when they apply. ── */

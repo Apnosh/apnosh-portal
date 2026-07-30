@@ -20,7 +20,11 @@
  * plan now, or send the words to a human who reads them. It never pretends to have understood.
  */
 import { NextResponse } from 'next/server'
-import { SITUATIONS, OWNER_ASSETS, PLAN_QUESTIONS, sanitizeAsk, type PlanQuestion } from '@/lib/campaigns/data/plan-goals'
+import {
+  SITUATIONS, OWNER_ASSETS, PLAN_QUESTIONS, sanitizeAsk, sanitizeRead,
+  SHIFT_OPTIONS, AUDIENCE_OPTIONS, REACH_OPTIONS, AVOID_OPTIONS, PROMOTE_OTHER_OPTIONS,
+  type PlanQuestion, type DescribeRead,
+} from '@/lib/campaigns/data/plan-goals'
 
 export const runtime = 'nodejs'
 export const maxDuration = 30
@@ -52,6 +56,14 @@ export interface DescribeResult {
    * evidence that something actually read what they wrote.
    */
   ask: { q: PlanQuestion; why: string }[]
+  /**
+   * THE WIDE READ (Campaign Ledger Phase 2): everything else the paragraph already answered —
+   * budget, reach, shifts, avoid list, audience, promote subject, start, offer economics. Each
+   * field only survives sanitizeRead's evidence law: the model must quote the words it read it
+   * from, and the quote must actually appear in the text. The screen prefills these and drops
+   * the matching question from the walk; budget always gets an explicit confirm tap.
+   */
+  read: DescribeRead
 }
 
 const SYS = `You turn a restaurant owner's description of a marketing campaign into structured fields.
@@ -69,6 +81,20 @@ Return ONLY a JSON object, no prose, with exactly these keys:
   ask         array of {"q": <question id>, "why": <one short sentence>} for the follow-ups THIS
               brief still needs. Ordered most important first. [] if the paragraph already covers
               everything.
+  read        an object holding anything ELSE the paragraph already answered. Every entry is
+              {"value": ..., "quote": "<the owner's exact words you read it from>"}. The quote
+              must be copied VERBATIM from their text — a field with a paraphrased or invented
+              quote is discarded. Omit any field they did not state. Possible keys:
+                budget      value is a number in dollars ("about $2k a month" -> 2000)
+                start       "asap" or "YYYY-MM-DD" — only for campaigns with no fixed date
+                reach       one reach id from the list below
+                shift       array of exact shift strings from the list below
+                avoid       array of exact avoid strings from the list below
+                audience    array of exact audience strings from the list below
+                promote     array of exact promote strings (menu items or the promote list below)
+                offerTerms  the deal itself, short ("20% off all sandwiches")
+                offerLimit  any redemption cap they stated ("first 100 customers")
+                offerExpiry when the offer ends, in their words or a date
 
 Rules:
 - Pick the situation that matches their PRIMARY intent, not an incidental mention.
@@ -88,22 +114,37 @@ Choosing "ask" is the most important thing you do here:
 - Fewer is better. Three is a lot. Zero is a valid and good answer.
 - "why" is one short sentence addressed to the owner, in plain words, referring to what they wrote.
   Good: "You said DJs and giveaways, but not how far out you want to pull people from."
-  Bad: "To better tailor your marketing plan."`
+  Bad: "To better tailor your marketing plan."
 
-function buildPrompt(text: string): string {
+Rules for "read":
+- Only what they actually SAID. "read" exists so we never ask a question the paragraph answered;
+  a guessed value would silently compose a wrong plan, which is worse than asking.
+- The quote is the proof. Copy their words exactly, including typos. Short is fine.
+- For list fields, map their words onto the EXACT strings from the lists ("Tuesdays and
+  Wednesdays are dead" -> shift ["Monday to Wednesday"]). If nothing on the list fits, omit it.
+- A field you put in "read" must NOT also appear in "ask".`
+
+function buildPrompt(text: string, menu: readonly string[]): string {
   const sits = SITUATIONS.map((s) => `  ${s.v} = ${s.label} (${s.sub})`).join('\n')
   const assets = OWNER_ASSETS.map((a) => `  "${a.v}"`).join('\n')
   /* Shipped from PLAN_QUESTIONS rather than restated here, so the rule the model is judging against
    * cannot drift from the rule the rest of the codebase states. */
   const qs = PLAN_QUESTIONS.map((q) => `  ${q.q} — ${q.asks}\n      changes: ${q.changes}`).join('\n')
-  return `Situation ids:\n${sits}\n\nAsset strings (use these exactly):\n${assets}\n\nQuestions you may ask for:\n${qs}\n\nThe owner wrote:\n"""${text}"""`
+  /* The read vocabularies, from the same constants the question screens render. */
+  const list = (opts: readonly { v: string }[]) => opts.map((o) => `  "${o.v}"`).join('\n')
+  const promote = [...menu, ...PROMOTE_OTHER_OPTIONS.flatMap((g) => g.items.map((i) => i.v))]
+  const reach = REACH_OPTIONS.map((o) => `  ${o.v} = ${o.label} (${o.sub})`).join('\n')
+  return `Situation ids:\n${sits}\n\nAsset strings (use these exactly):\n${assets}\n\nQuestions you may ask for:\n${qs}\n\nReach ids:\n${reach}\n\nShift strings:\n${list(SHIFT_OPTIONS)}\n\nAvoid strings:\n${list(AVOID_OPTIONS)}\n\nAudience strings:\n${list(AUDIENCE_OPTIONS)}\n\nPromote strings (their menu first):\n${promote.map((v) => `  "${v}"`).join('\n')}\n\nThe owner wrote:\n"""${text}"""`
 }
 
 export async function POST(req: Request) {
   let text = ''
+  /** Their real menu, sent by the screen, so the promote read can name actual dishes. */
+  let menu: string[] = []
   try {
-    const body = (await req.json()) as { text?: string }
+    const body = (await req.json()) as { text?: string; menu?: unknown }
     text = String(body.text ?? '').trim()
+    menu = (Array.isArray(body.menu) ? body.menu : []).filter((m): m is string => typeof m === 'string' && !!m.trim()).slice(0, 30)
   } catch {
     return NextResponse.json({ ok: false, reason: 'bad-request' }, { status: 400 })
   }
@@ -121,9 +162,9 @@ export async function POST(req: Request) {
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-opus-4-8',
-        max_tokens: 900,
+        max_tokens: 1400,
         system: SYS,
-        messages: [{ role: 'user', content: buildPrompt(text) }],
+        messages: [{ role: 'user', content: buildPrompt(text, menu) }],
       }),
       signal: AbortSignal.timeout(25_000),
     })
@@ -168,6 +209,13 @@ export async function POST(req: Request) {
    */
   const validAsk = sanitizeAsk(parsed.ask)
 
+  /* The wide read, through the evidence law: no quote in their text, no field. Pure and
+   * sim-locked in plan-goals, so this route cannot loosen it. */
+  const read = sanitizeRead((parsed as { read?: unknown }).read, text, menu)
+  /* The read wins over the ask — a field the paragraph answered must not also be asked. */
+  const readAsQ: Record<string, PlanQuestion> = { shift: 'shift', avoid: 'avoid', reach: 'reach', promote: 'promote' }
+  const askMinusRead = validAsk.filter((x) => !Object.entries(readAsQ).some(([k, q]) => q === x.q && k in read))
+
   return NextResponse.json({
     ok: true,
     result: {
@@ -179,7 +227,8 @@ export async function POST(req: Request) {
       assets: validAssets,
       summary: typeof parsed.summary === 'string' ? parsed.summary.slice(0, 200) : '',
       unsupported: (Array.isArray(parsed.unsupported) ? parsed.unsupported : []).slice(0, 6).map((x) => String(x).slice(0, 80)),
-      ask: validAsk,
+      ask: askMinusRead,
+      read,
     } satisfies DescribeResult,
   })
 }

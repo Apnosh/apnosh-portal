@@ -32,6 +32,12 @@ import {
   situationByValue,
   gapsFor,
   assetsCover,
+  SHIFT_OPTIONS,
+  AUDIENCE_OPTIONS,
+  REACH_OPTIONS,
+  AVOID_OPTIONS,
+  PROMOTE_OTHER_OPTIONS,
+  type DescribeRead,
   type PlanGoalKey,
   type PlanQuestion,
   type CampaignShape,
@@ -93,7 +99,6 @@ export interface Answers {
   capacity?: string
 }
 
-type Opt = { v: string; label: string; sub?: string }
 
 /** Icons live here, not in plan-goals.ts, so that module stays free of React imports. */
 const GOAL_ICON: Record<string, typeof Users> = {
@@ -126,81 +131,21 @@ const ONBOARDING_GOAL: Record<string, PlanGoalKey> = {
   regulars: 'regulars',
 }
 
-const SHIFTS: Opt[] = [
-  { v: 'Monday to Wednesday', label: 'Early week', sub: 'Mon, Tue, Wed' },
-  { v: 'Thursday', label: 'Thursdays', sub: '' },
-  { v: 'Sunday', label: 'Sundays', sub: '' },
-  { v: 'Lunch', label: 'Lunch', sub: 'The midday shift' },
-  { v: 'The late window', label: 'Late', sub: 'After the rush' },
-  { v: 'The whole off-season', label: 'Off-season', sub: 'The slow months' },
-]
+/* The option vocabularies live in plan-goals with the rest of the walk's vocabulary, because the
+ * describe read validates against the same lists these screens render (the model may not widen
+ * the vocabulary). Aliased to their old local names. */
+const SHIFTS = SHIFT_OPTIONS
 
 /** Uneven on purpose: the real decisions live under $2,000, and the top end is a long tail. */
 const STOPS = [150, 250, 400, 600, 800, 1100, 1500, 2000, 3000, 4000, 6000, 8000, 10000]
 
-/** Everything a restaurant advertises that is not a dish. The menu is offered alongside these. */
-const PROMOTE_OTHER: { group: string; items: Opt[] }[] = [
-  {
-    group: 'The place',
-    items: [
-      { v: 'The bar and the drinks', label: 'The bar', sub: 'Cocktails, wine, the list' },
-      { v: 'The patio or outdoor space', label: 'The patio', sub: 'Outdoor seating, the terrace' },
-      { v: 'The room itself', label: 'The room', sub: 'The space, the light, the feel' },
-      { v: 'A private or group space', label: 'Private space', sub: 'Back room, big tables' },
-    ],
-  },
-  {
-    group: 'What you do',
-    items: [
-      { v: 'A weekly night or event', label: 'A weekly night', sub: 'Trivia, music, game day' },
-      { v: 'Happy hour', label: 'Happy hour', sub: 'The early window' },
-      { v: 'Catering and private events', label: 'Catering', sub: 'Parties, offices, functions' },
-      { v: 'Takeout and delivery', label: 'Takeout', sub: 'Off-premise, delivery apps' },
-    ],
-  },
-  {
-    group: 'Who you are',
-    items: [
-      { v: 'The chef or the owner', label: 'The chef', sub: 'The person behind it' },
-      { v: 'The family story', label: 'The story', sub: 'How it started, who runs it' },
-      { v: 'How long you have been here', label: 'The years', sub: 'Longevity, the institution' },
-      { v: 'An award or a write-up', label: 'The press', sub: 'A review, a list, a prize' },
-    ],
-  },
-]
+const PROMOTE_OTHER = PROMOTE_OTHER_OPTIONS
 
-/** Who walks in: age, life stage and occasion together, because owners think in all three. */
-const AUDIENCE: Opt[] = [
-  { v: 'Young professionals', label: 'Young professionals', sub: 'Mid twenties to forties, after work' },
-  { v: 'Families with kids', label: 'Families', sub: 'Kids in tow, early evening' },
-  { v: 'Students', label: 'Students', sub: 'Price matters, late hours' },
-  { v: 'Older regulars', label: 'Older regulars', sub: 'Fifty-five and up, daytime and early' },
-  { v: 'Couples and date night', label: 'Date night', sub: 'Couples, weekend, unhurried' },
-  { v: 'Groups and celebrations', label: 'Groups', sub: 'Birthdays, work dos, big tables' },
-  { v: 'The weekday lunch crowd', label: 'Lunch crowd', sub: 'Nearby offices, fast, weekday' },
-  { v: 'Late night', label: 'Late night', sub: 'After the bars, after a shift' },
-  { v: 'Visitors and tourists', label: 'Visitors', sub: 'Hotels, sightseers, passing through' },
-]
+const AUDIENCE = AUDIENCE_OPTIONS
 
-const REACH: { v: Reach; label: string; sub: string }[] = [
-  { v: 'walk', label: 'The block', sub: 'People who can walk here' },
-  { v: 'local', label: 'The neighbourhood', sub: 'A mile or two out' },
-  { v: 'city', label: 'The whole city', sub: 'Worth crossing town for' },
-  { v: 'region', label: 'The wider region', sub: 'Worth a drive' },
-  { v: 'anywhere', label: 'Anywhere', sub: 'We ship or deliver beyond the area' },
-]
+const REACH = REACH_OPTIONS
 
-/** What NOT to do. Every one of these is a real complaint an owner has had about marketing. */
-const AVOID: Opt[] = [
-  { v: 'Discounts and deals', label: 'Discounts', sub: 'Nothing that reads as cheap' },
-  { v: 'Anything about price', label: 'Price talk', sub: 'Leave the numbers out' },
-  { v: 'Staff or faces on camera', label: 'Faces on camera', sub: 'Nobody on film' },
-  { v: 'Alcohol front and centre', label: 'Alcohol-led', sub: 'Keep drink out of the lead' },
-  { v: 'Emoji and slang', label: 'Emoji and slang', sub: 'Keep the tone straight' },
-  { v: 'Trends and memes', label: 'Trends', sub: 'No chasing the feed' },
-  { v: 'Comparing us to others', label: 'Comparisons', sub: 'Never name a competitor' },
-  { v: 'Politics or anything topical', label: 'Anything topical', sub: 'Stay out of the news' },
-]
+const AVOID = AVOID_OPTIONS
 
 const CSS = `
 .ps-slider { -webkit-appearance:none; appearance:none; width:100%; height:34px; background:transparent; cursor:grab; }
@@ -390,21 +335,26 @@ export default function PlanSetup({
    * A good description can empty this list. When it does the honest move is to go straight to the
    * plan, not to invent a question so the screen looks thorough.
    */
+  /* Which fields the describe read supplied (Ledger Tier 2). A read question is answered — the
+   * law is never to ask what is already held — so it subtracts from the walk exactly like an
+   * onboarding answer does. */
+  const readKeys = a.readKeys ?? []
+  const wasRead = (k: string) => readKeys.includes(k)
   const gaps = useMemo(
     () => gapsFor(
       situations,
       {
         assets: assets.length > 0,
         promote: promote.length > 0 || !!auto.promote || isKnown(inputs.knownFor),
-        reach: false,
+        reach: wasRead('reach'),
         shift: shift.length > 0 || isKnown(inputs.slowDays),
-        avoid: false,
+        avoid: wasRead('avoid'),
       },
       /* What the model decided this particular brief needs, when it got a look. Undefined falls
        * back to the situation's standing list, so a dead model costs relevance, not the flow. */
       a.asked ? a.asked.map((x) => x.q) : undefined,
     ),
-    [situations.join(','), assets.length, promote.length, auto.promote, shift.length, inputs, a.asked],
+    [situations.join(','), assets.length, promote.length, auto.promote, shift.length, inputs, a.asked, readKeys.join(',')],
   )
   const asks = (q: string) => gaps.includes(q as never)
   /** The model's reason for asking this one, in the owner's own terms. Empty when it did not run. */
@@ -473,7 +423,13 @@ export default function PlanSetup({
   /* The facts disclosure: collapsed by default — it exists to catch wrong data, not to be read
    * on every walk. */
   const [showFacts, setShowFacts] = useState(false)
-  const qlist: QStep[] = answered ? ['start', ...gaps, 'money'] : []
+  /* The start screen only shows when the paragraph did not already answer it: a read date (dated
+   * shapes) or a read start (ongoing) is held, and the law is never to ask what is held. The
+   * read-back chips below the recap are the correction path. Money ALWAYS shows — a read budget
+   * prefills it, but sizing money to a paragraph without an explicit confirm tap is the one
+   * shortcut the owner ruled out. */
+  const startRead = wasRead('start') || (dated && wasRead('when'))
+  const qlist: QStep[] = answered ? [...(startRead ? [] : ['start' as QStep]), ...gaps, 'money'] : []
   const q: QStep | null = qlist.length ? qlist[Math.min(qi, qlist.length - 1)] : null
   const last = qi >= qlist.length - 1
   const showHero = !answered || editDesc
@@ -527,7 +483,10 @@ export default function PlanSetup({
     if (qi === 0) {
       const what = readBack?.summary ?? (picked[0] ? picked[0].label.toLowerCase().replace(/^we are /, 'so you are ') : null)
       const count = qlist.length
-      return `${what ? what.replace(/\.?$/, '.') + ' ' : ''}We can build this — ${count} quick ${count === 1 ? 'answer' : 'answers'} first.`
+      /* Credit the paragraph for what it answered — the honest version of "this will be quick". */
+      const took = readKeys.filter((k) => k !== 'situation' && k !== 'until').length
+      const takeLine = took > 0 ? `You answered ${took === 1 ? 'one thing' : `${took} things`} in writing already. ` : ''
+      return `${what ? what.replace(/\.?$/, '.') + ' ' : ''}${takeLine}We can build this — ${count} quick ${count === 1 ? 'answer' : 'answers'} first.`
     }
     const prev = qlist[qi - 1]
     switch (prev) {
@@ -561,6 +520,67 @@ export default function PlanSetup({
         return null
     }
   })()
+
+  /*
+   * THE READ-BACK, itemized. One chip per field the paragraph supplied, in plain words. This is
+   * the correction line the prefill rule depends on: prefilling is only honest while every
+   * prefilled thing is visible and one tap from change.
+   */
+  const readChips = (() => {
+    const chips: { key: string; text: string }[] = []
+    if (wasRead('when') && a.when) chips.push({ key: 'when', text: fmtDay(a.when) + (a.until ? ` to ${fmtDay(a.until)}` : '') })
+    if (wasRead('start') && a.start) chips.push({ key: 'start', text: a.start === 'asap' ? 'Starts right away' : `Starts ${fmtDay(a.start)}` })
+    if (wasRead('budget') && a.budget != null) chips.push({ key: 'budget', text: `About $${a.budget.toLocaleString('en-US')}` })
+    if (wasRead('reach')) chips.push({ key: 'reach', text: REACH.find((r) => r.v === reach)?.label ?? 'Reach' })
+    if (wasRead('shift') && shift.length) chips.push({ key: 'shift', text: shift.join(', ') })
+    if (wasRead('avoid') && avoid.length) chips.push({ key: 'avoid', text: `No ${avoid[0].toLowerCase()}${avoid.length > 1 ? ` +${avoid.length - 1}` : ''}` })
+    if (wasRead('audience') && audience.length) chips.push({ key: 'audience', text: audience.slice(0, 2).join(', ') })
+    if (wasRead('promote') && promote.length) chips.push({ key: 'promote', text: `Leading with ${promote[0]}` })
+    if (wasRead('offerTerms') && a.offerTerms) chips.push({ key: 'offerTerms', text: a.offerTerms })
+    return chips
+  })()
+
+  /**
+   * A read was wrong: put its question back in the walk, with the read answer preselected so the
+   * fix is one change rather than a restart. Values are kept where the reopened screen prefills
+   * from them (date, reach, avoid, audience) and cleared where keeping them would stop the
+   * question from reappearing (shift, promote — their screens subtract on a non-empty answer).
+   */
+  const reopenRead = (key: string) => {
+    /* The offer has no question screen yet (Phase 3); its chip simply clears the read so the
+     * campaign carries no offer the owner disowned. */
+    if (key === 'offerTerms') {
+      setA({ ...a, offerTerms: undefined, offerLimit: undefined, offerExpiry: undefined, readKeys: readKeys.filter((k) => !['offerTerms', 'offerLimit', 'offerExpiry'].includes(k)) })
+      return
+    }
+    const q: QStep = key === 'when' || key === 'start' ? 'start' : key === 'budget' ? 'money' : key === 'audience' || key === 'reach' ? 'reach' : (key as QStep)
+    /* audience and reach share a screen; reopening one reopens both honestly. */
+    const drop = q === 'reach' ? ['reach', 'audience'] : [key]
+    const rk = readKeys.filter((k) => !drop.includes(k))
+    const patch: Partial<Answers> = { readKeys: rk }
+    if (key === 'shift') patch.shift = []
+    if (key === 'promote') patch.promote = []
+    const asked = a.asked
+    if ((q === 'reach' || q === 'shift' || q === 'avoid' || q === 'promote') && asked && !asked.some((x) => x.q === q)) {
+      patch.asked = [...asked, { q, why: 'You asked to change this.' }]
+    }
+    setA({ ...a, ...patch })
+    /* Land on the reopened question. Recompute the walk the same way qlist does, with the patch. */
+    const pg = gapsFor(
+      situations,
+      {
+        assets: assets.length > 0,
+        promote: (patch.promote ?? promote).length > 0 || !!auto.promote || isKnown(inputs.knownFor),
+        reach: rk.includes('reach'),
+        shift: (patch.shift ?? shift).length > 0 || isKnown(inputs.slowDays),
+        avoid: rk.includes('avoid'),
+      },
+      (patch.asked ?? asked)?.map((x) => x.q),
+    )
+    const sr = rk.includes('start') || (dated && rk.includes('when'))
+    const list: QStep[] = [...(sr ? [] : ['start' as QStep]), ...pg, 'money']
+    setQi(Math.max(0, list.indexOf(q)))
+  }
 
   /* The honest range for the money question, from the same anchors the plan screen uses. */
   const moneyRange = useMemo(() => {
@@ -601,7 +621,9 @@ export default function PlanSetup({
     setReadErr(null)
     try {
       const r = await fetch('/api/campaigns/describe', {
-        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }),
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        /* The menu rides along so the promote read can name their actual dishes. */
+        body: JSON.stringify({ text, menu: inputs.menu.map((m) => m.name) }),
       })
       const j = (await r.json()) as { ok?: boolean; reason?: string; result?: Record<string, unknown> }
       if (!j.ok || !j.result) { fallbackRead(text); setReadErr(String(j.reason ?? 'upstream')); setReadBack(null); return }
@@ -609,9 +631,16 @@ export default function PlanSetup({
         situation: string | null; shape?: string; when: string | null; until: string | null
         assets: string[]; summary: string; unsupported: string[]
         ask?: { q: PlanQuestion; why: string }[]
+        read?: DescribeRead
       }
       setReadBack({ summary: res.summary, unsupported: res.unsupported ?? [] })
       const sit = res.situation ? situationByValue(res.situation) : undefined
+      /* THE WIDE READ (Ledger Phase 2): everything else the paragraph answered, already through
+       * the route's evidence law (a field only arrives quote-backed and vocabulary-checked).
+       * Each one prefills its answer and joins readKeys, which drops its question from the walk.
+       * Budget is the exception by owner rule: it prefills the money question but that screen
+       * always shows for its explicit confirm tap. */
+      const rd = (sit && res.read) || {}
       /* Provenance for the ledger: exactly the fields this read supplied, so the tier
        * classification (READ vs ASKED) is a record, never a guess. */
       const readKeys = [
@@ -619,12 +648,24 @@ export default function PlanSetup({
         ...(res.when ? ['when'] : []),
         ...(res.until ? ['until'] : []),
         ...(res.assets?.length ? ['assets'] : []),
+        ...Object.keys(rd),
       ]
+      if (rd.budget != null) setWantBudget(true)
       set({
         ...(sit ? { situations: [sit.v], goals: [sit.goal], shape: sit.shape } : {}),
         ...(res.when ? { when: res.when } : {}),
         ...(res.until ? { until: res.until } : {}),
         ...(res.assets?.length ? { assets: res.assets } : {}),
+        ...(rd.budget != null ? { budget: rd.budget } : {}),
+        ...(rd.start ? { start: rd.start } : {}),
+        ...(rd.reach ? { reach: rd.reach } : {}),
+        ...(rd.shift ? { shift: rd.shift } : {}),
+        ...(rd.avoid ? { avoid: rd.avoid } : {}),
+        ...(rd.audience ? { audience: rd.audience } : {}),
+        ...(rd.promote ? { promote: rd.promote } : {}),
+        ...(rd.offerTerms ? { offerTerms: rd.offerTerms } : {}),
+        ...(rd.offerLimit ? { offerLimit: rd.offerLimit } : {}),
+        ...(rd.offerExpiry ? { offerExpiry: rd.offerExpiry } : {}),
         ...(readKeys.length ? { readKeys } : {}),
         /* Only when we actually understood the brief. Honouring an `ask` from a read that could not
          * place the situation would let a stray [] skip every follow-up on a plan built from
@@ -829,6 +870,31 @@ export default function PlanSetup({
           <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: DESK.mintDeep, marginTop: 1 }}>Edit</span>
         </button>
 
+        {/* WHAT THE PARAGRAPH ANSWERED (Ledger Tier 2), each with its way back. These questions
+            were dropped from the walk because the owner already answered them in writing — the
+            law is never to ask what is held. But a read can be wrong, so every taken field is a
+            chip; tapping one reopens that question with the read answer preselected. */}
+        {qi === 0 && readChips.length > 0 && (
+          <div style={{ margin: '-12px 0 22px' }}>
+            <div style={{ fontSize: 12, color: '#86868B', marginBottom: 7 }}>From what you wrote we took — tap to change:</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {readChips.map((c) => (
+                <button
+                  key={c.key} type="button" onClick={() => reopenRead(c.key)} className="ps-pick"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5, cursor: 'pointer',
+                    background: '#fff', border: `1px solid ${DESK.line}`, borderRadius: 99, padding: '6px 11px',
+                    fontFamily: "'Inter',system-ui,sans-serif", fontSize: 12, fontWeight: 600, color: DESK.ink,
+                  }}
+                >
+                  <Check size={11} strokeWidth={2.8} color={C.green} />
+                  {c.text}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Shown once, on the first stop: the facts the plan will lean on, each with its door to
             fix it. An owner who spots "4.1★" or a wrong slow day here just saved the whole plan. */}
         {/* One quiet line, not a wall: the facts the plan leans on stay a tap away. The detail
@@ -918,9 +984,17 @@ export default function PlanSetup({
         {/* money ── asked LAST and optional, so the range shown is the real one and a given
             number opens the plan already sized to it. The default hands sizing back to us. */}
         {q === 'money' && (
-          <Act n={qi + 2} of={1 + qlist.length} title="Do you have a budget in mind?" sub="Optional. Skip it and we size the plan to the job. You can always move the number on the plan itself.">
+          <Act
+            n={qi + 2} of={1 + qlist.length}
+            title={wasRead('budget') ? 'Confirm the budget' : 'Do you have a budget in mind?'}
+            sub={wasRead('budget') && a.budget != null
+              /* Money never moves on a read alone (owner rule): the number from the paragraph
+               * lands here prefilled, and the Next tap below IS the explicit confirmation. */
+              ? `You wrote about $${a.budget.toLocaleString('en-US')}. Confirm it or change it — nothing is sized until you do.`
+              : 'Optional. Skip it and we size the plan to the job. You can always move the number on the plan itself.'}
+          >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              <Card on={!wantBudget} label="You size it for me" sub="We build what this campaign needs and show you the price" badge="Recommended" onClick={() => { setWantBudget(false); set({ budget: undefined }) }} />
+              <Card on={!wantBudget} label="You size it for me" sub="We build what this campaign needs and show you the price" badge={wasRead('budget') ? undefined : 'Recommended'} onClick={() => { setWantBudget(false); set({ budget: undefined, readKeys: readKeys.filter((k) => k !== 'budget') }) }} />
               <Card on={wantBudget} label="I have a number" sub={dated ? 'The launch gets built to fit it' : 'The monthly plan gets built to fit it'} onClick={() => setWantBudget(true)} />
             </div>
             {wantBudget && (
@@ -930,7 +1004,11 @@ export default function PlanSetup({
                   <input
                     inputMode="numeric" aria-label="Your budget" autoFocus
                     value={a.budget != null ? a.budget.toLocaleString('en-US') : ''}
-                    onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); set({ budget: n ? Number(n) : undefined }) }}
+                    onChange={(e) => {
+                      const n = e.target.value.replace(/[^0-9]/g, '')
+                      /* Typing a different number makes it THEIR answer: provenance flips read → asked. */
+                      set({ budget: n ? Number(n) : undefined, readKeys: readKeys.filter((k) => k !== 'budget') })
+                    }}
                     placeholder={moneyRange ? Math.round((moneyRange.lo + moneyRange.hi) / 2).toLocaleString('en-US') : '1,000'}
                     style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: DISPLAY, fontSize: 18, color: C.ink }}
                   />

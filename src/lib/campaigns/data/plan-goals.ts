@@ -634,3 +634,169 @@ export function goalReadiness(key: string): { ready: number; held: number } {
   }
   return { ready, held }
 }
+
+/* ═══════════════════════════════════════════════════════ the walk's option vocabularies ═══ */
+
+/**
+ * THE VOCABULARIES THE WALK OFFERS, in one place, because two things validate against them:
+ * the question screens render them, and the describe read (Phase 2 of the Campaign Ledger,
+ * docs/CAMPAIGN-LEDGER-PLAN.md) may only extract values that appear here. The model does not
+ * get to widen the vocabulary — same law as situations and assets above.
+ */
+export interface WalkOpt { v: string; label: string; sub?: string }
+
+export const SHIFT_OPTIONS: readonly WalkOpt[] = [
+  { v: 'Monday to Wednesday', label: 'Early week', sub: 'Mon, Tue, Wed' },
+  { v: 'Thursday', label: 'Thursdays', sub: '' },
+  { v: 'Sunday', label: 'Sundays', sub: '' },
+  { v: 'Lunch', label: 'Lunch', sub: 'The midday shift' },
+  { v: 'The late window', label: 'Late', sub: 'After the rush' },
+  { v: 'The whole off-season', label: 'Off-season', sub: 'The slow months' },
+]
+
+/** Who walks in: age, life stage and occasion together, because owners think in all three. */
+export const AUDIENCE_OPTIONS: readonly WalkOpt[] = [
+  { v: 'Young professionals', label: 'Young professionals', sub: 'Mid twenties to forties, after work' },
+  { v: 'Families with kids', label: 'Families', sub: 'Kids in tow, early evening' },
+  { v: 'Students', label: 'Students', sub: 'Price matters, late hours' },
+  { v: 'Older regulars', label: 'Older regulars', sub: 'Fifty-five and up, daytime and early' },
+  { v: 'Couples and date night', label: 'Date night', sub: 'Couples, weekend, unhurried' },
+  { v: 'Groups and celebrations', label: 'Groups', sub: 'Birthdays, work dos, big tables' },
+  { v: 'The weekday lunch crowd', label: 'Lunch crowd', sub: 'Nearby offices, fast, weekday' },
+  { v: 'Late night', label: 'Late night', sub: 'After the bars, after a shift' },
+  { v: 'Visitors and tourists', label: 'Visitors', sub: 'Hotels, sightseers, passing through' },
+]
+
+export const REACH_OPTIONS: readonly { v: 'walk' | 'local' | 'city' | 'region' | 'anywhere'; label: string; sub: string }[] = [
+  { v: 'walk', label: 'The block', sub: 'People who can walk here' },
+  { v: 'local', label: 'The neighbourhood', sub: 'A mile or two out' },
+  { v: 'city', label: 'The whole city', sub: 'Worth crossing town for' },
+  { v: 'region', label: 'The wider region', sub: 'Worth a drive' },
+  { v: 'anywhere', label: 'Anywhere', sub: 'We ship or deliver beyond the area' },
+]
+
+/** What NOT to do. Every one of these is a real complaint an owner has had about marketing. */
+export const AVOID_OPTIONS: readonly WalkOpt[] = [
+  { v: 'Discounts and deals', label: 'Discounts', sub: 'Nothing that reads as cheap' },
+  { v: 'Anything about price', label: 'Price talk', sub: 'Leave the numbers out' },
+  { v: 'Staff or faces on camera', label: 'Faces on camera', sub: 'Nobody on film' },
+  { v: 'Alcohol front and centre', label: 'Alcohol-led', sub: 'Keep drink out of the lead' },
+  { v: 'Emoji and slang', label: 'Emoji and slang', sub: 'Keep the tone straight' },
+  { v: 'Trends and memes', label: 'Trends', sub: 'No chasing the feed' },
+  { v: 'Comparing us to others', label: 'Comparisons', sub: 'Never name a competitor' },
+  { v: 'Politics or anything topical', label: 'Anything topical', sub: 'Stay out of the news' },
+]
+
+/** Everything a restaurant advertises that is not a dish. The menu is offered alongside these. */
+export const PROMOTE_OTHER_OPTIONS: readonly { group: string; items: WalkOpt[] }[] = [
+  {
+    group: 'The place',
+    items: [
+      { v: 'The bar and the drinks', label: 'The bar', sub: 'Cocktails, wine, the list' },
+      { v: 'The patio or outdoor space', label: 'The patio', sub: 'Outdoor seating, the terrace' },
+      { v: 'The room itself', label: 'The room', sub: 'The space, the light, the feel' },
+      { v: 'A private or group space', label: 'Private space', sub: 'Back room, big tables' },
+    ],
+  },
+  {
+    group: 'What you do',
+    items: [
+      { v: 'A weekly night or event', label: 'A weekly night', sub: 'Trivia, music, game day' },
+      { v: 'Happy hour', label: 'Happy hour', sub: 'The early window' },
+      { v: 'Catering and private events', label: 'Catering', sub: 'Parties, offices, functions' },
+      { v: 'Takeout and delivery', label: 'Takeout', sub: 'Off-premise, delivery apps' },
+    ],
+  },
+  {
+    group: 'Who you are',
+    items: [
+      { v: 'The chef or the owner', label: 'The chef', sub: 'The person behind it' },
+      { v: 'The family story', label: 'The story', sub: 'How it started, who runs it' },
+      { v: 'How long you have been here', label: 'The years', sub: 'Longevity, the institution' },
+      { v: 'An award or a write-up', label: 'The press', sub: 'A review, a list, a prize' },
+    ],
+  },
+]
+
+/* ══════════════════════════════════════════ the describe read (Campaign Ledger, Tier 2) ═══ */
+
+/**
+ * What the paragraph itself answered, beyond the situation. Every field here was EXTRACTED, not
+ * asked — sanitizeRead only lets a value through when the model backed it with a quote that
+ * actually appears in the owner's text (the evidence law), and the value survives our own
+ * vocabulary. The screen prefills from this and drops the matching question from the walk;
+ * budget is the exception — it always gets an explicit confirm tap before it sizes anything
+ * (owner rule, 2026-07-29).
+ */
+export interface DescribeRead {
+  budget?: number
+  /** 'asap' or ISO yyyy-mm-dd. Only meaningful for ongoing shapes — dated shapes use `when`. */
+  start?: string
+  reach?: 'walk' | 'local' | 'city' | 'region' | 'anywhere'
+  shift?: string[]
+  avoid?: string[]
+  audience?: string[]
+  promote?: string[]
+  offerTerms?: string
+  offerLimit?: string
+  offerExpiry?: string
+}
+
+/** Normalize for the quote-in-text check: case, curly quotes, collapsed whitespace. */
+const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim()
+
+/**
+ * THE EVIDENCE LAW, enforced. The model returns every read field as {value, quote}; a field whose
+ * quote is missing, invented, or not a substring of what the owner wrote is dropped — a null the
+ * walk asks about beats a confident fabrication that composes a wrong plan. List values are then
+ * filtered to our own vocabularies, exactly like situations and assets: anything the model made
+ * up silently disappears rather than silently composing.
+ *
+ * Pure and sim-locked (scripts/sim/campaign-ledger.ts), so the guardrail cannot drift from the
+ * route that uses it.
+ */
+export function sanitizeRead(raw: unknown, text: string, menuNames: readonly string[]): DescribeRead {
+  if (!raw || typeof raw !== 'object') return {}
+  const t = norm(text)
+  const r = raw as Record<string, { value?: unknown; quote?: unknown } | undefined>
+  /** The gate every field passes: a real quote, found in the text. */
+  const backed = (k: string): unknown => {
+    const f = r[k]
+    if (!f || typeof f !== 'object') return undefined
+    const q = typeof f.quote === 'string' ? norm(f.quote) : ''
+    if (q.length < 2 || !t.includes(q)) return undefined
+    return f.value
+  }
+  const str = (v: unknown, max = 120) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined)
+  const inVocab = (v: unknown, vocab: readonly string[]) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && vocab.includes(x)) : []
+  const out: DescribeRead = {}
+
+  const budget = backed('budget')
+  const n = typeof budget === 'number' ? Math.round(budget) : typeof budget === 'string' ? Math.round(Number(budget.replace(/[^0-9.]/g, ''))) : NaN
+  if (Number.isFinite(n) && n >= 50 && n <= 50000) out.budget = n
+
+  const start = backed('start')
+  if (start === 'asap' || (typeof start === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(start))) out.start = start
+
+  const reach = backed('reach')
+  if (REACH_OPTIONS.some((o) => o.v === reach)) out.reach = reach as DescribeRead['reach']
+
+  const shift = inVocab(backed('shift'), SHIFT_OPTIONS.map((o) => o.v))
+  if (shift.length) out.shift = shift
+  const avoid = inVocab(backed('avoid'), AVOID_OPTIONS.map((o) => o.v))
+  if (avoid.length) out.avoid = avoid
+  const audience = inVocab(backed('audience'), AUDIENCE_OPTIONS.map((o) => o.v))
+  if (audience.length) out.audience = audience
+  const promote = inVocab(backed('promote'), [...menuNames, ...PROMOTE_OTHER_OPTIONS.flatMap((g) => g.items.map((i) => i.v))])
+  if (promote.length) out.promote = promote
+
+  const terms = str(backed('offerTerms'))
+  if (terms) out.offerTerms = terms
+  const limit = str(backed('offerLimit'))
+  if (limit) out.offerLimit = limit
+  const expiry = str(backed('offerExpiry'))
+  if (expiry) out.offerExpiry = expiry
+
+  return out
+}
