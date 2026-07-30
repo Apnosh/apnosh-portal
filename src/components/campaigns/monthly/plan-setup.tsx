@@ -1495,31 +1495,45 @@ export default function PlanSetup({
 
       {/* 4 ── who, and how far */}
         {q === 'reach' && <Act n={qi + 2} of={1 + qlist.length} title={WT.reach} sub={whyAsk('reach') || WS.reach}>
-        {/* Distance is a picture: tap a ring. DOM order puts inner rings on top, so a tap lands
-            on the smallest ring containing it — the band behavior falls out for free. */}
-        <div style={{ position: 'relative', width: 250, height: 250, margin: '2px auto 4px' }}>
-          {([
-            { v: 'region' as Reach, label: 'Worth a drive', inset: 0 },
-            { v: 'city' as Reach, label: 'The whole city', inset: 31 },
-            { v: 'local' as Reach, label: 'The neighbourhood', inset: 62 },
-            { v: 'walk' as Reach, label: 'The block', inset: 93 },
-          ]).map((r) => {
-            const on = reach === r.v
-            return (
-              <button
-                key={r.v} type="button" aria-label={r.label} aria-pressed={on}
-                onClick={() => set({ reach: r.v, touched: [...new Set([...(a.touched ?? []), 'reach'])] })}
-                style={{
-                  position: 'absolute', inset: r.inset, borderRadius: '50%', cursor: 'pointer',
-                  border: `1.5px solid ${on ? C.green : 'rgba(0,0,0,0.13)'}`,
-                  background: on ? '#f0faf6' : '#fff',
-                }}
-              >
-                <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 6, fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', color: on ? C.greenDk : C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}>{r.label}</span>
-              </button>
-            )
-          })}
-          <div aria-hidden style={{ position: 'absolute', inset: 108, borderRadius: '50%', background: C.ink, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, pointerEvents: 'none', fontFamily: "'Inter',system-ui,sans-serif" }}>YOU</div>
+        {/* Distance is a picture, and reach is CUMULATIVE: everything inside the line you tap
+            fills in, because pulling from the whole city includes the neighbourhood. DOM order
+            puts inner rings on top, so a tap lands on the smallest ring containing it. */}
+        {(() => {
+          const RINGS = [
+            { v: 'region' as Reach, label: 'Worth a drive', inset: 0, order: 3 },
+            { v: 'city' as Reach, label: 'The whole city', inset: 31, order: 2 },
+            { v: 'local' as Reach, label: 'The neighbourhood', inset: 62, order: 1 },
+            { v: 'walk' as Reach, label: 'The block', inset: 93, order: 0 },
+          ]
+          const picked = RINGS.find((r) => r.v === reach)?.order ?? -1
+          return (
+            <div style={{ position: 'relative', width: 250, height: 250, margin: '2px auto 10px' }}>
+              {RINGS.map((r) => {
+                const inside = picked >= 0 && r.order <= picked
+                const boundary = r.v === reach
+                return (
+                  <button
+                    key={r.v} type="button" aria-label={r.label} aria-pressed={boundary}
+                    onClick={() => set({ reach: r.v, touched: [...new Set([...(a.touched ?? []), 'reach'])] })}
+                    style={{
+                      position: 'absolute', inset: r.inset, borderRadius: '50%', cursor: 'pointer',
+                      border: boundary ? `2px solid ${C.green}` : `1.5px solid ${inside ? 'rgba(74,189,152,0.45)' : 'rgba(0,0,0,0.12)'}`,
+                      background: inside ? 'rgba(74,189,152,0.10)' : '#fff',
+                      transition: 'background .25s ease, border-color .25s ease',
+                    }}
+                  >
+                    <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 6, fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', color: boundary ? C.greenDk : inside ? 'rgba(46,154,120,0.75)' : '#AEAEB2', fontFamily: APPLE }}>{r.label}</span>
+                  </button>
+                )
+              })}
+              <div aria-hidden style={{ position: 'absolute', inset: 108, borderRadius: '50%', background: C.ink, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, pointerEvents: 'none', fontFamily: APPLE, zIndex: 2 }}>YOU</div>
+            </div>
+          )
+        })()}
+        {/* The choice, translated into plain distance. One line, always current. */}
+        <div style={{ fontFamily: APPLE, fontSize: 13, color: '#1D1D1F', textAlign: 'center', margin: '0 0 14px' }}>
+          <b style={{ color: DESK.mintDeep }}>{REACH.find((r) => r.v === reach)?.label ?? ''}.</b>{' '}
+          <span style={{ color: '#6E6E73' }}>{WL['reach.' + reach] ?? ''}</span>
         </div>
         <Card on={reach === 'anywhere'} label="Anywhere" sub="We ship or deliver beyond the area" onClick={() => set({ reach: 'anywhere', touched: [...new Set([...(a.touched ?? []), 'reach'])] })} />
         <div style={{ fontSize: 12, fontWeight: 600, color: C.mute, margin: '14px 0 7px' }}>{WL['audience.line']}</div>
