@@ -1500,47 +1500,54 @@ export default function PlanSetup({
 
       {/* 4 ── who, and how far */}
         {q === 'reach' && <Act n={qi + 2} of={1 + qlist.length} title={WT.reach} sub={whyAsk('reach') || WS.reach}>
-        {/* Distance is a picture, and reach is CUMULATIVE: everything inside the line you tap
-            fills in, because pulling from the whole city includes the neighbourhood. DOM order
-            puts inner rings on top, so a tap lands on the smallest ring containing it. */}
+        {/* A FACT THEY KNOW, not a strategy choice (owner, 2026-07-30). The code's own comment:
+            only 'anywhere' changes composition; the distances steer the brief's targeting. So we
+            ask about their guests in their words, and shipping gets pulled out into what it
+            really is: a service-model toggle with its consequence said out loud. */}
         {(() => {
-          const RINGS = [
-            { v: 'region' as Reach, label: 'Worth a drive', inset: 0, order: 3 },
-            { v: 'city' as Reach, label: 'The whole city', inset: 31, order: 2 },
-            { v: 'local' as Reach, label: 'The neighbourhood', inset: 62, order: 1 },
-            { v: 'walk' as Reach, label: 'The block', inset: 93, order: 0 },
+          const pick = (v: Reach) => set({ reach: v, touched: [...new Set([...(a.touched ?? []), 'reach'])] })
+          const CARDS: { v: Reach; on: boolean; label: string; sub: string }[] = [
+            { v: 'local', on: reach === 'local' || reach === 'walk', label: WL['reach.near.label'], sub: WL['reach.near.sub'] },
+            { v: 'city', on: reach === 'city', label: WL['reach.town.label'], sub: WL['reach.town.sub'] },
+            { v: 'region', on: reach === 'region', label: WL['reach.far.label'], sub: WL['reach.far.sub'] },
           ]
-          const picked = RINGS.find((r) => r.v === reach)?.order ?? -1
           return (
-            <div style={{ position: 'relative', width: 250, height: 250, margin: '2px auto 10px' }}>
-              {RINGS.map((r) => {
-                const inside = picked >= 0 && r.order <= picked
-                const boundary = r.v === reach
-                return (
-                  <button
-                    key={r.v} type="button" aria-label={r.label} aria-pressed={boundary}
-                    onClick={() => set({ reach: r.v, touched: [...new Set([...(a.touched ?? []), 'reach'])] })}
-                    style={{
-                      position: 'absolute', inset: r.inset, borderRadius: '50%', cursor: 'pointer',
-                      border: boundary ? `2px solid ${C.green}` : `1.5px solid ${inside ? 'rgba(74,189,152,0.45)' : 'rgba(0,0,0,0.12)'}`,
-                      background: inside ? 'rgba(74,189,152,0.10)' : '#fff',
-                      transition: 'background .25s ease, border-color .25s ease',
-                    }}
-                  >
-                    <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 6, fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', color: boundary ? C.greenDk : inside ? 'rgba(46,154,120,0.75)' : '#AEAEB2', fontFamily: APPLE }}>{r.label}</span>
-                  </button>
-                )
-              })}
-              <div aria-hidden style={{ position: 'absolute', inset: 108, borderRadius: '50%', background: C.ink, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, pointerEvents: 'none', fontFamily: APPLE, zIndex: 2 }}>YOU</div>
-            </div>
+            <>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {CARDS.map((c) => (
+                  <Card key={c.v} on={c.on} label={c.label} sub={c.sub} onClick={() => pick(c.v)} />
+                ))}
+              </div>
+              {/* Shipping is not a distance. It is "we are not only a walk-in business", and the
+                  one thing here that changes what gets built. */}
+              <button
+                type="button" className="ps-pick" aria-pressed={reach === 'anywhere'}
+                onClick={() => pick(reach === 'anywhere' ? 'local' : 'anywhere')}
+                style={{
+                  width: '100%', marginTop: 12, textAlign: 'left', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'flex-start',
+                  border: `1.5px solid ${reach === 'anywhere' ? C.green : 'rgba(0,0,0,0.07)'}`,
+                  background: reach === 'anywhere' ? C.greenSoft : '#fff', borderRadius: 16, padding: '12px 13px', fontFamily: APPLE,
+                  boxShadow: reach === 'anywhere' ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
+                }}
+              >
+                <span aria-hidden style={{
+                  width: 20, height: 20, borderRadius: 7, flexShrink: 0, marginTop: 1,
+                  border: `1.5px solid ${reach === 'anywhere' ? C.green : 'rgba(0,0,0,0.2)'}`,
+                  background: reach === 'anywhere' ? C.green : '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff',
+                }}>
+                  {reach === 'anywhere' && <Check size={12} strokeWidth={3.4} />}
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 13.5, fontWeight: reach === 'anywhere' ? 700 : 600, color: reach === 'anywhere' ? C.greenDk : C.ink }}>{WL['reach.ship.label']}</span>
+                  {reach === 'anywhere' && (
+                    <span style={{ display: 'block', fontSize: 11.5, color: C.greenDk, marginTop: 3, lineHeight: 1.4 }}>{WL['reach.ship.sub']}</span>
+                  )}
+                </span>
+              </button>
+            </>
           )
         })()}
-        {/* The choice, translated into plain distance. One line, always current. */}
-        <div style={{ fontFamily: APPLE, fontSize: 13, color: '#1D1D1F', textAlign: 'center', margin: '0 0 14px' }}>
-          <b style={{ color: DESK.mintDeep }}>{REACH.find((r) => r.v === reach)?.label ?? ''}.</b>{' '}
-          <span style={{ color: '#6E6E73' }}>{WL['reach.' + reach] ?? ''}</span>
-        </div>
-        <Card on={reach === 'anywhere'} label="Anywhere" sub="We ship or deliver beyond the area" onClick={() => set({ reach: 'anywhere', touched: [...new Set([...(a.touched ?? []), 'reach'])] })} />
         <div style={{ fontSize: 12, fontWeight: 600, color: C.mute, margin: '14px 0 7px' }}>{WL['audience.line']}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
           {AUDIENCE.map((o) => {

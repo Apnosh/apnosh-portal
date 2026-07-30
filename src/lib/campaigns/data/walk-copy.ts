@@ -25,7 +25,7 @@ export const WALK_TITLES: Record<string, string> = {
   shift: 'Which shifts need filling?',
   assets: 'What have you got to work with?',
   promote: 'What should we lead with?',
-  reach: 'How far should we pull people from?',
+  reach: 'Where do your guests come from?',
   avoid: 'Anything we should never do?',
 }
 
@@ -41,7 +41,7 @@ export const WALK_SUBS: Record<string, string> = {
   shift: 'The work aims at the shifts you name.',
   assets: 'You are never billed for what you already have.',
   promote: 'Pick one to three. We lead with your first pick.',
-  reach: 'Ads and listings stop at this line.',
+  reach: 'We aim the ads and listings to match.',
   avoid: 'Optional. Anything picked stays off, everywhere.',
 }
 
@@ -66,11 +66,14 @@ export const WALK_LINES: Record<string, string> = {
   'restate.avoid': 'Never',
   'run.note': 'The team works to the end date. A person checks long runs.',
   'own.ph': 'Or type your own and press enter',
-  'reach.walk': 'People who can walk in. About 5 minutes.',
-  'reach.local': 'A short hop. About 10 minutes out.',
-  'reach.city': 'Worth crossing town for. About 25 minutes out.',
-  'reach.region': 'Worth a real drive. Up to an hour.',
-  'reach.anywhere': 'We ship or deliver past the area.',
+  'reach.near.label': 'Mostly nearby',
+  'reach.near.sub': 'They live or work close by',
+  'reach.town.label': 'From all over town',
+  'reach.town.sub': 'People cross town for us',
+  'reach.far.label': 'From out of town too',
+  'reach.far.sub': 'Worth a real drive',
+  'reach.ship.label': 'We ship or deliver beyond our area',
+  'reach.ship.sub': 'We skip the work that only helps a walk-in address. You are not charged for it.',
 }
 
 /**
