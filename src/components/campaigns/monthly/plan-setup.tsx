@@ -22,7 +22,7 @@ import { ArrowRight, MessageSquare, Link2, Check, Users, Star, Moon, TrendingUp,
 import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
 import { DESK, DeskKeyframes, PlanSheet, type PlanSheetLine } from '@/components/campaigns/desk/ui'
 import { connectRecommendations, isKnown, knownIn, type PlanInputs } from '@/lib/campaigns/data/plan-inputs'
-import type { MonthlySignals } from '@/lib/campaigns/data/monthly-signals'
+import { signalNotes, type MonthlySignals } from '@/lib/campaigns/data/monthly-signals'
 import {
   PLAN_GOALS,
   SITUATIONS,
@@ -475,12 +475,21 @@ export default function PlanSetup({
    * goal came from the describe box, and old budget never sizes anything.
    */
   const facts = useMemo(() => {
-    const rows = knownIn(inputs)
-      .filter((r) => r.key !== 'goal' && r.key !== 'budget')
-      .map((r) => ({ label: r.label, value: r.value, href: r.href }))
-    if (signals?.rating != null) rows.unshift({ label: 'Google rating', value: `${signals.rating}★`, href: '/dashboard/business-info' })
-    if (signals?.listingCompleteness != null) rows.push({ label: 'Google listing health', value: `${signals.listingCompleteness} of 100`, href: '/dashboard/business-info' })
-    if (signals?.hasList != null) rows.push({ label: 'Email and text list', value: signals.hasList ? 'Connected' : 'None yet', href: undefined })
+    /* Each signal row carries its CONSEQUENCE, from the same file as the composer's rules — the
+     * card states what the plan does about the fact, never just "go fix it yourself". */
+    const FIX: Record<string, string | undefined> = { rating: '/dashboard/business-info', listing: '/dashboard/business-info' }
+    const rows = signalNotes(signals).map((n) => ({ label: n.label, value: n.value, note: n.note as string | null, href: FIX[n.key] }))
+    /* Onboarding facts steer the WORK (wording, featured dishes), not the mix — say that too. */
+    const STEER: Record<string, string | null> = {
+      knownFor: 'Your content and ads lead with these.',
+      audience: 'Steers the wording and where things run.',
+      slowDays: 'The slow-night work aims at these.',
+      standsOut: null,
+    }
+    for (const r of knownIn(inputs)) {
+      if (r.key === 'goal' || r.key === 'budget') continue
+      rows.push({ label: r.label, value: r.value, note: STEER[r.key] ?? null, href: r.href })
+    }
     return rows
   }, [inputs, signals])
 
@@ -746,18 +755,23 @@ export default function PlanSetup({
             fix it. An owner who spots "4.1★" or a wrong slow day here just saved the whole plan. */}
         {qi === 0 && facts.length > 0 && (
           <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '4px 15px', marginBottom: 22, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#86868B', padding: '10px 0 2px' }}>What we&rsquo;re working from</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#86868B', padding: '10px 0 2px' }}>What we already know, and what your plan does about it</div>
             {facts.map((f, i) => (
-              <div key={f.label} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '9px 0 10px', borderTop: i > 0 ? '0.5px solid rgba(0,0,0,0.06)' : 'none' }}>
-                <span style={{ fontSize: 13, color: '#6E6E73', flexShrink: 0 }}>{f.label}</span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#1D1D1F', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.value}</span>
-                {f.href && (
-                  <a href={f.href} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'none' }}>Fix</a>
+              <div key={f.label} style={{ padding: '9px 0 10px', borderTop: i > 0 ? '0.5px solid rgba(0,0,0,0.06)' : 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ fontSize: 13, color: '#6E6E73', flexShrink: 0 }}>{f.label}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#1D1D1F', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.value}</span>
+                  {f.href && (
+                    <a href={f.href} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'none' }}>Fix</a>
+                  )}
+                </div>
+                {f.note && (
+                  <div style={{ fontSize: 12, color: '#86868B', lineHeight: 1.45, marginTop: 3 }}>{f.note}</div>
                 )}
               </div>
             ))}
             <div style={{ fontSize: 11.5, color: '#86868B', lineHeight: 1.45, padding: '0 0 10px' }}>
-              The plan leans on these. If one looks wrong, fix it before you build.
+              Your plan is already shaped by these. If a fact looks wrong, fix it so the plan is built on the truth.
             </div>
           </div>
         )}

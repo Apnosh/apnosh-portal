@@ -28,7 +28,7 @@ import {
   rankedCandidates,
   stepOf,
 } from '../../src/lib/campaigns/data/monthly-plan'
-import { signalTilt, ALL_NULL_SIGNALS, type MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
+import { signalTilt, signalNotes, ALL_NULL_SIGNALS, type MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
 
 const s = new Suite()
 
@@ -673,6 +673,37 @@ s.group('dated mode: the launch dial buys the launch')
     const b = composeMonthlyPlan(2000, [], {}, goals, 'local', false)
     return JSON.stringify(a.lines.map((l) => l.id)) === JSON.stringify(b.lines.map((l) => l.id))
   })())
+}
+
+/*
+ * SIGNAL NOTES ≡ SIGNAL TILT — the owner-facing card must never claim a lean the composer does
+ * not make. The sentences and the thresholds live in the same file; this pins that they agree.
+ */
+s.group('signal notes: the card says exactly what the tilt does')
+{
+  const sig = (patch: Partial<MonthlySignals>): MonthlySignals => ({ ...ALL_NULL_SIGNALS, ...patch })
+  for (const rating of [3.9, 4.2, 4.4, 4.6, 4.8]) {
+    const s1 = sig({ rating })
+    const boosted = signalTilt(s1).boost.has('review-engine')
+    const note = signalNotes(s1).find((n) => n.key === 'rating')?.note ?? ''
+    s.check(`rating ${rating}: note claims review lean IFF the tilt boosts review work`,
+      boosted === /review work/.test(note))
+  }
+  for (const health of [0, 62, 70, 71, 95]) {
+    const s2 = sig({ listingCompleteness: health })
+    const boosted = signalTilt(s2).boost.has('gbp-setup')
+    const note = signalNotes(s2).find((n) => n.key === 'listing')?.note ?? ''
+    s.check(`listing ${health}: note claims a listing fix IFF the tilt boosts discovery`,
+      boosted === /fixing your Google listing/.test(note))
+  }
+  {
+    const noList = sig({ hasList: false })
+    const t = signalTilt(noList)
+    const note = signalNotes(noList).find((n) => n.key === 'list')?.note ?? ''
+    s.check('no list: tilt demotes sends + boosts list building, and the note says so',
+      t.demote.has('newsletter') && t.boost.has('crm-list') && /builds a list/.test(note))
+  }
+  s.check('null signals produce no notes (nothing invented)', signalNotes(undefined).length === 0 && signalNotes(ALL_NULL_SIGNALS).length === 0)
 }
 
 s.report('Plan packing properties')

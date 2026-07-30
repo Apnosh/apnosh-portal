@@ -93,6 +93,58 @@ export function signalTilt(s?: MonthlySignals): SignalTilt {
   return { boost, demote, dropped: new Set(s.droppedServiceIds) }
 }
 
+/**
+ * The same facts, said to the OWNER with their consequence: what the plan does about each one.
+ *
+ * Lives in this file ON PURPOSE, next to signalTilt, using the SAME thresholds — the card that
+ * renders these must never claim a lean the composer does not actually make. If you change a
+ * threshold above, change the matching sentence here in the same commit (sim-pinned).
+ */
+export interface SignalNote {
+  key: string
+  label: string
+  value: string
+  /** What the plan does because of this fact, in the owner's language. */
+  note: string
+}
+export function signalNotes(s?: MonthlySignals): SignalNote[] {
+  if (!s) return []
+  const out: SignalNote[] = []
+  if (s.rating != null) {
+    out.push({
+      key: 'rating', label: 'Google rating', value: `${s.rating}★`,
+      note: s.rating < 4.3
+        ? 'So your plan leans into review work. The stars are the first thing new guests check.'
+        : s.rating >= 4.6
+          ? 'Strong enough to carry ads, so your plan pushes reach harder than repair.'
+          : 'Solid. Your plan pushes reach and reviews evenly.',
+    })
+  }
+  if (s.listingCompleteness != null) {
+    out.push({
+      key: 'listing', label: 'Google listing health', value: `${s.listingCompleteness} of 100`,
+      note: s.listingCompleteness <= 70
+        ? 'So your plan starts by fixing your Google listing. It is the cheapest win here.'
+        : 'Healthy, so your plan spends elsewhere.',
+    })
+  }
+  if (s.hasList != null) {
+    out.push({
+      key: 'list', label: 'Email and text list', value: s.hasList ? 'Connected' : 'None yet',
+      note: s.hasList
+        ? 'So email and text sends are on the table.'
+        : 'So we will not sell you email sends. Your plan builds a list first.',
+    })
+  }
+  if (s.complaintThemes.some((t) => /photo|menu|pic|look/i.test(t))) {
+    out.push({
+      key: 'photos', label: 'Reviews mention how food looks', value: 'Yes',
+      note: 'So photo work is the repair lane, not a nice-to-have.',
+    })
+  }
+  return out
+}
+
 /** Every field null/empty: must behave exactly like no signals at all (sim-pinned). */
 export const ALL_NULL_SIGNALS: MonthlySignals = {
   droppedServiceIds: [],
