@@ -452,6 +452,9 @@ export default function PlanSetup({
    * we show be the real one, and a number given here opens the plan already sized to it. The
    * default hands the sizing back to us — the plan is still built to the job, never to a wallet. */
   const [wantBudget, setWantBudget] = useState(() => initialAnswers?.budget != null)
+  /* The facts disclosure: collapsed by default — it exists to catch wrong data, not to be read
+   * on every walk. */
+  const [showFacts, setShowFacts] = useState(false)
   const qlist: QStep[] = answered ? ['start', ...gaps, 'money'] : []
   const q: QStep | null = qlist.length ? qlist[Math.min(qi, qlist.length - 1)] : null
   const last = qi >= qlist.length - 1
@@ -801,26 +804,35 @@ export default function PlanSetup({
 
         {/* Shown once, on the first stop: the facts the plan will lean on, each with its door to
             fix it. An owner who spots "4.1★" or a wrong slow day here just saved the whole plan. */}
+        {/* One quiet line, not a wall: the facts the plan leans on stay a tap away. The detail
+            exists to catch wrong account data, not to be read every single time. */}
         {qi === 0 && facts.length > 0 && (
-          <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '4px 15px', marginBottom: 22, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: '#86868B', padding: '10px 0 2px' }}>What we already know, and what your plan does about it</div>
-            {facts.map((f, i) => (
-              <div key={f.label} style={{ padding: '9px 0 10px', borderTop: i > 0 ? '0.5px solid rgba(0,0,0,0.06)' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ fontSize: 13, color: '#6E6E73', flexShrink: 0 }}>{f.label}</span>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#1D1D1F', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.value}</span>
-                  {f.href && (
-                    <a href={f.href} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'none' }}>Fix</a>
-                  )}
-                </div>
-                {f.note && (
-                  <div style={{ fontSize: 12, color: '#86868B', lineHeight: 1.45, marginTop: 3 }}>{f.note}</div>
-                )}
+          <div style={{ marginBottom: 20 }}>
+            <button
+              type="button" onClick={() => setShowFacts(!showFacts)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: "'Inter',system-ui,sans-serif" }}
+            >
+              <span style={{ fontSize: 12.5, color: '#86868B' }}>Built from what we already know about you</span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep }}>{showFacts ? 'Hide' : 'Show'}</span>
+            </button>
+            {showFacts && (
+              <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '2px 15px', marginTop: 10, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+                {facts.map((f, i) => (
+                  <div key={f.label} style={{ padding: '9px 0 10px', borderTop: i > 0 ? '0.5px solid rgba(0,0,0,0.06)' : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                      <span style={{ fontSize: 13, color: '#6E6E73', flexShrink: 0 }}>{f.label}</span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#1D1D1F', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.value}</span>
+                      {f.href && (
+                        <a href={f.href} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'none' }}>Fix</a>
+                      )}
+                    </div>
+                    {f.note && (
+                      <div style={{ fontSize: 12, color: '#86868B', lineHeight: 1.45, marginTop: 3 }}>{f.note}</div>
+                    )}
+                  </div>
+                ))}
               </div>
-            ))}
-            <div style={{ fontSize: 11.5, color: '#86868B', lineHeight: 1.45, padding: '0 0 10px' }}>
-              Your plan is already shaped by these. If a fact looks wrong, fix it so the plan is built on the truth.
-            </div>
+            )}
           </div>
         )}
 
