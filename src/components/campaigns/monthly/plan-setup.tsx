@@ -44,6 +44,7 @@ import {
 } from '@/lib/campaigns/data/plan-goals'
 import { excludedByReach, datedAnchors, monthlyFloor, budgetCeiling, type Reach } from '@/lib/campaigns/data/monthly-plan'
 import { offerApplies, demandSpikeApplies, suggestedTarget } from '@/lib/campaigns/data/campaign-ledger'
+import { WALK_TITLES as WT, WALK_SUBS as WS, WALK_LINES as WL, ASSET_PAYOFF, CAPACITY_CHIPS, fill } from '@/lib/campaigns/data/walk-copy'
 import type { GoalKey } from '@/lib/campaigns/types'
 
 export interface Answers {
@@ -428,6 +429,13 @@ export default function PlanSetup({
   /* The facts disclosure: collapsed by default — it exists to catch wrong data, not to be read
    * on every walk. */
   const [showFacts, setShowFacts] = useState(false)
+  /* The long promote list folds behind one row (design plan P2). Starts open when their menu is
+   * empty (nothing else to pick from) or a read already picked from the folded groups. */
+  const [morePromote, setMorePromote] = useState(
+    () => menu.length === 0 || (a.promote ?? []).some((v) => PROMOTE_OTHER.some((g) => g.items.some((i) => i.v === v))),
+  )
+  /* The avoid question's free line, for the personal deal-breakers no chip covers. */
+  const [avoidText, setAvoidText] = useState('')
   /* The start screen only shows when the paragraph did not already answer it: a read date (dated
    * shapes) or a read start (ongoing) is held, and the law is never to ask what is held. The
    * read-back chips below the recap are the correction path. Money ALWAYS shows — a read budget
@@ -565,7 +573,7 @@ export default function PlanSetup({
           ? `Aimed at ${audience.slice(0, 2).join(' and ').toLowerCase()}. Got it.`
           : 'Keeping it local. Got it.'
       case 'shift':
-        return shift.length ? `${shift.join(' and ')} — those are the nights we fix.` : null
+        return shift.length ? `${shift.join(' and ')}. Those are the shifts we fix.` : null
       case 'avoid':
         return avoid.length ? 'Understood. That stays off the table, everywhere.' : 'Nothing off limits. Noted.'
       case 'offer':
@@ -742,6 +750,8 @@ export default function PlanSetup({
     }
   }
   const flip = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v])
+  /* The promote cap (design plan): one to three picks. The first pick is the lead. */
+  const flip3 = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : arr.length >= 3 ? arr : [...arr, v])
   const setAuto = (k: 'goals' | 'promote' | 'audience', on: boolean) => set({ auto: { ...auto, [k]: on } })
 
   /* A description on its own is enough. If we could not parse it, a person reads it. */
@@ -1007,8 +1017,8 @@ export default function PlanSetup({
             date; ongoing ones default honestly to as-soon-as-possible. */}
         {q === 'start' && (
           <Act n={qi + 2} of={1 + qlist.length}
-            title={shape === 'date' ? (picked[0]?.v === 'opening' ? 'When do you open?' : 'When is it?') : shape === 'run' ? 'How long is it on for?' : 'When should this start?'}
-            sub={shape === 'date' ? 'Everything is worked backwards from this, so the last push lands on the day.' : shape === 'run' ? 'The day it starts, and the day it comes off.' : 'We build the same plan either way. This just sets the clock.'}
+            title={shape === 'date' ? (picked[0]?.v === 'opening' ? WT['date.opening'] : WT['date.event']) : shape === 'run' ? WT['date.run'] : WT.start}
+            sub={shape === 'date' ? WS.date : shape === 'run' ? WS['date.run'] : WS.start}
           >
             {shape === 'date' ? (
               <input
@@ -1024,14 +1034,14 @@ export default function PlanSetup({
                     style={{ flex: 1, minWidth: 0, height: 48, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 10px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }} />
                 </div>
                 <div style={{ fontSize: 11.5, color: AMBER_DK, background: AMBER_SOFT, borderRadius: 9, padding: '8px 10px', marginTop: 9, lineHeight: 1.45 }}>
-                  We record the end date and the team works to it. The automatic schedule counts back from the start, so a long run gets checked by a person.
+                  {WL['run.note']}
                 </div>
               </>
             ) : (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  <Card on={a.start === 'asap'} label="As soon as possible" sub="We start the moment you approve the plan" badge="Recommended" onClick={() => set({ start: 'asap', touched: [...new Set([...(a.touched ?? []), 'start'])] })} />
-                  <Card on={a.start !== 'asap'} label="On a date" sub="Pick the day the work should begin" onClick={() => set({ start: a.start === 'asap' ? '' : a.start, touched: [...new Set([...(a.touched ?? []), 'start'])] })} />
+                  <Card on={a.start === 'asap'} label={WL['start.asap.label']} sub={WL['start.asap.sub']} badge="Recommended" onClick={() => set({ start: 'asap', touched: [...new Set([...(a.touched ?? []), 'start'])] })} />
+                  <Card on={a.start !== 'asap'} label={WL['start.date.label']} sub={WL['start.date.sub']} onClick={() => set({ start: a.start === 'asap' ? '' : a.start, touched: [...new Set([...(a.touched ?? []), 'start'])] })} />
                 </div>
                 {a.start !== 'asap' && (
                   <input
@@ -1050,16 +1060,16 @@ export default function PlanSetup({
         {q === 'money' && (
           <Act
             n={qi + 2} of={1 + qlist.length}
-            title={wasRead('budget') ? 'Confirm the budget' : 'Do you have a budget in mind?'}
+            title={wasRead('budget') ? WT['money.confirm'] : WT.money}
             sub={wasRead('budget') && a.budget != null
               /* Money never moves on a read alone (owner rule): the number from the paragraph
                * lands here prefilled, and the Next tap below IS the explicit confirmation. */
-              ? `You wrote about $${a.budget.toLocaleString('en-US')}. Confirm it or change it — nothing is sized until you do.`
-              : 'Optional. Skip it and we size the plan to the job. You can always move the number on the plan itself.'}
+              ? fill(WS['money.confirm'], { amount: '$' + a.budget.toLocaleString('en-US') })
+              : WS.money}
           >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              <Card on={!wantBudget} label="You size it for me" sub="We build what this campaign needs and show you the price" badge={wasRead('budget') ? undefined : 'Recommended'} onClick={() => { setWantBudget(false); set({ budget: undefined, readKeys: readKeys.filter((k) => k !== 'budget') }) }} />
-              <Card on={wantBudget} label="I have a number" sub={dated ? 'The launch gets built to fit it' : 'The monthly plan gets built to fit it'} onClick={() => setWantBudget(true)} />
+              <Card on={!wantBudget} label={WL['money.auto.label']} sub={WL['money.auto.sub']} badge={wasRead('budget') ? undefined : 'Recommended'} onClick={() => { setWantBudget(false); set({ budget: undefined, readKeys: readKeys.filter((k) => k !== 'budget') }) }} />
+              <Card on={wantBudget} label={WL['money.num.label']} sub={dated ? WL['money.num.sub.dated'] : WL['money.num.sub.monthly']} onClick={() => setWantBudget(true)} />
             </div>
             {wantBudget && (
               <>
@@ -1092,7 +1102,7 @@ export default function PlanSetup({
         {/* offer ── only for offer-shaped campaigns whose terms were not read. Terms may never
             default (owner rule): the walk cannot pass this screen without them. */}
         {q === 'offer' && (
-          <Act n={qi + 2} of={1 + qlist.length} title="What is the deal, exactly?" sub="You mentioned an offer. We never guess the terms — they go out exactly as you set them here.">
+          <Act n={qi + 2} of={1 + qlist.length} title={WT.offer} sub={WS.offer}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {([
                 { k: 'offerTerms' as const, label: 'The offer', ph: '20% off all sandwiches', req: true },
@@ -1121,39 +1131,62 @@ export default function PlanSetup({
         {/* capacity ── demand-spike shapes only: what limits the restaurant if it works. This is
             the room's capacity to absorb the spike, and it goes to the team verbatim. */}
         {q === 'capacity' && (
-          <Act n={qi + 2} of={1 + qlist.length} title="If this works, what limits you?" sub="A campaign that fills the room needs the room ready for it. Staffing, prep, quantity of the featured item — and who tells the staff about the deal.">
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
-              {['Staffing is tight', 'Prep is the limit', 'Limited quantity of the featured item', 'Nothing limits us'].map((c) => (
-                <button
-                  key={c} type="button" className="ps-pick"
-                  onClick={() => set({ capacity: c === 'Nothing limits us' ? c : [(a.capacity ?? '').trim(), c].filter(Boolean).join('. ').replace(/^Nothing limits us\.?\s*/, '') })}
-                  style={{
-                    cursor: 'pointer', background: '#fff', border: `1.5px solid ${DESK.line}`, borderRadius: 99,
-                    padding: '8px 13px', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 12.5, fontWeight: 600, color: C.ink,
-                  }}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
-            <textarea
-              value={a.capacity ?? ''} aria-label="Capacity"
-              onChange={(e) => set({ capacity: e.target.value || undefined })}
-              placeholder="Only 40 seats. Weekend staff can handle it, weekdays are thin. The manager briefs staff on the deal Friday."
-              rows={3}
-              style={{
-                width: '100%', boxSizing: 'border-box', padding: '11px 13px', resize: 'none',
-                border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none',
-                fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink, lineHeight: 1.5,
-              }}
-            />
+          <Act n={qi + 2} of={1 + qlist.length} title={WT.capacity} sub={WS.capacity}>
+            {(() => {
+              /* Two clean parts, stored as the one string the brief already carries. The chips and
+               * the who-line parse back out of the stored string, so the screen round-trips. */
+              const cap = a.capacity ?? ''
+              const picked = CAPACITY_CHIPS.filter((c) => cap.includes(c))
+              const who = (cap.match(/Staff briefed by: (.+?)\.?$/) ?? [])[1] ?? ''
+              const compose = (chips: string[], w: string) =>
+                [...chips, w.trim() ? `Staff briefed by: ${w.trim()}` : ''].filter(Boolean).join('. ') || undefined
+              const toggle = (c: string) => {
+                const next = c === 'Nothing limits us'
+                  ? (picked.includes(c) ? [] : ['Nothing limits us'])
+                  : (picked.includes(c) ? picked.filter((x) => x !== c) : [...picked.filter((x) => x !== 'Nothing limits us'), c])
+                set({ capacity: compose(next, who) })
+              }
+              return (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 12 }}>
+                    {CAPACITY_CHIPS.map((c) => {
+                      const on = picked.includes(c)
+                      return (
+                        <button
+                          key={c} type="button" className="ps-pick" onClick={() => toggle(c)}
+                          style={{
+                            cursor: 'pointer', background: on ? '#f0faf6' : '#fff',
+                            border: `1.5px solid ${on ? C.green : DESK.line}`, borderRadius: 99,
+                            padding: '8px 13px', fontFamily: "'Inter',system-ui,sans-serif",
+                            fontSize: 12.5, fontWeight: 600, color: on ? C.greenDk : C.ink,
+                          }}
+                        >
+                          {c}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.mute, marginBottom: 5 }}>{WL['capacity.who']}</div>
+                  <input
+                    value={who} aria-label={WL['capacity.who']}
+                    onChange={(e) => set({ capacity: compose(picked, e.target.value) })}
+                    placeholder={WL['capacity.who.ph']}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px',
+                      border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none',
+                      fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink,
+                    }}
+                  />
+                </>
+              )
+            })()}
           </Act>
         )}
 
         {/* target ── every campaign gets one number to hit, on the metric its recipe already
             tracks. Suggested so the owner confirms rather than invents; never revenue. */}
         {q === 'target' && targetSug && (
-          <Act n={qi + 2} of={1 + qlist.length} title="What should this campaign hit?" sub={`We track ${targetSug.metric} for campaigns like this. If the run is falling short partway, we flag it and adjust.`}>
+          <Act n={qi + 2} of={1 + qlist.length} title={WT.target} sub={fill(WS.target, { metric: targetSug.metric })}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', padding: '0 14px', height: 50 }}>
               <input
                 inputMode="numeric" aria-label="Success target"
@@ -1171,7 +1204,7 @@ export default function PlanSetup({
 
         {/* shift ── which shifts, its own screen when they said shifts are the problem. */}
         {q === 'shift' && (
-          <Act n={qi + 2} of={1 + qlist.length} title="Which shifts need filling?" sub={whyAsk('shift') || 'Naming them aims the same work at the shifts that sit empty.'}>
+          <Act n={qi + 2} of={1 + qlist.length} title={WT.shift} sub={whyAsk('shift') || WS.shift}>
             <Grid>
               {SHIFTS.map((o) => {
                 const on = shift.includes(o.v)
@@ -1194,27 +1227,35 @@ export default function PlanSetup({
           </Act>
         )}
 
-        {q === 'assets' && <Act n={qi + 2} of={1 + qlist.length} title="What have you got to work with?" sub={whyAsk('assets') || 'Anything you already have, or could get easily. We build around it instead of billing you for it.'}>
+        {q === 'assets' && <Act n={qi + 2} of={1 + qlist.length} title={WT.assets} sub={whyAsk('assets') || WS.assets}>
         <Grid>
-          {OWNER_ASSETS.map((o) => {
+          {OWNER_ASSETS.filter((o) => o.v !== 'Nothing yet').map((o) => {
             const on = assets.includes(o.v)
-            const none = o.v === 'Nothing yet'
+            /* The payoff swaps in on selection: honesty reads as visible money and strength. */
+            const line = on ? (ASSET_PAYOFF[o.v] ?? o.sub) : o.sub
             return (
               <button
                 key={o.v} type="button" className="ps-pick"
-                onClick={() => set({ assets: none ? (on ? [] : [o.v]) : flip(assets.filter((x) => x !== 'Nothing yet'), o.v) })}
+                onClick={() => set({ assets: flip(assets.filter((x) => x !== 'Nothing yet'), o.v) })}
                 style={{
                   textAlign: 'left', cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`,
                   background: on ? '#f0faf6' : '#fff', borderRadius: 14, padding: '11px 12px',
-                  fontFamily: "'Inter',system-ui,sans-serif", borderStyle: none ? 'dashed' : 'solid',
+                  fontFamily: "'Inter',system-ui,sans-serif",
                 }}
               >
                 <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: on ? C.green : C.ink }}>{o.label}</span>
-                <span style={{ display: 'block', fontSize: 11, color: C.mute, marginTop: 2, lineHeight: 1.35 }}>{o.sub}</span>
+                <span style={{ display: 'block', fontSize: 11, color: on ? C.greenDk : C.mute, marginTop: 2, lineHeight: 1.35, fontWeight: on ? 600 : 400 }}>{line}</span>
               </button>
             )
           })}
         </Grid>
+        <button
+          type="button"
+          onClick={() => set({ assets: assets.includes('Nothing yet') ? [] : ['Nothing yet'] })}
+          style={{ display: 'block', margin: '12px auto 0', background: 'none', border: 'none', padding: 4, cursor: 'pointer', fontSize: 12.5, fontWeight: assets.includes('Nothing yet') ? 700 : 600, color: assets.includes('Nothing yet') ? DESK.mintDeep : C.faint, fontFamily: "'Inter',system-ui,sans-serif" }}
+        >
+          {assets.includes('Nothing yet') ? 'Nothing yet. We cover it all.' : WL['assets.none']}
+        </button>
         {covered.length > 0 && (
           <div style={{ display: 'flex', gap: 8, marginTop: 11, padding: '10px 12px', background: '#f0faf6', borderRadius: 12, fontSize: 12.5, color: C.ink, lineHeight: 1.45 }}>
             <Check size={14} strokeWidth={2.6} color={C.green} style={{ flexShrink: 0, marginTop: 2 }} />
@@ -1224,29 +1265,44 @@ export default function PlanSetup({
       </Act>}
 
       {/* 3 ── what to promote */}
-        {q === 'promote' && <Act n={qi + 2} of={1 + qlist.length} title="What should we put in front of people?" sub={whyAsk('promote') || 'Your menu, and everything else worth showing. Pick as many as fit.'}>
+        {q === 'promote' && <Act n={qi + 2} of={1 + qlist.length} title={WT.promote} sub={whyAsk('promote') || WS.promote}>
         {menu.length > 0 && (
           <>
             <GroupLabel>From your menu</GroupLabel>
             <Grid>
               {menu.map((m) => (
                 <Card key={m.id} on={promote.includes(m.name)} label={m.name} badge={m.featured ? 'You featured this' : undefined}
-                  dim={auto.promote} onClick={() => set({ promote: flip(promote, m.name), auto: { ...auto, promote: false } })} />
+                  dim={auto.promote} onClick={() => set({ promote: flip3(promote, m.name), auto: { ...auto, promote: false } })} />
               ))}
             </Grid>
           </>
         )}
-        {PROMOTE_OTHER.map((g) => (
-          <div key={g.group}>
-            <GroupLabel>{g.group}</GroupLabel>
-            <Grid>
-              {g.items.map((o) => (
-                <Card key={o.v} on={promote.includes(o.v)} label={o.label} sub={o.sub}
-                  dim={auto.promote} onClick={() => set({ promote: flip(promote, o.v), auto: { ...auto, promote: false } })} />
-              ))}
-            </Grid>
+        {morePromote ? (
+          PROMOTE_OTHER.map((g) => (
+            <div key={g.group}>
+              <GroupLabel>{g.group}</GroupLabel>
+              <Grid>
+                {g.items.map((o) => (
+                  <Card key={o.v} on={promote.includes(o.v)} label={o.label} sub={o.sub}
+                    dim={auto.promote} onClick={() => set({ promote: flip3(promote, o.v), auto: { ...auto, promote: false } })} />
+                ))}
+              </Grid>
+            </div>
+          ))
+        ) : (
+          <button
+            type="button" onClick={() => setMorePromote(true)}
+            style={{ width: '100%', marginTop: 10, background: '#fff', border: `1.5px dashed ${C.line}`, borderRadius: 14, padding: '11px 12px', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}
+          >
+            More to show: the bar, the patio, happy hour, the story…
+          </button>
+        )}
+        {promote.length > 0 && !auto.promote && (
+          <div style={{ fontSize: 12.5, color: C.ink, marginTop: 11 }}>
+            {WL['restate.promote']}: <b style={{ color: DESK.mintDeep }}>{promote[0]}</b>
+            {promote.length > 1 && <span style={{ color: C.mute }}> · also {promote.slice(1).join(', ')}</span>}
           </div>
-        ))}
+        )}
         {menu.length === 0 && (
           <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>
             We do not have your menu yet.{' '}
@@ -1258,7 +1314,7 @@ export default function PlanSetup({
       </Act>}
 
       {/* 4 ── who, and how far */}
-        {q === 'reach' && <Act n={qi + 2} of={1 + qlist.length} title="Who are you trying to reach?" sub={whyAsk('reach') || 'Who walks in, and how far you want to pull from. Both change the work.'}>
+        {q === 'reach' && <Act n={qi + 2} of={1 + qlist.length} title={WT.reach} sub={whyAsk('reach') || WS.reach}>
         <GroupLabel>Who</GroupLabel>
         <Grid>
           {AUDIENCE.map((o) => (
@@ -1282,7 +1338,7 @@ export default function PlanSetup({
       </Act>}
 
       {/* 5 ── what to avoid */}
-        {q === 'avoid' && <Act n={qi + 2} of={1 + qlist.length} title="Anything we should never do?" sub={whyAsk('avoid') || 'Optional, and the one place a plan most often goes wrong. Pick anything that is off limits.'}>
+        {q === 'avoid' && <Act n={qi + 2} of={1 + qlist.length} title={WT.avoid} sub={whyAsk('avoid') || WS.avoid}>
         <Grid>
           {AVOID.map((o) => {
             const on = avoid.includes(o.v)
@@ -1306,6 +1362,29 @@ export default function PlanSetup({
             )
           })}
         </Grid>
+        {avoid.filter((v) => !AVOID.some((o) => o.v === v)).length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 10 }}>
+            {avoid.filter((v) => !AVOID.some((o) => o.v === v)).map((v) => (
+              <button key={v} type="button" onClick={() => set({ avoid: avoid.filter((x) => x !== v) })}
+                style={{ cursor: 'pointer', background: '#fdeeee', border: '1.5px solid #c0564f', borderRadius: 99, padding: '7px 12px', fontSize: 12, fontWeight: 600, color: '#c0564f', fontFamily: "'Inter',system-ui,sans-serif" }}>
+                {v} ×
+              </button>
+            ))}
+          </div>
+        )}
+        <input
+          value={avoidText} aria-label="Anything else to avoid"
+          onChange={(e) => setAvoidText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && avoidText.trim()) { set({ avoid: [...avoid, avoidText.trim()] }); setAvoidText('') } }}
+          onBlur={() => { if (avoidText.trim()) { set({ avoid: [...avoid, avoidText.trim()] }); setAvoidText('') } }}
+          placeholder="Anything else we should never do? Type it and press enter."
+          style={{ width: '100%', boxSizing: 'border-box', height: 44, marginTop: 10, padding: '0 13px', border: `1.5px solid ${C.line}`, borderRadius: 13, background: '#fff', outline: 'none', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13, color: C.ink }}
+        />
+        {avoid.length > 0 && (
+          <div style={{ fontSize: 12.5, color: C.ink, marginTop: 10 }}>
+            {WL['restate.avoid']}: <b style={{ color: '#c0564f' }}>{avoid.map((v) => v.toLowerCase()).join(', ')}.</b>
+          </div>
+        )}
       </Act>}
 
         {/* The last stop also carries the optional extras, so they are seen exactly once. */}

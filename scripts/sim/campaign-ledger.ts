@@ -20,6 +20,7 @@ import {
 } from '../../src/lib/campaigns/data/campaign-ledger'
 import { known, missing, type PlanInputs } from '../../src/lib/campaigns/data/plan-inputs'
 import { sanitizeRead } from '../../src/lib/campaigns/data/plan-goals'
+import { WALK_TITLES, WALK_SUBS, WALK_LINES, OPTIONAL_QUESTION_SUBS, fill } from '../../src/lib/campaigns/data/walk-copy'
 import type { MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
 import { SITUATIONS } from '../../src/lib/campaigns/data/plan-goals'
 
@@ -344,5 +345,22 @@ s.group('The walk law, both directions (on fixtures)')
   s.check('awareness-only: no offer or capacity rows exist to ask about', !awKeys.has('offerTerms') && !awKeys.has('capacity'))
 }
 
-const ok = s.report('Campaign ledger (Phases 1-3)')
+/* ── 10. The walk's owner copy obeys the wording rules (QUESTION-DESIGN-PLAN P1) ──────────── */
+
+s.group('Walk copy: the wording rules are checkable')
+{
+  const all = { ...WALK_TITLES, ...WALK_SUBS, ...WALK_LINES }
+  for (const [k, v] of Object.entries(all)) {
+    s.check(`no em or en dash: ${k}`, !/[—–]/.test(v), v)
+  }
+  for (const [k, v] of Object.entries(WALK_TITLES)) {
+    s.check(`title ≤ 8 words: ${k}`, v.trim().split(/\s+/).length <= 8, v)
+  }
+  for (const k of OPTIONAL_QUESTION_SUBS) {
+    s.check(`optional question '${k}' says what skipping does`, /optional|skip/i.test(WALK_SUBS[k] ?? ''), WALK_SUBS[k])
+  }
+  s.check('fill substitutes tokens and leaves unknowns visible', fill('about {amount} for {x}', { amount: '$2,000' }) === 'about $2,000 for {x}')
+}
+
+const ok = s.report('Campaign ledger (Phases 1-3 + walk copy)')
 process.exit(ok ? 0 : 1)
