@@ -45,6 +45,7 @@ import {
 import { excludedByReach, datedAnchors, monthlyFloor, budgetCeiling, type Reach } from '@/lib/campaigns/data/monthly-plan'
 import { offerApplies, demandSpikeApplies, suggestedTarget } from '@/lib/campaigns/data/campaign-ledger'
 import { WALK_TITLES as WT, WALK_SUBS as WS, WALK_LINES as WL, ASSET_PAYOFF, CAPACITY_CHIPS, fill } from '@/lib/campaigns/data/walk-copy'
+import WalkCalendar from './walk-calendar'
 import type { GoalKey } from '@/lib/campaigns/types'
 
 export interface Answers {
@@ -1021,9 +1022,12 @@ export default function PlanSetup({
             sub={shape === 'date' ? WS.date : shape === 'run' ? WS['date.run'] : WS.start}
           >
             {shape === 'date' ? (
-              <input
-                aria-label="The date" type="date" value={a.when ?? ''} onChange={(e) => set({ when: e.target.value })}
-                style={{ width: '100%', height: 48, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 12px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }}
+              /* A day whose quality is visible before the tap: tints from the goal's real
+               * turnarounds. Picking here makes the date THEIR answer (provenance read -> asked). */
+              <WalkCalendar
+                goal={picked[0]?.goal ?? goals[0] ?? 'more-new'}
+                value={a.when}
+                onChange={(day) => set({ when: day, readKeys: readKeys.filter((k) => k !== 'when'), touched: [...new Set([...(a.touched ?? []), 'start'])] })}
               />
             ) : shape === 'run' ? (
               <>
@@ -1044,11 +1048,13 @@ export default function PlanSetup({
                   <Card on={a.start !== 'asap'} label={WL['start.date.label']} sub={WL['start.date.sub']} onClick={() => set({ start: a.start === 'asap' ? '' : a.start, touched: [...new Set([...(a.touched ?? []), 'start'])] })} />
                 </div>
                 {a.start !== 'asap' && (
-                  <input
-                    aria-label="Start date" type="date" value={a.start && a.start !== 'asap' ? a.start : ''}
-                    onChange={(e) => set({ start: e.target.value, touched: [...new Set([...(a.touched ?? []), 'start'])] })}
-                    style={{ width: '100%', height: 48, marginTop: 9, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 12px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }}
-                  />
+                  <div style={{ marginTop: 9 }}>
+                    <WalkCalendar
+                      goal={goals[0] ?? 'more-new'}
+                      value={a.start && a.start !== 'asap' ? a.start : undefined}
+                      onChange={(day) => set({ start: day, touched: [...new Set([...(a.touched ?? []), 'start'])] })}
+                    />
+                  </div>
                 )}
               </>
             )}

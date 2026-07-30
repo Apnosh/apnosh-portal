@@ -21,6 +21,8 @@ import {
 import { known, missing, type PlanInputs } from '../../src/lib/campaigns/data/plan-inputs'
 import { sanitizeRead } from '../../src/lib/campaigns/data/plan-goals'
 import { WALK_TITLES, WALK_SUBS, WALK_LINES, OPTIONAL_QUESTION_SUBS, fill } from '../../src/lib/campaigns/data/walk-copy'
+import { goalWorkDays, feasibilityFor, classifyDay } from '../../src/lib/campaigns/data/date-feasibility'
+import { afterBusinessDays } from '../../src/lib/campaigns/builder/plan-gates'
 import type { MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
 import { SITUATIONS } from '../../src/lib/campaigns/data/plan-goals'
 
@@ -362,5 +364,26 @@ s.group('Walk copy: the wording rules are checkable')
   s.check('fill substitutes tokens and leaves unknowns visible', fill('about {amount} for {x}', { amount: '$2,000' }) === 'about $2,000 for {x}')
 }
 
-const ok = s.report('Campaign ledger (Phases 1-3 + walk copy)')
+/* ── 11. The calendar's tints can never disagree with the gate (design plan P3) ───────────── */
+
+s.group('Date feasibility: tints derive from real turnarounds, same split as the gate')
+{
+  const TODAY = '2026-07-28' // a Tuesday; injected clock
+  for (const g of ['opening', 'event', 'more-new', 'get-known', 'reviews', 'regulars']) {
+    s.check(`${g}: a real lead (> 0 business days)`, goalWorkDays(g) > 0, String(goalWorkDays(g)))
+  }
+  const lead = goalWorkDays('opening')
+  const refuseLine = Math.ceil(lead / 2)
+  const justUnder = afterBusinessDays(TODAY, refuseLine - 1)
+  const atRefuse = afterBusinessDays(TODAY, refuseLine)
+  const atLead = afterBusinessDays(TODAY, lead)
+  s.check('under half the lead: too-soon (the gate would refuse)', classifyDay(justUnder, 'opening', TODAY) === 'too-soon')
+  s.check('at half the lead: tight (the gate would advise)', classifyDay(atRefuse, 'opening', TODAY) === 'tight')
+  s.check('at the full lead: ok (the gate is silent)', classifyDay(atLead, 'opening', TODAY) === 'ok')
+  const f = feasibilityFor('opening', TODAY)
+  s.check('feasibilityFor names the same two boundary days', f.firstTight === atRefuse && f.firstComfortable === atLead && f.leadDays === lead)
+  s.check('a goal with no turnaround data gets the honest 10-day floor, never zero', goalWorkDays('definitely-not-a-goal') === 10)
+}
+
+const ok = s.report('Campaign ledger (Phases 1-3 + walk copy + calendar)')
 process.exit(ok ? 0 : 1)
