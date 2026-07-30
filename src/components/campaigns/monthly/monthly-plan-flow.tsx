@@ -36,7 +36,8 @@ import { startMonthlyPlan } from '@/lib/dashboard/get-plan-inputs'
 import { CLIENT_AGREEMENT_VERSION, CLIENT_AGREEMENT_SUMMARY } from '@/lib/agreements/client-agreement'
 import { buildOrderSnapshot } from '@/lib/agreements/order-snapshot'
 import { ChainRung, chainStateOf, chainVerdict } from '@/components/campaigns/slow-nights/slow-nights-chain'
-import { assetsCover } from '@/lib/campaigns/data/plan-goals'
+import { assetsCover, type PlanQuestion } from '@/lib/campaigns/data/plan-goals'
+import { ledgerFor } from '@/lib/campaigns/data/campaign-ledger'
 import PlanSetup, { type Answers } from './plan-setup'
 
 const MP_CSS = `
@@ -303,7 +304,10 @@ export default function MonthlyPlanFlow({
       <PlanSetup
         inputs={inputs}
         signals={signals}
-        initialAnswers={initialAnswers}
+        /* The LIVE answers, not the mount-time prop: coming back from the plan ("What we based
+         * this on", or the assumed-defaults Change) must reopen the walk with everything already
+         * answered, not a blank sheet. On first mount `a` IS the initial prop. */
+        initialAnswers={a}
         onBuild={(ans) => {
           setA(ans)
           setPhase('build')
@@ -386,6 +390,36 @@ export default function MonthlyPlanFlow({
           : 'Runs every month.'}{' '}
         {edited ? 'Changed by you.' : 'Every step covered, nothing padded on top.'}
       </div>
+
+      {/* TIER-4 DEFAULTS, OUT LOUD (Ledger law: a default is never silent). Anything the plan
+          assumed rather than was told renders here, with the one-tap way back to change it —
+          the tap reopens exactly those questions in the walk. */}
+      {(() => {
+        const defaulted = ledgerFor(inputs, signals, a).filter((f) => f.tier === 'defaulted')
+        if (!defaulted.length) return null
+        const SAY: Record<string, string> = { reach: 'the neighbourhood reach', start: 'starting as soon as you approve' }
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 9 }}>
+            <span style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
+              We assumed {defaulted.map((f) => SAY[f.key] ?? f.label.toLowerCase()).join(' and ')}.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                /* Reopen the defaulted questions: appending them to `asked` puts them back in the
+                 * walk (gapsFor honours the model's list plus these), and setup opens on them. */
+                const qs = defaulted.map((f) => f.key).filter((k): k is PlanQuestion => k === 'reach')
+                const asked = a.asked ?? []
+                setA({ ...a, asked: [...asked, ...qs.filter((q) => !asked.some((x) => x.q === q)).map((q) => ({ q, why: 'You asked to change this.' }))] })
+                setPhase('setup')
+              }}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: DESK.mintDeep, fontFamily: "'Inter',system-ui,sans-serif", flexShrink: 0 }}
+            >
+              Change
+            </button>
+          </div>
+        )
+      })()}
 
       <style>{MP_CSS}</style>
       <DeskKeyframes />

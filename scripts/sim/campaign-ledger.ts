@@ -15,7 +15,7 @@
  */
 import { Suite } from './lib'
 import {
-  ledgerFor, ledgerHoles, offerApplies, demandSpikeApplies, LEDGER_DEFAULTS,
+  ledgerFor, ledgerHoles, offerApplies, demandSpikeApplies, suggestedTarget, LEDGER_DEFAULTS,
   type LedgerAnswers, type LedgerField, type LedgerKey,
 } from '../../src/lib/campaigns/data/campaign-ledger'
 import { known, missing, type PlanInputs } from '../../src/lib/campaigns/data/plan-inputs'
@@ -54,7 +54,7 @@ const SIGNALS: MonthlySignals = {
 const AWARENESS: LedgerAnswers = {
   situations: ['known'], shape: 'ongoing', start: 'asap',
   assets: [], promote: ['Spicy Chicken Sandwich'], reach: 'local',
-  shift: ['none'], avoid: [], budget: 1500, notes: '',
+  shift: ['none'], avoid: [], budget: 1500, notes: '', successTarget: 300,
   described: 'I want more people around here to know we exist.',
 }
 
@@ -97,7 +97,7 @@ s.group('Every field the composer/briefs consume today appears in the ledger')
     'rating', 'listingHealth', 'hasList', 'history', 'complaints',
     // brief + walk inputs
     'menu', 'knownFor', 'standsOut', 'audience', 'slowDays', 'channels',
-    'situation', 'when', 'start', 'assets', 'promote', 'reach', 'shift', 'avoid', 'budget', 'notes',
+    'situation', 'when', 'start', 'assets', 'promote', 'reach', 'shift', 'avoid', 'budget', 'notes', 'successTarget',
   ]
   const rows = byKey(ledgerFor(RICH_INPUTS, SIGNALS, AWARENESS))
   for (const k of CONSUMED_TODAY) s.check(`'${k}' present`, rows.has(k))
@@ -129,6 +129,10 @@ s.group("Only reach and start may ever classify 'defaulted' (owner rule)")
   s.check('unanswered start defaults to asap, out loud', empty.get('start')?.tier === 'defaulted' && empty.get('start')?.value === LEDGER_DEFAULTS.start)
   s.check('a dated campaign has no start row (the date IS the start)', !byKey(ledgerFor(RICH_INPUTS, SIGNALS, OFFER_DATED)).has('start'))
   s.check('an explicit non-default reach classifies asked', byKey(ledgerFor(RICH_INPUTS, SIGNALS, { ...AWARENESS, reach: 'city' })).get('reach')?.tier === 'asked')
+  /* Touch provenance (Phase 3): a tapped default is an ANSWER. Only a never-shown question defaults. */
+  s.check("a tapped 'asap' start classifies asked, not defaulted", byKey(ledgerFor(RICH_INPUTS, SIGNALS, { ...AWARENESS, touched: ['start'] })).get('start')?.tier === 'asked')
+  s.check("a tapped 'local' reach classifies asked, not defaulted", byKey(ledgerFor(RICH_INPUTS, SIGNALS, { ...AWARENESS, touched: ['reach'] })).get('reach')?.tier === 'asked')
+  s.check("the same values untouched still classify defaulted", byKey(ledgerFor(RICH_INPUTS, SIGNALS, AWARENESS)).get('start')?.tier === 'defaulted' && byKey(ledgerFor(RICH_INPUTS, SIGNALS, AWARENESS)).get('reach')?.tier === 'defaulted')
 }
 
 /* ── 4. offer economics: conditional, never default ───────────────────────────────────────── */
@@ -202,9 +206,14 @@ s.group('ledgerHoles: only consumed-today missing fields count')
   s.check('a fully-answered campaign on a rich account has no consumed-today holes', fullHoles.length === 0, `holes: ${fullHoles.join(', ')}`)
   const bareHoles = new Set(ledgerHoles(ledgerFor(EMPTY_INPUTS, undefined, {})).map((f) => f.key))
   s.check('an empty intake has situation as a hole', bareHoles.has('situation'))
-  s.check("planned-only fields (identity, visitors, specials, offer economics) are never holes", !bareHoles.has('identity') && !bareHoles.has('visitors') && !bareHoles.has('specials') && !bareHoles.has('successTarget'))
+  s.check('planned-only fields (identity, visitors, specials) are never holes', !bareHoles.has('identity') && !bareHoles.has('visitors') && !bareHoles.has('specials'))
+  s.check('an unconfirmed success target IS a hole (the walk asks it, with a suggestion)', bareHoles.has('successTarget'))
+  s.check('a blank budget and blank notes are never holes (optional by design)', !bareHoles.has('budget') && !bareHoles.has('notes'))
+  /* Phase 3 flipped this: the offer now rides the campaign brief, so an unstated offer on an
+   * offer-shaped campaign is a REAL hole — which is exactly why the walk asks for it. */
   const offerHoles = new Set(ledgerHoles(ledgerFor(RICH_INPUTS, SIGNALS, { ...OFFER_DATED, offerTerms: undefined })).map((f) => f.key))
-  s.check('an unstated offer is NOT yet a hole (composer does not consume it until Phase 4)', !offerHoles.has('offerTerms'))
+  s.check('an unstated offer IS a hole (the brief consumes it; the walk must ask)', offerHoles.has('offerTerms'))
+  s.check('but a blank limit or expiry is not (optional by design: blank means none)', !offerHoles.has('offerLimit') && !offerHoles.has('offerExpiry'))
   s.check('a dated campaign with no date IS a hole', new Set(ledgerHoles(ledgerFor(RICH_INPUTS, SIGNALS, { ...OFFER_DATED, when: undefined, readKeys: ['situation'] })).map((f) => f.key)).has('when'))
 }
 
@@ -280,5 +289,60 @@ s.group('Ledger: wide-read fields classify read, and flip to asked without prove
   s.check('same answers without provenance classify asked/defaulted', noProv.get('reach')?.tier === 'asked' && noProv.get('budget')?.tier === 'asked' && noProv.get('start')?.tier === 'defaulted')
 }
 
-const ok = s.report('Campaign ledger (Phases 1-2)')
+/* ── 9. Phase 3: the suggested target + the walk law ──────────────────────────────────────── */
+
+s.group('suggestedTarget: a number on the recipe\'s own proxy metric, never revenue')
+{
+  s.check('no situation, no suggestion', suggestedTarget({}) === null)
+  for (const [sit, frag] of [['opening', 'door'], ['reviews', 'Google reviews'], ['slow-shifts', 'slow shifts'], ['return', 'second visits']] as const) {
+    const t = suggestedTarget({ situations: [sit] })
+    s.check(`${sit}: metric mentions "${frag}", value > 0`, !!t && t.metric.includes(frag) && t.value > 0)
+  }
+  for (const sit of ['opening', 'event', 'new-thing', 'quiet', 'slow-shifts', 'reviews', 'checks', 'catering', 'takeout', 'known', 'return']) {
+    const t = suggestedTarget({ situations: [sit] })
+    s.check(`${sit}: never a revenue metric`, !!t && !/revenue|sales|\$/.test(t.metric))
+  }
+  const offer = suggestedTarget({ situations: ['opening'], described: '20% off all week' })
+  s.check('offer-shaped campaigns count redemptions', offer?.metric === 'offer redemptions')
+  const capped = suggestedTarget({ situations: ['opening'], described: '20% off', offerLimit: 'first 50 customers' })
+  s.check('a stated redemption limit caps the suggestion', capped?.value === 50 && capped.basis.includes('capped'))
+  s.check('an uncapped offer suggestion stays modest', (suggestedTarget({ situations: ['opening'], described: '20% off' })?.value ?? 999) <= 200)
+  s.check('the basis is honest about its source', suggestedTarget({ situations: ['reviews'] })?.basis.includes('typical') === true)
+}
+
+s.group('The walk law, both directions (on fixtures)')
+{
+  /* Direction 1 — no silent holes: a campaign whose walk completed has nothing consumed-missing. */
+  const doneOffer: LedgerAnswers = {
+    ...OFFER_DATED, promote: ['Spicy Chicken Sandwich'],
+    offerLimit: 'first 200', offerExpiry: 'opening week',
+    capacity: 'Only 40 seats; manager briefs staff Friday', successTarget: 150, notes: '',
+    shift: [], avoid: [],
+  }
+  const holes = ledgerHoles(ledgerFor(RICH_INPUTS, SIGNALS, doneOffer)).map((f) => f.key)
+  s.check('a completed offer walk leaves zero holes', holes.length === 0, `holes: ${holes.join(', ')}`)
+  const holesAw = ledgerHoles(ledgerFor(RICH_INPUTS, SIGNALS, AWARENESS)).map((f) => f.key)
+  s.check('a completed awareness walk leaves zero holes', holesAw.length === 0, `holes: ${holesAw.join(', ')}`)
+
+  /* Direction 2 — no theater, no dead ends: every hole the ledger can raise has a remedy. A
+   * campaign-tier hole must be a question the walk can ask; an account-tier hole is fixed in
+   * the account (connect, onboarding), never by re-asking mid-walk. A hole in neither set
+   * would be a dead end. */
+  const ASKABLE = new Set(['situation', 'when', 'until', 'start', 'assets', 'promote', 'reach', 'shift', 'avoid', 'budget', 'notes', 'offerTerms', 'offerLimit', 'offerExpiry', 'capacity', 'successTarget'])
+  const ACCOUNT = new Set(['rating', 'listingHealth', 'hasList', 'history', 'complaints', 'menu', 'knownFor', 'standsOut', 'audience', 'slowDays', 'channels'])
+  const CASES: LedgerAnswers[] = [{}, OFFER_DATED, { ...OFFER_DATED, offerTerms: undefined }, { situations: ['slow-shifts'], shape: 'ongoing' }]
+  for (const [i, c] of CASES.entries()) {
+    const hk = ledgerHoles(ledgerFor(RICH_INPUTS, SIGNALS, c)).map((f) => f.key)
+    s.check(`case ${i}: on a full account, every hole is askable`, hk.every((k) => ASKABLE.has(k)), `unaskable: ${hk.filter((k) => !ASKABLE.has(k)).join(', ')}`)
+    const bare = ledgerHoles(ledgerFor(EMPTY_INPUTS, undefined, c)).map((f) => f.key)
+    s.check(`case ${i}: on an empty account, every hole is askable or account-fixable`, bare.every((k) => ASKABLE.has(k) || ACCOUNT.has(k)), `dead ends: ${bare.filter((k) => !ASKABLE.has(k) && !ACCOUNT.has(k)).join(', ')}`)
+  }
+
+  /* The conditional-question law, restated on the walk's own gates: an awareness-only ongoing
+   * campaign creates no offer or capacity rows at all — there is nothing for a walk to ask. */
+  const awKeys = new Set(ledgerFor(RICH_INPUTS, SIGNALS, AWARENESS).map((f) => f.key))
+  s.check('awareness-only: no offer or capacity rows exist to ask about', !awKeys.has('offerTerms') && !awKeys.has('capacity'))
+}
+
+const ok = s.report('Campaign ledger (Phases 1-3)')
 process.exit(ok ? 0 : 1)

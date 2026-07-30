@@ -53,6 +53,9 @@ export interface LedgerField {
   neverDefault?: boolean
   /** Conditional fields: present in the ledger only when their predicate holds. */
   appliesWhen?: 'offer' | 'demand-spike'
+  /** Skippable by design: leaving it blank is an answer (no limit, size-to-job, nothing to add).
+   *  Optional fields never count as holes. */
+  optional?: boolean
 }
 
 /** The Answers surface the ledger classifies. Structural (not imported from the component) so
@@ -73,6 +76,8 @@ export interface LedgerAnswers {
   notes?: string
   described?: string
   readKeys?: string[]
+  /** Keys the owner explicitly answered in the walk. A tapped default is ASKED, not defaulted. */
+  touched?: string[]
   auto?: { goals?: boolean; promote?: boolean; audience?: boolean }
   offerTerms?: string
   offerLimit?: string
@@ -102,6 +107,7 @@ export function demandSpikeApplies(a: LedgerAnswers): boolean {
 }
 
 const wasRead = (a: LedgerAnswers, key: string) => (a.readKeys ?? []).includes(key)
+const wasTouched = (a: LedgerAnswers, key: string) => (a.touched ?? []).includes(key)
 
 /**
  * Classify everything. One row per fact; conditional rows appear only when their predicate
@@ -141,37 +147,96 @@ export function ledgerFor(
   const dated = a.shape === 'date' || a.shape === 'run'
   row({ key: 'when', label: dated ? 'The date' : 'The date (not a dated campaign)', tier: a.when ? (wasRead(a, 'when') ? 'read' : 'asked') : dated ? 'missing' : 'known', value: a.when, consumedBy: ['schedule (works backwards)', 'lead-time gate'] })
   if (a.shape === 'run') row({ key: 'until', label: 'Run end', tier: a.until ? (wasRead(a, 'until') ? 'read' : 'asked') : 'missing', value: a.until, consumedBy: ['run window (team works to it)'] })
-  if (!dated) row({ key: 'start', label: 'When it starts', tier: a.start && wasRead(a, 'start') ? 'read' : a.start && a.start !== LEDGER_DEFAULTS.start ? 'asked' : 'defaulted', value: a.start ?? LEDGER_DEFAULTS.start, consumedBy: ['brief.start', 'schedule'] })
+  /* A tapped ASAP is an answer; only a never-shown question defaults. Same rule for reach. */
+  if (!dated) row({ key: 'start', label: 'When it starts', tier: a.start && wasRead(a, 'start') ? 'read' : a.start && (a.start !== LEDGER_DEFAULTS.start || wasTouched(a, 'start')) ? 'asked' : 'defaulted', value: a.start ?? LEDGER_DEFAULTS.start, consumedBy: ['brief.start', 'schedule'] })
   /* Presence, not length: an empty array is "answered with none" — a real answer, not a hole. */
   row({ key: 'assets', label: 'What you bring', tier: a.assets ? (wasRead(a, 'assets') ? 'read' : 'asked') : 'missing', value: a.assets, consumedBy: ['never-billed coverage', 'ranking boost'] })
   row({ key: 'promote', label: 'What to promote', tier: a.promote?.length && wasRead(a, 'promote') ? 'read' : a.promote?.length || a.auto?.promote ? 'asked' : 'missing', value: a.auto?.promote ? 'auto' : a.promote, consumedBy: ['content briefs'] })
-  row({ key: 'reach', label: 'How far to reach', tier: a.reach && wasRead(a, 'reach') ? 'read' : a.reach && a.reach !== LEDGER_DEFAULTS.reach ? 'asked' : 'defaulted', value: a.reach ?? LEDGER_DEFAULTS.reach, consumedBy: ['address-bound exclusions'] })
+  row({ key: 'reach', label: 'How far to reach', tier: a.reach && wasRead(a, 'reach') ? 'read' : a.reach && (a.reach !== LEDGER_DEFAULTS.reach || wasTouched(a, 'reach')) ? 'asked' : 'defaulted', value: a.reach ?? LEDGER_DEFAULTS.reach, consumedBy: ['address-bound exclusions'] })
   row({ key: 'shift', label: 'Which shifts', tier: a.shift ? (wasRead(a, 'shift') ? 'read' : 'asked') : 'missing', value: a.shift, consumedBy: ['night work layered on the goal'] })
   row({ key: 'avoid', label: 'Never do', tier: a.avoid ? (wasRead(a, 'avoid') ? 'read' : 'asked') : 'missing', value: a.avoid, consumedBy: ['service exclusions', 'tone constraints'] })
   /* A read budget still classifies 'read' after its confirm tap — the confirmation is the money
    * rule (nothing sizes without the tap), not a change of source. Typing a new number flips the
    * provenance to asked in the screen. */
-  row({ key: 'budget', label: 'Budget', tier: a.budget != null ? (wasRead(a, 'budget') ? 'read' : 'asked') : 'missing', value: a.budget, consumedBy: ['plan size (incl. dated launch mode)'] })
-  row({ key: 'notes', label: 'Anything else', tier: a.notes != null ? 'asked' : 'missing', value: a.notes, consumedBy: ['the team, verbatim'] })
+  row({ key: 'budget', label: 'Budget', tier: a.budget != null ? (wasRead(a, 'budget') ? 'read' : 'asked') : 'missing', value: a.budget, consumedBy: ['plan size (incl. dated launch mode)'], optional: true })
+  row({ key: 'notes', label: 'Anything else', tier: a.notes != null ? 'asked' : 'missing', value: a.notes, consumedBy: ['the team, verbatim'], optional: true })
 
-  /* ── Owner amendments: conditional fields, in the ledger only when they apply. ── */
+  /* ── Owner amendments: conditional fields, in the ledger only when they apply. Since Phase 1
+   *    these travel on the campaign brief the team receives, so the brief is a real consumer;
+   *    composer/reporting consumption is still Phase 4. ── */
   if (offerApplies(a)) {
-    row({ key: 'offerTerms', label: 'Offer terms', tier: a.offerTerms ? (wasRead(a, 'offerTerms') ? 'read' : 'asked') : 'missing', value: a.offerTerms, consumedBy: ['planned: offer briefs + redemption tracking (Phase 4)'], neverDefault: true, appliesWhen: 'offer' })
-    row({ key: 'offerLimit', label: 'Redemption limit', tier: a.offerLimit ? (wasRead(a, 'offerLimit') ? 'read' : 'asked') : 'missing', value: a.offerLimit, consumedBy: ['planned: offer briefs (Phase 4)'], neverDefault: true, appliesWhen: 'offer' })
-    row({ key: 'offerExpiry', label: 'Offer expiration', tier: a.offerExpiry ? (wasRead(a, 'offerExpiry') ? 'read' : 'asked') : 'missing', value: a.offerExpiry, consumedBy: ['planned: offer briefs (Phase 4)'], neverDefault: true, appliesWhen: 'offer' })
+    row({ key: 'offerTerms', label: 'Offer terms', tier: a.offerTerms ? (wasRead(a, 'offerTerms') ? 'read' : 'asked') : 'missing', value: a.offerTerms, consumedBy: ['campaign brief (the team runs the offer)', 'planned: redemption tracking (Phase 4)'], neverDefault: true, appliesWhen: 'offer' })
+    row({ key: 'offerLimit', label: 'Redemption limit', tier: a.offerLimit ? (wasRead(a, 'offerLimit') ? 'read' : 'asked') : 'missing', value: a.offerLimit, consumedBy: ['campaign brief'], neverDefault: true, appliesWhen: 'offer', optional: true })
+    row({ key: 'offerExpiry', label: 'Offer expiration', tier: a.offerExpiry ? (wasRead(a, 'offerExpiry') ? 'read' : 'asked') : 'missing', value: a.offerExpiry, consumedBy: ['campaign brief'], neverDefault: true, appliesWhen: 'offer', optional: true })
   }
-  row({ key: 'successTarget', label: 'Success target', tier: a.successTarget != null ? 'asked' : 'missing', value: a.successTarget, consumedBy: ['planned: reporting + mid-run pivot flag (Phase 4)'] })
+  row({ key: 'successTarget', label: 'Success target', tier: a.successTarget != null ? 'asked' : 'missing', value: a.successTarget, consumedBy: ['campaign brief', 'planned: reporting + mid-run pivot flag (Phase 4)'] })
   if (demandSpikeApplies(a)) {
-    row({ key: 'capacity', label: 'Capacity if it works', tier: a.capacity?.trim() ? 'asked' : 'missing', value: a.capacity, consumedBy: ['planned: work brief — staffing, prep, quantity, who briefs staff (Phase 4)'], appliesWhen: 'demand-spike' })
+    row({ key: 'capacity', label: 'Capacity if it works', tier: a.capacity?.trim() ? 'asked' : 'missing', value: a.capacity, consumedBy: ['campaign brief (work brief: staffing, prep, quantity, who briefs staff)'], appliesWhen: 'demand-spike' })
   }
 
   return rows
 }
 
+/* ═══════════════════════════════════════════════ the success target's suggested number ═══ */
+
+/**
+ * The proxy metric each situation's recipe already tracks, and a typical pre-launch number for
+ * it. The owner rule (2026-07-29): the target is ASKED, but with a suggested number so the owner
+ * confirms rather than invents — and the metric is never "incremental revenue", which is
+ * unknowable.
+ *
+ * `basis` says where the number comes from, honestly: today these are authored baselines for
+ * campaigns of this shape. Phase 4 replaces the basis with this business's own comparable past
+ * campaigns once outcome data flows; the shape of the answer does not change.
+ */
+const PROXY_TARGETS: Record<string, { metric: string; base: number }> = {
+  opening: { metric: 'people through the door in opening week', base: 200 },
+  event: { metric: 'covers on the night', base: 80 },
+  'new-thing': { metric: 'orders of the new item in the first month', base: 150 },
+  quiet: { metric: 'extra visits a month', base: 120 },
+  'slow-shifts': { metric: 'extra covers on the slow shifts a month', base: 100 },
+  reviews: { metric: 'new Google reviews a month', base: 15 },
+  checks: { metric: 'add-on orders a month', base: 100 },
+  catering: { metric: 'catering inquiries a month', base: 8 },
+  takeout: { metric: 'direct online orders a month', base: 120 },
+  known: { metric: 'people finding you on Google a month', base: 300 },
+  return: { metric: 'second visits a month', base: 60 },
+}
+
+export interface TargetSuggestion {
+  metric: string
+  value: number
+  /** where the number came from — said to the owner, never implied precision we do not have */
+  basis: string
+}
+
+/**
+ * The suggested target for THIS campaign. Offer-shaped campaigns count redemptions (the thing
+ * the recipe actually tracks); a stated redemption limit caps the suggestion — suggesting more
+ * redemptions than the owner will honour would be nonsense.
+ */
+export function suggestedTarget(a: LedgerAnswers): TargetSuggestion | null {
+  const sit = a.situations?.[0]
+  if (!sit) return null
+  if (offerApplies(a)) {
+    const limit = Number((a.offerLimit ?? '').replace(/[^0-9]/g, ''))
+    const base = PROXY_TARGETS[sit]?.base ?? 100
+    return {
+      metric: 'offer redemptions',
+      value: Number.isFinite(limit) && limit > 0 ? Math.min(limit, base) : Math.min(base, 100),
+      basis: 'typical for offer campaigns like this' + (Number.isFinite(limit) && limit > 0 ? ', capped at your redemption limit' : ''),
+    }
+  }
+  const t = PROXY_TARGETS[sit]
+  if (!t) return null
+  return { metric: t.metric, value: t.base, basis: 'typical for campaigns like this' }
+}
+
 /** The holes: consumed-today fields that are neither held nor legally defaulted. 'planned:'
- *  consumers do not count — a hole is only a hole once something real reads the field. */
+ *  consumers do not count — a hole is only a hole once something real reads the field — and
+ *  optional fields never count: leaving them blank is itself an answer. */
 export function ledgerHoles(fields: LedgerField[]): LedgerField[] {
   return fields.filter(
-    (f) => f.tier === 'missing' && f.consumedBy.some((c) => !c.startsWith('planned:')),
+    (f) => f.tier === 'missing' && !f.optional && f.consumedBy.some((c) => !c.startsWith('planned:')),
   )
 }

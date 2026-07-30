@@ -124,7 +124,9 @@ Not a new brain: the composer, ladders, tilt rules, gates and vault stay. This i
 contract that guarantees the composer is always fed everything it can use — which is what makes
 "the perfect campaign for exactly what was described" a checkable claim instead of a slogan.
 
-Status: Phases 1-2 of 5 complete.
+Status: Phases 1-3 of 5 complete. **NEXT: THE PILOT GATE** — put the flow in front of the two
+test clients on a real campaign; measure question count, completion, and stalls. Phase 4 only
+after that review.
 
 - **Phase 1 SHIPPED** (2026-07-29, 3cf592f): campaign-ledger.ts (`ledgerFor` + tiers + owner
   rules encoded), readKeys provenance, amendment fields on Answers + brief, sim (96 checks).
@@ -137,5 +139,18 @@ Status: Phases 1-2 of 5 complete.
   always gets its explicit confirm tap ("nothing is sized until you do"). Live-verified: a
   grand-opening paragraph answered 8 fields and left a 1-question walk.
 
-Next: Phase 3 (need-driven asking, conditional offer/capacity questions, success target with
-suggested number), then the PILOT GATE with the two test clients before Phase 4.
+- **Phase 3 SHIPPED** (2026-07-30): the conditional questions + the walk law. The offer screen
+  appears only for offer-shaped briefs whose terms were not read (terms required — never
+  default); the capacity screen only for demand-spike shapes (offer-driven or dated/time-boxed;
+  awareness-only never sees it); the success target is asked of every campaign with a suggested
+  number on the recipe's own proxy metric (`suggestedTarget` — authored baselines today, real
+  comparables in Phase 4; offer campaigns count redemptions, capped at the stated limit).
+  Tier-4 defaults render on the plan ("We assumed the neighbourhood reach") with a one-tap
+  Change that reopens the walk with all answers preserved (this also fixed a real bug: going
+  back to setup used to blank the walk). Touch provenance: a tapped ASAP/local is ASKED;
+  only a never-tapped question defaults. Sim 120 → 158 checks, incl. the walk law both
+  directions (no silent holes on completed walks; every hole askable or account-fixable) and
+  optional-by-design fields (limit/expiry, budget, notes) never counting as holes.
+
+The pilot gate is open: Phases 1-3 are live in the flow; Phase 5's voice partially shipped
+(the takes line). Phase 4 (composer consumes the whole ledger) waits for the pilot review.

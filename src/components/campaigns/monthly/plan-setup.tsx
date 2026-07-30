@@ -17,7 +17,7 @@
  * the slider runs to $10,000+ and the line underneath goes honest at the top.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowRight, MessageSquare, Link2, Check, Users, Star, Moon, TrendingUp, Wand2, Ban, Store, Megaphone } from 'lucide-react'
 import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
 import { DESK, DeskKeyframes, PlanSheet, type PlanSheetLine } from '@/components/campaigns/desk/ui'
@@ -43,6 +43,7 @@ import {
   type CampaignShape,
 } from '@/lib/campaigns/data/plan-goals'
 import { excludedByReach, datedAnchors, monthlyFloor, budgetCeiling, type Reach } from '@/lib/campaigns/data/monthly-plan'
+import { offerApplies, demandSpikeApplies, suggestedTarget } from '@/lib/campaigns/data/campaign-ledger'
 import type { GoalKey } from '@/lib/campaigns/types'
 
 export interface Answers {
@@ -85,6 +86,10 @@ export interface Answers {
    * Phase 3 uses it to remove already-answered questions from the walk.
    */
   readKeys?: string[]
+  /** ASKED provenance for defaults-shaped answers: keys the owner explicitly tapped in the walk.
+   *  Distinguishes "chose ASAP" (asked) from "never saw the question" (defaulted, said out loud
+   *  on the plan). */
+  touched?: string[]
   /* ── Offer economics (ledger fields; asked/read only when the campaign includes an offer;
    *    NEVER defaulted — owner rule 2026-07-29). Question UI arrives with Phase 3. ── */
   offerTerms?: string
@@ -412,7 +417,7 @@ export default function PlanSetup({
    * question every campaign gets: when it starts. Dated campaigns answer that with their date;
    * ongoing ones default to as-soon-as-possible.
    */
-  type QStep = 'start' | 'money' | PlanQuestion
+  type QStep = 'start' | 'money' | 'offer' | 'capacity' | 'target' | PlanQuestion
   const answered = situations.length > 0 || !!auto.goals
   const [editDesc, setEditDesc] = useState(false)
   const [qi, setQi] = useState(0)
@@ -429,7 +434,36 @@ export default function PlanSetup({
    * prefills it, but sizing money to a paragraph without an explicit confirm tap is the one
    * shortcut the owner ruled out. */
   const startRead = wasRead('start') || (dated && wasRead('when'))
-  const qlist: QStep[] = answered ? [...(startRead ? [] : ['start' as QStep]), ...gaps, 'money'] : []
+  /*
+   * THE CONDITIONAL QUESTIONS (Ledger Phase 3), by the conditional-question law: they appear
+   * only when this campaign's shape creates them, and never otherwise.
+   *
+   * Presence is judged on the PARAGRAPH and the shape, deliberately not on the answers the
+   * screens themselves collect — a question that vanished the moment you typed into it would
+   * yank the walk out from under the owner.
+   *
+   *   offer     the paragraph names a deal but the terms were not read out of it. Offer
+   *             economics may never default (owner rule), so an offer-shaped campaign cannot
+   *             pass this screen without terms.
+   *   capacity  the shape creates a demand spike (offer-driven, or a dated/time-boxed moment):
+   *             ask what limits the restaurant if it works. Awareness-only ongoing campaigns
+   *             never see it.
+   *   target    every campaign gets one: the number on the recipe's own proxy metric, suggested
+   *             so the owner confirms rather than invents.
+   */
+  const offerSignal = offerApplies({ described: a.described }) || wasRead('offerTerms')
+  const demandSpike = offerSignal || dated
+  const needOffer = offerSignal && !wasRead('offerTerms')
+  const qlist: QStep[] = answered
+    ? [
+        ...(startRead ? [] : ['start' as QStep]),
+        ...gaps,
+        ...(needOffer ? ['offer' as QStep] : []),
+        ...(demandSpike ? ['capacity' as QStep] : []),
+        'target' as QStep,
+        'money' as QStep,
+      ]
+    : []
   const q: QStep | null = qlist.length ? qlist[Math.min(qi, qlist.length - 1)] : null
   const last = qi >= qlist.length - 1
   const showHero = !answered || editDesc
@@ -440,7 +474,25 @@ export default function PlanSetup({
         ? promote.length > 0 || !!auto.promote
         : q === 'money'
           ? (!wantBudget || (a.budget != null && a.budget > 0))
-          : true
+          : q === 'offer'
+            /* Offer terms may never default (owner rule): an offer campaign cannot pass without them. */
+            ? !!a.offerTerms?.trim()
+            : q === 'capacity'
+              ? !!a.capacity?.trim()
+              : q === 'target'
+                ? a.successTarget != null
+                : true
+
+  /* The target arrives pre-filled with the suggested number, so confirming it is one tap and
+   * inventing one is never required. Suggested, not silent: the screen names the basis. */
+  const targetSug = useMemo(
+    () => suggestedTarget({ situations, described: a.described, offerTerms: a.offerTerms, offerLimit: a.offerLimit }),
+    [situations.join(','), a.described, a.offerTerms, a.offerLimit],
+  )
+  useEffect(() => {
+    if (q === 'target' && a.successTarget == null && targetSug) set({ successTarget: targetSug.value })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, targetSug?.value])
 
   /*
    * WHAT WE'RE WORKING FROM — the facts the plan quietly leans on, shown back once.
@@ -516,6 +568,16 @@ export default function PlanSetup({
         return shift.length ? `${shift.join(' and ')} — those are the nights we fix.` : null
       case 'avoid':
         return avoid.length ? 'Understood. That stays off the table, everywhere.' : 'Nothing off limits. Noted.'
+      case 'offer':
+        return a.offerTerms ? 'The deal goes out exactly as you wrote it.' : null
+      case 'capacity':
+        return a.capacity === 'Nothing limits us'
+          ? 'Good — then we push as hard as the budget allows.'
+          : a.capacity
+            ? 'Noted. The team plans the push around that.'
+            : null
+      case 'target':
+        return a.successTarget != null ? `${a.successTarget.toLocaleString('en-US')} it is. We track it from day one.` : null
       default:
         return null
     }
@@ -709,6 +771,8 @@ export default function PlanSetup({
     else if (asks('promote')) sheetLines.push({ text: 'What to promote', ghost: true })
     if (asks('reach')) sheetLines.push({ text: `Reaching ${REACH.find((r) => r.v === reach)?.label.toLowerCase() ?? 'the neighbourhood'}` })
     if (avoid.length > 0) sheetLines.push({ text: `Never: ${avoid.slice(0, 2).join(', ').toLowerCase()}${avoid.length > 2 ? '…' : ''}` })
+    if (a.offerTerms) sheetLines.push({ text: `The deal: ${a.offerTerms}${a.offerLimit ? ` (${a.offerLimit.toLowerCase()})` : ''}` })
+    if (a.successTarget != null && targetSug) sheetLines.push({ text: `Aiming for ${a.successTarget.toLocaleString('en-US')} ${targetSug.metric}` })
     if (a.budget != null) sheetLines.push({ text: `Built to about $${a.budget.toLocaleString('en-US')}${dated ? '' : ' a month'}` })
   }
 
@@ -966,13 +1030,13 @@ export default function PlanSetup({
             ) : (
               <>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-                  <Card on={a.start === 'asap'} label="As soon as possible" sub="We start the moment you approve the plan" badge="Recommended" onClick={() => set({ start: 'asap' })} />
-                  <Card on={a.start !== 'asap'} label="On a date" sub="Pick the day the work should begin" onClick={() => set({ start: a.start === 'asap' ? '' : a.start })} />
+                  <Card on={a.start === 'asap'} label="As soon as possible" sub="We start the moment you approve the plan" badge="Recommended" onClick={() => set({ start: 'asap', touched: [...new Set([...(a.touched ?? []), 'start'])] })} />
+                  <Card on={a.start !== 'asap'} label="On a date" sub="Pick the day the work should begin" onClick={() => set({ start: a.start === 'asap' ? '' : a.start, touched: [...new Set([...(a.touched ?? []), 'start'])] })} />
                 </div>
                 {a.start !== 'asap' && (
                   <input
                     aria-label="Start date" type="date" value={a.start && a.start !== 'asap' ? a.start : ''}
-                    onChange={(e) => set({ start: e.target.value })}
+                    onChange={(e) => set({ start: e.target.value, touched: [...new Set([...(a.touched ?? []), 'start'])] })}
                     style={{ width: '100%', height: 48, marginTop: 9, border: `1.5px solid ${DESK.line}`, borderRadius: 13, padding: '0 12px', fontSize: 15, color: C.ink, fontFamily: "'Inter',system-ui,sans-serif", background: '#fff' }}
                   />
                 )}
@@ -1022,6 +1086,86 @@ export default function PlanSetup({
                 )}
               </>
             )}
+          </Act>
+        )}
+
+        {/* offer ── only for offer-shaped campaigns whose terms were not read. Terms may never
+            default (owner rule): the walk cannot pass this screen without them. */}
+        {q === 'offer' && (
+          <Act n={qi + 2} of={1 + qlist.length} title="What is the deal, exactly?" sub="You mentioned an offer. We never guess the terms — they go out exactly as you set them here.">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {([
+                { k: 'offerTerms' as const, label: 'The offer', ph: '20% off all sandwiches', req: true },
+                { k: 'offerLimit' as const, label: 'Any limit', ph: 'First 100 customers, one per table…', req: false },
+                { k: 'offerExpiry' as const, label: 'When it ends', ph: 'Opening week, end of August…', req: false },
+              ]).map((f) => (
+                <div key={f.k}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: C.mute, marginBottom: 5 }}>
+                    {f.label}{f.req ? '' : '  ·  optional'}
+                  </div>
+                  <input
+                    value={a[f.k] ?? ''} placeholder={f.ph} aria-label={f.label}
+                    onChange={(e) => set({ [f.k]: e.target.value || undefined, readKeys: readKeys.filter((k) => k !== f.k) })}
+                    style={{
+                      width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px',
+                      border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none',
+                      fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink,
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+          </Act>
+        )}
+
+        {/* capacity ── demand-spike shapes only: what limits the restaurant if it works. This is
+            the room's capacity to absorb the spike, and it goes to the team verbatim. */}
+        {q === 'capacity' && (
+          <Act n={qi + 2} of={1 + qlist.length} title="If this works, what limits you?" sub="A campaign that fills the room needs the room ready for it. Staffing, prep, quantity of the featured item — and who tells the staff about the deal.">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 10 }}>
+              {['Staffing is tight', 'Prep is the limit', 'Limited quantity of the featured item', 'Nothing limits us'].map((c) => (
+                <button
+                  key={c} type="button" className="ps-pick"
+                  onClick={() => set({ capacity: c === 'Nothing limits us' ? c : [(a.capacity ?? '').trim(), c].filter(Boolean).join('. ').replace(/^Nothing limits us\.?\s*/, '') })}
+                  style={{
+                    cursor: 'pointer', background: '#fff', border: `1.5px solid ${DESK.line}`, borderRadius: 99,
+                    padding: '8px 13px', fontFamily: "'Inter',system-ui,sans-serif", fontSize: 12.5, fontWeight: 600, color: C.ink,
+                  }}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={a.capacity ?? ''} aria-label="Capacity"
+              onChange={(e) => set({ capacity: e.target.value || undefined })}
+              placeholder="Only 40 seats. Weekend staff can handle it, weekdays are thin. The manager briefs staff on the deal Friday."
+              rows={3}
+              style={{
+                width: '100%', boxSizing: 'border-box', padding: '11px 13px', resize: 'none',
+                border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', outline: 'none',
+                fontFamily: "'Inter',system-ui,sans-serif", fontSize: 14, color: C.ink, lineHeight: 1.5,
+              }}
+            />
+          </Act>
+        )}
+
+        {/* target ── every campaign gets one number to hit, on the metric its recipe already
+            tracks. Suggested so the owner confirms rather than invents; never revenue. */}
+        {q === 'target' && targetSug && (
+          <Act n={qi + 2} of={1 + qlist.length} title="What should this campaign hit?" sub={`We track ${targetSug.metric} for campaigns like this. If the run is falling short partway, we flag it and adjust.`}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, border: `1.5px solid ${DESK.line}`, borderRadius: 13, background: '#fff', padding: '0 14px', height: 50 }}>
+              <input
+                inputMode="numeric" aria-label="Success target"
+                value={a.successTarget != null ? a.successTarget.toLocaleString('en-US') : ''}
+                onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); set({ successTarget: n ? Number(n) : undefined }) }}
+                style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontFamily: DISPLAY, fontSize: 18, color: C.ink }}
+              />
+              <span style={{ fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap' }}>{targetSug.metric}</span>
+            </div>
+            <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, marginTop: 8 }}>
+              We suggested {targetSug.value.toLocaleString('en-US')} — {targetSug.basis}. Change it if you know your number.
+            </div>
           </Act>
         )}
 
@@ -1125,7 +1269,7 @@ export default function PlanSetup({
         <GroupLabel>How far</GroupLabel>
         <Grid>
           {REACH.map((r) => (
-            <Card key={r.v} on={reach === r.v} label={r.label} sub={r.sub} onClick={() => set({ reach: r.v })} />
+            <Card key={r.v} on={reach === r.v} label={r.label} sub={r.sub} onClick={() => set({ reach: r.v, touched: [...new Set([...(a.touched ?? []), 'reach'])] })} />
           ))}
         </Grid>
         {dropped.length > 0 && (
