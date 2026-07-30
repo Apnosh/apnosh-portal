@@ -302,6 +302,7 @@ export default function MonthlyPlanFlow({
     return (
       <PlanSetup
         inputs={inputs}
+        signals={signals}
         initialAnswers={initialAnswers}
         onBuild={(ans) => {
           setA(ans)

@@ -21,7 +21,8 @@ import { useMemo, useState } from 'react'
 import { ArrowRight, MessageSquare, Link2, Check, Users, Star, Moon, TrendingUp, Wand2, Ban, Store, Megaphone } from 'lucide-react'
 import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
 import { DESK, DeskKeyframes, PlanSheet, type PlanSheetLine } from '@/components/campaigns/desk/ui'
-import { connectRecommendations, isKnown, type PlanInputs } from '@/lib/campaigns/data/plan-inputs'
+import { connectRecommendations, isKnown, knownIn, type PlanInputs } from '@/lib/campaigns/data/plan-inputs'
+import type { MonthlySignals } from '@/lib/campaigns/data/monthly-signals'
 import {
   PLAN_GOALS,
   SITUATIONS,
@@ -316,10 +317,14 @@ function DecideForMe({ on, resolves, onToggle }: { on: boolean; resolves: string
 
 export default function PlanSetup({
   inputs,
+  signals,
   onBuild,
   initialAnswers,
 }: {
   inputs: PlanInputs
+  /** The brain's live read of THIS business (rating, list, listing health). Shown back as facts
+   *  the plan will lean on, so wrong account data gets caught here instead of composing quietly. */
+  signals?: MonthlySignals
   onBuild: (a: Answers) => void
   initialAnswers?: Answers
 }) {
@@ -459,6 +464,25 @@ export default function PlanSetup({
         : q === 'money'
           ? (!wantBudget || (a.budget != null && a.budget > 0))
           : true
+
+  /*
+   * WHAT WE'RE WORKING FROM — the facts the plan quietly leans on, shown back once.
+   *
+   * The engine reads the account (rating, list, listing health) and onboarding (known for, who
+   * you are for, slow days) and tilts the plan with all of it. Never showing that was the real
+   * plan-quality risk: wrong account data composed a quietly wrong plan and the owner had no
+   * moment to catch it. Stored goal and stored budget are deliberately NOT shown — this campaign's
+   * goal came from the describe box, and old budget never sizes anything.
+   */
+  const facts = useMemo(() => {
+    const rows = knownIn(inputs)
+      .filter((r) => r.key !== 'goal' && r.key !== 'budget')
+      .map((r) => ({ label: r.label, value: r.value, href: r.href }))
+    if (signals?.rating != null) rows.unshift({ label: 'Google rating', value: `${signals.rating}★`, href: '/dashboard/business-info' })
+    if (signals?.listingCompleteness != null) rows.push({ label: 'Google listing health', value: `${signals.listingCompleteness} of 100`, href: '/dashboard/business-info' })
+    if (signals?.hasList != null) rows.push({ label: 'Email and text list', value: signals.hasList ? 'Connected' : 'None yet', href: undefined })
+    return rows
+  }, [inputs, signals])
 
   /* The honest range for the money question, from the same anchors the plan screen uses. */
   const moneyRange = useMemo(() => {
@@ -717,6 +741,26 @@ export default function PlanSetup({
           </span>
           <span style={{ flexShrink: 0, fontSize: 12, fontWeight: 700, color: DESK.mintDeep, marginTop: 1 }}>Edit</span>
         </button>
+
+        {/* Shown once, on the first stop: the facts the plan will lean on, each with its door to
+            fix it. An owner who spots "4.1★" or a wrong slow day here just saved the whole plan. */}
+        {qi === 0 && facts.length > 0 && (
+          <div style={{ background: '#fff', border: '0.5px solid rgba(0,0,0,0.08)', borderRadius: 16, padding: '4px 15px', marginBottom: 22, boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#86868B', padding: '10px 0 2px' }}>What we&rsquo;re working from</div>
+            {facts.map((f, i) => (
+              <div key={f.label} style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '9px 0 10px', borderTop: i > 0 ? '0.5px solid rgba(0,0,0,0.06)' : 'none' }}>
+                <span style={{ fontSize: 13, color: '#6E6E73', flexShrink: 0 }}>{f.label}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 600, color: '#1D1D1F', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.value}</span>
+                {f.href && (
+                  <a href={f.href} style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'none' }}>Fix</a>
+                )}
+              </div>
+            ))}
+            <div style={{ fontSize: 11.5, color: '#86868B', lineHeight: 1.45, padding: '0 0 10px' }}>
+              The plan leans on these. If one looks wrong, fix it before you build.
+            </div>
+          </div>
+        )}
 
         <div key={q} className="ps-hero2">
         {/* start ── every campaign gets the clock question. Dated campaigns answer it with their

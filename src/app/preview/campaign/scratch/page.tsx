@@ -8,6 +8,12 @@
  */
 import MonthlyPlanFlow from '@/components/campaigns/monthly/monthly-plan-flow'
 import type { PlanInputs } from '@/lib/campaigns/data/plan-inputs'
+import type { MonthlySignals } from '@/lib/campaigns/data/monthly-signals'
+
+const SIGNALS: MonthlySignals = {
+  droppedServiceIds: [], workingServiceIds: [], complaintThemes: [],
+  rating: 4.6, listingCompleteness: 62, hasList: false, assembledAt: '2026-07-29T00:00:00Z',
+}
 
 const known = <T,>(value: T, label?: string) => ({ value, source: 'onboarding', label }) as never
 const missing = { value: null, source: 'missing' } as never
@@ -32,7 +38,7 @@ export default function PreviewScratchPage() {
   return (
     <div style={{ position: 'fixed', inset: 0, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 480, height: '100dvh', overflowY: 'auto', background: '#F7F5F0' }}>
-        <MonthlyPlanFlow inputs={INPUTS} />
+        <MonthlyPlanFlow inputs={INPUTS} signals={SIGNALS} />
       </div>
     </div>
   )
