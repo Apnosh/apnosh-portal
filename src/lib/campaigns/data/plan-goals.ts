@@ -645,14 +645,24 @@ export function goalReadiness(key: string): { ready: number; held: number } {
  */
 export interface WalkOpt { v: string; label: string; sub?: string }
 
-export const SHIFT_OPTIONS: readonly WalkOpt[] = [
-  { v: 'Monday to Wednesday', label: 'Early week', sub: 'Mon, Tue, Wed' },
-  { v: 'Thursday', label: 'Thursdays', sub: '' },
-  { v: 'Sunday', label: 'Sundays', sub: '' },
-  { v: 'Lunch', label: 'Lunch', sub: 'The midday shift' },
-  { v: 'The late window', label: 'Late', sub: 'After the rush' },
-  { v: 'The whole off-season', label: 'Off-season', sub: 'The slow months' },
+/* Days + dayparts, matching how owners say it ("Tuesday nights are dead"). The week strip
+ * renders the first seven; the daypart chips render the rest. */
+export const SHIFT_DAYS: readonly WalkOpt[] = [
+  { v: 'Monday', label: 'M' },
+  { v: 'Tuesday', label: 'T' },
+  { v: 'Wednesday', label: 'W' },
+  { v: 'Thursday', label: 'T' },
+  { v: 'Friday', label: 'F' },
+  { v: 'Saturday', label: 'S' },
+  { v: 'Sunday', label: 'S' },
 ]
+export const SHIFT_PARTS: readonly WalkOpt[] = [
+  { v: 'Lunch', label: 'Lunch', sub: 'The midday shift' },
+  { v: 'Dinner', label: 'Dinner', sub: 'The evening shift' },
+  { v: 'After the rush', label: 'Late', sub: 'The last hours' },
+  { v: 'The off-season', label: 'Off-season', sub: 'The slow months' },
+]
+export const SHIFT_OPTIONS: readonly WalkOpt[] = [...SHIFT_DAYS, ...SHIFT_PARTS]
 
 /** Who walks in: age, life stage and occasion together, because owners think in all three. */
 export const AUDIENCE_OPTIONS: readonly WalkOpt[] = [
@@ -792,7 +802,10 @@ export function sanitizeRead(raw: unknown, text: string, menuNames: readonly str
   if (promote.length) out.promote = promote
 
   const terms = str(backed('offerTerms'))
-  if (terms) out.offerTerms = terms
+  /* A vague deal cannot be run, tracked, or capped ("some kind of deal"). No number and no
+   * free/two-for-one shape means it is a wish, not terms — drop it so the composer asks. */
+  const concrete = (t: string) => /\d/.test(t) || /free|two for one|2 for 1|bogo/i.test(t)
+  if (terms && concrete(terms)) out.offerTerms = terms
   const limit = str(backed('offerLimit'))
   if (limit) out.offerLimit = limit
   const expiry = str(backed('offerExpiry'))

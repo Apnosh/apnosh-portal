@@ -121,7 +121,7 @@ Rules for "read":
   a guessed value would silently compose a wrong plan, which is worse than asking.
 - The quote is the proof. Copy their words exactly, including typos. Short is fine.
 - For list fields, map their words onto the EXACT strings from the lists ("Tuesdays and
-  Wednesdays are dead" -> shift ["Monday to Wednesday"]). If nothing on the list fits, omit it.
+  Wednesdays are dead" -> shift ["Tuesday", "Wednesday"]). If nothing on the list fits, omit it.
 - A field you put in "read" must NOT also appear in "ask".`
 
 function buildPrompt(text: string, menu: readonly string[]): string {

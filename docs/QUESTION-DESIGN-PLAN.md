@@ -240,5 +240,11 @@ question LIST; these phases must not change it (the walk-law sim is the tripwire
 4. **Target presets:** Careful / Suggested / Ambitious at 0.7x / 1x / 1.5x — right feel, or
    fewer options (Suggested + custom only)?
 
-Status: DRAFTED 2026-07-30. Awaiting owner review; builds after sign-off, before the pilot
-gate opens to the test clients.
+Status: BUILT 2026-07-30 (owner approved all four recommendations). All five phases shipped:
+P1 copy table + lint (walk-copy.ts), P2 cheap upgrades, P3 the calendar (date-feasibility.ts +
+WalkCalendar), P4 the deal composer + target cards (deal-composer.ts), P5 rings + week strip +
+money slider. Two real bugs caught by the browser pass and fixed with sim pins: a vague offer
+read ("some kind of deal") no longer skips the composer, and a read "start asap" no longer
+skips the date question on a dated campaign. Battery: ledger sim 240, plan-packing 387,
+monthly-plan-e2e 30, tsc clean, full phone-width walk to a built plan with zero console
+errors. The pilot gate is open on this version.

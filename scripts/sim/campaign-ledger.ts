@@ -232,13 +232,13 @@ s.group('sanitizeRead: the evidence law — no quote in the text, no field')
   const good = sanitizeRead({
     budget: q(2000, 'about $2,000'),
     reach: q('city', 'the whole city'),
-    shift: q(['Monday to Wednesday'], 'Tuesdays are dead'),
+    shift: q(['Tuesday'], 'Tuesdays are dead'),
     offerTerms: q('20% off all sandwiches', '20% off all sandwiches'),
     offerLimit: q('first 100 customers', 'first 100 customers'),
     promote: q(['Spicy Chicken Sandwich'], 'sandwiches'),
   }, TEXT, MENU)
   s.eq('a fully-backed read survives intact', good, {
-    budget: 2000, reach: 'city', shift: ['Monday to Wednesday'],
+    budget: 2000, reach: 'city', shift: ['Tuesday'],
     promote: ['Spicy Chicken Sandwich'], offerTerms: '20% off all sandwiches', offerLimit: 'first 100 customers',
   })
 
@@ -406,6 +406,11 @@ s.group('Deal composer: compose/parse round-trip, nothing vague')
   s.check('an empty scope cannot compose', dealSentence({ kind: 'pct', amount: 20, scope: '  ' }) === null)
   s.check('a zero or absurd percent cannot compose', dealSentence({ kind: 'pct', amount: 0, scope: 'x' }) === null && dealSentence({ kind: 'pct', amount: 100, scope: 'x' }) === null)
   s.check('free text from the escape does not false-parse', parseDeal('buy my cousin a boat and eat free forever') === null)
+  /* A vague offer read is no read at all: the composer must ask instead. */
+  const VTEXT = 'we want to run some kind of deal during opening week'
+  s.eq('a vague offer read is dropped (no number, no shape)', sanitizeRead({ offerTerms: { value: 'some kind of deal during opening week', quote: 'some kind of deal during opening week' } }, VTEXT, []), {})
+  s.check('a concrete offer read survives', sanitizeRead({ offerTerms: { value: '20% off everything', quote: 'some kind of deal' } }, VTEXT, []).offerTerms === '20% off everything')
+  s.check('a free-item offer read survives without a number', sanitizeRead({ offerTerms: { value: 'Free drink with any entree', quote: 'some kind of deal' } }, VTEXT, []).offerTerms === 'Free drink with any entree')
   /* The redemption-cap round trip: a composed limit still caps suggestedTarget. */
   const capped = suggestedTarget({ situations: ['opening'], described: '20% off', offerLimit: 'First 150 customers' })
   s.check('a composed limit caps the suggested target', capped?.value === 150)

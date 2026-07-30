@@ -32,7 +32,8 @@ import {
   situationByValue,
   gapsFor,
   assetsCover,
-  SHIFT_OPTIONS,
+  SHIFT_DAYS,
+  SHIFT_PARTS,
   AUDIENCE_OPTIONS,
   REACH_OPTIONS,
   AVOID_OPTIONS,
@@ -142,7 +143,6 @@ const ONBOARDING_GOAL: Record<string, PlanGoalKey> = {
 /* The option vocabularies live in plan-goals with the rest of the walk's vocabulary, because the
  * describe read validates against the same lists these screens render (the model may not widen
  * the vocabulary). Aliased to their old local names. */
-const SHIFTS = SHIFT_OPTIONS
 
 /** Uneven on purpose: the real decisions live under $2,000, and the top end is a long tail. */
 const STOPS = [150, 250, 400, 600, 800, 1100, 1500, 2000, 3000, 4000, 6000, 8000, 10000]
@@ -455,7 +455,10 @@ export default function PlanSetup({
    * read-back chips below the recap are the correction path. Money ALWAYS shows — a read budget
    * prefills it, but sizing money to a paragraph without an explicit confirm tap is the one
    * shortcut the owner ruled out. */
-  const startRead = wasRead('start') || (dated && wasRead('when'))
+  /* Dated shapes are only satisfied by the DATE itself: a read "start asap" must not skip the
+   * date question (the model can emit start for a dated brief, and the whole schedule works
+   * backwards from the day). Ongoing shapes are satisfied by a read start. */
+  const startRead = dated ? wasRead('when') : wasRead('start')
   /*
    * THE CONDITIONAL QUESTIONS (Ledger Phase 3), by the conditional-question law: they appear
    * only when this campaign's shape creates them, and never otherwise.
@@ -560,7 +563,7 @@ export default function PlanSetup({
       /* Credit the paragraph for what it answered — the honest version of "this will be quick". */
       const took = readKeys.filter((k) => k !== 'situation' && k !== 'until').length
       const takeLine = took > 0 ? `You answered ${took === 1 ? 'one thing' : `${took} things`} in writing already. ` : ''
-      return `${what ? what.replace(/\.?$/, '.') + ' ' : ''}${takeLine}We can build this — ${count} quick ${count === 1 ? 'answer' : 'answers'} first.`
+      return `${what ? what.replace(/\.?$/, '.') + ' ' : ''}${takeLine}We can build this. ${count} quick ${count === 1 ? 'answer' : 'answers'} and it is ready.`
     }
     const prev = qlist[qi - 1]
     switch (prev) {
@@ -1107,9 +1110,27 @@ export default function PlanSetup({
                   />
                   <span style={{ fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap' }}>{dated ? 'for the launch' : 'a month'}</span>
                 </div>
+                {(() => {
+                  /* The slider rides the same STOPS as everything else; the honest range is
+                   * shaded on the track so the good zone is visible before a number is typed. */
+                  const nearest = (v: number) => STOPS.reduce((best, x, i) => (Math.abs(x - v) < Math.abs(STOPS[best] - v) ? i : best), 0)
+                  const idx = a.budget != null ? nearest(a.budget) : moneyRange ? nearest(Math.round((moneyRange.lo + moneyRange.hi) / 2)) : 6
+                  const pct = (i: number) => (i / (STOPS.length - 1)) * 100
+                  const track = moneyRange
+                    ? `linear-gradient(to right, #E8E8ED ${pct(nearest(moneyRange.lo))}%, #BFE8DA ${pct(nearest(moneyRange.lo))}%, #BFE8DA ${pct(nearest(moneyRange.hi))}%, #E8E8ED ${pct(nearest(moneyRange.hi))}%)`
+                    : '#E8E8ED'
+                  return (
+                    <input
+                      type="range" className="ps-slider" aria-label="Budget slider"
+                      min={0} max={STOPS.length - 1} step={1} value={idx}
+                      onChange={(e) => set({ budget: STOPS[Number(e.target.value)], readKeys: readKeys.filter((k) => k !== 'budget') })}
+                      style={{ marginTop: 6, ['--ps-track' as never]: track } as React.CSSProperties}
+                    />
+                  )
+                })()}
                 {moneyRange && (
-                  <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, marginTop: 8 }}>
-                    Campaigns like this run ${moneyRange.lo.toLocaleString('en-US')} to ${moneyRange.hi.toLocaleString('en-US')} {moneyRange.per === 'all-in' ? 'all-in' : 'a month'}.
+                  <div style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, marginTop: 4 }}>
+                    The shaded stretch is where campaigns like this usually run: ${moneyRange.lo.toLocaleString('en-US')} to ${moneyRange.hi.toLocaleString('en-US')} {moneyRange.per === 'all-in' ? 'all-in' : 'a month'}.
                     We build to your number and show what a little more would add.
                   </div>
                 )}
@@ -1306,25 +1327,47 @@ export default function PlanSetup({
         {/* shift ── which shifts, its own screen when they said shifts are the problem. */}
         {q === 'shift' && (
           <Act n={qi + 2} of={1 + qlist.length} title={WT.shift} sub={whyAsk('shift') || WS.shift}>
-            <Grid>
-              {SHIFTS.map((o) => {
-                const on = shift.includes(o.v)
+            {/* The week you tap: how owners actually say it ("Tuesday nights are dead"). */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5, marginBottom: 10 }}>
+              {SHIFT_DAYS.map((d) => {
+                const on = shift.includes(d.v)
                 return (
                   <button
-                    key={o.v} type="button" className="ps-pick"
-                    onClick={() => set({ shift: flip(shift, o.v) })}
+                    key={d.v} type="button" className="ps-pick" aria-label={d.v} aria-pressed={on}
+                    onClick={() => set({ shift: flip(shift, d.v) })}
                     style={{
-                      textAlign: 'left', cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`,
-                      background: on ? '#f0faf6' : '#fff', borderRadius: 14, padding: '11px 12px',
-                      fontFamily: "'Inter',system-ui,sans-serif",
+                      aspectRatio: '0.9', cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`,
+                      background: on ? '#f0faf6' : '#fff', borderRadius: 11, fontSize: 13, fontWeight: 800,
+                      color: on ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif",
                     }}
                   >
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: on ? C.green : C.ink }}>{o.label}</span>
-                    {o.sub && <span style={{ display: 'block', fontSize: 11, color: C.mute, marginTop: 2 }}>{o.sub}</span>}
+                    {d.label}
                   </button>
                 )
               })}
-            </Grid>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+              {SHIFT_PARTS.map((o) => {
+                const on = shift.includes(o.v)
+                return (
+                  <button
+                    key={o.v} type="button" className="ps-pick" onClick={() => set({ shift: flip(shift, o.v) })}
+                    style={{
+                      cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`,
+                      background: on ? '#f0faf6' : '#fff', borderRadius: 99, padding: '8px 13px',
+                      fontSize: 12.5, fontWeight: 600, color: on ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif",
+                    }}
+                  >
+                    {o.label}
+                  </button>
+                )
+              })}
+            </div>
+            {shift.length > 0 && (
+              <div style={{ fontSize: 12.5, color: C.ink, marginTop: 11 }}>
+                {WL['restate.shift']}: <b style={{ color: DESK.mintDeep }}>{shift.join(' and ').toLowerCase()}</b>
+              </div>
+            )}
           </Act>
         )}
 
@@ -1416,19 +1459,51 @@ export default function PlanSetup({
 
       {/* 4 ── who, and how far */}
         {q === 'reach' && <Act n={qi + 2} of={1 + qlist.length} title={WT.reach} sub={whyAsk('reach') || WS.reach}>
-        <GroupLabel>Who</GroupLabel>
-        <Grid>
-          {AUDIENCE.map((o) => (
-            <Card key={o.v} on={audience.includes(o.v)} label={o.label} sub={o.sub}
-              dim={auto.audience} onClick={() => set({ audience: flip(audience, o.v), auto: { ...auto, audience: false } })} />
-          ))}
-        </Grid>
-        <GroupLabel>How far</GroupLabel>
-        <Grid>
-          {REACH.map((r) => (
-            <Card key={r.v} on={reach === r.v} label={r.label} sub={r.sub} onClick={() => set({ reach: r.v, touched: [...new Set([...(a.touched ?? []), 'reach'])] })} />
-          ))}
-        </Grid>
+        {/* Distance is a picture: tap a ring. DOM order puts inner rings on top, so a tap lands
+            on the smallest ring containing it — the band behavior falls out for free. */}
+        <div style={{ position: 'relative', width: 250, height: 250, margin: '2px auto 4px' }}>
+          {([
+            { v: 'region' as Reach, label: 'Worth a drive', inset: 0 },
+            { v: 'city' as Reach, label: 'The whole city', inset: 31 },
+            { v: 'local' as Reach, label: 'The neighbourhood', inset: 62 },
+            { v: 'walk' as Reach, label: 'The block', inset: 93 },
+          ]).map((r) => {
+            const on = reach === r.v
+            return (
+              <button
+                key={r.v} type="button" aria-label={r.label} aria-pressed={on}
+                onClick={() => set({ reach: r.v, touched: [...new Set([...(a.touched ?? []), 'reach'])] })}
+                style={{
+                  position: 'absolute', inset: r.inset, borderRadius: '50%', cursor: 'pointer',
+                  border: `1.5px solid ${on ? C.green : 'rgba(0,0,0,0.13)'}`,
+                  background: on ? '#f0faf6' : '#fff',
+                }}
+              >
+                <span style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: 6, fontSize: 9.5, fontWeight: 700, whiteSpace: 'nowrap', color: on ? C.greenDk : C.mute, fontFamily: "'Inter',system-ui,sans-serif" }}>{r.label}</span>
+              </button>
+            )
+          })}
+          <div aria-hidden style={{ position: 'absolute', inset: 108, borderRadius: '50%', background: C.ink, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, pointerEvents: 'none', fontFamily: "'Inter',system-ui,sans-serif" }}>YOU</div>
+        </div>
+        <Card on={reach === 'anywhere'} label="Anywhere" sub="We ship or deliver beyond the area" onClick={() => set({ reach: 'anywhere', touched: [...new Set([...(a.touched ?? []), 'reach'])] })} />
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.mute, margin: '14px 0 7px' }}>{WL['audience.line']}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          {AUDIENCE.map((o) => {
+            const on = audience.includes(o.v)
+            return (
+              <button
+                key={o.v} type="button" className="ps-pick" onClick={() => set({ audience: flip(audience, o.v), auto: { ...auto, audience: false } })}
+                style={{
+                  cursor: 'pointer', border: `1.5px solid ${on ? C.green : C.line}`, opacity: auto.audience ? 0.45 : 1,
+                  background: on ? '#f0faf6' : '#fff', borderRadius: 99, padding: '8px 13px',
+                  fontSize: 12.5, fontWeight: 600, color: on ? C.greenDk : C.ink, fontFamily: "'Inter',system-ui,sans-serif",
+                }}
+              >
+                {o.label}
+              </button>
+            )
+          })}
+        </div>
         {dropped.length > 0 && (
           <div style={{ fontSize: 11.5, color: AMBER_DK, background: AMBER_SOFT, borderRadius: 12, padding: '10px 12px', marginTop: 10, lineHeight: 1.5 }}>
             Because you serve beyond your area, we have taken out the work that only pays off for a
