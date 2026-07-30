@@ -493,6 +493,54 @@ export default function PlanSetup({
     return rows
   }, [inputs, signals])
 
+  /*
+   * THE SESSION VOICE — the walk reads as a strategist thinking with you, not a form.
+   *
+   * Each screen opens with a short line that ACKNOWLEDGES the previous answer before asking the
+   * next thing, and the first screen sets the contract ("N quick answers, then we build").
+   * Deterministic on purpose: composed from the answers already given, never a model call —
+   * the conversation must not be able to stall, cost money, or invent things mid-walk.
+   */
+  const fmtDay = (iso?: string) => (iso ? new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) : '')
+  const say = (() => {
+    if (qi === 0) {
+      const what = readBack?.summary ?? (picked[0] ? picked[0].label.toLowerCase().replace(/^we are /, 'so you are ') : null)
+      const count = qlist.length
+      return `${what ? what.replace(/\.?$/, '.') + ' ' : ''}We can build this — ${count} quick ${count === 1 ? 'answer' : 'answers'} first.`
+    }
+    const prev = qlist[qi - 1]
+    switch (prev) {
+      case 'start':
+        return dated && a.when
+          ? `${fmtDay(a.when)} it is. Everything works backwards from that day.`
+          : a.start === 'asap'
+            ? 'Starting the moment you approve. That keeps the momentum.'
+            : a.start
+              ? `Starting ${fmtDay(a.start)}. Noted.`
+              : null
+      case 'assets':
+        return assets.length && !assets.includes('Nothing yet')
+          ? 'Good. We build around what you already have, and you are never billed for it.'
+          : 'Starting from scratch. No problem, the plan covers it.'
+      case 'promote':
+        return auto.promote
+          ? 'We will pick from your menu. Next:'
+          : promote.length
+            ? `Leading with ${promote[0]}. Good choice.`
+            : null
+      case 'reach':
+        return audience.length
+          ? `Aimed at ${audience.slice(0, 2).join(' and ').toLowerCase()}. Got it.`
+          : 'Keeping it local. Got it.'
+      case 'shift':
+        return shift.length ? `${shift.join(' and ')} — those are the nights we fix.` : null
+      case 'avoid':
+        return avoid.length ? 'Understood. That stays off the table, everywhere.' : 'Nothing off limits. Noted.'
+      default:
+        return null
+    }
+  })()
+
   /* The honest range for the money question, from the same anchors the plan screen uses. */
   const moneyRange = useMemo(() => {
     if (q !== 'money') return null
@@ -777,6 +825,15 @@ export default function PlanSetup({
         )}
 
         <div key={q} className="ps-hero2">
+        {/* The strategist speaks first: acknowledge what was just said, then ask the next thing. */}
+        {say && (
+          <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginBottom: 18 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={DESK.mintDeep} aria-hidden style={{ flexShrink: 0, marginTop: 3 }}>
+              <path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" />
+            </svg>
+            <span style={{ fontSize: 15, color: '#1D1D1F', lineHeight: 1.5, letterSpacing: '-0.01em' }}>{say}</span>
+          </div>
+        )}
         {/* start ── every campaign gets the clock question. Dated campaigns answer it with their
             date; ongoing ones default honestly to as-soon-as-possible. */}
         {q === 'start' && (
