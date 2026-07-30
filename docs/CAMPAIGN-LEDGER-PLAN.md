@@ -51,6 +51,11 @@ gapsFor, and the composer's parameters — which is why nobody can answer "do we
 | Avoid list | ASKED | avoid question | service exclusions + tone constraints |
 | Budget | ASKED (optional, last) | money question | plan size (incl. dated launch mode) |
 | Free-text notes | ASKED (optional) | notes box | reaches the team verbatim |
+| **Offer terms** (discount / deal structure) | READ else ASKED · only when the campaign includes an offer · **never defaults** | describe → offer question | not yet consumed (Phase 4: offer briefs + redemption tracking) |
+| **Offer redemption limit** | READ else ASKED · offer-shaped only · **never defaults** | describe → offer question | not yet consumed (Phase 4) |
+| **Offer expiration** | READ else ASKED · offer-shaped only · **never defaults** | describe → offer question | not yet consumed (Phase 4) |
+| **Success target** | ASKED · suggested from comparable past campaigns, owner confirms rather than invents | target question | reporting + mid-run pivot flag (planned). A number on the proxy metric this recipe already tracks — never "incremental revenue" |
+| **Capacity check** | ASKED · only when the shape creates a demand spike (offer-driven, event-anchored, or time-boxed) | capacity question | staffing/prep/quantity limits + who briefs staff, into the work brief. The RESTAURANT's capacity to absorb demand — separate from creator routing capacity |
 
 Phase 1 turns this table into code: `ledgerFor(situation, account, read, answers)` returns every
 field with `{ value, tier: 'known'|'read'|'asked'|'defaulted'|'missing', consumedBy }`. The
@@ -81,7 +86,11 @@ Each situation already declares `needs`; the model's ask[] already prunes per-br
 consume. The walk asks exactly `requirements − known − read`, in a stable order, and the sim
 pins both directions: nothing asked that isn't consumed (no theater), nothing consumed that
 isn't known/read/asked/defaulted (no silent holes). Tier-4 defaults render on the plan ("we
-assumed local reach") with one-tap change.
+assumed local reach") with one-tap change. The conditional questions obey the same law:
+offer economics only when the campaign includes an offer; the capacity check only when the
+shape creates a demand spike (offer-driven, event-anchored, or time-boxed) — an awareness-only
+campaign must never see it. The success target is asked WITH a suggested number from comparable
+past campaigns, so the owner confirms rather than invents.
 
 **Phase 4 — the composer consumes the whole ledger (1–2 sessions).**
 Close the dead-input gaps found in the audit: audience genuinely tilts the ranking (late-night →
@@ -96,12 +105,18 @@ The intro line becomes an honest account of the waterfall: "Your account gave us
 rating and listing health. From what you wrote we took the date and the DJ. Two questions left."
 The count is computed from the ledger, so it can never overpromise.
 
-## 3. Decisions needed from the owner
+## 3. Decisions — RESOLVED (owner, 2026-07-29)
 
-1. **Auto-prefill vs confirm for Tier 2 reads.** Recommendation: prefill everything with the
-   read-back correction line; budget alone always requires an explicit confirm tap.
-2. **Tier 4 defaults.** Which fields may default (reach=local, start=asap are today's), and the
-   exact "we assumed" wording on the plan.
+1. **Tier 2 reads:** prefill everything with the read-back correction line; **budget always gets
+   an explicit confirm tap** before it sizes anything.
+2. **Tier 4 defaults:** stay exactly as-is — reach = local, start = ASAP. **No new defaults.**
+   Offer economics (terms, redemption limit, expiration) may NEVER default.
+
+## 3b. Reorder — the pilot gate
+
+After Phase 3 ships, **pause**: put the flow in front of the two test clients on a real
+campaign. Measure question count, completion rate, and where they stall. **Phase 4 proceeds
+only after that review.** Phase 5 may ship alongside Phases 1–3 (it is small).
 
 ## 4. What this is NOT
 

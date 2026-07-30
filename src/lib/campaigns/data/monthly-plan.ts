@@ -677,6 +677,14 @@ export function toCampaignDraft(
       shift?: string[]
       avoid?: string[]
       notes?: string
+      /* Offer economics (never defaulted — asked/read only for offer-shaped campaigns). */
+      offerTerms?: string
+      offerLimit?: string
+      offerExpiry?: string
+      /** Pre-launch target on the recipe's own proxy metric (reporting + pivot flag). */
+      successTarget?: number
+      /** The restaurant's capacity to absorb a demand spike, and who briefs staff. */
+      capacity?: string
     },
   },
 ): Record<string, unknown> {

@@ -606,6 +606,11 @@ export default function MonthlyPlanFlow({
               shift: a.shift,
               avoid: a.avoid,
               notes: a.notes,
+              offerTerms: a.offerTerms,
+              offerLimit: a.offerLimit,
+              offerExpiry: a.offerExpiry,
+              successTarget: a.successTarget,
+              capacity: a.capacity,
             },
           })
           const snapshot = buildOrderSnapshot({

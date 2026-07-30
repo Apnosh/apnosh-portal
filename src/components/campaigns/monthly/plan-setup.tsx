@@ -73,6 +73,24 @@ export interface Answers {
   notes?: string
   /** Which questions the owner handed back to us, so the plan can say so rather than imply choice. */
   auto?: { goals?: boolean; promote?: boolean; audience?: boolean }
+  /**
+   * PROVENANCE (the ledger's Tier 2): which fields were READ out of the describe paragraph
+   * rather than asked. Set by the describe read; the ledger uses it to classify tiers, and
+   * Phase 3 uses it to remove already-answered questions from the walk.
+   */
+  readKeys?: string[]
+  /* ── Offer economics (ledger fields; asked/read only when the campaign includes an offer;
+   *    NEVER defaulted — owner rule 2026-07-29). Question UI arrives with Phase 3. ── */
+  offerTerms?: string
+  offerLimit?: string
+  offerExpiry?: string
+  /** Success target on the recipe's own proxy metric (never "incremental revenue"). Asked with
+   *  a suggested number from comparable past campaigns; consumed by reporting + the mid-run
+   *  pivot flag (Phase 4). */
+  successTarget?: number
+  /** The RESTAURANT's capacity to absorb a demand spike (staffing, prep, featured-item quantity,
+   *  who briefs staff). Asked only for spike-shaped campaigns; separate from creator routing. */
+  capacity?: string
 }
 
 type Opt = { v: string; label: string; sub?: string }
@@ -572,7 +590,7 @@ export default function PlanSetup({
   const fallbackRead = (text: string) => {
     const m = matchSituation(text)
     if (!m) return false
-    set({ situations: [m.situation.v], goals: [m.situation.goal], shape: m.situation.shape })
+    set({ situations: [m.situation.v], goals: [m.situation.goal], shape: m.situation.shape, readKeys: ['situation'] })
     return true
   }
 
@@ -594,11 +612,20 @@ export default function PlanSetup({
       }
       setReadBack({ summary: res.summary, unsupported: res.unsupported ?? [] })
       const sit = res.situation ? situationByValue(res.situation) : undefined
+      /* Provenance for the ledger: exactly the fields this read supplied, so the tier
+       * classification (READ vs ASKED) is a record, never a guess. */
+      const readKeys = [
+        ...(sit ? ['situation'] : []),
+        ...(res.when ? ['when'] : []),
+        ...(res.until ? ['until'] : []),
+        ...(res.assets?.length ? ['assets'] : []),
+      ]
       set({
         ...(sit ? { situations: [sit.v], goals: [sit.goal], shape: sit.shape } : {}),
         ...(res.when ? { when: res.when } : {}),
         ...(res.until ? { until: res.until } : {}),
         ...(res.assets?.length ? { assets: res.assets } : {}),
+        ...(readKeys.length ? { readKeys } : {}),
         /* Only when we actually understood the brief. Honouring an `ask` from a read that could not
          * place the situation would let a stray [] skip every follow-up on a plan built from
          * nothing. */
