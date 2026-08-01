@@ -16,11 +16,12 @@ import { DESTINATIONS, type DestinationId } from './destinations'
 
 /* ── the job vocabulary ───────────────────────────────────────────────────────────────────── */
 
-export type DesignJobId = 'weekly-special' | 'event-promo' | 'new-menu' | 'holiday-hours' | 'hiring' | 'other'
+export type DesignJobId = 'weekly-special' | 'event-promo' | 'announcement' | 'new-menu' | 'holiday-hours' | 'hiring' | 'other'
 
 export const DESIGN_JOBS: readonly { id: DesignJobId; label: string }[] = [
   { id: 'weekly-special', label: 'Weekly special' },
   { id: 'event-promo', label: 'Event promo' },
+  { id: 'announcement', label: 'Announcement' },
   { id: 'new-menu', label: 'New menu' },
   { id: 'holiday-hours', label: 'Holiday hours' },
   { id: 'hiring', label: 'Hiring post' },
@@ -35,8 +36,9 @@ export const DESIGN_JOBS: readonly { id: DesignJobId; label: string }[] = [
 const JOB_CUES: readonly { id: DesignJobId; phrases: readonly string[]; words: readonly string[] }[] = [
   { id: 'weekly-special', phrases: ['weekly special', 'this week', 'special of the week', 'lunch special', 'dinner special'], words: ['special'] },
   { id: 'event-promo', phrases: ['live music', 'trivia night', 'event this', 'one night'], words: ['event', 'party', 'concert', 'dj', 'night'] },
+  { id: 'announcement', phrases: ['grand opening', 'now open', 'just got on', 'big news', 'reopening', 'new location'], words: ['announcement', 'announce', 'opening', 'doordash', 'ubereats', 'grubhub'] },
   { id: 'new-menu', phrases: ['new menu', 'menu redesign', 'updated menu', 'menu board'], words: ['menu'] },
-  { id: 'holiday-hours', phrases: ['holiday hours', 'closed for', 'open late', 'special hours', 'closing early'], words: ['hours', 'holiday', 'thanksgiving', 'christmas'] },
+  { id: 'holiday-hours', phrases: ['holiday hours', 'closed for', 'open late', 'special hours', 'closing early', 'labor day', 'memorial day', 'new years'], words: ['hours', 'holiday', 'thanksgiving', 'christmas', 'closed'] },
   { id: 'hiring', phrases: ['now hiring', 'help wanted', 'join our team', 'we are hiring'], words: ['hiring', 'hire', 'staff'] },
 ]
 
@@ -58,8 +60,10 @@ export interface DesignRead {
   /** the headline message, in their words */
   message?: string
   offer?: string
-  /** only when the day itself appears in the text (the credibility law) */
-  dateISO?: string
+  /** THE EVENT'S date, never the delivery date. Only when the day itself appears in the text
+   *  (the credibility law). The flow asks the need-by date separately: a flyer due the night
+   *  of the event promotes nothing. */
+  eventDateISO?: string
   /** 'YYYY-MM' when they named a month but no day: anchors the calendar, never a date */
   monthHint?: string
   destinations?: DestinationId[]
@@ -68,10 +72,30 @@ export interface DesignRead {
   /** rush language present ("need it by", "asap", "tomorrow") — opens the date step, never charges */
   rushLanguage?: boolean
   /** cited words per field, for the price lines and read-back chips */
-  cited: Partial<Record<'jobType' | 'message' | 'offer' | 'dateISO' | 'destinations' | 'ownPhotos', string>>
+  /** things they asked us to make that no destination covers (banner, email, gift cards):
+   *  said out loud, never silently dropped */
+  unplaced?: string[]
+  cited: Partial<Record<'jobType' | 'message' | 'offer' | 'eventDate' | 'destinations' | 'ownPhotos', string>>
 }
 
 const str = (v: unknown, max = 200) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined)
+
+/** Products owners really ask for that we do not make here (yet). Found in the text, they are
+ *  SAID OUT LOUD in the flow — an order must never silently shrink. */
+const UNPLACED_PRODUCTS = [
+  'banner', 'email', 'gift card', 'business card', 'sticker', 'decal', 'billboard',
+  't-shirt', 'loyalty card', 'punch card', 'yard sign', 'window cling',
+] as const
+
+export function unplacedAsks(text: string): string[] {
+  const t = text.toLowerCase()
+  return UNPLACED_PRODUCTS.filter((w) => t.includes(w))
+}
+
+/** Local, so it works even when the model is down. Never charges; only makes the date step
+ *  speak up sooner. */
+const hasRushLanguage = (text: string) =>
+  /asap|as soon as|tomorrow|tonight|by (mon|tues|wednes|thurs|fri|satur|sun)day|rush|urgent|today/i.test(text)
 
 /**
  * Server-side sanitation of the model's read, through the shared evidence gate. The model may
@@ -84,6 +108,9 @@ export function sanitizeDesignRead(raw: unknown, text: string, todayISO: string)
     const local = matchDesignJob(text)
     if (local) out.jobType = local
     out.monthHint = monthHintFrom(text, todayISO) ?? undefined
+    const up = unplacedAsks(text)
+    if (up.length) out.unplaced = up
+    out.rushLanguage = hasRushLanguage(text) || undefined
     return out
   }
   const r = raw as Record<string, unknown>
@@ -106,9 +133,9 @@ export function sanitizeDesignRead(raw: unknown, text: string, todayISO: string)
   /* Same vagueness rule as campaigns: a deal with no number and no shape is a wish, not terms. */
   if (offer && (/\d/.test(offer) || /free|two for one|2 for 1|bogo/i.test(offer))) { out.offer = offer; cite('offer', r.offer) }
 
-  const date = backedValue(r.dateISO, text)
+  const date = backedValue(r.eventDate, text)
   const future = typeof date === 'string' && credibleDate(date, text) ? futureDate(date, todayISO) : null
-  if (future) { out.dateISO = future; cite('dateISO', r.dateISO) }
+  if (future) { out.eventDateISO = future; cite('eventDate', r.eventDate) }
   else out.monthHint = monthHintFrom(text, todayISO) ?? undefined
 
   const dests = backedValue(r.destinations, text)
@@ -120,9 +147,17 @@ export function sanitizeDesignRead(raw: unknown, text: string, todayISO: string)
   const own = backedValue(r.ownPhotos, text)
   if (own === true) { out.ownPhotos = true; cite('ownPhotos', r.ownPhotos) }
 
-  /* Rush language never charges anything; it only makes the date step ask sooner. Local check
-   * so it works even when the model is down. */
-  out.rushLanguage = /asap|as soon as|tomorrow|tonight|by (mon|tues|wednes|thurs|fri|satur|sun)day|rush|urgent|today/i.test(text) || undefined
+  /* The model may name unsupported asks too (quote-backed); the local scan is the floor.
+   * Union of both, deduped: the owner hears every dropped ask exactly once. */
+  const modelUp = Array.isArray(r.unsupported)
+    ? r.unsupported.map((u) => str(backedValue(u, text), 40)).filter((v): v is string => !!v)
+    : []
+  const merged = [...new Set([...unplacedAsks(text), ...modelUp.map((v) => v.toLowerCase())])]
+  /* "big banner" collapses into "banner": keep the shortest name for each ask. */
+  const up = merged.filter((v) => !merged.some((o) => o !== v && v.includes(o)))
+  if (up.length) out.unplaced = up
+
+  out.rushLanguage = hasRushLanguage(text) || undefined
 
   return out
 }

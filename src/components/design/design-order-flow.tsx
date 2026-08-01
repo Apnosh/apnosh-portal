@@ -118,6 +118,10 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const [picked, setPicked] = useState<string[]>([])
   const [uploaded, setUploaded] = useState<DesignAsset[]>([])
   const [sourcePhotos, setSourcePhotos] = useState(false)
+  const [noPhotos, setNoPhotos] = useState(false)
+  /* The event's own date, from the read. NEVER the delivery date: a flyer due the night of
+   * the event promotes nothing. The need-by date (due) is always the owner's tap. */
+  const [eventDate, setEventDate] = useState<string | null>(null)
   const [due, setDue] = useState<string | null>(null)
   const [rushConfirmed, setRushConfirmed] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -126,23 +130,26 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const src = (k: keyof DesignRead['cited']): DesignFact<never>['source'] => (read?.cited[k] ? 'read' : 'asked')
   const allAssets = [...assets, ...uploaded]
   const usable = allAssets.filter(passesQualityGate)
-  const usingOwn = picked.length > 0 && !sourcePhotos
+  const usingOwn = picked.length > 0 && !sourcePhotos && !noPhotos
   const printPicked = dests.some((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'print')
   const bufferDays = productionBufferDays(dests)
   /* Standard delivery: design time plus the slowest destination's production buffer. */
   const standardDelivery = addDays(today, 4 + bufferDays)
   const rushEligible = rushApplies(due ?? undefined, today, RATE_CARD.rushWindowHours)
+  /* A sensible head start before a known event; offered as one tap, never silently applied. */
+  const suggestedDue = eventDate ? addDays(eventDate, -3) : null
+  const afterEvent = due != null && eventDate != null && due > eventDate
 
   const answers: DesignOrderAnswers = {
     jobType: { value: job ?? 'other', source: src('jobType'), citedWords: read?.cited.jobType },
     destinations: { value: dests, source: src('destinations'), citedWords: read?.cited.destinations },
     ...(printQty != null ? { printQty: { value: printQty, source: 'asked' as const } } : {}),
     ...(printer != null ? { printer: { value: printer, source: 'asked' as const } } : {}),
-    ...(usingOwn || sourcePhotos
-      ? { photos: { value: usingOwn ? ('own' as const) : ('source' as const), source: 'asked' as const } }
+    ...(usingOwn || sourcePhotos || noPhotos
+      ? { photos: { value: noPhotos ? ('none' as const) : usingOwn ? ('own' as const) : ('source' as const), source: 'asked' as const } }
       : {}),
     tier: 2, // Phase C derives this from design history; standard custom until then
-    ...(due ? { dueDateISO: { value: due, source: src('dateISO') } } : {}),
+    ...(due ? { dueDateISO: { value: due, source: 'asked' as const } } : {}),
     todayISO: today,
     rushConfirmed,
   }
@@ -164,7 +171,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         if (rd.destinations?.length) setDests(rd.destinations)
         if (rd.message) { setMessage(rd.message); setExactText(rd.message + (rd.offer ? `. ${rd.offer}` : '')) }
         if (rd.offer) setOffer(rd.offer)
-        if (rd.dateISO) setDue(rd.dateISO)
+        if (rd.eventDateISO) setEventDate(rd.eventDateISO)
       }
     } catch {
       /* the chips keep the flow alive; the read is a shortcut, never a dependency */
@@ -178,8 +185,8 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     step === 1 ? job != null || described.trim().length >= 8
     : step === 2 ? dests.length > 0 && (!printPicked || (printQty != null && printer != null))
     : step === 3 ? exactText.trim().length > 0
-    : step === 4 ? usingOwn || sourcePhotos
-    : step === 5 ? due != null && (!rushEligible || rushConfirmed || false)
+    : step === 4 ? usingOwn || sourcePhotos || noPhotos
+    : step === 5 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
     : true
 
   const upload = (files: FileList | null) => {
@@ -245,10 +252,15 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             <div style={{ fontSize: 12, color: FAINT, marginBottom: 7 }}>From what you wrote:</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
               {job && read.cited.jobType && <Chip on label={DESIGN_JOBS.find((j) => j.id === job)?.label ?? ''} onClick={() => setStep(1)} />}
-              {due && read.cited.dateISO && <Chip on label={fmtDay(due)} onClick={() => setStep(5)} />}
+              {eventDate && read.cited.eventDate && <Chip on label={`Event: ${fmtDay(eventDate)}`} onClick={() => setStep(5)} />}
               {offer && read.cited.offer && <Chip on label={offer} onClick={() => setStep(3)} />}
               {read.ownPhotos && read.cited.ownPhotos && <Chip on label="Your own photos" onClick={() => setStep(4)} />}
             </div>
+            {(read.unplaced?.length ?? 0) > 0 && (
+              <div style={{ background: AMBER_SOFT, color: AMBER, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 10, lineHeight: 1.45 }}>
+                We cannot make {read.unplaced!.join(' or ')} here yet, so it is not in this order. Message us and we will sort it out.
+              </div>
+            )}
           </div>
         )}
 
@@ -314,12 +326,12 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                 return (
                   <button
                     key={a.id} type="button" disabled={!ok}
-                    onClick={() => { setSourcePhotos(false); setPicked((prev) => (prev.includes(a.id) ? prev.filter((x) => x !== a.id) : [...prev, a.id])) }}
+                    onClick={() => { setSourcePhotos(false); setNoPhotos(false); setPicked((prev) => (prev.includes(a.id) ? prev.filter((x) => x !== a.id) : [...prev, a.id])) }}
                     style={{ position: 'relative', aspectRatio: '1', borderRadius: 12, overflow: 'hidden', cursor: ok ? 'pointer' : 'default', border: `2px solid ${on ? MINT : 'transparent'}`, padding: 0, background: '#E8E8ED', opacity: ok ? 1 : 0.45 }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={a.url} alt={a.label ?? 'photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    {!ok && <span style={{ position: 'absolute', left: 4, bottom: 4, right: 4, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '2px 4px' }}>Too small to print well</span>}
+                    {!ok && <span style={{ position: 'absolute', left: 4, bottom: 4, right: 4, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '2px 4px' }}>Too small to look sharp</span>}
                     {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 18, height: 18, borderRadius: 99, background: MINT, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} strokeWidth={3.4} /></span>}
                   </button>
                 )
@@ -334,26 +346,60 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                 Nothing here is sharp enough to design with. We can source photos for ${RATE_CARD.photoSourcing}.
               </div>
             )}
-            <CardBtn
-              on={sourcePhotos}
-              label={`Source photos for me. $${RATE_CARD.photoSourcing}`}
-              sub="We find or license the shots"
-              onClick={() => { setSourcePhotos(!sourcePhotos); setPicked([]) }}
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+              <CardBtn
+                on={noPhotos}
+                label="No photos needed. $0"
+                sub="Text and your brand only"
+                onClick={() => { setNoPhotos(!noPhotos); setSourcePhotos(false); setPicked([]) }}
+              />
+              <CardBtn
+                on={sourcePhotos}
+                label={`Source photos for me. $${RATE_CARD.photoSourcing}`}
+                sub="We find or license the shots"
+                onClick={() => { setSourcePhotos(!sourcePhotos); setNoPhotos(false); setPicked([]) }}
+              />
+            </div>
           </Plate>
         )}
 
         {/* ── 5. when ── */}
         {step === 5 && (
-          <Plate n={5} title="When do you need it?" sub={`Standard turnaround delivers by ${fmtDay(standardDelivery)}.`}>
+          <Plate
+            n={5}
+            title={eventDate ? 'When do you need it in hand?' : 'When do you need it?'}
+            sub={eventDate ? `Your event is ${fmtDay(eventDate)}. The design should be working before that.` : `Standard turnaround delivers by ${fmtDay(standardDelivery)}.`}
+          >
+            {read?.rushLanguage && !due && (
+              <div style={{ fontSize: 12.5, color: AMBER, fontWeight: 600, marginBottom: 10 }}>
+                You mentioned needing this fast. The first day without a rush charge is {fmtDay(standardDelivery)}.
+              </div>
+            )}
             <WalkCalendar
               goal="more-new"
               value={due ?? undefined}
-              hintMonth={read?.monthHint}
-              classify={(day, t) => (rushApplies(day, t, RATE_CARD.rushWindowHours) ? 'tight' : 'ok')}
-              tagLine="Amber days are a rush. Standard days cost nothing extra."
+              hintMonth={eventDate ? eventDate.slice(0, 7) : read?.monthHint}
+              classify={(day, t) =>
+                eventDate && day > eventDate ? 'too-soon' : rushApplies(day, t, RATE_CARD.rushWindowHours) ? 'tight' : 'ok'
+              }
+              tagLine={eventDate ? 'Amber days are a rush. Days after your event are off.' : 'Amber days are a rush. Standard days cost nothing extra.'}
               onChange={(day) => { setDue(day); setRushConfirmed(false) }}
             />
+            {afterEvent && (
+              <div style={{ background: AMBER_SOFT, borderRadius: 14, padding: '12px 14px', marginTop: 12 }}>
+                <div style={{ fontSize: 13, color: AMBER, fontWeight: 600, lineHeight: 1.5 }}>
+                  {fmtDay(due!)} is after your {fmtDay(eventDate!)} event. The design would arrive too late to work. Pick a day before it.
+                </div>
+              </div>
+            )}
+            {suggestedDue && !due && suggestedDue > today && (
+              <button
+                type="button" onClick={() => { setDue(suggestedDue); setRushConfirmed(false) }}
+                style={{ width: '100%', marginTop: 12, height: 44, borderRadius: 22, border: `1.5px solid ${MINT}`, background: MINT_SOFT, color: MINT_DK, fontFamily: APPLE, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}
+              >
+                {fmtDay(suggestedDue)}, three days before your event
+              </button>
+            )}
             {due && rushEligible && !rushConfirmed && (
               <div style={{ background: AMBER_SOFT, borderRadius: 14, padding: '12px 14px', marginTop: 12 }}>
                 <div style={{ fontSize: 13, color: AMBER, fontWeight: 600, lineHeight: 1.5 }}>
@@ -382,8 +428,9 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{exactText.trim()}&rdquo; for{' '}
               {dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase()).join(', ')}
               {printPicked && printQty ? ` (${printQty} copies, ${printer === 'us' ? 'we print' : 'your shop prints'})` : ''}
-              {usingOwn ? ', using your photos' : ', with sourced photos'}
-              {due ? `, delivered by ${fmtDay(due)}` : ''}.
+              {noPhotos ? ', text and brand only' : usingOwn ? ', using your photos' : ', with sourced photos'}
+              {due ? `, in hand by ${fmtDay(due)}` : ''}
+              {eventDate ? ` for your ${fmtDay(eventDate)} event` : ''}.
             </div>
             <div style={{ fontSize: 11.5, color: FAINT, marginTop: 10, lineHeight: 1.5 }}>
               {RATE_CARD.includedRevisions} revision rounds included. Round {RATE_CARD.includedRevisions + 1}+ is billed. A change to the message, offer, or destinations is a new order, not a revision.

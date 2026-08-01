@@ -17,6 +17,7 @@
 
 import { DESTINATIONS, destinationById, isPrint, type DestinationId, type DestinationSpec } from './destinations'
 import type { RateCard } from './rate-card'
+import type { DesignJobId } from './design-read'
 
 /** The why-structure every order fact and price line carries (same shape as plan lines). */
 export type FactSource = 'known' | 'read' | 'asked' | 'defaulted'
@@ -29,14 +30,15 @@ export interface DesignFact<T = unknown> {
 }
 
 export interface DesignOrderAnswers {
-  jobType: DesignFact<'weekly-special' | 'event-promo' | 'new-menu' | 'holiday-hours' | 'hiring' | 'other'>
+  jobType: DesignFact<DesignJobId>
   destinations: DesignFact<DestinationId[]>
   /** required when any print destination is checked; never guessed (law 4) */
   printQty?: DesignFact<number>
   printer?: DesignFact<'client' | 'us'>
-  /** 'own' = client assets cleared the quality gate; 'source' = the photo add-on.
+  /** 'own' = client assets cleared the quality gate; 'source' = the photo add-on; 'none' =
+   *  text and brand only, a visible zero (a holiday-hours notice needs no photos).
    *  Absent while the photos step is unanswered: a question, never a guessed charge (law 4). */
-  photos?: DesignFact<'own' | 'source'>
+  photos?: DesignFact<'own' | 'source' | 'none'>
   /** from design history (Phase C); the engine never asks for it */
   tier: 1 | 2 | 3
   /** true when history could support a higher tier: price the lower one, flag for review */
@@ -133,6 +135,11 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
    * has not chosen yet. */
   if (a.photos == null) {
     needs.push('photos')
+  } else if (a.photos.value === 'none') {
+    lines.push({
+      id: 'photos', label: 'Photos', amount: 0,
+      why: 'Text and your brand only. No photos needed.', source: a.photos.source,
+    })
   } else if (a.photos.value === 'own') {
     lines.push({
       id: 'photos', label: 'Photos', amount: 0,

@@ -27,9 +27,13 @@ Omit any field they did not state. Keys:
   jobType       one job id from the list below
   message       the headline message, short, in their words
   offer         the deal if they stated one ("20% off pitchers"). Never invent terms.
-  dateISO       "YYYY-MM-DD" only when a real day is stated. Never guess a day from a month.
+  eventDate     "YYYY-MM-DD", the date of THE EVENT OR OCCASION ITSELF, only when a real day is
+                stated. Never guess a day from a month. A delivery deadline ("need it by
+                Friday") is NOT an event date; omit it.
   destinations  array of destination ids from the list below that they asked for
   ownPhotos     true only if they said they have photos or want their own used
+  unsupported   array of things they asked us to MAKE that match no destination id (a banner,
+                an email, gift cards). Each is {"value": "their word", "quote": "..."}.
 
 Rules:
 - Only ids from the lists. Nothing else can be read downstream.
