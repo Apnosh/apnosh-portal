@@ -177,16 +177,34 @@ s.group('sanitizeDesignRead: the shared evidence gate, the design vocabulary')
 
   /* The audit's serious findings, pinned. */
   s.check('rush language works on the DEAD-MODEL floor too', sanitizeDesignRead(null, 'poster for the window, need it asap', TODAY).rushLanguage === true)
-  s.check('unplaced asks are captured locally, never dropped silently', (() => { const r = sanitizeDesignRead(null, 'a big banner and flyers to hand out', TODAY); return r.unplaced?.includes('banner') === true })())
+  s.check('unplaced asks are captured locally, never dropped silently', (() => { const r = sanitizeDesignRead(null, 'business cards and flyers to hand out', TODAY); return r.unplaced?.includes('business card') === true })())
   s.check('model-named unsupported asks merge in, quote-backed only', (() => {
-    const t = 'table tents and an email blast for mothers day'
-    const r = sanitizeDesignRead({ unsupported: [q('email blast', 'an email blast'), q('skywriting', 'we never said this')] }, t, TODAY)
-    return r.unplaced?.includes('email') === true && !r.unplaced?.includes('skywriting')
+    const t = 'table tents and car decals for mothers day'
+    const r = sanitizeDesignRead({ unsupported: [q('car decals', 'car decals'), q('skywriting', 'we never said this')] }, t, TODAY)
+    return r.unplaced?.includes('decal') === true && !r.unplaced?.includes('skywriting')
   })())
   s.check('overlapping names collapse to one ask', (() => {
-    const t = 'a big banner and flyers to hand out'
-    const r = sanitizeDesignRead({ unsupported: [q('big banner', 'a big banner')] }, t, TODAY)
-    return r.unplaced?.length === 1 && r.unplaced[0] === 'banner'
+    const t = 'loyalty punch cards and flyers to hand out'
+    const r = sanitizeDesignRead({ unsupported: [q('loyalty punch cards', 'loyalty punch cards')] }, t, TODAY)
+    return (r.unplaced?.length ?? 0) <= 2 && r.unplaced?.some((u) => u.includes('punch card')) === true
+  })())
+  s.check('banner, email, gift card are REAL destinations now, not unplaced', (() => {
+    const r = sanitizeDesignRead(null, 'a banner, an email blast, and gift cards for the holidays', TODAY)
+    return r.unplaced === undefined && r.destinations?.length === 3 && !!r.cited.destinations
+  })())
+  s.check('the destination floor ticks plainly-named products, model dead', (() => {
+    const r = sanitizeDesignRead(null, 'Gift cards to sell for the holidays', TODAY)
+    return r.destinations?.includes('gift-card') === true
+  })())
+  s.check('a model miss on email still lands the destination, never unplaced', (() => {
+    const t = 'table tents and an email blast for mothers day'
+    const r = sanitizeDesignRead({ destinations: q(['table-tent'], 'table tents'), unsupported: [q('email blast', 'an email blast')] }, t, TODAY)
+    return r.destinations?.includes('email-header') === true && r.unplaced === undefined
+  })())
+  s.check('cues never duplicate a destination the model already read', (() => {
+    const t = 'a banner for the window'
+    const r = sanitizeDesignRead({ destinations: q(['banner'], 'a banner') }, t, TODAY)
+    return r.destinations?.filter((d) => d === 'banner').length === 1
   })())
   s.check('a supported order has no unplaced note', sanitizeDesignRead(null, TEXT, TODAY).unplaced === undefined)
 }

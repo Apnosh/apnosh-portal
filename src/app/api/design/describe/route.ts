@@ -37,6 +37,7 @@ Omit any field they did not state. Keys:
 
 Rules:
 - Only ids from the lists. Nothing else can be read downstream.
+- An email blast's graphic is email-header. Gift cards to sell are gift-card. A banner is banner.
 - Be conservative. A field the screen asks about beats a confident wrong answer.
 - The quote is the proof. Copy their words exactly, including typos.`
 

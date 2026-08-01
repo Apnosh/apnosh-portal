@@ -83,7 +83,7 @@ const str = (v: unknown, max = 200) => (typeof v === 'string' && v.trim() ? v.tr
 /** Products owners really ask for that we do not make here (yet). Found in the text, they are
  *  SAID OUT LOUD in the flow — an order must never silently shrink. */
 const UNPLACED_PRODUCTS = [
-  'banner', 'email', 'gift card', 'business card', 'sticker', 'decal', 'billboard',
+  'business card', 'sticker', 'decal', 'billboard',
   't-shirt', 'loyalty card', 'punch card', 'yard sign', 'window cling',
 ] as const
 
@@ -91,6 +91,18 @@ export function unplacedAsks(text: string): string[] {
   const t = text.toLowerCase()
   return UNPLACED_PRODUCTS.filter((w) => t.includes(w))
 }
+
+/** The local destination floor for plainly-named products: if the owner wrote the word, the
+ *  checkbox ticks itself, model or no model. Cited by the matched word (the evidence law
+ *  holds by construction). */
+const DEST_CUES: readonly { id: DestinationId; re: RegExp }[] = [
+  { id: 'banner', re: /\bbanners?\b/i },
+  { id: 'email-header', re: /\bemail\b/i },
+  { id: 'gift-card', re: /\bgift\s?cards?\b/i },
+]
+
+const cuedDestinations = (text: string, have: DestinationId[]): { id: DestinationId; word: string }[] =>
+  DEST_CUES.filter((c) => !have.includes(c.id) && c.re.test(text)).map((c) => ({ id: c.id, word: text.match(c.re)![0] }))
 
 /** Local, so it works even when the model is down. Never charges; only makes the date step
  *  speak up sooner. */
@@ -108,6 +120,8 @@ export function sanitizeDesignRead(raw: unknown, text: string, todayISO: string)
     const local = matchDesignJob(text)
     if (local) out.jobType = local
     out.monthHint = monthHintFrom(text, todayISO) ?? undefined
+    const cued = cuedDestinations(text, [])
+    if (cued.length) { out.destinations = cued.map((c) => c.id); out.cited.destinations = cued.map((c) => c.word).join(', ') }
     const up = unplacedAsks(text)
     if (up.length) out.unplaced = up
     out.rushLanguage = hasRushLanguage(text) || undefined
@@ -144,6 +158,12 @@ export function sanitizeDesignRead(raw: unknown, text: string, todayISO: string)
     if (valid.length) { out.destinations = valid; cite('destinations', r.destinations) }
   }
 
+  const cued = cuedDestinations(text, out.destinations ?? [])
+  if (cued.length) {
+    out.destinations = [...(out.destinations ?? []), ...cued.map((c) => c.id)]
+    if (!out.cited.destinations) out.cited.destinations = cued.map((c) => c.word).join(', ')
+  }
+
   const own = backedValue(r.ownPhotos, text)
   if (own === true) { out.ownPhotos = true; cite('ownPhotos', r.ownPhotos) }
 
@@ -154,7 +174,8 @@ export function sanitizeDesignRead(raw: unknown, text: string, todayISO: string)
     : []
   const merged = [...new Set([...unplacedAsks(text), ...modelUp.map((v) => v.toLowerCase())])]
   /* "big banner" collapses into "banner": keep the shortest name for each ask. */
-  const up = merged.filter((v) => !merged.some((o) => o !== v && v.includes(o)))
+  const covered = merged.filter((v) => !DEST_CUES.some((c) => c.re.test(v)))
+  const up = covered.filter((v) => !covered.some((o) => o !== v && v.includes(o)))
   if (up.length) out.unplaced = up
 
   out.rushLanguage = hasRushLanguage(text) || undefined
