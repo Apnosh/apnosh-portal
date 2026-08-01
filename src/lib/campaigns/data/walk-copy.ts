@@ -99,6 +99,24 @@ export const CAPACITY_CHIPS: readonly string[] = [
   'Nothing limits us',
 ]
 
+/**
+ * WHY A PLAN LINE EXISTS (the why-layer, 2026-07-31). Every composed line carries one of
+ * these, so the plan reads as reasoning instead of output. The ladder default is honest on
+ * purpose: a line that exists purely from the recipe and the budget says exactly that.
+ */
+export const WHY_LINES: Record<string, string> = {
+  'why.headline': 'This is the heart of what you asked for.',
+  'why.coverage': 'Covers the {step} step so the plan has no hole.',
+  'why.measure': 'So you can see what worked.',
+  'why.depth': 'Part of the standard recipe. Your budget reached it.',
+  'why.depth.dated': 'Extra push for the day. Your budget reached it.',
+  'why.added': 'You added this.',
+  'why.have': 'You already have this. Never billed.',
+  'why.asset': 'Worth more because of what you bring.',
+  'why.shift': 'Aimed at your slow shifts.',
+  'why.worked': 'This worked for you before.',
+}
+
 /** The questions whose sub must state the skip-consequence (rule W5). */
 export const OPTIONAL_QUESTION_SUBS: readonly string[] = ['money', 'avoid']
 

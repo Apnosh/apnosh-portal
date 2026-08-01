@@ -28,7 +28,7 @@ import {
   rankedCandidates,
   stepOf,
 } from '../../src/lib/campaigns/data/monthly-plan'
-import { signalTilt, signalNotes, ALL_NULL_SIGNALS, type MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
+import { signalTilt, signalNotes, tiltWhys, ALL_NULL_SIGNALS, type MonthlySignals } from '../../src/lib/campaigns/data/monthly-signals'
 
 const s = new Suite()
 
@@ -704,6 +704,70 @@ s.group('signal notes: the card says exactly what the tilt does')
       t.demote.has('newsletter') && t.boost.has('crm-list') && /builds a list/.test(note))
   }
   s.check('null signals produce no notes (nothing invented)', signalNotes(undefined).length === 0 && signalNotes(ALL_NULL_SIGNALS).length === 0)
+}
+
+/* ── THE WHY-LAYER (2026-07-31): every line explains itself, and never lies ─────────────── */
+
+s.group('Why-layer: every billed line carries its reason')
+{
+  const SIG: MonthlySignals = { ...ALL_NULL_SIGNALS, rating: 4.2, listingCompleteness: 62, hasList: false, complaintThemes: ['photos look old'], workingServiceIds: ['review-engine'] }
+  const FIXTURES: [string, ReturnType<typeof composeMonthlyPlan>][] = [
+    ['get-known $800', composeMonthlyPlan(800, [], {}, ['get-known'], 'local')],
+    ['reviews $400 + signals', composeMonthlyPlan(400, [], {}, ['reviews'], 'local', false, [], [], SIG)],
+    ['catering $1500', composeMonthlyPlan(1500, [], {}, ['catering'], 'city')],
+    ['opening dated $4000', composeMonthlyPlan(4000, [], {}, ['opening'], 'local', false, [], [], undefined, { dated: true, priorityCap: 6 })],
+    ['more-new $600 shift', composeMonthlyPlan(600, [], {}, ['more-new'], 'local', true)],
+  ]
+  for (const [name, plan] of FIXTURES) {
+    const bare = plan.lines.filter((l) => !l.held && !l.have && !l.why)
+    s.check(`${name}: every billed line has a why`, bare.length === 0, bare.map((l) => l.id).join(', '))
+    const dashed = plan.lines.filter((l) => l.why && /[—–]/.test(l.why))
+    s.check(`${name}: no em or en dash in any why`, dashed.length === 0)
+  }
+  /* An owner-held service says so, and says it costs nothing. The held id is taken FROM the
+   * plan itself, so the fixture can never drift out of the candidate pool. */
+  const baseline = composeMonthlyPlan(800, [], {}, ['get-known'], 'local')
+  const someBilled = baseline.lines.find((l) => !l.held && !l.have)!.id
+  const withHave = composeMonthlyPlan(800, [someBilled], {}, ['get-known'], 'local')
+  const haveLine = withHave.lines.find((l) => l.have)
+  s.check('an owner-held line says never billed', !!haveLine?.why && /never billed/i.test(haveLine.why), haveLine?.why)
+}
+
+s.group('Why-layer: a line never cites a lean the composer did not make')
+{
+  const SIG: MonthlySignals = { ...ALL_NULL_SIGNALS, rating: 4.2, listingCompleteness: 62, hasList: false, complaintThemes: ['photos look old'], workingServiceIds: ['review-engine'] }
+  /* tiltWhys and signalTilt.boost are the SAME set: a why for every boost, a boost for every why. */
+  const whys = tiltWhys(SIG)
+  const boost = signalTilt(SIG).boost
+  s.check('every boosted id has a why', [...boost].every((id) => whys.has(id)), [...boost].filter((id) => !whys.has(id)).join(', '))
+  s.check('every why maps to a boosted id', [...whys.keys()].every((id) => boost.has(id)), [...whys.keys()].filter((id) => !boost.has(id)).join(', '))
+  s.check('no signals, no signal whys', tiltWhys(undefined).size === 0 && tiltWhys(ALL_NULL_SIGNALS).size === 0)
+
+  /* Precedence is pure: worked-here beats the rating reason for the same service. */
+  s.check('worked-before outranks the rating in the why map', tiltWhys(SIG).get('review-engine') === 'This worked for you before.')
+  /* And in a composed plan, a billed worked-before service cites its history. The id is taken
+   * from the plan itself so the fixture cannot pick a held service. */
+  const noSig = composeMonthlyPlan(400, [], {}, ['reviews'], 'local')
+  const billedId = noSig.lines.find((l) => !l.held && !l.have)!.id
+  const SIG2: MonthlySignals = { ...ALL_NULL_SIGNALS, workingServiceIds: [billedId] }
+  const plan = composeMonthlyPlan(400, [], {}, ['reviews'], 'local', false, [], [], SIG2)
+  const rep = plan.lines.find((l) => l.id === billedId && !l.held)
+  s.check('a worked-before service cites its history', !!rep?.why && /worked for you before/i.test(rep.why), rep?.why)
+  const withSig = composeMonthlyPlan(400, [], {}, ['reviews'], 'local', false, [], [], SIG)
+  const disc = withSig.lines.find((l) => ['local-seo', 'listings-sync', 'gbp-setup'].includes(l.id) && !l.held && !l.have)
+  s.check('a listing fix cites the real score', !disc || /62 of 100/.test(disc.why ?? ''), disc?.why)
+
+  /* Slow shifts: the merged work says why it is aimed there. */
+  const shifted = composeMonthlyPlan(600, [], {}, ['reviews'], 'local', true)
+  const base = composeMonthlyPlan(600, [], {}, ['reviews'], 'local', false)
+  const baseIds = new Set(base.lines.map((l) => l.id))
+  const merged = shifted.lines.filter((l) => !baseIds.has(l.id) && !l.held && !l.have)
+  s.check('shift-merged lines cite the slow shifts', merged.length > 0 && merged.every((l) => /slow shifts/i.test(l.why ?? '')), merged.map((l) => `${l.id}:${l.why}`).join(' | '))
+
+  /* No cause at all: the honest ladder default, not silence and not invention. */
+  const plain = composeMonthlyPlan(800, [], {}, ['get-known'], 'local')
+  const defaults = plain.lines.filter((l) => !l.held && !l.have && l.why)
+  s.check('uncaused lines say recipe/coverage/budget honestly', defaults.every((l) => /recipe|budget|step|heart|measure|worked|shifts|bring/i.test(l.why ?? '')), defaults.map((l) => l.why).join(' | '))
 }
 
 s.report('Plan packing properties')

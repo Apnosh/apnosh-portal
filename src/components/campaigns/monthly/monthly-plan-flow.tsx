@@ -157,6 +157,13 @@ function ServiceCard({ line, action, onToggle }: { line: MonthlyLine; action: 'r
           )}
         </div>
         <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.5 }}>{line.role}</div>
+        {/* WHY THIS LINE EXISTS (the why-layer): the fact that put it here, said to the owner.
+            Suppressed on held/have lines, whose own explanations already carry the card. */}
+        {line.why && !line.held && !line.have && (
+          <div style={{ marginTop: 6, fontSize: 12, fontWeight: 600, color: DESK.mintDeep, lineHeight: 1.45 }}>
+            {line.why}
+          </div>
+        )}
         {line.held && (
           <div style={{ marginTop: 9, paddingTop: 9, borderTop: `0.5px solid ${C.line}`, fontSize: 12, color: AMBER_DK, lineHeight: 1.5 }}>
             {line.held}

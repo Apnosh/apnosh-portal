@@ -94,6 +94,31 @@ export function signalTilt(s?: MonthlySignals): SignalTilt {
 }
 
 /**
+ * WHY A BOOSTED SERVICE IS IN THE PLAN, per service id (the why-layer, 2026-07-31).
+ *
+ * Same file, same thresholds, same rule as signalTilt and signalNotes: a plan line must never
+ * cite a lean the composer did not actually make. M2 (worked here) outranks the signal reasons,
+ * mirroring the tilt's own precedence. Sim-pinned against signalTilt in plan-packing.
+ */
+export function tiltWhys(s?: MonthlySignals): Map<string, string> {
+  const out = new Map<string, string>()
+  if (!s) return out
+  if (s.rating != null && s.rating < 4.3) {
+    for (const id of REPUTATION) out.set(id, `Your Google rating is ${s.rating.toFixed(1)}. This pushes it up.`)
+  }
+  if (s.listingCompleteness != null && s.listingCompleteness <= 70) {
+    for (const id of DISCOVERY) out.set(id, `Your Google listing scores ${s.listingCompleteness} of 100. This fixes it.`)
+  }
+  if (s.hasList === false) out.set('crm-list', 'You have no guest list yet. This builds one.')
+  else if (s.hasList === true) for (const id of SENDS) out.set(id, 'You have a guest list. This puts it to work.')
+  if (s.complaintThemes.some((t) => /photo|menu|pic|look/i.test(t))) {
+    for (const id of PHOTO) out.set(id, 'Reviews mention how the food looks. This fixes that.')
+  }
+  for (const id of s.workingServiceIds) out.set(id, 'This worked for you before.')
+  return out
+}
+
+/**
  * The same facts, said to the OWNER with their consequence: what the plan does about each one.
  *
  * Lives in this file ON PURPOSE, next to signalTilt, using the SAME thresholds — the card that

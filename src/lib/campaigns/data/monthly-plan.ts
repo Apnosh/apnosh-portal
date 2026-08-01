@@ -30,8 +30,9 @@ import { PLAN_GOALS, candidatesForGoal, shiftCandidates, assetsBoost, type Candi
 import { SEND_DEPS } from '../builder/build-from-atoms'
 import { etaLabelFor } from './service-turnaround'
 import { passthroughMonthlyMinimumCents, plainCostNote } from '../builder/item-prices'
-import { signalTilt, type MonthlySignals } from './monthly-signals'
+import { signalTilt, tiltWhys, type MonthlySignals } from './monthly-signals'
 import { guideMovesForMonthly } from './guide-moves'
+import { WHY_LINES as WHY, fill } from './walk-copy'
 
 /* ── the four steps a stranger moves through ────────────────────────────────────────────── */
 
@@ -250,6 +251,13 @@ export interface MonthlyLine {
   have?: boolean
   /** added by hand, beyond what the budget reached */
   extra?: boolean
+  /**
+   * WHY THIS LINE IS IN THE PLAN, citing the fact that put it there (the why-layer,
+   * 2026-07-31): a signal, an asset, a slow shift, the owner's own hand — or, honestly, the
+   * recipe and the budget. Optional so every existing path is untouched; the draft mapping
+   * falls back to the catalog role.
+   */
+  why?: string
 }
 
 export interface MonthlyPlan {
@@ -412,7 +420,18 @@ export function composeMonthlyPlan(
    * are hard exclusions — nothing in either set can be taken, at any budget. */
   const blockedByReach = new Set([...excludedByReach(reach), ...excludedByAvoid(avoid)])
   const missing: string[] = []
-  const chosen: { s: PricedService; have: boolean; extra?: boolean }[] = []
+  const chosen: { s: PricedService; have: boolean; extra?: boolean; why?: string }[] = []
+
+  /*
+   * THE WHY-LAYER'S CAUSE MAP, computed once before any pass. A line's reason is the most
+   * specific true thing: owner-held beats a live cause, a live cause (signal, worked-before,
+   * asset boost, slow-shift aim) beats the pass default, and the pass default says honestly
+   * that the recipe and the budget put it there. Same precedence as the ranking itself, so a
+   * line can never cite a lean the composer did not make.
+   */
+  const causes = tiltWhys(signals)
+  if (shift) for (const c of shiftCandidates()) if (!causes.has(c.id)) causes.set(c.id, WHY['why.shift'])
+  for (const id of assetsBoost(assets)) if (!causes.has(id)) causes.set(id, WHY['why.asset'])
   const taken = new Set<string>()
   let load = 0
   let start = 0
@@ -454,7 +473,7 @@ export function composeMonthlyPlan(
    * rewritten to remove. If a step's cheapest ongoing option does not fit, that step stays uncovered
    * and the honest floor rises to say so.
    */
-  const consider = (id: string, required = false): 'taken' | 'unaffordable' | 'skip' => {
+  const consider = (id: string, required = false, why?: string): 'taken' | 'unaffordable' | 'skip' => {
     if (taken.has(id) || blockedByReach.has(id)) return 'skip'
     const s = svc(id)
     if (!s) {
@@ -462,11 +481,12 @@ export function composeMonthlyPlan(
       return 'skip'
     }
     if (haveSet.has(id)) {
-      chosen.push({ s, have: true })
+      chosen.push({ s, have: true, why: WHY['why.have'] })
       taken.add(id)
       return 'taken'
     }
     if (!deliverable(id)) {
+      /* Held lines explain themselves through `held`; a why on top would compete with it. */
       chosen.push({ s, have: false })
       taken.add(id)
       return 'taken'
@@ -477,7 +497,7 @@ export function composeMonthlyPlan(
        * (`required`) is the quote itself and is always taken — the floor anchor reports its cost. */
       if (!required && start + load + (startOf(s) + r) > budgetMonthly) return 'unaffordable'
     } else if (load + r > budgetMonthly && !(required && r === 0)) return 'unaffordable'
-    chosen.push({ s, have: false })
+    chosen.push({ s, have: false, why: causes.get(id) ?? why })
     taken.add(id)
     load += r
     start += startOf(s)
@@ -499,7 +519,7 @@ export function composeMonthlyPlan(
    */
   for (const g of goals ?? []) {
     for (const c of candidatesForGoal(g)) {
-      if (c.priority === 1 && deliverable(c.id) && !blockedByReach.has(c.id) && svc(c.id)) consider(c.id, true)
+      if (c.priority === 1 && deliverable(c.id) && !blockedByReach.has(c.id) && svc(c.id)) consider(c.id, true, WHY['why.headline'])
     }
   }
 
@@ -528,14 +548,14 @@ export function composeMonthlyPlan(
      */
     for (const c of ranked) {
       if (stepOf(c.id) !== step.stage || taken.has(c.id) || !deliverable(c.id) || blockedByReach.has(c.id) || !svc(c.id)) continue
-      if (consider(c.id, true) === 'taken') break
+      if (consider(c.id, true, fill(WHY['why.coverage'], { step: step.name })) === 'taken') break
     }
   }
 
   /* PASS 2 — one measurement line, so the plan can be judged later. A plan nobody can grade is
    * worth less than a smaller one that can be. */
   const meas = ranked.find((c) => stepOf(c.id) === 'backstage' && !taken.has(c.id) && deliverable(c.id))
-  if (meas) consider(meas.id, true)
+  if (meas) consider(meas.id, true, WHY['why.measure'])
 
   /*
    * PASS 3 — DEPTH IS ONGOING WORK ONLY. The dial buys months, never setups.
@@ -553,7 +573,7 @@ export function composeMonthlyPlan(
     const s = svc(c.id)
     /* The months-only rule holds for ongoing plans; a dated campaign's depth IS one-time work. */
     if (!dated && s && deliverable(c.id) && !taken.has(c.id) && recurringOf(s) === 0) continue
-    const r = consider(c.id)
+    const r = consider(c.id, false, dated ? WHY['why.depth.dated'] : WHY['why.depth'])
     if (r === 'unaffordable' && !nextUp) {
       const svcx = svc(c.id)!
       const gap = dated
@@ -569,7 +589,7 @@ export function composeMonthlyPlan(
     if (taken.has(id)) continue
     const s = svc(id)
     if (s) {
-      chosen.push({ s, have: false, extra: true })
+      chosen.push({ s, have: false, extra: true, why: WHY['why.added'] })
       taken.add(id)
     }
   }
@@ -588,7 +608,7 @@ export function composeMonthlyPlan(
   const order = [...MONTHLY_STEPS.map((s) => s.stage), 'backstage'] as readonly string[]
 
   const lines = kept
-    .map((c) => lineOf(c.s, heldMap, { have: c.have, extra: c.extra }))
+    .map((c) => lineOf(c.s, heldMap, { have: c.have, extra: c.extra, why: c.why }))
     .sort((a, b) => order.indexOf(a.stage) - order.indexOf(b.stage))
 
   const bill = monthlyBill(lines)
@@ -703,7 +723,7 @@ export function toCampaignDraft(
           ? { kind: 'per-occurrence', unit: l.unit ?? 'each' }
           : { kind: 'one-time' },
     eta: etaLabelFor(l.id),
-    why: l.role,
+    why: l.why ?? l.role,
     included: !l.held && !l.have,
     ...(l.have ? { optOut: 'have-it' as const } : {}),
     lock: 'editable' as const,
