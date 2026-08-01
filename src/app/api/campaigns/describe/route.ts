@@ -21,7 +21,7 @@
  */
 import { NextResponse } from 'next/server'
 import {
-  SITUATIONS, OWNER_ASSETS, PLAN_QUESTIONS, sanitizeAsk, sanitizeRead, credibleDate, monthHintFrom,
+  SITUATIONS, OWNER_ASSETS, PLAN_QUESTIONS, sanitizeAsk, sanitizeRead, credibleDate, monthHintFrom, futureDate,
   SHIFT_OPTIONS, AUDIENCE_OPTIONS, REACH_OPTIONS, AVOID_OPTIONS, PROMOTE_OTHER_OPTIONS,
   type PlanQuestion, type DescribeRead,
 } from '@/lib/campaigns/data/plan-goals'
@@ -217,9 +217,10 @@ export async function POST(req: Request) {
   /* THE DAY MUST BE THEIRS (owner catch): a full date only survives when its day-of-month
    * appears as a number in the text. A coerced "September 1st" from "in September" becomes a
    * month hint instead — the calendar opens there and asks. */
+  const todayISO = new Date().toISOString().slice(0, 10)
   const rawWhen = iso(parsed.when)
-  const when = rawWhen && credibleDate(rawWhen, text) ? rawWhen : null
-  const until = ((u) => (u && credibleDate(u, text) ? u : null))(iso(parsed.until))
+  const when = rawWhen && credibleDate(rawWhen, text) ? futureDate(rawWhen, todayISO) : null
+  const until = ((u) => (u && credibleDate(u, text) ? futureDate(u, todayISO) : null))(iso(parsed.until))
   /* Local month scan, not the model: their month anchors the calendar either way. */
   const whenHint = when ? null : monthHintFrom(text, new Date().toISOString().slice(0, 10))
 

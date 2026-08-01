@@ -30,6 +30,8 @@ export default function WalkCalendar({
   onChange,
   goal,
   hintMonth,
+  classify,
+  tagLine,
 }: {
   value?: string
   onChange: (dayISO: string) => void
@@ -38,6 +40,11 @@ export default function WalkCalendar({
   /** 'YYYY-MM' from the paragraph ("in September"): a month is not a date, but it IS where the
    *  calendar should open and ask. */
   hintMonth?: string
+  /** Override the day-fit rule (the design flow tints rush days instead of lead-time days).
+   *  Omitted, the campaign feasibility rule applies unchanged. */
+  classify?: (dayISO: string, todayISO: string) => DayFit
+  /** Override the legend line under the grid when `classify` is custom. */
+  tagLine?: string
 }) {
   const todayISO = iso(new Date())
   const f = feasibilityFor(goal, todayISO)
@@ -58,7 +65,7 @@ export default function WalkCalendar({
     const d = new Date(y, m - 1 + dir, 1)
     setYm(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
   }
-  const fitOf = (day: string): DayFit => (day <= todayISO ? 'too-soon' : classifyDay(day, goal, todayISO))
+  const fitOf = (day: string): DayFit => (day <= todayISO ? 'too-soon' : (classify ?? ((d: string, t: string) => classifyDay(d, goal, t)))(day, todayISO))
   const pickedFit: DayFit | null = value ? fitOf(value) : null
 
   return (
@@ -98,14 +105,14 @@ export default function WalkCalendar({
       </div>
       <div style={{ fontSize: 10.5, color: MINT_DK, marginTop: 8, lineHeight: 1.45 }}>
         <span aria-hidden style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 3, background: MINT_SOFT, border: `1px solid ${MINT}`, marginRight: 5, verticalAlign: -1 }} />
-        Gray is too soon for the work. {fmtDay(f.firstComfortable)} is the first comfortable day.
+        {tagLine ?? `Gray is too soon for the work. ${fmtDay(f.firstComfortable)} is the first comfortable day.`}
       </div>
-      {pickedFit === 'too-soon' && (
+      {!classify && pickedFit === 'too-soon' && (
         <div style={{ fontSize: 11.5, color: AMBER, background: AMBER_SOFT, borderRadius: 9, padding: '8px 10px', marginTop: 8, lineHeight: 1.45 }}>
           That is sooner than the work fits. We can rush it, but some pieces will land after the day. {fmtDay(f.firstComfortable)} or later runs clean.
         </div>
       )}
-      {pickedFit === 'tight' && (
+      {!classify && pickedFit === 'tight' && (
         <div style={{ fontSize: 11.5, color: AMBER, background: AMBER_SOFT, borderRadius: 9, padding: '8px 10px', marginTop: 8, lineHeight: 1.45 }}>
           Tight but doable. Everything must go right. {fmtDay(f.firstComfortable)} or later is comfortable.
         </div>

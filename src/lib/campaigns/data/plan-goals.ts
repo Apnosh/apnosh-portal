@@ -780,6 +780,18 @@ export interface DescribeRead {
  * are compared whole, so day 2 never sneaks in via "2026". A month with no day is not a date;
  * it is a month, and the screen should ask with the calendar opened there.
  */
+/**
+ * A read date must be in the FUTURE (owner intent is always an upcoming moment; the model can
+ * guess a past year when the text names no year, e.g. "August 15" read as last year). A past
+ * date rolls forward one year when that lands it in the future; anything still past is no
+ * date at all.
+ */
+export function futureDate(iso: string, todayISO: string): string | null {
+  if (iso >= todayISO) return iso
+  const bumped = String(Number(iso.slice(0, 4)) + 1) + iso.slice(4)
+  return bumped >= todayISO ? bumped : null
+}
+
 export function credibleDate(iso: string | null | undefined, text: string): boolean {
   if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false
   const day = Number(iso.slice(8))
@@ -804,8 +816,7 @@ export function monthHintFrom(text: string, todayISO: string): string | null {
   return `${year}-${String(idx + 1).padStart(2, '0')}`
 }
 
-/** Normalize for the quote-in-text check: case, curly quotes, collapsed whitespace. */
-const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim()
+import { norm, backedValue } from './read-evidence'
 
 /**
  * THE EVIDENCE LAW, enforced. The model returns every read field as {value, quote}; a field whose
@@ -819,16 +830,9 @@ const norm = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[
  */
 export function sanitizeRead(raw: unknown, text: string, menuNames: readonly string[]): DescribeRead {
   if (!raw || typeof raw !== 'object') return {}
-  const t = norm(text)
   const r = raw as Record<string, { value?: unknown; quote?: unknown } | undefined>
-  /** The gate every field passes: a real quote, found in the text. */
-  const backed = (k: string): unknown => {
-    const f = r[k]
-    if (!f || typeof f !== 'object') return undefined
-    const q = typeof f.quote === 'string' ? norm(f.quote) : ''
-    if (q.length < 2 || !t.includes(q)) return undefined
-    return f.value
-  }
+  /** The shared evidence gate (read-evidence.ts): one law, every flow. */
+  const backed = (k: string): unknown => backedValue(r[k], text)
   const str = (v: unknown, max = 120) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : undefined)
   const inVocab = (v: unknown, vocab: readonly string[]) =>
     Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && vocab.includes(x)) : []

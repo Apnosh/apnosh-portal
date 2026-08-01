@@ -16,6 +16,7 @@ import { Suite } from './lib'
 import { DESTINATIONS, destinationById } from '../../src/lib/design/destinations'
 import { RATE_CARD } from '../../src/lib/design/rate-card'
 import { priceDesignOrder, rushApplies, productionBufferDays, type DesignOrderAnswers } from '../../src/lib/design/design-pricing'
+import { matchDesignJob, sanitizeDesignRead } from '../../src/lib/design/design-read'
 
 const s = new Suite()
 const TODAY = '2026-07-31' // injected clock, never the real one
@@ -55,6 +56,11 @@ s.group('No unexplained money: every line cites its cause, total is the sum')
   s.check('total = sum of lines', q.total === q.lines.reduce((n, l) => n + l.amount, 0))
   s.check('no em or en dash in any why', q.lines.every((l) => !/[—–]/.test(l.why)))
   s.check('own photos are a VISIBLE zero, not an omission', q.lines.some((l) => l.id === 'photos' && l.amount === 0 && /your own/i.test(l.why)))
+  {
+    const { photos: _drop, ...rest } = BASE
+    const unanswered = priceDesignOrder(rest, RATE_CARD)
+    s.check('an unanswered photos step is a QUESTION, never a charge', unanswered.needs.includes('photos') && !unanswered.lines.some((l) => l.id === 'photos'))
+  }
   s.check('the second destination cites its checkbox', q.lines.some((l) => l.id === 'dest-instagram-story' && /You checked Instagram Story/.test(l.why)))
   s.check('a read answer carries its cited words onto the line', q.lines.find((l) => l.id === 'dest-instagram-story')?.citedWords === 'for instagram and stories')
   s.check('revision rounds ride the quote', q.includedRevisions === RATE_CARD.includedRevisions)
@@ -130,5 +136,42 @@ s.group('The rate card is a placeholder until reviewed, and says so')
   s.check('the rush window is inside the spec range (48 to 72 hours)', RATE_CARD.rushWindowHours >= 48 && RATE_CARD.rushWindowHours <= 72)
 }
 
-const ok = s.report('Design pricing (Phase A)')
+/* ── Phase B: the design read obeys the same laws as the campaign read ────────────────────── */
+
+s.group('Local job matcher: available when the model is not, honest when unsure')
+{
+  s.check('weekly special', matchDesignJob('need a flyer for our weekly special') === 'weekly-special')
+  s.check('hiring', matchDesignJob('we are hiring two line cooks') === 'hiring')
+  s.check('holiday hours', matchDesignJob('closed for thanksgiving, need to post our holiday hours') === 'holiday-hours')
+  s.check('a miss returns null, never a guess', matchDesignJob('make it pop') === null)
+}
+
+s.group('sanitizeDesignRead: the shared evidence gate, the design vocabulary')
+{
+  const TEXT = 'Need an instagram post and a printed flyer for our live music night on August 15. 20% off pitchers. We have our own photos. Need it by Friday.'
+  const q = (value: unknown, quote: string) => ({ value, quote })
+  const read = sanitizeDesignRead({
+    jobType: q('event-promo', 'live music night'),
+    message: q('Live music night', 'live music night'),
+    offer: q('20% off pitchers', '20% off pitchers'),
+    dateISO: q('2026-08-15', 'August 15'),
+    destinations: q(['instagram-post', 'printed-flyer'], 'instagram post and a printed flyer'),
+    ownPhotos: q(true, 'our own photos'),
+  }, TEXT, TODAY)
+  s.check('a fully-backed read survives with citations', read.jobType === 'event-promo' && read.offer === '20% off pitchers' && read.dateISO === '2026-08-15' && read.destinations?.length === 2 && read.ownPhotos === true)
+  s.check('cited words ride along for the price lines', read.cited.destinations === 'instagram post and a printed flyer' && read.cited.offer === '20% off pitchers')
+  s.check('rush language detected locally', read.rushLanguage === true)
+
+  s.check('an invented quote kills the field', sanitizeDesignRead({ offer: q('50% off', 'we agreed to half price') }, TEXT, TODAY).offer === undefined)
+  s.check('a vague offer read is dropped (no number, no shape)', sanitizeDesignRead({ offer: q('a great deal', '20% off pitchers') }, 'we want to run a great deal on drinks', TODAY).offer === undefined)
+  s.check('an off-vocabulary destination vanishes', sanitizeDesignRead({ destinations: q(['skywriting'], 'instagram post') }, TEXT, TODAY).destinations === undefined)
+  s.check('"in September" is a month hint, never a date', (() => { const r = sanitizeDesignRead({ dateISO: q('2026-09-01', 'in September') }, 'flyer for our event in September', TODAY); return r.dateISO === undefined && r.monthHint === '2026-09' })())
+  s.check('a dead model still lands the local job', sanitizeDesignRead('not-an-object', 'poster for our weekly special', TODAY).jobType === 'weekly-special')
+  /* The future rule: a past-year guess for "August 15" rolls to the upcoming August 15. */
+  s.check('a past-year date read rolls forward, never backwards', sanitizeDesignRead({ dateISO: q('2025-08-15', 'August 15') }, 'event on August 15', TODAY).dateISO === '2026-08-15')
+  s.check('a date past even after the roll is no date', sanitizeDesignRead({ dateISO: q('2024-03-01', 'March 1') }, 'back on March 1', '2026-07-31').dateISO === undefined)
+  s.check('no read whys carry dashes', Object.values(read.cited).every((c) => !/[—–]/.test(c ?? '')))
+}
+
+const ok = s.report('Design pricing + read (Phases A-B)')
 process.exit(ok ? 0 : 1)

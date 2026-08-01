@@ -39,9 +39,21 @@ rate-card config, set by the designer job-history review — placeholders never 
   DesignFact why-structure {value, source, citedWords}). Goldens in
   scripts/sim/design-pricing.ts (39 checks: table completeness, no unexplained money, flip
   test, rush honesty, print honesty, tier rule, placeholder gate).
-- **Phase B**: the six-step flow on existing components. BLOCKED ON: rate card populated from
-  the designer job-history review (last 15-20 jobs: tier tags + hours + revision counts).
-- **Phase C**: reorder shortcut + tier detection from design history (layout-family tag).
+- **Phase B BUILT, testable at /preview/design/order** (2026-07-31): reuse flag 2 resolved by
+  extraction — the evidence gate moved to src/lib/campaigns/data/read-evidence.ts (campaign
+  sims prove behavior identical), design got its own vocabulary in design-read.ts + a
+  /api/design/describe route on the campaign route's skeleton (adds futureDate: a model-guessed
+  past year rolls forward, applied to BOTH routes). Six-step flow in
+  src/components/design/design-order-flow.tsx: describe+chips (chips are the no-AI floor),
+  destinations w/ print follow-ups, exact copy w/ revision line, photos w/ quality gate
+  (fixtures; real library still flag 1), WalkCalendar w/ rush classifier + un-rush nudge,
+  review+submit. Price panel pinned + cited; photos became OPTIONAL in the engine (unanswered =
+  needs entry, never a charge). Goldens now 55. Preview submit records locally; order
+  persistence + payment are post-testing wiring.
+  STILL GATED FOR CLIENTS ON: rate card populated from the designer job-history review
+  (last 15-20 jobs: tier tags + hours + revision counts) → flip RATE_CARD.approved.
+- **Phase C**: reorder shortcut + tier detection from design history (layout-family tag);
+  until then the flow fixes tier 2 (custom).
 
 ## Reuse flags (raised per the build rule, 2026-07-31)
 1. **Photo library with upload + quality gate does not exist yet.** The campaign walk treats

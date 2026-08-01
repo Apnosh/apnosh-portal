@@ -34,8 +34,9 @@ export interface DesignOrderAnswers {
   /** required when any print destination is checked; never guessed (law 4) */
   printQty?: DesignFact<number>
   printer?: DesignFact<'client' | 'us'>
-  /** 'own' = client assets cleared the quality gate; 'source' = the photo add-on */
-  photos: DesignFact<'own' | 'source'>
+  /** 'own' = client assets cleared the quality gate; 'source' = the photo add-on.
+   *  Absent while the photos step is unanswered: a question, never a guessed charge (law 4). */
+  photos?: DesignFact<'own' | 'source'>
   /** from design history (Phase C); the engine never asks for it */
   tier: 1 | 2 | 3
   /** true when history could support a higher tier: price the lower one, flag for review */
@@ -61,7 +62,7 @@ export interface DesignQuote {
   lines: PriceLine[]
   total: number
   /** price-affecting questions still unanswered: shown as questions, never guessed as charges */
-  needs: ('printQty' | 'printer')[]
+  needs: ('printQty' | 'printer' | 'photos')[]
   rush: boolean
   /** ambiguous tier priced LOW and flagged for internal review before work starts */
   flaggedForReview: boolean
@@ -127,8 +128,12 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
     }
   }
 
-  /* Photos: the client's own are a visible zero; sourcing is a priced add-on they chose knowingly. */
-  if (a.photos.value === 'own') {
+  /* Photos: the client's own are a visible zero; sourcing is a priced add-on they chose knowingly.
+   * Unanswered, it is a question in needs — the panel must never show photo money the client
+   * has not chosen yet. */
+  if (a.photos == null) {
+    needs.push('photos')
+  } else if (a.photos.value === 'own') {
     lines.push({
       id: 'photos', label: 'Photos', amount: 0,
       why: 'You are using your own.', source: a.photos.source,
