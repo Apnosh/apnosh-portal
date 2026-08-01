@@ -52,6 +52,10 @@ rate-card config, set by the designer job-history review — placeholders never 
   persistence + payment are post-testing wiring.
   STILL GATED FOR CLIENTS ON: rate card populated from the designer job-history review
   (last 15-20 jobs: tier tags + hours + revision counts) → flip RATE_CARD.approved.
+  The review now fills PER-DESTINATION adders (destinationAdder: one number per destination,
+  11 total — a banner adaptation is not a Facebook post). Engine rule: the most expensive
+  picked destination is included with the design (visible $0 line), the rest bill their own
+  adder, ranked so tap order can never change the total.
 - **Phase C**: reorder shortcut + tier detection from design history (layout-family tag);
   until then the flow fixes tier 2 (custom).
 

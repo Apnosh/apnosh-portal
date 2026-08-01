@@ -105,14 +105,20 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
     why: TIER_WHY[tier], source: 'known',
   })
 
-  /* Each destination beyond the first is an adaptation, one line per checkbox (law 3). */
+  /* Every destination gets a line (law 3). The most expensive one is INCLUDED with the design,
+   * a visible zero; the rest are adaptations priced by their own production reality. Ranked by
+   * adder so the total can never depend on tap order. */
   const dests = a.destinations.value.map(destinationById).filter((d): d is DestinationSpec => !!d)
-  for (const d of dests.slice(1)) {
+  const ranked = [...dests].sort((x, y) => (rates.destinationAdder[y.id] ?? 0) - (rates.destinationAdder[x.id] ?? 0))
+  ranked.forEach((d, i) => {
     lines.push({
-      id: `dest-${d.id}`, label: `${d.label} version`, amount: rates.perDestination,
-      why: `You checked ${d.label}.`, source: a.destinations.source, citedWords: a.destinations.citedWords,
+      id: `dest-${d.id}`,
+      label: i === 0 ? d.label : `${d.label} version`,
+      amount: i === 0 ? 0 : rates.destinationAdder[d.id] ?? 0,
+      why: i === 0 ? 'Included with the design.' : `You checked ${d.label}.`,
+      source: a.destinations.source, citedWords: a.destinations.citedWords,
     })
-  }
+  })
 
   /* Print: quantity and printer are asked, never guessed. Missing means a question, not a charge. */
   const printDests = dests.filter((d) => d.kind === 'print')

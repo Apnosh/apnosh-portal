@@ -11,13 +11,18 @@
  * flag exists and starts false. Flip it only in the commit that lands the reviewed numbers.
  */
 
+import type { DestinationId } from './destinations'
+
 export interface RateCard {
   /** false until the designer job-history review sets real numbers. Clients never see placeholders. */
   approved: boolean
   /** Tier bases. The tier is never asked — it derives from design history (Phase C). */
   tierBase: { 1: number; 2: number; 3: number }
-  /** Each destination beyond the first is an adaptation of the approved design. */
-  perDestination: number
+  /** Per-destination adder: each extra place is an adaptation priced by its own production
+   *  reality (a banner is not a Facebook post). The most expensive picked destination is
+   *  included with the design; every other one bills at its own adder, so the total never
+   *  depends on tap order. */
+  destinationAdder: Record<DestinationId, number>
   /** We find or license usable photos when nothing in the client's library clears the gate. */
   photoSourcing: number
   /** We run the print job end to end. Printing cost itself passes through at cost. */
@@ -37,7 +42,19 @@ export interface RateCard {
 export const RATE_CARD: RateCard = {
   approved: false,
   tierBase: { 1: 75, 2: 175, 3: 400 },
-  perDestination: 35,
+  destinationAdder: {
+    'instagram-post': 35,
+    'instagram-story': 35,
+    'facebook-post': 35,
+    'google-listing': 35,
+    'email-header': 35,
+    'printed-flyer': 45,
+    'table-tent': 45,
+    'menu-board': 55,
+    poster: 55,
+    'gift-card': 65,
+    banner: 85,
+  },
   photoSourcing: 60,
   printManagement: 50,
   rushMultiplier: 1.5,

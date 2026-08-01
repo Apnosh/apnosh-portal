@@ -89,6 +89,21 @@ s.group('Flip test: every price-affecting answer visibly moves the quote')
   s.check('unchecking a destination removes its line', three.lines.some((l) => l.id === 'dest-facebook-post') && !two.lines.some((l) => l.id === 'dest-facebook-post'))
 }
 
+/* ── per-destination adders ───────────────────────────────────────────────────────────────── */
+
+s.group('Per-destination adders: own price, order-blind, most expensive included')
+{
+  const ab = priceDesignOrder({ ...BASE, destinations: asked(['instagram-post', 'banner']) }, RATE_CARD)
+  const ba = priceDesignOrder({ ...BASE, destinations: asked(['banner', 'instagram-post']) }, RATE_CARD)
+  s.check('tap order never changes the total', ab.total === ba.total, `${ab.total} vs ${ba.total}`)
+  s.check('the most expensive destination is the included one', ab.lines.some((l) => l.id === 'dest-banner' && l.amount === 0 && /included/i.test(l.why)))
+  s.check('the cheaper one bills at its own adder', ab.lines.some((l) => l.id === 'dest-instagram-post' && l.amount === RATE_CARD.destinationAdder['instagram-post']))
+  s.check('every picked destination has a line, single included', ab.lines.filter((l) => l.id.startsWith('dest-')).length === 2 && ab.lines.filter((l) => l.id.startsWith('dest-') && l.amount === 0).length === 1)
+  const gift = priceDesignOrder({ ...BASE, destinations: asked(['gift-card', 'printed-flyer']) }, RATE_CARD)
+  s.check('a flyer next to gift cards bills the flyer adder, not a flat rate',
+    gift.lines.some((l) => l.id === 'dest-printed-flyer' && l.amount === RATE_CARD.destinationAdder['printed-flyer']))
+}
+
 /* ── golden 5 + law 4: rush honesty, print honesty ────────────────────────────────────────── */
 
 s.group('Rush honesty: the window and the confirmation are both required')
@@ -132,7 +147,9 @@ s.group('The rate card is a placeholder until reviewed, and says so')
 {
   s.check('approved starts false: Phase B must refuse to show clients these numbers', RATE_CARD.approved === false)
   s.check('every amount is positive and the multiplier is above 1',
-    Object.values(RATE_CARD.tierBase).every((n) => n > 0) && RATE_CARD.perDestination > 0 && RATE_CARD.photoSourcing > 0 && RATE_CARD.printManagement > 0 && RATE_CARD.rushMultiplier > 1)
+    Object.values(RATE_CARD.tierBase).every((n) => n > 0) && RATE_CARD.photoSourcing > 0 && RATE_CARD.printManagement > 0 && RATE_CARD.rushMultiplier > 1)
+  s.check('every destination has its own positive adder, none forgotten',
+    DESTINATIONS.every((d) => (RATE_CARD.destinationAdder[d.id] ?? 0) > 0))
   s.check('the rush window is inside the spec range (48 to 72 hours)', RATE_CARD.rushWindowHours >= 48 && RATE_CARD.rushWindowHours <= 72)
 }
 
