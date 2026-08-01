@@ -159,7 +159,7 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
     const base = lines.reduce((n, l) => n + l.amount, 0)
     lines.push({
       id: 'rush', label: 'Rush', amount: Math.round(base * (rates.rushMultiplier - 1)),
-      why: `Due ${a.dueDateISO!.value}, inside the ${rates.rushWindowHours} hour rush window. You confirmed the date is firm.`,
+      why: `Due ${a.dueDateISO!.value}, inside the ${Math.round(rates.rushWindowHours / 24)} day rush window. You confirmed the date is firm.`,
       source: 'asked',
     })
   }

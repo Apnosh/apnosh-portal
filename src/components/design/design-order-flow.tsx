@@ -46,6 +46,18 @@ export interface DesignAsset {
 export const passesQualityGate = (a: { width: number; height: number }) => Math.min(a.width, a.height) >= 1000
 
 const fmtDay = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
+const fmtLong = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
+const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
+
+/* Starter headlines per job: the honest fallback when nothing was read. What was actually
+ * read (their message, their menu item, their deal) always ranks first. */
+const JOB_HEADLINES: Partial<Record<DesignJobId, string>> = {
+  'weekly-special': 'This Week Only',
+  announcement: 'Big News',
+  'new-menu': 'Our New Menu',
+  'holiday-hours': 'Holiday Hours',
+  hiring: 'Join Our Team',
+}
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const addDays = (iso: string, n: number) => {
   const d = new Date(iso + 'T12:00:00')
@@ -111,10 +123,10 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const [dests, setDests] = useState<DestinationId[]>([])
   const [printQty, setPrintQty] = useState<number | null>(null)
   const [printer, setPrinter] = useState<'client' | 'us' | null>(null)
-  const [message, setMessage] = useState('')
+  const [headline, setHeadline] = useState('')
+  const [details, setDetails] = useState('')
   const [offer, setOffer] = useState('')
   const [promoteItem, setPromoteItem] = useState<string | null>(null)
-  const [exactText, setExactText] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [uploaded, setUploaded] = useState<DesignAsset[]>([])
   const [sourcePhotos, setSourcePhotos] = useState(false)
@@ -154,6 +166,9 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     rushConfirmed,
   }
   const quote = priceDesignOrder(answers, RATE_CARD)
+  const saidText = [headline, details, offer].map((t) => t.trim()).filter(Boolean).join('. ')
+  /* The rush question shows real dollars: the engine's own delta, before it is agreed to. */
+  const rushDelta = Math.round(quote.total * (RATE_CARD.rushMultiplier - 1))
 
   const describe = async () => {
     const text = described.trim()
@@ -169,9 +184,9 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         setRead(rd)
         if (rd.jobType) setJob(rd.jobType)
         if (rd.destinations?.length) setDests(rd.destinations)
-        if (rd.message) { setMessage(rd.message); setExactText(rd.message + (rd.offer ? `. ${rd.offer}` : '')) }
+        if (rd.message) setHeadline(titleCase(rd.message))
         if (rd.offer) setOffer(rd.offer)
-        if (rd.eventDateISO) setEventDate(rd.eventDateISO)
+        if (rd.eventDateISO) { setEventDate(rd.eventDateISO); setDetails(fmtLong(rd.eventDateISO)) }
       }
     } catch {
       /* the chips keep the flow alive; the read is a shortcut, never a dependency */
@@ -184,7 +199,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
     : step === 2 ? dests.length > 0 && (!printPicked || (printQty != null && printer != null))
-    : step === 3 ? exactText.trim().length > 0
+    : step === 3 ? headline.trim().length > 0
     : step === 4 ? usingOwn || sourcePhotos || noPhotos
     : step === 5 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
     : true
@@ -291,30 +306,81 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
           </Plate>
         )}
 
-        {/* ── 3. what should it say ── */}
-        {step === 3 && (
-          <Plate n={3} title="What should it say?" sub="We design what you approve here.">
-            {menu.length > 0 && (
-              <>
-                <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, marginBottom: 6 }}>Featuring, from your menu. Optional.</div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginBottom: 12 }}>
-                  {menu.slice(0, 8).map((m) => (
-                    <Chip key={m.id} on={promoteItem === m.name} label={m.name} onClick={() => setPromoteItem(promoteItem === m.name ? null : m.name)} />
-                  ))}
-                </div>
-              </>
-            )}
-            <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, marginBottom: 6 }}>The exact text</div>
-            <textarea
-              value={exactText} onChange={(e) => setExactText(e.target.value)} rows={3} aria-label="The exact text"
-              placeholder="Live Music Friday. 20% off pitchers, 8pm till late."
-              style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', resize: 'none', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 14, background: '#fff', outline: 'none', fontFamily: APPLE, fontSize: 14.5, color: INK, lineHeight: 1.5 }}
+        {/* ── 3. what should it say: three slots + a live text-layout preview ── */}
+        {step === 3 && (() => {
+          const headlineSugs = [...new Set([
+            read?.message ? titleCase(read.message) : null,
+            promoteItem,
+            job ? JOB_HEADLINES[job] : null,
+          ].filter((x): x is string => !!x && x !== headline))].slice(0, 3)
+          const detailSugs = eventDate && details !== fmtLong(eventDate) ? [fmtLong(eventDate)] : []
+          const slotInput = (v: string, set: (x: string) => void, ph: string, label: string) => (
+            <input
+              value={v} onChange={(e) => set(e.target.value)} placeholder={ph} aria-label={label}
+              style={{ width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: APPLE, fontSize: 14.5, color: INK }}
             />
-            <div style={{ fontSize: 11.5, color: FAINT, marginTop: 7, lineHeight: 1.45 }}>
-              Text changes after design starts count as a revision.
-            </div>
-          </Plate>
-        )}
+          )
+          const slotLabel = (t: string, opt?: boolean) => (
+            <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, margin: '14px 0 6px' }}>{t}{opt ? <span style={{ color: FAINT, fontWeight: 500 }}> · optional</span> : ''}</div>
+          )
+          return (
+            <Plate n={3} title="What should it say?" sub="Watch it take shape. Tap a suggestion or write your own.">
+              {/* the graphic taking shape: text hierarchy only, honestly labeled */}
+              <div style={{ background: INK, borderRadius: 18, padding: '26px 20px', textAlign: 'center' }}>
+                <div style={{ fontFamily: APPLE, fontSize: headline ? 24 : 18, fontWeight: 800, color: headline ? '#fff' : 'rgba(255,255,255,0.35)', letterSpacing: '-0.02em', lineHeight: 1.15, overflowWrap: 'break-word' }}>
+                  {headline || 'Your headline'}
+                </div>
+                {(details || !headline) && (
+                  <div style={{ fontFamily: APPLE, fontSize: 13, fontWeight: 500, color: details ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)', marginTop: 8 }}>
+                    {details || 'The when and where'}
+                  </div>
+                )}
+                {offer && (
+                  <div style={{ display: 'inline-block', marginTop: 12, background: MINT, color: '#fff', borderRadius: 99, padding: '5px 13px', fontFamily: APPLE, fontSize: 12.5, fontWeight: 700 }}>
+                    {offer}
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: FAINT, marginTop: 6, textAlign: 'center' }}>
+                A rough layout of the words, not the design. Your designer makes it look good.
+              </div>
+
+              {slotLabel('The headline')}
+              {slotInput(headline, setHeadline, 'Live Music Friday', 'The headline')}
+              {headlineSugs.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
+                  {headlineSugs.map((h) => <Chip key={h} on={false} label={h} onClick={() => setHeadline(h)} />)}
+                </div>
+              )}
+
+              {slotLabel('The when and where', true)}
+              {slotInput(details, setDetails, eventDate ? fmtLong(eventDate) : 'Friday nights, 8pm till late', 'The when and where')}
+              {detailSugs.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
+                  {detailSugs.map((d) => <Chip key={d} on={false} label={d} onClick={() => setDetails(d)} />)}
+                </div>
+              )}
+
+              {slotLabel('The deal', true)}
+              {slotInput(offer, setOffer, '20% off pitchers', 'The deal')}
+
+              {menu.length > 0 && (
+                <>
+                  {slotLabel('Featuring, from your menu', true)}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                    {menu.slice(0, 8).map((m) => (
+                      <Chip key={m.id} on={promoteItem === m.name} label={m.name} onClick={() => setPromoteItem(promoteItem === m.name ? null : m.name)} />
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div style={{ fontSize: 11.5, color: FAINT, marginTop: 14, lineHeight: 1.45 }}>
+                We design exactly these words. Changes after design starts count as a revision.
+              </div>
+            </Plate>
+          )
+        })()}
 
         {/* ── 4. photos ── */}
         {step === 4 && (
@@ -401,20 +467,33 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               </button>
             )}
             {due && rushEligible && !rushConfirmed && (
-              <div style={{ background: AMBER_SOFT, borderRadius: 14, padding: '12px 14px', marginTop: 12 }}>
-                <div style={{ fontSize: 13, color: AMBER, fontWeight: 600, lineHeight: 1.5 }}>
-                  Standard turnaround would deliver {fmtDay(standardDelivery)}. Okay, or is {fmtDay(due)} firm?
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, color: AMBER, fontWeight: 600, lineHeight: 1.5, marginBottom: 8 }}>
+                  {fmtDay(due)} is inside our {Math.round(RATE_CARD.rushWindowHours / 24)} day rush window. Your call:
                 </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <button type="button" onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
-                    style={{ flex: 1, height: 40, borderRadius: 20, border: '1px solid rgba(0,0,0,0.10)', background: '#fff', fontFamily: APPLE, fontSize: 13, fontWeight: 600, color: INK, cursor: 'pointer' }}>
-                    {fmtDay(standardDelivery)} works
-                  </button>
-                  <button type="button" onClick={() => setRushConfirmed(true)}
-                    style={{ flex: 1, height: 40, borderRadius: 20, border: 'none', background: AMBER, color: '#fff', fontFamily: APPLE, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-                    {fmtDay(due)} is firm
-                  </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <CardBtn
+                    on={false}
+                    label={`Rush it for ${fmtDay(due)}. +$${rushDelta}`}
+                    sub={`Your job moves to the front. Total becomes $${quote.total + rushDelta}.`}
+                    onClick={() => setRushConfirmed(true)}
+                  />
+                  <CardBtn
+                    on={false}
+                    label={`No rush. $0 extra`}
+                    sub={`First standard day is ${fmtDay(standardDelivery)}. Total stays $${quote.total}.`}
+                    onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
+                  />
                 </div>
+              </div>
+            )}
+            {due && rushEligible && rushConfirmed && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: AMBER_SOFT, borderRadius: 12, padding: '9px 13px', marginTop: 12 }}>
+                <span style={{ fontSize: 12.5, color: AMBER, fontWeight: 600 }}>Rush on for {fmtDay(due)}.</span>
+                <button type="button" onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
+                  style={{ border: 'none', background: 'none', color: AMBER, fontFamily: APPLE, fontSize: 12.5, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
+                  Undo
+                </button>
               </div>
             )}
           </Plate>
@@ -425,7 +504,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
           <Plate n={6} title="Look right?" sub="This exact order becomes the designer's brief.">
             <div style={{ background: '#fff', border: `0.5px solid ${HAIR}`, borderRadius: 16, padding: '14px 16px', fontSize: 13.5, color: INK, lineHeight: 1.6 }}>
               {(() => { const n = job && job !== 'other' ? `${DESIGN_JOBS.find((j) => j.id === job)?.label.toLowerCase()} design` : 'design'; return `${/^[aeiou]/.test(n) ? 'An' : 'A'} ${n}` })()}
-              {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{exactText.trim()}&rdquo; for{' '}
+              {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
               {dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase()).join(', ')}
               {printPicked && printQty ? ` (${printQty} copies, ${printer === 'us' ? 'we print' : 'your shop prints'})` : ''}
               {noPhotos ? ', text and brand only' : usingOwn ? ', using your photos' : ', with sourced photos'}
