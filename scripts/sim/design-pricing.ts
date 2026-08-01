@@ -124,11 +124,15 @@ s.group('Print: quantity and printer are questions, never guesses (law 4)')
   const noAnswers = priceDesignOrder({ ...BASE, destinations: asked(['printed-flyer']) }, RATE_CARD)
   s.check('a print destination with no answers yields needs, not charges',
     noAnswers.needs.includes('printQty') && noAnswers.needs.includes('printer') && !noAnswers.lines.some((l) => l.id === 'print-mgmt'))
-  const clientPrints = priceDesignOrder({ ...BASE, destinations: asked(['printed-flyer']), printQty: asked(200), printer: asked('client') }, RATE_CARD)
+  const clientPrints = priceDesignOrder({ ...BASE, destinations: asked(['printed-flyer']), printQtys: asked({ 'printed-flyer': 200 }), printer: asked('client') }, RATE_CARD)
   s.check('client-runs-the-print-job adds no management line', !clientPrints.lines.some((l) => l.id === 'print-mgmt') && clientPrints.passThroughNote === null)
-  const wePrint = priceDesignOrder({ ...BASE, destinations: asked(['printed-flyer']), printQty: asked(200), printer: asked('us') }, RATE_CARD)
+  const wePrint = priceDesignOrder({ ...BASE, destinations: asked(['printed-flyer']), printQtys: asked({ 'printed-flyer': 200 }), printer: asked('us') }, RATE_CARD)
+  const twoProducts = priceDesignOrder({ ...BASE, destinations: asked(['printed-flyer', 'table-tent']), printQtys: asked({ 'printed-flyer': 300, 'table-tent': 20 }), printer: asked('us') }, RATE_CARD)
+  s.check('each print product carries its own count in the why', /300 x printed flyer, 20 x table tent/.test(twoProducts.lines.find((l) => l.id === 'print-mgmt')?.why ?? ''))
+  const halfAnswered = priceDesignOrder({ ...BASE, destinations: asked(['printed-flyer', 'table-tent']), printQtys: asked({ 'printed-flyer': 300 }), printer: asked('us') }, RATE_CARD)
+  s.check('one product missing its count is still a QUESTION, never a guess', halfAnswered.needs.includes('printQty') && !halfAnswered.lines.some((l) => l.id === 'print-mgmt'))
   s.check('we-print adds the management line citing the job and quantity',
-    wePrint.lines.some((l) => l.id === 'print-mgmt' && /printed flyer, 200 copies/.test(l.why)))
+    wePrint.lines.some((l) => l.id === 'print-mgmt' && /200 x printed flyer/.test(l.why)))
   s.check('and the pass-through cost is a note, never a hidden line', !!wePrint.passThroughNote && /at cost/.test(wePrint.passThroughNote))
 }
 

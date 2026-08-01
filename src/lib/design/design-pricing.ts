@@ -32,8 +32,9 @@ export interface DesignFact<T = unknown> {
 export interface DesignOrderAnswers {
   jobType: DesignFact<DesignJobId>
   destinations: DesignFact<DestinationId[]>
-  /** required when any print destination is checked; never guessed (law 4) */
-  printQty?: DesignFact<number>
+  /** copies PER print destination (200 flyers is not 20 table tents); every checked print
+   *  destination needs its own confirmed count; never guessed (law 4) */
+  printQtys?: DesignFact<Partial<Record<DestinationId, number>>>
   printer?: DesignFact<'client' | 'us'>
   /** 'own' = client assets cleared the quality gate; 'source' = the photo add-on; 'none' =
    *  text and brand only, a visible zero (a holiday-hours notice needs no photos).
@@ -124,13 +125,15 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
   const printDests = dests.filter((d) => d.kind === 'print')
   let passThroughNote: string | null = null
   if (printDests.length > 0) {
-    if (a.printQty == null) needs.push('printQty')
+    const qtys = a.printQtys?.value
+    const missingQty = printDests.some((d) => qtys?.[d.id] == null)
+    if (missingQty) needs.push('printQty')
     if (a.printer == null) needs.push('printer')
-    if (a.printer?.value === 'us' && a.printQty != null) {
-      const names = printDests.map((d) => d.label.toLowerCase()).join(', ')
+    if (a.printer?.value === 'us' && !missingQty) {
+      const names = printDests.map((d) => `${qtys![d.id]} x ${d.label.toLowerCase()}`).join(', ')
       lines.push({
         id: 'print-mgmt', label: 'Print management', amount: rates.printManagement,
-        why: `We run the print job: ${names}, ${a.printQty.value} copies.`, source: a.printer.source,
+        why: `We run the print job: ${names}.`, source: a.printer.source,
       })
       passThroughNote = 'Printing itself is billed at cost, on top. We show the printer receipt.'
     }

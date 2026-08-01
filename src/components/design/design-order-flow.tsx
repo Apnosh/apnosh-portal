@@ -49,6 +49,12 @@ const fmtDay = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString(undef
 const fmtLong = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
 
+/* Typical counts, PLACEHOLDER ONLY — shown gray in the empty input, never charged as a
+ * default. A quantity is money-adjacent; it is always the owner's own tap (law 4). */
+const QTY_HINT: Partial<Record<DestinationId, string>> = {
+  'printed-flyer': '200', 'table-tent': '25', 'menu-board': '2', poster: '10', banner: '1', 'gift-card': '100',
+}
+
 /* Starter headlines per job: the honest fallback when nothing was read. What was actually
  * read (their message, their menu item, their deal) always ranks first. */
 const JOB_HEADLINES: Partial<Record<DesignJobId, string>> = {
@@ -121,7 +127,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const [read, setRead] = useState<DesignRead | null>(null)
   const [job, setJob] = useState<DesignJobId | null>(null)
   const [dests, setDests] = useState<DestinationId[]>([])
-  const [printQty, setPrintQty] = useState<number | null>(null)
+  const [printQtys, setPrintQtys] = useState<Partial<Record<DestinationId, number>>>({})
   const [printer, setPrinter] = useState<'client' | 'us' | null>(null)
   const [headline, setHeadline] = useState('')
   const [details, setDetails] = useState('')
@@ -143,7 +149,11 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const allAssets = [...assets, ...uploaded]
   const usable = allAssets.filter(passesQualityGate)
   const usingOwn = picked.length > 0 && !sourcePhotos && !noPhotos
-  const printPicked = dests.some((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'print')
+  const printDestSpecs = dests
+    .map((d) => DESTINATIONS.find((x) => x.id === d))
+    .filter((d): d is (typeof DESTINATIONS)[number] => !!d && d.kind === 'print')
+  const printPicked = printDestSpecs.length > 0
+  const allQtysIn = printDestSpecs.every((d) => printQtys[d.id] != null)
   const bufferDays = productionBufferDays(dests)
   /* Standard delivery: design time plus the slowest destination's production buffer. */
   const standardDelivery = addDays(today, 4 + bufferDays)
@@ -155,7 +165,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const answers: DesignOrderAnswers = {
     jobType: { value: job ?? 'other', source: src('jobType'), citedWords: read?.cited.jobType },
     destinations: { value: dests, source: src('destinations'), citedWords: read?.cited.destinations },
-    ...(printQty != null ? { printQty: { value: printQty, source: 'asked' as const } } : {}),
+    ...(printPicked && allQtysIn ? { printQtys: { value: printQtys, source: 'asked' as const } } : {}),
     ...(printer != null ? { printer: { value: printer, source: 'asked' as const } } : {}),
     ...(usingOwn || sourcePhotos || noPhotos
       ? { photos: { value: noPhotos ? ('none' as const) : usingOwn ? ('own' as const) : ('source' as const), source: 'asked' as const } }
@@ -198,7 +208,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
-    : step === 2 ? dests.length > 0 && (!printPicked || (printQty != null && printer != null))
+    : step === 2 ? dests.length > 0 && (!printPicked || (allQtysIn && printer != null))
     : step === 3 ? headline.trim().length > 0
     : step === 4 ? usingOwn || sourcePhotos || noPhotos
     : step === 5 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
@@ -290,13 +300,20 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             </div>
             {printPicked && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, marginBottom: 6 }}>How many copies?</div>
-                <input
-                  inputMode="numeric" value={printQty ?? ''} aria-label="How many copies"
-                  onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); setPrintQty(n ? Number(n) : null) }}
-                  placeholder="200"
-                  style={{ width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: APPLE, fontSize: 15, color: INK }}
-                />
+                <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, marginBottom: 6 }}>How many of each?</div>
+                <div style={{ display: 'grid', gridTemplateColumns: printDestSpecs.length > 1 ? '1fr 1fr' : '1fr', gap: 8 }}>
+                  {printDestSpecs.map((d) => (
+                    <div key={d.id}>
+                      <div style={{ fontSize: 11.5, color: FAINT, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
+                      <input
+                        inputMode="numeric" value={printQtys[d.id] ?? ''} aria-label={`${d.label} copies`}
+                        onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); setPrintQtys((prev) => { const next = { ...prev }; if (n) next[d.id] = Number(n); else delete next[d.id]; return next }) }}
+                        placeholder={QTY_HINT[d.id] ?? '100'}
+                        style={{ width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: APPLE, fontSize: 15, color: INK }}
+                      />
+                    </div>
+                  ))}
+                </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
                   <CardBtn on={printer === 'client'} label="My print shop prints it" sub="We hand you print-ready files" onClick={() => setPrinter('client')} />
                   <CardBtn on={printer === 'us'} label="Handle the printing for me" sub="We run the job. Printing is billed at cost, and you see the receipt." onClick={() => setPrinter('us')} />
@@ -506,7 +523,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               {(() => { const n = job && job !== 'other' ? `${DESIGN_JOBS.find((j) => j.id === job)?.label.toLowerCase()} design` : 'design'; return `${/^[aeiou]/.test(n) ? 'An' : 'A'} ${n}` })()}
               {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
               {dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase()).join(', ')}
-              {printPicked && printQty ? ` (${printQty} copies, ${printer === 'us' ? 'we print' : 'your shop prints'})` : ''}
+              {printPicked && allQtysIn ? ` (${printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label.toLowerCase()}`).join(', ')}, ${printer === 'us' ? 'we print' : 'your shop prints'})` : ''}
               {noPhotos ? ', text and brand only' : usingOwn ? ', using your photos' : ', with sourced photos'}
               {due ? `, in hand by ${fmtDay(due)}` : ''}
               {eventDate ? ` for your ${fmtDay(eventDate)} event` : ''}.
