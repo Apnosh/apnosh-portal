@@ -48,7 +48,7 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * and the health cron re-proves that daily by pulling down the actual data path, so "done" here is
  * data arriving rather than anybody's say-so.
  */
-export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu']
+export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu', 'design']
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
  *  card and the product page so "coming soon" is never a mystery. No em dashes, 5th-grade words. */

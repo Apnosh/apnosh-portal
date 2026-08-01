@@ -299,6 +299,16 @@ export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
     expectation: "You keep the files and can use them for months.",
     heroImage: null,
   },
+  design: {
+    id: 'design',
+    title: "Get a graphic made",
+    tagline: "Flyers, posts, banners, gift cards: designed on your brand",
+    description: "One order for any graphic you need: a flyer, a social post, a banner, gift cards. You say what it is for, pick where it goes, approve the exact words, and see the price build as you answer.",
+    promise: "A finished graphic, sized correctly for every place you need it, on your brand.",
+    why: "Everything you hand out or post needs to look like you. One designer, your brand kit, and the right file for each place beats a template every time.",
+    expectation: "Standard turnaround is under a week. Print pieces add production days.",
+    heroImage: null,
+  },
   gbp: {
     id: 'gbp',
     title: "Polish your Google profile",
