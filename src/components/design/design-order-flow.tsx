@@ -22,6 +22,13 @@ import { DESTINATIONS, type DestinationId } from '@/lib/design/destinations'
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
 import { DESIGN_JOBS, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
+import { DESIGN_TITLES, DESIGN_SUBS, DESIGN_LINES, fill } from '@/lib/design/design-copy'
+
+/* Shorthands: every owner-facing string lives in the question bank (design-copy.ts), same
+ * pattern and lint as the campaign walk. Nothing user-visible is authored inline here. */
+const T = DESIGN_TITLES
+const S = DESIGN_SUBS
+const L = DESIGN_LINES
 
 const APPLE = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif"
 const INK = '#1D1D1F'
@@ -230,11 +237,11 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         <div style={{ width: 52, height: 52, borderRadius: 99, background: MINT, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
           <Check size={26} strokeWidth={3} />
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: INK, letterSpacing: '-0.02em' }}>Order recorded</div>
+        <div style={{ fontSize: 22, fontWeight: 700, color: INK, letterSpacing: '-0.02em' }}>{L['done.title']}</div>
         <div style={{ fontSize: 13.5, color: MUTE, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
-          This exact order becomes the brief your designer works from. Nothing gets re-interpreted.
+          {L['done.sub']}
         </div>
-        <div style={{ fontSize: 12, color: FAINT, marginTop: 14 }}>Test mode: no payment was taken.</div>
+        <div style={{ fontSize: 12, color: FAINT, marginTop: 14 }}>{L['done.testmode']}</div>
       </div>
     )
   }
@@ -243,14 +250,14 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     <div style={{ background: '#F5F5F7', minHeight: '100%', padding: '18px 14px 0', fontFamily: APPLE, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
       {!RATE_CARD.approved && (
         <div style={{ background: AMBER_SOFT, color: AMBER, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginBottom: 14, lineHeight: 1.4 }}>
-          Test prices. The real rate card is not set yet, so these numbers are placeholders.
+          {L['banner.testprices']}
         </div>
       )}
       <div style={{ flex: 1 }}>
 
         {/* ── 1. what do you need ── */}
         {step === 1 && (
-          <Plate n={1} title="What do you need made?" sub="Say it your way, or tap a job. We work out the rest.">
+          <Plate n={1} title={T.job} sub={S.job}>
             <textarea
               value={described} onChange={(e) => setDescribed(e.target.value)}
               placeholder="A flyer and an Instagram post for our live music night on the 15th, 20% off pitchers…"
@@ -274,16 +281,16 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         {/* the read-back, once */}
         {step === 2 && read && Object.keys(read.cited).length > 0 && (
           <div style={{ margin: '0 0 18px' }}>
-            <div style={{ fontSize: 12, color: FAINT, marginBottom: 7 }}>From what you wrote:</div>
+            <div style={{ fontSize: 12, color: FAINT, marginBottom: 7 }}>{L['read.prefix']}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
               {job && read.cited.jobType && <Chip on label={DESIGN_JOBS.find((j) => j.id === job)?.label ?? ''} onClick={() => setStep(1)} />}
               {eventDate && read.cited.eventDate && <Chip on label={`Event: ${fmtDay(eventDate)}`} onClick={() => setStep(5)} />}
               {offer && read.cited.offer && <Chip on label={offer} onClick={() => setStep(3)} />}
-              {read.ownPhotos && read.cited.ownPhotos && <Chip on label="Your own photos" onClick={() => setStep(4)} />}
+              {read.ownPhotos && read.cited.ownPhotos && <Chip on label={L['read.ownphotos']} onClick={() => setStep(4)} />}
             </div>
             {(read.unplaced?.length ?? 0) > 0 && (
               <div style={{ background: AMBER_SOFT, color: AMBER, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 10, lineHeight: 1.45 }}>
-                We cannot make {read.unplaced!.join(' or ')} here yet, so it is not in this order. Message us and we will sort it out.
+                {fill(L['read.unplaced'], { list: read.unplaced!.join(' or ') })}
               </div>
             )}
           </div>
@@ -291,7 +298,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
 
         {/* ── 2. where is it going ── */}
         {step === 2 && (
-          <Plate n={2} title="Where is it going?" sub="Each place gets its own correctly sized version.">
+          <Plate n={2} title={T.where} sub={S.where}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
               {DESTINATIONS.map((d) => (
                 <Chip key={d.id} on={dests.includes(d.id)} label={d.label}
@@ -300,7 +307,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             </div>
             {printPicked && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, marginBottom: 6 }}>How many of each?</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, marginBottom: 6 }}>{L['print.qty']}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: printDestSpecs.length > 1 ? '1fr 1fr' : '1fr', gap: 8 }}>
                   {printDestSpecs.map((d) => (
                     <div key={d.id}>
@@ -315,8 +322,8 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                   ))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  <CardBtn on={printer === 'client'} label="My print shop prints it" sub="We hand you print-ready files" onClick={() => setPrinter('client')} />
-                  <CardBtn on={printer === 'us'} label="Handle the printing for me" sub="We run the job. Printing is billed at cost, and you see the receipt." onClick={() => setPrinter('us')} />
+                  <CardBtn on={printer === 'client'} label={L['print.client.label']} sub={L['print.client.sub']} onClick={() => setPrinter('client')} />
+                  <CardBtn on={printer === 'us'} label={L['print.us.label']} sub={L['print.us.sub']} onClick={() => setPrinter('us')} />
                 </div>
               </div>
             )}
@@ -338,18 +345,18 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             />
           )
           const slotLabel = (t: string, opt?: boolean) => (
-            <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, margin: '14px 0 6px' }}>{t}{opt ? <span style={{ color: FAINT, fontWeight: 500 }}> · optional</span> : ''}</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, margin: '14px 0 6px' }}>{t}{opt ? <span style={{ color: FAINT, fontWeight: 500 }}>{' · '}{L['say.optional']}</span> : ''}</div>
           )
           return (
-            <Plate n={3} title="What should it say?" sub="Watch it take shape. Tap a suggestion or write your own.">
+            <Plate n={3} title={T.say} sub={S.say}>
               {/* the graphic taking shape: text hierarchy only, honestly labeled */}
               <div style={{ background: INK, borderRadius: 18, padding: '26px 20px', textAlign: 'center' }}>
                 <div style={{ fontFamily: APPLE, fontSize: headline ? 24 : 18, fontWeight: 800, color: headline ? '#fff' : 'rgba(255,255,255,0.35)', letterSpacing: '-0.02em', lineHeight: 1.15, overflowWrap: 'break-word' }}>
-                  {headline || 'Your headline'}
+                  {headline || L['say.preview.headline']}
                 </div>
                 {(details || !headline) && (
                   <div style={{ fontFamily: APPLE, fontSize: 13, fontWeight: 500, color: details ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)', marginTop: 8 }}>
-                    {details || 'The when and where'}
+                    {details || L['say.preview.details']}
                   </div>
                 )}
                 {offer && (
@@ -359,31 +366,31 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                 )}
               </div>
               <div style={{ fontSize: 11, color: FAINT, marginTop: 6, textAlign: 'center' }}>
-                A rough layout of the words, not the design. Your designer makes it look good.
+                {L['say.caption']}
               </div>
 
-              {slotLabel('The headline')}
-              {slotInput(headline, setHeadline, 'Live Music Friday', 'The headline')}
+              {slotLabel(L['say.headline'])}
+              {slotInput(headline, setHeadline, L['say.headline.ph'], L['say.headline'])}
               {headlineSugs.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
                   {headlineSugs.map((h) => <Chip key={h} on={false} label={h} onClick={() => setHeadline(h)} />)}
                 </div>
               )}
 
-              {slotLabel('The when and where', true)}
-              {slotInput(details, setDetails, eventDate ? fmtLong(eventDate) : 'Friday nights, 8pm till late', 'The when and where')}
+              {slotLabel(L['say.details'], true)}
+              {slotInput(details, setDetails, eventDate ? fmtLong(eventDate) : L['say.details.ph'], L['say.details'])}
               {detailSugs.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
                   {detailSugs.map((d) => <Chip key={d} on={false} label={d} onClick={() => setDetails(d)} />)}
                 </div>
               )}
 
-              {slotLabel('The deal', true)}
-              {slotInput(offer, setOffer, '20% off pitchers', 'The deal')}
+              {slotLabel(L['say.deal'], true)}
+              {slotInput(offer, setOffer, L['say.deal.ph'], L['say.deal'])}
 
               {menu.length > 0 && (
                 <>
-                  {slotLabel('Featuring, from your menu', true)}
+                  {slotLabel(L['say.featuring'], true)}
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                     {menu.slice(0, 8).map((m) => (
                       <Chip key={m.id} on={promoteItem === m.name} label={m.name} onClick={() => setPromoteItem(promoteItem === m.name ? null : m.name)} />
@@ -393,7 +400,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               )}
 
               <div style={{ fontSize: 11.5, color: FAINT, marginTop: 14, lineHeight: 1.45 }}>
-                We design exactly these words. Changes after design starts count as a revision.
+                {L['say.note']}
               </div>
             </Plate>
           )
@@ -401,7 +408,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
 
         {/* ── 4. photos ── */}
         {step === 4 && (
-          <Plate n={4} title="Which photos?" sub="Yours are free. Tap to use them.">
+          <Plate n={4} title={T.photos} sub={S.photos}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {allAssets.map((a) => {
                 const ok = passesQualityGate(a)
@@ -414,7 +421,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={a.url} alt={a.label ?? 'photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    {!ok && <span style={{ position: 'absolute', left: 4, bottom: 4, right: 4, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '2px 4px' }}>Too small to look sharp</span>}
+                    {!ok && <span style={{ position: 'absolute', left: 4, bottom: 4, right: 4, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '2px 4px' }}>{L['photos.gate']}</span>}
                     {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 18, height: 18, borderRadius: 99, background: MINT, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} strokeWidth={3.4} /></span>}
                   </button>
                 )
@@ -426,20 +433,20 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             </div>
             {usable.length === 0 && (
               <div style={{ background: AMBER_SOFT, color: AMBER, borderRadius: 12, padding: '10px 13px', fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>
-                Nothing here is sharp enough to design with. We can source photos for ${RATE_CARD.photoSourcing}.
+                {fill(L['photos.empty'], { price: String(RATE_CARD.photoSourcing) })}
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
               <CardBtn
                 on={noPhotos}
-                label="No photos needed. $0"
-                sub="Text and your brand only"
+                label={L['photos.none.label']}
+                sub={L['photos.none.sub']}
                 onClick={() => { setNoPhotos(!noPhotos); setSourcePhotos(false); setPicked([]) }}
               />
               <CardBtn
                 on={sourcePhotos}
-                label={`Source photos for me. $${RATE_CARD.photoSourcing}`}
-                sub="We find or license the shots"
+                label={fill(L['photos.source.label'], { price: String(RATE_CARD.photoSourcing) })}
+                sub={L['photos.source.sub']}
                 onClick={() => { setSourcePhotos(!sourcePhotos); setNoPhotos(false); setPicked([]) }}
               />
             </div>
@@ -450,12 +457,12 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         {step === 5 && (
           <Plate
             n={5}
-            title={eventDate ? 'When do you need it in hand?' : 'When do you need it?'}
-            sub={eventDate ? `Your event is ${fmtDay(eventDate)}. The design should be working before that.` : `Standard turnaround delivers by ${fmtDay(standardDelivery)}.`}
+            title={eventDate ? T['when.event'] : T.when}
+            sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })}
           >
             {read?.rushLanguage && !due && (
               <div style={{ fontSize: 12.5, color: AMBER, fontWeight: 600, marginBottom: 10 }}>
-                You mentioned needing this fast. The first day without a rush charge is {fmtDay(standardDelivery)}.
+                {fill(L['when.rushnote'], { date: fmtDay(standardDelivery) })}
               </div>
             )}
             <WalkCalendar
@@ -465,13 +472,13 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               classify={(day, t) =>
                 eventDate && day > eventDate ? 'too-soon' : rushApplies(day, t, RATE_CARD.rushWindowHours) ? 'tight' : 'ok'
               }
-              tagLine={eventDate ? 'Amber days are a rush. Days after your event are off.' : 'Amber days are a rush. Standard days cost nothing extra.'}
+              tagLine={eventDate ? L['when.tag.event'] : L['when.tag']}
               onChange={(day) => { setDue(day); setRushConfirmed(false) }}
             />
             {afterEvent && (
               <div style={{ background: AMBER_SOFT, borderRadius: 14, padding: '12px 14px', marginTop: 12 }}>
                 <div style={{ fontSize: 13, color: AMBER, fontWeight: 600, lineHeight: 1.5 }}>
-                  {fmtDay(due!)} is after your {fmtDay(eventDate!)} event. The design would arrive too late to work. Pick a day before it.
+                  {fill(L['when.after'], { picked: fmtDay(due!), event: fmtDay(eventDate!) })}
                 </div>
               </div>
             )}
@@ -480,25 +487,25 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                 type="button" onClick={() => { setDue(suggestedDue); setRushConfirmed(false) }}
                 style={{ width: '100%', marginTop: 12, height: 44, borderRadius: 22, border: `1.5px solid ${MINT}`, background: MINT_SOFT, color: MINT_DK, fontFamily: APPLE, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}
               >
-                {fmtDay(suggestedDue)}, three days before your event
+                {fill(L['when.suggest'], { date: fmtDay(suggestedDue) })}
               </button>
             )}
             {due && rushEligible && !rushConfirmed && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ fontSize: 13, color: AMBER, fontWeight: 600, lineHeight: 1.5, marginBottom: 8 }}>
-                  {fmtDay(due)} is inside our {Math.round(RATE_CARD.rushWindowHours / 24)} day rush window. Your call:
+                  {fill(L['when.rush.q'], { date: fmtDay(due), days: String(Math.round(RATE_CARD.rushWindowHours / 24)) })}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <CardBtn
                     on={false}
-                    label={`Rush it for ${fmtDay(due)}. +$${rushDelta}`}
-                    sub={`Your job moves to the front. Total becomes $${quote.total + rushDelta}.`}
+                    label={fill(L['when.rush.label'], { date: fmtDay(due), delta: String(rushDelta) })}
+                    sub={fill(L['when.rush.sub'], { total: String(quote.total + rushDelta) })}
                     onClick={() => setRushConfirmed(true)}
                   />
                   <CardBtn
                     on={false}
-                    label={`No rush. $0 extra`}
-                    sub={`First standard day is ${fmtDay(standardDelivery)}. Total stays $${quote.total}.`}
+                    label={L['when.norush.label']}
+                    sub={fill(L['when.norush.sub'], { date: fmtDay(standardDelivery), total: String(quote.total) })}
                     onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
                   />
                 </div>
@@ -506,7 +513,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             )}
             {due && rushEligible && rushConfirmed && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: AMBER_SOFT, borderRadius: 12, padding: '9px 13px', marginTop: 12 }}>
-                <span style={{ fontSize: 12.5, color: AMBER, fontWeight: 600 }}>Rush on for {fmtDay(due)}.</span>
+                <span style={{ fontSize: 12.5, color: AMBER, fontWeight: 600 }}>{fill(L['when.rushon'], { date: fmtDay(due) })}</span>
                 <button type="button" onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
                   style={{ border: 'none', background: 'none', color: AMBER, fontFamily: APPLE, fontSize: 12.5, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
                   Undo
@@ -518,7 +525,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
 
         {/* ── 6. review ── */}
         {step === 6 && (
-          <Plate n={6} title="Look right?" sub="This exact order becomes the designer's brief.">
+          <Plate n={6} title={T.review} sub={S.review}>
             <div style={{ background: '#fff', border: `0.5px solid ${HAIR}`, borderRadius: 16, padding: '14px 16px', fontSize: 13.5, color: INK, lineHeight: 1.6 }}>
               {(() => { const n = job && job !== 'other' ? `${DESIGN_JOBS.find((j) => j.id === job)?.label.toLowerCase()} design` : 'design'; return `${/^[aeiou]/.test(n) ? 'An' : 'A'} ${n}` })()}
               {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
@@ -529,7 +536,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               {eventDate ? ` for your ${fmtDay(eventDate)} event` : ''}.
             </div>
             <div style={{ fontSize: 11.5, color: FAINT, marginTop: 10, lineHeight: 1.5 }}>
-              {RATE_CARD.includedRevisions} revision rounds included. Round {RATE_CARD.includedRevisions + 1}+ is billed. A change to the message, offer, or destinations is a new order, not a revision.
+              {fill(L['review.revisions'], { n: String(RATE_CARD.includedRevisions), next: String(RATE_CARD.includedRevisions + 1) })}
             </div>
             <button
               type="button" onClick={() => setSubmitted(true)}

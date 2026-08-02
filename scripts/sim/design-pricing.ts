@@ -17,6 +17,8 @@ import { DESTINATIONS, destinationById } from '../../src/lib/design/destinations
 import { RATE_CARD } from '../../src/lib/design/rate-card'
 import { priceDesignOrder, rushApplies, productionBufferDays, type DesignOrderAnswers } from '../../src/lib/design/design-pricing'
 import { matchDesignJob, sanitizeDesignRead } from '../../src/lib/design/design-read'
+import { DESIGN_TITLES, DESIGN_SUBS, DESIGN_LINES, fill } from '../../src/lib/design/design-copy'
+import { WALK_SUBS } from '../../src/lib/campaigns/data/walk-copy'
 
 const s = new Suite()
 const TODAY = '2026-07-31' // injected clock, never the real one
@@ -235,6 +237,22 @@ s.group('Photos: the third honest answer')
   const none = priceDesignOrder({ ...BASE, photos: asked('none' as const) }, RATE_CARD)
   s.check('no-photos is a VISIBLE zero with its own why', none.lines.some((l) => l.id === 'photos' && l.amount === 0 && /no photos/i.test(l.why)))
   s.check('no-photos total equals own-photos total', none.total === priceDesignOrder(BASE, RATE_CARD).total)
+}
+
+s.group('Question bank: the walk lint, applied to the design copy (W1, W4, W5, uniformity)')
+{
+  const all = { ...DESIGN_TITLES, ...DESIGN_SUBS, ...DESIGN_LINES }
+  s.check('W1: every title is counter-speak, 8 words or fewer',
+    Object.values(DESIGN_TITLES).every((t) => t.split(/\s+/).length <= 8))
+  s.check('W4: no em or en dash anywhere in owner copy',
+    Object.values(all).every((t) => !/[\u2014\u2013]/.test(t)))
+  s.check('W5: skippable slots are marked out loud', DESIGN_LINES['say.optional'] === 'optional')
+  s.check('UNIFORM: the photos promise is the walk assets line, verbatim',
+    DESIGN_SUBS.photos === WALK_SUBS.assets)
+  s.check('tokens survive fill round-trips', fill(DESIGN_SUBS.when, { date: 'August 8' }) === 'Standard turnaround delivers by August 8.'
+    && fill(DESIGN_LINES['when.rush.label'], { date: 'August 1', delta: '88' }) === 'Rush it for August 1. +$88')
+  s.check('no unfilled brace pair hides in a title',
+    Object.values({ ...DESIGN_TITLES }).every((t) => !/\{\w+\}/.test(t)))
 }
 
 const ok = s.report('Design pricing + read (Phases A-B)')
