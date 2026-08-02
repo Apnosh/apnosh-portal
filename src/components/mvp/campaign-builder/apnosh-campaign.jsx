@@ -2055,10 +2055,10 @@ function CampaignDetail({ camp, onBack }) {
    PLAN CATALOG  (DoorDash-style browse)
    ============================================================ */
 const TYPE_G = {
-  plan: ["#3ec79a", "#2e9a78"],
-  content: ["#fb7a4a", "#ef5a2c"],
-  email: ["#4a9bf0", "#2f6fd0"],
-  task: ["#28b3a6", "#149088"],
+  plan: ["#3ec79a", "#1d7a5c"],
+  content: ["#fb8a55", "#d94e22"],
+  email: ["#38a08c", "#166a58"],
+  task: ["#2bb3a0", "#0e7c70"],
   automation: ["#8a5cf0", "#6a39de"],
 };
 export const gType = (t) => `linear-gradient(135deg, ${(TYPE_G[t] || TYPE_G.plan)[0]}, ${(TYPE_G[t] || TYPE_G.plan)[1]})`;
@@ -2113,7 +2113,7 @@ function IconG({ name, size = 26 }) {
 
 const CADENCE_TAG = { once: "One-time", recurring: "Recurring", auto: "Automatic", setup: "Setup", group: "Multi-step" };
 function TagPill({ children, accent }) {
-  return <span style={{ fontFamily: "Inter, sans-serif", fontSize: 10, fontWeight: 600, color: accent ? "#b06a16" : "#7c837e", background: accent ? "#fbf0db" : "#f0f2f0", borderRadius: 6, padding: "2.5px 6px", whiteSpace: "nowrap" }}>{children}</span>;
+  return <span style={{ fontFamily: accent ? "'SF Mono', ui-monospace, Menlo, monospace" : "Inter, sans-serif", fontSize: accent ? 9.5 : 10, fontWeight: accent ? 700 : 600, color: accent ? DESKJ.mintDeep : DESKJ.ink2, background: accent ? DESKJ.mintWash : "#F1EEE6", border: accent ? `1px solid ${DESKJ.mintLine}` : "1px solid transparent", borderRadius: 6, padding: "2.5px 6px", whiteSpace: "nowrap" }}>{children}</span>;
 }
 
 const CATALOG = [
@@ -2408,12 +2408,11 @@ function SoonBadge() {
 function PlanCardV({ p, onOpen, full }) {
   const soon = !buyableId(p.id);
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 3px rgba(20,30,26,0.06), 0 0 0 1px rgba(20,30,26,0.05)", opacity: soon ? 0.82 : 1 }}>
-      <div style={{ position: "relative", height: 90, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: `1px solid ${DESKJ.line}`, borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 6px 16px rgba(22,33,28,0.07)", opacity: soon ? 0.82 : 1 }}>
+      <div style={{ position: "relative", height: 86, backgroundImage: `radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px), ${gType(p.type)}`, backgroundSize: "14px 14px, 100% 100%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
         {soon && <SoonBadge />}
-        <div style={{ position: "absolute", width: 110, height: 110, borderRadius: 55, background: "rgba(255,255,255,0.12)", bottom: -36, right: -24 }} />
-        <div style={{ position: "absolute", width: 60, height: 60, borderRadius: 30, background: "rgba(0,0,0,0.05)", bottom: -22, left: -16 }} />
-        <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={62} /></div>
+        <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.1)", bottom: -44, right: -28 }} />
+        <div style={{ position: "relative", width: 54, height: 54, borderRadius: 15, background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)", boxShadow: "0 4px 12px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(2px)" }}><Art id={p.id} size={34} /></div>
       </div>
       <div style={{ padding: "10px 11px 12px" }}>
         {/* Fixed 2-line blocks + a fixed tag band = every card in a row lands the same height. */}
@@ -2447,12 +2446,11 @@ function PlanCardBig({ p, onOpen, full }) {
   const clamp2 = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
   const soon = !buyableId(p.id);
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 3px 10px rgba(20,30,26,0.07), 0 0 0 1px rgba(20,30,26,0.05)", opacity: soon ? 0.82 : 1 }}>
-      <div style={{ position: "relative", height: 96, background: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
+    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: `1px solid ${DESKJ.line}`, borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 8px 20px rgba(22,33,28,0.08)", opacity: soon ? 0.82 : 1 }}>
+      <div style={{ position: "relative", height: 92, backgroundImage: `radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px), ${gType(p.type)}`, backgroundSize: "14px 14px, 100% 100%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
         {soon && <SoonBadge />}
-        <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.12)", bottom: -40, right: -26 }} />
-        <div style={{ position: "absolute", width: 70, height: 70, borderRadius: 35, background: "rgba(0,0,0,0.05)", bottom: -24, left: -18 }} />
-        <div style={{ position: "relative", display: "flex" }}><Art id={p.id} size={64} /></div>
+        <div style={{ position: "absolute", width: 130, height: 130, borderRadius: 65, background: "rgba(255,255,255,0.1)", bottom: -46, right: -30 }} />
+        <div style={{ position: "relative", width: 58, height: 58, borderRadius: 16, background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)", boxShadow: "0 4px 12px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(2px)" }}><Art id={p.id} size={36} /></div>
       </div>
       <div style={{ padding: "11px 12px 12px" }}>
         <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.2, marginBottom: 3, height: 34, ...clamp2 }}>{p.title}</div>
@@ -3162,7 +3160,7 @@ function CategoryRow({ row, onOpen, onSeeAll, creatorCards = [], onOpenCreator }
       <button onClick={() => onSeeAll(row.id)} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "0 20px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", WebkitTapHighlightColor: "transparent" }}>
         <div style={{ textAlign: "left" }}>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: big ? 21 : 18.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.3 }}>{row.title}</div>
-          {row.note && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.faint, marginTop: 1 }}>{row.note}</div>}
+          {row.note && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: DESKJ.mute, marginTop: 1 }}>{row.note}</div>}
         </div>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
       </button>
@@ -3170,7 +3168,7 @@ function CategoryRow({ row, onOpen, onSeeAll, creatorCards = [], onOpenCreator }
         {items.map((p) => big ? <PlanCardBig key={p.id} p={p} onOpen={onOpen} /> : <PlanCardV key={p.id} p={p} onOpen={onOpen} />)}
         {(row.id === "content" ? creatorCards : []).map((c) => <CreatorStoreCard key={c.id} c={c} onOpen={onOpenCreator} />)}
         <button onClick={() => onSeeAll(row.id)} style={{ flexShrink: 0, width: big ? 110 : 92, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
-          <div style={{ width: 46, height: 46, borderRadius: 23, background: "#eef1ef", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 46, height: 46, borderRadius: 23, background: "#fff", border: `1px solid ${DESKJ.line}`, boxShadow: "0 2px 6px rgba(22,33,28,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
           </div>
           <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.ink }}>View all</span>
@@ -3184,23 +3182,23 @@ function ScratchHero({ onScratch }) {
   // No handler means no route to send them to (an older embedded Browse). A dead button in the
   // busiest slot on the page is worse than no button, so it simply does not render.
   if (!onScratch) return null;
-  const GRAD = "linear-gradient(135deg, #25c2a0, #2f72d6)";
-  const INK = "#2660c4";
+  const GRAD = DESKJ.ink;
+  const INK = DESKJ.mintDeep;
   return (
     <div style={{ padding: "0 20px 20px" }}>
-      <div style={{ borderRadius: 18, overflow: "hidden", background: GRAD, boxShadow: "0 10px 24px rgba(47,114,214,0.3)" }}>
+      <div style={{ borderRadius: 18, overflow: "hidden", position: "relative", backgroundColor: GRAD, backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), radial-gradient(circle at 85% 10%, rgba(74,189,152,0.35), transparent 55%)", backgroundSize: "18px 18px, 100% 100%", boxShadow: "0 14px 30px rgba(22,33,28,0.28)" }}>
         <button onClick={onScratch} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 700, color: "#fff" }}>Built around your restaurant</span>
+            <span style={{ fontFamily: "'SF Mono', ui-monospace, Menlo, monospace", fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}>Built around your restaurant</span>
           </div>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6 }}>Design a new campaign from scratch</div>
           <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>
             Answer four questions and we build the plan around them. You see both numbers before anything starts.
           </div>
-          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, background: "#fff", color: INK, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, background: "linear-gradient(135deg,#4ABD98,#2E9A78)", color: "#fff", boxShadow: "0 6px 16px rgba(46,154,120,0.4)", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600 }}>
             Start from scratch
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
           </div>
         </button>
       </div>
@@ -3211,7 +3209,7 @@ function ScratchHero({ onScratch }) {
 function SearchBar({ value, onChange }) {
   return (
     <div style={{ padding: "0 20px 16px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 46, borderRadius: 14, background: "#f1f3f2", padding: "0 14px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, height: 46, borderRadius: 14, background: "#fff", border: `1px solid ${DESKJ.line}`, boxShadow: "0 1px 3px rgba(22,33,28,0.05)", padding: "0 14px" }}>
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.2-3.2" /></svg>
         <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search plans, like reel or win back" style={{ flex: 1, border: "none", background: "none", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.ink }} />
         {value && <button onClick={() => onChange("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
@@ -3250,10 +3248,10 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, onScratch, recommended, recs
     ? [...liveRows, { id: "__soon", title: "Coming soon", note: "We only sell what really works today. These are on the way", ids: soonIds }]
     : liveRows;
   return (
-    <div style={{ paddingBottom: 26 }}>
+    <div style={{ paddingBottom: 26, background: DESKJ.paper, backgroundImage: "radial-gradient(rgba(22,33,28,0.028) 1px, transparent 1px)", backgroundSize: "22px 22px" }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
       <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
-      <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, lineHeight: 1.4 }}>You see the full price before you pay. Your card is only charged at checkout.</div></div>
+      <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "'SF Mono', ui-monospace, Menlo, monospace", fontSize: 10.5, letterSpacing: "0.04em", color: DESKJ.mute, lineHeight: 1.5 }}>You see the full price before you pay. Your card is only charged at checkout.</div></div>
       {!query && recsLoading && recList.length === 0 && (
         <div style={{ padding: "0 20px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, background: TOKENS.mintTint, border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "9px 13px" }}>
