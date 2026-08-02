@@ -1,24 +1,26 @@
 /**
- * THE DESIGN ORDER FLOW — a configurator, not a form (DESIGN-ORDERING spec, Phase B).
+ * THE DESIGN ORDER FLOW: THE DRAFTING TABLE (DESIGN-ORDERING spec, Phase B; desk restyle).
  *
- * Six steps in the walk's own language: describe + job chips, destinations, exact copy,
- * assets, the date, review. The price panel rides the bottom the whole way, every line citing
- * the answer that created it, and reprices live on every change (the pure engine).
+ * One idea carries every step: your graphic is a LIVE ARTBOARD pinned to the strategist's
+ * desk, and every answer visibly changes it. The job sketches it in, destinations fan it out
+ * into real-ratio frames, your words ink onto it, your photo paints it, the date sticks on as
+ * a tape tag, and ordering is the press-and-hold seal that stamps it ORDERED. Nothing is
+ * decoration: everything on the board is an answer you gave.
  *
- * THE PLACEHOLDER GATE: while RATE_CARD.approved is false, an amber banner marks every price
- * as a test number. This surface must not be linked for clients until the reviewed rate card
- * lands and flips the flag.
+ * Visual language is the Strategist's Desk kit (desk/ui.tsx) so the campaign builder and the
+ * design order read as one shop. All owner copy comes from the question bank (design-copy.ts).
+ * Money stays engine-truth: destination tiles show their own line amount from the live quote.
  *
- * Built from the campaign walk's parts on purpose: the Apple-clean plate, the describe-read
- * (shared evidence laws via /api/design/describe), WalkCalendar with a rush classifier,
- * read-back chips. No parallel implementations.
+ * THE PLACEHOLDER GATE: while RATE_CARD.approved is false, the amber banner marks every price
+ * as a test number. This surface must not be sold until the reviewed rate card flips the flag.
  */
 'use client'
 
 import { useState } from 'react'
-import { Check, ArrowRight } from 'lucide-react'
+import { Check } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
-import { DESTINATIONS, type DestinationId } from '@/lib/design/destinations'
+import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, SealButton } from '@/components/campaigns/desk/ui'
+import { DESTINATIONS, type DestinationId, type DestinationSpec } from '@/lib/design/destinations'
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
 import { DESIGN_JOBS, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
@@ -29,17 +31,6 @@ import { DESIGN_TITLES, DESIGN_SUBS, DESIGN_LINES, fill } from '@/lib/design/des
 const T = DESIGN_TITLES
 const S = DESIGN_SUBS
 const L = DESIGN_LINES
-
-const APPLE = "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', system-ui, sans-serif"
-const INK = '#1D1D1F'
-const MUTE = '#6E6E73'
-const FAINT = '#86868B'
-const MINT = '#4ABD98'
-const MINT_DK = '#2E9A78'
-const MINT_SOFT = '#F0FAF6'
-const HAIR = 'rgba(0,0,0,0.08)'
-const AMBER = '#B77A1E'
-const AMBER_SOFT = '#FBF3E4'
 
 export interface DesignAsset {
   id: string
@@ -78,49 +69,201 @@ const addDays = (iso: string, n: number) => {
   return d.toISOString().slice(0, 10)
 }
 
-function Plate({ n, title, sub, children }: { n: number; title: string; sub: string; children: React.ReactNode }) {
+/* ── desk-flavored micro-motion, once per screen ─────────────────────────────────────────── */
+function BoardKeyframes() {
   return (
-    <section style={{ marginBottom: 34 }}>
-      <div style={{ fontFamily: APPLE, fontSize: 11, fontWeight: 600, letterSpacing: '.09em', color: '#AEAEB2', marginBottom: 8 }}>{n} OF 6</div>
-      <h2 style={{ fontFamily: APPLE, fontSize: 25, fontWeight: 700, color: INK, lineHeight: 1.15, margin: '0 0 6px', letterSpacing: '-0.022em' }}>{title}</h2>
-      <p style={{ fontFamily: APPLE, fontSize: 14, color: MUTE, lineHeight: 1.5, margin: '0 0 20px', maxWidth: '34ch' }}>{sub}</p>
-      {children}
-    </section>
+    <style>{`
+      @media (prefers-reduced-motion: no-preference) {
+        .db-pop { animation: dbPop .38s cubic-bezier(.2,1.4,.4,1) both }
+        @keyframes dbPop { from { opacity: 0; transform: scale(.92) translateY(5px) } to { opacity: 1; transform: none } }
+        .db-tape { animation: dbTape .4s cubic-bezier(.2,1.5,.4,1) both }
+        @keyframes dbTape { from { opacity: 0; transform: rotate(3deg) translateY(-8px) } to { opacity: 1; transform: rotate(3deg) } }
+      }
+    `}</style>
   )
 }
 
-function Chip({ on, label, onClick, dashed }: { on: boolean; label: string; onClick: () => void; dashed?: boolean }) {
+/* ── the step ticker: the order sheet's own header ───────────────────────────────────────── */
+function StepHead({ n, title, sub }: { n: number; title: string; sub: string }) {
+  return (
+    <div className="db-pop" style={{ marginBottom: 14 }}>
+      <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', color: DESK.mute, marginBottom: 7 }}>
+        {'ORDER SHEET · '}{n}{' / 6'}
+      </div>
+      <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: '0 0 5px', letterSpacing: '-0.02em' }}>{title}</h2>
+      <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, lineHeight: 1.5, margin: 0, maxWidth: '36ch' }}>{sub}</p>
+    </div>
+  )
+}
+
+/* ── the artboard: the graphic, alive on the desk, changed only by answers ───────────────── */
+function Artboard({ jobLabel, headline, details, offer, photoUrl, tag, rush, stamped, compact }: {
+  jobLabel?: string | null
+  headline: string
+  details: string
+  offer: string
+  photoUrl?: string | null
+  /** the masking-tape date tag ("In hand September 9") */
+  tag?: string | null
+  rush?: boolean
+  /** the ORDERED stamp, after the seal */
+  stamped?: boolean
+  compact?: boolean
+}) {
+  const hasWords = !!(headline || details || offer)
+  return (
+    <div style={{ position: 'relative', padding: '10px 4px 2px', marginBottom: 14 }}>
+      {/* the pin */}
+      <span aria-hidden style={{ position: 'absolute', top: 2, left: '50%', transform: 'translateX(-50%)', width: 11, height: 11, borderRadius: '50%', background: DESK.grad, boxShadow: '0 2px 5px rgba(22,33,28,0.35), inset 0 1px 2px rgba(255,255,255,0.5)', zIndex: 4 }} />
+      <div style={{
+        position: 'relative', transform: 'rotate(-1.1deg)', borderRadius: 8, overflow: 'hidden',
+        background: photoUrl ? undefined : DESK.ink, minHeight: compact ? 118 : 158,
+        boxShadow: '0 14px 30px rgba(22,33,28,0.18), 0 2px 6px rgba(22,33,28,0.12)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: compact ? '18px 16px' : '26px 20px', textAlign: 'center',
+        transition: 'min-height .25s ease',
+      }}>
+        {photoUrl && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoUrl} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+            <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,33,28,0.35), rgba(22,33,28,0.62))' }} />
+          </>
+        )}
+        <div style={{ position: 'relative', zIndex: 2, width: '100%' }}>
+          {jobLabel && (
+            <div className="db-pop" style={{ fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.62)', marginBottom: 8 }}>
+              {jobLabel}
+            </div>
+          )}
+          {hasWords ? (
+            <>
+              {headline && (
+                <div key={headline} className="db-pop" style={{ fontFamily: DESK.disp, fontSize: compact ? 20 : 25, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.12, overflowWrap: 'break-word', textShadow: photoUrl ? '0 1px 8px rgba(0,0,0,0.4)' : undefined }}>
+                  {headline}
+                </div>
+              )}
+              {details && (
+                <div key={details} className="db-pop" style={{ fontFamily: DESK.body, fontSize: 12.5, fontWeight: 500, color: 'rgba(255,255,255,0.82)', marginTop: 7 }}>
+                  {details}
+                </div>
+              )}
+              {offer && (
+                <div key={offer} className="db-pop" style={{ display: 'inline-block', marginTop: 11, background: DESK.grad, color: '#fff', borderRadius: 99, padding: '5px 13px', fontFamily: DESK.disp, fontSize: 12, fontWeight: 700, boxShadow: '0 3px 10px rgba(46,154,120,0.4)' }}>
+                  {offer}
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: 'rgba(255,255,255,0.4)', border: '1.5px dashed rgba(255,255,255,0.25)', borderRadius: 10, padding: '14px 16px', display: 'inline-block' }}>
+              {L['board.empty']}
+            </div>
+          )}
+        </div>
+        {stamped && (
+          <span style={{ position: 'absolute', right: 10, bottom: 10, zIndex: 3 }}>
+            <Stamp mint>{L['done.stamp']}</Stamp>
+          </span>
+        )}
+        {rush && !stamped && (
+          <span style={{ position: 'absolute', left: 10, bottom: 10, zIndex: 3 }}>
+            <Stamp>{L['board.rush']}</Stamp>
+          </span>
+        )}
+      </div>
+      {/* the masking-tape date tag */}
+      {tag && (
+        <div className="db-tape" style={{
+          position: 'absolute', top: 3, right: 8, zIndex: 5, transform: 'rotate(3deg)',
+          background: 'rgba(247,243,228,0.96)', border: `1px solid ${DESK.line}`, borderRadius: 3,
+          padding: '4px 10px', fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.ink2,
+          boxShadow: '0 2px 6px rgba(22,33,28,0.15)',
+        }}>
+          {tag}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── a destination as a real-ratio frame of YOUR artwork ─────────────────────────────────── */
+function DestFrame({ d, on, amount, photoUrl, headline, onClick }: {
+  d: DestinationSpec
+  on: boolean
+  /** the engine's own line amount for this tile when selected (null = unselected) */
+  amount: number | null
+  photoUrl?: string | null
+  headline: string
+  onClick: () => void
+}) {
+  const ratio = d.dimensions.w / d.dimensions.h
+  const w = ratio >= 2.2 ? 104 : ratio >= 1 ? 74 : 52
+  const h = Math.max(34, Math.min(86, Math.round(w / ratio)))
   return (
     <button
-      type="button" onClick={onClick}
-      style={{
-        cursor: 'pointer', background: on ? MINT_SOFT : '#fff',
-        border: `1.5px ${dashed ? 'dashed' : 'solid'} ${on ? MINT : HAIR}`, borderRadius: 99,
-        padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: on ? MINT_DK : INK, fontFamily: APPLE,
-      }}
+      type="button" onClick={onClick} aria-pressed={on}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', padding: 4, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
     >
-      {label}
+      <span style={{
+        position: 'relative', width: w, height: h, borderRadius: 6, overflow: 'hidden',
+        background: photoUrl ? undefined : DESK.ink,
+        border: `2px solid ${on ? DESK.mint : DESK.line}`,
+        boxShadow: on ? '0 4px 12px rgba(46,154,120,0.3)' : '0 1px 4px rgba(22,33,28,0.1)',
+        transform: on ? 'translateY(-2px)' : undefined, transition: 'transform .18s ease, box-shadow .18s ease, border-color .18s ease',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {photoUrl && (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photoUrl} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+            <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'rgba(22,33,28,0.42)' }} />
+          </>
+        )}
+        {/* your headline, scaled into the frame; bars when there are no words yet */}
+        <span style={{ position: 'relative', zIndex: 2, padding: '0 4px', width: '100%', textAlign: 'center' }}>
+          {headline ? (
+            <span style={{ fontFamily: DESK.disp, fontWeight: 700, fontSize: Math.max(6, Math.min(9, h / 6)), color: '#fff', lineHeight: 1.1, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{headline}</span>
+          ) : (
+            <span aria-hidden style={{ display: 'block', margin: '0 auto', width: '62%' }}>
+              <span style={{ display: 'block', height: 3.5, borderRadius: 2, background: 'rgba(255,255,255,0.75)' }} />
+              <span style={{ display: 'block', height: 2.5, borderRadius: 2, background: 'rgba(255,255,255,0.35)', marginTop: 3, width: '72%', marginLeft: 'auto', marginRight: 'auto' }} />
+            </span>
+          )}
+        </span>
+        {on && (
+          <span style={{ position: 'absolute', top: 3, right: 3, zIndex: 3, width: 15, height: 15, borderRadius: '50%', background: DESK.mint, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Check size={9} strokeWidth={3.6} />
+          </span>
+        )}
+      </span>
+      <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: on ? DESK.mintDeep : DESK.ink2, lineHeight: 1.2, textAlign: 'center' }}>{d.label}</span>
+      <span style={{ fontFamily: DESK.mono, fontSize: 9.5, fontWeight: 700, color: DESK.mintDeep, minHeight: 12 }}>
+        {on && amount != null ? (amount === 0 ? L['dest.included'] : `+$${amount}`) : ''}
+      </span>
     </button>
   )
 }
 
-function CardBtn({ on, label, sub, onClick }: { on: boolean; label: string; sub?: string; onClick: () => void }) {
+/* ── small shared inputs, desk-inked ─────────────────────────────────────────────────────── */
+const inputStyle = {
+  width: '100%', boxSizing: 'border-box' as const, height: 46, padding: '0 13px',
+  border: `1.5px solid ${DESK.line}`, borderRadius: 12, background: DESK.card, outline: 'none',
+  fontFamily: DESK.body, fontSize: 14.5, color: DESK.ink,
+}
+
+function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
   return (
     <button
       type="button" onClick={onClick}
       style={{
-        position: 'relative', width: '100%', textAlign: 'left', cursor: 'pointer',
-        border: `1.5px solid ${on ? MINT : 'rgba(0,0,0,0.07)'}`, background: on ? MINT_SOFT : '#fff',
-        borderRadius: 16, padding: '12px 13px', fontFamily: APPLE, boxShadow: on ? 'none' : '0 1px 2px rgba(0,0,0,0.03)',
+        cursor: 'pointer', background: on ? DESK.mintWash : DESK.card,
+        border: `1.5px solid ${on ? DESK.mint : DESK.line}`, borderRadius: 99,
+        padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: on ? DESK.mintDeep : DESK.ink,
+        fontFamily: DESK.body, boxShadow: on ? 'none' : '0 1px 2px rgba(22,33,28,0.04)',
+        transition: 'border-color .15s ease, background .15s ease', WebkitTapHighlightColor: 'transparent',
       }}
     >
-      <span style={{ display: 'block', fontSize: 13.5, fontWeight: on ? 700 : 600, color: on ? MINT_DK : INK }}>{label}</span>
-      {sub && <span style={{ display: 'block', fontSize: 11.5, color: on ? MINT_DK : MUTE, marginTop: 3, lineHeight: 1.4 }}>{sub}</span>}
-      {on && (
-        <span style={{ position: 'absolute', top: 11, right: 11, width: 18, height: 18, borderRadius: 99, background: MINT, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Check size={11} strokeWidth={3.4} />
-        </span>
-      )}
+      {label}
     </button>
   )
 }
@@ -186,6 +329,14 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const saidText = [headline, details, offer].map((t) => t.trim()).filter(Boolean).join('. ')
   /* The rush question shows real dollars: the engine's own delta, before it is agreed to. */
   const rushDelta = Math.round(quote.total * (RATE_CARD.rushMultiplier - 1))
+  /* The board's photo: the first picked asset paints the artwork everywhere it appears. */
+  const boardPhoto = usingOwn ? allAssets.find((a) => picked.includes(a.id))?.url ?? null : null
+  const jobLabel = job ? DESIGN_JOBS.find((j) => j.id === job)?.label ?? null : null
+  const boardTag = due ? fill(L['tag.inhand'], { date: fmtDay(due) }) : eventDate ? fill(L['tag.event'], { date: fmtDay(eventDate) }) : null
+  const destAmount = (id: string): number | null => {
+    const line = quote.lines.find((l) => l.id === `dest-${id}`)
+    return line ? line.amount : null
+  }
 
   const describe = async () => {
     const text = described.trim()
@@ -231,38 +382,56 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     }
   }
 
+  const ground = { ...paperGround, minHeight: '100%', padding: '16px 16px 0', fontFamily: DESK.body, boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' as const }
+
   if (submitted) {
     return (
-      <div style={{ background: '#F5F5F7', minHeight: '100%', padding: '48px 18px', fontFamily: APPLE, textAlign: 'center' }}>
-        <div style={{ width: 52, height: 52, borderRadius: 99, background: MINT, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
-          <Check size={26} strokeWidth={3} />
+      <div style={{ ...ground, padding: '44px 22px', textAlign: 'center' }}>
+        <DeskKeyframes />
+        <BoardKeyframes />
+        <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
+          <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} tag={boardTag} stamped />
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, color: INK, letterSpacing: '-0.02em' }}>{L['done.title']}</div>
-        <div style={{ fontSize: 13.5, color: MUTE, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.5 }}>
+        <div style={{ fontFamily: DESK.disp, fontSize: 23, fontWeight: 700, color: DESK.ink, letterSpacing: '-0.02em', marginTop: 10 }}>{L['done.title']}</div>
+        <div style={{ fontSize: 13.5, color: DESK.ink2, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
           {L['done.sub']}
         </div>
-        <div style={{ fontSize: 12, color: FAINT, marginTop: 14 }}>{L['done.testmode']}</div>
+        <div style={{ fontSize: 12, color: DESK.mute, marginTop: 14 }}>{L['done.testmode']}</div>
       </div>
     )
   }
 
   return (
-    <div style={{ background: '#F5F5F7', minHeight: '100%', padding: '18px 14px 0', fontFamily: APPLE, boxSizing: 'border-box', display: 'flex', flexDirection: 'column' }}>
+    <div style={ground}>
+      <DeskKeyframes />
+      <BoardKeyframes />
       {!RATE_CARD.approved && (
-        <div style={{ background: AMBER_SOFT, color: AMBER, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginBottom: 14, lineHeight: 1.4 }}>
+        <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}>
           {L['banner.testprices']}
         </div>
       )}
+
+      {/* the artboard rides every step once the first answer exists */}
+      {(step > 1 || job != null) && (
+        <Artboard
+          jobLabel={jobLabel}
+          headline={headline} details={details} offer={offer}
+          photoUrl={boardPhoto} tag={boardTag} rush={quote.rush}
+          compact={step !== 3 && step !== 6}
+        />
+      )}
+
       <div style={{ flex: 1 }}>
 
         {/* ── 1. what do you need ── */}
         {step === 1 && (
-          <Plate n={1} title={T.job} sub={S.job}>
+          <>
+            <StepHead n={1} title={T.job} sub={S.job} />
             <textarea
               value={described} onChange={(e) => setDescribed(e.target.value)}
               placeholder="A flyer and an Instagram post for our live music night on the 15th, 20% off pitchers…"
               rows={3}
-              style={{ width: '100%', boxSizing: 'border-box', padding: '12px 14px', resize: 'none', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 14, background: '#fff', outline: 'none', fontFamily: APPLE, fontSize: 14.5, color: INK, lineHeight: 1.5 }}
+              style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
             />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
               {DESIGN_JOBS.map((j) => (
@@ -271,17 +440,22 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             </div>
             <button
               type="button" disabled={!canNext || reading} onClick={() => (described.trim().length >= 8 ? describe() : setStep(2))}
-              style={{ width: '100%', height: 50, marginTop: 16, borderRadius: 25, border: 'none', cursor: canNext ? 'pointer' : 'default', background: canNext ? MINT : '#E8E8ED', color: canNext ? '#fff' : '#AEAEB2', fontFamily: APPLE, fontSize: 16, fontWeight: 600 }}
+              style={{
+                width: '100%', height: 50, marginTop: 16, borderRadius: 25, border: 'none',
+                cursor: canNext ? 'pointer' : 'default', background: canNext ? DESK.grad : '#E7E4DB',
+                color: canNext ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700,
+                boxShadow: canNext ? '0 8px 20px rgba(46,154,120,0.3)' : 'none',
+              }}
             >
-              {reading ? 'Reading…' : 'Continue'}
+              {reading ? L['nav.reading'] : L['nav.continue']}
             </button>
-          </Plate>
+          </>
         )}
 
         {/* the read-back, once */}
         {step === 2 && read && Object.keys(read.cited).length > 0 && (
-          <div style={{ margin: '0 0 18px' }}>
-            <div style={{ fontSize: 12, color: FAINT, marginBottom: 7 }}>{L['read.prefix']}</div>
+          <div className="db-pop" style={{ margin: '0 0 16px' }}>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: DESK.mute, marginBottom: 7 }}>{L['read.prefix']}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
               {job && read.cited.jobType && <Chip on label={DESIGN_JOBS.find((j) => j.id === job)?.label ?? ''} onClick={() => setStep(1)} />}
               {eventDate && read.cited.eventDate && <Chip on label={`Event: ${fmtDay(eventDate)}`} onClick={() => setStep(5)} />}
@@ -289,48 +463,52 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               {read.ownPhotos && read.cited.ownPhotos && <Chip on label={L['read.ownphotos']} onClick={() => setStep(4)} />}
             </div>
             {(read.unplaced?.length ?? 0) > 0 && (
-              <div style={{ background: AMBER_SOFT, color: AMBER, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 10, lineHeight: 1.45 }}>
+              <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 10, lineHeight: 1.45 }}>
                 {fill(L['read.unplaced'], { list: read.unplaced!.join(' or ') })}
               </div>
             )}
           </div>
         )}
 
-        {/* ── 2. where is it going ── */}
+        {/* ── 2. where is it going: your artwork, cut to every size ── */}
         {step === 2 && (
-          <Plate n={2} title={T.where} sub={S.where}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          <>
+            <StepHead n={2} title={T.where} sub={S.where} />
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
               {DESTINATIONS.map((d) => (
-                <Chip key={d.id} on={dests.includes(d.id)} label={d.label}
-                  onClick={() => setDests((prev) => (prev.includes(d.id) ? prev.filter((x) => x !== d.id) : [...prev, d.id]))} />
+                <DestFrame
+                  key={d.id} d={d} on={dests.includes(d.id)}
+                  amount={destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
+                  onClick={() => setDests((prev) => (prev.includes(d.id) ? prev.filter((x) => x !== d.id) : [...prev, d.id]))}
+                />
               ))}
             </div>
             {printPicked && (
               <div style={{ marginTop: 14 }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, marginBottom: 6 }}>{L['print.qty']}</div>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 6 }}>{L['print.qty']}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: printDestSpecs.length > 1 ? '1fr 1fr' : '1fr', gap: 8 }}>
                   {printDestSpecs.map((d) => (
                     <div key={d.id}>
-                      <div style={{ fontSize: 11.5, color: FAINT, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
+                      <div style={{ fontSize: 11.5, color: DESK.mute, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
                       <input
                         inputMode="numeric" value={printQtys[d.id] ?? ''} aria-label={`${d.label} copies`}
                         onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); setPrintQtys((prev) => { const next = { ...prev }; if (n) next[d.id] = Number(n); else delete next[d.id]; return next }) }}
                         placeholder={QTY_HINT[d.id] ?? '100'}
-                        style={{ width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: APPLE, fontSize: 15, color: INK }}
+                        style={inputStyle}
                       />
                     </div>
                   ))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  <CardBtn on={printer === 'client'} label={L['print.client.label']} sub={L['print.client.sub']} onClick={() => setPrinter('client')} />
-                  <CardBtn on={printer === 'us'} label={L['print.us.label']} sub={L['print.us.sub']} onClick={() => setPrinter('us')} />
+                  <Ticket on={printer === 'client'} name={L['print.client.label']} sub={L['print.client.sub']} price="Free" onClick={() => setPrinter('client')} />
+                  <Ticket on={printer === 'us'} name={L['print.us.label']} sub={L['print.us.sub']} price={`$${RATE_CARD.printManagement}`} onClick={() => setPrinter('us')} />
                 </div>
               </div>
             )}
-          </Plate>
+          </>
         )}
 
-        {/* ── 3. what should it say: three slots + a live text-layout preview ── */}
+        {/* ── 3. what should it say: the words ink straight onto the board above ── */}
         {step === 3 && (() => {
           const headlineSugs = [...new Set([
             read?.message ? titleCase(read.message) : null,
@@ -339,33 +517,17 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
           ].filter((x): x is string => !!x && x !== headline))].slice(0, 3)
           const detailSugs = eventDate && details !== fmtLong(eventDate) ? [fmtLong(eventDate)] : []
           const slotInput = (v: string, set: (x: string) => void, ph: string, label: string) => (
-            <input
-              value={v} onChange={(e) => set(e.target.value)} placeholder={ph} aria-label={label}
-              style={{ width: '100%', boxSizing: 'border-box', height: 46, padding: '0 13px', border: '1.5px solid rgba(0,0,0,0.10)', borderRadius: 13, background: '#fff', outline: 'none', fontFamily: APPLE, fontSize: 14.5, color: INK }}
-            />
+            <input value={v} onChange={(e) => set(e.target.value)} placeholder={ph} aria-label={label} style={inputStyle} />
           )
           const slotLabel = (t: string, opt?: boolean) => (
-            <div style={{ fontSize: 12, fontWeight: 600, color: MUTE, margin: '14px 0 6px' }}>{t}{opt ? <span style={{ color: FAINT, fontWeight: 500 }}>{' · '}{L['say.optional']}</span> : ''}</div>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '14px 0 6px' }}>
+              {t}{opt ? <span style={{ color: DESK.mute, fontWeight: 500, textTransform: 'none', letterSpacing: 0 }}>{' · '}{L['say.optional']}</span> : ''}
+            </div>
           )
           return (
-            <Plate n={3} title={T.say} sub={S.say}>
-              {/* the graphic taking shape: text hierarchy only, honestly labeled */}
-              <div style={{ background: INK, borderRadius: 18, padding: '26px 20px', textAlign: 'center' }}>
-                <div style={{ fontFamily: APPLE, fontSize: headline ? 24 : 18, fontWeight: 800, color: headline ? '#fff' : 'rgba(255,255,255,0.35)', letterSpacing: '-0.02em', lineHeight: 1.15, overflowWrap: 'break-word' }}>
-                  {headline || L['say.preview.headline']}
-                </div>
-                {(details || !headline) && (
-                  <div style={{ fontFamily: APPLE, fontSize: 13, fontWeight: 500, color: details ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.25)', marginTop: 8 }}>
-                    {details || L['say.preview.details']}
-                  </div>
-                )}
-                {offer && (
-                  <div style={{ display: 'inline-block', marginTop: 12, background: MINT, color: '#fff', borderRadius: 99, padding: '5px 13px', fontFamily: APPLE, fontSize: 12.5, fontWeight: 700 }}>
-                    {offer}
-                  </div>
-                )}
-              </div>
-              <div style={{ fontSize: 11, color: FAINT, marginTop: 6, textAlign: 'center' }}>
+            <>
+              <StepHead n={3} title={T.say} sub={S.say} />
+              <div style={{ fontSize: 11, color: DESK.mute, marginTop: -8, marginBottom: 4, textAlign: 'center' }}>
                 {L['say.caption']}
               </div>
 
@@ -399,16 +561,17 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                 </>
               )}
 
-              <div style={{ fontSize: 11.5, color: FAINT, marginTop: 14, lineHeight: 1.45 }}>
+              <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
                 {L['say.note']}
               </div>
-            </Plate>
+            </>
           )
         })()}
 
-        {/* ── 4. photos ── */}
+        {/* ── 4. photos: the picked shot paints the board ── */}
         {step === 4 && (
-          <Plate n={4} title={T.photos} sub={S.photos}>
+          <>
+            <StepHead n={4} title={T.photos} sub={S.photos} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
               {allAssets.map((a) => {
                 const ok = passesQualityGate(a)
@@ -417,51 +580,44 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                   <button
                     key={a.id} type="button" disabled={!ok}
                     onClick={() => { setSourcePhotos(false); setNoPhotos(false); setPicked((prev) => (prev.includes(a.id) ? prev.filter((x) => x !== a.id) : [...prev, a.id])) }}
-                    style={{ position: 'relative', aspectRatio: '1', borderRadius: 12, overflow: 'hidden', cursor: ok ? 'pointer' : 'default', border: `2px solid ${on ? MINT : 'transparent'}`, padding: 0, background: '#E8E8ED', opacity: ok ? 1 : 0.45 }}
+                    style={{ position: 'relative', aspectRatio: '1', borderRadius: 12, overflow: 'hidden', cursor: ok ? 'pointer' : 'default', border: `2px solid ${on ? DESK.mint : 'transparent'}`, padding: 0, background: '#E7E4DB', opacity: ok ? 1 : 0.45, boxShadow: on ? '0 4px 12px rgba(46,154,120,0.3)' : '0 1px 3px rgba(22,33,28,0.08)', transform: on ? 'translateY(-2px)' : undefined, transition: 'transform .18s ease, box-shadow .18s ease' }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={a.url} alt={a.label ?? 'photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    {!ok && <span style={{ position: 'absolute', left: 4, bottom: 4, right: 4, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.55)', borderRadius: 6, padding: '2px 4px' }}>{L['photos.gate']}</span>}
-                    {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 18, height: 18, borderRadius: 99, background: MINT, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} strokeWidth={3.4} /></span>}
+                    {!ok && <span style={{ position: 'absolute', left: 4, bottom: 4, right: 4, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(22,33,28,0.6)', borderRadius: 6, padding: '2px 4px' }}>{L['photos.gate']}</span>}
+                    {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 18, height: 18, borderRadius: 99, background: DESK.mint, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} strokeWidth={3.4} /></span>}
                   </button>
                 )
               })}
-              <label style={{ aspectRatio: '1', borderRadius: 12, border: '1.5px dashed rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: MUTE, cursor: 'pointer', background: '#fff' }}>
-                Upload
+              <label style={{ aspectRatio: '1', borderRadius: 12, border: `1.5px dashed ${DESK.mute}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: DESK.ink2, cursor: 'pointer', background: DESK.card }}>
+                {L['photos.upload']}
                 <input type="file" accept="image/*" multiple onChange={(e) => upload(e.target.files)} style={{ display: 'none' }} />
               </label>
             </div>
             {usable.length === 0 && (
-              <div style={{ background: AMBER_SOFT, color: AMBER, borderRadius: 12, padding: '10px 13px', fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>
+              <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '10px 13px', fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>
                 {fill(L['photos.empty'], { price: String(RATE_CARD.photoSourcing) })}
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-              <CardBtn
-                on={noPhotos}
-                label={L['photos.none.label']}
-                sub={L['photos.none.sub']}
-                onClick={() => { setNoPhotos(!noPhotos); setSourcePhotos(false); setPicked([]) }}
-              />
-              <CardBtn
-                on={sourcePhotos}
-                label={fill(L['photos.source.label'], { price: String(RATE_CARD.photoSourcing) })}
-                sub={L['photos.source.sub']}
-                onClick={() => { setSourcePhotos(!sourcePhotos); setNoPhotos(false); setPicked([]) }}
-              />
+              <Ticket on={noPhotos} name={L['photos.none.label']} sub={L['photos.none.sub']} price="$0"
+                onClick={() => { setNoPhotos(!noPhotos); setSourcePhotos(false); setPicked([]) }} />
+              <Ticket on={sourcePhotos} name={fill(L['photos.source.label'], { price: String(RATE_CARD.photoSourcing) })} sub={L['photos.source.sub']} price={`$${RATE_CARD.photoSourcing}`}
+                onClick={() => { setSourcePhotos(!sourcePhotos); setNoPhotos(false); setPicked([]) }} />
             </div>
-          </Plate>
+          </>
         )}
 
-        {/* ── 5. when ── */}
+        {/* ── 5. when: the date sticks onto the board as a tape tag ── */}
         {step === 5 && (
-          <Plate
-            n={5}
-            title={eventDate ? T['when.event'] : T.when}
-            sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })}
-          >
+          <>
+            <StepHead
+              n={5}
+              title={eventDate ? T['when.event'] : T.when}
+              sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })}
+            />
             {read?.rushLanguage && !due && (
-              <div style={{ fontSize: 12.5, color: AMBER, fontWeight: 600, marginBottom: 10 }}>
+              <div style={{ fontSize: 12.5, color: DESK.amber, fontWeight: 600, marginBottom: 10 }}>
                 {fill(L['when.rushnote'], { date: fmtDay(standardDelivery) })}
               </div>
             )}
@@ -476,8 +632,8 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               onChange={(day) => { setDue(day); setRushConfirmed(false) }}
             />
             {afterEvent && (
-              <div style={{ background: AMBER_SOFT, borderRadius: 14, padding: '12px 14px', marginTop: 12 }}>
-                <div style={{ fontSize: 13, color: AMBER, fontWeight: 600, lineHeight: 1.5 }}>
+              <div style={{ background: DESK.amberWash, border: `1px solid ${DESK.amberLine}`, borderRadius: 14, padding: '12px 14px', marginTop: 12 }}>
+                <div style={{ fontSize: 13, color: DESK.amber, fontWeight: 600, lineHeight: 1.5 }}>
                   {fill(L['when.after'], { picked: fmtDay(due!), event: fmtDay(eventDate!) })}
                 </div>
               </div>
@@ -485,48 +641,39 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             {suggestedDue && !due && suggestedDue > today && (
               <button
                 type="button" onClick={() => { setDue(suggestedDue); setRushConfirmed(false) }}
-                style={{ width: '100%', marginTop: 12, height: 44, borderRadius: 22, border: `1.5px solid ${MINT}`, background: MINT_SOFT, color: MINT_DK, fontFamily: APPLE, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}
+                style={{ width: '100%', marginTop: 12, height: 44, borderRadius: 22, border: `1.5px solid ${DESK.mint}`, background: DESK.mintWash, color: DESK.mintDeep, fontFamily: DESK.body, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}
               >
                 {fill(L['when.suggest'], { date: fmtDay(suggestedDue) })}
               </button>
             )}
             {due && rushEligible && !rushConfirmed && (
               <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 13, color: AMBER, fontWeight: 600, lineHeight: 1.5, marginBottom: 8 }}>
+                <div style={{ fontSize: 13, color: DESK.amber, fontWeight: 600, lineHeight: 1.5, marginBottom: 8 }}>
                   {fill(L['when.rush.q'], { date: fmtDay(due), days: String(Math.round(RATE_CARD.rushWindowHours / 24)) })}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <CardBtn
-                    on={false}
-                    label={fill(L['when.rush.label'], { date: fmtDay(due), delta: String(rushDelta) })}
-                    sub={fill(L['when.rush.sub'], { total: String(quote.total + rushDelta) })}
-                    onClick={() => setRushConfirmed(true)}
-                  />
-                  <CardBtn
-                    on={false}
-                    label={L['when.norush.label']}
-                    sub={fill(L['when.norush.sub'], { date: fmtDay(standardDelivery), total: String(quote.total) })}
-                    onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
-                  />
+                  <Ticket name={fill(L['when.rush.label'], { date: fmtDay(due), delta: String(rushDelta) })} sub={fill(L['when.rush.sub'], { total: String(quote.total + rushDelta) })} price={`+$${rushDelta}`} onClick={() => setRushConfirmed(true)} />
+                  <Ticket name={L['when.norush.label']} sub={fill(L['when.norush.sub'], { date: fmtDay(standardDelivery), total: String(quote.total) })} price="$0" onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }} />
                 </div>
               </div>
             )}
             {due && rushEligible && rushConfirmed && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: AMBER_SOFT, borderRadius: 12, padding: '9px 13px', marginTop: 12 }}>
-                <span style={{ fontSize: 12.5, color: AMBER, fontWeight: 600 }}>{fill(L['when.rushon'], { date: fmtDay(due) })}</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: DESK.amberWash, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', marginTop: 12 }}>
+                <span style={{ fontSize: 12.5, color: DESK.amber, fontWeight: 600 }}>{fill(L['when.rushon'], { date: fmtDay(due) })}</span>
                 <button type="button" onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
-                  style={{ border: 'none', background: 'none', color: AMBER, fontFamily: APPLE, fontSize: 12.5, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
+                  style={{ border: 'none', background: 'none', color: DESK.amber, fontFamily: DESK.body, fontSize: 12.5, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
                   Undo
                 </button>
               </div>
             )}
-          </Plate>
+          </>
         )}
 
-        {/* ── 6. review ── */}
+        {/* ── 6. review: the brief under the board, sealed by hand ── */}
         {step === 6 && (
-          <Plate n={6} title={T.review} sub={S.review}>
-            <div style={{ background: '#fff', border: `0.5px solid ${HAIR}`, borderRadius: 16, padding: '14px 16px', fontSize: 13.5, color: INK, lineHeight: 1.6 }}>
+          <>
+            <StepHead n={6} title={T.review} sub={S.review} />
+            <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '14px 16px', fontSize: 13.5, color: DESK.ink, lineHeight: 1.6, boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
               {(() => { const n = job && job !== 'other' ? `${DESIGN_JOBS.find((j) => j.id === job)?.label.toLowerCase()} design` : 'design'; return `${/^[aeiou]/.test(n) ? 'An' : 'A'} ${n}` })()}
               {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
               {dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase()).join(', ')}
@@ -535,59 +682,59 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               {due ? `, in hand by ${fmtDay(due)}` : ''}
               {eventDate ? ` for your ${fmtDay(eventDate)} event` : ''}.
             </div>
-            <div style={{ fontSize: 11.5, color: FAINT, marginTop: 10, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 10, lineHeight: 1.5 }}>
               {fill(L['review.revisions'], { n: String(RATE_CARD.includedRevisions), next: String(RATE_CARD.includedRevisions + 1) })}
             </div>
-            <button
-              type="button" onClick={() => setSubmitted(true)}
-              style={{ width: '100%', height: 50, marginTop: 16, borderRadius: 25, border: 'none', cursor: 'pointer', background: MINT, color: '#fff', fontFamily: APPLE, fontSize: 16, fontWeight: 600 }}
-            >
-              Submit order · ${quote.total}
-            </button>
-          </Plate>
+            <div style={{ margin: '14px 0 4px' }}>
+              <ReceiptFrame>
+                {quote.lines.map((l) => <ReceiptRow key={l.id} label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />)}
+                <ReceiptRule />
+                <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+              </ReceiptFrame>
+            </div>
+            <SealButton label={L['seal.label']} onSealed={() => setSubmitted(true)} />
+            <div style={{ height: 18 }} />
+          </>
         )}
 
         {/* back / next */}
         {step > 1 && step < 6 && (
-          <div style={{ display: 'flex', gap: 10, marginTop: 4, marginBottom: 24 }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
             <button type="button" onClick={() => setStep(step - 1)}
-              style={{ flexShrink: 0, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer', border: '1px solid rgba(0,0,0,0.10)', background: '#fff', color: INK, fontFamily: APPLE, fontSize: 14.5, fontWeight: 600 }}>
-              Back
+              style={{ flexShrink: 0, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
+              {L['nav.back']}
             </button>
             <button type="button" disabled={!canNext} onClick={() => setStep(step + 1)}
-              style={{ flex: 1, height: 50, borderRadius: 25, border: 'none', cursor: canNext ? 'pointer' : 'default', background: canNext ? MINT : '#E8E8ED', color: canNext ? '#fff' : '#AEAEB2', fontFamily: APPLE, fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              Next <ArrowRight size={17} />
+              style={{ flex: 1, height: 50, borderRadius: 25, border: 'none', cursor: canNext ? 'pointer' : 'default', background: canNext ? DESK.grad : '#E7E4DB', color: canNext ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: canNext ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}>
+              {L['nav.next']}
             </button>
           </div>
         )}
       </div>
 
-      {/* ── the price panel: pinned, cited, live ── */}
-      {step > 1 && (
-        <div style={{ position: 'sticky', bottom: 0, margin: '0 -14px 0', zIndex: 3 }}>
+      {/* ── the running receipt: pinned, cited, live ── */}
+      {step > 1 && step < 6 && (
+        <div style={{ position: 'sticky', bottom: 0, margin: '0 -16px 0', zIndex: 3 }}>
           {panelOpen ? (
-            <div onClick={() => setPanelOpen(false)} style={{ cursor: 'pointer', background: '#fff', borderTop: `0.5px solid ${HAIR}`, borderRadius: '16px 16px 0 0', padding: '14px 20px 16px', boxShadow: '0 -4px 16px rgba(0,0,0,0.05)' }}>
-              {quote.lines.map((l) => (
-                <div key={l.id} style={{ padding: '7px 0', borderBottom: `0.5px solid ${HAIR}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: INK }}>{l.label}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: l.amount === 0 ? MINT_DK : INK, fontVariantNumeric: 'tabular-nums' }}>{l.amount === 0 ? '$0' : `$${l.amount}`}</span>
+            <div onClick={() => setPanelOpen(false)} style={{ cursor: 'pointer', padding: '0 10px' }}>
+              <ReceiptFrame style={{ boxShadow: '0 -8px 28px rgba(22,33,28,0.12)' }}>
+                {quote.lines.map((l) => (
+                  <div key={l.id}>
+                    <ReceiptRow label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />
+                    <div style={{ fontSize: 10.5, color: DESK.mute, marginTop: -3, paddingBottom: 4 }}>{l.why}</div>
                   </div>
-                  <div style={{ fontSize: 11, color: MUTE, marginTop: 1 }}>{l.why}</div>
-                </div>
-              ))}
-              {quote.passThroughNote && <div style={{ fontSize: 11, color: FAINT, paddingTop: 8 }}>{quote.passThroughNote}</div>}
-              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 10 }}>
-                <span style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>Total</span>
-                <span style={{ fontSize: 13.5, fontWeight: 800, color: INK, fontVariantNumeric: 'tabular-nums' }}>${quote.total}</span>
-              </div>
-              <div style={{ fontSize: 10.5, color: FAINT, marginTop: 2 }}>Includes {quote.includedRevisions} revision rounds.</div>
+                ))}
+                {quote.passThroughNote && <div style={{ fontSize: 11, color: DESK.mute, paddingTop: 4 }}>{quote.passThroughNote}</div>}
+                <ReceiptRule />
+                <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+                <div style={{ fontSize: 10.5, color: DESK.mute, marginTop: 2 }}>{fill(L['panel.revisions'], { n: String(quote.includedRevisions) })}</div>
+              </ReceiptFrame>
             </div>
           ) : (
             <button type="button" onClick={() => setPanelOpen(true)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', border: 'none', borderTop: `0.5px solid ${HAIR}`, borderRadius: '16px 16px 0 0', padding: '13px 20px', cursor: 'pointer', boxShadow: '0 -4px 16px rgba(0,0,0,0.05)', fontFamily: APPLE }}>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: MUTE }}>Your price so far</span>
-              <span style={{ fontSize: 13.5, fontWeight: 800, color: MINT_DK, fontVariantNumeric: 'tabular-nums' }}>${quote.total}</span>
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: DESK.card, border: 'none', borderTop: `1px solid ${DESK.line}`, borderRadius: '16px 16px 0 0', padding: '13px 20px', cursor: 'pointer', boxShadow: '0 -6px 20px rgba(22,33,28,0.08)', fontFamily: DESK.body }}>
+              <span style={{ fontFamily: DESK.mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute }}>{L['panel.sofar']}</span>
+              <span style={{ fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep, fontVariantNumeric: 'tabular-nums' }}>${quote.total}</span>
             </button>
           )}
         </div>
