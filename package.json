@@ -19,6 +19,7 @@
     "sim:plan": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/monthly-plan-e2e.ts",
     "sim:packing": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/plan-packing.ts",
     "sim:design": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/design-pricing.ts",
+    "sim:channels": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/channels.ts",
     "sim:services": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/service-completeness.ts",
     "sim:mechanisms": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/mechanisms.ts",
     "smoke:plan": "tsx scripts/smoke-render-slow-nights.tsx"
