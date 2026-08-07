@@ -5506,7 +5506,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
   // through here. Non-catalog pseudo-items ("__else") keep going straight to the builder.
   const openCard = (id, from, rowId) => {
     // The graphic configurator prices itself question by question; it has no product page.
-    if (id === "design") { window.location.assign("/dashboard/design/order"); return; }
+    // Only when the card is actually buyable — while it sits coming-soon (rate card unsigned)
+    // a tap falls through to the PDP so the owner sees the honest reason, never live prices.
+    if (id === "design" && buyableId("design")) { window.location.assign("/dashboard/design/order"); return; }
     if (catGet(id)) setRoute({ name: "pdp", itemId: id, from, rowId });
     else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };

@@ -48,7 +48,11 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * and the health cron re-proves that daily by pulling down the actual data path, so "done" here is
  * data arriving rather than anybody's say-so.
  */
-export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu', 'design']
+/* 'design' (the graphic configurator) is BUILT and verified end to end, but its rate card is
+ * still placeholder numbers awaiting the owner + designer review. Selling at made-up prices
+ * fails the same bar as selling unbuilt work, so it stays coming-soon on production until the
+ * rate card is signed off — then adding 'design' back here is the whole launch. */
+export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu']
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
  *  card and the product page so "coming soon" is never a mystery. No em dashes, 5th-grade words. */
@@ -85,6 +89,8 @@ export const COMING_SOON_REASON: Record<string, string> = {
   // the wrong sales, which is worse than no numbers at all. Named plainly because most restaurants
   // run their marketing off the POS, so "coming soon" has to be believable, not a brush-off.
   pos: 'Your till talks to us differently depending on who makes it. We are building those one at a time, and we will not connect yours until the numbers it sends are right.',
+  // The graphic configurator works end to end; only the price list is unsigned. Honest about that.
+  pricing: 'This one is built and working. We are finishing the price list so what you see is what you pay. Coming soon.',
 }
 
 /** Which reason group each bookmarked built-in belongs to (drives COMING_SOON_REASON). */
@@ -97,6 +103,8 @@ const COMING_SOON_GROUP: Record<string, keyof typeof COMING_SOON_REASON> = {
   creator: 'creator',
   // Gift cards + ticketing need POS + sends.
   giftcard: 'commerce', ticket: 'commerce',
+  // Built, awaiting the signed rate card (see FULLY_BUILT_LIVE note).
+  design: 'pricing',
   // Mega multi-month programs — rebuild from servicable atoms (Phase 6, deferred).
   nights: 'program', firstvisit: 'program', regulars: 'program',
   // 'reviews' is the system-goal id the 'reviewsplan' card remaps to at plan time (SYSTEM_GOAL_ALIAS
