@@ -69,10 +69,12 @@ export async function POST(req: Request) {
   /* Staff hear about every request the moment it lands (law: no silent stalls).
    * Best-effort: a notification hiccup must not fail the owner's submit. */
   try {
+    /* notifications.body is NOT NULL: always send one (owner notes when given,
+     * else the request summary). */
     await notifyStaffForClient(clientId, ['strategist', 'designer'], {
       kind: 'client_request',
       title: `New request: ${summaryLine(v.type.id, v.clean)}`,
-      body: v.clean.notes ? v.clean.notes.slice(0, 200) : undefined,
+      body: v.clean.notes?.slice(0, 200) || summaryLine(v.type.id, v.clean),
       link: '/admin/requests',
     })
   } catch (e) {
