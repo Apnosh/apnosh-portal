@@ -13,6 +13,35 @@ const AUTHORIZE = 'https://connect.squareup.com/oauth2/authorize'
 /** Read-only scopes: sales into pos_daily_sales. Never payments-write. */
 const SCOPES = ['MERCHANT_PROFILE_READ', 'ORDERS_READ', 'PAYMENTS_READ'] as const
 
+/** The code-for-tokens exchange. Only this file knows Square's token endpoint. */
+export async function squareExchangeCode(code: string): Promise<{
+  accessToken: string
+  refreshToken: string | null
+  merchantId: string
+  expiresAt: string | null
+}> {
+  const res = await fetch('https://connect.squareup.com/oauth2/token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      client_id: process.env.SQUARE_APP_ID,
+      client_secret: process.env.SQUARE_APP_SECRET,
+      code,
+      grant_type: 'authorization_code',
+    }),
+  })
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok || typeof data.access_token !== 'string') {
+    throw new ChannelError('auth', `Square token exchange failed (${res.status})`)
+  }
+  return {
+    accessToken: data.access_token,
+    refreshToken: typeof data.refresh_token === 'string' ? data.refresh_token : null,
+    merchantId: typeof data.merchant_id === 'string' ? data.merchant_id : 'unknown',
+    expiresAt: typeof data.expires_at === 'string' ? data.expires_at : null,
+  }
+}
+
 export const squareAdapter: ChannelAdapter = {
   id: 'square',
   kind: 'oauth',
@@ -21,18 +50,18 @@ export const squareAdapter: ChannelAdapter = {
     return Boolean(process.env.SQUARE_APP_ID && process.env.SQUARE_APP_SECRET)
   },
 
-  async connectStart(clientId: string): Promise<ConnectStart> {
+  async connectStart(state: string): Promise<ConnectStart> {
     const appId = process.env.SQUARE_APP_ID
     if (!appId || !process.env.SQUARE_APP_SECRET) {
       throw new ChannelError('not_configured', 'SQUARE_APP_ID / SQUARE_APP_SECRET are not set')
     }
-    /* state carries the client id; the P4 callback verifies it against the signed-in
-     * user before persisting anything (documented in CHANNELS-PLAN P4). */
+    /* state is the SIGNED token from oauth-state.ts; the callback verifies it before
+     * persisting anything. */
     const params = new URLSearchParams({
       client_id: appId,
       scope: SCOPES.join(' '),
       session: 'false',
-      state: clientId,
+      state,
     })
     return { url: `${AUTHORIZE}?${params.toString()}` }
   },

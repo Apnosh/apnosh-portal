@@ -11,6 +11,7 @@ import { CHANNELS, CHANNEL_IDS, adapterFor } from '../../src/lib/channels/regist
 import { ALERT_THRESHOLD, buildAlertCopy, nextFailureState } from '../../src/lib/channels/sync'
 import { ChannelError, countsAsFailure, type ChannelErrorCode } from '../../src/lib/channels/types'
 import { dayKey, normalizeSource } from '../../src/lib/channels/adapters/statements'
+import { signState, verifyState } from '../../src/lib/channels/oauth-state'
 
 const s = new Suite()
 
@@ -65,6 +66,18 @@ s.group('OAuth adapters: env kill switch + honest URLs')
   s.check('square configured with env', CHANNELS.square.isConfigured() === true)
   if (hadSq.id) process.env.SQUARE_APP_ID = hadSq.id
   if (hadSq.secret) process.env.SQUARE_APP_SECRET = hadSq.secret
+}
+
+s.group('OAuth state: signed, expiring, tamper-evident')
+{
+  process.env.CRON_SECRET = process.env.CRON_SECRET || 'sim-secret'
+  const t0 = 1_000_000_000_000
+  const tok = signState('client-abc', t0)
+  s.check('roundtrip returns the client id', verifyState(tok, t0 + 1000) === 'client-abc')
+  s.check('expires after ten minutes', verifyState(tok, t0 + 11 * 60 * 1000) === null)
+  s.check('a tampered signature is rejected', verifyState(tok.slice(0, -2) + 'xx', t0 + 1000) === null)
+  s.check('a tampered payload is rejected', (() => { const [p1, p2, mac] = tok.split('.'); void p1; return verifyState(`${Buffer.from('client-EVIL').toString('base64url')}.${p2}.${mac}`, t0 + 1000) === null })())
+  s.check('garbage input is a calm null, never a crash', verifyState('not-a-token', t0) === null && verifyState(null, t0) === null && verifyState('a.b', t0) === null)
 }
 
 s.group('Owner alert copy: the house lint')
