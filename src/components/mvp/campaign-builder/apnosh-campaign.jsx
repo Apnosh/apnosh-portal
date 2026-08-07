@@ -2128,6 +2128,7 @@ const CATALOG = [
   { id: "story", type: "content", icon: "story", title: "A story", sub: "A quick post to stay top of mind", cad: "once" },
   { id: "graphic", type: "content", icon: "image", title: "A social media post", sub: "A designed post: graphic, carousel, or photo", cad: "once" },
   { id: "design", type: "task", icon: "graphic", title: "Get a graphic made", sub: "Flyers, posts, banners, gift cards: designed on your brand", cad: "once" },
+  { id: "creative", type: "task", icon: "graphic", title: "Request creative work", sub: "Menus, logos, websites, videos, photos, ads: ask, we quote it", cad: "once", hot: true },
   { id: "dish", type: "content", icon: "image", title: "Feature a dish", sub: "Show off one of your best plates", cad: "once", hot: true },
   { id: "edit", type: "content", icon: "video", title: "Edit my footage", sub: "Send us your clips and photos, we cut and polish them", cad: "once" },
   { id: "gpost", type: "content", icon: "store", title: "A Google Business post", sub: "An update on your listing, seen in Search and Maps", cad: "once" },
@@ -2302,7 +2303,7 @@ const ROWS = [
   // multi-month programs live on their own "Full campaigns" shelf below, so a $70
   // fix never sits next to an $8k system (the audit's price-cliff finding).
   { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "website", "localseo", "creator", "gpost"] },
-  { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["design", "reel", "dish", "story", "graphic", "shoot", "reviewsplan", "reviewsreply"] },
+  { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["creative", "design", "reel", "dish", "story", "graphic", "shoot", "reviewsplan", "reviewsreply"] },
   { id: "actions", title: "Make it easy to order", note: "Working buttons, right info, easy ways to act", ids: ["friction", "direct", "website", "gbp"] },
   { id: "orders", title: "Fill your seats", note: "Events, deals, and pushes that ring the register", ids: ["promoevent", "launch", "ticket", "catering", "giftcard", "slowoffer"] },
   { id: "back", title: "Bring guests back", note: "Turn one visit into two, three, ten", ids: ["welcome", "news", "birthday", "earlyaccess", "winback", "direct"] },
@@ -2310,7 +2311,7 @@ const ROWS = [
   { id: "programs", title: "Full campaigns", note: "We plan it, make it, and run it for you, month after month", ids: ["firstvisit", "nights", "regulars", "reach"] },
   // Production-only shelf: shoots, edits, and single pieces bought as GOODS, not
   // campaigns — no outcome promise, no tracking, the deliverable is the product.
-  { id: "content", title: "Just need content", note: "Shoots, edits, and pieces. No campaign, just the goods", ids: ["design", "shoot", "edit", "reel", "story", "graphic", "dish", "gpost"] },
+  { id: "content", title: "Just need content", note: "Shoots, edits, and pieces. No campaign, just the goods", ids: ["creative", "design", "shoot", "edit", "reel", "story", "graphic", "dish", "gpost"] },
 ];
 
 // DB campaigns appear on their chosen shelf AFTER the code-authored cards (never
@@ -5509,6 +5510,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     // Only when the card is actually buyable — while it sits coming-soon (rate card unsigned)
     // a tap falls through to the PDP so the owner sees the honest reason, never live prices.
     if (id === "design" && buyableId("design")) { window.location.assign("/dashboard/design/order"); return; }
+    // The Request Desk is its own surface (ask for anything, we quote it). Same allowlist
+    // gate: pull "creative" from FULLY_BUILT_LIVE and taps fall back to the honest PDP.
+    if (id === "creative" && buyableId("creative")) { window.location.assign("/dashboard/requests"); return; }
     if (catGet(id)) setRoute({ name: "pdp", itemId: id, from, rowId });
     else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };

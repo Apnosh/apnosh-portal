@@ -33,6 +33,7 @@ export type NotificationKind =
   // AI transport failure (key dead, credits out, rate limited) — the loud half of law 6.
   | 'ai_failure'
   | 'channel_broken'
+  | 'request_update'
   | 'booking_reminder'
 
 export interface NotificationRow {

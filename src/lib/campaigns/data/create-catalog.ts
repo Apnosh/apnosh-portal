@@ -43,6 +43,7 @@ const SOURCE = [
   { id: 'story', title: 'A story post', goal: 'new-customers', stages: ['interest'] },
   { id: 'graphic', title: 'A social media post', goal: 'new-customers', stages: ['interest'] },
   { id: 'design', title: 'Get a graphic made', goal: 'new-customers', stages: ['interest'] },
+  { id: 'creative', title: 'Request creative work', goal: 'new-customers', stages: ['interest'] },
   { id: 'dish', title: 'Feature a dish', goal: 'new-customers', stages: ['interest'] },
   { id: 'edit', title: 'Edit my footage', goal: 'new-customers', stages: ['interest'] },
   { id: 'gpost', title: 'A Google Business post', goal: 'new-customers', stages: ['aware'] },

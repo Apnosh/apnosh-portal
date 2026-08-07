@@ -129,6 +129,7 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
   story: () => null,
   graphic: () => null,
   design: () => null,
+  creative: () => null,
   dish: () => null,
   edit: () => null,
   shoot: () => null,

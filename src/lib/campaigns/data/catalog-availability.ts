@@ -52,7 +52,10 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * still placeholder numbers awaiting the owner + designer review. Selling at made-up prices
  * fails the same bar as selling unbuilt work, so it stays coming-soon on production until the
  * rate card is signed off — then adding 'design' back here is the whole launch. */
-export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu']
+/* 'creative' (the Request Desk) is live because it SELLS NOTHING: it collects a brief and
+ * the team answers with a quote. The no-unsigned-price rule that holds 'design' back does
+ * not apply to a request that charges zero. */
+export const FULLY_BUILT_LIVE: readonly string[] = ['gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu', 'creative']
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
  *  card and the product page so "coming soon" is never a mystery. No em dashes, 5th-grade words. */

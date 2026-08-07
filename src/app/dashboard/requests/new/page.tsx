@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 
-// The requests concept folded into Messages (owner↔team chat).
+// The Request Desk owns request creation now (type picker on the hub).
 export default function NewRequestRedirect() {
-  redirect('/dashboard/messages')
+  redirect('/dashboard/requests')
 }
