@@ -13,9 +13,11 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { verifyState } from '@/lib/channels/oauth-state'
 import { squareExchangeCode } from '@/lib/channels/adapters/square'
 import { cloverExchangeCode } from '@/lib/channels/adapters/clover'
-import { ChannelError } from '@/lib/channels/types'
+import { adapterFor } from '@/lib/channels/registry'
+import { ChannelError, type ChannelConnection } from '@/lib/channels/types'
 
 export const runtime = 'nodejs'
+export const maxDuration = 60
 
 const DONE = '/dashboard/connected-accounts'
 
@@ -62,18 +64,39 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
       .eq('client_id', clientId)
       .eq('channel', provider)
 
-    const { error: insertErr } = await admin.from('channel_connections').insert({
-      client_id: clientId,
-      channel: provider,
-      connection_type: 'oauth',
-      platform_account_id: merchantId,
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      status: 'active',
-      connected_at: new Date().toISOString(),
-      metadata: { env: provider === 'clover' ? (process.env.CLOVER_ENV ?? 'production') : 'production' },
-    })
-    if (insertErr) throw new Error(insertErr.message)
+    const { data: inserted, error: insertErr } = await admin
+      .from('channel_connections')
+      .insert({
+        client_id: clientId,
+        channel: provider,
+        connection_type: 'oauth',
+        platform_account_id: merchantId,
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        status: 'active',
+        connected_at: new Date().toISOString(),
+        metadata: { env: provider === 'clover' ? (process.env.CLOVER_ENV ?? 'production') : 'production' },
+      })
+      .select('id, client_id, channel, connection_type, platform_account_id, access_token, refresh_token, status, metadata')
+      .single()
+    if (insertErr || !inserted) throw new Error(insertErr?.message ?? 'insert returned no row')
+
+    /* First sync, immediately: the owner should come back to a page with data, not a
+     * promise. Best-effort — a slow vendor must never break the redirect; the sync
+     * cron re-covers this window within the day either way. */
+    try {
+      const adapter = adapterFor(provider)
+      if (adapter) {
+        const r = await adapter.sync(inserted as ChannelConnection)
+        await admin
+          .from('channel_connections')
+          .update({ last_sync_at: new Date().toISOString() })
+          .eq('id', inserted.id)
+        console.log(`[channels] ${provider} first sync: ${r.itemsWritten} days${r.note ? ` (${r.note})` : ''}`)
+      }
+    } catch (e) {
+      console.error(`[channels] ${provider} first sync failed (connection still saved)`, e)
+    }
 
     return back(req, `connected=${provider}`)
   } catch (e) {

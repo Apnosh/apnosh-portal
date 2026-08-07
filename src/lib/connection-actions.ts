@@ -8,7 +8,7 @@ import { parseYelpAlias, type YelpPreview } from '@/lib/yelp-helpers'
 // Unified connection type for the Connected Accounts hub
 // ---------------------------------------------------------------------------
 
-export type ConnectionCategory = 'social' | 'google' | 'reviews'
+export type ConnectionCategory = 'social' | 'google' | 'reviews' | 'pos'
 
 export type ConnectionStatus = 'connected' | 'expired' | 'error' | 'pending' | 'setting_up'
 
@@ -74,6 +74,16 @@ const PLATFORM_META: Record<string, {
     label: 'Google Business Profile',
     category: 'google',
     reconnectPath: '/api/auth/google-business',
+  },
+  square: {
+    label: 'Square',
+    category: 'pos',
+    reconnectPath: '/api/channels/square/start',
+  },
+  clover: {
+    label: 'Clover',
+    category: 'pos',
+    reconnectPath: '/api/channels/clover/start',
   },
   yelp: {
     label: 'Yelp',
@@ -372,6 +382,31 @@ export async function syncConnection(
     const r = await syncSearchConsoleForClient(clientId, 7)
     if (r.error) return { success: false, error: r.error }
     return { success: true, locationsDiscovered: 0, metricsImported: r.daysWritten, reviewsImported: 0, errors: [] }
+  }
+
+  /* POS (Square/Clover): manual sync pulls the last 7 days of daily sales through the
+   * channel adapter into pos_daily_sales. Same 60s cooldown as the Google lanes. */
+  if (source === 'channel_connections' && (channelOrPlatform === 'square' || channelOrPlatform === 'clover')) {
+    const lastSync = row.last_sync_at ? new Date(row.last_sync_at).getTime() : 0
+    if (Date.now() - lastSync < 60_000) {
+      const secsLeft = Math.ceil((60_000 - (Date.now() - lastSync)) / 1000)
+      return { success: false, error: `Try again in ${secsLeft}s — last sync was just a moment ago.` }
+    }
+    const { adapterFor } = await import('@/lib/channels/registry')
+    const adapter = adapterFor(channelOrPlatform)
+    if (!adapter) return { success: false, error: 'Sync not supported for this connection yet' }
+    try {
+      const r = await adapter.sync(existing as import('@/lib/channels/types').ChannelConnection)
+      await admin
+        .from('channel_connections')
+        .update({ last_sync_at: new Date().toISOString(), sync_error: null })
+        .eq('id', connectionId)
+      return { success: true, locationsDiscovered: 0, metricsImported: r.itemsWritten, reviewsImported: 0, errors: [] }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Sync failed'
+      await admin.from('channel_connections').update({ sync_error: msg }).eq('id', connectionId)
+      return { success: false, error: msg }
+    }
   }
 
   return { success: false, error: 'Sync not supported for this connection yet' }

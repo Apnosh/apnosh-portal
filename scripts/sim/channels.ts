@@ -12,6 +12,7 @@ import { ALERT_THRESHOLD, buildAlertCopy, nextFailureState } from '../../src/lib
 import { ChannelError, countsAsFailure, type ChannelErrorCode } from '../../src/lib/channels/types'
 import { dayKey, normalizeSource } from '../../src/lib/channels/adapters/statements'
 import { signState, verifyState } from '../../src/lib/channels/oauth-state'
+import { aggregateDaily, dayOfMs, windowStartMs } from '../../src/lib/channels/daily'
 
 const s = new Suite()
 
@@ -87,6 +88,33 @@ s.group('Owner alert copy: the house lint')
     s.check(`${id}: no em or en dash, has link, plain words`, !/[—–]/.test(copy.title + copy.body) && copy.link.startsWith('/dashboard'))
   }
   s.check('alert names the channel', buildAlertCopy('yelp').title.includes('Yelp'))
+}
+
+s.group('Daily aggregation: the POS fold (P4b)')
+{
+  const NOON = Date.UTC(2026, 7, 5, 12, 0, 0) // 2026-08-05T12:00Z
+  const LATE = Date.UTC(2026, 7, 5, 23, 59, 59)
+  const NEXT = Date.UTC(2026, 7, 6, 0, 0, 1) // one second into the next UTC day
+  const days = aggregateDaily([
+    { atMs: NOON, cents: 1250 },
+    { atMs: LATE, cents: 800 },
+    { atMs: NEXT, cents: 500 },
+  ])
+  s.check('payments bucket by UTC day', days.length === 2 && days[0].day === '2026-08-05' && days[1].day === '2026-08-06')
+  s.check('gross sums within a day', days[0].gross_cents === 2050 && days[1].gross_cents === 500)
+  s.check('orders count payments, not dollars', days[0].orders === 2 && days[1].orders === 1)
+  s.check('days come back sorted ascending', days.every((d, i) => i === 0 || days[i - 1].day < d.day))
+
+  const refunded = aggregateDaily([{ atMs: NOON, cents: 1000 }, { atMs: NOON, cents: -1000 }])
+  s.check('a refund nets against the day, both count as orders', refunded[0].gross_cents === 0 && refunded[0].orders === 2)
+
+  const dirty = aggregateDaily([{ atMs: NaN, cents: 100 }, { atMs: NOON, cents: NaN }, { atMs: NOON, cents: 300 }])
+  s.check('garbage rows are skipped, never a crash', dirty.length === 1 && dirty[0].gross_cents === 300 && dirty[0].orders === 1)
+
+  s.check('empty input is an empty fold, not an error', aggregateDaily([]).length === 0)
+  s.check('the fold is deterministic (same input, same output)', JSON.stringify(aggregateDaily([{ atMs: NOON, cents: 7 }])) === JSON.stringify(aggregateDaily([{ atMs: NOON, cents: 7 }])))
+
+  s.check('the sync window is seven days', dayOfMs(windowStartMs(NOON)) === '2026-07-29')
 }
 
 const ok = s.report('Channels layer (P1 spine)')

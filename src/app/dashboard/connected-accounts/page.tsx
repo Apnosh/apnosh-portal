@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   Camera, Globe, Tv, Briefcase, BarChart3, Search, MapPin, Star,
-  Link as LinkIcon, RefreshCw, ExternalLink, Loader2, Plus, X,
+  CreditCard, Store, Link as LinkIcon, RefreshCw, ExternalLink, Loader2, Plus, X,
   CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
@@ -23,7 +23,7 @@ const AMBER = '#bd7e16'
 const AMBER_DK = '#8a5a0c'
 const BLUE = '#3a6ea5'
 
-type Cat = 'social' | 'google' | 'reviews'
+type Cat = 'social' | 'google' | 'reviews' | 'pos'
 interface CatalogItem { id: string; label: string; authPath: string; category: Cat; Icon: typeof Camera; description: string }
 
 const CATALOG: CatalogItem[] = [
@@ -35,12 +35,14 @@ const CATALOG: CatalogItem[] = [
   { id: 'google_search_console', label: 'Google Search Console', authPath: '/api/auth/google-search-console', category: 'google', Icon: Search, description: 'What people search to find you' },
   { id: 'google_business_profile', label: 'Google Business Profile', authPath: '/api/auth/google-business', category: 'google', Icon: MapPin, description: 'Calls, directions, search views' },
   { id: 'yelp', label: 'Yelp', authPath: '/dashboard/connected-accounts/yelp', category: 'reviews', Icon: Star, description: 'Your Yelp rating and reviews' },
+  { id: 'square', label: 'Square', authPath: '/api/channels/square/start', category: 'pos', Icon: CreditCard, description: 'Daily sales from your register' },
+  { id: 'clover', label: 'Clover', authPath: '/api/channels/clover/start', category: 'pos', Icon: Store, description: 'Daily sales from your register' },
 ]
-const CAT_LABEL: Record<Cat, string> = { social: 'Social media', google: 'Google', reviews: 'Reviews' }
-const CAT_ORDER: Cat[] = ['social', 'google', 'reviews']
+const CAT_LABEL: Record<Cat, string> = { social: 'Social media', google: 'Google', reviews: 'Reviews', pos: 'Point of sale' }
+const CAT_ORDER: Cat[] = ['pos', 'social', 'google', 'reviews']
 const iconFor = (id: string) => CATALOG.find(c => c.id === id)?.Icon ?? LinkIcon
 
-const canSync = (c: UnifiedConnection) => c.source === 'channel_connections' && ['google_business_profile', 'google_analytics', 'google_search_console'].includes(c.platform)
+const canSync = (c: UnifiedConnection) => c.source === 'channel_connections' && ['google_business_profile', 'google_analytics', 'google_search_console', 'square', 'clover'].includes(c.platform)
 const needsAttention = (s: UnifiedConnection['status']) => s === 'expired' || s === 'error'
 
 function dotColor(s: UnifiedConnection['status']): string {
@@ -77,7 +79,19 @@ export default function ConnectedAccountsPage() {
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
-    if (p.get('connected')) setBanner({ ok: true, text: 'Connected.' })
+    const NAME: Record<string, string> = { square: 'Square', clover: 'Clover' }
+    const connected = p.get('connected')
+    const connectError = p.get('connect_error')
+    if (connected && NAME[connected]) setBanner({ ok: true, text: `${NAME[connected]} connected. Your sales will show up shortly.` })
+    else if (connected) setBanner({ ok: true, text: 'Connected.' })
+    else if (connectError) {
+      const reason = p.get('reason')
+      const who = NAME[connectError] ?? 'That account'
+      const text = reason === 'bad_state' ? `That connect link expired. Tap ${who} and try again.`
+        : reason === 'denied' ? `${who} was not connected. You can try again any time.`
+        : `Could not connect ${who}. Try again in a moment.`
+      setBanner({ ok: false, text })
+    }
     else if (p.get('error')) setBanner({ ok: false, text: p.get('error') || 'Could not connect. Try again.' })
   }, [])
 
