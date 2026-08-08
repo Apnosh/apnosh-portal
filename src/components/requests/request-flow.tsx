@@ -75,6 +75,14 @@ export default function RequestFlow() {
   }, [])
   useEffect(() => { loadMine() }, [loadMine])
 
+  /* Deep link: a Creatives-shelf card arrives as /dashboard/requests?type=<id> and lands
+   * straight on that type's questions. An unknown type falls back to the hub, calmly. */
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get('type')
+    const t = wanted ? requestTypeById(wanted) : null
+    if (t) { setType(t); setAnswers({}); setView('form') }
+  }, [])
+
   const start = (t: RequestType) => { setType(t); setAnswers({}); setError(null); setView('form') }
   const setA = (id: string, val: string) => setAnswers((a) => ({ ...a, [id]: val }))
 

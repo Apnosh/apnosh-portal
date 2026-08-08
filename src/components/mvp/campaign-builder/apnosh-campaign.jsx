@@ -10,6 +10,7 @@ import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-tu
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { contentFor } from "@/lib/campaigns/data/content-overrides";
 import { isBuyable, isHidden, comingSoonReason } from "@/lib/campaigns/data/catalog-availability";
+import { REQUEST_TYPES } from "@/lib/requests/catalog";
 import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, unbundleFor } from "@/lib/campaigns/data/live-alternatives";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
 import { whyFor } from "@/lib/campaigns/data/why-for";
@@ -2129,6 +2130,17 @@ const CATALOG = [
   { id: "graphic", type: "content", icon: "image", title: "A social media post", sub: "A designed post: graphic, carousel, or photo", cad: "once" },
   { id: "design", type: "task", icon: "graphic", title: "Get a graphic made", sub: "Flyers, posts, banners, gift cards: designed on your brand", cad: "once" },
   { id: "creative", type: "task", icon: "graphic", title: "Request creative work", sub: "Menus, logos, websites, videos, photos, ads: ask, we quote it", cad: "once", hot: true },
+  // The Creatives shelf: one card per request type, generated straight from the request
+  // catalog (src/lib/requests/catalog.ts) so titles and blurbs live in ONE place. Tapping
+  // one deep-links into that type's questions on the Request Desk (openCard below).
+  ...REQUEST_TYPES.map((t) => ({
+    id: `creative-${t.id}`,
+    type: "task",
+    icon: { graphic: "image", menu: "tag", logo: "bolt", website: "store", video: "video", photos: "camera", social: "heart", email: "mail", ads: "funnel", print: "ticket", copy: "chat", other: "gift" }[t.id] || "tag",
+    title: t.label,
+    sub: t.blurb,
+    cad: "once",
+  })),
   { id: "dish", type: "content", icon: "image", title: "Feature a dish", sub: "Show off one of your best plates", cad: "once", hot: true },
   { id: "edit", type: "content", icon: "video", title: "Edit my footage", sub: "Send us your clips and photos, we cut and polish them", cad: "once" },
   { id: "gpost", type: "content", icon: "store", title: "A Google Business post", sub: "An update on your listing, seen in Search and Maps", cad: "once" },
@@ -2303,7 +2315,10 @@ const ROWS = [
   // multi-month programs live on their own "Full campaigns" shelf below, so a $70
   // fix never sits next to an $8k system (the audit's price-cliff finding).
   { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "website", "localseo", "creator", "gpost"] },
-  { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["creative", "design", "reel", "dish", "story", "graphic", "shoot", "reviewsplan", "reviewsreply"] },
+  { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["design", "reel", "dish", "story", "graphic", "shoot", "reviewsplan", "reviewsreply"] },
+  // Every creative request type as its own card, straight from the request catalog.
+  // Sending a request is free; the team answers with a plan and a price.
+  { id: "creatives", title: "Creatives", note: "Ask for anything made. We answer with a plan and a price", ids: REQUEST_TYPES.map((t) => `creative-${t.id}`) },
   { id: "actions", title: "Make it easy to order", note: "Working buttons, right info, easy ways to act", ids: ["friction", "direct", "website", "gbp"] },
   { id: "orders", title: "Fill your seats", note: "Events, deals, and pushes that ring the register", ids: ["promoevent", "launch", "ticket", "catering", "giftcard", "slowoffer"] },
   { id: "back", title: "Bring guests back", note: "Turn one visit into two, three, ten", ids: ["welcome", "news", "birthday", "earlyaccess", "winback", "direct"] },
@@ -2311,7 +2326,7 @@ const ROWS = [
   { id: "programs", title: "Full campaigns", note: "We plan it, make it, and run it for you, month after month", ids: ["firstvisit", "nights", "regulars", "reach"] },
   // Production-only shelf: shoots, edits, and single pieces bought as GOODS, not
   // campaigns — no outcome promise, no tracking, the deliverable is the product.
-  { id: "content", title: "Just need content", note: "Shoots, edits, and pieces. No campaign, just the goods", ids: ["creative", "design", "shoot", "edit", "reel", "story", "graphic", "dish", "gpost"] },
+  { id: "content", title: "Just need content", note: "Shoots, edits, and pieces. No campaign, just the goods", ids: ["design", "shoot", "edit", "reel", "story", "graphic", "dish", "gpost"] },
 ];
 
 // DB campaigns appear on their chosen shelf AFTER the code-authored cards (never
@@ -5513,6 +5528,8 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     // The Request Desk is its own surface (ask for anything, we quote it). Same allowlist
     // gate: pull "creative" from FULLY_BUILT_LIVE and taps fall back to the honest PDP.
     if (id === "creative" && buyableId("creative")) { window.location.assign("/dashboard/requests"); return; }
+    // A Creatives-shelf card deep-links straight into that type's questions on the desk.
+    if (id.startsWith("creative-") && buyableId(id)) { window.location.assign(`/dashboard/requests?type=${id.slice("creative-".length)}`); return; }
     if (catGet(id)) setRoute({ name: "pdp", itemId: id, from, rowId });
     else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };

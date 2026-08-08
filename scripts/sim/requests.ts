@@ -16,6 +16,7 @@ import {
   REQUEST_TYPES, SHARED_QUESTIONS, questionsFor, requestTypeById, validateRequestPayload,
   summaryLine, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE,
 } from '@/lib/requests/catalog'
+import { FULLY_BUILT_LIVE } from '@/lib/campaigns/data/catalog-availability'
 
 config({ path: '.env.local' })
 
@@ -45,6 +46,13 @@ s.group('Catalog: closed, complete, honest')
   s.check('the timing question is required everywhere', SHARED_QUESTIONS.find((q) => q.id === 'when')?.optional !== true)
   s.check('the notes question is optional everywhere', SHARED_QUESTIONS.find((q) => q.id === 'notes')?.optional === true)
   s.check('unknown ids resolve to null, never crash', requestTypeById('carrier-pigeon') === null)
+}
+
+s.group('Store shelf sync: every type is a live card, every card is a type')
+{
+  const cardIds = FULLY_BUILT_LIVE.filter((id) => id.startsWith('creative-'))
+  s.check('every request type has a live creative-* card', REQUEST_TYPES.every((t) => cardIds.includes(`creative-${t.id}`)))
+  s.check('every creative-* card maps back to a real type', cardIds.every((id) => requestTypeById(id.slice('creative-'.length)) !== null))
 }
 
 s.group('Copy lint: no dashes, plain words')
