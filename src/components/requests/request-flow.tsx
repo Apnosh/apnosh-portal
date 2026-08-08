@@ -29,6 +29,7 @@ import {
   REQUEST_TYPES, questionsFor, STATUS_LABEL, STATUS_OWNER_LINE, requestTypeById,
   type RequestType, type RequestTypeId, type RequestAnswers, type RequestStatus, type RequestQuestion,
 } from '@/lib/requests/catalog'
+import RequestBoard from '@/components/requests/request-boards'
 
 const TYPE_ICONS: Record<RequestTypeId, LucideIcon> = {
   graphic: Palette, menu: BookOpen, logo: Sparkles, website: Globe, video: Clapperboard,
@@ -183,13 +184,17 @@ export default function RequestFlow() {
           </span>
         </div>
 
+        {/* THE BOARD: the thing being ordered, pinned to the desk, visibly becoming
+            every answer — each type gets its own custom live display. */}
+        <RequestBoard typeId={type.id} answers={answers} />
+
         {!onReview && q ? (
           /* ── one question, big and alone ── */
           <div key={q.id} className="dk-ink">
-            <div style={{ ...label, margin: '18px 2px 6px' }}>
+            <div style={{ ...label, margin: '10px 2px 6px' }}>
               Question {step + 1} of {qs.length}{q.optional ? '  ·  optional' : ''}
             </div>
-            <h1 style={{ fontFamily: DESK.disp, fontSize: 23, color: DESK.ink, margin: '0 0 18px', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+            <h1 style={{ fontFamily: DESK.disp, fontSize: 21, color: DESK.ink, margin: '0 0 14px', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
               {q.prompt}
             </h1>
 
@@ -252,15 +257,12 @@ export default function RequestFlow() {
               </>
             )}
 
-            <div style={{ marginTop: 26 }}>
-              <PlanSheet title="The brief" lines={briefLines(false)} />
-            </div>
           </div>
         ) : (
-          /* ── review: the finished brief, the $0 receipt, the seal ── */
+          /* ── review: the finished board, the written brief, the $0 receipt, the seal ── */
           <div className="dk-ink">
-            <div style={{ ...label, margin: '18px 2px 6px' }}>Read it back</div>
-            <h1 style={{ fontFamily: DESK.disp, fontSize: 23, color: DESK.ink, margin: '0 0 18px', letterSpacing: '-0.01em' }}>
+            <div style={{ ...label, margin: '10px 2px 6px' }}>Read it back</div>
+            <h1 style={{ fontFamily: DESK.disp, fontSize: 21, color: DESK.ink, margin: '0 0 14px', letterSpacing: '-0.01em' }}>
               Your brief, ready to send.
             </h1>
             <PlanSheet title="The brief" lines={briefLines(true)} />
