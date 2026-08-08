@@ -2319,6 +2319,10 @@ const ROWS = [
   // Every creative request type as its own card, straight from the request catalog.
   // Sending a request is free; the team answers with a plan and a price.
   { id: "creatives", title: "Creatives", note: "Ask for anything made. We answer with a plan and a price", ids: REQUEST_TYPES.map((t) => `creative-${t.id}`) },
+  // Real local creators, one card per published package (fed by /api/dashboard/creator-cards
+  // from bookable vendors' active listings). The row hides itself while there is no supply,
+  // so the store never shows an empty promise (PlanBrowse filters it out when empty).
+  { id: "creators", title: "Creators", note: "Book a real local creator directly, at their own rate", ids: [], creatorRow: true },
   { id: "actions", title: "Make it easy to order", note: "Working buttons, right info, easy ways to act", ids: ["friction", "direct", "website", "gbp"] },
   { id: "orders", title: "Fill your seats", note: "Events, deals, and pushes that ring the register", ids: ["promoevent", "launch", "ticket", "catering", "giftcard", "slowoffer"] },
   { id: "back", title: "Bring guests back", note: "Turn one visit into two, three, ten", ids: ["welcome", "news", "birthday", "earlyaccess", "winback", "direct"] },
@@ -3182,13 +3186,13 @@ function CategoryRow({ row, onOpen, onSeeAll, creatorCards = [], onOpenCreator }
       </button>
       <div className="apnosh-row" style={{ display: "flex", gap: 12, overflowX: "auto", padding: "2px 20px", scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
         {items.map((p) => big ? <PlanCardBig key={p.id} p={p} onOpen={onOpen} /> : <PlanCardV key={p.id} p={p} onOpen={onOpen} />)}
-        {(row.id === "content" ? creatorCards : []).map((c) => <CreatorStoreCard key={c.id} c={c} onOpen={onOpenCreator} />)}
-        <button onClick={() => onSeeAll(row.id)} style={{ flexShrink: 0, width: big ? 110 : 92, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
+        {(row.creatorRow ? creatorCards : []).map((c) => <CreatorStoreCard key={c.id} c={c} onOpen={onOpenCreator} />)}
+        {!row.creatorRow && <button onClick={() => onSeeAll(row.id)} style={{ flexShrink: 0, width: big ? 110 : 92, background: "none", border: "none", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, WebkitTapHighlightColor: "transparent" }}>
           <div style={{ width: 46, height: 46, borderRadius: 23, background: "#fff", border: `1px solid ${DESKJ.line}`, boxShadow: "0 2px 6px rgba(22,33,28,0.06)", display: "flex", alignItems: "center", justifyContent: "center" }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.ink} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
           </div>
           <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12, fontWeight: 600, color: TOKENS.ink }}>View all</span>
-        </button>
+        </button>}
       </div>
     </div>
   );
@@ -3260,9 +3264,20 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, onScratch, recommended, recs
   // nothing buyable stops pretending to be a shopping aisle (13 dark cards across two
   // shelves was the sim's walk-away for the highest-budget owners).
   const { liveRows, soonIds } = collapseDarkShelves(allRows, { buyable: buyableId, hidden: hiddenId });
+  // The creators row carries LIVE vendor cards, not catalog ids, so the dark-shelf collapse
+  // (which keys on ids) drops it. Re-insert it after Creatives; PlanBrowse still hides it
+  // whenever creatorCards is empty, so the no-supply honesty holds.
+  const creatorRowDef = allRows.find((r) => r.creatorRow);
+  const shelfRows = (() => {
+    if (!creatorRowDef) return liveRows;
+    const out = [...liveRows];
+    const at = out.findIndex((r) => r.id === "creatives");
+    out.splice(at >= 0 ? at + 1 : out.length, 0, creatorRowDef);
+    return out;
+  })();
   const rows = soonIds.length
-    ? [...liveRows, { id: "__soon", title: "Coming soon", note: "We only sell what really works today. These are on the way", ids: soonIds }]
-    : liveRows;
+    ? [...shelfRows, { id: "__soon", title: "Coming soon", note: "We only sell what really works today. These are on the way", ids: soonIds }]
+    : shelfRows;
   return (
     <div style={{ paddingBottom: 26, background: DESKJ.paper, backgroundImage: "radial-gradient(rgba(22,33,28,0.028) 1px, transparent 1px)", backgroundSize: "22px 22px" }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
@@ -3321,8 +3336,9 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, onScratch, recommended, recs
                   I do". The recommendations are not lost: they still drive the "Suggested for you"
                   shelf below, where a pick belongs, next to its alternatives. */}
               <ScratchHero onScratch={onScratch} />
-              <CreatorSpotlight items={creatorCards} onOpen={onOpenCreator} />
-              {rows.map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} creatorCards={creatorCards} onOpenCreator={onOpenCreator} />)}
+              {/* Creators live on their own named shelf now (the "creators" row below), which
+                  hides itself while there is no published supply — same honesty as before. */}
+              {rows.filter((row) => !(row.creatorRow && creatorCards.length === 0)).map((row) => <CategoryRow key={row.id} row={row} onOpen={onOpen} onSeeAll={onSeeAll} creatorCards={creatorCards} onOpenCreator={onOpenCreator} />)}
             </>
           ) : (() => {
             const row = rowWithDb(ROWS.find((r) => r.id === lens));
