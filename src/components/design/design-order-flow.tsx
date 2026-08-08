@@ -390,6 +390,28 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     }
   }
 
+  /* The owner's picked photos must actually travel with the request. Uploaded files
+   * only exist as local blob: URLs until now — push those bytes through the asset
+   * rail; library photos already have real URLs and pass straight through. Best-
+   * effort per file: one bad photo must not sink the request. */
+  const attachmentsForRequest = async (): Promise<{ url: string; name: string; path?: string }[]> => {
+    if (!usingOwn) return []
+    const out: { url: string; name: string; path?: string }[] = []
+    for (const a of allAssets.filter((x) => picked.includes(x.id)).slice(0, 10)) {
+      const name = a.label || 'photo'
+      if (!a.url.startsWith('blob:')) { out.push({ url: a.url, name }); continue }
+      try {
+        const blob = await fetch(a.url).then((r) => r.blob())
+        const fd = new FormData()
+        fd.append('file', new File([blob], name, { type: blob.type || 'image/jpeg' }))
+        const r = await fetch('/api/dashboard/upload-asset', { method: 'POST', body: fd })
+        const j = (await r.json().catch(() => ({}))) as { url?: string; path?: string }
+        if (r.ok && j.url) out.push({ url: j.url, name, path: j.path })
+      } catch { /* skip this file, keep the rest */ }
+    }
+    return out
+  }
+
   /* Request mode's seal: the finished brief goes to the Request Desk rail as a graphic
    * request. The mapping reuses the desk's validated vocabulary: destinations are the
    * same DESTINATIONS labels, timing folds into the four honest buckets. */
@@ -397,6 +419,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     if (sending) return
     setSending(true)
     setSendError(null)
+    const attachments = await attachmentsForRequest()
     const days = due ? Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86400000) : null
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
     const noteBits = [
@@ -420,6 +443,8 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             when,
             notes: noteBits || undefined,
           },
+          ...(due ? { due_date: due } : {}),
+          ...(attachments.length ? { attachments } : {}),
         }),
       })
       const j = (await r.json().catch(() => ({}))) as { error?: string }

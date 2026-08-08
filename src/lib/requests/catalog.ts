@@ -276,3 +276,53 @@ export const STATUS_OWNER_LINE: Record<RequestStatus, string> = {
   closed: 'All wrapped up.',
   declined: 'We could not take this one on. We said why in a note.',
 }
+
+/* ── v2: files, real dates, and the bridge (pure, sim-locked) ─────────────────── */
+
+/** A file the owner hands us with the request. url is the stored public URL. */
+export interface RequestAttachment {
+  url: string
+  name: string
+  path?: string
+}
+
+const MAX_ATTACHMENTS = 10
+
+/** Server-side gate for the attachments array: keeps only well-formed http(s)
+ *  entries, trims names, caps the count. Garbage in the array is dropped, not
+ *  fatal — a bad extra file must never sink the whole request. */
+export function validateAttachments(raw: unknown): RequestAttachment[] {
+  if (!Array.isArray(raw)) return []
+  const out: RequestAttachment[] = []
+  for (const item of raw) {
+    if (out.length >= MAX_ATTACHMENTS) break
+    if (typeof item !== 'object' || item === null) continue
+    const o = item as Record<string, unknown>
+    const url = typeof o.url === 'string' ? o.url.trim() : ''
+    if (!/^https?:\/\//.test(url) || url.length > 600) continue
+    const name = (typeof o.name === 'string' ? o.name.trim() : '').slice(0, 120) || 'file'
+    const path = typeof o.path === 'string' ? o.path.slice(0, 300) : undefined
+    out.push(path ? { url, name, path } : { url, name })
+  }
+  return out
+}
+
+/** Server-side gate for the owner's picked date: YYYY-MM-DD, not in the past,
+ *  within two years. Anything else is null (the request still lands). */
+export function validateDueDate(raw: unknown, todayISO: string): string | null {
+  if (typeof raw !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(raw)) return null
+  const d = new Date(`${raw}T00:00:00Z`)
+  if (isNaN(d.getTime())) return null
+  const today = new Date(`${todayISO}T00:00:00Z`)
+  const horizon = new Date(today)
+  horizon.setUTCFullYear(horizon.getUTCFullYear() + 2)
+  if (d < today || d > horizon) return null
+  return raw
+}
+
+/** Which craft a request maps to when it becomes a work order on accept. */
+export function disciplineForRequestType(typeId: string): string {
+  if (typeId === 'photos') return 'Photo'
+  if (typeId === 'video') return 'Video'
+  return 'Design'
+}

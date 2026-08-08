@@ -15,6 +15,7 @@ import { Suite } from './lib'
 import {
   REQUEST_TYPES, SHARED_QUESTIONS, questionsFor, requestTypeById, validateRequestPayload,
   summaryLine, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE,
+  validateAttachments, validateDueDate, disciplineForRequestType,
 } from '@/lib/requests/catalog'
 import { FULLY_BUILT_LIVE } from '@/lib/campaigns/data/catalog-availability'
 import { CREATIVE_FLOWS, flowFor, bucketForDate } from '@/lib/requests/flows'
@@ -105,6 +106,39 @@ s.group('Store shelf sync: every type is a live card, every card is a type')
   const cardIds = FULLY_BUILT_LIVE.filter((id) => id.startsWith('creative-'))
   s.check('every request type has a live creative-* card', REQUEST_TYPES.every((t) => cardIds.includes(`creative-${t.id}`)))
   s.check('every creative-* card maps back to a real type', cardIds.every((id) => requestTypeById(id.slice('creative-'.length)) !== null))
+}
+
+s.group('v2 gates: files, real dates, the bridge map')
+{
+  const good = { url: 'https://x.supabase.co/storage/v1/object/public/client-graphics/a.jpg', name: 'menu.jpg' }
+  s.check('a clean attachment passes through intact', (() => {
+    const out = validateAttachments([good])
+    return out.length === 1 && out[0].url === good.url && out[0].name === 'menu.jpg'
+  })())
+  s.check('garbage entries drop without sinking the rest', (() => {
+    const out = validateAttachments([{ url: 'javascript:alert(1)', name: 'x' }, 42, null, good, { name: 'no-url' }])
+    return out.length === 1 && out[0].url === good.url
+  })())
+  s.check('the count caps at ten', validateAttachments(Array.from({ length: 15 }, () => ({ ...good }))).length === 10)
+  s.check('a long name trims, an empty name becomes "file"', (() => {
+    const out = validateAttachments([{ url: good.url, name: 'x'.repeat(300) }, { url: good.url, name: '   ' }])
+    return out[0].name.length === 120 && out[1].name === 'file'
+  })())
+  s.check('non-arrays validate to empty, never crash', validateAttachments('nope').length === 0 && validateAttachments(null).length === 0)
+
+  const today = '2026-08-08'
+  s.check('a real future date passes', validateDueDate('2026-08-31', today) === '2026-08-31')
+  s.check('today itself passes (due today is real)', validateDueDate(today, today) === today)
+  s.check('the past refuses', validateDueDate('2026-08-07', today) === null)
+  s.check('beyond two years refuses', validateDueDate('2029-01-01', today) === null)
+  s.check('garbage refuses quietly', validateDueDate('soon', today) === null && validateDueDate(20260831, today) === null && validateDueDate('not-a-date!', today) === null)
+
+  s.check('shoots map to Photo/Video, everything else to Design', (() =>
+    disciplineForRequestType('photos') === 'Photo' &&
+    disciplineForRequestType('video') === 'Video' &&
+    REQUEST_TYPES.filter((t) => !['photos', 'video'].includes(t.id))
+      .every((t) => disciplineForRequestType(t.id) === 'Design')
+  )())
 }
 
 s.group('Copy lint: no dashes, plain words')

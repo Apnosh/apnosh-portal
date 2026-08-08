@@ -38,6 +38,8 @@ const ALLOWED_TYPES = new Set([
   'image/avif',
   'image/heic',
   'image/heif',
+  // PDFs ride the same rail for creative-request handoffs (menus, print artwork)
+  'application/pdf',
 ])
 
 function extFromMime(mime: string): string {
@@ -49,6 +51,7 @@ function extFromMime(mime: string): string {
   if (mime === 'image/avif') return 'avif'
   if (mime === 'image/heic') return 'heic'
   if (mime === 'image/heif') return 'heif'
+  if (mime === 'application/pdf') return 'pdf'
   return 'bin'
 }
 

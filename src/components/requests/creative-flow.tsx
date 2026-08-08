@@ -90,6 +90,8 @@ export default function CreativeFlow({ typeId, onBack }: { typeId: string; onBac
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
   const [submitted, setSubmitted] = useState(false)
+  const [files, setFiles] = useState<{ url: string; name: string; path?: string }[]>([])
+  const [uploading, setUploading] = useState(false)
 
   if (!type || !flow) return null
   const today = new Date().toISOString().slice(0, 10)
@@ -109,6 +111,27 @@ export default function CreativeFlow({ typeId, onBack }: { typeId: string; onBac
     ? current.requires.every((qid) => (qid === 'when' ? dueISO != null : (answers[qid] ?? '').trim().length > 0))
     : true
 
+  /* Files land in storage the moment they are picked, so send() only ships URLs. */
+  const addFiles = async (list: FileList | null) => {
+    if (!list || !list.length || uploading) return
+    setUploading(true)
+    setSendError(null)
+    for (const f of Array.from(list).slice(0, 10 - files.length)) {
+      try {
+        const fd = new FormData()
+        fd.append('file', f)
+        const r = await fetch('/api/dashboard/upload-asset', { method: 'POST', body: fd })
+        const j = (await r.json().catch(() => ({}))) as { url?: string; path?: string; error?: string }
+        if (!r.ok || !j.url) throw new Error(typeof j.error === 'string' ? j.error : 'Upload failed')
+        setFiles((prev) => [...prev, { url: j.url!, name: f.name, path: j.path }])
+      } catch (e) {
+        setSendError(e instanceof Error ? `${f.name}: ${e.message}` : 'Upload failed. Try again.')
+        break
+      }
+    }
+    setUploading(false)
+  }
+
   const send = async () => {
     if (sending) return
     setSending(true)
@@ -121,6 +144,8 @@ export default function CreativeFlow({ typeId, onBack }: { typeId: string; onBac
         body: JSON.stringify({
           type: type.id,
           answers: { ...answers, when: bucketForDate(dueISO, today), ...(composedNotes ? { notes: composedNotes } : {}) },
+          ...(dueISO ? { due_date: dueISO } : {}),
+          ...(files.length ? { attachments: files } : {}),
         }),
       })
       const j = (await r.json().catch(() => ({}))) as { error?: string }
@@ -276,6 +301,42 @@ export default function CreativeFlow({ typeId, onBack }: { typeId: string; onBac
               placeholder="Anything else we should know? Links, examples, things to avoid"
               style={{ ...inputStyle, resize: 'none', lineHeight: 1.5, fontSize: 13.5 }}
             />
+          </div>
+          {/* the hand-off: menus, logos, examples — files most jobs cannot start without */}
+          <div style={{ margin: '0 0 12px' }}>
+            <label style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+              border: `1.5px dashed ${DESK.line}`, borderRadius: 12, padding: '11px 12px',
+              fontFamily: DESK.body, fontSize: 13, color: uploading ? DESK.mute : DESK.ink2,
+              cursor: uploading ? 'default' : 'pointer', background: DESK.card,
+            }}>
+              <input
+                type="file" multiple accept="image/*,application/pdf" disabled={uploading || files.length >= 10}
+                onChange={(e) => { void addFiles(e.target.files); e.target.value = '' }}
+                style={{ display: 'none' }}
+              />
+              {uploading ? 'Uploading...' : 'Hand us files — your menu, logo, photos, examples'}
+            </label>
+            {files.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                {files.map((f, i) => (
+                  <span key={`${f.url}-${i}`} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%',
+                    background: DESK.mintWash, border: `1px solid ${DESK.mintLine}`, borderRadius: 999,
+                    padding: '5px 10px', fontFamily: DESK.body, fontSize: 12, color: DESK.mintDeep,
+                  }}>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{f.name}</span>
+                    <button
+                      type="button" aria-label={`Remove ${f.name}`}
+                      onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                      style={{ border: 'none', background: 'none', color: DESK.mintDeep, cursor: 'pointer', padding: 0, fontSize: 13, lineHeight: 1 }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <ReceiptFrame>
             <ReceiptRow label="What this costs to send" amount="$0" />
