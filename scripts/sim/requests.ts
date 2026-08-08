@@ -17,6 +17,7 @@ import {
   summaryLine, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE,
 } from '@/lib/requests/catalog'
 import { FULLY_BUILT_LIVE } from '@/lib/campaigns/data/catalog-availability'
+import { CREATIVE_FLOWS, flowFor, bucketForDate } from '@/lib/requests/flows'
 
 config({ path: '.env.local' })
 
@@ -46,6 +47,57 @@ s.group('Catalog: closed, complete, honest')
   s.check('the timing question is required everywhere', SHARED_QUESTIONS.find((q) => q.id === 'when')?.optional !== true)
   s.check('the notes question is optional everywhere', SHARED_QUESTIONS.find((q) => q.id === 'notes')?.optional === true)
   s.check('unknown ids resolve to null, never crash', requestTypeById('carrier-pigeon') === null)
+}
+
+s.group('Creative flows: every type has its own Drafting Table, locked to the catalog')
+{
+  const nonGraphic = REQUEST_TYPES.filter((t) => t.id !== 'graphic')
+  s.check('every non-graphic type has its own flow', nonGraphic.every((t) => flowFor(t.id) !== null))
+  s.check('the graphic has NO generic flow (it is the original builder)', flowFor('graphic') === null)
+  s.check('no flow exists for a type that does not exist', CREATIVE_FLOWS.every((f) => requestTypeById(f.typeId) !== null))
+
+  let qidsValid = true, optionsValid = true, multiValid = true, calendarLast = true, requiresValid = true, sentencesClean = true
+  for (const f of CREATIVE_FLOWS) {
+    const type = requestTypeById(f.typeId)!
+    const qs = new Map(questionsFor(type).map((q) => [q.id, q]))
+    const controlQids: string[] = []
+    for (const step of f.steps) {
+      for (const c of step.controls) {
+        if (c.kind === 'calendar') { controlQids.push('when'); continue }
+        controlQids.push(c.qid)
+        const q = qs.get(c.qid)
+        if (!q) { qidsValid = false; continue }
+        if (c.kind === 'tickets') {
+          const opts = q.options ?? []
+          if (!c.options.every((o) => opts.includes(o.value))) optionsValid = false
+          if (Boolean(c.multi) !== Boolean(q.multi)) multiValid = false
+        }
+      }
+      if (!step.requires.every((qid) => qid === 'when' || controlQids.includes(qid))) requiresValid = false
+    }
+    const last = f.steps[f.steps.length - 1]
+    if (!last.controls.some((c) => c.kind === 'calendar')) calendarLast = false
+    const filled: Record<string, string> = {}
+    for (const q of questionsFor(type)) if (q.kind === 'choice') filled[q.id] = (q.options ?? [])[0] ?? ''
+    for (const q of questionsFor(type)) if (q.kind !== 'choice') filled[q.id] = 'sample words'
+    const sentence = f.sentence(filled, 'August 20')
+    if (!sentence || /[—–]/.test(sentence)) sentencesClean = false
+  }
+  s.check('every control writes into a real catalog question', qidsValid)
+  s.check('every ticket option is a real catalog option', optionsValid)
+  s.check('multi flags match the catalog exactly', multiValid)
+  s.check('every flow ends on the calendar (a real date, not buckets)', calendarLast)
+  s.check('every requires gate is a control on that flow', requiresValid)
+  s.check('review sentences build clean (no dashes, never empty)', sentencesClean)
+
+  s.check('the calendar folds into the honest buckets', (() => {
+    const t = '2026-08-08'
+    return bucketForDate('2026-08-12', t) === 'This week'
+      && bucketForDate('2026-08-20', t) === 'In 2 weeks'
+      && bucketForDate('2026-09-05', t) === 'This month'
+      && bucketForDate('2026-10-20', t) === 'No rush'
+      && bucketForDate(null, t) === 'No rush'
+  })())
 }
 
 s.group('Store shelf sync: every type is a live card, every card is a type')
