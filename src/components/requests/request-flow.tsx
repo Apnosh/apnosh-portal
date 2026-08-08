@@ -4,12 +4,16 @@
  * THE REQUEST DESK — ask us for anything (creative requests, owner side).
  *
  * The design order generalized: one desk where an owner asks for any marketing work.
- * Pick what you need, answer a few plain questions, press to send. Request first,
- * quote later: nothing here shows or charges a price. The team reads every request
- * and answers with a plan and a real number in the owner's inbox.
+ * Request first, quote later: nothing here shows or charges a price. The team reads
+ * every request and answers with a plan and a real number in the owner's inbox.
  *
- * Visual language is the Strategist's Desk kit (desk/ui.tsx) so the whole shop reads
- * as one place. All statuses come from the catalog (STATUS_LABEL / STATUS_OWNER_LINE).
+ * The asking is a WALK, not a form (same idea as the campaign walk and the Drafting
+ * Table): one question per screen, big tap targets, and THE BRIEF building visibly
+ * below as every answer inks onto it. The review screen is the finished brief plus
+ * the $0 receipt, sealed with the press-and-hold stamp.
+ *
+ * Visual language is the Strategist's Desk kit (desk/ui.tsx). All statuses come from
+ * the catalog (STATUS_LABEL / STATUS_OWNER_LINE).
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -18,11 +22,12 @@ import {
   Megaphone, Printer, PenLine, MessageCircle, ChevronRight, ChevronLeft, type LucideIcon,
 } from 'lucide-react'
 import {
-  DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, SealButton,
+  DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule,
+  SealButton, PlanSheet, type PlanSheetLine,
 } from '@/components/campaigns/desk/ui'
 import {
   REQUEST_TYPES, questionsFor, STATUS_LABEL, STATUS_OWNER_LINE, requestTypeById,
-  type RequestType, type RequestTypeId, type RequestAnswers, type RequestStatus,
+  type RequestType, type RequestTypeId, type RequestAnswers, type RequestStatus, type RequestQuestion,
 } from '@/lib/requests/catalog'
 
 const TYPE_ICONS: Record<RequestTypeId, LucideIcon> = {
@@ -57,6 +62,7 @@ export default function RequestFlow() {
   const [view, setView] = useState<'hub' | 'form' | 'done'>('hub')
   const [type, setType] = useState<RequestType | null>(null)
   const [answers, setAnswers] = useState<RequestAnswers>({})
+  const [step, setStep] = useState(0)
   const [mine, setMine] = useState<RequestRow[]>([])
   const [loadingMine, setLoadingMine] = useState(true)
   const [sending, setSending] = useState(false)
@@ -76,19 +82,26 @@ export default function RequestFlow() {
   useEffect(() => { loadMine() }, [loadMine])
 
   /* Deep link: a Creatives-shelf card arrives as /dashboard/requests?type=<id> and lands
-   * straight on that type's questions. An unknown type falls back to the hub, calmly. */
+   * straight on that type's first question. An unknown type falls back to the hub, calmly. */
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get('type')
     const t = wanted ? requestTypeById(wanted) : null
-    if (t) { setType(t); setAnswers({}); setView('form') }
+    if (t) { setType(t); setAnswers({}); setStep(0); setView('form') }
   }, [])
 
-  const start = (t: RequestType) => { setType(t); setAnswers({}); setError(null); setView('form') }
+  const start = (t: RequestType) => { setType(t); setAnswers({}); setStep(0); setError(null); setView('form') }
   const setA = (id: string, val: string) => setAnswers((a) => ({ ...a, [id]: val }))
 
   const qs = type ? questionsFor(type) : []
-  const missing = qs.filter((q) => !q.optional && !(answers[q.id] ?? '').trim())
+  const onReview = step >= qs.length
+  const q: RequestQuestion | null = onReview ? null : qs[step] ?? null
+  const missing = qs.filter((x) => !x.optional && !(answers[x.id] ?? '').trim())
   const canSend = type !== null && missing.length === 0
+
+  const advance = () => setStep((s) => Math.min(s + 1, qs.length))
+  const goBack = () => {
+    if (step === 0) { setView('hub'); setType(null) } else setStep((s) => s - 1)
+  }
 
   async function send() {
     if (!type || sending) return
@@ -112,9 +125,18 @@ export default function RequestFlow() {
 
   const label = { fontFamily: DESK.mono, fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: DESK.mute }
   const inputStyle = {
-    width: '100%', padding: '12px 14px', borderRadius: 12, border: `1.5px solid ${DESK.line}`,
-    background: DESK.card, fontFamily: DESK.body, fontSize: 14.5, color: DESK.ink, outline: 'none',
+    width: '100%', padding: '13px 15px', borderRadius: 13, border: `1.5px solid ${DESK.line}`,
+    background: DESK.card, fontFamily: DESK.body, fontSize: 15, color: DESK.ink, outline: 'none',
   }
+
+  /* THE BRIEF: answered questions ink in, the rest wait as ghosts. Shown under every
+   * question and complete on the review screen — the walk's live artboard. */
+  const briefLines = (strong: boolean): PlanSheetLine[] =>
+    qs.map((x) => {
+      const val = (answers[x.id] ?? '').trim()
+      if (!val) return { text: x.prompt, ghost: true }
+      return { text: `${x.prompt}  ·  ${val.length > 60 ? `${val.slice(0, 60)}...` : val}`, strong }
+    })
 
   /* ── DONE: the sent stamp ─────────────────────────────────────────────────────────── */
   if (view === 'done' && type) {
@@ -130,7 +152,7 @@ export default function RequestFlow() {
         </p>
         <button
           type="button"
-          onClick={() => { setView('hub'); setType(null); setAnswers({}) }}
+          onClick={() => { setView('hub'); setType(null); setAnswers({}); setStep(0) }}
           style={{
             marginTop: 28, padding: '13px 26px', borderRadius: 999, border: 'none', cursor: 'pointer',
             background: DESK.grad, color: '#fff', fontFamily: DESK.disp, fontWeight: 700, fontSize: 14.5,
@@ -142,101 +164,132 @@ export default function RequestFlow() {
     )
   }
 
-  /* ── FORM: the chosen type's questions ────────────────────────────────────────────── */
+  /* ── FORM: the walk — one question per screen, the brief inking in below ──────────── */
   if (view === 'form' && type) {
     const Icon = TYPE_ICONS[type.id]
     return (
       <div style={{ ...paperGround, minHeight: '100dvh', padding: '14px 16px 120px' }}>
         <DeskKeyframes />
-        <button
-          type="button"
-          onClick={() => setView('hub')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: DESK.ink2, fontFamily: DESK.body, fontSize: 13.5, padding: '6px 4px' }}
-        >
-          <ChevronLeft size={16} /> All requests
-        </button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 11, margin: '10px 2px 4px' }}>
-          <span style={{ width: 40, height: 40, borderRadius: 12, background: DESK.mintWash, color: DESK.mintDeep, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Icon size={20} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <button
+            type="button"
+            onClick={goBack}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: DESK.ink2, fontFamily: DESK.body, fontSize: 13.5, padding: '6px 4px' }}
+          >
+            <ChevronLeft size={16} /> {step === 0 ? 'All requests' : 'Back'}
+          </button>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontFamily: DESK.body, fontSize: 12.5, fontWeight: 600, color: DESK.ink2 }}>
+            <Icon size={14} style={{ color: DESK.mintDeep }} /> {type.label}
           </span>
-          <div>
-            <h1 style={{ fontFamily: DESK.disp, fontSize: 20, color: DESK.ink, margin: 0 }}>{type.label}</h1>
-            <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: DESK.mute }}>{type.blurb}</div>
-          </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 18 }}>
-          {qs.map((q) => (
-            <div key={q.id} className="dk-ink">
-              <div style={{ ...label, marginBottom: 8 }}>
-                {q.prompt}{q.optional ? '  ·  optional' : ''}
+        {!onReview && q ? (
+          /* ── one question, big and alone ── */
+          <div key={q.id} className="dk-ink">
+            <div style={{ ...label, margin: '18px 2px 6px' }}>
+              Question {step + 1} of {qs.length}{q.optional ? '  ·  optional' : ''}
+            </div>
+            <h1 style={{ fontFamily: DESK.disp, fontSize: 23, color: DESK.ink, margin: '0 0 18px', letterSpacing: '-0.01em', lineHeight: 1.2 }}>
+              {q.prompt}
+            </h1>
+
+            {q.kind === 'choice' ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                {(q.options ?? []).map((opt) => (
+                  <Ticket
+                    key={opt}
+                    name={opt}
+                    on={answers[q.id] === opt}
+                    onClick={() => { setA(q.id, opt); setTimeout(advance, 170) }}
+                  />
+                ))}
               </div>
-              {q.kind === 'choice' ? (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {(q.options ?? []).map((opt) => {
-                    const on = answers[q.id] === opt
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setA(q.id, on ? '' : opt)}
-                        style={{
-                          padding: '9px 14px', borderRadius: 999, cursor: 'pointer',
-                          border: `1.5px solid ${on ? DESK.mint : DESK.line}`,
-                          background: on ? DESK.mintWash : DESK.card,
-                          color: on ? DESK.mintDeep : DESK.ink2,
-                          fontFamily: DESK.body, fontWeight: on ? 700 : 500, fontSize: 13.5,
-                        }}
-                      >
-                        {opt}
-                      </button>
-                    )
-                  })}
+            ) : (
+              <>
+                {q.kind === 'long' ? (
+                  <textarea
+                    autoFocus
+                    value={answers[q.id] ?? ''}
+                    onChange={(e) => setA(q.id, e.target.value)}
+                    placeholder={q.hint}
+                    rows={4}
+                    style={{ ...inputStyle, resize: 'vertical', minHeight: 100 }}
+                  />
+                ) : (
+                  <input
+                    autoFocus
+                    value={answers[q.id] ?? ''}
+                    onChange={(e) => setA(q.id, e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && ((answers[q.id] ?? '').trim() || q.optional)) advance() }}
+                    placeholder={q.hint}
+                    style={inputStyle}
+                  />
+                )}
+                <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                  <button
+                    type="button"
+                    disabled={!((answers[q.id] ?? '').trim() || q.optional)}
+                    onClick={advance}
+                    style={{
+                      flex: 1, padding: '13px 0', borderRadius: 13, border: 'none',
+                      cursor: 'pointer', background: DESK.grad, color: '#fff',
+                      fontFamily: DESK.disp, fontWeight: 700, fontSize: 15,
+                      opacity: (answers[q.id] ?? '').trim() || q.optional ? 1 : 0.45,
+                    }}
+                  >
+                    Next
+                  </button>
+                  {q.optional && (answers[q.id] ?? '').trim() === '' && (
+                    <button
+                      type="button"
+                      onClick={advance}
+                      style={{ padding: '13px 18px', borderRadius: 13, border: `1.5px solid ${DESK.line}`, background: DESK.card, color: DESK.ink2, fontFamily: DESK.body, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}
+                    >
+                      Skip
+                    </button>
+                  )}
                 </div>
-              ) : q.kind === 'long' ? (
-                <textarea
-                  value={answers[q.id] ?? ''}
-                  onChange={(e) => setA(q.id, e.target.value)}
-                  placeholder={q.hint}
-                  rows={3}
-                  style={{ ...inputStyle, resize: 'vertical', minHeight: 84 }}
-                />
+              </>
+            )}
+
+            <div style={{ marginTop: 26 }}>
+              <PlanSheet title="The brief" lines={briefLines(false)} />
+            </div>
+          </div>
+        ) : (
+          /* ── review: the finished brief, the $0 receipt, the seal ── */
+          <div className="dk-ink">
+            <div style={{ ...label, margin: '18px 2px 6px' }}>Read it back</div>
+            <h1 style={{ fontFamily: DESK.disp, fontSize: 23, color: DESK.ink, margin: '0 0 18px', letterSpacing: '-0.01em' }}>
+              Your brief, ready to send.
+            </h1>
+            <PlanSheet title="The brief" lines={briefLines(true)} />
+
+            <ReceiptFrame style={{ marginTop: 18 }}>
+              <ReceiptRow label="What this costs to send" amount="$0" />
+              <ReceiptRule />
+              <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: DESK.ink2, lineHeight: 1.5 }}>
+                We read it, then send you a plan and a real price. Work starts only after you say yes.
+              </div>
+            </ReceiptFrame>
+
+            {error && (
+              <div style={{ marginTop: 14, background: DESK.amberWash, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '10px 13px', fontFamily: DESK.body, fontSize: 13, color: DESK.amber }}>
+                {error}
+              </div>
+            )}
+
+            <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              {canSend ? (
+                <SealButton label={sending ? 'Sending...' : 'Press\nto send'} disabled={sending} onSealed={send} />
               ) : (
-                <input
-                  value={answers[q.id] ?? ''}
-                  onChange={(e) => setA(q.id, e.target.value)}
-                  placeholder={q.hint}
-                  style={inputStyle}
-                />
+                <div style={{ fontFamily: DESK.body, fontSize: 13, color: DESK.mute, textAlign: 'center' }}>
+                  {missing.length} answer{missing.length === 1 ? '' : 's'} still missing. Go back and fill them in.
+                </div>
               )}
             </div>
-          ))}
-        </div>
-
-        <ReceiptFrame style={{ marginTop: 26 }}>
-          <ReceiptRow label="What this costs to send" amount="$0" />
-          <ReceiptRule />
-          <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: DESK.ink2, lineHeight: 1.5 }}>
-            We read it, then send you a plan and a real price. Work starts only after you say yes.
-          </div>
-        </ReceiptFrame>
-
-        {error && (
-          <div style={{ marginTop: 14, background: DESK.amberWash, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '10px 13px', fontFamily: DESK.body, fontSize: 13, color: DESK.amber }}>
-            {error}
           </div>
         )}
-
-        <div style={{ marginTop: 22, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-          {canSend ? (
-            <SealButton label={sending ? 'Sending...' : 'Press\nto send'} disabled={sending} onSealed={send} />
-          ) : (
-            <div style={{ fontFamily: DESK.body, fontSize: 13, color: DESK.mute, textAlign: 'center' }}>
-              {missing.length} more to answer before you can send
-            </div>
-          )}
-        </div>
       </div>
     )
   }

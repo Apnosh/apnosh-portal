@@ -5519,6 +5519,42 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
   // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
   const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : initialView === "plan" ? { name: "plan" } : { name: "browse" }));
 
+  // Desktop mouse drag-to-scroll for every horizontal shelf row (.apnosh-row). Touch and
+  // trackpads already scroll natively; this delegates pointer events so a mouse can grab
+  // and drag a row too. A real drag swallows the click that would otherwise open a card.
+  useEffect(() => {
+    let row = null, startX = 0, startLeft = 0, dragged = false;
+    const down = (e) => {
+      if (e.pointerType !== "mouse" || e.button !== 0) return;
+      row = e.target && e.target.closest ? e.target.closest(".apnosh-row") : null;
+      if (!row) return;
+      startX = e.clientX; startLeft = row.scrollLeft; dragged = false;
+    };
+    const move = (e) => {
+      if (!row) return;
+      const dx = e.clientX - startX;
+      if (!dragged && Math.abs(dx) > 5) { dragged = true; row.style.userSelect = "none"; }
+      if (dragged) { row.scrollLeft = startLeft - dx; e.preventDefault(); }
+    };
+    const up = () => {
+      if (row) row.style.userSelect = "";
+      if (row && dragged) {
+        const swallow = (ce) => { ce.stopPropagation(); ce.preventDefault(); };
+        document.addEventListener("click", swallow, { capture: true, once: true });
+        setTimeout(() => document.removeEventListener("click", swallow, { capture: true }), 50);
+      }
+      row = null; dragged = false;
+    };
+    document.addEventListener("pointerdown", down);
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+    return () => {
+      document.removeEventListener("pointerdown", down);
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+    };
+  }, []);
+
   const exit = () => { if (onClose) onClose(); };
 
   // The live plan (cart). Loaded + subscribed after mount (hydration-safe: server and
