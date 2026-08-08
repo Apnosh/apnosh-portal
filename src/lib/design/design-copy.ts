@@ -98,4 +98,19 @@ export const DESIGN_LINES: Record<string, string> = {
   'done.title': 'Order recorded',
   'done.sub': 'This exact order becomes the brief your designer works from. Nothing gets re-interpreted.',
   'done.testmode': 'Test mode: no payment was taken.',
+
+  /* Request mode: the same flow while the rate card is unsigned. No numbers appear
+   * anywhere; the seal sends a quote request instead of recording an order. */
+  'banner.request': 'Sending this is free. We answer with a plan and a real price. Nothing is charged until you say yes.',
+  'photos.source.label.request': 'Find the photos for me',
+  'when.rush.label.request': 'Yes, rush it for {date}',
+  'when.rush.sub.request': 'Rush work costs more. Your quote will show the number.',
+  'when.norush.sub.request': 'First standard day is {date}.',
+  'receipt.request.label': 'What this costs to send',
+  'receipt.request.note': 'We read it, then send you a plan and a real price. Work starts only after you say yes.',
+  'seal.label.request': 'Hold\nto send',
+  'done.stamp.request': 'Request sent',
+  'done.title.request': 'The team has your graphic.',
+  'done.sub.request': 'This exact brief goes to a real person. You will get a plan and a price in your inbox. No charge until you say yes.',
+  'send.error': 'Could not send. Check your connection and hold the seal again.',
 }

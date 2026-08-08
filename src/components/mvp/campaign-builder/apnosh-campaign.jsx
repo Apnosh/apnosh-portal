@@ -5580,7 +5580,10 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     // The Request Desk is its own surface (ask for anything, we quote it). Same allowlist
     // gate: pull "creative" from FULLY_BUILT_LIVE and taps fall back to the honest PDP.
     if (id === "creative" && buyableId("creative")) { window.location.assign("/dashboard/requests"); return; }
-    // A Creatives-shelf card deep-links straight into that type's questions on the desk.
+    // A graphic goes to THE ONE graphic builder (the Drafting Table), which runs in
+    // request mode while the rate card is unsigned and becomes the priced order after.
+    if (id === "creative-graphic" && buyableId(id)) { window.location.assign("/dashboard/design/order"); return; }
+    // Every other Creatives-shelf card deep-links into that type's questions on the desk.
     if (id.startsWith("creative-") && buyableId(id)) { window.location.assign(`/dashboard/requests?type=${id.slice("creative-".length)}`); return; }
     if (catGet(id)) setRoute({ name: "pdp", itemId: id, from, rowId });
     else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });

@@ -49,10 +49,10 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * and the health cron re-proves that daily by pulling down the actual data path, so "done" here is
  * data arriving rather than anybody's say-so.
  */
-/* 'design' (the graphic configurator) is BUILT and verified end to end, but its rate card is
- * still placeholder numbers awaiting the owner + designer review. Selling at made-up prices
- * fails the same bar as selling unbuilt work, so it stays coming-soon on production until the
- * rate card is signed off — then adding 'design' back here is the whole launch. */
+/* 'design' (the graphic configurator, the Drafting Table) is LIVE: while the rate card is
+ * unsigned it runs in REQUEST MODE (no numbers anywhere; the seal sends a quote request),
+ * and the day RATE_CARD.approved flips it becomes the priced order flow. One builder, both
+ * moments — no unsigned price can reach a buyer either way. */
 /* 'creative' (the Request Desk) and the per-type 'creative-*' cards are live because they
  * SELL NOTHING: each collects a brief and the team answers with a quote. The
  * no-unsigned-price rule that holds 'design' back does not apply to requests that charge
@@ -60,7 +60,7 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * store's Creatives shelf and the desk can never drift apart. */
 export const FULLY_BUILT_LIVE: readonly string[] = [
   'gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu',
-  'creative', ...REQUEST_TYPES.map((t) => `creative-${t.id}`),
+  'design', 'creative', ...REQUEST_TYPES.map((t) => `creative-${t.id}`),
 ]
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the

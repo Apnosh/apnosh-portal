@@ -294,6 +294,14 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const [rushConfirmed, setRushConfirmed] = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState<string | null>(null)
+
+  /* REQUEST MODE: the same flow with every number removed, until the rate card is
+   * signed. The seal sends a quote request (creative_requests) instead of recording
+   * an order; the day RATE_CARD.approved flips, prices return and this mode ends.
+   * One flow, two moments — never two builders. */
+  const requestMode = !RATE_CARD.approved
 
   const src = (k: keyof DesignRead['cited']): DesignFact<never>['source'] => (read?.cited[k] ? 'read' : 'asked')
   const allAssets = [...assets, ...uploaded]
@@ -382,6 +390,47 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     }
   }
 
+  /* Request mode's seal: the finished brief goes to the Request Desk rail as a graphic
+   * request. The mapping reuses the desk's validated vocabulary: destinations are the
+   * same DESTINATIONS labels, timing folds into the four honest buckets. */
+  const sendAsRequest = async () => {
+    if (sending) return
+    setSending(true)
+    setSendError(null)
+    const days = due ? Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86400000) : null
+    const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
+    const noteBits = [
+      printPicked && allQtysIn ? printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label}`).join(', ') : '',
+      printer === 'us' ? 'We print and deliver' : printer === 'client' ? 'Their shop prints' : '',
+      noPhotos ? 'Text and brand only' : usingOwn ? 'Using their photos' : sourcePhotos ? 'Find photos for them' : '',
+      eventDate ? `Event on ${fmtDay(eventDate)}` : '',
+      due ? `In hand by ${fmtDay(due)}` : '',
+      rushConfirmed ? 'Rush agreed' : '',
+    ].filter(Boolean).join('. ')
+    try {
+      const r = await fetch('/api/requests', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          type: 'graphic',
+          answers: {
+            what: `${jobLabel ?? 'A graphic'}${promoteItem ? ` featuring ${promoteItem}` : ''}`,
+            where: dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', '),
+            words: saidText || undefined,
+            when,
+            notes: noteBits || undefined,
+          },
+        }),
+      })
+      const j = (await r.json().catch(() => ({}))) as { error?: string }
+      if (!r.ok) throw new Error(typeof j.error === 'string' ? j.error : L['send.error'])
+      setSubmitted(true)
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : L['send.error'])
+    }
+    setSending(false)
+  }
+
   const ground = { ...paperGround, minHeight: '100%', padding: '16px 16px 0', fontFamily: DESK.body, boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' as const }
 
   if (submitted) {
@@ -392,11 +441,11 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
           <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} tag={boardTag} stamped />
         </div>
-        <div style={{ fontFamily: DESK.disp, fontSize: 23, fontWeight: 700, color: DESK.ink, letterSpacing: '-0.02em', marginTop: 10 }}>{L['done.title']}</div>
+        <div style={{ fontFamily: DESK.disp, fontSize: 23, fontWeight: 700, color: DESK.ink, letterSpacing: '-0.02em', marginTop: 10 }}>{requestMode ? L['done.title.request'] : L['done.title']}</div>
         <div style={{ fontSize: 13.5, color: DESK.ink2, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
-          {L['done.sub']}
+          {requestMode ? L['done.sub.request'] : L['done.sub']}
         </div>
-        <div style={{ fontSize: 12, color: DESK.mute, marginTop: 14 }}>{L['done.testmode']}</div>
+        {!requestMode && <div style={{ fontSize: 12, color: DESK.mute, marginTop: 14 }}>{L['done.testmode']}</div>}
       </div>
     )
   }
@@ -405,9 +454,9 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     <div style={ground}>
       <DeskKeyframes />
       <BoardKeyframes />
-      {!RATE_CARD.approved && (
-        <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}>
-          {L['banner.testprices']}
+      {requestMode && (
+        <div style={{ background: DESK.mintWash, color: DESK.mintDeep, border: `1px solid ${DESK.mintLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}>
+          {L['banner.request']}
         </div>
       )}
 
@@ -478,7 +527,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               {DESTINATIONS.map((d) => (
                 <DestFrame
                   key={d.id} d={d} on={dests.includes(d.id)}
-                  amount={destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
+                  amount={requestMode ? null : destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
                   onClick={() => setDests((prev) => (prev.includes(d.id) ? prev.filter((x) => x !== d.id) : [...prev, d.id]))}
                 />
               ))}
@@ -500,8 +549,8 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                   ))}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  <Ticket on={printer === 'client'} name={L['print.client.label']} sub={L['print.client.sub']} price="Free" onClick={() => setPrinter('client')} />
-                  <Ticket on={printer === 'us'} name={L['print.us.label']} sub={L['print.us.sub']} price={`$${RATE_CARD.printManagement}`} onClick={() => setPrinter('us')} />
+                  <Ticket on={printer === 'client'} name={L['print.client.label']} sub={L['print.client.sub']} price={requestMode ? undefined : 'Free'} onClick={() => setPrinter('client')} />
+                  <Ticket on={printer === 'us'} name={L['print.us.label']} sub={L['print.us.sub']} price={requestMode ? undefined : `$${RATE_CARD.printManagement}`} onClick={() => setPrinter('us')} />
                 </div>
               </div>
             )}
@@ -600,9 +649,9 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               </div>
             )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-              <Ticket on={noPhotos} name={L['photos.none.label']} sub={L['photos.none.sub']} price="$0"
+              <Ticket on={noPhotos} name={L['photos.none.label']} sub={L['photos.none.sub']} price={requestMode ? undefined : '$0'}
                 onClick={() => { setNoPhotos(!noPhotos); setSourcePhotos(false); setPicked([]) }} />
-              <Ticket on={sourcePhotos} name={fill(L['photos.source.label'], { price: String(RATE_CARD.photoSourcing) })} sub={L['photos.source.sub']} price={`$${RATE_CARD.photoSourcing}`}
+              <Ticket on={sourcePhotos} name={requestMode ? L['photos.source.label.request'] : fill(L['photos.source.label'], { price: String(RATE_CARD.photoSourcing) })} sub={L['photos.source.sub']} price={requestMode ? undefined : `$${RATE_CARD.photoSourcing}`}
                 onClick={() => { setSourcePhotos(!sourcePhotos); setNoPhotos(false); setPicked([]) }} />
             </div>
           </>
@@ -652,8 +701,18 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                   {fill(L['when.rush.q'], { date: fmtDay(due), days: String(Math.round(RATE_CARD.rushWindowHours / 24)) })}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <Ticket name={fill(L['when.rush.label'], { date: fmtDay(due), delta: String(rushDelta) })} sub={fill(L['when.rush.sub'], { total: String(quote.total + rushDelta) })} price={`+$${rushDelta}`} onClick={() => setRushConfirmed(true)} />
-                  <Ticket name={L['when.norush.label']} sub={fill(L['when.norush.sub'], { date: fmtDay(standardDelivery), total: String(quote.total) })} price="$0" onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }} />
+                  <Ticket
+                    name={requestMode ? fill(L['when.rush.label.request'], { date: fmtDay(due) }) : fill(L['when.rush.label'], { date: fmtDay(due), delta: String(rushDelta) })}
+                    sub={requestMode ? L['when.rush.sub.request'] : fill(L['when.rush.sub'], { total: String(quote.total + rushDelta) })}
+                    price={requestMode ? undefined : `+$${rushDelta}`}
+                    onClick={() => setRushConfirmed(true)}
+                  />
+                  <Ticket
+                    name={L['when.norush.label']}
+                    sub={requestMode ? fill(L['when.norush.sub.request'], { date: fmtDay(standardDelivery) }) : fill(L['when.norush.sub'], { date: fmtDay(standardDelivery), total: String(quote.total) })}
+                    price={requestMode ? undefined : '$0'}
+                    onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
+                  />
                 </div>
               </div>
             )}
@@ -687,12 +746,31 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
             </div>
             <div style={{ margin: '14px 0 4px' }}>
               <ReceiptFrame>
-                {quote.lines.map((l) => <ReceiptRow key={l.id} label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />)}
-                <ReceiptRule />
-                <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+                {requestMode ? (
+                  <>
+                    <ReceiptRow label={L['receipt.request.label']} amount="$0" />
+                    <ReceiptRule />
+                    <div style={{ fontSize: 12.5, color: DESK.ink2, lineHeight: 1.5 }}>{L['receipt.request.note']}</div>
+                  </>
+                ) : (
+                  <>
+                    {quote.lines.map((l) => <ReceiptRow key={l.id} label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />)}
+                    <ReceiptRule />
+                    <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+                  </>
+                )}
               </ReceiptFrame>
             </div>
-            <SealButton label={L['seal.label']} onSealed={() => setSubmitted(true)} />
+            {sendError && (
+              <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, marginBottom: 12, lineHeight: 1.45 }}>
+                {sendError}
+              </div>
+            )}
+            <SealButton
+              label={sending ? 'Sending...' : requestMode ? L['seal.label.request'] : L['seal.label']}
+              disabled={sending}
+              onSealed={() => { if (requestMode) { void sendAsRequest() } else { setSubmitted(true) } }}
+            />
             <div style={{ height: 18 }} />
           </>
         )}
@@ -712,8 +790,9 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         )}
       </div>
 
-      {/* ── the running receipt: pinned, cited, live ── */}
-      {step > 1 && step < 6 && (
+      {/* ── the running receipt: pinned, cited, live (order mode only; a request has no
+            numbers to run) ── */}
+      {!requestMode && step > 1 && step < 6 && (
         <div style={{ position: 'sticky', bottom: 0, margin: '0 -16px 0', zIndex: 3 }}>
           {panelOpen ? (
             <div onClick={() => setPanelOpen(false)} style={{ cursor: 'pointer', padding: '0 10px' }}>

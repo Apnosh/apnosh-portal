@@ -102,14 +102,19 @@ export default function RequestFlow() {
   useEffect(() => { loadMine() }, [loadMine])
 
   /* Deep link: a Creatives-shelf card arrives as /dashboard/requests?type=<id> and lands
-   * straight on that type's first question. An unknown type falls back to the hub, calmly. */
+   * straight on that type's first question. An unknown type falls back to the hub, calmly.
+   * The graphic is special: it has THE builder (the Drafting Table), so it goes there. */
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get('type')
+    if (wanted === 'graphic') { window.location.replace('/dashboard/design/order'); return }
     const t = wanted ? requestTypeById(wanted) : null
     if (t) { setType(t); setAnswers({}); setStep(0); setView('form') }
   }, [])
 
-  const start = (t: RequestType) => { setType(t); setAnswers({}); setStep(0); setError(null); setView('form') }
+  const start = (t: RequestType) => {
+    if (t.id === 'graphic') { window.location.assign('/dashboard/design/order'); return }
+    setType(t); setAnswers({}); setStep(0); setError(null); setView('form')
+  }
   const setA = (id: string, val: string) => setAnswers((a) => ({ ...a, [id]: val }))
 
   const qs = type ? questionsFor(type) : []
