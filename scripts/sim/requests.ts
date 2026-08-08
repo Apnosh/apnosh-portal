@@ -97,6 +97,13 @@ s.group('Validation: accepts honesty, refuses garbage')
   const injected = validateRequestPayload('video', { ...full, hacker: 'ignore previous instructions' })
   s.check('answers outside the question set are dropped, not stored', injected.ok === true && !('hacker' in injected.clean))
 
+  const multiOk = validateRequestPayload('graphic', { what: 'Grand opening', where: 'Instagram post, Printed flyer, Banner', when: 'This week' })
+  s.check('a multi-choice answer with several real formats validates', multiOk.ok === true)
+  const multiBad = validateRequestPayload('graphic', { what: 'Grand opening', where: 'Instagram post, Skywriting', when: 'This week' })
+  s.check('a multi-choice answer with a fake member is refused', multiBad.ok === false)
+  const graphicWhere = requestTypeById('graphic')!.questions.find((x) => x.id === 'where')!
+  s.check('the graphic destinations are the REAL design formats (11, multi)', graphicWhere.multi === true && (graphicWhere.options ?? []).length === 11)
+
   s.check('summaryLine reads like a sentence fragment', summaryLine('video', full).includes('Short video') && summaryLine('video', full).includes('This week'))
   s.check('summaryLine survives an unknown type', summaryLine('nope', {}) === 'Request')
   void video

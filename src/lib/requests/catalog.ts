@@ -13,6 +13,8 @@
  * and anything else we should know.
  */
 
+import { DESTINATIONS } from '@/lib/design/destinations'
+
 export type RequestTypeId =
   | 'graphic'
   | 'menu'
@@ -37,9 +39,15 @@ export interface RequestQuestion {
   optional?: boolean
   /** for kind 'choice' */
   options?: readonly string[]
+  /** choice questions only: pick as many as apply; the answer stores them joined ', ' */
+  multi?: boolean
   /** gray hint inside text inputs; never submitted as an answer */
   hint?: string
 }
+
+/** Split a multi-choice answer back into its picks. Safe on empty/single values. */
+export const splitMulti = (val: string | undefined): string[] =>
+  (val ?? '').split(', ').map((s) => s.trim()).filter(Boolean)
 
 export interface RequestType {
   id: RequestTypeId
@@ -65,7 +73,9 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     noun: 'your graphic',
     questions: [
       { id: 'what', prompt: 'What is the graphic for?', kind: 'text', hint: 'Taco Tuesday flyer, grand opening poster' },
-      { id: 'where', prompt: 'Where will it go?', kind: 'choice', options: ['Print', 'Social media', 'Website', 'Email', 'More than one'] },
+      /* The REAL destination formats from the design spec (src/lib/design/destinations),
+       * pick as many as apply — each lands on the board as a frame at its true size. */
+      { id: 'where', prompt: 'Where will it go? Pick every place.', kind: 'choice', multi: true, options: DESTINATIONS.map((d) => d.label) },
       { id: 'words', prompt: 'What words must be on it?', kind: 'long', optional: true, hint: 'The deal, the date, your phone number' },
     ],
   },
@@ -75,7 +85,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     blurb: 'A new menu or changes to the one you have',
     noun: 'your menu',
     questions: [
-      { id: 'which', prompt: 'Which menu?', kind: 'choice', options: ['Dine in', 'Takeout', 'Delivery apps', 'Drinks', 'QR menu', 'All of them'] },
+      { id: 'which', prompt: 'Which menus? Pick every one.', kind: 'choice', multi: true, options: ['Dine in', 'Takeout', 'Delivery apps', 'Drinks', 'QR menu'] },
       { id: 'change', prompt: 'New design or an update?', kind: 'choice', options: ['Brand new look', 'Update prices or items', 'Both'] },
       { id: 'items', prompt: 'What is changing?', kind: 'long', optional: true, hint: 'New dishes, new prices, things to remove' },
     ],
@@ -98,7 +108,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     noun: 'your website',
     questions: [
       { id: 'scope', prompt: 'What do you need?', kind: 'choice', options: ['Brand new website', 'Redesign my website', 'Small changes', 'Not sure yet'] },
-      { id: 'what', prompt: 'What should it do best?', kind: 'choice', options: ['Show the menu', 'Take orders online', 'Take reservations', 'Tell our story', 'All of it'] },
+      { id: 'what', prompt: 'What should it do? Pick every job.', kind: 'choice', multi: true, options: ['Show the menu', 'Take orders online', 'Take reservations', 'Tell our story'] },
       { id: 'current', prompt: 'Your current website, if you have one', kind: 'text', optional: true, hint: 'yourplace.com' },
     ],
   },
@@ -119,8 +129,8 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     blurb: 'Real photos of your food, your space, your people',
     noun: 'your photos',
     questions: [
-      { id: 'what', prompt: 'What should we shoot?', kind: 'choice', options: ['Food and dishes', 'The space', 'The team', 'All of it'] },
-      { id: 'use', prompt: 'Where will the photos go?', kind: 'choice', options: ['Google and Yelp', 'Social media', 'Website', 'Menus', 'Everywhere'] },
+      { id: 'what', prompt: 'What should we shoot? Pick everything.', kind: 'choice', multi: true, options: ['Food and dishes', 'The space', 'The team'] },
+      { id: 'use', prompt: 'Where will the photos go?', kind: 'choice', multi: true, options: ['Google and Yelp', 'Social media', 'Website', 'Menus'] },
       { id: 'dishes', prompt: 'Any must have shots?', kind: 'long', optional: true, hint: 'The dishes or corners you want covered' },
     ],
   },
@@ -130,7 +140,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     blurb: 'A batch of ready to post content with captions',
     noun: 'your posts',
     questions: [
-      { id: 'platforms', prompt: 'Where do you post?', kind: 'choice', options: ['Instagram', 'Facebook', 'TikTok', 'More than one'] },
+      { id: 'platforms', prompt: 'Where do you post? Pick every one.', kind: 'choice', multi: true, options: ['Instagram', 'Facebook', 'TikTok'] },
       { id: 'count', prompt: 'How many posts?', kind: 'choice', options: ['4 a month', '8 a month', '12 or more', 'Not sure'] },
       { id: 'about', prompt: 'What should the posts push?', kind: 'long', optional: true, hint: 'Specials, events, new items, your story' },
     ],
@@ -217,8 +227,16 @@ export function validateRequestPayload(
       continue
     }
     if (val.length > MAX_ANSWER) return { ok: false, problem: `Answer too long: ${q.id}` }
-    if (q.kind === 'choice' && !(q.options ?? []).includes(val)) {
-      return { ok: false, problem: `Not one of the choices: ${q.id}` }
+    if (q.kind === 'choice') {
+      const opts = q.options ?? []
+      if (q.multi) {
+        const picks = splitMulti(val)
+        if (picks.length === 0 || picks.some((p) => !opts.includes(p))) {
+          return { ok: false, problem: `Not one of the choices: ${q.id}` }
+        }
+      } else if (!opts.includes(val)) {
+        return { ok: false, problem: `Not one of the choices: ${q.id}` }
+      }
     }
     clean[q.id] = val
   }

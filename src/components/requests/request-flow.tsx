@@ -19,17 +19,36 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   Palette, BookOpen, Sparkles, Globe, Clapperboard, Camera, Share2, Mail,
-  Megaphone, Printer, PenLine, MessageCircle, ChevronRight, ChevronLeft, type LucideIcon,
+  Megaphone, Printer, PenLine, MessageCircle, ChevronRight, ChevronLeft, Check, type LucideIcon,
 } from 'lucide-react'
 import {
   DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule,
   SealButton, PlanSheet, type PlanSheetLine,
 } from '@/components/campaigns/desk/ui'
 import {
-  REQUEST_TYPES, questionsFor, STATUS_LABEL, STATUS_OWNER_LINE, requestTypeById,
+  REQUEST_TYPES, questionsFor, STATUS_LABEL, STATUS_OWNER_LINE, requestTypeById, splitMulti,
   type RequestType, type RequestTypeId, type RequestAnswers, type RequestStatus, type RequestQuestion,
 } from '@/lib/requests/catalog'
+import { DESTINATIONS } from '@/lib/design/destinations'
 import RequestBoard from '@/components/requests/request-boards'
+
+/* The graphic's destination picker shows each format at its TRUE shape (the design
+ * spec's real dimensions), like the original configurator. Scaled to fit a chip. */
+function FormatFrame({ label }: { label: string }) {
+  const d = DESTINATIONS.find((x) => x.label === label)
+  if (!d) return null
+  const ratio = d.dimensions.w / d.dimensions.h
+  const MAX = 34
+  const w = ratio >= 1 ? MAX : Math.max(10, Math.round(MAX * ratio))
+  const h = ratio >= 1 ? Math.max(10, Math.round(MAX / ratio)) : MAX
+  const dims = d.dimensions.unit === 'in' ? `${d.dimensions.w}x${d.dimensions.h} in` : `${d.dimensions.w}x${d.dimensions.h}`
+  return (
+    <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3, width: 44, flexShrink: 0 }}>
+      <span style={{ width: w, height: h, border: `1.5px solid ${DESK.ink2}`, borderRadius: 2, background: DESK.paper, display: 'block' }} />
+      <span style={{ fontFamily: DESK.mono, fontSize: 7.5, color: DESK.mute, whiteSpace: 'nowrap' }}>{dims}</span>
+    </span>
+  )
+}
 
 const TYPE_ICONS: Record<RequestTypeId, LucideIcon> = {
   graphic: Palette, menu: BookOpen, logo: Sparkles, website: Globe, video: Clapperboard,
@@ -198,7 +217,53 @@ export default function RequestFlow() {
               {q.prompt}
             </h1>
 
-            {q.kind === 'choice' ? (
+            {q.kind === 'choice' && q.multi ? (
+              /* MULTI-CHOICE: pick as many as apply, then Done. The graphic's destination
+               * step shows every format at its true shape and size, like the original. */
+              (() => {
+                const picks = splitMulti(answers[q.id])
+                const toggle = (opt: string) => {
+                  const next = picks.includes(opt) ? picks.filter((p) => p !== opt) : [...picks, opt]
+                  setA(q.id, next.join(', '))
+                }
+                const showFrames = type.id === 'graphic' && q.id === 'where'
+                return (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {(q.options ?? []).map((opt) => (
+                        <Ticket
+                          key={opt}
+                          name={
+                            showFrames ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 11 }}>
+                                <FormatFrame label={opt} />
+                                {opt}
+                              </span>
+                            ) : opt
+                          }
+                          on={picks.includes(opt)}
+                          right={picks.includes(opt) ? <Check size={16} /> : undefined}
+                          onClick={() => toggle(opt)}
+                        />
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={picks.length === 0 && !q.optional}
+                      onClick={advance}
+                      style={{
+                        width: '100%', marginTop: 14, padding: '13px 0', borderRadius: 13, border: 'none',
+                        cursor: 'pointer', background: DESK.grad, color: '#fff',
+                        fontFamily: DESK.disp, fontWeight: 700, fontSize: 15,
+                        opacity: picks.length > 0 || q.optional ? 1 : 0.45,
+                      }}
+                    >
+                      {picks.length > 0 ? `Done · ${picks.length} picked` : 'Pick at least one'}
+                    </button>
+                  </>
+                )
+              })()
+            ) : q.kind === 'choice' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {(q.options ?? []).map((opt) => (
                   <Ticket

@@ -16,7 +16,8 @@
 
 import type { CSSProperties, ReactNode } from 'react'
 import { DESK } from '@/components/campaigns/desk/ui'
-import type { RequestAnswers, RequestTypeId } from '@/lib/requests/catalog'
+import { splitMulti, type RequestAnswers, type RequestTypeId } from '@/lib/requests/catalog'
+import { DESTINATIONS } from '@/lib/design/destinations'
 
 const clip = (s: string | undefined, n: number) => {
   const v = (s ?? '').trim()
@@ -81,48 +82,86 @@ function Board({ children, when, notes, badge }: { children: ReactNode; when?: s
 /* ── per-type boards ───────────────────────────────────────────────────────────────── */
 
 function GraphicBoard({ a }: { a: RequestAnswers }) {
-  /* The frame takes the SHAPE of where it will live; the words ink onto it. */
-  const where = a.where
-  const dims = where === 'Print' ? { w: 120, h: 160 } : where === 'Website' ? { w: 210, h: 110 } : where === 'Email' ? { w: 130, h: 170 } : { w: 150, h: 150 }
-  return (
-    <div style={{ position: 'relative' }}>
-      {where === 'More than one' && <div style={{ position: 'absolute', inset: -6, transform: 'rotate(-4deg)', background: '#fff', border: `1px solid ${DESK.line}`, borderRadius: 4 }} />}
-      <div style={{ position: 'relative', width: dims.w, height: dims.h, border: `1.5px solid ${DESK.ink2}`, borderRadius: 4, background: DESK.paper, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7, padding: 12 }}>
-        {a.what
-          ? <div className="dk-ink" style={{ fontFamily: DESK.disp, fontWeight: 700, fontSize: 14, color: DESK.ink, textAlign: 'center', lineHeight: 1.2 }}>{clip(a.what, 40)}</div>
-          : <><Ghost w="80%" h={12} /><Ghost w="55%" /></>}
-        {a.words ? <div className="dk-ink" style={{ fontFamily: DESK.body, fontSize: 10, color: DESK.ink2, textAlign: 'center' }}>{clip(a.words, 60)}</div> : <Ghost w="65%" h={6} />}
-        {where && <Tape style={{ position: 'absolute', bottom: -9 }}>{where}</Tape>}
+  /* One frame per picked destination, each at its TRUE aspect ratio from the design
+   * spec — the fan-out from the original configurator. The first (largest) frame
+   * carries the headline; every frame is labeled with its format and real size. */
+  const picks = splitMulti(a.where)
+  const specs = picks.map((p) => DESTINATIONS.find((d) => d.label === p)).filter(Boolean) as (typeof DESTINATIONS)[number][]
+  const shown = specs.slice(0, 4)
+  const extra = specs.length - shown.length
+
+  const frame = (d: (typeof DESTINATIONS)[number], i: number) => {
+    const ratio = d.dimensions.w / d.dimensions.h
+    const MAX = i === 0 ? 108 : 66
+    const w = ratio >= 1 ? MAX : Math.max(26, Math.round(MAX * ratio))
+    const h = ratio >= 1 ? Math.max(26, Math.round(MAX / ratio)) : MAX
+    const dims = d.dimensions.unit === 'in' ? `${d.dimensions.w}x${d.dimensions.h} in` : `${d.dimensions.w}x${d.dimensions.h}px`
+    return (
+      <div key={d.id} className="dk-ink" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+        <div style={{ width: w, height: h, border: `1.5px solid ${DESK.ink2}`, borderRadius: 3, background: DESK.paper, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, padding: 6, transform: `rotate(${(i % 3 - 1) * 1.5}deg)` }}>
+          {i === 0 && (a.what
+            ? <div style={{ fontFamily: DESK.disp, fontWeight: 700, fontSize: Math.max(8, Math.min(12, w / 9)), color: DESK.ink, textAlign: 'center', lineHeight: 1.15, overflow: 'hidden' }}>{clip(a.what, 26)}</div>
+            : <Ghost w="70%" h={8} />)}
+          {i === 0 && (a.words ? <div style={{ fontFamily: DESK.body, fontSize: 7.5, color: DESK.ink2, textAlign: 'center', overflow: 'hidden' }}>{clip(a.words, 30)}</div> : <Ghost w="50%" h={5} />)}
+          {i > 0 && <><InkBar w="60%" h={5} /><Ghost w="40%" h={4} /></>}
+        </div>
+        <span style={{ fontFamily: DESK.mono, fontSize: 7.5, color: DESK.mute, textAlign: 'center', lineHeight: 1.3 }}>{d.label}<br />{dims}</span>
       </div>
+    )
+  }
+
+  if (shown.length === 0) {
+    /* Nothing picked yet: one sketch frame waiting, the what/words landing on it. */
+    return (
+      <div style={{ width: 130, height: 150, border: `1.5px dashed ${DESK.line}`, borderRadius: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 7, padding: 12 }}>
+        {a.what
+          ? <div className="dk-ink" style={{ fontFamily: DESK.disp, fontWeight: 700, fontSize: 13, color: DESK.ink, textAlign: 'center', lineHeight: 1.2 }}>{clip(a.what, 36)}</div>
+          : <><Ghost w="80%" h={11} /><Ghost w="55%" /></>}
+        {a.words ? <div className="dk-ink" style={{ fontFamily: DESK.body, fontSize: 9.5, color: DESK.ink2, textAlign: 'center' }}>{clip(a.words, 48)}</div> : <Ghost w="60%" h={6} />}
+      </div>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end', justifyContent: 'center', maxWidth: 300 }}>
+      {shown.map((d, i) => frame(d, i))}
+      {extra > 0 && <span style={{ fontFamily: DESK.mono, fontSize: 9, color: DESK.mintDeep, border: `1px solid ${DESK.mintLine}`, background: DESK.mintWash, borderRadius: 999, padding: '3px 8px' }}>+{extra} more</span>}
     </div>
   )
 }
 
 function MenuBoard({ a }: { a: RequestAnswers }) {
-  /* The menu refolds per which-menu; updates strike prices in pencil red. */
-  const which = a.which
+  /* One panel per picked menu, each in its own shape (delivery/QR are phones);
+   * price updates strike the old numbers in pencil red. */
+  const picks = splitMulti(a.which)
   const update = a.change === 'Update prices or items' || a.change === 'Both'
-  const phone = which === 'Delivery apps' || which === 'QR menu'
-  const panels = which === 'All of them' ? 3 : which === 'Dine in' ? 2 : 1
-  const Panel = ({ i }: { i: number }) => (
-    <div style={{ width: phone ? 92 : 86, height: phone ? 168 : 150, background: DESK.paper, border: `1.5px solid ${DESK.ink2}`, borderRadius: phone ? 14 : 3, padding: '12px 9px', transform: panels > 1 ? `rotate(${(i - 1) * 3}deg)` : 'none', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
-      <div style={{ fontFamily: DESK.disp, fontWeight: 700, fontSize: 9, letterSpacing: '0.12em', color: DESK.ink }}>{which === 'Drinks' ? 'DRINKS' : 'MENU'}</div>
-      {which === 'QR menu' && i === 0 && <div style={{ width: 34, height: 34, background: `repeating-conic-gradient(${DESK.ink} 0% 25%, transparent 0% 50%)`, backgroundSize: '10px 10px', opacity: 0.75 }} />}
-      {[0, 1, 2].map((r) => (
-        <div key={r} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 4 }}>
-          <InkBar w="60%" h={5} />
-          <span style={{ marginLeft: 'auto', position: 'relative', fontFamily: DESK.mono, fontSize: 7.5, color: DESK.ink2 }}>
-            $$
-            {update && <span style={{ position: 'absolute', left: -2, right: -2, top: '48%', height: 1.5, background: '#C0392B', transform: 'rotate(-8deg)' }} />}
-          </span>
-        </div>
-      ))}
-      {a.items && i === 0 && <div className="dk-ink" style={{ fontFamily: DESK.body, fontSize: 8.5, color: '#C0392B', lineHeight: 1.3 }}>{clip(a.items, 34)}</div>}
-    </div>
-  )
+  const shown = picks.length ? picks.slice(0, 3) : [null]
+  const extra = picks.length - shown.length
+  const Panel = ({ which, i }: { which: string | null; i: number }) => {
+    const phone = which === 'Delivery apps' || which === 'QR menu'
+    return (
+      <div className={which ? 'dk-ink' : undefined} style={{ width: phone ? 84 : 80, height: phone ? 156 : 140, background: DESK.paper, border: `1.5px ${which ? 'solid' : 'dashed'} ${which ? DESK.ink2 : DESK.line}`, borderRadius: phone ? 14 : 3, padding: '11px 8px', transform: shown.length > 1 ? `rotate(${(i - 1) * 3}deg)` : 'none', display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
+        <div style={{ fontFamily: DESK.disp, fontWeight: 700, fontSize: 8.5, letterSpacing: '0.12em', color: which ? DESK.ink : DESK.line }}>{which === 'Drinks' ? 'DRINKS' : 'MENU'}</div>
+        {which === 'QR menu' && <div style={{ width: 30, height: 30, background: `repeating-conic-gradient(${DESK.ink} 0% 25%, transparent 0% 50%)`, backgroundSize: '9px 9px', opacity: 0.75 }} />}
+        {[0, 1, 2].map((r) => (
+          <div key={r} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <InkBar w="60%" h={4.5} />
+            <span style={{ marginLeft: 'auto', position: 'relative', fontFamily: DESK.mono, fontSize: 7, color: DESK.ink2 }}>
+              $$
+              {update && which && <span style={{ position: 'absolute', left: -2, right: -2, top: '48%', height: 1.5, background: '#C0392B', transform: 'rotate(-8deg)' }} />}
+            </span>
+          </div>
+        ))}
+        {which && <div style={{ marginTop: 'auto', fontFamily: DESK.mono, fontSize: 6.5, color: DESK.mute, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{which}</div>}
+      </div>
+    )
+  }
   return (
-    <div style={{ display: 'flex', gap: panels > 1 ? 0 : 8 }}>
-      {Array.from({ length: panels }, (_, i) => <Panel key={i} i={i} />)}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', gap: shown.length > 1 ? 2 : 8, alignItems: 'center' }}>
+        {shown.map((w, i) => <Panel key={w ?? i} which={w} i={i} />)}
+        {extra > 0 && <span style={{ fontFamily: DESK.mono, fontSize: 9, color: DESK.mintDeep, border: `1px solid ${DESK.mintLine}`, background: DESK.mintWash, borderRadius: 999, padding: '3px 8px' }}>+{extra}</span>}
+      </div>
+      {a.items && <div className="dk-ink" style={{ fontFamily: DESK.body, fontSize: 9, color: '#C0392B', lineHeight: 1.3, maxWidth: 240, textAlign: 'center' }}>{clip(a.items, 60)}</div>}
     </div>
   )
 }
@@ -166,11 +205,15 @@ function WebsiteBoard({ a }: { a: RequestAnswers }) {
   const block = (label: string, mint?: boolean) => (
     <div key={label} className="dk-ink" style={{ borderRadius: 5, border: `1.5px solid ${mint ? DESK.mint : DESK.line}`, background: mint ? DESK.mintWash : '#fff', color: mint ? DESK.mintDeep : DESK.ink2, fontFamily: DESK.disp, fontWeight: 700, fontSize: 9.5, textAlign: 'center', padding: '7px 4px' }}>{label}</div>
   )
-  const hero = what === 'Show the menu' ? [block('YOUR MENU', true), block('Photos'), block('Hours + map')]
-    : what === 'Take orders online' ? [block('ORDER NOW', true), block('Menu'), block('Pickup + delivery')]
-    : what === 'Take reservations' ? [block('BOOK A TABLE', true), block('Tonight 6:30 · 7:00 · 7:30'), block('Menu')]
-    : what === 'Tell our story' ? [block('OUR STORY', true), block('Photos of the room'), block('Meet the family')]
-    : what === 'All of it' ? [block('MENU', true), block('ORDER', true), block('BOOK', true), block('STORY')]
+  const picks = splitMulti(what)
+  const jobBlock: Record<string, ReactNode> = {
+    'Show the menu': block('YOUR MENU', true),
+    'Take orders online': block('ORDER NOW', true),
+    'Take reservations': block('BOOK A TABLE', true),
+    'Tell our story': block('OUR STORY', true),
+  }
+  const hero = picks.length
+    ? [...picks.map((p) => jobBlock[p]).filter(Boolean), ...(picks.length === 1 ? [block('Photos'), block('Hours + map')] : [])]
     : [<Ghost key="g1" w="100%" h={22} />, <Ghost key="g2" w="100%" h={14} />, <Ghost key="g3" w="70%" h={14} />]
   return (
     <div style={{ width: 220 }}>
@@ -181,7 +224,7 @@ function WebsiteBoard({ a }: { a: RequestAnswers }) {
             {a.current ? clip(a.current, 26) : 'yourplace.com'}
           </span>
         </div>
-        <div style={{ padding: 10, display: 'grid', gridTemplateColumns: what === 'All of it' ? '1fr 1fr' : '1fr', gap: 6 }}>{hero}</div>
+        <div style={{ padding: 10, display: 'grid', gridTemplateColumns: picks.length > 2 ? '1fr 1fr' : '1fr', gap: 6 }}>{hero}</div>
       </div>
       {a.scope && <div style={{ marginTop: 8, textAlign: 'center' }}><Tape>{a.scope}</Tape></div>}
     </div>
@@ -236,18 +279,18 @@ function PhotosBoard({ a }: { a: RequestAnswers }) {
       {kind === 'team' && <span style={{ display: 'flex', gap: 2 }}>{[0, 1].map((j) => <span key={j} style={{ width: 8, height: 8, borderRadius: 4, border: `1.5px solid ${DESK.ink2}`, display: 'block' }} />)}</span>}
     </div>
   )
-  const kinds: ('dish' | 'room' | 'team' | 'ghost')[] =
-    what === 'Food and dishes' ? ['dish', 'dish', 'dish', 'dish', 'dish', 'dish']
-    : what === 'The space' ? ['room', 'room', 'room', 'room', 'room', 'room']
-    : what === 'The team' ? ['team', 'team', 'team', 'team', 'team', 'team']
-    : what === 'All of it' ? ['dish', 'room', 'team', 'dish', 'room', 'dish']
+  const picks = splitMulti(what)
+  const kindFor: Record<string, 'dish' | 'room' | 'team'> = { 'Food and dishes': 'dish', 'The space': 'room', 'The team': 'team' }
+  const chosen = picks.map((p) => kindFor[p]).filter(Boolean)
+  const kinds: ('dish' | 'room' | 'team' | 'ghost')[] = chosen.length
+    ? Array.from({ length: 6 }, (_, i) => chosen[i % chosen.length])
     : ['ghost', 'ghost', 'ghost', 'ghost', 'ghost', 'ghost']
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 40px)', gap: 5, padding: 8, background: '#fff', border: `1.5px solid ${DESK.ink2}`, borderRadius: 4 }}>
         {kinds.map((k, i) => cell(k, i))}
       </div>
-      {a.use && <Tape>{`For ${a.use}`}</Tape>}
+      {a.use && <Tape>{clip(`For ${a.use}`, 38)}</Tape>}
       {a.dishes && <div className="dk-ink" style={{ fontFamily: DESK.body, fontSize: 9.5, color: DESK.ink2 }}>Must have: {clip(a.dishes, 40)}</div>}
     </div>
   )
@@ -266,7 +309,7 @@ function SocialBoard({ a }: { a: RequestAnswers }) {
         </div>
         <span style={{ position: 'absolute', top: -8, right: -6, fontFamily: DESK.mono, fontSize: 8, background: DESK.paper, border: `1px solid ${DESK.line}`, borderRadius: 3, padding: '2px 5px', color: DESK.ink2 }}>1 MONTH</span>
       </div>
-      {a.platforms && <Tape>{a.platforms}</Tape>}
+      {a.platforms && <Tape>{clip(a.platforms, 34)}</Tape>}
       {a.about && <div className="dk-ink" style={{ fontFamily: DESK.body, fontSize: 9.5, color: DESK.ink2, maxWidth: 220, textAlign: 'center' }}>{clip(a.about, 60)}</div>}
     </div>
   )
