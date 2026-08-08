@@ -23,8 +23,8 @@ const nextConfig: NextConfig = {
   // The campaign "Needs you" intake consolidated onto /ready; keep old /setup links working.
   // Plus a safety net for legacy links stored in prod notification rows: the old
   // /dashboard/{website,social,local-seo,email-sms}/... channel hubs were folded into
-  // /dashboard/insights (one page, no subroutes), and the requests concept folded
-  // into /dashboard/messages.
+  // /dashboard/insights (one page, no subroutes). (The old requests->messages redirect
+  // is gone: /dashboard/requests is the Request Desk now, a real surface.)
   async redirects() {
     return [
       { source: '/dashboard/campaigns/:id/setup', destination: '/dashboard/campaigns/:id/ready', permanent: false },
@@ -46,7 +46,6 @@ const nextConfig: NextConfig = {
       // old half-built /insights/setup wizard route moved to the real surface at /measure.
       { source: '/dashboard/insights/setup', destination: '/dashboard/measure', permanent: false },
       { source: '/dashboard/insights/:path((?!analyst$).+)', destination: '/dashboard/insights', permanent: false },
-      { source: '/dashboard/requests/:path*', destination: '/dashboard/messages', permanent: false },
     ]
   },
 }
