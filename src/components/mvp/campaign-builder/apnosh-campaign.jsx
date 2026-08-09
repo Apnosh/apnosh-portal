@@ -2303,7 +2303,7 @@ const ROWS = [
   // The static fallback set is honest now: it says it is NOT personalized (the AI row swaps in
   // "Picked for your goals and reviews" when real recs land), and it holds only LIVE staples —
   // the old set claimed "Based on your menu" while being hardcoded and mostly coming soon.
-  { id: "suggested", title: "Suggested for you", note: "Popular first steps. Not personalized yet", big: true, ids: ["gbp", "dish", "reel", "gpost", "reviewsreply", "website"] },
+  { id: "suggested", title: "Suggested for you", note: "Popular first steps. Not personalized yet", big: true, ids: ["gbp", "design", "creative-photos", "creative-video", "reviewsreply", "website"] },
   // TWO LAYERS, ONE SYSTEM: section headers say what the campaigns DO (verb-first,
   // across-the-counter words); the funnel-stage words the Home dashboard teaches
   // (Awareness → Interest → Customer actions → Orders → Retention) live as TAGS on
@@ -2314,7 +2314,7 @@ const ROWS = [
   // multi-month programs live on their own "Full campaigns" shelf below, so a $70
   // fix never sits next to an $8k system (the audit's price-cliff finding).
   { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "website", "localseo", "creator", "gpost"] },
-  { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["design", "reel", "dish", "story", "graphic", "shoot", "reviewsplan", "reviewsreply"] },
+  { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["design", "creative-video", "creative-photos", "creative-social", "reviewsplan", "reviewsreply"] },
   // Every creative request type as its own card, straight from the request catalog.
   // Sending a request is free; the team answers with a plan and a price.
   { id: "creatives", title: "Creatives", note: "Ask for anything made. We answer with a plan and a price", ids: REQUEST_TYPES.map((t) => `creative-${t.id}`) },
@@ -2327,9 +2327,6 @@ const ROWS = [
   { id: "back", title: "Bring guests back", note: "Turn one visit into two, three, ten", ids: ["welcome", "news", "birthday", "earlyaccess", "winback", "direct"] },
   // The heavy hitters, separated on purpose: multi-month programs we run end to end.
   { id: "programs", title: "Full campaigns", note: "We plan it, make it, and run it for you, month after month", ids: ["firstvisit", "nights", "regulars", "reach"] },
-  // Production-only shelf: shoots, edits, and single pieces bought as GOODS, not
-  // campaigns — no outcome promise, no tracking, the deliverable is the product.
-  { id: "content", title: "Just need content", note: "Shoots, edits, and pieces. No campaign, just the goods", ids: ["design", "shoot", "edit", "reel", "story", "graphic", "dish", "gpost"] },
 ];
 
 // DB campaigns appear on their chosen shelf AFTER the code-authored cards (never
@@ -2350,7 +2347,6 @@ const LENS_CHIPS = [
   { id: "orders", label: "Fill seats" },
   { id: "back", label: "Bring back" },
   { id: "programs", label: "Full campaigns" },
-  { id: "content", label: "Just content" },
 ];
 
 // Which funnel legs each item genuinely moves (audited per real composed lines) —
@@ -3231,7 +3227,7 @@ function SearchBar({ value, onChange }) {
     <div style={{ padding: "0 20px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, height: 46, borderRadius: 14, background: "#fff", border: `1px solid ${DESKJ.line}`, boxShadow: "0 1px 3px rgba(22,33,28,0.05)", padding: "0 14px" }}>
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.2-3.2" /></svg>
-        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search plans, like reel or win back" style={{ flex: 1, border: "none", background: "none", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.ink }} />
+        <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="Search plans, like video or win back" style={{ flex: 1, border: "none", background: "none", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14.5, color: TOKENS.ink }} />
         {value && <button onClick={() => onChange("")} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, display: "flex" }}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
       </div>
     </div>
