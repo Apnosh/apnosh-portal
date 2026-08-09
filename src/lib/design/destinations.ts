@@ -107,3 +107,12 @@ export const destinationById = (id: string): DestinationSpec | undefined =>
   DESTINATIONS.find((d) => d.id === id)
 
 export const isPrint = (id: string): boolean => destinationById(id)?.kind === 'print'
+
+/* PRINTING IS OFF (owner call, 2026-08-09): we cannot run print jobs right now, so the
+ * print destinations (flyer, table tent, menu board, poster, banner, gift card) are shown
+ * but not selectable, with a plain message saying why. One flag to flip when printing
+ * returns; the specs, adders, and buffers below all stay ready. */
+export const PRINT_AVAILABLE = false
+
+export const PRINT_OFF_MESSAGE =
+  'We cannot print for you yet. Screen designs only for now. Printed pieces are coming back.'

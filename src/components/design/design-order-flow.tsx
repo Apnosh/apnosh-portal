@@ -20,7 +20,7 @@ import { useState } from 'react'
 import { Check } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
 import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, SealButton } from '@/components/campaigns/desk/ui'
-import { DESTINATIONS, type DestinationId, type DestinationSpec } from '@/lib/design/destinations'
+import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, type DestinationSpec } from '@/lib/design/destinations'
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
 import { DESIGN_JOBS, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
@@ -359,7 +359,10 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
       if (rd) {
         setRead(rd)
         if (rd.jobType) setJob(rd.jobType)
-        if (rd.destinations?.length) setDests(rd.destinations)
+        /* the read can suggest print sizes; while printing is off they must not
+           slip into the pick, or the flow would sell a thing we cannot make */
+        const usableDests = (rd.destinations ?? []).filter((d) => PRINT_AVAILABLE || !DESTINATIONS.find((x) => x.id === d && x.kind === 'print'))
+        if (usableDests.length) setDests(usableDests)
         if (rd.message) setHeadline(titleCase(rd.message))
         if (rd.offer) setOffer(rd.offer)
         if (rd.eventDateISO) { setEventDate(rd.eventDateISO); setDetails(fmtLong(rd.eventDateISO)) }
@@ -559,7 +562,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
           <>
             <StepHead n={2} title={T.where} sub={S.where} />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
-              {DESTINATIONS.map((d) => (
+              {DESTINATIONS.filter((d) => PRINT_AVAILABLE || d.kind !== 'print').map((d) => (
                 <DestFrame
                   key={d.id} d={d} on={dests.includes(d.id)}
                   amount={requestMode ? null : destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
@@ -567,6 +570,20 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                 />
               ))}
             </div>
+            {/* printing is off: the print sizes are shown dimmed so the owner knows they
+                exist, with one plain line saying why they cannot be picked today */}
+            {!PRINT_AVAILABLE && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', opacity: 0.38, pointerEvents: 'none' }} aria-hidden>
+                  {DESTINATIONS.filter((d) => d.kind === 'print').map((d) => (
+                    <DestFrame key={d.id} d={d} on={false} amount={null} photoUrl={boardPhoto} headline={headline} onClick={() => {}} />
+                  ))}
+                </div>
+                <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 8, lineHeight: 1.45 }}>
+                  {PRINT_OFF_MESSAGE}
+                </div>
+              </div>
+            )}
             {printPicked && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 6 }}>{L['print.qty']}</div>

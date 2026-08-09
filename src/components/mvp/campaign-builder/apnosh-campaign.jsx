@@ -2128,7 +2128,7 @@ const CATALOG = [
   { id: "reel", type: "content", icon: "video", title: "A short video", sub: "A reel for Instagram", cad: "once", hot: true },
   { id: "story", type: "content", icon: "story", title: "A story", sub: "A quick post to stay top of mind", cad: "once" },
   { id: "graphic", type: "content", icon: "image", title: "A social media post", sub: "A designed post: graphic, carousel, or photo", cad: "once" },
-  { id: "design", type: "task", icon: "graphic", title: "Get a graphic made", sub: "Flyers, posts, banners, gift cards: designed on your brand", cad: "once" },
+  { id: "design", type: "task", icon: "graphic", title: "Get a graphic made", sub: "Posts, stories, and promo graphics: designed on your brand", cad: "once" },
   // The Creatives shelf: one card per request type, generated straight from the request
   // catalog (src/lib/requests/catalog.ts) so titles and blurbs live in ONE place. Tapping
   // one deep-links into that type's questions on the Request Desk (openCard below).
