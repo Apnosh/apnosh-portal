@@ -13,6 +13,7 @@ export interface FixtureAsset {
   width: number
   height: number
   label?: string
+  kind?: 'library' | 'menu'
 }
 
 const ph = (w: number, h: number, hue: number, label: string): string =>
@@ -21,9 +22,11 @@ const ph = (w: number, h: number, hue: number, label: string): string =>
   )}`
 
 export const FIXTURE_ASSETS: FixtureAsset[] = [
-  { id: 'fx-1', url: ph(1600, 1200, 18, 'Patio'), width: 1600, height: 1200, label: 'Patio at dusk' },
-  { id: 'fx-2', url: ph(1400, 1400, 152, 'Ribs'), width: 1400, height: 1400, label: 'Rib platter' },
-  { id: 'fx-3', url: ph(640, 480, 205, 'Logo'), width: 640, height: 480, label: 'Old logo scan' },
+  { id: 'fx-1', url: ph(1600, 1200, 18, 'Patio'), width: 1600, height: 1200, label: 'Patio at dusk', kind: 'library' },
+  /* 0x0 on purpose: exercises the flow's in-browser measurement path (menu photos ship
+   * with unknown dimensions in production) */
+  { id: 'fx-2', url: ph(1400, 1400, 152, 'Ribs'), width: 0, height: 0, label: 'Rib platter', kind: 'menu' },
+  { id: 'fx-3', url: ph(640, 480, 205, 'Logo'), width: 640, height: 480, label: 'Old logo scan', kind: 'library' },
 ]
 
 export const FIXTURE_MENU = [

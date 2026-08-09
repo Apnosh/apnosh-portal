@@ -16,7 +16,7 @@
  */
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
 import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, SealButton } from '@/components/campaigns/desk/ui'
@@ -35,9 +35,13 @@ const L = DESIGN_LINES
 export interface DesignAsset {
   id: string
   url: string
+  /** 0x0 = size unknown at read time; the flow measures it in the browser before the
+   *  quality gate judges it (client-photos.ts feeds menu photos this way) */
   width: number
   height: number
   label?: string
+  /** where it came from: the owner's Photos & files library, or a menu item's dish photo */
+  kind?: 'library' | 'menu'
 }
 
 /** The upload quality gate: honest and simple. Small images fail loudly, never silently. */
@@ -96,13 +100,21 @@ function StepHead({ n, title, sub }: { n: number; title: string; sub: string }) 
   )
 }
 
-/* ── the artboard: the graphic, alive on the desk, changed only by answers ───────────────── */
-function Artboard({ jobLabel, headline, details, offer, photoUrl, tag, rush, stamped, compact }: {
+/* ── the artboard: the graphic, alive on the desk, changed only by answers ─────────────────
+ * Composed like a real flyer proof, not a text card: corner crop marks (a proof on the
+ * drafting table), an eyebrow held by side rules, the display headline over a short mint
+ * rule, the offer as the one loud element, and the business name as a small-caps footer
+ * under a hairline. The photo is graded (slight saturate + a bottom-weighted scrim) so
+ * white type always reads; with no photo the ground is a deep ink gradient with a quiet
+ * mint glow behind the words. */
+function Artboard({ jobLabel, headline, details, offer, photoUrl, businessName, tag, rush, stamped, compact }: {
   jobLabel?: string | null
   headline: string
   details: string
   offer: string
   photoUrl?: string | null
+  /** the small-caps footer line, like a real flyer signs itself */
+  businessName?: string | null
   /** the masking-tape date tag ("In hand September 9") */
   tag?: string | null
   rush?: boolean
@@ -111,45 +123,61 @@ function Artboard({ jobLabel, headline, details, offer, photoUrl, tag, rush, sta
   compact?: boolean
 }) {
   const hasWords = !!(headline || details || offer)
+  const cropMark = (pos: React.CSSProperties): React.CSSProperties => ({
+    position: 'absolute', width: 10, height: 10, zIndex: 2, opacity: 0.4, ...pos,
+  })
   return (
     <div style={{ position: 'relative', padding: '10px 4px 2px', marginBottom: 14 }}>
       {/* the pin */}
       <span aria-hidden style={{ position: 'absolute', top: 2, left: '50%', transform: 'translateX(-50%)', width: 11, height: 11, borderRadius: '50%', background: DESK.grad, boxShadow: '0 2px 5px rgba(22,33,28,0.35), inset 0 1px 2px rgba(255,255,255,0.5)', zIndex: 4 }} />
       <div style={{
         position: 'relative', transform: 'rotate(-1.1deg)', borderRadius: 8, overflow: 'hidden',
-        background: photoUrl ? undefined : DESK.ink, minHeight: compact ? 118 : 158,
+        background: photoUrl ? '#16211C' : 'linear-gradient(148deg, #22312A 0%, #16211C 52%, #101A15 100%)',
+        minHeight: compact ? 122 : 168,
         boxShadow: '0 14px 30px rgba(22,33,28,0.18), 0 2px 6px rgba(22,33,28,0.12)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        padding: compact ? '18px 16px' : '26px 20px', textAlign: 'center',
+        padding: compact ? '18px 18px 14px' : '26px 22px 16px', textAlign: 'center',
         transition: 'min-height .25s ease',
       }}>
-        {photoUrl && (
+        {photoUrl ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photoUrl} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-            <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,33,28,0.35), rgba(22,33,28,0.62))' }} />
+            <img src={photoUrl} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'saturate(1.08) contrast(1.05)' }} />
+            <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,33,28,0.22) 0%, rgba(22,33,28,0.42) 55%, rgba(22,33,28,0.74) 100%)' }} />
           </>
+        ) : (
+          <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 32%, rgba(46,154,120,0.30), transparent 62%)' }} />
         )}
+        {/* crop marks: this is a proof on the drafting table */}
+        <span aria-hidden style={{ ...cropMark({ top: 7, left: 7 }), borderTop: '1.5px solid #fff', borderLeft: '1.5px solid #fff' }} />
+        <span aria-hidden style={{ ...cropMark({ top: 7, right: 7 }), borderTop: '1.5px solid #fff', borderRight: '1.5px solid #fff' }} />
+        <span aria-hidden style={{ ...cropMark({ bottom: 7, left: 7 }), borderBottom: '1.5px solid #fff', borderLeft: '1.5px solid #fff' }} />
+        <span aria-hidden style={{ ...cropMark({ bottom: 7, right: 7 }), borderBottom: '1.5px solid #fff', borderRight: '1.5px solid #fff' }} />
         <div style={{ position: 'relative', zIndex: 2, width: '100%' }}>
           {jobLabel && (
-            <div className="db-pop" style={{ fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.62)', marginBottom: 8 }}>
-              {jobLabel}
+            <div className="db-pop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: compact ? 7 : 10 }}>
+              <span aria-hidden style={{ height: 1, width: 22, background: 'rgba(255,255,255,0.3)' }} />
+              <span style={{ fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.68)', whiteSpace: 'nowrap' }}>{jobLabel}</span>
+              <span aria-hidden style={{ height: 1, width: 22, background: 'rgba(255,255,255,0.3)' }} />
             </div>
           )}
           {hasWords ? (
             <>
               {headline && (
-                <div key={headline} className="db-pop" style={{ fontFamily: DESK.disp, fontSize: compact ? 20 : 25, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.12, overflowWrap: 'break-word', textShadow: photoUrl ? '0 1px 8px rgba(0,0,0,0.4)' : undefined }}>
+                <div key={headline} className="db-pop" style={{ fontFamily: DESK.disp, fontSize: compact ? 21 : 27, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1, overflowWrap: 'break-word', textShadow: '0 1px 10px rgba(0,0,0,0.35)', textWrap: 'balance' as never }}>
                   {headline}
                 </div>
               )}
+              {headline && (details || offer) && (
+                <span aria-hidden className="db-pop" style={{ display: 'block', width: 26, height: 2.5, borderRadius: 2, background: DESK.grad, margin: `${compact ? 7 : 9}px auto 0`, boxShadow: '0 1px 6px rgba(46,154,120,0.5)' }} />
+              )}
               {details && (
-                <div key={details} className="db-pop" style={{ fontFamily: DESK.body, fontSize: 12.5, fontWeight: 500, color: 'rgba(255,255,255,0.82)', marginTop: 7 }}>
+                <div key={details} className="db-pop" style={{ fontFamily: DESK.body, fontSize: 12.5, fontWeight: 500, color: 'rgba(255,255,255,0.85)', marginTop: 7, letterSpacing: '0.01em' }}>
                   {details}
                 </div>
               )}
               {offer && (
-                <div key={offer} className="db-pop" style={{ display: 'inline-block', marginTop: 11, background: DESK.grad, color: '#fff', borderRadius: 99, padding: '5px 13px', fontFamily: DESK.disp, fontSize: 12, fontWeight: 700, boxShadow: '0 3px 10px rgba(46,154,120,0.4)' }}>
+                <div key={offer} className="db-pop" style={{ display: 'inline-block', marginTop: compact ? 9 : 12, background: DESK.grad, color: '#fff', borderRadius: 99, padding: '5px 14px', fontFamily: DESK.disp, fontSize: 12.5, fontWeight: 700, boxShadow: '0 3px 10px rgba(46,154,120,0.4)' }}>
                   {offer}
                 </div>
               )}
@@ -157,6 +185,14 @@ function Artboard({ jobLabel, headline, details, offer, photoUrl, tag, rush, sta
           ) : (
             <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: 'rgba(255,255,255,0.4)', border: '1.5px dashed rgba(255,255,255,0.25)', borderRadius: 10, padding: '14px 16px', display: 'inline-block' }}>
               {L['board.empty']}
+            </div>
+          )}
+          {businessName && (
+            <div style={{ marginTop: compact ? 10 : 14 }}>
+              <span aria-hidden style={{ display: 'block', height: 1, width: '38%', margin: '0 auto 6px', background: 'rgba(255,255,255,0.22)' }} />
+              <div style={{ fontFamily: DESK.mono, fontSize: 8.5, letterSpacing: '0.3em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {businessName}
+              </div>
             </div>
           )}
         </div>
@@ -268,7 +304,7 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
   )
 }
 
-export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; name: string }[]; assets: DesignAsset[] }) {
+export default function DesignOrderFlow({ menu, assets, businessName }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null }) {
   const today = todayISO()
 
   const [step, setStep] = useState(1)
@@ -285,8 +321,13 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const [promoteItem, setPromoteItem] = useState<string | null>(null)
   const [picked, setPicked] = useState<string[]>([])
   const [uploaded, setUploaded] = useState<DesignAsset[]>([])
-  const [sourcePhotos, setSourcePhotos] = useState(false)
-  const [noPhotos, setNoPhotos] = useState(false)
+  /* The hand-it-to-us paths. Picking photos clears the mode; picking a mode clears the
+   * photos. 'shoot' books a real photo shoot, 'source' is stock sourcing, 'none' is
+   * custom artwork with no photo at all. */
+  const [photoMode, setPhotoMode] = useState<'shoot' | 'source' | 'none' | null>(null)
+  /* Sizes the server did not know (menu photos, older uploads): measured here, once,
+   * before the quality gate judges them. null = the image would not load at all. */
+  const [measured, setMeasured] = useState<Record<string, { width: number; height: number } | null>>({})
   /* The event's own date, from the read. NEVER the delivery date: a flyer due the night of
    * the event promotes nothing. The need-by date (due) is always the owner's tap. */
   const [eventDate, setEventDate] = useState<string | null>(null)
@@ -304,9 +345,30 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
   const requestMode = !RATE_CARD.approved
 
   const src = (k: keyof DesignRead['cited']): DesignFact<never>['source'] => (read?.cited[k] ? 'read' : 'asked')
-  const allAssets = [...assets, ...uploaded]
+
+  useEffect(() => {
+    for (const a of assets) {
+      if (a.width > 0 || measured[a.id] !== undefined) continue
+      const img = new Image()
+      img.onload = () => setMeasured((m) => ({ ...m, [a.id]: { width: img.naturalWidth, height: img.naturalHeight } }))
+      img.onerror = () => setMeasured((m) => ({ ...m, [a.id]: null }))
+      img.src = a.url
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assets])
+
+  const allAssets = [...assets, ...uploaded].map((a) =>
+    a.width > 0 ? a : measured[a.id] ? { ...a, ...measured[a.id]! } : a,
+  )
+  /* Best options first: everything that clears the gate, sharpest on top; too-small
+   * photos sink to the end (visible but honestly disabled). */
+  const rankedAssets = [...allAssets].sort(
+    (a, b) =>
+      (passesQualityGate(b) ? 1 : 0) - (passesQualityGate(a) ? 1 : 0) ||
+      b.width * b.height - a.width * a.height,
+  )
   const usable = allAssets.filter(passesQualityGate)
-  const usingOwn = picked.length > 0 && !sourcePhotos && !noPhotos
+  const usingOwn = picked.length > 0 && photoMode == null
   const printDestSpecs = dests
     .map((d) => DESTINATIONS.find((x) => x.id === d))
     .filter((d): d is (typeof DESTINATIONS)[number] => !!d && d.kind === 'print')
@@ -325,8 +387,8 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     destinations: { value: dests, source: src('destinations'), citedWords: read?.cited.destinations },
     ...(printPicked && allQtysIn ? { printQtys: { value: printQtys, source: 'asked' as const } } : {}),
     ...(printer != null ? { printer: { value: printer, source: 'asked' as const } } : {}),
-    ...(usingOwn || sourcePhotos || noPhotos
-      ? { photos: { value: noPhotos ? ('none' as const) : usingOwn ? ('own' as const) : ('source' as const), source: 'asked' as const } }
+    ...(usingOwn || photoMode != null
+      ? { photos: { value: photoMode ?? ('own' as const), source: 'asked' as const } }
       : {}),
     tier: 2, // Phase C derives this from design history; standard custom until then
     ...(due ? { dueDateISO: { value: due, source: 'asked' as const } } : {}),
@@ -376,7 +438,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     step === 1 ? job != null || described.trim().length >= 8
     : step === 2 ? dests.length > 0 && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
     : step === 3 ? headline.trim().length > 0
-    : step === 4 ? usingOwn || sourcePhotos || noPhotos
+    : step === 4 ? usingOwn || photoMode != null
     : step === 5 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
     : true
 
@@ -427,7 +489,10 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
       /* print runs are off: any picked print size is a print ready FILE handoff */
       printPicked && !PRINT_AVAILABLE ? 'Print ready files only; they handle the printing' :
       printer === 'us' ? 'We print and deliver' : printer === 'client' ? 'Their shop prints' : '',
-      noPhotos ? 'Text and brand only' : usingOwn ? 'Using their photos' : sourcePhotos ? 'Find photos for them' : '',
+      photoMode === 'none' ? 'No photos: custom artwork on their brand'
+        : photoMode === 'shoot' ? 'Wants a PHOTO SHOOT at their place. Set the shoot date with them before design starts'
+        : photoMode === 'source' ? 'Find photos for them'
+        : usingOwn ? 'Using their photos' : '',
       eventDate ? `Event on ${fmtDay(eventDate)}` : '',
       due ? `In hand by ${fmtDay(due)}` : '',
       rushConfirmed ? 'Rush agreed' : '',
@@ -466,7 +531,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         <DeskKeyframes />
         <BoardKeyframes />
         <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
-          <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} tag={boardTag} stamped />
+          <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} stamped />
         </div>
         <div style={{ fontFamily: DESK.disp, fontSize: 23, fontWeight: 700, color: DESK.ink, letterSpacing: '-0.02em', marginTop: 10 }}>{requestMode ? L['done.title.request'] : L['done.title']}</div>
         <div style={{ fontSize: 13.5, color: DESK.ink2, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
@@ -502,7 +567,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
         <Artboard
           jobLabel={jobLabel}
           headline={headline} details={details} offer={offer}
-          photoUrl={boardPhoto} tag={boardTag} rush={quote.rush}
+          photoUrl={boardPhoto} businessName={businessName} tag={boardTag} rush={quote.rush}
           compact={step !== 3 && step !== 6}
         />
       )}
@@ -662,23 +727,30 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
           )
         })()}
 
-        {/* ── 4. photos: the picked shot paints the board ── */}
+        {/* ── 4. photos: real library ranked sharpest first, or hand it to us ── */}
         {step === 4 && (
           <>
             <StepHead n={4} title={T.photos} sub={S.photos} />
+            {usable.length > 0 && (
+              <div style={{ fontSize: 11.5, color: DESK.mute, margin: '-6px 0 10px', lineHeight: 1.45 }}>
+                {L['photos.best']}
+              </div>
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {allAssets.map((a) => {
+              {rankedAssets.map((a, i) => {
                 const ok = passesQualityGate(a)
                 const on = picked.includes(a.id)
+                /* honest quality tags: the sharpest few say so; a dish photo names its dish */
+                const tag = !ok ? L['photos.gate'] : a.kind === 'menu' && a.label ? a.label : i === 0 && usable.length > 1 ? L['photos.sharp'] : null
                 return (
                   <button
                     key={a.id} type="button" disabled={!ok}
-                    onClick={() => { setSourcePhotos(false); setNoPhotos(false); setPicked((prev) => (prev.includes(a.id) ? prev.filter((x) => x !== a.id) : [...prev, a.id])) }}
-                    style={{ position: 'relative', aspectRatio: '1', borderRadius: 12, overflow: 'hidden', cursor: ok ? 'pointer' : 'default', border: `2px solid ${on ? DESK.mint : 'transparent'}`, padding: 0, background: '#E7E4DB', opacity: ok ? 1 : 0.45, boxShadow: on ? '0 4px 12px rgba(46,154,120,0.3)' : '0 1px 3px rgba(22,33,28,0.08)', transform: on ? 'translateY(-2px)' : undefined, transition: 'transform .18s ease, box-shadow .18s ease' }}
+                    onClick={() => { setPhotoMode(null); setPicked((prev) => (prev.includes(a.id) ? prev.filter((x) => x !== a.id) : [...prev, a.id])) }}
+                    style={{ position: 'relative', aspectRatio: '1', borderRadius: 12, overflow: 'hidden', cursor: ok ? 'pointer' : 'default', border: `2px solid ${on ? DESK.mint : 'transparent'}`, padding: 0, background: '#E7E4DB', opacity: ok ? 1 : 0.45, boxShadow: on ? '0 4px 12px rgba(46,154,120,0.3)' : '0 1px 3px rgba(22,33,28,0.08)', transform: on ? 'translateY(-2px)' : undefined, transition: 'opacity .2s ease, transform .18s ease, box-shadow .18s ease' }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.url} alt={a.label ?? 'photo'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    {!ok && <span style={{ position: 'absolute', left: 4, bottom: 4, right: 4, fontSize: 9, fontWeight: 700, color: '#fff', background: 'rgba(22,33,28,0.6)', borderRadius: 6, padding: '2px 4px' }}>{L['photos.gate']}</span>}
+                    <img src={a.url} alt={a.label ?? 'photo'} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    {tag && <span style={{ position: 'absolute', left: 4, bottom: 4, right: on ? 4 : undefined, maxWidth: 'calc(100% - 8px)', fontSize: 9, fontWeight: 700, color: '#fff', background: ok ? 'rgba(22,33,28,0.55)' : 'rgba(22,33,28,0.6)', borderRadius: 6, padding: '2px 5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tag}</span>}
                     {on && <span style={{ position: 'absolute', top: 5, right: 5, width: 18, height: 18, borderRadius: 99, background: DESK.mint, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check size={11} strokeWidth={3.4} /></span>}
                   </button>
                 )
@@ -688,16 +760,21 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                 <input type="file" accept="image/*" multiple onChange={(e) => upload(e.target.files)} style={{ display: 'none' }} />
               </label>
             </div>
-            {usable.length === 0 && (
+            {usable.length === 0 && allAssets.length > 0 && (
               <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '10px 13px', fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>
-                {fill(L['photos.empty'], { price: String(RATE_CARD.photoSourcing) })}
+                {L['photos.empty']}
               </div>
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
-              <Ticket on={noPhotos} name={L['photos.none.label']} sub={L['photos.none.sub']} price={requestMode ? undefined : '$0'}
-                onClick={() => { setNoPhotos(!noPhotos); setSourcePhotos(false); setPicked([]) }} />
-              <Ticket on={sourcePhotos} name={requestMode ? L['photos.source.label.request'] : fill(L['photos.source.label'], { price: String(RATE_CARD.photoSourcing) })} sub={L['photos.source.sub']} price={requestMode ? undefined : `$${RATE_CARD.photoSourcing}`}
-                onClick={() => { setSourcePhotos(!sourcePhotos); setNoPhotos(false); setPicked([]) }} />
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '16px 0 8px' }}>
+              {L['photos.or']}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Ticket on={photoMode === 'shoot'} name={L['photos.shoot.label']} sub={L['photos.shoot.sub']}
+                onClick={() => { setPhotoMode(photoMode === 'shoot' ? null : 'shoot'); setPicked([]) }} />
+              <Ticket on={photoMode === 'source'} name={requestMode ? L['photos.source.label.request'] : fill(L['photos.source.label'], { price: String(RATE_CARD.photoSourcing) })} sub={L['photos.source.sub']} price={requestMode ? undefined : `$${RATE_CARD.photoSourcing}`}
+                onClick={() => { setPhotoMode(photoMode === 'source' ? null : 'source'); setPicked([]) }} />
+              <Ticket on={photoMode === 'none'} name={L['photos.none.label']} sub={L['photos.none.sub']} price={requestMode ? undefined : '$0'}
+                onClick={() => { setPhotoMode(photoMode === 'none' ? null : 'none'); setPicked([]) }} />
             </div>
           </>
         )}
@@ -782,7 +859,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
               {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
               {dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase()).join(', ')}
               {printPicked && allQtysIn ? ` (${printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label.toLowerCase()}`).join(', ')}, ${printer === 'us' ? 'we print' : 'your shop prints'})` : ''}
-              {noPhotos ? ', text and brand only' : usingOwn ? ', using your photos' : ', with sourced photos'}
+              {photoMode === 'none' ? ', custom artwork with no photos' : photoMode === 'shoot' ? ', with a photo shoot at your place first' : usingOwn ? ', using your photos' : ', with photos we find for you'}
               {due ? `, in hand by ${fmtDay(due)}` : ''}
               {eventDate ? ` for your ${fmtDay(eventDate)} event` : ''}.
             </div>

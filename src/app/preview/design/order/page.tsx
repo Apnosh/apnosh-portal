@@ -17,7 +17,7 @@ export const metadata = { title: 'Design order, no login' }
 export default function PreviewDesignOrderPage() {
   return (
     <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100dvh', background: '#F5F5F7' }}>
-      <DesignOrderFlow menu={FIXTURE_MENU} assets={FIXTURE_ASSETS} />
+      <DesignOrderFlow menu={FIXTURE_MENU} assets={FIXTURE_ASSETS} businessName="The Rib Shack" />
     </div>
   )
 }

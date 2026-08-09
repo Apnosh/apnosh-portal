@@ -232,11 +232,16 @@ s.group('sanitizeDesignRead: the shared evidence gate, the design vocabulary')
   s.check('a supported order has no unplaced note', sanitizeDesignRead(null, TEXT, TODAY).unplaced === undefined)
 }
 
-s.group('Photos: the third honest answer')
+s.group('Photos: the four honest answers')
 {
   const none = priceDesignOrder({ ...BASE, photos: asked('none' as const) }, RATE_CARD)
   s.check('no-photos is a VISIBLE zero with its own why', none.lines.some((l) => l.id === 'photos' && l.amount === 0 && /no photos/i.test(l.why)))
   s.check('no-photos total equals own-photos total', none.total === priceDesignOrder(BASE, RATE_CARD).total)
+  const shoot = priceDesignOrder({ ...BASE, photos: asked('shoot' as const) }, RATE_CARD)
+  s.check('a photo shoot is a VISIBLE zero that says the shoot is quoted on its own',
+    shoot.lines.some((l) => l.id === 'photos' && l.amount === 0 && /shoot/i.test(l.why) && /on its own/i.test(l.why)))
+  s.check('shoot total equals own-photos total (no guessed shoot money, law 4)',
+    shoot.total === priceDesignOrder(BASE, RATE_CARD).total)
 }
 
 s.group('Question bank: the walk lint, applied to the design copy (W1, W4, W5, uniformity)')

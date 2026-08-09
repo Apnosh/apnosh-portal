@@ -36,10 +36,12 @@ export interface DesignOrderAnswers {
    *  destination needs its own confirmed count; never guessed (law 4) */
   printQtys?: DesignFact<Partial<Record<DestinationId, number>>>
   printer?: DesignFact<'client' | 'us'>
-  /** 'own' = client assets cleared the quality gate; 'source' = the photo add-on; 'none' =
-   *  text and brand only, a visible zero (a holiday-hours notice needs no photos).
+  /** 'own' = client assets cleared the quality gate; 'source' = the photo add-on; 'shoot' =
+   *  a real photo shoot at their place, scheduled and quoted on its own (a visible zero
+   *  here, never a hidden charge); 'none' = custom artwork on their brand, a visible zero
+   *  (a holiday-hours notice needs no photos).
    *  Absent while the photos step is unanswered: a question, never a guessed charge (law 4). */
-  photos?: DesignFact<'own' | 'source' | 'none'>
+  photos?: DesignFact<'own' | 'source' | 'none' | 'shoot'>
   /** from design history (Phase C); the engine never asks for it */
   tier: 1 | 2 | 3
   /** true when history could support a higher tier: price the lower one, flag for review */
@@ -153,6 +155,13 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
     lines.push({
       id: 'photos', label: 'Photos', amount: 0,
       why: 'You are using your own.', source: a.photos.source,
+    })
+  } else if (a.photos.value === 'shoot') {
+    /* The shoot itself is scheduled and quoted as its own job (date, place, and scope are
+     * unknown here) — pricing it now would be guessed money, which law 4 forbids. */
+    lines.push({
+      id: 'photos', label: 'Photo shoot', amount: 0,
+      why: 'We shoot it at your place. The shoot is set up and quoted on its own.', source: a.photos.source,
     })
   } else {
     lines.push({
