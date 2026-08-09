@@ -1,33 +1,24 @@
 'use client'
 
 /**
- * THE REQUEST DESK — ask us for anything (creative requests, owner side).
+ * YOUR REQUESTS — the tracking side of creative requests (owner side).
  *
- * The hub lists every way to ask plus the owner's past requests with the team's
- * replies. Picking a creative opens ITS OWN Drafting Table flow (creative-flow.tsx
- * driven by flows.ts): the live board on top, numbered steps with controls sized to
- * the thing, a real calendar, the spoken review, the $0 receipt, hold-to-send.
- * The graphic is the original design configurator (/dashboard/design/order) — owner
- * law: one builder per thing, never a generic form.
+ * The store's Creatives shelf is the only storefront (one card per type, owner's
+ * call: individual items, no hub picker). A card deep-links here as ?type=<id> and
+ * lands straight in that type's own Drafting Table flow (creative-flow.tsx driven
+ * by flows.ts). Without ?type this page is the ledger: every request, its status,
+ * the team's quote, the thread, and the accept button. The graphic is the original
+ * design configurator (/dashboard/design/order) — owner law: one builder per thing.
  */
 
 import { useCallback, useEffect, useState } from 'react'
-import {
-  Palette, BookOpen, Sparkles, Globe, Clapperboard, Camera, Share2, Mail,
-  Megaphone, Printer, PenLine, MessageCircle, ChevronRight, type LucideIcon,
-} from 'lucide-react'
+import { ChevronRight } from 'lucide-react'
 import { DESK, paperGround, DeskKeyframes, Ticket } from '@/components/campaigns/desk/ui'
 import {
-  REQUEST_TYPES, STATUS_LABEL, STATUS_OWNER_LINE, requestTypeById, questionsFor,
-  type RequestType, type RequestTypeId, type RequestAnswers, type RequestStatus,
+  STATUS_LABEL, STATUS_OWNER_LINE, requestTypeById, questionsFor,
+  type RequestType, type RequestAnswers, type RequestStatus,
 } from '@/lib/requests/catalog'
 import CreativeFlow from '@/components/requests/creative-flow'
-
-const TYPE_ICONS: Record<RequestTypeId, LucideIcon> = {
-  graphic: Palette, menu: BookOpen, logo: Sparkles, website: Globe, video: Clapperboard,
-  photos: Camera, social: Share2, email: Mail, ads: Megaphone, print: Printer,
-  copy: PenLine, other: MessageCircle,
-}
 
 interface RequestNote {
   id: string
@@ -100,11 +91,6 @@ export default function RequestFlow() {
     if (t) setType(t)
   }, [])
 
-  const start = (t: RequestType) => {
-    if (t.id === 'graphic') { window.location.assign('/dashboard/design/order'); return }
-    setType(t)
-  }
-
   /* accept = the owner's yes to a quote; note = a reply on the thread. */
   const act = async (id: string, kind: 'accept' | 'note') => {
     if (busy) return
@@ -135,39 +121,26 @@ export default function RequestFlow() {
     return <CreativeFlow typeId={type.id} onBack={() => { setType(null); loadMine() }} />
   }
 
-  /* ── HUB: the picker + your requests ──────────────────────────────────────────────── */
+  /* ── THE LEDGER: your requests, their answers, your yes ──────────────────────────── */
   return (
     <div style={{ ...paperGround, minHeight: '100dvh', padding: '22px 16px 90px' }}>
       <DeskKeyframes />
-      <div style={label}>The request desk</div>
+      <div style={label}>Creative requests</div>
       <h1 style={{ fontFamily: DESK.disp, fontSize: 24, color: DESK.ink, margin: '6px 0 4px', letterSpacing: '-0.01em' }}>
-        What do you need made?
+        Your requests
       </h1>
-      <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, margin: '0 0 18px', lineHeight: 1.5 }}>
-        Ask for anything. We answer with a plan and a price. Nothing is charged until you say yes.
+      <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, margin: '0 0 14px', lineHeight: 1.5 }}>
+        We answer each one with a plan and a price. Nothing is charged until you say yes.
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-        {REQUEST_TYPES.map((t) => {
-          const Icon = TYPE_ICONS[t.id]
-          return (
-            <Ticket
-              key={t.id}
-              name={
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
-                  <Icon size={16} style={{ color: DESK.mintDeep, flexShrink: 0 }} />
-                  {t.label}
-                </span>
-              }
-              sub={t.blurb}
-              right={<ChevronRight size={17} />}
-              onClick={() => start(t)}
-            />
-          )
-        })}
-      </div>
+      <Ticket
+        name="Ask for something new"
+        sub="Menus, logos, videos, photos, websites: pick one from the store"
+        right={<ChevronRight size={17} />}
+        onClick={() => window.location.assign('/dashboard/campaigns/new?lens=creatives')}
+      />
 
-      <div style={{ ...label, margin: '30px 2px 10px' }}>Your requests</div>
+      <div style={{ ...label, margin: '26px 2px 10px' }}>Sent</div>
       {loadingMine ? (
         <div style={{ fontFamily: DESK.body, fontSize: 13, color: DESK.mute, padding: '8px 2px' }}>Loading...</div>
       ) : mine.length === 0 ? (

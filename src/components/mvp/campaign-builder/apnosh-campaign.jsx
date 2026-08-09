@@ -2345,6 +2345,7 @@ const LENS_CHIPS = [
   { id: "all", label: "All" },
   { id: "aware", label: "Get discovered" },
   { id: "interest", label: "Create interest" },
+  { id: "creatives", label: "Creatives" },
   { id: "actions", label: "Easy to order" },
   { id: "orders", label: "Fill seats" },
   { id: "back", label: "Bring back" },
