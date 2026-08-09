@@ -109,6 +109,9 @@ const MVP_PREFIX = [
   '/dashboard/connect-accounts', // the reconnect pickers (GA property / GSC site) — keep them full-screen mobile, not legacy desktop chrome
   '/dashboard/billing', // billing + its sub-routes (e.g. /billing/orders/[id]) own their full-screen chrome
   '/dashboard/requests', // the creative request desk owns its full-screen chrome
+  '/dashboard/design', // the graphic Drafting Table (/design/order) owns its full-screen chrome
+  '/dashboard/delivery-menu', // delivery-menu setup tool, mobile-first
+  '/dashboard/email', // email deliverability setup tool, mobile-first
 ]
 function isMvpRoute(path: string): boolean {
   return MVP_EXACT.has(path) || MVP_PREFIX.some(p => path === p || path.startsWith(p + '/'))
