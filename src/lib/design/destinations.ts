@@ -108,11 +108,12 @@ export const destinationById = (id: string): DestinationSpec | undefined =>
 
 export const isPrint = (id: string): boolean => destinationById(id)?.kind === 'print'
 
-/* PRINTING IS OFF (owner call, 2026-08-09): we cannot run print jobs right now, so the
- * print destinations (flyer, table tent, menu board, poster, banner, gift card) are shown
- * but not selectable, with a plain message saying why. One flag to flip when printing
- * returns; the specs, adders, and buffers below all stay ready. */
+/* PRINT RUNS ARE OFF (owner call, 2026-08-09): we DESIGN print pieces (flyer, table
+ * tent, menu board, poster, banner, gift card) and hand over the print ready file, but
+ * we cannot run the print job itself. While this flag is false the flow skips the
+ * copy-count and who-prints questions and says so plainly. One flag to flip when
+ * printing returns; specs, adders, and buffers all stay ready. */
 export const PRINT_AVAILABLE = false
 
 export const PRINT_OFF_MESSAGE =
-  'We cannot print for you yet. Screen designs only for now. Printed pieces are coming back.'
+  'We design it and hand you the print ready file. We cannot print or deliver copies yet, so printing is with you or your print shop.'

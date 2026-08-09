@@ -359,10 +359,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
       if (rd) {
         setRead(rd)
         if (rd.jobType) setJob(rd.jobType)
-        /* the read can suggest print sizes; while printing is off they must not
-           slip into the pick, or the flow would sell a thing we cannot make */
-        const usableDests = (rd.destinations ?? []).filter((d) => PRINT_AVAILABLE || !DESTINATIONS.find((x) => x.id === d && x.kind === 'print'))
-        if (usableDests.length) setDests(usableDests)
+        if (rd.destinations?.length) setDests(rd.destinations)
         if (rd.message) setHeadline(titleCase(rd.message))
         if (rd.offer) setOffer(rd.offer)
         if (rd.eventDateISO) { setEventDate(rd.eventDateISO); setDetails(fmtLong(rd.eventDateISO)) }
@@ -377,7 +374,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
-    : step === 2 ? dests.length > 0 && (!printPicked || (allQtysIn && printer != null))
+    : step === 2 ? dests.length > 0 && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
     : step === 3 ? headline.trim().length > 0
     : step === 4 ? usingOwn || sourcePhotos || noPhotos
     : step === 5 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
@@ -427,6 +424,8 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
     const noteBits = [
       printPicked && allQtysIn ? printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label}`).join(', ') : '',
+      /* print runs are off: any picked print size is a print ready FILE handoff */
+      printPicked && !PRINT_AVAILABLE ? 'Print ready files only; they handle the printing' :
       printer === 'us' ? 'We print and deliver' : printer === 'client' ? 'Their shop prints' : '',
       noPhotos ? 'Text and brand only' : usingOwn ? 'Using their photos' : sourcePhotos ? 'Find photos for them' : '',
       eventDate ? `Event on ${fmtDay(eventDate)}` : '',
@@ -562,7 +561,7 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
           <>
             <StepHead n={2} title={T.where} sub={S.where} />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
-              {DESTINATIONS.filter((d) => PRINT_AVAILABLE || d.kind !== 'print').map((d) => (
+              {DESTINATIONS.map((d) => (
                 <DestFrame
                   key={d.id} d={d} on={dests.includes(d.id)}
                   amount={requestMode ? null : destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
@@ -570,21 +569,15 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
                 />
               ))}
             </div>
-            {/* printing is off: the print sizes are shown dimmed so the owner knows they
-                exist, with one plain line saying why they cannot be picked today */}
-            {!PRINT_AVAILABLE && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end', opacity: 0.38, pointerEvents: 'none' }} aria-hidden>
-                  {DESTINATIONS.filter((d) => d.kind === 'print').map((d) => (
-                    <DestFrame key={d.id} d={d} on={false} amount={null} photoUrl={boardPhoto} headline={headline} onClick={() => {}} />
-                  ))}
-                </div>
-                <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 8, lineHeight: 1.45 }}>
-                  {PRINT_OFF_MESSAGE}
-                </div>
+            {/* print runs are off: a picked print size is DESIGNED (print ready file
+                handed over), but the copy-count and who-prints questions only exist for
+                a print job we cannot run, so they hide and one plain note says why */}
+            {printPicked && !PRINT_AVAILABLE && (
+              <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 14, lineHeight: 1.45 }}>
+                {PRINT_OFF_MESSAGE}
               </div>
             )}
-            {printPicked && (
+            {printPicked && PRINT_AVAILABLE && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 6 }}>{L['print.qty']}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: printDestSpecs.length > 1 ? '1fr 1fr' : '1fr', gap: 8 }}>

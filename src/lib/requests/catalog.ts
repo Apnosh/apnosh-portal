@@ -69,7 +69,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
   {
     id: 'graphic',
     label: 'A graphic',
-    blurb: 'A promo image, social graphic, or any one off design',
+    blurb: 'A flyer, poster, promo image, or any one off design',
     noun: 'your graphic',
     questions: [
       { id: 'what', prompt: 'What is the graphic for?', kind: 'text', hint: 'Taco Tuesday flyer, grand opening poster' },
