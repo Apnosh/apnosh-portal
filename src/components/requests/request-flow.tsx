@@ -118,7 +118,19 @@ export default function RequestFlow() {
 
   /* ── a creative's own Drafting Table flow ─────────────────────────────────────────── */
   if (type) {
-    return <CreativeFlow typeId={type.id} onBack={() => { setType(null); loadMine() }} />
+    return (
+      <CreativeFlow
+        typeId={type.id}
+        /* Backing out of a flow returns to where the cards live: the store. */
+        onBack={() => window.location.assign('/dashboard/campaigns/new?lens=creatives')}
+        /* After a send, land on the ledger (and drop ?type so refresh stays here). */
+        onDone={() => {
+          window.history.replaceState(null, '', window.location.pathname)
+          setType(null)
+          loadMine()
+        }}
+      />
+    )
   }
 
   /* ── THE LEDGER: your requests, their answers, your yes ──────────────────────────── */

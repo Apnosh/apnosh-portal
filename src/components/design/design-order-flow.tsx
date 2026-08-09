@@ -479,6 +479,16 @@ export default function DesignOrderFlow({ menu, assets }: { menu: { id: string; 
     <div style={ground}>
       <DeskKeyframes />
       <BoardKeyframes />
+      {/* step 1's exit: back to the store where the cards live (later steps use Back) */}
+      {step === 1 && (
+        <button
+          type="button"
+          onClick={() => window.location.assign('/dashboard/campaigns/new?lens=creatives')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '2px 0', marginBottom: 8, cursor: 'pointer', fontFamily: DESK.body, fontSize: 14, fontWeight: 600, color: DESK.ink2 }}
+        >
+          {'‹'} Store
+        </button>
+      )}
       {requestMode && (
         <div style={{ background: DESK.mintWash, color: DESK.mintDeep, border: `1px solid ${DESK.mintLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginBottom: 12, lineHeight: 1.4 }}>
           {L['banner.request']}

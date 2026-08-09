@@ -80,7 +80,7 @@ function MenuFrame({ frame }: { frame: NonNullable<TicketOption['frame']> }) {
   return <span style={{ ...base, width: 20, height: 26, borderRadius: 2 }} />
 }
 
-export default function CreativeFlow({ typeId, onBack }: { typeId: string; onBack: () => void }) {
+export default function CreativeFlow({ typeId, onBack, onDone }: { typeId: string; onBack: () => void; onDone?: () => void }) {
   const type = requestTypeById(typeId)
   const flow = flowFor(typeId)
   const [answers, setAnswers] = useState<RequestAnswers>({})
@@ -173,10 +173,10 @@ export default function CreativeFlow({ typeId, onBack }: { typeId: string; onBac
           This exact brief goes to a real person. You will get a plan and a price in your inbox. No charge until you say yes.
         </div>
         <button
-          type="button" onClick={onBack}
+          type="button" onClick={onDone ?? onBack}
           style={{ marginTop: 24, padding: '13px 26px', borderRadius: 999, border: 'none', cursor: 'pointer', background: DESK.grad, color: '#fff', fontFamily: DESK.disp, fontWeight: 700, fontSize: 14.5 }}
         >
-          Back to the desk
+          See your request
         </button>
       </div>
     )
@@ -250,7 +250,7 @@ export default function CreativeFlow({ typeId, onBack }: { typeId: string; onBac
           onClick={() => (step === 0 ? onBack() : setStep((s) => s - 1))}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', color: DESK.ink2, fontFamily: DESK.body, fontSize: 13.5, padding: '6px 4px' }}
         >
-          <ChevronLeft size={16} /> {step === 0 ? 'All requests' : 'Back'}
+          <ChevronLeft size={16} /> {step === 0 ? 'Store' : 'Back'}
         </button>
         <span style={{ fontFamily: DESK.body, fontSize: 12.5, fontWeight: 600, color: DESK.ink2 }}>{type.label}</span>
       </div>
