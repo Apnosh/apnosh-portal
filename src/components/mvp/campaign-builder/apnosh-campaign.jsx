@@ -2122,7 +2122,7 @@ const CATALOG = [
   { id: "nights", type: "plan", icon: "moon", title: "Fill your slow nights", sub: "Drive guests on your quiet days", cad: "recurring" },
   { id: "firstvisit", type: "plan", icon: "people", title: "Win first-time visits", sub: "Give new people a reason to come in", cad: "recurring" },
   { id: "regulars", type: "plan", icon: "heart", title: "Turn first-timers into regulars", sub: "Win the all-important second visit", cad: "recurring", hot: true },
-  { id: "catering", type: "plan", icon: "people", title: "Promote your catering", sub: "1 styled photo, 1 post, 1 outreach email to nearby offices", cad: "once" },
+  { id: "catering", type: "plan", icon: "people", title: "Promote your catering", sub: "1 styled photo and 1 post that land group and office orders", cad: "once" },
   { id: "reviewsplan", type: "plan", icon: "chat", title: "Boost reviews and rating", sub: "Review-request system set up, plus the first asks", cad: "setup" },
 
   { id: "reel", type: "content", icon: "video", title: "A short video", sub: "A reel for Instagram", cad: "once", hot: true },
