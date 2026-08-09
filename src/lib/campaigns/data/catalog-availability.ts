@@ -183,8 +183,23 @@ function coerceAvailability(v: unknown): CardAvailability | null {
  */
 export const RETIRED_IDS: readonly string[] = ['delivery']
 
+/* EMAIL IS OFF (owner call, 2026-08-08): the send rail is built but not armed
+ * (no Resend key, EMAIL_SEND_ENABLED unset), so nothing email-shaped is sold or
+ * even teased — not the six send campaigns, not the email request card. Hidden,
+ * not coming-soon: "we don't have that yet" should read as absence, not a
+ * promise. Wins over CMS overrides on purpose. When the rail is armed and one
+ * real send has been proven, delete ids from this list to bring them back
+ * (the send group returns as LIVE, the email request card returns to the
+ * Creatives shelf). The email deliverability SETUP card (emaildeliver) stays:
+ * it diagnoses, it never sends. */
+export const EMAIL_OFF_IDS: readonly string[] = [
+  'welcome', 'news', 'slowoffer', 'birthday', 'earlyaccess', 'winback',
+  'creative-email',
+]
+
 export function availabilityFor(id: string, overrides?: VisibilityOverrideMap): CardAvailability {
   if (RETIRED_IDS.includes(id)) return 'hidden'
+  if (EMAIL_OFF_IDS.includes(id)) return 'hidden'
   const o = overrides?.[id]
   const ov = o ? coerceAvailability(o.visibility) : null
   if (ov) return ov

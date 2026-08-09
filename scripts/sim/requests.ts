@@ -17,7 +17,7 @@ import {
   summaryLine, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE,
   validateAttachments, validateDueDate, disciplineForRequestType,
 } from '@/lib/requests/catalog'
-import { FULLY_BUILT_LIVE } from '@/lib/campaigns/data/catalog-availability'
+import { FULLY_BUILT_LIVE, EMAIL_OFF_IDS, availabilityFor } from '@/lib/campaigns/data/catalog-availability'
 import { CREATIVE_FLOWS, flowFor, bucketForDate } from '@/lib/requests/flows'
 
 config({ path: '.env.local' })
@@ -104,8 +104,18 @@ s.group('Creative flows: every type has its own Drafting Table, locked to the ca
 s.group('Store shelf sync: every type is a live card, every card is a type')
 {
   const cardIds = FULLY_BUILT_LIVE.filter((id) => id.startsWith('creative-'))
-  s.check('every request type has a live creative-* card', REQUEST_TYPES.every((t) => cardIds.includes(`creative-${t.id}`)))
+  s.check('every request type has a live creative-* card (unless switched off)', REQUEST_TYPES.every((t) =>
+    cardIds.includes(`creative-${t.id}`) || EMAIL_OFF_IDS.includes(`creative-${t.id}`)
+  ))
   s.check('every creative-* card maps back to a real type', cardIds.every((id) => requestTypeById(id.slice('creative-'.length)) !== null))
+  /* Owner call 2026-08-08: nothing email-shaped is sold until the send rail is
+   * armed and one real send has been proven. Hidden, not coming-soon. */
+  s.check('email surfaces are OFF (hidden, not teased)', (() =>
+    availabilityFor('creative-email') === 'hidden' &&
+    ['welcome', 'news', 'slowoffer', 'birthday', 'earlyaccess', 'winback']
+      .every((id) => availabilityFor(id) === 'hidden')
+  )())
+  s.check('the deliverability setup card stays live (diagnoses, never sends)', availabilityFor('emaildeliver') === 'live')
 }
 
 s.group('v2 gates: files, real dates, the bridge map')
