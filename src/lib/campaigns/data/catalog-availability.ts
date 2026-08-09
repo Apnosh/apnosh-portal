@@ -53,14 +53,15 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * unsigned it runs in REQUEST MODE (no numbers anywhere; the seal sends a quote request),
  * and the day RATE_CARD.approved flips it becomes the priced order flow. One builder, both
  * moments — no unsigned price can reach a buyer either way. */
-/* 'creative' (the Request Desk) and the per-type 'creative-*' cards are live because they
- * SELL NOTHING: each collects a brief and the team answers with a quote. The
- * no-unsigned-price rule that holds 'design' back does not apply to requests that charge
- * zero. The per-type ids are generated from the request catalog (imported at top) so the
- * store's Creatives shelf and the desk can never drift apart. */
+/* The per-type 'creative-*' cards are live because they SELL NOTHING: each collects a
+ * brief and the team answers with a quote. The no-unsigned-price rule that holds 'design'
+ * back does not apply to requests that charge zero. The ids are generated from the request
+ * catalog (imported at top) so the store's Creatives shelf and the desk can never drift
+ * apart. The old 'creative' hub card is gone on purpose: the owner asked for individual
+ * cards only, so the Creatives shelf IS the desk's storefront. */
 export const FULLY_BUILT_LIVE: readonly string[] = [
   'gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu',
-  'design', 'creative', ...REQUEST_TYPES.map((t) => `creative-${t.id}`),
+  'design', ...REQUEST_TYPES.map((t) => `creative-${t.id}`),
 ]
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the

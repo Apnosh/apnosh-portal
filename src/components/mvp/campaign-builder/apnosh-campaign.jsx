@@ -2129,7 +2129,6 @@ const CATALOG = [
   { id: "story", type: "content", icon: "story", title: "A story", sub: "A quick post to stay top of mind", cad: "once" },
   { id: "graphic", type: "content", icon: "image", title: "A social media post", sub: "A designed post: graphic, carousel, or photo", cad: "once" },
   { id: "design", type: "task", icon: "graphic", title: "Get a graphic made", sub: "Flyers, posts, banners, gift cards: designed on your brand", cad: "once" },
-  { id: "creative", type: "task", icon: "graphic", title: "Request creative work", sub: "Menus, logos, websites, videos, photos, ads: ask, we quote it", cad: "once", hot: true },
   // The Creatives shelf: one card per request type, generated straight from the request
   // catalog (src/lib/requests/catalog.ts) so titles and blurbs live in ONE place. Tapping
   // one deep-links into that type's questions on the Request Desk (openCard below).
@@ -5577,9 +5576,6 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     // Only when the card is actually buyable — while it sits coming-soon (rate card unsigned)
     // a tap falls through to the PDP so the owner sees the honest reason, never live prices.
     if (id === "design" && buyableId("design")) { window.location.assign("/dashboard/design/order"); return; }
-    // The Request Desk is its own surface (ask for anything, we quote it). Same allowlist
-    // gate: pull "creative" from FULLY_BUILT_LIVE and taps fall back to the honest PDP.
-    if (id === "creative" && buyableId("creative")) { window.location.assign("/dashboard/requests"); return; }
     // A graphic goes to THE ONE graphic builder (the Drafting Table), which runs in
     // request mode while the rate card is unsigned and becomes the priced order after.
     if (id === "creative-graphic" && buyableId(id)) { window.location.assign("/dashboard/design/order"); return; }
