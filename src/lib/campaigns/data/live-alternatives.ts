@@ -21,10 +21,7 @@ import { isBuyable, type VisibilityOverrideMap } from './catalog-availability'
  *  whether that is true depends on the allowlist, which moves. It was briefly false — both pieces
  *  were gated as coming-soon while this note still told owners to go buy them. */
 export const UNBUNDLED_TODAY: Record<string, { ids: string[]; note: string }> = {
-  catering: {
-    ids: ['dish', 'graphic'],
-    note: 'The full catering push has an email step we are still building. Its two ready pieces, the dish feature and the post, are real and you can buy them today.',
-  },
+  // catering went live 2026-08-09 (sold without its email leg), so its unbundle detour retired.
 }
 
 /**

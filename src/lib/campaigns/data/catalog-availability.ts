@@ -62,6 +62,12 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
 export const FULLY_BUILT_LIVE: readonly string[] = [
   'gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu',
   'design', ...REQUEST_TYPES.map((t) => `creative-${t.id}`),
+  /* Owner call 2026-08-09 ("all except the email/text for now"): these three sell the plan
+   * WITHOUT its email leg. Their spine (reels, posts, photos, Google posts) is fully
+   * deliverable on the publish rail; the email line rides the plan as held-and-unbilled
+   * (service-availability layer) and comes back the day the send rail is armed.
+   * reviewsplan + direct stay gated: sends ARE their mechanism, not a leg. */
+  'promoevent', 'launch', 'catering',
 ]
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
@@ -108,7 +114,8 @@ const COMING_SOON_GROUP: Record<string, keyof typeof COMING_SOON_REASON> = {
   // Pure email / SMS sends — no send rail exists.
   welcome: 'send', news: 'send', slowoffer: 'send', birthday: 'send', earlyaccess: 'send', winback: 'send',
   // Mostly buildable but carries an email/SMS leg (owner decision: bookmark whole, do not trim).
-  catering: 'partialSend', promoevent: 'partialSend', launch: 'partialSend', reviewsplan: 'partialSend', direct: 'partialSend',
+  // catering/promoevent/launch went LIVE 2026-08-09 (email leg held, not billed).
+  reviewsplan: 'partialSend', direct: 'partialSend',
   // No real creator supply.
   creator: 'creator',
   // Gift cards + ticketing need POS + sends.
