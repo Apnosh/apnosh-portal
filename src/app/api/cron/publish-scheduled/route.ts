@@ -28,6 +28,8 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { attemptPublish } from '@/lib/publish/attempt-publish'
+import { sendEmailDraft } from '@/lib/email/rail'
+import { isEmailDraft } from '@/lib/email/rail-core'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 
 export const runtime = 'nodejs'
@@ -48,6 +50,10 @@ const HARD_FAIL_CODES = new Set([
   'no_platforms',
   'no_connections',
   'missing_platform_connection',
+  // Email pieces (the send rail): none of these get better by retrying.
+  'no_subject',
+  'no_audience',
+  'rail_closed',
 ])
 
 // A claim older than this can't belong to a live invocation (maxDuration is
@@ -133,7 +139,7 @@ export async function GET(req: Request) {
   // scheduled posts per hour, max).
   const { data: due } = await admin
     .from('content_drafts')
-    .select('id, client_id, scheduled_for')
+    .select('id, client_id, scheduled_for, target_platforms')
     .eq('status', 'scheduled')
     .lte('scheduled_for', nowIso)
     .order('scheduled_for', { ascending: true })
@@ -163,9 +169,13 @@ export async function GET(req: Request) {
       .maybeSingle()
     if (!claimed) continue
 
+    // An email piece (target_platforms = {email}) rides the send rail; every
+    // other piece takes the social publisher. Same claim, same state machine.
+    const emailPiece = isEmailDraft(row.target_platforms as string[] | null)
+
     let result
     try {
-      result = await attemptPublish(draftId)
+      result = emailPiece ? await sendEmailDraft(draftId) : await attemptPublish(draftId)
     } catch (e) {
       // Unexpected exception — restore scheduled_for and let the next
       // tick retry.
@@ -197,11 +207,15 @@ export async function GET(req: Request) {
         .update({ status: 'done', completed_at: nowIso })
         .eq('draft_id', draftId)
         .in('status', ['todo', 'doing'])
+      const sentCount = 'sent' in result ? (result as { sent?: number }).sent : undefined
+      const publishedUrl = 'publishedUrl' in result ? (result as { publishedUrl?: string }).publishedUrl : undefined
       await notifyClientOwners(clientId, {
         kind: 'draft_published',
-        title: 'Your post is live',
-        body: result.publishedUrl ? 'Open to see it in the wild.' : 'It just went out on your feed.',
-        link: result.publishedUrl ?? '/dashboard',
+        title: emailPiece ? 'Your email went out' : 'Your post is live',
+        body: emailPiece
+          ? (sentCount ? `Sent to ${sentCount} guests.` : 'It just went out to your guest list.')
+          : publishedUrl ? 'Open to see it in the wild.' : 'It just went out on your feed.',
+        link: publishedUrl ?? '/dashboard',
       }).catch(() => ({ notified: 0 }))
       outcomes.push({ draftId, clientId, status: 'published' })
       continue

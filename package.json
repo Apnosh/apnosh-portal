@@ -19,6 +19,7 @@
     "sim:plan": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/monthly-plan-e2e.ts",
     "sim:packing": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/plan-packing.ts",
     "sim:design": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/design-pricing.ts",
+    "sim:send-rail": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/send-rail.ts",
     "sim:requests": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/requests.ts",
     "sim:requests-e2e": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/requests-e2e.ts",
     "sim:channels": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/channels.ts",

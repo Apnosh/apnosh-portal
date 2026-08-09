@@ -100,6 +100,7 @@ const MVP_EXACT = new Set([
   '/dashboard/more', '/dashboard/billing', '/dashboard/bookings',
   '/dashboard/assets', '/dashboard/goals', '/dashboard/help', '/dashboard/google-profile',
   '/dashboard/order-buttons', '/dashboard/review-replies', '/dashboard/listings', '/dashboard/measure',
+  '/dashboard/guests', // the guest list (send-rail audience) owns its full-screen chrome
 ])
 const MVP_PREFIX = [
   '/dashboard/insights', // insights + its sub-routes (e.g. /insights/analyst) own their full-screen chrome
