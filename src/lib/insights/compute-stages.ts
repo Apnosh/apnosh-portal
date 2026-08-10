@@ -153,10 +153,10 @@ const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds:
     { key: 'calls', label: 'Calls', sourceIds: ['gbp_calls', 'ga4_phone_taps'] },
     { key: 'directions', label: 'Directions', sourceIds: ['gbp_direction_requests'] },
     { key: 'orders', label: 'Online orders', sourceIds: ['ga4_order_clicks', 'paid_ads_conversions'] },
-    { key: 'bookings', label: 'Bookings', sourceIds: ['gbp_booking_clicks', 'reservations', 'social_link_clicks', 'ig_profile_actions', 'facebook_cta_clicks', 'tiktok_link_clicks'] },
+    { key: 'bookings', label: 'Bookings', sourceIds: ['gbp_booking_clicks', 'reservations', 'social_link_clicks'] },
   ],
   4: [
-    { key: 'guests', label: 'Guests', sourceIds: ['pos_covers'] },
+    { key: 'guests', label: 'Orders', sourceIds: ['pos_covers'] },
     { key: 'revenue', label: 'Revenue', sourceIds: ['pos_revenue'] },
     { key: 'delivery', label: 'Delivery', sourceIds: ['delivery_orders'] },
     { key: 'ticket', label: 'Avg ticket', sourceIds: ['pos_avg_ticket'] },

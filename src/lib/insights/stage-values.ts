@@ -202,6 +202,33 @@ export async function loadStageValues(
     }
   } catch { /* social unavailable */ }
 
+  // ── Register + delivery (pos_daily_sales) -> orders, revenue, avg ticket,
+  //    delivery orders. Written daily by the Square/Clover sync; delivery rows
+  //    come from uploaded statements (source statement:*). ──
+  try {
+    const { data, error } = await capDate(admin
+      .from('pos_daily_sales')
+      .select('source, day, gross_cents, orders')
+      .eq('client_id', clientId)
+      .gte('day', otherStart), 'day')
+    if (!error && data) {
+      let regOrders = 0, regGross = 0, delOrders = 0
+      for (const r of data as Record<string, unknown>[]) {
+        const src = typeof r.source === 'string' ? r.source : ''
+        if (src === 'square' || src === 'clover') {
+          regOrders += num(r.orders)
+          regGross += num(r.gross_cents)
+        } else if (src.startsWith('statement:')) {
+          delOrders += num(r.orders)
+        }
+      }
+      out.pos_covers = regOrders
+      out.pos_revenue = Math.round(regGross / 100)
+      out.pos_avg_ticket = regOrders > 0 ? Math.round(regGross / regOrders / 100) : null
+      out.delivery_orders = delOrders
+    }
+  } catch { /* register unavailable -> its sources stay null */ }
+
   // ── Website / GA4 (website_metrics) -> website visits (sessions), menu views,
   //    order clicks, returning users. sessions are always ingested when GA4 is
   //    connected; menu_views / order_clicks come from migration 206. ──
