@@ -58,10 +58,15 @@ export async function syncChannels(only?: string[]): Promise<EngineRun> {
   const admin = createAdminClient()
   const run: EngineRun = { scanned: 0, synced: 0, failed: 0, skipped: 0, alerts: 0 }
 
+  /* Walk ACTIVE and PENDING connections. Pending is the normal state of a
+   * hosted_link lane right after the owner connects (the vendor holds the login;
+   * we only learn about it by syncing) — skipping pending meant a client who
+   * linked socials and never tapped "Sync now" stayed dark forever. The cron IS
+   * the thing that notices the link. */
   let query = admin
     .from('channel_connections')
     .select('id, client_id, channel, connection_type, platform_account_id, access_token, refresh_token, status, consecutive_failures, metadata')
-    .eq('status', 'active')
+    .in('status', ['active', 'pending'])
   if (only && only.length > 0) query = query.in('channel', only)
   const { data: connections, error } = await query
   if (error) throw new Error(`channels engine could not list connections: ${error.message}`)
@@ -116,9 +121,13 @@ export async function syncChannels(only?: string[]): Promise<EngineRun> {
     const update: Record<string, unknown> = {
       last_sync_at: new Date().toISOString(),
       sync_error: ok ? null : errorText,
-      status: decision.status,
       consecutive_failures: decision.failures,
     }
+    /* Structural outcomes (not_connected / not_configured) are gaps, not incidents:
+     * the adapter already set the honest status (e.g. pending while the owner has
+     * not finished a login). Forcing 'active' here would show "Connected" for a
+     * connection with nothing behind it. Only real outcomes move the status. */
+    if (ok || !structural) update.status = decision.status
     const { error: upErr } = await admin.from('channel_connections').update(update).eq('id', connection.id)
     if (upErr) {
       /* consecutive_failures ships in 234; degrade to the columns that exist. */

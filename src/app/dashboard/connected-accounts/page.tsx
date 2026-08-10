@@ -101,16 +101,18 @@ export default function ConnectedAccountsPage() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  /* Right after the owner finishes a social login on the vendor's page (or whenever a
-   * vendor connection is still "Setting up"), check with the vendor once instead of
-   * leaving a silent card until the nightly sync. */
+  /* Keep the vendor state fresh WITHOUT the owner ever tapping anything: check with
+   * the vendor on page load whenever the connection is new (pending), the owner just
+   * came back from a login, or the last check is older than ten minutes. Newly added
+   * platforms and accounts appear on the next visit; the nightly cron covers the rest. */
   const autoChecked = useRef(false)
   useEffect(() => {
     if (autoChecked.current || loading) return
     const vendor = connections.find(c => c.source === 'channel_connections' && SOCIAL_VENDORS.includes(c.platform))
     if (!vendor) return
     const cameBack = new URLSearchParams(window.location.search).get('connected') === 'social'
-    if (vendor.status !== 'pending' && !cameBack) return
+    const staleMs = vendor.lastSyncAt ? Date.now() - new Date(vendor.lastSyncAt).getTime() : Infinity
+    if (vendor.status !== 'pending' && !cameBack && staleMs < 10 * 60_000) return
     autoChecked.current = true
     ;(async () => {
       setBanner({ ok: true, text: 'Checking your social login...' })
