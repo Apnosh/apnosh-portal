@@ -324,6 +324,12 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
   const [details, setDetails] = useState('')
   const [offer, setOffer] = useState('')
   const [promoteItem, setPromoteItem] = useState<string | null>(null)
+  /* Featuring explores the WHOLE menu, not a taste of it: collapsed shows 8, Show-all
+   * opens everything with a search box, and Something-else takes a dish we do not hold. */
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [menuQ, setMenuQ] = useState('')
+  const [featureOtherOn, setFeatureOtherOn] = useState(false)
+  const [featureOtherText, setFeatureOtherText] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [uploaded, setUploaded] = useState<DesignAsset[]>([])
   /* The hand-it-to-us paths. Picking photos clears the mode; picking a mode clears the
@@ -745,16 +751,51 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
               {slotLabel(L['say.deal'], true)}
               {slotInput(offer, setOffer, L['say.deal.ph'], L['say.deal'])}
 
-              {menu.length > 0 && (
-                <>
-                  {slotLabel(L['say.featuring'], true)}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                    {menu.slice(0, 8).map((m) => (
-                      <Chip key={m.id} on={promoteItem === m.name} label={m.name} onClick={() => setPromoteItem(promoteItem === m.name ? null : m.name)} />
-                    ))}
-                  </div>
-                </>
-              )}
+              {menu.length > 0 && (() => {
+                const q = menuQ.trim().toLowerCase()
+                const shown = menuOpen
+                  ? menu.filter((m) => !q || m.name.toLowerCase().includes(q))
+                  : menu.slice(0, 8)
+                return (
+                  <>
+                    {slotLabel(L['say.featuring'], true)}
+                    {menuOpen && menu.length > 12 && (
+                      <input
+                        value={menuQ} onChange={(e) => setMenuQ(e.target.value)}
+                        placeholder={L['say.menu.search.ph']} aria-label={L['say.menu.search.ph']}
+                        style={{ ...inputStyle, marginBottom: 8 }}
+                      />
+                    )}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                      {shown.map((m) => (
+                        <Chip key={m.id} on={promoteItem === m.name} label={m.name} onClick={() => { setFeatureOtherOn(false); setFeatureOtherText(''); setPromoteItem(promoteItem === m.name ? null : m.name) }} />
+                      ))}
+                      {!menuOpen && menu.length > 8 && (
+                        <Chip on={false} label={fill(L['say.menu.all'], { n: String(menu.length) })} onClick={() => setMenuOpen(true)} />
+                      )}
+                      {menuOpen && (
+                        <Chip on={false} label={L['say.menu.less']} onClick={() => { setMenuOpen(false); setMenuQ('') }} />
+                      )}
+                      <Chip
+                        on={featureOtherOn}
+                        label={L['say.featuring.other']}
+                        onClick={() => {
+                          if (featureOtherOn) { setPromoteItem(null); setFeatureOtherText('') } else { setPromoteItem(null) }
+                          setFeatureOtherOn(!featureOtherOn)
+                        }}
+                      />
+                    </div>
+                    {featureOtherOn && (
+                      <input
+                        value={featureOtherText}
+                        onChange={(e) => { setFeatureOtherText(e.target.value); setPromoteItem(e.target.value.trim() ? e.target.value.trim() : null) }}
+                        placeholder={L['say.featuring.other.ph']} aria-label={L['say.featuring.other']}
+                        style={{ ...inputStyle, marginTop: 8 }}
+                      />
+                    )}
+                  </>
+                )
+              })()}
 
               <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
                 {L['say.note']}
@@ -942,17 +983,19 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
           </>
         )}
 
-        {/* back / next */}
-        {step > 1 && step < 6 && (
+        {/* back / next (review keeps Back too, under the seal, so a typo is one tap away) */}
+        {step > 1 && (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
             <button type="button" onClick={() => setStep(step - 1)}
-              style={{ flexShrink: 0, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
+              style={{ flexShrink: 0, flex: step === 6 ? 1 : undefined, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
               {L['nav.back']}
             </button>
-            <button type="button" disabled={!canNext} onClick={() => setStep(step + 1)}
-              style={{ flex: 1, height: 50, borderRadius: 25, border: 'none', cursor: canNext ? 'pointer' : 'default', background: canNext ? DESK.grad : '#E7E4DB', color: canNext ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: canNext ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}>
-              {L['nav.next']}
-            </button>
+            {step < 6 && (
+              <button type="button" disabled={!canNext} onClick={() => setStep(step + 1)}
+                style={{ flex: 1, height: 50, borderRadius: 25, border: 'none', cursor: canNext ? 'pointer' : 'default', background: canNext ? DESK.grad : '#E7E4DB', color: canNext ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: canNext ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}>
+                {L['nav.next']}
+              </button>
+            )}
           </div>
         )}
       </div>
