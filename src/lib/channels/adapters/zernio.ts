@@ -68,6 +68,9 @@ export interface PlatformTotals {
   reach: number
   impressions: number
   engagement: number
+  /** new followers attributed to posts that day (Zernio per-post 'follows') */
+  follows: number
+  clicks: number
 }
 
 /**
@@ -110,10 +113,12 @@ export function aggregateZernioPosts(rows: ZernioPostRow[] | null | undefined): 
     const platform = normalizePlatform(r?.platform)
     if (!platform) continue
     const a = (r?.analytics ?? {}) as Record<string, unknown>
-    const cur = out[platform] ?? { reach: 0, impressions: 0, engagement: 0 }
+    const cur = out[platform] ?? { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0 }
     cur.reach += num(a.reach)
     cur.impressions += num(a.impressions) || num(a.views)
     cur.engagement += num(a.likes) + num(a.comments) + num(a.shares) + num(a.saves)
+    cur.follows += num(a.follows)
+    cur.clicks += num(a.clicks)
     out[platform] = cur
   }
   return out
@@ -346,8 +351,9 @@ export const zernioAdapter: ChannelAdapter = {
             reach: h.reach,
             impressions: h.impressions,
             profile_visits: 0,
+            followers_gained: h.follows,
             engagement: h.engagement,
-            raw_data: { vendor: 'zernio', note: 'backfilled from post analytics; reach is summed post reach', totals: h },
+            raw_data: { vendor: 'zernio', note: 'backfilled from post analytics; reach is summed post reach; followers_gained is post-attributed follows', totals: h },
           },
           { onConflict: 'client_id,platform,date' },
         )
@@ -355,7 +361,7 @@ export const zernioAdapter: ChannelAdapter = {
         written++
       }
 
-      const t = byDay[today]?.[platform] ?? { reach: 0, impressions: 0, engagement: 0 }
+      const t = byDay[today]?.[platform] ?? { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0 }
       const followersTotal = num(followersByPlatform[platform])
 
       const { data: prev } = await admin
@@ -368,7 +374,10 @@ export const zernioAdapter: ChannelAdapter = {
         .limit(1)
         .maybeSingle()
       const prevTotal = num(prev?.followers_total)
-      const gained = followersTotal > 0 && prevTotal > 0 ? Math.max(0, followersTotal - prevTotal) : 0
+      /* gained = post-attributed follows for the day (always real), or the total
+       * diff when follower totals exist on both sides — whichever is larger. */
+      const diffGained = followersTotal > 0 && prevTotal > 0 ? Math.max(0, followersTotal - prevTotal) : 0
+      const gained = Math.max(t.follows, diffGained)
 
       const { error } = await admin.from('social_metrics').upsert(
         {
