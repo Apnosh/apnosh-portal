@@ -38,6 +38,7 @@ export type SourceProvider =
   | 'google_search_console'
   | 'tiktok'
   | 'facebook'
+  | 'linkedin'
   | 'yelp'
   | 'pos'
   | 'reservations'
@@ -152,27 +153,39 @@ export const SOURCES: SourceDef[] = [
   },
   {
     id: 'tiktok_video_views',
-    displayName: 'Views on your TikTok videos',
+    displayName: 'Reach on your TikTok videos',
     provider: 'tiktok',
     stage: 1,
-    metricKeys: [],
-    baseStatus: 'COMING_SOON',
+    metricKeys: ['reach'],
+    baseStatus: 'CONNECTED',
     authType: 'oauth',
     docsUrl: null,
-    notes: NO_ADAPTER_NOTE,
-    wired: false,
+    notes: 'Real metric — the social vendor sync writes tiktok rows into social_metrics; stage-values splits reach per platform.',
+    wired: true,
   },
   {
     id: 'facebook_reach',
     displayName: 'People your Facebook reached',
     provider: 'facebook',
     stage: 1,
-    metricKeys: [],
-    baseStatus: 'COMING_SOON',
+    metricKeys: ['reach'],
+    baseStatus: 'CONNECTED',
     authType: 'oauth',
     docsUrl: null,
-    notes: NO_ADAPTER_NOTE + ' (Facebook Page reach via the Graph API.)',
-    wired: false,
+    notes: 'Real metric — the social vendor sync (zernio/ayrshare) writes facebook rows into social_metrics; stage-values splits reach per platform.',
+    wired: true,
+  },
+  {
+    id: 'linkedin_reach',
+    displayName: 'People your LinkedIn reached',
+    provider: 'linkedin',
+    stage: 1,
+    metricKeys: ['reach'],
+    baseStatus: 'CONNECTED',
+    authType: 'oauth',
+    docsUrl: null,
+    notes: 'Real metric — the social vendor sync writes linkedin rows into social_metrics; stage-values splits reach per platform.',
+    wired: true,
   },
   {
     id: 'yelp_views',
@@ -628,6 +641,7 @@ export const SHORT_LABELS: Record<string, string> = {
   ig_reach: 'Instagram reach',
   tiktok_video_views: 'TikTok views',
   facebook_reach: 'Facebook reach',
+  linkedin_reach: 'LinkedIn reach',
   yelp_views: 'Yelp views',
   gbp_search_keywords: 'Search terms',
   ig_nonfollower_reach_pct: 'New-audience reach',
@@ -694,7 +708,12 @@ export const PROVIDER_CHANNELS: Partial<Record<SourceProvider, ConnectorChannel[
   instagram: ['instagram', 'instagram_direct'],
   google_analytics: ['google_analytics'],
   google_search_console: ['google_search_console'],
+  /* facebook / tiktok / linkedin channel entries are synthesized from the social
+   * vendor row's metadata.platforms by loadClientConnections — one login per
+   * platform on the vendor's page proves exactly that platform here. */
+  facebook: ['facebook'],
   tiktok: ['tiktok'],
+  linkedin: ['linkedin'],
 }
 
 /**

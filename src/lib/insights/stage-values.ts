@@ -160,23 +160,30 @@ export async function loadStageValues(
     }
   } catch { /* reviews unavailable */ }
 
-  // ── Instagram (social_metrics) -> reach, profile visits, engagement,
-  //    follower growth. All written daily by the sync-social-metrics edge fn. ──
+  // ── Socials (social_metrics) -> per-PLATFORM reach, plus follower growth /
+  //    profile visits / engagement. Written daily by the social vendor sync.
+  //    Reach is split by platform so each chip shows ITS number — Facebook
+  //    reach under Facebook, never silently folded into the Instagram chip. ──
   try {
     const { data, error } = await capDate(admin
       .from('social_metrics')
-      .select('reach, followers_gained, profile_visits, engagement')
+      .select('platform, reach, followers_gained, profile_visits, engagement')
       .eq('client_id', clientId)
       .gte('date', otherStart))
     if (!error && data) {
-      let reach = 0, gained = 0, visits = 0, engaged = 0
+      const reachBy: Record<string, number> = {}
+      let gained = 0, visits = 0, engaged = 0
       for (const r of data as Record<string, unknown>[]) {
-        reach += num(r.reach)
+        const p = typeof r.platform === 'string' ? r.platform : 'instagram'
+        reachBy[p] = (reachBy[p] ?? 0) + num(r.reach)
         gained += num(r.followers_gained)
         visits += num(r.profile_visits)
         engaged += num(r.engagement)
       }
-      out.ig_reach = reach
+      out.ig_reach = reachBy.instagram ?? 0
+      out.facebook_reach = reachBy.facebook ?? 0
+      out.tiktok_video_views = reachBy.tiktok ?? 0
+      out.linkedin_reach = reachBy.linkedin ?? 0
       out.ig_follower_growth = gained
       out.ig_profile_visits = visits
       out.ig_engaged = engaged
