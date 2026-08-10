@@ -92,6 +92,9 @@ export default function CreativeFlow({ typeId, onBack, onDone }: { typeId: strin
   const [submitted, setSubmitted] = useState(false)
   const [files, setFiles] = useState<{ url: string; name: string; path?: string }[]>([])
   const [uploading, setUploading] = useState(false)
+  /* per-question "Something else" free text (see the escape hatch below) */
+  const [others, setOthers] = useState<Record<string, string>>({})
+  const [otherOn, setOtherOn] = useState<Record<string, boolean>>({})
 
   if (!type || !flow) return null
   const today = new Date().toISOString().slice(0, 10)
@@ -105,6 +108,35 @@ export default function CreativeFlow({ typeId, onBack, onDone }: { typeId: strin
   const toggle = (qid: string, val: string) => {
     const picks = picksOf(qid)
     setA(qid, (picks.includes(val) ? picks.filter((p) => p !== val) : [...picks, val]).join(', '))
+  }
+
+  /* THE ESCAPE HATCH: every fixed-choice question also takes "Something else" in the
+   * owner's own words, so a miss in our lists never blocks a request. The typed words
+   * ARE the answer (single) or ride as one more pick (multi) — the same plain-string
+   * vocabulary the team already reads. Commas fold to spaces so multi joins stay
+   * parseable. */
+  const setOtherText = (qid: string, multi: boolean, raw: string) => {
+    const text = raw.replace(/,/g, ' ').replace(/\s{2,}/g, ' ')
+    const prev = (others[qid] ?? '').trim()
+    if (multi) {
+      const picks = picksOf(qid).filter((p) => p !== prev)
+      setA(qid, [...picks, text.trim()].filter(Boolean).join(', '))
+    } else {
+      setA(qid, text.trim())
+    }
+    setOthers((o) => ({ ...o, [qid]: text }))
+  }
+  const toggleOther = (qid: string, multi: boolean) => {
+    const on = otherOn[qid] === true
+    if (on) {
+      const prev = (others[qid] ?? '').trim()
+      if (multi) setA(qid, picksOf(qid).filter((p) => p !== prev).join(', '))
+      else if ((answers[qid] ?? '') === prev) setA(qid, '')
+      setOthers((o) => ({ ...o, [qid]: '' }))
+    } else if (!multi) {
+      setA(qid, '')
+    }
+    setOtherOn((o) => ({ ...o, [qid]: !on }))
   }
 
   const canNext = current
@@ -197,10 +229,11 @@ export default function CreativeFlow({ typeId, onBack, onDone }: { typeId: strin
       )
     }
     if (c.kind === 'tickets') {
+      const isOtherOn = otherOn[c.qid] === true
       return (
         <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
           {c.options.map((o) => {
-            const on = c.multi ? picksOf(c.qid).includes(o.value) : answers[c.qid] === o.value
+            const on = c.multi ? picksOf(c.qid).includes(o.value) : !isOtherOn && answers[c.qid] === o.value
             return (
               <Ticket
                 key={o.value}
@@ -212,10 +245,30 @@ export default function CreativeFlow({ typeId, onBack, onDone }: { typeId: strin
                   </span>
                 }
                 sub={o.sub}
-                onClick={() => (c.multi ? toggle(c.qid, o.value) : setA(c.qid, answers[c.qid] === o.value ? '' : o.value))}
+                onClick={() => {
+                  if (!c.multi && isOtherOn) toggleOther(c.qid, false)
+                  if (c.multi) toggle(c.qid, o.value)
+                  else setA(c.qid, answers[c.qid] === o.value ? '' : o.value)
+                }}
               />
             )
           })}
+          <Ticket
+            on={isOtherOn}
+            name="Something else"
+            sub="Say it your way. We read every word."
+            onClick={() => toggleOther(c.qid, c.multi === true)}
+          />
+          {isOtherOn && (
+            <input
+              value={others[c.qid] ?? ''}
+              onChange={(e) => setOtherText(c.qid, c.multi === true, e.target.value)}
+              placeholder="Tell us what you have in mind"
+              aria-label="Something else"
+              style={inputStyle}
+              autoFocus
+            />
+          )}
         </div>
       )
     }

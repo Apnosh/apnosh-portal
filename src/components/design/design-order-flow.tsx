@@ -313,6 +313,11 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
   const [read, setRead] = useState<DesignRead | null>(null)
   const [job, setJob] = useState<DesignJobId | null>(null)
   const [dests, setDests] = useState<DestinationId[]>([])
+  /* The somewhere-else escape hatch: a place our 11 formats missed, in the owner's own
+   * words. Never priced by the engine (it has no spec to cite) — it rides the request
+   * and the team sizes and quotes it. */
+  const [destOtherOn, setDestOtherOn] = useState(false)
+  const [destOther, setDestOther] = useState('')
   const [printQtys, setPrintQtys] = useState<Partial<Record<DestinationId, number>>>({})
   const [printer, setPrinter] = useState<'client' | 'us' | null>(null)
   const [headline, setHeadline] = useState('')
@@ -324,7 +329,9 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
   /* The hand-it-to-us paths. Picking photos clears the mode; picking a mode clears the
    * photos. 'shoot' books a real photo shoot, 'source' is stock sourcing, 'none' is
    * custom artwork with no photo at all. */
-  const [photoMode, setPhotoMode] = useState<'shoot' | 'source' | 'none' | null>(null)
+  const [photoMode, setPhotoMode] = useState<'shoot' | 'source' | 'none' | 'other' | null>(null)
+  /* 'other' carries the owner's own words about photos (like: use my Instagram shots) */
+  const [photoOther, setPhotoOther] = useState('')
   /* Sizes the server did not know (menu photos, older uploads): measured here, once,
    * before the quality gate judges them. null = the image would not load at all. */
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number } | null>>({})
@@ -387,8 +394,10 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
     destinations: { value: dests, source: src('destinations'), citedWords: read?.cited.destinations },
     ...(printPicked && allQtysIn ? { printQtys: { value: printQtys, source: 'asked' as const } } : {}),
     ...(printer != null ? { printer: { value: printer, source: 'asked' as const } } : {}),
-    ...(usingOwn || photoMode != null
-      ? { photos: { value: photoMode ?? ('own' as const), source: 'asked' as const } }
+    /* 'other' stays OUT of the engine: free words are not a priceable photo answer, so
+     * the quote keeps photos as an open question and the team answers it (law 4). */
+    ...(usingOwn || (photoMode != null && photoMode !== 'other')
+      ? { photos: { value: (photoMode as 'shoot' | 'source' | 'none' | null) ?? ('own' as const), source: 'asked' as const } }
       : {}),
     tier: 2, // Phase C derives this from design history; standard custom until then
     ...(due ? { dueDateISO: { value: due, source: 'asked' as const } } : {}),
@@ -436,9 +445,9 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
-    : step === 2 ? dests.length > 0 && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
+    : step === 2 ? (dests.length > 0 || destOther.trim().length > 1) && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
     : step === 3 ? headline.trim().length > 0
-    : step === 4 ? usingOwn || photoMode != null
+    : step === 4 ? usingOwn || (photoMode === 'other' ? photoOther.trim().length > 1 : photoMode != null)
     : step === 5 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
     : true
 
@@ -489,9 +498,11 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
       /* print runs are off: any picked print size is a print ready FILE handoff */
       printPicked && !PRINT_AVAILABLE ? 'Print ready files only; they handle the printing' :
       printer === 'us' ? 'We print and deliver' : printer === 'client' ? 'Their shop prints' : '',
+      destOther.trim() ? `CUSTOM SPOT (not on our format list): "${destOther.trim()}". Size it with them and quote it on its own` : '',
       photoMode === 'none' ? 'No photos: custom artwork on their brand'
         : photoMode === 'shoot' ? 'Wants a PHOTO SHOOT at their place. Set the shoot date with them before design starts'
         : photoMode === 'source' ? 'Find photos for them'
+        : photoMode === 'other' ? `Photos, in their own words: "${photoOther.trim()}"`
         : usingOwn ? 'Using their photos' : '',
       eventDate ? `Event on ${fmtDay(eventDate)}` : '',
       due ? `In hand by ${fmtDay(due)}` : '',
@@ -505,7 +516,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
           type: 'graphic',
           answers: {
             what: `${jobLabel ?? 'A graphic'}${promoteItem ? ` featuring ${promoteItem}` : ''}`,
-            where: dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', '),
+            where: [...dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean), ...(destOther.trim() ? [destOther.trim()] : [])].join(', '),
             words: saidText || undefined,
             when,
             notes: noteBits || undefined,
@@ -633,7 +644,32 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                   onClick={() => setDests((prev) => (prev.includes(d.id) ? prev.filter((x) => x !== d.id) : [...prev, d.id]))}
                 />
               ))}
+              {/* the escape hatch: a place the 11 frames missed, in the owner's words */}
+              <button
+                type="button" aria-pressed={destOtherOn}
+                onClick={() => { if (destOtherOn) setDestOther(''); setDestOtherOn(!destOtherOn) }}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', padding: 4, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+              >
+                <span style={{
+                  width: 74, height: 50, borderRadius: 6, border: `2px dashed ${destOtherOn ? DESK.mint : DESK.mute}`,
+                  background: destOtherOn ? DESK.mintWash : DESK.card,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: DESK.disp, fontSize: 18, fontWeight: 700, color: destOtherOn ? DESK.mintDeep : DESK.mute,
+                }}>?</span>
+                <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: destOtherOn ? DESK.mintDeep : DESK.ink2, lineHeight: 1.2 }}>{L['dest.other.label']}</span>
+                <span style={{ minHeight: 12 }} />
+              </button>
             </div>
+            {destOtherOn && (
+              <div style={{ marginTop: 10 }}>
+                <input
+                  value={destOther} onChange={(e) => setDestOther(e.target.value)}
+                  placeholder={L['dest.other.ph']} aria-label={L['dest.other.label']}
+                  style={inputStyle}
+                />
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['dest.other.note']}</div>
+              </div>
+            )}
             {/* print runs are off: a picked print size is DESIGNED (print ready file
                 handed over), but the copy-count and who-prints questions only exist for
                 a print job we cannot run, so they hide and one plain note says why */}
@@ -775,7 +811,16 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                 onClick={() => { setPhotoMode(photoMode === 'source' ? null : 'source'); setPicked([]) }} />
               <Ticket on={photoMode === 'none'} name={L['photos.none.label']} sub={L['photos.none.sub']} price={requestMode ? undefined : '$0'}
                 onClick={() => { setPhotoMode(photoMode === 'none' ? null : 'none'); setPicked([]) }} />
+              <Ticket on={photoMode === 'other'} name={L['photos.other.label']} sub={L['photos.other.sub']}
+                onClick={() => { if (photoMode === 'other') setPhotoOther(''); setPhotoMode(photoMode === 'other' ? null : 'other'); setPicked([]) }} />
             </div>
+            {photoMode === 'other' && (
+              <input
+                value={photoOther} onChange={(e) => setPhotoOther(e.target.value)}
+                placeholder={L['photos.other.ph']} aria-label={L['photos.other.label']}
+                style={{ ...inputStyle, marginTop: 10 }}
+              />
+            )}
           </>
         )}
 
@@ -857,9 +902,9 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
             <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '14px 16px', fontSize: 13.5, color: DESK.ink, lineHeight: 1.6, boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
               {(() => { const n = job && job !== 'other' ? `${DESIGN_JOBS.find((j) => j.id === job)?.label.toLowerCase()} design` : 'design'; return `${/^[aeiou]/.test(n) ? 'An' : 'A'} ${n}` })()}
               {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
-              {dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase()).join(', ')}
+              {[...dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase() ?? ''), ...(destOther.trim() ? [destOther.trim().toLowerCase()] : [])].filter(Boolean).join(', ')}
               {printPicked && allQtysIn ? ` (${printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label.toLowerCase()}`).join(', ')}, ${printer === 'us' ? 'we print' : 'your shop prints'})` : ''}
-              {photoMode === 'none' ? ', custom artwork with no photos' : photoMode === 'shoot' ? ', with a photo shoot at your place first' : usingOwn ? ', using your photos' : ', with photos we find for you'}
+              {photoMode === 'none' ? ', custom artwork with no photos' : photoMode === 'shoot' ? ', with a photo shoot at your place first' : photoMode === 'other' ? `, photos your way: “${photoOther.trim()}”` : usingOwn ? ', using your photos' : ', with photos we find for you'}
               {due ? `, in hand by ${fmtDay(due)}` : ''}
               {eventDate ? ` for your ${fmtDay(eventDate)} event` : ''}.
             </div>
