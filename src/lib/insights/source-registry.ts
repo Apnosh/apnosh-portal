@@ -40,6 +40,7 @@ export type SourceProvider =
   | 'facebook'
   | 'linkedin'
   | 'social'
+  | 'ads'
   | 'yelp'
   | 'pos'
   | 'reservations'
@@ -199,6 +200,45 @@ export const SOURCES: SourceDef[] = [
     docsUrl: null,
     notes: 'Real metric — per-post link clicks from the social vendor sync, summed across every connected platform (stored in social_metrics raw_data.totals.clicks).',
     wired: true,
+  },
+  /* Paid ads: the funnel is SHAPED for them now (owner call 2026-08-11) so the day
+   * an ads account connects the numbers drop straight in. Until then these are
+   * honest Coming-soon stubs — shown, never counted, never faked. */
+  {
+    id: 'paid_ads_impressions',
+    displayName: 'Times your ads were seen',
+    provider: 'ads',
+    stage: 1,
+    metricKeys: [],
+    baseStatus: 'COMING_SOON',
+    authType: 'oauth',
+    docsUrl: null,
+    notes: 'Google/Meta ads impressions. No ads adapter yet — stub until an ads account connects.',
+    wired: false,
+  },
+  {
+    id: 'paid_ads_clicks',
+    displayName: 'Clicks on your ads',
+    provider: 'ads',
+    stage: 2,
+    metricKeys: [],
+    baseStatus: 'COMING_SOON',
+    authType: 'oauth',
+    docsUrl: null,
+    notes: 'Google/Meta ads clicks. No ads adapter yet — stub until an ads account connects.',
+    wired: false,
+  },
+  {
+    id: 'paid_ads_conversions',
+    displayName: 'Orders and bookings from your ads',
+    provider: 'ads',
+    stage: 3,
+    metricKeys: [],
+    baseStatus: 'COMING_SOON',
+    authType: 'oauth',
+    docsUrl: null,
+    notes: 'Google/Meta ads conversions. No ads adapter yet — stub until an ads account connects.',
+    wired: false,
   },
   {
     id: 'yelp_views',
@@ -656,6 +696,9 @@ export const SHORT_LABELS: Record<string, string> = {
   facebook_reach: 'Facebook reach',
   linkedin_reach: 'LinkedIn reach',
   social_link_clicks: 'Post link clicks',
+  paid_ads_impressions: 'Ad views',
+  paid_ads_clicks: 'Ad clicks',
+  paid_ads_conversions: 'Ad conversions',
   yelp_views: 'Yelp views',
   gbp_search_keywords: 'Search terms',
   ig_nonfollower_reach_pct: 'New-audience reach',

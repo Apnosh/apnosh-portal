@@ -194,7 +194,9 @@ export async function loadStageValues(
       out.tiktok_video_views = (imprBy.tiktok ?? 0) > 0 ? (imprBy.tiktok ?? 0) : (reachBy.tiktok ?? 0)
       out.linkedin_reach = best('linkedin')
       out.ig_follower_growth = gained
-      out.ig_profile_visits = visits
+      /* profile visits only when the vendor actually provides them (ayrshare does,
+       * zernio does not) — a permanent 0 would read as data for a missing metric */
+      if (visits > 0) out.ig_profile_visits = visits
       out.ig_engaged = engaged
       out.social_link_clicks = linkClicks
     }

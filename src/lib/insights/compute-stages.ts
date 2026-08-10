@@ -113,7 +113,7 @@ export type ManualStore = Record<string, ManualEntry>
 // The sources that SUM into each stage headline (drill-downs + context are
 // excluded). Stage 4 and 5 have preference rules layered on top (see below).
 const SUMMABLE: Record<FunnelStage, string[]> = {
-  1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'linkedin_reach', 'yelp_views'],
+  1: ['gbp_impressions_search', 'gbp_impressions_maps', 'gsc_site_impressions', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'linkedin_reach', 'yelp_views', 'paid_ads_impressions'],
   // Owner redefinition (2026-07-13): Interest = people EXPLORING you but not yet
   // trying to come/buy — website visits, menu looks, profile taps. Website
   // visits (GA sessions) count every arrival ONCE; gbp_website_clicks is the
@@ -126,8 +126,8 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
   // count (usable() requires CONNECTED) but they SHOW as by-source cards so the
   // Interest grid lists every channel, exactly like Awareness (which carries
   // tiktok/facebook/yelp the same way).
-  2: ['ga4_website_visits', 'gbp_website_clicks', 'ga4_menu_views', 'gbp_menu_clicks', 'ig_profile_visits', 'facebook_page_visits', 'tiktok_profile_views'],
-  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations', 'social_link_clicks'],
+  2: ['ga4_website_visits', 'gbp_website_clicks', 'ga4_menu_views', 'gbp_menu_clicks', 'ig_profile_visits', 'facebook_page_visits', 'tiktok_profile_views', 'paid_ads_clicks'],
+  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations', 'social_link_clicks', 'paid_ads_conversions'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
 }
@@ -138,21 +138,21 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
  *  stay the specifics (e.g. Google = Maps + Search; Calls = Google + website). */
 const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds: string[] }[]> = {
   1: [
-    { key: 'google', label: 'Google', sourceIds: ['gbp_impressions_search', 'gbp_impressions_maps'] },
+    { key: 'google', label: 'Google', sourceIds: ['gbp_impressions_search', 'gbp_impressions_maps', 'gsc_site_impressions'] },
     { key: 'social', label: 'Social media', sourceIds: ['ig_reach', 'facebook_reach', 'tiktok_video_views', 'linkedin_reach'] },
+    { key: 'ads', label: 'Paid ads', sourceIds: ['paid_ads_impressions'] },
     { key: 'yelp', label: 'Yelp', sourceIds: ['yelp_views'] },
-    { key: 'other', label: 'Other', sourceIds: [] },
   ],
   2: [
     { key: 'website', label: 'Website visits', sourceIds: ['ga4_website_visits', 'gbp_website_clicks'] },
     { key: 'menu', label: 'Menu views', sourceIds: ['ga4_menu_views', 'gbp_menu_clicks'] },
     { key: 'profile', label: 'Profile visits', sourceIds: ['ig_profile_visits', 'facebook_page_visits', 'tiktok_profile_views'] },
-    { key: 'other', label: 'Other', sourceIds: ['ig_engaged', 'ig_saves', 'ig_shares', 'ig_link_clicks'] },
+    { key: 'ads', label: 'Paid ads', sourceIds: ['paid_ads_clicks'] },
   ],
   3: [
     { key: 'calls', label: 'Calls', sourceIds: ['gbp_calls', 'ga4_phone_taps'] },
     { key: 'directions', label: 'Directions', sourceIds: ['gbp_direction_requests'] },
-    { key: 'orders', label: 'Online orders', sourceIds: ['ga4_order_clicks'] },
+    { key: 'orders', label: 'Online orders', sourceIds: ['ga4_order_clicks', 'paid_ads_conversions'] },
     { key: 'bookings', label: 'Bookings', sourceIds: ['gbp_booking_clicks', 'reservations', 'social_link_clicks', 'ig_profile_actions', 'facebook_cta_clicks', 'tiktok_link_clicks'] },
   ],
   4: [
