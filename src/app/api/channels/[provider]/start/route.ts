@@ -10,7 +10,7 @@
 import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { adapterFor } from '@/lib/channels/registry'
+import { adapterFor, activeSocialAdapter } from '@/lib/channels/registry'
 import { signState } from '@/lib/channels/oauth-state'
 import { ChannelError } from '@/lib/channels/types'
 
@@ -28,7 +28,7 @@ async function resolveClientId(userId: string): Promise<string | null> {
 
 export async function GET(req: Request, { params }: { params: Promise<{ provider: string }> }) {
   const { provider } = await params
-  const adapter = adapterFor(provider)
+  const adapter = provider === 'social' ? activeSocialAdapter() : adapterFor(provider)
   /* oauth lanes carry a signed state through the vendor round trip; hosted_link lanes
    * (Ayrshare) have no callback — linking happens on the vendor's page and the nightly
    * sync notices — so they receive the raw client id instead. */
@@ -46,7 +46,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
   try {
-    const { url } = await adapter.connectStart(adapter.kind === 'hosted_link' ? clientId : signState(clientId))
+    const platform = new URL(req.url).searchParams.get('platform') ?? undefined
+    const { url } = adapter.kind === 'hosted_link'
+      ? await adapter.connectStart(clientId, platform ? { platform } : undefined)
+      : await adapter.connectStart(signState(clientId))
     if (!url) return NextResponse.json({ error: 'This channel does not connect by redirect' }, { status: 400 })
     return NextResponse.redirect(url)
   } catch (e) {

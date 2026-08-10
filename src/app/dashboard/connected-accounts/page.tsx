@@ -31,7 +31,7 @@ const CATALOG: CatalogItem[] = [
    * page covers Instagram, Facebook, TikTok, and LinkedIn, and the nightly sync
    * pulls their numbers into the dashboard. The old per-network OAuth lanes
    * (including the broken TikTok connect) are retired from this surface. */
-  { id: 'ayrshare', label: 'Social accounts', authPath: '/api/channels/ayrshare/start', category: 'social', Icon: Camera, description: 'Instagram, Facebook, TikTok, LinkedIn. Link once, numbers flow nightly' },
+  { id: 'ayrshare', label: 'Social accounts', authPath: '/api/channels/social/start', category: 'social', Icon: Camera, description: 'Instagram, Facebook, TikTok, LinkedIn. Link once, numbers flow nightly' },
   { id: 'google_analytics', label: 'Google Analytics', authPath: '/api/auth/google', category: 'google', Icon: BarChart3, description: 'Website visitors and traffic' },
   { id: 'google_search_console', label: 'Google Search Console', authPath: '/api/auth/google-search-console', category: 'google', Icon: Search, description: 'What people search to find you' },
   { id: 'google_business_profile', label: 'Google Business Profile', authPath: '/api/auth/google-business', category: 'google', Icon: MapPin, description: 'Calls, directions, search views' },
@@ -43,7 +43,7 @@ const CAT_LABEL: Record<Cat, string> = { social: 'Social media', google: 'Google
 const CAT_ORDER: Cat[] = ['pos', 'social', 'google', 'reviews']
 const iconFor = (id: string) => CATALOG.find(c => c.id === id)?.Icon ?? LinkIcon
 
-const canSync = (c: UnifiedConnection) => c.source === 'channel_connections' && ['google_business_profile', 'google_analytics', 'google_search_console', 'square', 'clover', 'ayrshare'].includes(c.platform)
+const canSync = (c: UnifiedConnection) => c.source === 'channel_connections' && ['google_business_profile', 'google_analytics', 'google_search_console', 'square', 'clover', 'ayrshare', 'zernio'].includes(c.platform)
 const needsAttention = (s: UnifiedConnection['status']) => s === 'expired' || s === 'error'
 
 function dotColor(s: UnifiedConnection['status']): string {
@@ -104,7 +104,8 @@ export default function ConnectedAccountsPage() {
   const summary = attention.length > 0 ? `${attention.length} need${attention.length > 1 ? '' : 's'} attention`
     : connectedCount > 0 ? `${connectedCount} connected` : 'Nothing connected yet'
 
-  const connectedSet = new Set(connections.map(c => c.platform))
+  /* both social vendors light the one Social accounts card */
+  const connectedSet = new Set(connections.map(c => (c.platform === 'zernio' ? 'ayrshare' : c.platform)))
   const unconnected = CATALOG.filter(p => !connectedSet.has(p.id))
 
   const byCat: Record<string, UnifiedConnection[]> = {}

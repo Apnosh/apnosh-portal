@@ -12,7 +12,7 @@
  * surface can say "not set up yet" honestly (law 3).
  */
 
-export type ChannelId = 'yelp' | 'square' | 'clover' | 'statements' | 'ayrshare'
+export type ChannelId = 'yelp' | 'square' | 'clover' | 'statements' | 'ayrshare' | 'zernio'
 
 export type ChannelKind = 'api_key' | 'oauth' | 'upload' | 'hosted_link'
 
@@ -73,8 +73,9 @@ export interface ChannelAdapter {
   kind: ChannelKind
   /** Env-level kill switch (law 3). False = every surface says "not set up". */
   isConfigured(): boolean
-  /** Begin connecting a client. Throws ChannelError('not_configured') when unconfigured. */
-  connectStart(clientId: string): Promise<ConnectStart>
+  /** Begin connecting a client. Throws ChannelError('not_configured') when unconfigured.
+   *  hosted_link lanes may receive opts.platform (which network the owner tapped). */
+  connectStart(clientId: string, opts?: { platform?: string }): Promise<ConnectStart>
   /** Pull fresh data for one ACTIVE connection into canonical tables. Throws
    *  ChannelError on failure; never returns partial silence. */
   sync(connection: ChannelConnection): Promise<SyncResult>

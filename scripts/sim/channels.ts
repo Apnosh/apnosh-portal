@@ -14,6 +14,7 @@ import { dayKey, normalizeSource } from '../../src/lib/channels/adapters/stateme
 import { signState, verifyState } from '../../src/lib/channels/oauth-state'
 import { aggregateDaily, dayOfMs, windowStartMs } from '../../src/lib/channels/daily'
 import { mapSocialAnalytics, AYRSHARE_PLATFORMS } from '../../src/lib/channels/adapters/ayrshare'
+import { aggregateZernioPosts, ZERNIO_PLATFORMS } from '../../src/lib/channels/adapters/zernio'
 
 const s = new Suite()
 
@@ -144,6 +145,28 @@ s.group('Ayrshare mapper: canonical columns from vendor aliases (P3)')
     JSON.stringify(AYRSHARE_PLATFORMS) === JSON.stringify(['instagram', 'facebook', 'tiktok', 'linkedin']))
   s.check('the adapter is hosted_link and env kill-switched',
     CHANNELS.ayrshare.kind === 'hosted_link' && (Boolean(process.env.AYRSHARE_API_KEY) || CHANNELS.ayrshare.isConfigured() === false))
+}
+
+s.group('Zernio fold: post analytics -> daily platform totals (bake-off)')
+{
+  const rows = [
+    { platform: 'instagram', analytics: { reach: 100, impressions: 150, likes: 10, comments: 2, shares: 1, saves: 3 } },
+    { platform: 'instagram', analytics: { reach: 50, views: 80, likes: 5 } },
+    { platform: 'facebook', analytics: { impressions: 200, likes: 20 } },
+    { platform: 'x', analytics: { impressions: 999 } },
+    { platform: 'tiktok', analytics: null },
+  ]
+  const out = aggregateZernioPosts(rows)
+  s.check('per-platform sums are right (views backfills missing impressions)',
+    out.instagram.reach === 150 && out.instagram.impressions === 230 && out.instagram.engagement === 21)
+  s.check('facebook folds separately', out.facebook.impressions === 200 && out.facebook.engagement === 20)
+  s.check('platforms outside our table are dropped, null analytics is a zero row',
+    !('x' in out) && out.tiktok.reach === 0 && out.tiktok.engagement === 0)
+  s.check('empty and null inputs fold to empty', Object.keys(aggregateZernioPosts([])).length === 0 && Object.keys(aggregateZernioPosts(null)).length === 0)
+  s.check('zernio and ayrshare cover the same four platforms',
+    JSON.stringify(ZERNIO_PLATFORMS) === JSON.stringify(AYRSHARE_PLATFORMS))
+  s.check('the adapter is hosted_link and env kill-switched',
+    CHANNELS.zernio.kind === 'hosted_link' && (Boolean(process.env.ZERNIO_API_KEY) || CHANNELS.zernio.isConfigured() === false))
 }
 
 const ok = s.report('Channels layer (P1 spine)')
