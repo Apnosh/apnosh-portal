@@ -118,19 +118,26 @@ async function ensureProfile(clientId: string): Promise<string> {
     .maybeSingle()
   if (existing?.platform_account_id) return existing.platform_account_id as string
 
-  const created = await zer('/profiles', {
-    method: 'POST',
-    body: JSON.stringify({ name: `apnosh-${clientId.slice(0, 8)}` }),
-  })
-  /* Documented shape (llms-full.txt, verified after the first live 2xx): the profile
-   * comes wrapped under "profile" with a Mongo-style "_id". Older spellings kept as
-   * fallbacks; a miss now carries the body so the next surprise diagnoses itself. */
-  const prof = created.profile as Record<string, unknown> | undefined
-  const profileId =
-    str(prof?._id) || str(prof?.id) || str(created._id) ||
-    str(created.profileId) || str(created.id)
+  /* Idempotent create: profile names are unique on Zernio (409 on repeat), so first
+   * look for OUR name in the list — this recovers a profile whose create response we
+   * failed to store (exactly what the first live run did). */
+  const name = `apnosh-${clientId.slice(0, 8)}`
+  const listed = await zer('/profiles')
+  const match = unwrapList(listed, 'profiles').find((p) => str(p.name) === name)
+  let profileId = match ? str(match._id) || str(match.id) : ''
+
   if (!profileId) {
-    throw new ChannelError('upstream', `Zernio did not return a profile id (body: ${JSON.stringify(created).slice(0, 200)})`)
+    const created = await zer('/profiles', { method: 'POST', body: JSON.stringify({ name }) })
+    /* Documented shape (llms-full.txt, verified after the first live 2xx): the profile
+     * comes wrapped under "profile" with a Mongo-style "_id". Older spellings kept as
+     * fallbacks; a miss carries the body so the next surprise diagnoses itself. */
+    const prof = created.profile as Record<string, unknown> | undefined
+    profileId =
+      str(prof?._id) || str(prof?.id) || str(created._id) ||
+      str(created.profileId) || str(created.id)
+    if (!profileId) {
+      throw new ChannelError('upstream', `Zernio did not return a profile id (body: ${JSON.stringify(created).slice(0, 200)})`)
+    }
   }
 
   const row = {
