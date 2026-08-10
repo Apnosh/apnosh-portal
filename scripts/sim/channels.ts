@@ -13,6 +13,7 @@ import { ChannelError, countsAsFailure, type ChannelErrorCode } from '../../src/
 import { dayKey, normalizeSource } from '../../src/lib/channels/adapters/statements'
 import { signState, verifyState } from '../../src/lib/channels/oauth-state'
 import { aggregateDaily, dayOfMs, windowStartMs } from '../../src/lib/channels/daily'
+import { mapSocialAnalytics, AYRSHARE_PLATFORMS } from '../../src/lib/channels/adapters/ayrshare'
 
 const s = new Suite()
 
@@ -115,6 +116,25 @@ s.group('Daily aggregation: the POS fold (P4b)')
   s.check('the fold is deterministic (same input, same output)', JSON.stringify(aggregateDaily([{ atMs: NOON, cents: 7 }])) === JSON.stringify(aggregateDaily([{ atMs: NOON, cents: 7 }])))
 
   s.check('the sync window is seven days', dayOfMs(windowStartMs(NOON)) === '2026-07-29')
+}
+
+s.group('Ayrshare mapper: canonical columns from vendor aliases (P3)')
+{
+  const full = mapSocialAnalytics({ followersCount: 1200, reachCount: 5000, impressionsCount: 8000, profileViewsCount: 300, engagementCount: 450 })
+  s.check('primary aliases map straight through',
+    full.followers_total === 1200 && full.reach === 5000 && full.impressions === 8000 && full.profile_visits === 300 && full.engagement === 450)
+  const alt = mapSocialAnalytics({ fanCount: 900, views: 4000, profileViews: 120, likeCount: 30, commentsCount: 12, sharesCount: 8 })
+  s.check('fallback aliases work (fanCount, views, likes+comments+shares)',
+    alt.followers_total === 900 && alt.impressions === 4000 && alt.profile_visits === 120 && alt.engagement === 50)
+  const empty = mapSocialAnalytics({})
+  s.check('missing metrics are honest zeros, never guesses',
+    empty.reach === 0 && empty.impressions === 0 && empty.followers_total === 0 && empty.engagement === 0)
+  s.check('null and garbage survive without crashing',
+    mapSocialAnalytics(null).reach === 0 && mapSocialAnalytics({ followersCount: -5 }).followers_total === 0 && mapSocialAnalytics({ reach: 'lots' as unknown as number }).reach === 0)
+  s.check('the platform list matches the social_metrics CHECK constraint',
+    JSON.stringify(AYRSHARE_PLATFORMS) === JSON.stringify(['instagram', 'facebook', 'tiktok', 'linkedin']))
+  s.check('the adapter is hosted_link and env kill-switched',
+    CHANNELS.ayrshare.kind === 'hosted_link' && (Boolean(process.env.AYRSHARE_API_KEY) || CHANNELS.ayrshare.isConfigured() === false))
 }
 
 const ok = s.report('Channels layer (P1 spine)')

@@ -27,10 +27,11 @@ type Cat = 'social' | 'google' | 'reviews' | 'pos'
 interface CatalogItem { id: string; label: string; authPath: string; category: Cat; Icon: typeof Camera; description: string }
 
 const CATALOG: CatalogItem[] = [
-  { id: 'instagram', label: 'Instagram', authPath: '/api/auth/instagram-direct', category: 'social', Icon: Camera, description: 'Followers, reach, engagement' },
-  { id: 'facebook', label: 'Facebook', authPath: '/api/auth/instagram', category: 'social', Icon: Globe, description: 'Page performance (also pulls a linked Instagram)' },
-  { id: 'tiktok', label: 'TikTok', authPath: '/api/auth/tiktok', category: 'social', Icon: Tv, description: 'Video views and engagement' },
-  { id: 'linkedin', label: 'LinkedIn', authPath: '/api/auth/linkedin', category: 'social', Icon: Briefcase, description: 'Followers and post engagement' },
+  /* Socials go through Ayrshare (DECIDED integration strategy): one hosted link
+   * page covers Instagram, Facebook, TikTok, and LinkedIn, and the nightly sync
+   * pulls their numbers into the dashboard. The old per-network OAuth lanes
+   * (including the broken TikTok connect) are retired from this surface. */
+  { id: 'ayrshare', label: 'Social accounts', authPath: '/api/channels/ayrshare/start', category: 'social', Icon: Camera, description: 'Instagram, Facebook, TikTok, LinkedIn. Link once, numbers flow nightly' },
   { id: 'google_analytics', label: 'Google Analytics', authPath: '/api/auth/google', category: 'google', Icon: BarChart3, description: 'Website visitors and traffic' },
   { id: 'google_search_console', label: 'Google Search Console', authPath: '/api/auth/google-search-console', category: 'google', Icon: Search, description: 'What people search to find you' },
   { id: 'google_business_profile', label: 'Google Business Profile', authPath: '/api/auth/google-business', category: 'google', Icon: MapPin, description: 'Calls, directions, search views' },
@@ -42,7 +43,7 @@ const CAT_LABEL: Record<Cat, string> = { social: 'Social media', google: 'Google
 const CAT_ORDER: Cat[] = ['pos', 'social', 'google', 'reviews']
 const iconFor = (id: string) => CATALOG.find(c => c.id === id)?.Icon ?? LinkIcon
 
-const canSync = (c: UnifiedConnection) => c.source === 'channel_connections' && ['google_business_profile', 'google_analytics', 'google_search_console', 'square', 'clover'].includes(c.platform)
+const canSync = (c: UnifiedConnection) => c.source === 'channel_connections' && ['google_business_profile', 'google_analytics', 'google_search_console', 'square', 'clover', 'ayrshare'].includes(c.platform)
 const needsAttention = (s: UnifiedConnection['status']) => s === 'expired' || s === 'error'
 
 function dotColor(s: UnifiedConnection['status']): string {
@@ -79,7 +80,7 @@ export default function ConnectedAccountsPage() {
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
-    const NAME: Record<string, string> = { square: 'Square', clover: 'Clover' }
+    const NAME: Record<string, string> = { square: 'Square', clover: 'Clover', ayrshare: 'Social accounts' }
     const connected = p.get('connected')
     const connectError = p.get('connect_error')
     if (connected && NAME[connected]) setBanner({ ok: true, text: `${NAME[connected]} connected. Your sales will show up shortly.` })

@@ -29,7 +29,10 @@ async function resolveClientId(userId: string): Promise<string | null> {
 export async function GET(req: Request, { params }: { params: Promise<{ provider: string }> }) {
   const { provider } = await params
   const adapter = adapterFor(provider)
-  if (!adapter || adapter.kind !== 'oauth') {
+  /* oauth lanes carry a signed state through the vendor round trip; hosted_link lanes
+   * (Ayrshare) have no callback — linking happens on the vendor's page and the nightly
+   * sync notices — so they receive the raw client id instead. */
+  if (!adapter || (adapter.kind !== 'oauth' && adapter.kind !== 'hosted_link')) {
     return NextResponse.json({ error: 'Unknown connect provider' }, { status: 404 })
   }
   if (!adapter.isConfigured()) {
@@ -43,7 +46,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
   try {
-    const { url } = await adapter.connectStart(signState(clientId))
+    const { url } = await adapter.connectStart(adapter.kind === 'hosted_link' ? clientId : signState(clientId))
     if (!url) return NextResponse.json({ error: 'This channel does not connect by redirect' }, { status: 400 })
     return NextResponse.redirect(url)
   } catch (e) {

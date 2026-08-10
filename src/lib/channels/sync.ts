@@ -37,7 +37,7 @@ export function nextFailureState(prevFailures: number, outcome: 'ok' | 'counted_
 
 /** Owner alert copy. House lint applies: plain words, no em or en dashes. */
 export function buildAlertCopy(channel: string): { kind: 'channel_broken'; title: string; body: string; link: string } {
-  const name = channel === 'yelp' ? 'Yelp' : channel === 'square' ? 'Square' : channel === 'clover' ? 'Clover' : channel
+  const name = channel === 'yelp' ? 'Yelp' : channel === 'square' ? 'Square' : channel === 'clover' ? 'Clover' : channel === 'ayrshare' ? 'social accounts' : channel
   return {
     kind: 'channel_broken' as const,
     title: `Your ${name} connection stopped working`,
