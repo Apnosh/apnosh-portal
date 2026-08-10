@@ -21,7 +21,7 @@ import {
 } from '@/components/campaigns/desk/ui'
 import RequestBoard from '@/components/requests/request-boards'
 import { requestTypeById, questionsFor, type RequestAnswers } from '@/lib/requests/catalog'
-import { priceCreativeRequest, fmtCents } from '@/lib/requests/pricing'
+import { priceCreativeRequest, fmtCents, CREATIVE_LEVELS, VALVE_LINE, REVISION_LINE } from '@/lib/requests/pricing'
 import { flowFor, bucketForDate, type FlowControl, type TicketOption } from '@/lib/requests/flows'
 
 const fmtDay = (s: string) => new Date(`${s}T12:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
@@ -255,11 +255,12 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           </div>
         )}
         <ConfirmButton
-          label={sending ? 'Placing your order...' : `Confirm order${price ? ` · ${fmtCents(price.totalCents)}` : ''}`}
+          label={sending ? 'Placing your order...' : `Confirm order${price ? ` · ${price.startsAt ? 'from ' : ''}${fmtCents(price.totalCents)}` : ''}`}
           sub="Goes on your Apnosh bill. Nothing else to do."
           disabled={sending}
           onClick={() => { void send() }}
         />
+        <div style={{ fontSize: 11.5, color: DESK.mute, margin: '8px 2px 0', lineHeight: 1.5, textAlign: 'center' }}>{VALVE_LINE}</div>
         <div style={{ height: 10 }} />
         <ConfirmButton label="Change something" tone="paper" disabled={sending} onClick={() => setCart(false)} />
       </div>
@@ -457,6 +458,37 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
               <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>A named creator picks it up within 1 business day. You can follow it in Your requests.</div>
             </div>
           </div>
+          {CREATIVE_LEVELS[type.id] && (() => {
+            /* THE TIER CHOICE (persona-tested): Standard is the default, so this is never
+             * a required decision; each ticket shows ITS OWN total so picking visibly
+             * changes the price; promises are countable, never vibes. */
+            const std = priceCreativeRequest(type.id, { ...answers, level: 'Standard' })
+            const wrk = priceCreativeRequest(type.id, { ...answers, level: 'The works' })
+            const isWorks = (answers.level ?? '') === 'The works'
+            return (
+              <div style={{ margin: '14px 0 2px' }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 8 }}>
+                  How good should it be?
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Ticket
+                    on={!isWorks}
+                    name={<span>Standard <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>most owners pick this</span></span>}
+                    sub={CREATIVE_LEVELS[type.id].standard}
+                    price={std ? fmtCents(std.totalCents) : undefined}
+                    onClick={() => setA('level', 'Standard')}
+                  />
+                  <Ticket
+                    on={isWorks}
+                    name="The works"
+                    sub={CREATIVE_LEVELS[type.id].works}
+                    price={wrk ? fmtCents(wrk.totalCents) : undefined}
+                    onClick={() => setA('level', 'The works')}
+                  />
+                </div>
+              </div>
+            )
+          })()}
           <div style={{ margin: '12px 0' }}>
             <textarea
               value={notes} onChange={(e) => setNotes(e.target.value)} rows={2}
@@ -503,11 +535,19 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           {(() => {
             const price = priceCreativeRequest(type.id, answers)
             return price ? (
-              <ReceiptFrame>
-                {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
-                <ReceiptRule />
-                <ReceiptTotal label="Total" big={fmtCents(price.totalCents)} />
-              </ReceiptFrame>
+              <>
+                <ReceiptFrame>
+                  {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
+                  <ReceiptRule />
+                  <ReceiptTotal label={price.startsAt ? 'Starts at' : 'Total'} big={fmtCents(price.totalCents)} />
+                </ReceiptFrame>
+                {price.startsAt && (
+                  <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 8, lineHeight: 1.5 }}>
+                    This is the starting point. The final number is agreed in your thread before work starts. We answer within 1 business day.
+                  </div>
+                )}
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 8, lineHeight: 1.5 }}>{REVISION_LINE}</div>
+              </>
             ) : null
           })()}
           {sendError && (

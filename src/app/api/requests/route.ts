@@ -45,7 +45,7 @@ function graphicOrderCents(design: unknown): number | null {
     ...(photosVal ? { photos: { value: photosVal, source: 'asked' as const } } : {}),
     /* print runs are off, so qty/printer cannot exist and no print-mgmt line can
      * price; revisit this sanitizer when PRINT_AVAILABLE flips back on */
-    tier: 2,
+    tier: d.tier === 1 || d.tier === 3 ? d.tier : 2,
     ...(due ? { dueDateISO: { value: due, source: 'asked' as const } } : {}),
     todayISO: new Date().toISOString().slice(0, 10),
     rushConfirmed: d.rushConfirmed === true,

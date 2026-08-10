@@ -315,6 +315,10 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
   const [reading, setReading] = useState(false)
   const [read, setRead] = useState<DesignRead | null>(null)
   const [job, setJob] = useState<DesignJobId | null>(null)
+  /* THE TIER (persona-tested): the engine's three tiers, now the owner's own pick.
+   * Custom is the default so this is never a required decision; each ticket shows its
+   * own price so picking visibly changes the number (never a picker that is theater). */
+  const [tier, setTier] = useState<1 | 2 | 3>(2)
   const [dests, setDests] = useState<DestinationId[]>([])
   /* The somewhere-else escape hatch: a place our 11 formats missed, in the owner's own
    * words. Never priced by the engine (it has no spec to cite) — it rides the request
@@ -419,7 +423,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
     ...(usingOwn || (photoMode != null && photoMode !== 'other')
       ? { photos: { value: (photoMode as 'shoot' | 'source' | 'none' | null) ?? ('own' as const), source: 'asked' as const } }
       : {}),
-    tier: 2, // Phase C derives this from design history; standard custom until then
+    tier,
     ...(due ? { dueDateISO: { value: due, source: 'asked' as const } } : {}),
     todayISO: today,
     rushConfirmed,
@@ -545,6 +549,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
           ...(attachments.length ? { attachments } : {}),
           order: true,
           design: {
+            tier,
             destinations: dests,
             photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
             dueDateISO: due ?? undefined,
@@ -615,6 +620,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
           disabled={sending}
           onClick={() => { void placeOrder() }}
         />
+        <div style={{ fontSize: 11.5, color: DESK.mute, margin: '8px 2px 0', lineHeight: 1.5, textAlign: 'center' }}>{L['cart.valve']}</div>
         <div style={{ height: 10 }} />
         <ConfirmButton label={L['cart.change']} tone="paper" disabled={sending} onClick={() => setCart(false)} />
       </div>
@@ -667,6 +673,14 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
               {DESIGN_JOBS.map((j) => (
                 <Chip key={j.id} on={job === j.id} label={j.label} onClick={() => setJob(job === j.id ? null : j.id)} />
               ))}
+            </div>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '16px 0 8px' }}>
+              {L['tier.title']}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Ticket on={tier === 1} name={L['tier.basic.label']} sub={L['tier.basic.sub']} price={`$${RATE_CARD.tierBase[1]}`} onClick={() => setTier(1)} />
+              <Ticket on={tier === 2} name={<span>{L['tier.custom.label']} <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>{L['tier.most']}</span></span>} sub={L['tier.custom.sub']} price={`$${RATE_CARD.tierBase[2]}`} onClick={() => setTier(2)} />
+              <Ticket on={tier === 3} name={L['tier.works.label']} sub={L['tier.works.sub']} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => setTier(3)} />
             </div>
             <button
               type="button" disabled={!canNext || reading} onClick={() => (described.trim().length >= 8 ? describe() : setStep(2))}

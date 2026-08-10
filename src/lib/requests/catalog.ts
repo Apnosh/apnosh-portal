@@ -88,6 +88,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
       { id: 'which', prompt: 'Which menus? Pick every one.', kind: 'choice', multi: true, options: ['Dine in', 'Takeout', 'Delivery apps', 'Drinks', 'QR menu'] },
       { id: 'change', prompt: 'New design or an update?', kind: 'choice', options: ['Brand new look', 'Update prices or items', 'Both'] },
       { id: 'items', prompt: 'What is changing?', kind: 'long', optional: true, hint: 'New dishes, new prices, things to remove' },
+      { id: 'level', prompt: 'How good should it be?', kind: 'text', optional: true, hint: 'Standard or The works' },
     ],
   },
   {
@@ -121,6 +122,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
       { id: 'what', prompt: 'What should the video show?', kind: 'text', hint: 'The cheese pull, the pour, the line out the door' },
       { id: 'filming', prompt: 'How do we get the footage?', kind: 'choice', options: ['Come film at my place', 'Use clips and photos I have', 'Not sure'] },
       { id: 'count', prompt: 'How many videos?', kind: 'choice', options: ['Just 1', '3 to 5', 'A monthly batch'] },
+      { id: 'level', prompt: 'How good should it be?', kind: 'text', optional: true, hint: 'Standard or The works' },
       { id: 'featuring', prompt: 'Featuring, from your menu', kind: 'text', optional: true, hint: 'The dishes the video should star' },
     ],
   },
@@ -134,6 +136,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
       { id: 'use', prompt: 'Where will the photos go?', kind: 'choice', multi: true, options: ['Google and Yelp', 'Social media', 'Website', 'Menus'] },
       { id: 'dishes', prompt: 'Any must have shots?', kind: 'long', optional: true, hint: 'The dishes or corners you want covered' },
       { id: 'featuring', prompt: 'Featuring, from your menu', kind: 'text', optional: true, hint: 'The dishes the shoot should star' },
+      { id: 'level', prompt: 'How good should it be?', kind: 'text', optional: true, hint: 'Standard or The works' },
     ],
   },
   {
@@ -156,6 +159,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     questions: [
       { id: 'what', prompt: 'What is the email about?', kind: 'text', hint: 'Monthly news, a deal, an event invite' },
       { id: 'list', prompt: 'Do you have a customer list?', kind: 'choice', options: ['Yes', 'A small one', 'Not yet'] },
+      { id: 'level', prompt: 'How good should it be?', kind: 'text', optional: true, hint: 'Standard or The works' },
     ],
   },
   {
@@ -166,6 +170,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     questions: [
       { id: 'platform', prompt: 'Where will the ads run?', kind: 'choice', options: ['Facebook and Instagram', 'Google', 'Both', 'Not sure'] },
       { id: 'push', prompt: 'What are you promoting?', kind: 'text', hint: 'A deal, an event, just more customers' },
+      { id: 'level', prompt: 'How good should it be?', kind: 'text', optional: true, hint: 'Standard or The works' },
     ],
   },
   {
@@ -176,6 +181,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     questions: [
       { id: 'what', prompt: 'What do you need made?', kind: 'text', hint: 'A banner, table tents, loyalty cards, a window decal' },
       { id: 'printing', prompt: 'Should we handle the printing too?', kind: 'choice', options: ['Yes, print and deliver', 'Just the design file', 'Not sure'] },
+      { id: 'level', prompt: 'How good should it be?', kind: 'text', optional: true, hint: 'Standard or The works' },
     ],
   },
   {
@@ -186,6 +192,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
     questions: [
       { id: 'what', prompt: 'What needs writing?', kind: 'choice', options: ['Menu descriptions', 'Our story or about page', 'An announcement', 'Something else'] },
       { id: 'about', prompt: 'Tell us the gist', kind: 'long', hint: 'What it is about, in your own words' },
+      { id: 'level', prompt: 'How good should it be?', kind: 'text', optional: true, hint: 'Standard or The works' },
     ],
   },
   {

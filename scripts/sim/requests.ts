@@ -17,7 +17,7 @@ import {
   summaryLine, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE,
   validateAttachments, validateDueDate, disciplineForRequestType,
 } from '@/lib/requests/catalog'
-import { priceCreativeRequest } from '@/lib/requests/pricing'
+import { priceCreativeRequest, CREATIVE_LEVELS, VALVE_LINE, REVISION_LINE } from '@/lib/requests/pricing'
 import { FULLY_BUILT_LIVE, EMAIL_OFF_IDS, availabilityFor } from '@/lib/campaigns/data/catalog-availability'
 import { CREATIVE_FLOWS, flowFor, bucketForDate } from '@/lib/requests/flows'
 
@@ -211,26 +211,45 @@ s.group('Validation: accepts honesty, refuses garbage')
   void video
 }
 
-s.group('The price sheet: every creative orders at a listed number (owner call 2026-08-09)')
+s.group('The TIERED price sheet (persona-tested, owner call 2026-08-09)')
 {
   const priced = REQUEST_TYPES.filter((t) => t.id !== 'graphic')
   s.check('every non-graphic type has a price and it is above zero',
     priced.every((t) => (priceCreativeRequest(t.id, {})?.totalCents ?? 0) > 0))
   s.check('the graphic returns null: the design engine owns its price',
     priceCreativeRequest('graphic', {}) === null)
+  s.check('TIERS CHANGE THE PRICE (never theater): The works > Standard on every level type',
+    Object.keys(CREATIVE_LEVELS).every((t) =>
+      priceCreativeRequest(t, { level: 'The works' })!.totalCents > priceCreativeRequest(t, {})!.totalCents))
+  s.check('Standard is the default: a missing level prices as Standard',
+    Object.keys(CREATIVE_LEVELS).every((t) =>
+      priceCreativeRequest(t, {})!.totalCents === priceCreativeRequest(t, { level: 'Standard' })!.totalCents))
   const one = priceCreativeRequest('video', { count: 'Just 1' })!
   const batch = priceCreativeRequest('video', { count: 'A monthly batch' })!
   s.check('scope moves the price: a monthly batch costs more than one video',
     batch.totalCents > one.totalCents)
   const own = priceCreativeRequest('video', { count: 'whatever you think is right' })!
-  s.check('own words on a scope question price at the base, never a guessed upcharge',
+  s.check('own words on a scope question price at the tier base, never a guessed upcharge',
     own.totalCents === one.totalCents)
-  const shoot2 = priceCreativeRequest('photos', { what: 'Food and dishes, The space' })!
-  const shoot1 = priceCreativeRequest('photos', { what: 'Food and dishes' })!
-  s.check('photos: extra coverage areas add their line; the first is included',
-    shoot2.totalCents > shoot1.totalCents && shoot2.lines.length === 2)
+  const full = priceCreativeRequest('photos', { what: 'Food and dishes, The space' })!
+  const std = priceCreativeRequest('photos', { what: 'Food and dishes' })!
+  s.check('photos: full house beats one focus; the works beats both',
+    full.totalCents > std.totalCents
+    && priceCreativeRequest('photos', { level: 'The works' })!.totalCents > full.totalCents)
+  s.check('open scope is a STARTS-AT floor with the answer clock in its why',
+    priceCreativeRequest('website', { scope: 'Brand new website' })!.startsAt === true
+    && priceCreativeRequest('other', {})!.startsAt === true
+    && /1 business day/.test(priceCreativeRequest('other', {})!.lines[0].why))
+  s.check('logo and website scope answers ARE the tiers (kit > new > refresh)',
+    priceCreativeRequest('logo', { scope: 'Full brand kit' })!.totalCents > priceCreativeRequest('logo', {})!.totalCents
+    && priceCreativeRequest('logo', {})!.totalCents > priceCreativeRequest('logo', { scope: 'Refresh my logo' })!.totalCents)
+  s.check('the ownership promise rides every photo tier why (Omar guardrail)',
+    ['Standard', 'The works'].every((lv) =>
+      /Photos and files/.test(priceCreativeRequest('photos', { level: lv })!.lines[0].why)))
   s.check('every price line carries a why (no un-explained money)',
     priced.every((t) => (priceCreativeRequest(t.id, {})?.lines ?? []).every((l) => l.why.length > 0)))
+  s.check('the valve and revision lines exist and carry no dashes',
+    VALVE_LINE.length > 0 && REVISION_LINE.length > 0 && ![VALVE_LINE, REVISION_LINE].some((x) => /[\u2014\u2013]/.test(x)))
 }
 
 /* ── Part 2: the real table (skips loudly if 235 is not applied) ───────────── */
