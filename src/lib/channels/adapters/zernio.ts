@@ -84,6 +84,26 @@ export function normalizePlatform(v: unknown): ZernioPlatform | '' {
   return ''
 }
 
+/** PURE fold: post rows -> per-DAY per-platform totals, so one sync backfills real
+ *  daily history instead of collapsing a month into today. Undated rows land on
+ *  fallbackDate (today). Sim-locked. */
+export function aggregateZernioPostsByDay(
+  rows: ZernioPostRow[] | null | undefined,
+  fallbackDate: string,
+): Record<string, Record<string, PlatformTotals>> {
+  const byDay: Record<string, ZernioPostRow[]> = {}
+  for (const r of rows ?? []) {
+    const o = (r ?? {}) as Record<string, unknown>
+    const raw = str(o.publishedAt) || str(o.postedAt) || str(o.posted_at) || str(o.date) || str(o.createdAt) || str(o.created_at)
+    const t = Date.parse(raw)
+    const day = Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : fallbackDate
+    ;(byDay[day] ??= []).push(r)
+  }
+  const out: Record<string, Record<string, PlatformTotals>> = {}
+  for (const [day, group] of Object.entries(byDay)) out[day] = aggregateZernioPosts(group)
+  return out
+}
+
 export function aggregateZernioPosts(rows: ZernioPostRow[] | null | undefined): Record<string, PlatformTotals> {
   const out: Record<string, PlatformTotals> = {}
   for (const r of rows ?? []) {
@@ -255,17 +275,41 @@ export const zernioAdapter: ChannelAdapter = {
       }
     } catch { followersByPlatform = {} /* follower stats missing is a gap, not a failure */ }
 
-    // 3. The day's content totals from post analytics (yesterday -> today window).
-    const from = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10)
-    const posts = await zer(`/analytics?profileId=${encodeURIComponent(profileId)}&fromDate=${from}&limit=100`)
+    // 3. Content totals from post analytics — a 30-day window folded PER DAY, so the
+    //    first sync backfills real daily history and the dashboard has numbers now.
+    const today = new Date().toISOString().slice(0, 10)
+    const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
+    const posts = await zer(`/analytics?profileId=${encodeURIComponent(profileId)}&fromDate=${from}&limit=200`)
     const rows = unwrapList(posts, 'posts', 'analytics') as ZernioPostRow[]
-    const totals = aggregateZernioPosts(rows)
+    const byDay = aggregateZernioPostsByDay(rows, today)
 
     // 4. One daily row per linked platform (even a zero day is a real day).
-    const today = new Date().toISOString().slice(0, 10)
     let written = 0
     for (const platform of linked) {
-      const t = totals[platform] ?? { reach: 0, impressions: 0, engagement: 0 }
+      /* history: content numbers only (no follower columns — those are only known
+       * for today; historical rows must not clobber a real value with zero) */
+      for (const [day, dayTotals] of Object.entries(byDay)) {
+        if (day === today) continue
+        const h = dayTotals[platform]
+        if (!h) continue
+        const { error: histErr } = await admin.from('social_metrics').upsert(
+          {
+            client_id: connection.client_id,
+            platform,
+            date: day,
+            reach: h.reach,
+            impressions: h.impressions,
+            profile_visits: 0,
+            engagement: h.engagement,
+            raw_data: { vendor: 'zernio', note: 'backfilled from post analytics; reach is summed post reach', totals: h },
+          },
+          { onConflict: 'client_id,platform,date' },
+        )
+        if (histErr) throw new ChannelError('upstream', `social_metrics write failed: ${histErr.message}`)
+        written++
+      }
+
+      const t = byDay[today]?.[platform] ?? { reach: 0, impressions: 0, engagement: 0 }
       const followersTotal = num(followersByPlatform[platform])
 
       const { data: prev } = await admin

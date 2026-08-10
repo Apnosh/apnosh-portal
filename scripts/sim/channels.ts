@@ -14,7 +14,7 @@ import { dayKey, normalizeSource } from '../../src/lib/channels/adapters/stateme
 import { signState, verifyState } from '../../src/lib/channels/oauth-state'
 import { aggregateDaily, dayOfMs, windowStartMs } from '../../src/lib/channels/daily'
 import { mapSocialAnalytics, AYRSHARE_PLATFORMS } from '../../src/lib/channels/adapters/ayrshare'
-import { aggregateZernioPosts, ZERNIO_PLATFORMS } from '../../src/lib/channels/adapters/zernio'
+import { aggregateZernioPosts, aggregateZernioPostsByDay, normalizePlatform, ZERNIO_PLATFORMS } from '../../src/lib/channels/adapters/zernio'
 
 const s = new Suite()
 
@@ -167,6 +167,29 @@ s.group('Zernio fold: post analytics -> daily platform totals (bake-off)')
     JSON.stringify(ZERNIO_PLATFORMS) === JSON.stringify(AYRSHARE_PLATFORMS))
   s.check('the adapter is hosted_link and env kill-switched',
     CHANNELS.zernio.kind === 'hosted_link' && (Boolean(process.env.ZERNIO_API_KEY) || CHANNELS.zernio.isConfigured() === false))
+
+  /* platform normalization: vendor variants map to our canonical four */
+  s.check('platform names normalize by prefix, unknowns to empty',
+    normalizePlatform('instagram-business') === 'instagram' &&
+    normalizePlatform('Facebook Page') === 'facebook' &&
+    normalizePlatform('TIKTOK') === 'tiktok' &&
+    normalizePlatform('bluesky') === '' && normalizePlatform(null) === '')
+
+  /* per-day fold: dated posts land on their day, undated on the fallback */
+  {
+    const dayRows = [
+      { platform: 'instagram', publishedAt: '2026-08-01T12:00:00Z', analytics: { reach: 10, impressions: 20, likes: 1 } },
+      { platform: 'instagram', publishedAt: '2026-08-01T18:00:00Z', analytics: { reach: 5, impressions: 5 } },
+      { platform: 'facebook', date: '2026-08-03', analytics: { impressions: 7, likes: 2 } },
+      { platform: 'instagram', analytics: { reach: 99 } },
+    ]
+    const byDay = aggregateZernioPostsByDay(dayRows, '2026-08-09')
+    s.check('same-day posts sum on their day',
+      byDay['2026-08-01'].instagram.reach === 15 && byDay['2026-08-01'].instagram.impressions === 25 && byDay['2026-08-01'].instagram.engagement === 1)
+    s.check('other platforms keep their own day', byDay['2026-08-03'].facebook.impressions === 7)
+    s.check('undated posts land on the fallback day', byDay['2026-08-09'].instagram.reach === 99)
+    s.check('by-day fold of nothing is empty', Object.keys(aggregateZernioPostsByDay([], '2026-08-09')).length === 0)
+  }
 }
 
 const ok = s.report('Channels layer (P1 spine)')
