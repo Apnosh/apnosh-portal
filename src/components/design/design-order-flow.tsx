@@ -338,6 +338,11 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
   const [photoMode, setPhotoMode] = useState<'shoot' | 'source' | 'none' | 'other' | null>(null)
   /* 'other' carries the owner's own words about photos (like: use my Instagram shots) */
   const [photoOther, setPhotoOther] = useState('')
+  /* Photos explore the WHOLE library, same pattern as Featuring: collapsed shows the
+   * sharpest 8 (picked ones always stay visible), Show-all opens everything with a
+   * search box past 12. */
+  const [photosOpen, setPhotosOpen] = useState(false)
+  const [photoQ, setPhotoQ] = useState('')
   /* Sizes the server did not know (menu photos, older uploads): measured here, once,
    * before the quality gate judges them. null = the image would not load at all. */
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number } | null>>({})
@@ -813,8 +818,23 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                 {L['photos.best']}
               </div>
             )}
+            {photosOpen && rankedAssets.length > 12 && (
+              <input
+                value={photoQ} onChange={(e) => setPhotoQ(e.target.value)}
+                placeholder={L['photos.search.ph']} aria-label={L['photos.search.ph']}
+                style={{ ...inputStyle, marginBottom: 8 }}
+              />
+            )}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-              {rankedAssets.map((a, i) => {
+              {(() => {
+                if (photosOpen) {
+                  const q = photoQ.trim().toLowerCase()
+                  return q ? rankedAssets.filter((a) => (a.label ?? '').toLowerCase().includes(q)) : rankedAssets
+                }
+                /* collapsed: sharpest 8, but a picked photo never disappears from view */
+                const top = rankedAssets.slice(0, 8)
+                return [...top, ...rankedAssets.filter((a) => picked.includes(a.id) && !top.some((t) => t.id === a.id))]
+              })().map((a, i) => {
                 const ok = passesQualityGate(a)
                 const on = picked.includes(a.id)
                 /* honest quality tags: the sharpest few say so; a dish photo names its dish */
@@ -832,6 +852,22 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                   </button>
                 )
               })}
+              {!photosOpen && rankedAssets.length > 8 && (
+                <button
+                  type="button" onClick={() => setPhotosOpen(true)}
+                  style={{ aspectRatio: '1', borderRadius: 12, border: `1.5px dashed ${DESK.mint}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: DESK.mintDeep, cursor: 'pointer', background: DESK.mintWash, padding: 4, textAlign: 'center' }}
+                >
+                  {fill(L['photos.all'], { n: String(rankedAssets.length) })}
+                </button>
+              )}
+              {photosOpen && (
+                <button
+                  type="button" onClick={() => { setPhotosOpen(false); setPhotoQ('') }}
+                  style={{ aspectRatio: '1', borderRadius: 12, border: `1.5px dashed ${DESK.mute}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: DESK.ink2, cursor: 'pointer', background: DESK.card, padding: 4 }}
+                >
+                  {L['photos.less']}
+                </button>
+              )}
               <label style={{ aspectRatio: '1', borderRadius: 12, border: `1.5px dashed ${DESK.mute}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: DESK.ink2, cursor: 'pointer', background: DESK.card }}>
                 {L['photos.upload']}
                 <input type="file" accept="image/*" multiple onChange={(e) => upload(e.target.files)} style={{ display: 'none' }} />
