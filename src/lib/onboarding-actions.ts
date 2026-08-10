@@ -520,14 +520,30 @@ export async function getConnectedPlatforms(clientId: string): Promise<Record<st
   const connected: Record<string, boolean> = {}
   if (data) {
     for (const row of data) {
-      const name = row.platform === 'instagram' ? 'Instagram'
-        : row.platform === 'facebook' ? 'Facebook'
-        : row.platform === 'tiktok' ? 'TikTok'
-        : row.platform === 'linkedin' ? 'LinkedIn'
-        : row.platform === 'google_business' ? 'Google Business'
+      /* legacy per-network social rows no longer count as connected — socials now
+       * link through the vendor lane (channel_connections metadata below) */
+      if (['instagram', 'facebook', 'tiktok', 'linkedin'].includes(row.platform)) continue
+      const name = row.platform === 'google_business' ? 'Google Business'
         : row.platform === 'yelp' ? 'Yelp'
         : row.platform
       connected[name] = true
+    }
+  }
+
+  /* socials linked through the vendor (zernio/ayrshare): one connection row,
+   * per-platform state in metadata.platforms */
+  const { data: vendor } = await supabase
+    .from('channel_connections')
+    .select('metadata')
+    .eq('client_id', clientId)
+    .in('channel', ['zernio', 'ayrshare'])
+  for (const v of vendor ?? []) {
+    const platforms = (v.metadata as { platforms?: unknown } | null)?.platforms
+    if (!Array.isArray(platforms)) continue
+    for (const p of platforms) {
+      const name = p === 'instagram' ? 'Instagram' : p === 'facebook' ? 'Facebook'
+        : p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : null
+      if (name) connected[name] = true
     }
   }
   return connected

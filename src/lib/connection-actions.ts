@@ -40,27 +40,30 @@ const PLATFORM_META: Record<string, {
   reconnectPath: string | null
   profileUrlBuilder?: (accountName: string | null) => string | null
 }> = {
+  /* Per-platform socials now ALWAYS reconnect through the vendor lane (zernio/
+   * ayrshare hosted login) — the old direct Meta/TikTok/LinkedIn OAuth routes are
+   * retired from every owner-facing surface. */
   instagram: {
     label: 'Instagram',
     category: 'social',
-    reconnectPath: '/api/auth/instagram',
+    reconnectPath: '/api/channels/social/start?platform=instagram',
     profileUrlBuilder: (n) => n ? `https://instagram.com/${n.replace(/^@/, '')}` : null,
   },
   facebook: {
     label: 'Facebook',
     category: 'social',
-    reconnectPath: '/api/auth/instagram', // Meta OAuth handles both
+    reconnectPath: '/api/channels/social/start?platform=facebook',
   },
   tiktok: {
     label: 'TikTok',
     category: 'social',
-    reconnectPath: '/api/auth/tiktok',
+    reconnectPath: '/api/channels/social/start?platform=tiktok',
     profileUrlBuilder: (n) => n ? `https://tiktok.com/@${n.replace(/^@/, '')}` : null,
   },
   linkedin: {
     label: 'LinkedIn',
     category: 'social',
-    reconnectPath: '/api/auth/linkedin',
+    reconnectPath: '/api/channels/social/start?platform=linkedin',
   },
   google_analytics: {
     label: 'Google Analytics',
@@ -200,14 +203,17 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
 
   const results: UnifiedConnection[] = []
 
-  // Social platform_connections
+  // Social platform_connections — the OLD direct-API lane. These rows predate the
+  // vendor pipe and no longer feed the dashboard, so they always surface as an old
+  // connection that needs a relink through the new per-platform login.
   for (const r of pc.data ?? []) {
     if (!r.access_token) continue
     const meta = PLATFORM_META[r.platform]
     if (!meta) continue
 
+    const isLegacySocial = meta.category === 'social'
     const isExpired = r.expires_at ? new Date(r.expires_at) < new Date() : false
-    const status: ConnectionStatus = isExpired ? 'expired' : 'connected'
+    const status: ConnectionStatus = isLegacySocial || isExpired ? 'expired' : 'connected'
 
     const accountName = r.username || r.page_name || null
     const profileUrl = r.profile_url || (meta.profileUrlBuilder ? meta.profileUrlBuilder(accountName) : null)
@@ -221,7 +227,8 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
       accountName,
       profileUrl,
       status,
-      friendlyStatus: status === 'expired' ? 'Needs reconnect' : 'Connected',
+      friendlyStatus: isLegacySocial ? 'Old connection. Tap to relink'
+        : status === 'expired' ? 'Needs reconnect' : 'Connected',
       lastSyncAt: null, // platform_connections doesn't track this directly; sync-social-metrics uses social_connections
       syncError: null,
       connectedAt: r.connected_at,

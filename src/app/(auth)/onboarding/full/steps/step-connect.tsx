@@ -5,14 +5,13 @@ import { type OnboardingData, PLATFORMS } from '../data'
 import { Question, Hint } from '../ui'
 import { ensureClientForBusiness, getConnectedPlatforms } from '@/lib/onboarding-actions'
 
-// Map platform display names to OAuth paths
-// Instagram uses the direct Instagram login (simpler, no Facebook Page required)
-// Facebook uses the Meta OAuth flow (connects Facebook Page + linked IG)
+// Every social connect goes through the vendor lane (the same per-platform hosted
+// login the Connected accounts page uses); the old direct OAuth routes are retired.
 const OAUTH_PATHS: Record<string, string> = {
-  Instagram: '/api/auth/instagram-direct',
-  Facebook: '/api/auth/instagram',
-  TikTok: '/api/auth/tiktok',
-  LinkedIn: '/api/auth/linkedin',
+  Instagram: '/api/channels/social/start?platform=instagram',
+  Facebook: '/api/channels/social/start?platform=facebook',
+  TikTok: '/api/channels/social/start?platform=tiktok',
+  LinkedIn: '/api/channels/social/start?platform=linkedin',
 }
 
 interface Props {
@@ -96,9 +95,9 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
     setConnectingPlatform(name)
     setLoading(true)
 
-    // Full-page redirect to OAuth (more reliable than popups for Meta)
-    // The callback will redirect back to /onboarding after connecting
-    const url = `${authPath}?clientId=${clientId}&returnTo=/onboarding`
+    // Full-page redirect to the vendor's hosted login. The path already carries
+    // ?platform=, so append with the right separator.
+    const url = `${authPath}${authPath.includes('?') ? '&' : '?'}clientId=${clientId}&returnTo=/onboarding`
     console.log('[connect] Redirecting to:', url)
     window.location.href = url
   }

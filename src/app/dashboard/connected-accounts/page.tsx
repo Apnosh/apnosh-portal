@@ -115,10 +115,9 @@ export default function ConnectedAccountsPage() {
       if (r.success) {
         setBanner({ ok: true, text: 'Linked. Your numbers start flowing tonight.' })
         load()
-      } else if (cameBack) {
-        setBanner({ ok: false, text: r.error })
       } else {
-        setBanner(null)
+        /* say exactly where the chain is stuck — a silent card reads as broken */
+        setBanner({ ok: false, text: r.error })
       }
     })()
   }, [connections, loading, load])
@@ -152,9 +151,11 @@ export default function ConnectedAccountsPage() {
   const summary = attention.length > 0 ? `${attention.length} need${attention.length > 1 ? '' : 's'} attention`
     : connectedCount > 0 ? `${connectedCount} connected` : 'Nothing connected yet'
 
-  /* which individual social platforms are already linked (either via the vendor's
-   * metadata or a legacy per-network OAuth row) */
-  const linkedSocial = new Set(display.filter(c => c.category === 'social' && !SOCIAL_VENDORS.includes(c.platform)).map(c => c.platform))
+  /* which individual social platforms are linked THROUGH THE VENDOR. Legacy
+   * direct-API rows (source platform_connections) do not count — they surface
+   * under Needs attention as "Old connection. Tap to relink" instead, and the
+   * fresh per-platform connect rows stay available. */
+  const linkedSocial = new Set(display.filter(c => c.category === 'social' && c.source === 'channel_connections' && !SOCIAL_VENDORS.includes(c.platform)).map(c => c.platform))
   const connectedSet = new Set(display.map(c => c.platform))
   const unconnected = CATALOG.filter(p => (p.category === 'social' ? !linkedSocial.has(p.id) : !connectedSet.has(p.id)))
 
