@@ -127,7 +127,7 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
   // Interest grid lists every channel, exactly like Awareness (which carries
   // tiktok/facebook/yelp the same way).
   2: ['ga4_website_visits', 'gbp_website_clicks', 'ga4_menu_views', 'gbp_menu_clicks', 'ig_profile_visits', 'facebook_page_visits', 'tiktok_profile_views'],
-  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations'],
+  3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations', 'social_link_clicks'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
 }
@@ -153,7 +153,7 @@ const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds:
     { key: 'calls', label: 'Calls', sourceIds: ['gbp_calls', 'ga4_phone_taps'] },
     { key: 'directions', label: 'Directions', sourceIds: ['gbp_direction_requests'] },
     { key: 'orders', label: 'Online orders', sourceIds: ['ga4_order_clicks'] },
-    { key: 'bookings', label: 'Bookings', sourceIds: ['gbp_booking_clicks', 'reservations', 'ig_profile_actions', 'facebook_cta_clicks', 'tiktok_link_clicks'] },
+    { key: 'bookings', label: 'Bookings', sourceIds: ['gbp_booking_clicks', 'reservations', 'social_link_clicks', 'ig_profile_actions', 'facebook_cta_clicks', 'tiktok_link_clicks'] },
   ],
   4: [
     { key: 'guests', label: 'Guests', sourceIds: ['pos_covers'] },

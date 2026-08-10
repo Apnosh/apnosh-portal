@@ -39,6 +39,7 @@ export type SourceProvider =
   | 'tiktok'
   | 'facebook'
   | 'linkedin'
+  | 'social'
   | 'yelp'
   | 'pos'
   | 'reservations'
@@ -185,6 +186,18 @@ export const SOURCES: SourceDef[] = [
     authType: 'oauth',
     docsUrl: null,
     notes: 'Real metric — the social vendor sync writes linkedin rows into social_metrics; stage-values splits reach per platform.',
+    wired: true,
+  },
+  {
+    id: 'social_link_clicks',
+    displayName: 'Clicks on links in your posts',
+    provider: 'social',
+    stage: 3,
+    metricKeys: ['clicks'],
+    baseStatus: 'CONNECTED',
+    authType: 'oauth',
+    docsUrl: null,
+    notes: 'Real metric — per-post link clicks from the social vendor sync, summed across every connected platform (stored in social_metrics raw_data.totals.clicks).',
     wired: true,
   },
   {
@@ -642,6 +655,7 @@ export const SHORT_LABELS: Record<string, string> = {
   tiktok_video_views: 'TikTok views',
   facebook_reach: 'Facebook reach',
   linkedin_reach: 'LinkedIn reach',
+  social_link_clicks: 'Post link clicks',
   yelp_views: 'Yelp views',
   gbp_search_keywords: 'Search terms',
   ig_nonfollower_reach_pct: 'New-audience reach',
@@ -714,6 +728,8 @@ export const PROVIDER_CHANNELS: Partial<Record<SourceProvider, ConnectorChannel[
   facebook: ['facebook'],
   tiktok: ['tiktok'],
   linkedin: ['linkedin'],
+  /* 'social' = any vendor-linked platform proves it */
+  social: ['instagram', 'facebook', 'tiktok', 'linkedin'],
 }
 
 /**

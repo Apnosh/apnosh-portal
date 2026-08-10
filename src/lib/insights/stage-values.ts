@@ -167,13 +167,13 @@ export async function loadStageValues(
   try {
     const { data, error } = await capDate(admin
       .from('social_metrics')
-      .select('platform, reach, impressions, followers_gained, profile_visits, engagement')
+      .select('platform, reach, impressions, followers_gained, profile_visits, engagement, raw_data')
       .eq('client_id', clientId)
       .gte('date', otherStart))
     if (!error && data) {
       const reachBy: Record<string, number> = {}
       const imprBy: Record<string, number> = {}
-      let gained = 0, visits = 0, engaged = 0
+      let gained = 0, visits = 0, engaged = 0, linkClicks = 0
       for (const r of data as Record<string, unknown>[]) {
         const p = typeof r.platform === 'string' ? r.platform : 'instagram'
         reachBy[p] = (reachBy[p] ?? 0) + num(r.reach)
@@ -181,6 +181,9 @@ export async function loadStageValues(
         gained += num(r.followers_gained)
         visits += num(r.profile_visits)
         engaged += num(r.engagement)
+        /* per-post link clicks live in the day row's raw_data.totals (vendor sync) */
+        const totals = (r.raw_data as { totals?: { clicks?: unknown } } | null)?.totals
+        linkClicks += num(totals?.clicks)
       }
       /* Platforms report differently: IG/FB have reach; TikTok and LinkedIn report
        * views/impressions and no reach. Each chip shows the platform's real number
@@ -193,6 +196,7 @@ export async function loadStageValues(
       out.ig_follower_growth = gained
       out.ig_profile_visits = visits
       out.ig_engaged = engaged
+      out.social_link_clicks = linkClicks
     }
   } catch { /* social unavailable */ }
 
