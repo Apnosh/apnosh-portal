@@ -950,8 +950,8 @@ export const GENERATED_CATALOG: PricedService[] = [
           "offshore": 1
         },
         "kind": "monthly",
-        "note": "ad spend billed at cost, $500/mo minimum",
-        "amount": 545,
+        "note": "15% of your ad spend. Ad spend is paid to Google and Meta at cost, $300/mo minimum. Fee scales with the spend you choose.",
+        "amount": 45,
         "market": {
           "low": 500,
           "high": 1500,
