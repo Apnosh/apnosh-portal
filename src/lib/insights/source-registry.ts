@@ -761,7 +761,7 @@ export function sourcesForStage(stage: FunnelStage): SourceDef[] {
  * Providers with no entry (pos/reservations/delivery/loyalty/email) have no
  * adapter — their sources are always COMING_SOON.
  */
-export const PROVIDER_CHANNELS: Partial<Record<SourceProvider, ConnectorChannel[]>> = {
+export const PROVIDER_CHANNELS: Partial<Record<SourceProvider, (ConnectorChannel | string)[]>> = {
   google_business_profile: ['google_business_profile'],
   instagram: ['instagram', 'instagram_direct'],
   google_analytics: ['google_analytics'],
