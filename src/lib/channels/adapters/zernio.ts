@@ -195,6 +195,23 @@ export const zernioAdapter: ChannelAdapter = {
       await admin.from('channel_connections')
         .update({ status: 'pending', metadata: { platforms: [] } })
         .eq('id', connection.id)
+      /* Wrong-profile probe: logins done inside Zernio's own dashboard attach to the
+       * owner's default workspace profile, not ours. If the workspace-wide list shows
+       * accounts our profile can't see, say THAT instead of "not linked". */
+      try {
+        const all = await zer('/accounts')
+        const elsewhere = unwrapList(all, 'accounts')
+          .map((a) => str(a.platform).toLowerCase())
+          .filter((p) => (ZERNIO_PLATFORMS as readonly string[]).includes(p))
+        if (elsewhere.length > 0) {
+          const profileName = `apnosh-${connection.client_id.slice(0, 8)}`
+          throw new ChannelError('not_connected',
+            `Your ${elsewhere.join(' and ')} ${elsewhere.length === 1 ? 'is' : 'are'} linked on Zernio, but under a different profile than ours. In Zernio, move ${elsewhere.length === 1 ? 'it' : 'them'} to the profile named ${profileName} — or unlink there and relink using the Connect buttons here. Relinking the same accounts does not use up extra account slots.`)
+        }
+      } catch (e) {
+        if (e instanceof ChannelError) throw e
+        /* workspace probe unsupported — fall through to the plain message */
+      }
       throw new ChannelError('not_connected', 'No social account linked on Zernio yet')
     }
 
