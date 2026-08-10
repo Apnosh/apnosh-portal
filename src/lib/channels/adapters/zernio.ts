@@ -74,11 +74,21 @@ export interface PlatformTotals {
  * PURE fold: a page of Zernio post-analytics rows -> per-platform daily totals.
  * Missing numbers are honest zeros; unknown platforms are dropped. Sim-locked.
  */
+/** Normalize a vendor platform value to our canonical four ('instagram-business',
+ *  'Facebook Page', etc. all map by prefix); '' when it is none of ours. */
+export function normalizePlatform(v: unknown): ZernioPlatform | '' {
+  const p = str(v).toLowerCase().replace(/[^a-z]/g, '')
+  for (const known of ZERNIO_PLATFORMS) {
+    if (p.startsWith(known)) return known
+  }
+  return ''
+}
+
 export function aggregateZernioPosts(rows: ZernioPostRow[] | null | undefined): Record<string, PlatformTotals> {
   const out: Record<string, PlatformTotals> = {}
   for (const r of rows ?? []) {
-    const platform = str(r?.platform).toLowerCase()
-    if (!(ZERNIO_PLATFORMS as readonly string[]).includes(platform)) continue
+    const platform = normalizePlatform(r?.platform)
+    if (!platform) continue
     const a = (r?.analytics ?? {}) as Record<string, unknown>
     const cur = out[platform] ?? { reach: 0, impressions: 0, engagement: 0 }
     cur.reach += num(a.reach)
@@ -189,12 +199,19 @@ export const zernioAdapter: ChannelAdapter = {
     if (!profileId) throw new ChannelError('not_connected', 'No Zernio profile on this connection yet')
     const admin = createAdminClient()
 
-    // 1. Which accounts are linked? (documented: the quickstart reads data.accounts)
-    const accountsRes = await zer(`/accounts?profileId=${encodeURIComponent(profileId)}`)
-    const rawAccounts = unwrapList(accountsRes, 'accounts')
-    const linked = rawAccounts
-      .map((a) => str(a.platform).toLowerCase())
-      .filter((p): p is ZernioPlatform => (ZERNIO_PLATFORMS as readonly string[]).includes(p))
+    // 1. Which accounts are linked? (documented: the quickstart reads data.accounts;
+    //    the multi-tenant docs also mention a profile-scoped path — try both)
+    let accountsRes = await zer(`/accounts?profileId=${encodeURIComponent(profileId)}`)
+    let rawAccounts = unwrapList(accountsRes, 'accounts')
+    if (rawAccounts.length === 0) {
+      try {
+        accountsRes = await zer(`/profiles/${encodeURIComponent(profileId)}/accounts`)
+        rawAccounts = unwrapList(accountsRes, 'accounts')
+      } catch { /* alternate path unsupported — keep the first answer */ }
+    }
+    const linked = [...new Set(rawAccounts
+      .map((a) => normalizePlatform(a.platform ?? a.provider ?? a.type))
+      .filter((p): p is ZernioPlatform => p !== ''))]
     if (linked.length === 0) {
       await admin.from('channel_connections')
         .update({ status: 'pending', metadata: { platforms: [] } })
@@ -204,9 +221,9 @@ export const zernioAdapter: ChannelAdapter = {
        * accounts our profile can't see, say THAT instead of "not linked". */
       try {
         const all = await zer('/accounts')
-        const elsewhere = unwrapList(all, 'accounts')
-          .map((a) => str(a.platform).toLowerCase())
-          .filter((p) => (ZERNIO_PLATFORMS as readonly string[]).includes(p))
+        const elsewhere = [...new Set(unwrapList(all, 'accounts')
+          .map((a) => normalizePlatform(a.platform ?? a.provider ?? a.type))
+          .filter((p) => p !== ''))]
         if (elsewhere.length > 0) {
           const profileName = `apnosh-${connection.client_id.slice(0, 8)}`
           throw new ChannelError('not_connected',
@@ -214,9 +231,12 @@ export const zernioAdapter: ChannelAdapter = {
         }
       } catch (e) {
         if (e instanceof ChannelError) throw e
-        /* workspace probe unsupported — fall through to the plain message */
+        /* workspace probe unsupported — fall through to the diagnostic message */
       }
-      throw new ChannelError('not_connected', 'No social account linked on Zernio yet')
+      /* Carry the raw body: if Zernio DOES have the accounts and we are misreading
+       * the shape, this message is the proof and the fix in one. */
+      throw new ChannelError('not_connected',
+        `Zernio lists no account on our profile yet (their reply: ${JSON.stringify(accountsRes).slice(0, 180)})`)
     }
 
     // 2. Followers per platform.
