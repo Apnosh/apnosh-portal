@@ -126,17 +126,20 @@ export async function GET(req: NextRequest) {
   if (posts.status === 'fulfilled' && Array.isArray(posts.value)) {
     socialConnected = posts.value.length > 0
     socialReach = posts.value.reduce((s, p) => s + (p.reach ?? 0), 0)
+    /* Recent posts, newest first — a fresh post with zero reach still shows
+     * (owner call: even a 0 must be visible and accurate). Platforms that report
+     * views instead of reach (TikTok, LinkedIn) fall back to video_views. */
     topPosts = posts.value
-      .filter((p) => (p.reach ?? 0) > 0)
-      .sort((a, b) => (b.reach ?? 0) - (a.reach ?? 0))
-      .slice(0, 3)
+      .slice()
+      .sort((a, b) => new Date(b.posted_at ?? 0).getTime() - new Date(a.posted_at ?? 0).getTime())
+      .slice(0, 5)
       .map((p) => ({
         id: p.id,
         platform: p.platform,
         permalink: p.permalink,
         thumbnailUrl: p.thumbnail_url,
         type: postType(p.media_type, p.media_product_type),
-        reach: p.reach ?? 0,
+        reach: (p.reach ?? 0) > 0 ? (p.reach ?? 0) : (p.video_views ?? 0),
         likes: p.likes ?? 0,
         saves: p.saves ?? 0,
         postedAt: p.posted_at ?? null,

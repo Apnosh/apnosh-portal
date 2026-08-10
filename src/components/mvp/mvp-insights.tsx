@@ -493,6 +493,7 @@ function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; 
           {cs
             ? <RangeSources cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" title="Views by source" range={range} />
             : <WhatFeedsThis feed={buildAwarenessFeed(toFeedInput(detail))} unit="Times you showed up" />}
+          {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
           {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
         </>
       )
@@ -1584,11 +1585,10 @@ function TopSearches({ queries }: { queries: { query: string; impressions: numbe
   )
 }
 
-// ── Your best posts ──
+// ── Recent posts, newest first (a zero-reach post still shows — honesty) ──
 function BestPosts({ posts }: { posts: InsightsPost[] }) {
-  const hero = posts[0]
   return (
-    <Section title="Your best posts lately">
+    <Section title="Recent posts">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {posts.map((p) => (
           <a key={p.id} href={p.permalink ?? undefined} target="_blank" rel="noreferrer noopener" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 11, alignItems: 'center', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 10 }}>
@@ -1610,7 +1610,7 @@ function BestPosts({ posts }: { posts: InsightsPost[] }) {
           </a>
         ))}
       </div>
-      {hero && <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>Your <b style={{ color: C.mute, fontWeight: 600 }}>{hero.type.toLowerCase()}s</b> are pulling the most reach. Make more like these.</div>}
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>Your latest posts across every connected account, with what each one reached so far.</div>
     </Section>
   )
 }

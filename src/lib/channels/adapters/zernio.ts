@@ -292,6 +292,43 @@ export const zernioAdapter: ChannelAdapter = {
     const rows = unwrapList(posts, 'posts', 'analytics') as ZernioPostRow[]
     const byDay = aggregateZernioPostsByDay(rows, today)
 
+    /* 3b. Per-POST rows into social_posts — this is what "Recent posts" and the
+     * content views read. One row per post, refreshed every sync. */
+    const postRows = rows.flatMap((r) => {
+      const o = (r ?? {}) as Record<string, unknown>
+      const platform = normalizePlatform(o.platform ?? o.provider ?? o.type)
+      const externalId = str(o._id) || str(o.id) || str(o.postId) || str(o.latePostId)
+      if (!platform || !externalId) return []
+      const a = (o.analytics ?? {}) as Record<string, unknown>
+      const rawDate = str(o.publishedAt) || str(o.postedAt) || str(o.posted_at) || str(o.date) || str(o.createdAt) || str(o.created_at)
+      const t = Date.parse(rawDate)
+      return [{
+        client_id: connection.client_id,
+        platform,
+        external_id: externalId,
+        permalink: str(o.permalink) || str(o.url) || str(o.link) || null,
+        media_type: str(o.mediaType) || str(o.media_type) || null,
+        caption: (str(o.caption) || str(o.content) || str(o.text) || '').slice(0, 500) || null,
+        thumbnail_url: str(o.thumbnailUrl) || str(o.mediaUrl) || str(o.imageUrl) || null,
+        posted_at: Number.isFinite(t) ? new Date(t).toISOString() : new Date().toISOString(),
+        reach: num(a.reach),
+        likes: num(a.likes),
+        comments: num(a.comments),
+        saves: num(a.saves),
+        shares: num(a.shares),
+        video_views: num(a.views) || num(a.impressions),
+        total_interactions: num(a.likes) + num(a.comments) + num(a.shares) + num(a.saves),
+        raw_data: o,
+        synced_at: new Date().toISOString(),
+      }]
+    })
+    if (postRows.length > 0) {
+      const { error: postsErr } = await admin
+        .from('social_posts')
+        .upsert(postRows, { onConflict: 'client_id,platform,external_id' })
+      if (postsErr) throw new ChannelError('upstream', `social_posts write failed: ${postsErr.message}`)
+    }
+
     // 4. One daily row per linked platform (even a zero day is a real day).
     let written = 0
     for (const platform of linked) {

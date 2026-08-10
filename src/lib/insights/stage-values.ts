@@ -167,23 +167,29 @@ export async function loadStageValues(
   try {
     const { data, error } = await capDate(admin
       .from('social_metrics')
-      .select('platform, reach, followers_gained, profile_visits, engagement')
+      .select('platform, reach, impressions, followers_gained, profile_visits, engagement')
       .eq('client_id', clientId)
       .gte('date', otherStart))
     if (!error && data) {
       const reachBy: Record<string, number> = {}
+      const imprBy: Record<string, number> = {}
       let gained = 0, visits = 0, engaged = 0
       for (const r of data as Record<string, unknown>[]) {
         const p = typeof r.platform === 'string' ? r.platform : 'instagram'
         reachBy[p] = (reachBy[p] ?? 0) + num(r.reach)
+        imprBy[p] = (imprBy[p] ?? 0) + num(r.impressions)
         gained += num(r.followers_gained)
         visits += num(r.profile_visits)
         engaged += num(r.engagement)
       }
-      out.ig_reach = reachBy.instagram ?? 0
-      out.facebook_reach = reachBy.facebook ?? 0
-      out.tiktok_video_views = reachBy.tiktok ?? 0
-      out.linkedin_reach = reachBy.linkedin ?? 0
+      /* Platforms report differently: IG/FB have reach; TikTok and LinkedIn report
+       * views/impressions and no reach. Each chip shows the platform's real number
+       * instead of a false 0 — views first for TikTok (that IS its number). */
+      const best = (p: string) => (reachBy[p] ?? 0) > 0 ? (reachBy[p] ?? 0) : (imprBy[p] ?? 0)
+      out.ig_reach = best('instagram')
+      out.facebook_reach = best('facebook')
+      out.tiktok_video_views = (imprBy.tiktok ?? 0) > 0 ? (imprBy.tiktok ?? 0) : (reachBy.tiktok ?? 0)
+      out.linkedin_reach = best('linkedin')
       out.ig_follower_growth = gained
       out.ig_profile_visits = visits
       out.ig_engaged = engaged
