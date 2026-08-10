@@ -163,8 +163,12 @@ async function ensureProfile(clientId: string): Promise<string> {
     status: 'pending',
     metadata: { platforms: [] as string[] },
   }
-  if (existing?.id) await admin.from('channel_connections').update(row).eq('id', existing.id)
-  else await admin.from('channel_connections').insert(row)
+  /* A silent write failure here strands the whole lane (the constraint bug that hid
+   * the owner's first live connect) — fail LOUD. */
+  const { error } = existing?.id
+    ? await admin.from('channel_connections').update(row).eq('id', existing.id)
+    : await admin.from('channel_connections').insert(row)
+  if (error) throw new ChannelError('upstream', `Could not save the connection: ${error.message}`)
   return profileId
 }
 
