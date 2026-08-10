@@ -316,14 +316,14 @@ export const SOURCES: SourceDef[] = [
   {
     id: 'ig_engaged',
     displayName: 'Times people engaged with your posts',
-    provider: 'instagram',
+    provider: 'social',
     stage: 2,
-    metricKeys: ['engagement', 'total_interactions'],
+    metricKeys: ['engagement'],
     baseStatus: 'CONNECTED',
     authType: 'oauth',
     docsUrl: null,
     notes:
-      'Real IG metric. The daily sync-social-metrics edge function writes total_interactions (falling back to per-post likes+comments) into social_metrics.engagement.',
+      'Real metric — likes + comments + saves + shares across every connected platform, written daily into social_metrics.engagement by the social vendor sync. Owner call 2026-08-11: engagement COUNTS into Interest (supersedes the July likes-are-not-intent rule now that per-platform engagement flows daily).',
     wired: true,
   },
   {
@@ -705,7 +705,7 @@ export const SHORT_LABELS: Record<string, string> = {
   gsc_site_impressions: 'Website in Google',
   // Stage 2 · Interest
   ig_profile_visits: 'Instagram visits',
-  ig_engaged: 'Post engagement',
+  ig_engaged: 'Engagement',
   ig_saves: 'Post saves',
   ig_shares: 'Post shares',
   ga4_menu_views: 'Menu page views',
