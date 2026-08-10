@@ -113,7 +113,7 @@ export type ManualStore = Record<string, ManualEntry>
 // The sources that SUM into each stage headline (drill-downs + context are
 // excluded). Stage 4 and 5 have preference rules layered on top (see below).
 const SUMMABLE: Record<FunnelStage, string[]> = {
-  1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'yelp_views'],
+  1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'tiktok_video_views', 'facebook_reach', 'linkedin_reach', 'yelp_views'],
   // Owner redefinition (2026-07-13): Interest = people EXPLORING you but not yet
   // trying to come/buy — website visits, menu looks, profile taps. Website
   // visits (GA sessions) count every arrival ONCE; gbp_website_clicks is the
@@ -139,7 +139,7 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
 const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds: string[] }[]> = {
   1: [
     { key: 'google', label: 'Google', sourceIds: ['gbp_impressions_search', 'gbp_impressions_maps'] },
-    { key: 'social', label: 'Social media', sourceIds: ['ig_reach', 'facebook_reach', 'tiktok_video_views'] },
+    { key: 'social', label: 'Social media', sourceIds: ['ig_reach', 'facebook_reach', 'tiktok_video_views', 'linkedin_reach'] },
     { key: 'yelp', label: 'Yelp', sourceIds: ['yelp_views'] },
     { key: 'other', label: 'Other', sourceIds: [] },
   ],
