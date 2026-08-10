@@ -61,7 +61,7 @@ const STATUS_TONE: Record<RequestStatus, { fg: string; bg: string }> = {
   declined: { fg: DESK.amber, bg: DESK.amberWash },
 }
 
-export default function RequestFlow() {
+export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: string }[] }) {
   const [type, setType] = useState<RequestType | null>(null)
   const [mine, setMine] = useState<RequestRow[]>([])
   const [loadingMine, setLoadingMine] = useState(true)
@@ -121,6 +121,7 @@ export default function RequestFlow() {
     return (
       <CreativeFlow
         typeId={type.id}
+        menu={menu}
         /* Backing out of a flow returns to where the cards live: the store. */
         onBack={() => window.location.assign('/dashboard/campaigns/new?lens=creatives')}
         /* After a send, land on the ledger (and drop ?type so refresh stays here). */

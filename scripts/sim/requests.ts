@@ -175,8 +175,9 @@ s.group('Validation: accepts honesty, refuses garbage')
   const noWhen = validateRequestPayload('video', { ...full, when: '' })
   s.check('missing required answer is refused', noWhen.ok === false && noWhen.problem.includes('when'))
 
-  const badChoice = validateRequestPayload('video', { ...full, filming: 'Send a drone' })
-  s.check('an answer outside the choices is refused', badChoice.ok === false)
+  const ownWords = validateRequestPayload('video', { ...full, filming: 'Send a drone' })
+  s.check('THE ESCAPE HATCH: own words on a choice question are accepted, not refused',
+    ownWords.ok === true && ownWords.clean.filming === 'Send a drone')
 
   const badType = validateRequestPayload('nope', full)
   s.check('an unknown type is refused', badType.ok === false)
@@ -195,8 +196,12 @@ s.group('Validation: accepts honesty, refuses garbage')
 
   const multiOk = validateRequestPayload('graphic', { what: 'Grand opening', where: 'Instagram post, Printed flyer, Banner', when: 'This week' })
   s.check('a multi-choice answer with several real formats validates', multiOk.ok === true)
-  const multiBad = validateRequestPayload('graphic', { what: 'Grand opening', where: 'Instagram post, Skywriting', when: 'This week' })
-  s.check('a multi-choice answer with a fake member is refused', multiBad.ok === false)
+  const multiOwn = validateRequestPayload('graphic', { what: 'Grand opening', where: 'Instagram post, Skywriting', when: 'This week' })
+  s.check('THE ESCAPE HATCH: a multi-choice answer may carry an own-words member', multiOwn.ok === true)
+  const featuringOk = validateRequestPayload('video', { ...full, featuring: 'Rib platter, Loaded fries' })
+  s.check('featuring rides video/photos/social as an optional text answer',
+    featuringOk.ok === true && featuringOk.clean.featuring === 'Rib platter, Loaded fries'
+    && ['video', 'photos', 'social'].every((t) => requestTypeById(t)!.questions.some((q) => q.id === 'featuring' && q.optional === true)))
   const graphicWhere = requestTypeById('graphic')!.questions.find((x) => x.id === 'where')!
   s.check('the graphic destinations are the REAL design formats (11, multi)', graphicWhere.multi === true && (graphicWhere.options ?? []).length === 11)
 

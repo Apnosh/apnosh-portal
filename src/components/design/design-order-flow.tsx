@@ -50,6 +50,9 @@ export const passesQualityGate = (a: { width: number; height: number }) => Math.
 const fmtDay = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
 const fmtLong = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
 const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase())
+/** "a" / "a and b" / "a, b and c" — how an owner would say a list out loud. */
+const sayList = (xs: string[]): string =>
+  xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`
 
 /* Typical counts, PLACEHOLDER ONLY — shown gray in the empty input, never charged as a
  * default. A quantity is money-adjacent; it is always the owner's own tap (law 4). */
@@ -323,7 +326,9 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
   const [headline, setHeadline] = useState('')
   const [details, setDetails] = useState('')
   const [offer, setOffer] = useState('')
-  const [promoteItem, setPromoteItem] = useState<string | null>(null)
+  /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
+   * the same list (featureOtherText tracks which member is the typed one). */
+  const [promoteItems, setPromoteItems] = useState<string[]>([])
   /* Featuring explores the WHOLE menu, not a taste of it: collapsed shows 8, Show-all
    * opens everything with a search box, and Something-else takes a dish we do not hold. */
   const [menuOpen, setMenuOpen] = useState(false)
@@ -526,7 +531,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
         body: JSON.stringify({
           type: 'graphic',
           answers: {
-            what: `${jobLabel ?? 'A graphic'}${promoteItem ? ` featuring ${promoteItem}` : ''}`,
+            what: `${jobLabel ?? 'A graphic'}${promoteItems.length ? ` featuring ${sayList(promoteItems)}` : ''}`,
             where: [...dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean), ...(destOther.trim() ? [destOther.trim()] : [])].join(', '),
             words: saidText || undefined,
             when,
@@ -718,7 +723,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
         {step === 3 && (() => {
           const headlineSugs = [...new Set([
             read?.message ? titleCase(read.message) : null,
-            promoteItem,
+            promoteItems[0] ?? null,
             job ? JOB_HEADLINES[job] : null,
           ].filter((x): x is string => !!x && x !== headline))].slice(0, 3)
           const detailSugs = eventDate && details !== fmtLong(eventDate) ? [fmtLong(eventDate)] : []
@@ -773,7 +778,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                     )}
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                       {shown.map((m) => (
-                        <Chip key={m.id} on={promoteItem === m.name} label={m.name} onClick={() => { setFeatureOtherOn(false); setFeatureOtherText(''); setPromoteItem(promoteItem === m.name ? null : m.name) }} />
+                        <Chip key={m.id} on={promoteItems.includes(m.name)} label={m.name} onClick={() => setPromoteItems((prev) => (prev.includes(m.name) ? prev.filter((x) => x !== m.name) : [...prev, m.name]))} />
                       ))}
                       {!menuOpen && menu.length > 8 && (
                         <Chip on={false} label={fill(L['say.menu.all'], { n: String(menu.length) })} onClick={() => setMenuOpen(true)} />
@@ -785,7 +790,11 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                         on={featureOtherOn}
                         label={L['say.featuring.other']}
                         onClick={() => {
-                          if (featureOtherOn) { setPromoteItem(null); setFeatureOtherText('') } else { setPromoteItem(null) }
+                          if (featureOtherOn) {
+                            const prev = featureOtherText.trim()
+                            if (prev) setPromoteItems((xs) => xs.filter((x) => x !== prev))
+                            setFeatureOtherText('')
+                          }
                           setFeatureOtherOn(!featureOtherOn)
                         }}
                       />
@@ -793,7 +802,15 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                     {featureOtherOn && (
                       <input
                         value={featureOtherText}
-                        onChange={(e) => { setFeatureOtherText(e.target.value); setPromoteItem(e.target.value.trim() ? e.target.value.trim() : null) }}
+                        onChange={(e) => {
+                          const prev = featureOtherText.trim()
+                          const next = e.target.value
+                          setFeatureOtherText(next)
+                          setPromoteItems((xs) => {
+                            const rest = xs.filter((x) => x !== prev)
+                            return next.trim() ? [...rest, next.trim()] : rest
+                          })
+                        }}
                         placeholder={L['say.featuring.other.ph']} aria-label={L['say.featuring.other']}
                         style={{ ...inputStyle, marginTop: 8 }}
                       />
@@ -978,7 +995,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
             <StepHead n={6} title={T.review} sub={S.review} />
             <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '14px 16px', fontSize: 13.5, color: DESK.ink, lineHeight: 1.6, boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
               {(() => { const n = job && job !== 'other' ? `${DESIGN_JOBS.find((j) => j.id === job)?.label.toLowerCase()} design` : 'design'; return `${/^[aeiou]/.test(n) ? 'An' : 'A'} ${n}` })()}
-              {promoteItem ? ` featuring ${promoteItem}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
+              {promoteItems.length ? ` featuring ${sayList(promoteItems)}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
               {[...dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase() ?? ''), ...(destOther.trim() ? [destOther.trim().toLowerCase()] : [])].filter(Boolean).join(', ')}
               {printPicked && allQtysIn ? ` (${printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label.toLowerCase()}`).join(', ')}, ${printer === 'us' ? 'we print' : 'your shop prints'})` : ''}
               {photoMode === 'none' ? ', custom artwork with no photos' : photoMode === 'shoot' ? ', with a photo shoot at your place first' : photoMode === 'other' ? `, photos your way: “${photoOther.trim()}”` : usingOwn ? ', using your photos' : ', with photos we find for you'}

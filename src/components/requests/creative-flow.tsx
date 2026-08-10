@@ -80,7 +80,7 @@ function MenuFrame({ frame }: { frame: NonNullable<TicketOption['frame']> }) {
   return <span style={{ ...base, width: 20, height: 26, borderRadius: 2 }} />
 }
 
-export default function CreativeFlow({ typeId, onBack, onDone }: { typeId: string; onBack: () => void; onDone?: () => void }) {
+export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { typeId: string; onBack: () => void; onDone?: () => void; menu?: { id: string; name: string }[] }) {
   const type = requestTypeById(typeId)
   const flow = flowFor(typeId)
   const [answers, setAnswers] = useState<RequestAnswers>({})
@@ -319,6 +319,49 @@ export default function CreativeFlow({ typeId, onBack, onDone }: { typeId: strin
         <div key={step} className="dk-ink">
           <StepHead n={step + 1} total={total} title={current.title} sub={current.sub} />
           {current.controls.map(renderControl)}
+          {step === 0 && menu.length > 0 && type.questions.some((q) => q.id === 'featuring') && (() => {
+            /* FEATURING, FROM YOUR MENU: multi-pick chips over the owner's real dishes,
+             * whole-menu explore (Show all + search past 12) and the own-words hatch.
+             * Rides the catalog's optional 'featuring' answer. */
+            const picks = picksOf('featuring')
+            const q = (others['featuring.q'] ?? '').trim().toLowerCase()
+            const open = otherOn['featuring.open'] === true
+            const shown = open ? menu.filter((m) => !q || m.name.toLowerCase().includes(q)) : menu.slice(0, 8)
+            return (
+              <div style={{ marginTop: 4, marginBottom: 12 }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '2px 0 8px' }}>
+                  Featuring, from your menu <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>· optional, pick as many as you want</span>
+                </div>
+                {open && menu.length > 12 && (
+                  <input
+                    value={others['featuring.q'] ?? ''} onChange={(e) => setOthers((o) => ({ ...o, 'featuring.q': e.target.value }))}
+                    placeholder="Search your menu" aria-label="Search your menu"
+                    style={{ ...inputStyle, marginBottom: 8 }}
+                  />
+                )}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                  {shown.map((m) => (
+                    <Chip key={m.id} label={m.name} on={picks.includes(m.name)} onClick={() => toggle('featuring', m.name)} />
+                  ))}
+                  {!open && menu.length > 8 && (
+                    <Chip label={`Show all ${menu.length}`} onClick={() => setOtherOn((o) => ({ ...o, 'featuring.open': true }))} />
+                  )}
+                  {open && (
+                    <Chip label="Show less" onClick={() => setOtherOn((o) => ({ ...o, 'featuring.open': false }))} />
+                  )}
+                  <Chip label="Something else" on={otherOn['featuring'] === true} onClick={() => toggleOther('featuring', true)} />
+                </div>
+                {otherOn['featuring'] === true && (
+                  <input
+                    value={others['featuring'] ?? ''}
+                    onChange={(e) => setOtherText('featuring', true, e.target.value)}
+                    placeholder="Name the dish or special" aria-label="Featuring something else"
+                    style={{ ...inputStyle, marginTop: 8 }}
+                  />
+                )}
+              </div>
+            )
+          })()}
           <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
             {step > 0 && (
               <button

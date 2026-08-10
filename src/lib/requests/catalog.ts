@@ -121,6 +121,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
       { id: 'what', prompt: 'What should the video show?', kind: 'text', hint: 'The cheese pull, the pour, the line out the door' },
       { id: 'filming', prompt: 'How do we get the footage?', kind: 'choice', options: ['Come film at my place', 'Use clips and photos I have', 'Not sure'] },
       { id: 'count', prompt: 'How many videos?', kind: 'choice', options: ['Just 1', '3 to 5', 'A monthly batch'] },
+      { id: 'featuring', prompt: 'Featuring, from your menu', kind: 'text', optional: true, hint: 'The dishes the video should star' },
     ],
   },
   {
@@ -132,6 +133,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
       { id: 'what', prompt: 'What should we shoot? Pick everything.', kind: 'choice', multi: true, options: ['Food and dishes', 'The space', 'The team'] },
       { id: 'use', prompt: 'Where will the photos go?', kind: 'choice', multi: true, options: ['Google and Yelp', 'Social media', 'Website', 'Menus'] },
       { id: 'dishes', prompt: 'Any must have shots?', kind: 'long', optional: true, hint: 'The dishes or corners you want covered' },
+      { id: 'featuring', prompt: 'Featuring, from your menu', kind: 'text', optional: true, hint: 'The dishes the shoot should star' },
     ],
   },
   {
@@ -143,6 +145,7 @@ export const REQUEST_TYPES: readonly RequestType[] = [
       { id: 'platforms', prompt: 'Where do you post? Pick every one.', kind: 'choice', multi: true, options: ['Instagram', 'Facebook', 'TikTok'] },
       { id: 'count', prompt: 'How many posts?', kind: 'choice', options: ['4 a month', '8 a month', '12 or more', 'Not sure'] },
       { id: 'about', prompt: 'What should the posts push?', kind: 'long', optional: true, hint: 'Specials, events, new items, your story' },
+      { id: 'featuring', prompt: 'Featuring, from your menu', kind: 'text', optional: true, hint: 'The dishes the posts should star' },
     ],
   },
   {
@@ -227,17 +230,10 @@ export function validateRequestPayload(
       continue
     }
     if (val.length > MAX_ANSWER) return { ok: false, problem: `Answer too long: ${q.id}` }
-    if (q.kind === 'choice') {
-      const opts = q.options ?? []
-      if (q.multi) {
-        const picks = splitMulti(val)
-        if (picks.length === 0 || picks.some((p) => !opts.includes(p))) {
-          return { ok: false, problem: `Not one of the choices: ${q.id}` }
-        }
-      } else if (!opts.includes(val)) {
-        return { ok: false, problem: `Not one of the choices: ${q.id}` }
-      }
-    }
+    /* THE ESCAPE HATCH LAW: every fixed-choice question also accepts the owner's own
+     * words ("Something else" in the flows), so option lists are suggestions, not walls.
+     * What the gate still enforces: the question ids (unknown keys are dropped), required
+     * presence, and the length cap. Multi answers must still parse into non-empty picks. */
     clean[q.id] = val
   }
   return { ok: true, type, clean }

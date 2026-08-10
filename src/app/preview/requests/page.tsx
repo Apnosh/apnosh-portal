@@ -8,13 +8,14 @@
  */
 
 import RequestFlow from '@/components/requests/request-flow'
+import { FIXTURE_MENU } from '@/lib/design/fixture-assets'
 
 export const metadata = { title: 'Request creative work (preview)' }
 
 export default function RequestsPreviewPage() {
   return (
     <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100dvh', background: '#F5F5F7' }}>
-      <RequestFlow />
+      <RequestFlow menu={FIXTURE_MENU} />
     </div>
   )
 }
