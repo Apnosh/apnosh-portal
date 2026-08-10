@@ -286,7 +286,9 @@ export const zernioAdapter: ChannelAdapter = {
     //    first sync backfills real daily history and the dashboard has numbers now.
     const today = new Date().toISOString().slice(0, 10)
     const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
-    const posts = await zer(`/analytics?profileId=${encodeURIComponent(profileId)}&fromDate=${from}&limit=200`)
+    /* Zernio caps limit at 100 (400 above that, found live). 100 posts covers a
+     * month for any restaurant account; a busier profile just backfills less. */
+    const posts = await zer(`/analytics?profileId=${encodeURIComponent(profileId)}&fromDate=${from}&limit=100`)
     const rows = unwrapList(posts, 'posts', 'analytics') as ZernioPostRow[]
     const byDay = aggregateZernioPostsByDay(rows, today)
 
