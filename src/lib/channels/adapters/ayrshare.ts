@@ -48,13 +48,25 @@ const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v)
  */
 export function mapSocialAnalytics(a: Record<string, unknown> | null | undefined): MappedMetrics {
   const o = (a ?? {}) as Record<string, unknown>
-  const followers = num(o.followersCount) || num(o.followerCount) || num(o.fanCount) || num(o.followers)
-  const impressions = num(o.impressionsCount) || num(o.impressions) || num(o.viewsCount) || num(o.views)
+  /* Aliases are the DOCUMENTED per-network field names (Ayrshare analytics docs,
+   * checked 2026-08-10): IG followersCount/reachCount/viewsCount/shareCount ·
+   * FB fanCount/pagePostEngagements (impressions family retired by Meta) ·
+   * TikTok viewCountTotal/likeCountTotal/commentCountTotal/shareCountTotal/profileViews ·
+   * LinkedIn impressionCount/commentCount + nested followers.totalFollowerCount. */
+  const followersObj = (o.followers && typeof o.followers === 'object' ? (o.followers as Record<string, unknown>) : {})
+  const followers =
+    num(o.followersCount) || num(o.followerCount) || num(o.fanCount) ||
+    num(followersObj.totalFollowerCount) || num(o.followers)
+  const impressions =
+    num(o.impressionsCount) || num(o.impressionCount) || num(o.impressions) ||
+    num(o.viewsCount) || num(o.viewCountTotal) || num(o.views)
   const reach = num(o.reachCount) || num(o.reach)
   const visits = num(o.profileViewsCount) || num(o.profileViews) || num(o.profileVisits)
   const engagement =
-    num(o.engagementCount) || num(o.totalInteractions) ||
-    num(o.likeCount) + num(o.commentsCount) + num(o.sharesCount)
+    num(o.engagementCount) || num(o.totalInteractions) || num(o.pagePostEngagements) ||
+    (num(o.likeCount) || num(o.likeCountTotal)) +
+    (num(o.commentsCount) || num(o.commentCount) || num(o.commentCountTotal)) +
+    (num(o.sharesCount) || num(o.shareCount) || num(o.shareCountTotal))
   return { reach, impressions, profile_visits: visits, followers_total: followers, engagement }
 }
 

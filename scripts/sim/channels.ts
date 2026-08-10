@@ -131,6 +131,15 @@ s.group('Ayrshare mapper: canonical columns from vendor aliases (P3)')
     empty.reach === 0 && empty.impressions === 0 && empty.followers_total === 0 && empty.engagement === 0)
   s.check('null and garbage survive without crashing',
     mapSocialAnalytics(null).reach === 0 && mapSocialAnalytics({ followersCount: -5 }).followers_total === 0 && mapSocialAnalytics({ reach: 'lots' as unknown as number }).reach === 0)
+  const fb = mapSocialAnalytics({ fanCount: 2100, pagePostEngagements: 640 })
+  s.check('Facebook documented names: fanCount + pagePostEngagements',
+    fb.followers_total === 2100 && fb.engagement === 640)
+  const tk = mapSocialAnalytics({ followersCount: 5400, viewCountTotal: 90000, likeCountTotal: 700, commentCountTotal: 80, shareCountTotal: 20, profileViews: 400 })
+  s.check('TikTok documented names: viewCountTotal + *Total engagement + profileViews',
+    tk.followers_total === 5400 && tk.impressions === 90000 && tk.engagement === 800 && tk.profile_visits === 400)
+  const li = mapSocialAnalytics({ impressionCount: 3000, commentCount: 12, likeCount: 88, followers: { totalFollowerCount: 640 } })
+  s.check('LinkedIn documented names: impressionCount + nested followers object',
+    li.impressions === 3000 && li.followers_total === 640 && li.engagement === 100)
   s.check('the platform list matches the social_metrics CHECK constraint',
     JSON.stringify(AYRSHARE_PLATFORMS) === JSON.stringify(['instagram', 'facebook', 'tiktok', 'linkedin']))
   s.check('the adapter is hosted_link and env kill-switched',
