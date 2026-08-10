@@ -26,6 +26,8 @@ export interface UnifiedConnection {
   syncError: string | null
   connectedAt: string | null
   actions: { canReconnect: boolean; canDisconnect: boolean; reconnectUrl: string | null }
+  /** social vendor rows (zernio/ayrshare): which platforms the owner has linked */
+  linkedPlatforms?: string[]
 }
 
 // ---------------------------------------------------------------------------
@@ -84,6 +86,18 @@ const PLATFORM_META: Record<string, {
     label: 'Clover',
     category: 'pos',
     reconnectPath: '/api/channels/clover/start',
+  },
+  /* The social pipe vendors (bake-off): one connection row carries every linked
+   * social platform in metadata.platforms. Reconnect = the per-platform start route. */
+  zernio: {
+    label: 'Social accounts',
+    category: 'social',
+    reconnectPath: '/api/channels/social/start',
+  },
+  ayrshare: {
+    label: 'Social accounts',
+    category: 'social',
+    reconnectPath: '/api/channels/social/start',
   },
   yelp: {
     label: 'Yelp',
@@ -179,7 +193,7 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
       .eq('client_id', clientId),
     admin
       .from('channel_connections')
-      .select('id, channel, platform_account_name, platform_url, status, last_sync_at, sync_error, connected_at, access_token')
+      .select('id, channel, platform_account_id, platform_account_name, platform_url, status, last_sync_at, sync_error, connected_at, access_token, metadata')
       .eq('client_id', clientId)
       .neq('platform_account_id', 'pending'),
   ])
@@ -221,7 +235,9 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
 
   // Google channel_connections
   for (const r of cc.data ?? []) {
-    if (!r.access_token) continue
+    /* hosted_link vendors (zernio) hold no token — their identity is the
+     * platform_account_id (the vendor profile id). Only drop truly empty rows. */
+    if (!r.access_token && !r.platform_account_id) continue
     const meta = PLATFORM_META[r.channel]
     if (!meta) continue
 
@@ -243,6 +259,11 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
       friendlyStatus = 'Connected (pending data)'
     }
 
+    const md = (r as { metadata?: { platforms?: unknown } }).metadata
+    const linkedPlatforms = Array.isArray(md?.platforms)
+      ? (md.platforms as unknown[]).filter((p): p is string => typeof p === 'string')
+      : undefined
+
     results.push({
       id: r.id,
       source: 'channel_connections',
@@ -261,6 +282,7 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
         canDisconnect: true,
         reconnectUrl: meta.reconnectPath,
       },
+      ...(linkedPlatforms ? { linkedPlatforms } : {}),
     })
   }
 
@@ -404,6 +426,35 @@ export async function syncConnection(
       return { success: true, locationsDiscovered: 0, metricsImported: r.itemsWritten, reviewsImported: 0, errors: [] }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Sync failed'
+      await admin.from('channel_connections').update({ sync_error: msg }).eq('id', connectionId)
+      return { success: false, error: msg }
+    }
+  }
+
+  /* Social vendors (zernio/ayrshare): manual sync asks the vendor which accounts are
+   * linked and pulls today's numbers into social_metrics. This is also the "did my
+   * login take?" check right after the owner comes back from the vendor's page. */
+  if (source === 'channel_connections' && (channelOrPlatform === 'zernio' || channelOrPlatform === 'ayrshare')) {
+    const lastSync = row.last_sync_at ? new Date(row.last_sync_at).getTime() : 0
+    if (Date.now() - lastSync < 60_000) {
+      const secsLeft = Math.ceil((60_000 - (Date.now() - lastSync)) / 1000)
+      return { success: false, error: `Try again in ${secsLeft}s — last check was just a moment ago.` }
+    }
+    const { adapterFor } = await import('@/lib/channels/registry')
+    const adapter = adapterFor(channelOrPlatform)
+    if (!adapter) return { success: false, error: 'Sync not supported for this connection yet' }
+    try {
+      const r = await adapter.sync(existing as import('@/lib/channels/types').ChannelConnection)
+      await admin
+        .from('channel_connections')
+        .update({ last_sync_at: new Date().toISOString(), sync_error: null })
+        .eq('id', connectionId)
+      return { success: true, locationsDiscovered: 0, metricsImported: r.itemsWritten, reviewsImported: 0, errors: [] }
+    } catch (e) {
+      const raw = e instanceof Error ? e.message : 'Sync failed'
+      const msg = raw.includes('No social account linked')
+        ? 'We do not see a finished login yet. Finish the login on the page that opened, then check again.'
+        : raw
       await admin.from('channel_connections').update({ sync_error: msg }).eq('id', connectionId)
       return { success: false, error: msg }
     }

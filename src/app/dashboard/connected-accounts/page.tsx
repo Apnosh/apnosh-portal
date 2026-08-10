@@ -8,11 +8,11 @@
  * OAuth connect/reconnect are links to the existing /api/auth/* routes.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Camera, Globe, Tv, Briefcase, BarChart3, Search, MapPin, Star,
   CreditCard, Store, Link as LinkIcon, RefreshCw, ExternalLink, Loader2, Plus, X,
-  CheckCircle2, AlertCircle,
+  CheckCircle2, AlertCircle, ThumbsUp, Music2,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getConnectionsForClient, disconnectPlatform, syncConnection, type UnifiedConnection } from '@/lib/connection-actions'
@@ -27,11 +27,13 @@ type Cat = 'social' | 'google' | 'reviews' | 'pos'
 interface CatalogItem { id: string; label: string; authPath: string; category: Cat; Icon: typeof Camera; description: string }
 
 const CATALOG: CatalogItem[] = [
-  /* Socials go through Ayrshare (DECIDED integration strategy): one hosted link
-   * page covers Instagram, Facebook, TikTok, and LinkedIn, and the nightly sync
-   * pulls their numbers into the dashboard. The old per-network OAuth lanes
-   * (including the broken TikTok connect) are retired from this surface. */
-  { id: 'ayrshare', label: 'Social accounts', authPath: '/api/channels/social/start', category: 'social', Icon: Camera, description: 'Instagram, Facebook, TikTok, LinkedIn. Link once, numbers flow nightly' },
+  /* Socials go through the active social vendor (zernio/ayrshare bake-off): each
+   * platform is its own login on the vendor's hosted page, all landing on the ONE
+   * vendor connection row (metadata.platforms). The nightly sync pulls the numbers. */
+  { id: 'instagram', label: 'Instagram', authPath: '/api/channels/social/start?platform=instagram', category: 'social', Icon: Camera, description: 'Log in with your Instagram' },
+  { id: 'facebook', label: 'Facebook', authPath: '/api/channels/social/start?platform=facebook', category: 'social', Icon: ThumbsUp, description: 'Log in with your Facebook page' },
+  { id: 'tiktok', label: 'TikTok', authPath: '/api/channels/social/start?platform=tiktok', category: 'social', Icon: Music2, description: 'Log in with your TikTok' },
+  { id: 'linkedin', label: 'LinkedIn', authPath: '/api/channels/social/start?platform=linkedin', category: 'social', Icon: Briefcase, description: 'Log in with your LinkedIn page' },
   { id: 'google_analytics', label: 'Google Analytics', authPath: '/api/auth/google', category: 'google', Icon: BarChart3, description: 'Website visitors and traffic' },
   { id: 'google_search_console', label: 'Google Search Console', authPath: '/api/auth/google-search-console', category: 'google', Icon: Search, description: 'What people search to find you' },
   { id: 'google_business_profile', label: 'Google Business Profile', authPath: '/api/auth/google-business', category: 'google', Icon: MapPin, description: 'Calls, directions, search views' },
@@ -41,9 +43,27 @@ const CATALOG: CatalogItem[] = [
 ]
 const CAT_LABEL: Record<Cat, string> = { social: 'Social media', google: 'Google', reviews: 'Reviews', pos: 'Point of sale' }
 const CAT_ORDER: Cat[] = ['pos', 'social', 'google', 'reviews']
-const iconFor = (id: string) => CATALOG.find(c => c.id === id)?.Icon ?? LinkIcon
+const SOCIAL_VENDORS = ['zernio', 'ayrshare']
+const SOCIAL_PLATFORM_LABEL: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn' }
+const iconFor = (id: string) => (SOCIAL_VENDORS.includes(id) ? Camera : CATALOG.find(c => c.id === id)?.Icon ?? LinkIcon)
 
-const canSync = (c: UnifiedConnection) => c.source === 'channel_connections' && ['google_business_profile', 'google_analytics', 'google_search_console', 'square', 'clover', 'ayrshare', 'zernio'].includes(c.platform)
+/* Per-platform rows synthesized from a social vendor connection keep the vendor's
+ * source+id (sync and disconnect act on the one vendor row) but display as the
+ * platform the owner actually logged into. */
+const isSocialVendorRow = (c: UnifiedConnection) => c.source === 'channel_connections' && (SOCIAL_VENDORS.includes(c.platform) || c.platform in SOCIAL_PLATFORM_LABEL)
+function expandSocial(conns: UnifiedConnection[]): UnifiedConnection[] {
+  const out: UnifiedConnection[] = []
+  for (const c of conns) {
+    if (c.source === 'channel_connections' && SOCIAL_VENDORS.includes(c.platform) && c.linkedPlatforms?.length) {
+      for (const p of c.linkedPlatforms) out.push({ ...c, platform: p, label: SOCIAL_PLATFORM_LABEL[p] ?? p })
+    } else {
+      out.push(c)
+    }
+  }
+  return out
+}
+
+const canSync = (c: UnifiedConnection) => c.source === 'channel_connections' && (['google_business_profile', 'google_analytics', 'google_search_console', 'square', 'clover'].includes(c.platform) || isSocialVendorRow(c))
 const needsAttention = (s: UnifiedConnection['status']) => s === 'expired' || s === 'error'
 
 function dotColor(s: UnifiedConnection['status']): string {
@@ -78,9 +98,34 @@ export default function ConnectedAccountsPage() {
   }, [])
   useEffect(() => { load() }, [load])
 
+  /* Right after the owner finishes a social login on the vendor's page (or whenever a
+   * vendor connection is still "Setting up"), check with the vendor once instead of
+   * leaving a silent card until the nightly sync. */
+  const autoChecked = useRef(false)
+  useEffect(() => {
+    if (autoChecked.current || loading) return
+    const vendor = connections.find(c => c.source === 'channel_connections' && SOCIAL_VENDORS.includes(c.platform))
+    if (!vendor) return
+    const cameBack = new URLSearchParams(window.location.search).get('connected') === 'social'
+    if (vendor.status !== 'pending' && !cameBack) return
+    autoChecked.current = true
+    ;(async () => {
+      setBanner({ ok: true, text: 'Checking your social login...' })
+      const r = await syncConnection(vendor.source, vendor.id)
+      if (r.success) {
+        setBanner({ ok: true, text: 'Linked. Your numbers start flowing tonight.' })
+        load()
+      } else if (cameBack) {
+        setBanner({ ok: false, text: r.error })
+      } else {
+        setBanner(null)
+      }
+    })()
+  }, [connections, loading, load])
+
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
-    const NAME: Record<string, string> = { square: 'Square', clover: 'Clover', ayrshare: 'Social accounts' }
+    const NAME: Record<string, string> = { square: 'Square', clover: 'Clover', ayrshare: 'Social accounts', social: 'Social accounts' }
     const connected = p.get('connected')
     const connectError = p.get('connect_error')
     if (connected && NAME[connected]) setBanner({ ok: true, text: `${NAME[connected]} connected. Your sales will show up shortly.` })
@@ -96,17 +141,22 @@ export default function ConnectedAccountsPage() {
     else if (p.get('error')) setBanner({ ok: false, text: p.get('error') || 'Could not connect. Try again.' })
   }, [])
 
-  const connectHref = (authPath: string) => `${authPath}?clientId=${encodeURIComponent(clientId)}&returnTo=/dashboard/connected-accounts`
+  const connectHref = (authPath: string) => `${authPath}${authPath.includes('?') ? '&' : '?'}clientId=${encodeURIComponent(clientId)}&returnTo=/dashboard/connected-accounts`
 
-  const attention = connections.filter(c => needsAttention(c.status))
-  const ok = connections.filter(c => !needsAttention(c.status))
-  const connectedCount = connections.filter(c => c.status === 'connected').length
+  /* Social vendor rows expand to one row per platform the owner has linked;
+   * a vendor row with nothing linked yet stays visible as "Setting up". */
+  const display = expandSocial(connections)
+  const attention = display.filter(c => needsAttention(c.status))
+  const ok = display.filter(c => !needsAttention(c.status))
+  const connectedCount = display.filter(c => c.status === 'connected').length
   const summary = attention.length > 0 ? `${attention.length} need${attention.length > 1 ? '' : 's'} attention`
     : connectedCount > 0 ? `${connectedCount} connected` : 'Nothing connected yet'
 
-  /* both social vendors light the one Social accounts card */
-  const connectedSet = new Set(connections.map(c => (c.platform === 'zernio' ? 'ayrshare' : c.platform)))
-  const unconnected = CATALOG.filter(p => !connectedSet.has(p.id))
+  /* which individual social platforms are already linked (either via the vendor's
+   * metadata or a legacy per-network OAuth row) */
+  const linkedSocial = new Set(display.filter(c => c.category === 'social' && !SOCIAL_VENDORS.includes(c.platform)).map(c => c.platform))
+  const connectedSet = new Set(display.map(c => c.platform))
+  const unconnected = CATALOG.filter(p => (p.category === 'social' ? !linkedSocial.has(p.id) : !connectedSet.has(p.id)))
 
   const byCat: Record<string, UnifiedConnection[]> = {}
   for (const c of ok) (byCat[c.category] ??= []).push(c)
@@ -132,13 +182,13 @@ export default function ConnectedAccountsPage() {
 
               {attention.length > 0 && (
                 <Group title="Needs attention">
-                  {attention.map(c => <ConnRow key={c.id} conn={c} onTap={() => setDetail(c)} />)}
+                  {attention.map(c => <ConnRow key={`${c.id}-${c.platform}`} conn={c} onTap={() => setDetail(c)} />)}
                 </Group>
               )}
 
               {CAT_ORDER.filter(cat => byCat[cat]?.length).map(cat => (
                 <Group key={cat} title={CAT_LABEL[cat]}>
-                  {byCat[cat].map(c => <ConnRow key={c.id} conn={c} onTap={() => setDetail(c)} />)}
+                  {byCat[cat].map(c => <ConnRow key={`${c.id}-${c.platform}`} conn={c} onTap={() => setDetail(c)} />)}
                 </Group>
               ))}
 
@@ -272,6 +322,11 @@ function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedC
           <a href={conn.profileUrl} target="_blank" rel="noopener noreferrer" style={actionBtn}><ExternalLink size={16} /> Open profile</a>
         )}
 
+        {isSocialVendorRow(conn) && conn.actions.canDisconnect && (
+          <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.45, margin: '2px 2px 10px' }}>
+            Your social logins live together. Disconnecting removes all of them at once.
+          </div>
+        )}
         {conn.actions.canDisconnect && (
           confirmDisc ? (
             <div style={{ display: 'flex', gap: 10 }}>
