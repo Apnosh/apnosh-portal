@@ -68,6 +68,13 @@ export const FULLY_BUILT_LIVE: readonly string[] = [
    * (service-availability layer) and comes back the day the send rail is armed.
    * reviewsplan + direct stay gated: sends ARE their mechanism, not a leg. */
   'promoevent', 'launch', 'catering',
+  /* Owner call 2026-08-11: paid ads go LIVE under the agency model. The playbook is
+   * five documented human steps run from Apnosh's own Business Manager (grant access
+   * or we create the accounts); ad spend is billed by the platform at cost, separate
+   * from the management fee, so no unsigned price and no client ad-account OAuth is
+   * involved. Performance reporting lands in the funnel's paid-ads slots when the
+   * ads adapter ships; until then the weekly tuning report is the deliverable. */
+  'reach',
 ]
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
@@ -93,7 +100,7 @@ export const COMING_SOON_REASON: Record<string, string> = {
   // work, but not yet to the bar the four live cards set, so they wait until they do.
   creative: 'We are making this one better right now. Coming soon.',
   // Local ads need the client's ad account connected, which is not wired yet.
-  ads: 'This needs your ad account connected, which is coming soon.',
+  ads: 'We run these from our own ad accounts, so nothing to connect. Coming soon here means the card itself is still being finished.',
   // Monthly management subscriptions: we will not bill month over month for posting until the
   // publishing pipes are genuinely connected and proven. Selling the subscription first and wiring
   // the pipe second is how a client pays for a month of nothing.
@@ -133,8 +140,6 @@ const COMING_SOON_GROUP: Record<string, keyof typeof COMING_SOON_REASON> = {
   // The creative shelf — the next build. Held to coming-soon while we rework it.
   reel: 'creative', story: 'creative', graphic: 'creative', dish: 'creative', edit: 'creative',
   gpost: 'creative', shoot: 'creative',
-  // Ads need an ad-account connection.
-  reach: 'ads',
   // Website + local search: part-Google, part site rebuild, not one flow yet.
   website: 'site', localseo: 'site',
   // The till hookup. Real demand, no integration yet.
