@@ -148,7 +148,7 @@ export const DESIGN_LINES: Record<string, string> = {
 
   /* Request mode: the same flow while the rate card is unsigned. No numbers appear
    * anywhere; the seal sends a quote request instead of recording an order. */
-  'banner.request': 'Sending this is free. We answer with a plan and a real price. Nothing is charged until you say yes.',
+  'banner.request': 'Prices are listed as you pick. Nothing goes on your bill until you tap Confirm order.',
   'photos.source.label.request': 'Find the photos for me',
   'when.rush.label.request': 'Yes, rush it for {date}',
   'when.rush.sub.request': 'Rush work costs more. Your quote will show the number.',

@@ -362,7 +362,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
       </div>
 
       <div style={{ background: DESK.mintWash, color: DESK.mintDeep, border: `1px solid ${DESK.mintLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, margin: '10px 0 2px', lineHeight: 1.4 }}>
-        Sending this is free. We answer with a plan and a real price. Nothing is charged until you say yes.
+        Prices are listed as you pick. Nothing goes on your bill until you tap Confirm order.
       </div>
 
       {/* the board rides every step, becoming each answer */}
