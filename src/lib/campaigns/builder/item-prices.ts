@@ -32,7 +32,7 @@ const COST_NOTES_BY_SERVICE: Map<string, string[]> = (() => {
   for (const s of PRICED_CATALOG) {
     const notes = s.prices
       .map((p) => (p as { note?: string }).note)
-      .filter((n): n is string => !!n && /billed at cost/i.test(n))
+      .filter((n): n is string => !!n && /billed at cost|paid at cost|at cost,/i.test(n))
     if (notes.length) m.set(s.id, [...new Set(notes)])
   }
   return m
