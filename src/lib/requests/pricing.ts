@@ -19,6 +19,12 @@
 
 import { splitMulti, type RequestAnswers } from './catalog'
 
+/** THE SERVICE FEE (owner call 2026-08-10: fees stay). The sim's law: a fee that
+ * appears late is a trust crack, so the fee is a VISIBLE LINE inside every total from
+ * the first screen a total appears on. Listed total = charged total, always. */
+export const SERVICE_FEE_RATE = 0.10
+export const feeOn = (subtotalCents: number): number => Math.round(subtotalCents * SERVICE_FEE_RATE)
+
 export interface CreativePriceLine {
   label: string
   amountCents: number
@@ -190,7 +196,13 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
       return null
   }
 
-  return { lines, totalCents: lines.reduce((n, l) => n + l.amountCents, 0), ...(startsAt ? { startsAt: true } : {}) }
+  const subtotal = lines.reduce((n, l) => n + l.amountCents, 0)
+  lines.push({
+    label: 'Service fee',
+    amountCents: feeOn(subtotal),
+    why: '10% covers coordination, revision handling, and your team. It is inside every total you see, never added later.',
+  })
+  return { lines, totalCents: subtotal + feeOn(subtotal), ...(startsAt ? { startsAt: true } : {}) }
 }
 
 /** "$250" / "$1,200" for whole-dollar sheet prices. */

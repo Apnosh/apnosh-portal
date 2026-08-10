@@ -429,6 +429,10 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
     rushConfirmed,
   }
   const quote = priceDesignOrder(answers, RATE_CARD)
+  /* THE SERVICE FEE (owner call: fees stay). Visible as its own line inside EVERY total
+   * from the first screen a total appears on; listed total = charged total, always. */
+  const svcFee = Math.round(quote.total * 0.1)
+  const orderTotal = quote.total + svcFee
   const saidText = [headline, details, offer].map((t) => t.trim()).filter(Boolean).join('. ')
   /* The rush question shows real dollars: the engine's own delta, before it is agreed to. */
   const rushDelta = Math.round(quote.total * (RATE_CARD.rushMultiplier - 1))
@@ -601,8 +605,9 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
         <div style={{ fontSize: 13, color: DESK.ink2, margin: '2px 0 12px', lineHeight: 1.5 }}>{L['cart.sub']}</div>
         <ReceiptFrame>
           {quote.lines.map((l) => <ReceiptRow key={l.id} label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />)}
+          <ReceiptRow label={L['receipt.fee']} amount={`$${svcFee}`} />
           <ReceiptRule />
-          <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+          <ReceiptTotal label={L['panel.total']} big={`$${orderTotal}`} />
         </ReceiptFrame>
         <div style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '12px 14px', margin: '12px 0' }}>
           <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>{L['sum.assigned']}</div>
@@ -615,7 +620,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
           </div>
         )}
         <ConfirmButton
-          label={sending ? 'Placing your order...' : `${L['cart.confirm']} · $${quote.total}`}
+          label={sending ? 'Placing your order...' : `${L['cart.confirm']} · $${orderTotal}`}
           sub={L['cart.confirm.sub']}
           disabled={sending}
           onClick={() => { void placeOrder() }}
@@ -1030,13 +1035,13 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <Ticket
                     name={requestMode ? fill(L['when.rush.label.request'], { date: fmtDay(due) }) : fill(L['when.rush.label'], { date: fmtDay(due), delta: String(rushDelta) })}
-                    sub={requestMode ? L['when.rush.sub.request'] : fill(L['when.rush.sub'], { total: String(quote.total + rushDelta) })}
+                    sub={requestMode ? L['when.rush.sub.request'] : fill(L['when.rush.sub'], { total: String(quote.total + rushDelta + Math.round((quote.total + rushDelta) * 0.1)) })}
                     price={requestMode ? undefined : `+$${rushDelta}`}
                     onClick={() => setRushConfirmed(true)}
                   />
                   <Ticket
                     name={L['when.norush.label']}
-                    sub={requestMode ? fill(L['when.norush.sub.request'], { date: fmtDay(standardDelivery) }) : fill(L['when.norush.sub'], { date: fmtDay(standardDelivery), total: String(quote.total) })}
+                    sub={requestMode ? fill(L['when.norush.sub.request'], { date: fmtDay(standardDelivery) }) : fill(L['when.norush.sub'], { date: fmtDay(standardDelivery), total: String(orderTotal) })}
                     price={requestMode ? undefined : '$0'}
                     onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
                   />
@@ -1109,11 +1114,12 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
               <div style={{ margin: '14px 0 14px' }}>
                 <ReceiptFrame>
                   {quote.lines.map((l) => <ReceiptRow key={l.id} label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />)}
+                  <ReceiptRow label={L['receipt.fee']} amount={`$${svcFee}`} />
                   <ReceiptRule />
-                  <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+                  <ReceiptTotal label={L['panel.total']} big={`$${orderTotal}`} />
                 </ReceiptFrame>
               </div>
-              <ConfirmButton label={`${L['cart.add']} · $${quote.total}`} onClick={() => { setSendError(null); setCart(true) }} />
+              <ConfirmButton label={`${L['cart.add']} · $${orderTotal}`} onClick={() => { setSendError(null); setCart(true) }} />
               <div style={{ height: 6 }} />
             </>
           )
@@ -1150,8 +1156,9 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                   </div>
                 ))}
                 {quote.passThroughNote && <div style={{ fontSize: 11, color: DESK.mute, paddingTop: 4 }}>{quote.passThroughNote}</div>}
+                <ReceiptRow label={L['receipt.fee']} amount={`$${svcFee}`} />
                 <ReceiptRule />
-                <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+                <ReceiptTotal label={L['panel.total']} big={`$${orderTotal}`} />
                 <div style={{ fontSize: 10.5, color: DESK.mute, marginTop: 2 }}>{fill(L['panel.revisions'], { n: String(quote.includedRevisions) })}</div>
               </ReceiptFrame>
             </div>
@@ -1159,7 +1166,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
             <button type="button" onClick={() => setPanelOpen(true)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: DESK.card, border: 'none', borderTop: `1px solid ${DESK.line}`, borderRadius: '16px 16px 0 0', padding: '13px 20px', cursor: 'pointer', boxShadow: '0 -6px 20px rgba(22,33,28,0.08)', fontFamily: DESK.body }}>
               <span style={{ fontFamily: DESK.mono, fontSize: 11, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute }}>{L['panel.sofar']}</span>
-              <span style={{ fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep, fontVariantNumeric: 'tabular-nums' }}>${quote.total}</span>
+              <span style={{ fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep, fontVariantNumeric: 'tabular-nums' }}>${orderTotal}</span>
             </button>
           )}
         </div>

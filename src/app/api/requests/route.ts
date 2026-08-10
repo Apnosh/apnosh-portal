@@ -50,7 +50,9 @@ function graphicOrderCents(design: unknown): number | null {
     todayISO: new Date().toISOString().slice(0, 10),
     rushConfirmed: d.rushConfirmed === true,
   }
-  return Math.round(priceDesignOrder(answers, RATE_CARD).total * 100)
+  /* fee-inclusive, same rounding as the flow shows: listed total = charged total */
+  const t = priceDesignOrder(answers, RATE_CARD).total
+  return Math.round((t + Math.round(t * 0.1)) * 100)
 }
 
 async function resolveClientId(userId: string): Promise<string | null> {

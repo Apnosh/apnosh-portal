@@ -105,6 +105,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'tag.inhand': 'In hand {date}',
   'tag.event': 'Event {date}',
   'dest.included': 'Included',
+  'receipt.fee': 'Service fee',
   'panel.sofar': 'Your price so far',
   'panel.total': 'Total',
   'panel.revisions': 'Includes {n} revision rounds.',
