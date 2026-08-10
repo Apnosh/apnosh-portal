@@ -28,6 +28,8 @@ export interface UnifiedConnection {
   actions: { canReconnect: boolean; canDisconnect: boolean; reconnectUrl: string | null }
   /** social vendor rows (zernio/ayrshare): which platforms the owner has linked */
   linkedPlatforms?: string[]
+  /** social vendor rows: how many accounts per platform (personal + business etc.) */
+  accountCounts?: Record<string, number>
 }
 
 // ---------------------------------------------------------------------------
@@ -266,9 +268,13 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
       friendlyStatus = 'Connected (pending data)'
     }
 
-    const md = (r as { metadata?: { platforms?: unknown } }).metadata
+    const md = (r as { metadata?: { platforms?: unknown; account_counts?: unknown } }).metadata
     const linkedPlatforms = Array.isArray(md?.platforms)
       ? (md.platforms as unknown[]).filter((p): p is string => typeof p === 'string')
+      : undefined
+    const accountCounts = md?.account_counts && typeof md.account_counts === 'object'
+      ? Object.fromEntries(Object.entries(md.account_counts as Record<string, unknown>)
+          .filter(([, v]) => typeof v === 'number') as [string, number][])
       : undefined
 
     results.push({
@@ -290,6 +296,7 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
         reconnectUrl: meta.reconnectPath,
       },
       ...(linkedPlatforms ? { linkedPlatforms } : {}),
+      ...(accountCounts ? { accountCounts } : {}),
     })
   }
 

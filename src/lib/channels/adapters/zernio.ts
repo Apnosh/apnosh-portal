@@ -236,6 +236,13 @@ export const zernioAdapter: ChannelAdapter = {
     const linked = [...new Set(rawAccounts
       .map((a) => normalizePlatform(a.platform ?? a.provider ?? a.type))
       .filter((p): p is ZernioPlatform => p !== ''))]
+    /* how many accounts per platform (personal + business etc.) — shown honestly
+     * on the connected row; totals always combine per platform */
+    const accountCounts: Record<string, number> = {}
+    for (const a of rawAccounts) {
+      const p = normalizePlatform(a.platform ?? a.provider ?? a.type)
+      if (p) accountCounts[p] = (accountCounts[p] ?? 0) + 1
+    }
     if (linked.length === 0) {
       await admin.from('channel_connections')
         .update({ status: 'pending', metadata: { platforms: [] } })
@@ -344,7 +351,7 @@ export const zernioAdapter: ChannelAdapter = {
     }
 
     await admin.from('channel_connections')
-      .update({ status: 'active', metadata: { platforms: linked } })
+      .update({ status: 'active', metadata: { platforms: linked, account_counts: accountCounts } })
       .eq('id', connection.id)
 
     return { itemsWritten: written, note: `${linked.join(', ')} synced (zernio)` }

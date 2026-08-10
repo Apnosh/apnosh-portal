@@ -55,7 +55,10 @@ function expandSocial(conns: UnifiedConnection[]): UnifiedConnection[] {
   const out: UnifiedConnection[] = []
   for (const c of conns) {
     if (c.source === 'channel_connections' && SOCIAL_VENDORS.includes(c.platform) && c.linkedPlatforms?.length) {
-      for (const p of c.linkedPlatforms) out.push({ ...c, platform: p, label: SOCIAL_PLATFORM_LABEL[p] ?? p })
+      for (const p of c.linkedPlatforms) {
+        const n = c.accountCounts?.[p] ?? 0
+        out.push({ ...c, platform: p, label: SOCIAL_PLATFORM_LABEL[p] ?? p, accountName: n > 1 ? `${n} accounts` : c.accountName })
+      }
     } else {
       out.push(c)
     }
@@ -321,6 +324,16 @@ function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedC
         )}
         {conn.profileUrl && (
           <a href={conn.profileUrl} target="_blank" rel="noopener noreferrer" style={actionBtn}><ExternalLink size={16} /> Open profile</a>
+        )}
+        {conn.source === 'channel_connections' && conn.platform in SOCIAL_PLATFORM_LABEL && !needs && (
+          <>
+            <a href={connectHref(`/api/channels/social/start?platform=${conn.platform}`)} style={actionBtn}>
+              <Plus size={16} /> Add another {SOCIAL_PLATFORM_LABEL[conn.platform]} account
+            </a>
+            <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.45, margin: '2px 2px 10px' }}>
+              Personal or business, they all count. All your {SOCIAL_PLATFORM_LABEL[conn.platform]} accounts add into one {SOCIAL_PLATFORM_LABEL[conn.platform]} number.
+            </div>
+          </>
         )}
 
         {isSocialVendorRow(conn) && conn.actions.canDisconnect && (
