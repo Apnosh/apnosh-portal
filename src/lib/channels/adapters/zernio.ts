@@ -19,9 +19,11 @@
  * as such in raw_data; the bake-off judges whether that beats Ayrshare's account-level
  * numbers for our dashboard.
  *
- * UNVERIFIED SHAPES: profiles-create / accounts-list / follower-stats responses are not
- * fully documented publicly; parsing is defensive and the FIRST LIVE RUN on the free
- * account is the verification step (channel_sync_runs shows exactly what happened).
+ * SHAPES (llms-full.txt + first live run 2026-08-10): profiles create returns
+ * { profile: { _id } }; the quickstart reads accounts under data.accounts — so list
+ * reads go through unwrapList (top-level key, data array, or data.key). follower-stats
+ * is still undocumented; its parse stays defensive and a miss is a gap, not a failure.
+ * Any remaining shape miss now throws WITH the response body in the message.
  *
  * Env (fail closed): ZERNIO_API_KEY — that is all (no domain, no RSA key).
  */
@@ -38,6 +40,24 @@ export type ZernioPlatform = (typeof ZERNIO_PLATFORMS)[number]
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : 0)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+
+/** Unwrap a list response that may arrive as {key:[...]}, {data:[...]}, or {data:{key:[...]}}
+ *  (Zernio's quickstart shows accounts under data.accounts; other reads vary). */
+function unwrapList(res: Record<string, unknown>, ...keys: string[]): Record<string, unknown>[] {
+  for (const k of keys) {
+    const v = res[k]
+    if (Array.isArray(v)) return v as Record<string, unknown>[]
+  }
+  const d = res.data
+  if (Array.isArray(d)) return d as Record<string, unknown>[]
+  if (d && typeof d === 'object') {
+    for (const k of keys) {
+      const v = (d as Record<string, unknown>)[k]
+      if (Array.isArray(v)) return v as Record<string, unknown>[]
+    }
+  }
+  return []
+}
 
 export interface ZernioPostRow {
   platform?: string
@@ -102,12 +122,16 @@ async function ensureProfile(clientId: string): Promise<string> {
     method: 'POST',
     body: JSON.stringify({ name: `apnosh-${clientId.slice(0, 8)}` }),
   })
-  /* defensive: docs show profile ids like prof_abc123 but the create response shape
-   * is not public; accept the common field spellings */
+  /* Documented shape (llms-full.txt, verified after the first live 2xx): the profile
+   * comes wrapped under "profile" with a Mongo-style "_id". Older spellings kept as
+   * fallbacks; a miss now carries the body so the next surprise diagnoses itself. */
+  const prof = created.profile as Record<string, unknown> | undefined
   const profileId =
-    str(created.profileId) || str(created.id) ||
-    str((created.profile as Record<string, unknown> | undefined)?.id)
-  if (!profileId) throw new ChannelError('upstream', 'Zernio did not return a profile id')
+    str(prof?._id) || str(prof?.id) || str(created._id) ||
+    str(created.profileId) || str(created.id)
+  if (!profileId) {
+    throw new ChannelError('upstream', `Zernio did not return a profile id (body: ${JSON.stringify(created).slice(0, 200)})`)
+  }
 
   const row = {
     client_id: clientId,
@@ -141,8 +165,10 @@ export const zernioAdapter: ChannelAdapter = {
     }
     const profileId = await ensureProfile(clientId)
     const res = await zer(`/connect/${platform}?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(REDIRECT)}`)
-    const url = str(res.authUrl)
-    if (!url) throw new ChannelError('upstream', 'Zernio did not return an authUrl')
+    const url = str(res.authUrl) || str((res.data as Record<string, unknown> | undefined)?.authUrl)
+    if (!url) {
+      throw new ChannelError('upstream', `Zernio did not return an authUrl (body: ${JSON.stringify(res).slice(0, 200)})`)
+    }
     return { url, instructions: 'Log into the account on the page that opens. Numbers start flowing the next morning.' }
   },
 
@@ -152,10 +178,9 @@ export const zernioAdapter: ChannelAdapter = {
     if (!profileId) throw new ChannelError('not_connected', 'No Zernio profile on this connection yet')
     const admin = createAdminClient()
 
-    // 1. Which accounts are linked? (defensive: accounts may be top-level or nested)
+    // 1. Which accounts are linked? (documented: the quickstart reads data.accounts)
     const accountsRes = await zer(`/accounts?profileId=${encodeURIComponent(profileId)}`)
-    const rawAccounts = (Array.isArray(accountsRes.accounts) ? accountsRes.accounts
-      : Array.isArray(accountsRes.data) ? accountsRes.data : []) as Record<string, unknown>[]
+    const rawAccounts = unwrapList(accountsRes, 'accounts')
     const linked = rawAccounts
       .map((a) => str(a.platform).toLowerCase())
       .filter((p): p is ZernioPlatform => (ZERNIO_PLATFORMS as readonly string[]).includes(p))
@@ -170,8 +195,7 @@ export const zernioAdapter: ChannelAdapter = {
     let followersByPlatform: Record<string, number> = {}
     try {
       const fs = await zer(`/accounts/follower-stats?profileId=${encodeURIComponent(profileId)}`)
-      const rows = (Array.isArray(fs.accounts) ? fs.accounts : Array.isArray(fs.data) ? fs.data
-        : Array.isArray(fs.stats) ? fs.stats : []) as Record<string, unknown>[]
+      const rows = unwrapList(fs, 'accounts', 'stats')
       for (const r of rows) {
         const p = str(r.platform).toLowerCase()
         const f = num(r.followers) || num(r.followersCount) || num(r.followerCount)
@@ -182,8 +206,7 @@ export const zernioAdapter: ChannelAdapter = {
     // 3. The day's content totals from post analytics (yesterday -> today window).
     const from = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10)
     const posts = await zer(`/analytics?profileId=${encodeURIComponent(profileId)}&fromDate=${from}&limit=100`)
-    const rows = (Array.isArray(posts.posts) ? posts.posts : Array.isArray(posts.data) ? posts.data
-      : Array.isArray(posts.analytics) ? posts.analytics : []) as ZernioPostRow[]
+    const rows = unwrapList(posts, 'posts', 'analytics') as ZernioPostRow[]
     const totals = aggregateZernioPosts(rows)
 
     // 4. One daily row per linked platform (even a zero day is a real day).
