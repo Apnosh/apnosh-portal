@@ -149,9 +149,9 @@ s.group('Tier: ambiguity prices low and flags, never a silent upcharge')
   s.check('ambiguous tier 1 stays tier 1', priceDesignOrder({ ...BASE, tier: 1, tierAmbiguous: true }, RATE_CARD).lines[0].amount === RATE_CARD.tierBase[1])
 }
 
-s.group('The rate card is a placeholder until reviewed, and says so')
+s.group('The rate card is LIVE (owner call 2026-08-09: pricing included, no quote round trip)')
 {
-  s.check('approved starts false: Phase B must refuse to show clients these numbers', RATE_CARD.approved === false)
+  s.check('approved is true: prices render to clients and orders charge these numbers', RATE_CARD.approved === true)
   s.check('every amount is positive and the multiplier is above 1',
     Object.values(RATE_CARD.tierBase).every((n) => n > 0) && RATE_CARD.photoSourcing > 0 && RATE_CARD.printManagement > 0 && RATE_CARD.rushMultiplier > 1)
   s.check('every destination has its own positive adder, none forgotten',

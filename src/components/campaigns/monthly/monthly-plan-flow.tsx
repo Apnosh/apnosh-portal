@@ -17,7 +17,7 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, Check, Clock, Plus, Minus, TrendingUp, Inbox, BarChart3, Hammer } from 'lucide-react'
 import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
-import { DESK, DeskKeyframes, ReceiptFrame, ReceiptRule, SealButton, paperGround } from '@/components/campaigns/desk/ui'
+import { DESK, DeskKeyframes, ReceiptFrame, ReceiptRule, ConfirmButton, paperGround } from '@/components/campaigns/desk/ui'
 import {
   MONTHLY_STEPS,
   composeMonthlyPlan,
@@ -620,14 +620,14 @@ export default function MonthlyPlanFlow({
         </span>
       </label>
 
-      {/* Approval as a physical act: press and hold the seal. Disabled until the terms above are
-          ticked; a failed start remounts it so it can be pressed again. */}
+      {/* A plain confirm tap (the hold-to-approve seal is retired). Disabled until the
+          terms above are ticked; a failed start remounts it so it can be tapped again. */}
       <div style={{ textAlign: 'center' }}>
-      <SealButton
+      <ConfirmButton
         key={attempt}
-        label={'Hold to\nstart'}
+        label={starting ? 'Starting...' : 'Confirm and start'}
         disabled={starting || !accepted}
-        onSealed={async () => {
+        onClick={async () => {
           setStarting(true)
           setStartErr(null)
           const draft = toCampaignDraft(plan.lines, {
@@ -673,7 +673,7 @@ export default function MonthlyPlanFlow({
         }}
       />
       <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.5, marginTop: 2, fontFamily: "'Inter',system-ui,sans-serif" }}>
-        {starting ? 'Starting your plan…' : accepted ? 'Press and hold. This starts the work.' : 'Accept the terms above to start.'}
+        {starting ? 'Starting your plan…' : accepted ? 'One tap. This starts the work.' : 'Accept the terms above to start.'}
       </div>
       </div>
 

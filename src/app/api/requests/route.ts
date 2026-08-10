@@ -14,9 +14,44 @@ import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { validateRequestPayload, summaryLine, validateAttachments, validateDueDate } from '@/lib/requests/catalog'
+import { priceCreativeRequest } from '@/lib/requests/pricing'
+import { mintRequestWorkOrder } from '@/lib/requests/bridge'
+import { priceDesignOrder, type DesignOrderAnswers } from '@/lib/design/design-pricing'
+import { DESTINATIONS, type DestinationId } from '@/lib/design/destinations'
+import { RATE_CARD } from '@/lib/design/rate-card'
 import { notifyStaffForClient } from '@/lib/notifications'
 
 export const runtime = 'nodejs'
+
+/**
+ * THE ORDER LANE (owner call 2026-08-09: price included, no quote round trip).
+ * `order: true` turns a request into an order at the SERVER's own price: the sheet
+ * (pricing.ts) for creatives, the design engine for graphics. The row lands already
+ * accepted at that price and the work order mints immediately on the house team —
+ * the same bridge the quote-accept path proved. The client's displayed number is
+ * never trusted; the server computes its own.
+ */
+function graphicOrderCents(design: unknown): number | null {
+  if (typeof design !== 'object' || design === null) return null
+  const d = design as Record<string, unknown>
+  const destIds = (Array.isArray(d.destinations) ? d.destinations : [])
+    .filter((x): x is DestinationId => typeof x === 'string' && DESTINATIONS.some((s) => s.id === x))
+  if (destIds.length === 0) return null
+  const photosVal = ['own', 'source', 'none', 'shoot'].includes(String(d.photos)) ? (d.photos as 'own' | 'source' | 'none' | 'shoot') : undefined
+  const due = typeof d.dueDateISO === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.dueDateISO) ? d.dueDateISO : undefined
+  const answers: DesignOrderAnswers = {
+    jobType: { value: 'other', source: 'asked' },
+    destinations: { value: destIds, source: 'asked' },
+    ...(photosVal ? { photos: { value: photosVal, source: 'asked' as const } } : {}),
+    /* print runs are off, so qty/printer cannot exist and no print-mgmt line can
+     * price; revisit this sanitizer when PRINT_AVAILABLE flips back on */
+    tier: 2,
+    ...(due ? { dueDateISO: { value: due, source: 'asked' as const } } : {}),
+    todayISO: new Date().toISOString().slice(0, 10),
+    rushConfirmed: d.rushConfirmed === true,
+  }
+  return Math.round(priceDesignOrder(answers, RATE_CARD).total * 100)
+}
 
 async function resolveClientId(userId: string): Promise<string | null> {
   const admin = createAdminClient()
@@ -39,7 +74,7 @@ export async function POST(req: Request) {
   const clientId = await resolveClientId(user.id)
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
-  let body: { type?: string; answers?: unknown; attachments?: unknown; due_date?: unknown }
+  let body: { type?: string; answers?: unknown; attachments?: unknown; due_date?: unknown; order?: unknown; design?: unknown }
   try {
     body = await req.json()
   } catch {
@@ -51,17 +86,30 @@ export async function POST(req: Request) {
   const attachments = validateAttachments(body.attachments)
   const dueDate = validateDueDate(body.due_date, new Date().toISOString().slice(0, 10))
 
+  /* The order lane: price at the server's own number and land pre-accepted. */
+  const isOrder = body.order === true
+  let orderCents: number | null = null
+  if (isOrder) {
+    orderCents = v.type.id === 'graphic'
+      ? graphicOrderCents(body.design)
+      : priceCreativeRequest(v.type.id, v.clean)?.totalCents ?? null
+    if (orderCents == null) {
+      return NextResponse.json({ error: 'Could not price this order. Send it as a request instead.' }, { status: 400 })
+    }
+  }
+
   const admin = createAdminClient()
   const baseRow = {
     client_id: clientId,
     type: v.type.id,
     brief: v.clean,
-    status: 'requested',
+    status: isOrder ? 'in_progress' : 'requested',
     created_by: user.id,
   }
+  const orderCols = isOrder ? { quote_cents: orderCents, accepted_at: new Date().toISOString() } : {}
   let { data: row, error } = await admin
     .from('creative_requests')
-    .insert({ ...baseRow, attachments, due_date: dueDate })
+    .insert({ ...baseRow, attachments, due_date: dueDate, ...orderCols })
     .select('id, type, status, created_at')
     .single()
   /* Migration 236 not applied yet (42703 unknown column): the request still
@@ -78,6 +126,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: isMissingTable(error?.message) ? SETUP_MSG : 'Could not save your request. Try again.' }, { status: 500 })
   }
 
+  /* An order mints its work order NOW, on the house team, same bridge the
+   * quote-accept path proved. Best-effort: the order stands even if the mint hiccups
+   * (the admin queue shows it either way). */
+  let workOrderId: string | null = null
+  if (isOrder) {
+    workOrderId = await mintRequestWorkOrder({
+      id: row.id as string,
+      client_id: clientId,
+      type: v.type.id,
+      brief: v.clean,
+      attachments,
+      due_date: dueDate,
+      quote_cents: orderCents,
+    })
+  }
+
   /* Staff hear about every request the moment it lands (law: no silent stalls).
    * Best-effort: a notification hiccup must not fail the owner's submit. */
   try {
@@ -85,7 +149,9 @@ export async function POST(req: Request) {
      * else the request summary). */
     await notifyStaffForClient(clientId, ['strategist', 'designer'], {
       kind: 'client_request',
-      title: `New request: ${summaryLine(v.type.id, v.clean)}`,
+      title: isOrder
+        ? `New ORDER ($${Math.round((orderCents ?? 0) / 100)}): ${summaryLine(v.type.id, v.clean)}`
+        : `New request: ${summaryLine(v.type.id, v.clean)}`,
       body: v.clean.notes?.slice(0, 200) || summaryLine(v.type.id, v.clean),
       link: '/admin/requests',
     })
@@ -93,7 +159,11 @@ export async function POST(req: Request) {
     console.error('[requests] staff notify failed (request still saved)', e)
   }
 
-  return NextResponse.json({ ok: true, request: row })
+  return NextResponse.json({
+    ok: true,
+    request: row,
+    ...(isOrder ? { order: { amount_cents: orderCents, work_order_id: workOrderId, assigned: 'Your Apnosh creative team' } } : {}),
+  })
 }
 
 export async function GET() {

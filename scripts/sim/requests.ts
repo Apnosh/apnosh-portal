@@ -17,6 +17,7 @@ import {
   summaryLine, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE,
   validateAttachments, validateDueDate, disciplineForRequestType,
 } from '@/lib/requests/catalog'
+import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { FULLY_BUILT_LIVE, EMAIL_OFF_IDS, availabilityFor } from '@/lib/campaigns/data/catalog-availability'
 import { CREATIVE_FLOWS, flowFor, bucketForDate } from '@/lib/requests/flows'
 
@@ -208,6 +209,28 @@ s.group('Validation: accepts honesty, refuses garbage')
   s.check('summaryLine reads like a sentence fragment', summaryLine('video', full).includes('Short video') && summaryLine('video', full).includes('This week'))
   s.check('summaryLine survives an unknown type', summaryLine('nope', {}) === 'Request')
   void video
+}
+
+s.group('The price sheet: every creative orders at a listed number (owner call 2026-08-09)')
+{
+  const priced = REQUEST_TYPES.filter((t) => t.id !== 'graphic')
+  s.check('every non-graphic type has a price and it is above zero',
+    priced.every((t) => (priceCreativeRequest(t.id, {})?.totalCents ?? 0) > 0))
+  s.check('the graphic returns null: the design engine owns its price',
+    priceCreativeRequest('graphic', {}) === null)
+  const one = priceCreativeRequest('video', { count: 'Just 1' })!
+  const batch = priceCreativeRequest('video', { count: 'A monthly batch' })!
+  s.check('scope moves the price: a monthly batch costs more than one video',
+    batch.totalCents > one.totalCents)
+  const own = priceCreativeRequest('video', { count: 'whatever you think is right' })!
+  s.check('own words on a scope question price at the base, never a guessed upcharge',
+    own.totalCents === one.totalCents)
+  const shoot2 = priceCreativeRequest('photos', { what: 'Food and dishes, The space' })!
+  const shoot1 = priceCreativeRequest('photos', { what: 'Food and dishes' })!
+  s.check('photos: extra coverage areas add their line; the first is included',
+    shoot2.totalCents > shoot1.totalCents && shoot2.lines.length === 2)
+  s.check('every price line carries a why (no un-explained money)',
+    priced.every((t) => (priceCreativeRequest(t.id, {})?.lines ?? []).every((l) => l.why.length > 0)))
 }
 
 /* ── Part 2: the real table (skips loudly if 235 is not applied) ───────────── */

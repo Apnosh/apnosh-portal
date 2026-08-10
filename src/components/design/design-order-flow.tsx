@@ -19,7 +19,7 @@
 import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
-import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, SealButton } from '@/components/campaigns/desk/ui'
+import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, ConfirmButton } from '@/components/campaigns/desk/ui'
 import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, type DestinationSpec } from '@/lib/design/destinations'
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
@@ -357,6 +357,10 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
   const [due, setDue] = useState<string | null>(null)
   const [rushConfirmed, setRushConfirmed] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  /* the cart screen between Add to cart and Confirm order */
+  const [cart, setCart] = useState(false)
+  /* the server's own total, echoed on the placed screen */
+  const [orderAmount, setOrderAmount] = useState<number | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -499,10 +503,10 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
     return out
   }
 
-  /* Request mode's seal: the finished brief goes to the Request Desk rail as a graphic
-   * request. The mapping reuses the desk's validated vocabulary: destinations are the
-   * same DESTINATIONS labels, timing folds into the four honest buckets. */
-  const sendAsRequest = async () => {
+  /* Confirm order: the finished brief goes down the Request Desk ORDER lane at the
+   * engine's price (server computes its own number and never trusts ours); the row lands
+   * pre-accepted and the work order mints on the house team right away. */
+  const placeOrder = async () => {
     if (sending) return
     setSending(true)
     setSendError(null)
@@ -539,10 +543,18 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
           },
           ...(due ? { due_date: due } : {}),
           ...(attachments.length ? { attachments } : {}),
+          order: true,
+          design: {
+            destinations: dests,
+            photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
+            dueDateISO: due ?? undefined,
+            rushConfirmed,
+          },
         }),
       })
-      const j = (await r.json().catch(() => ({}))) as { error?: string }
+      const j = (await r.json().catch(() => ({}))) as { error?: string; order?: { amount_cents?: number } }
       if (!r.ok) throw new Error(typeof j.error === 'string' ? j.error : L['send.error'])
+      setOrderAmount(typeof j.order?.amount_cents === 'number' ? Math.round(j.order.amount_cents / 100) : quote.total)
       setSubmitted(true)
     } catch (e) {
       setSendError(e instanceof Error ? e.message : L['send.error'])
@@ -560,11 +572,51 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
         <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
           <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} stamped />
         </div>
-        <div style={{ fontFamily: DESK.disp, fontSize: 23, fontWeight: 700, color: DESK.ink, letterSpacing: '-0.02em', marginTop: 10 }}>{requestMode ? L['done.title.request'] : L['done.title']}</div>
+        <div style={{ fontFamily: DESK.disp, fontSize: 23, fontWeight: 700, color: DESK.ink, letterSpacing: '-0.02em', marginTop: 10 }}>{L['done.title.order']}</div>
         <div style={{ fontSize: 13.5, color: DESK.ink2, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
-          {requestMode ? L['done.sub.request'] : L['done.sub']}
+          {L['done.sub.order']}
         </div>
-        {!requestMode && <div style={{ fontSize: 12, color: DESK.mute, marginTop: 14 }}>{L['done.testmode']}</div>}
+        {orderAmount != null && (
+          <div style={{ fontFamily: DESK.mono, fontSize: 14, fontWeight: 700, color: DESK.mintDeep, marginTop: 12 }}>{`$${orderAmount}`} · {L['sum.assigned.who']}</div>
+        )}
+      </div>
+    )
+  }
+
+  /* ── THE CART: one item, one honest total, one tap to confirm ─────────────────────── */
+  if (cart) {
+    return (
+      <div style={{ ...ground, padding: '24px 18px 40px' }}>
+        <DeskKeyframes />
+        <BoardKeyframes />
+        <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: DESK.mute, marginBottom: 10 }}>{L['cart.title']}</div>
+        <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
+          <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} compact />
+        </div>
+        <div style={{ fontSize: 13, color: DESK.ink2, margin: '2px 0 12px', lineHeight: 1.5 }}>{L['cart.sub']}</div>
+        <ReceiptFrame>
+          {quote.lines.map((l) => <ReceiptRow key={l.id} label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />)}
+          <ReceiptRule />
+          <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+        </ReceiptFrame>
+        <div style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '12px 14px', margin: '12px 0' }}>
+          <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>{L['sum.assigned']}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: DESK.ink }}>{L['sum.assigned.who']}</div>
+          <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.45 }}>{L['sum.assigned.sub']}</div>
+        </div>
+        {sendError && (
+          <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, marginBottom: 12, lineHeight: 1.45 }}>
+            {sendError}
+          </div>
+        )}
+        <ConfirmButton
+          label={sending ? 'Placing your order...' : `${L['cart.confirm']} · $${quote.total}`}
+          sub={L['cart.confirm.sub']}
+          disabled={sending}
+          onClick={() => { void placeOrder() }}
+        />
+        <div style={{ height: 10 }} />
+        <ConfirmButton label={L['cart.change']} tone="paper" disabled={sending} onClick={() => setCart(false)} />
       </div>
     )
   }
@@ -989,52 +1041,69 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
           </>
         )}
 
-        {/* ── 6. review: the brief under the board, sealed by hand ── */}
-        {step === 6 && (
-          <>
-            <StepHead n={6} title={T.review} sub={S.review} />
-            <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '14px 16px', fontSize: 13.5, color: DESK.ink, lineHeight: 1.6, boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
-              {(() => { const n = job && job !== 'other' ? `${DESIGN_JOBS.find((j) => j.id === job)?.label.toLowerCase()} design` : 'design'; return `${/^[aeiou]/.test(n) ? 'An' : 'A'} ${n}` })()}
-              {promoteItems.length ? ` featuring ${sayList(promoteItems)}` : ''} saying &ldquo;{saidText}&rdquo; for{' '}
-              {[...dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label.toLowerCase() ?? ''), ...(destOther.trim() ? [destOther.trim().toLowerCase()] : [])].filter(Boolean).join(', ')}
-              {printPicked && allQtysIn ? ` (${printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label.toLowerCase()}`).join(', ')}, ${printer === 'us' ? 'we print' : 'your shop prints'})` : ''}
-              {photoMode === 'none' ? ', custom artwork with no photos' : photoMode === 'shoot' ? ', with a photo shoot at your place first' : photoMode === 'other' ? `, photos your way: “${photoOther.trim()}”` : usingOwn ? ', using your photos' : ', with photos we find for you'}
-              {due ? `, in hand by ${fmtDay(due)}` : ''}
-              {eventDate ? ` for your ${fmtDay(eventDate)} event` : ''}.
-            </div>
-            <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 10, lineHeight: 1.5 }}>
-              {fill(L['review.revisions'], { n: String(RATE_CARD.includedRevisions), next: String(RATE_CARD.includedRevisions + 1) })}
-            </div>
-            <div style={{ margin: '14px 0 4px' }}>
-              <ReceiptFrame>
-                {requestMode ? (
-                  <>
-                    <ReceiptRow label={L['receipt.request.label']} amount="$0" />
-                    <ReceiptRule />
-                    <div style={{ fontSize: 12.5, color: DESK.ink2, lineHeight: 1.5 }}>{L['receipt.request.note']}</div>
-                  </>
-                ) : (
-                  <>
-                    {quote.lines.map((l) => <ReceiptRow key={l.id} label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />)}
-                    <ReceiptRule />
-                    <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
-                  </>
-                )}
-              </ReceiptFrame>
-            </div>
-            {sendError && (
-              <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, marginBottom: 12, lineHeight: 1.45 }}>
-                {sendError}
+        {/* ── 6. review: the WHOLE order, itemized, then Add to cart ── */}
+        {step === 6 && (() => {
+          const sumRow = (label: string, lines: (string | null | undefined)[]) => {
+            const vals = lines.filter((x): x is string => !!x && x.trim().length > 0)
+            if (vals.length === 0) return null
+            return (
+              <div style={{ padding: '10px 0', borderBottom: `1px solid ${DESK.line}` }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 3 }}>{label}</div>
+                {vals.map((v, i) => (
+                  <div key={i} style={{ fontSize: 13.5, color: DESK.ink, lineHeight: 1.5 }}>{v}</div>
+                ))}
               </div>
-            )}
-            <SealButton
-              label={sending ? 'Sending...' : requestMode ? L['seal.label.request'] : L['seal.label']}
-              disabled={sending}
-              onSealed={() => { if (requestMode) { void sendAsRequest() } else { setSubmitted(true) } }}
-            />
-            <div style={{ height: 18 }} />
-          </>
-        )}
+            )
+          }
+          const whereLines = [
+            ...dests.map((d) => {
+              const spec = DESTINATIONS.find((x) => x.id === d)
+              const amt = destAmount(d)
+              return spec ? `${spec.label}${amt != null ? (amt === 0 ? ' (included)' : ` (+$${amt})`) : ''}` : null
+            }),
+            destOther.trim() ? `${destOther.trim()} (custom spot, we size and quote it with your team)` : null,
+          ]
+          const photoLine =
+            photoMode === 'none' ? 'Custom artwork, no photos'
+            : photoMode === 'shoot' ? 'Photo shoot at your place first (scheduled with you)'
+            : photoMode === 'source' ? `We find the photos (+$${RATE_CARD.photoSourcing})`
+            : photoMode === 'other' ? `Your way: “${photoOther.trim()}”`
+            : usingOwn ? `Your own photos (${picked.length} picked)` : null
+          return (
+            <>
+              <StepHead n={6} title={T.review} sub={S.review} />
+              <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '4px 16px 2px', boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
+                {sumRow(L['sum.job'], [jobLabel ?? 'A design'])}
+                {sumRow(L['sum.featuring'], [promoteItems.length ? sayList(promoteItems) : null])}
+                {sumRow(L['sum.words'], [headline ? `“${headline}”` : null, details || null, offer ? `Deal: ${offer}` : null])}
+                {sumRow(L['sum.where'], whereLines)}
+                {printPicked && !PRINT_AVAILABLE ? sumRow('Print', ['Print ready files handed to you; printing is with you or your print shop']) : null}
+                {sumRow(L['sum.photos'], [photoLine])}
+                {sumRow(L['sum.when'], [
+                  due ? `${fmtDay(due)}${quote.rush ? ' (rush confirmed)' : ''}` : null,
+                  eventDate ? `For your ${fmtDay(eventDate)} event` : null,
+                ])}
+                <div style={{ padding: '10px 0' }}>
+                  <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 3 }}>{L['sum.assigned']}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>{L['sum.assigned.who']}</div>
+                  <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{L['sum.assigned.sub']}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 10, lineHeight: 1.5 }}>
+                {fill(L['review.revisions'], { n: String(RATE_CARD.includedRevisions), next: String(RATE_CARD.includedRevisions + 1) })}
+              </div>
+              <div style={{ margin: '14px 0 14px' }}>
+                <ReceiptFrame>
+                  {quote.lines.map((l) => <ReceiptRow key={l.id} label={l.label} amount={l.amount === 0 ? '$0' : `$${l.amount}`} you={l.amount === 0} />)}
+                  <ReceiptRule />
+                  <ReceiptTotal label={L['panel.total']} big={`$${quote.total}`} />
+                </ReceiptFrame>
+              </div>
+              <ConfirmButton label={`${L['cart.add']} · $${quote.total}`} onClick={() => { setSendError(null); setCart(true) }} />
+              <div style={{ height: 6 }} />
+            </>
+          )
+        })()}
 
         {/* back / next (review keeps Back too, under the seal, so a typo is one tap away) */}
         {step > 1 && (

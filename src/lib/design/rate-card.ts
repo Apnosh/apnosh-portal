@@ -36,11 +36,11 @@ export interface RateCard {
 }
 
 /**
- * PLACEHOLDERS. Deliberately round, deliberately wrong-ish, so nobody mistakes them for
- * reviewed prices. Replace from the job-history review, then flip `approved`.
+ * LIVE by owner call (2026-08-09): pricing is included at order time, no quote round
+ * trip. These are the first-pass numbers; each is one line to change on the owner's word.
  */
 export const RATE_CARD: RateCard = {
-  approved: false,
+  approved: true,
   tierBase: { 1: 75, 2: 175, 3: 400 },
   destinationAdder: {
     'instagram-post': 35,

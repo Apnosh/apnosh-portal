@@ -113,11 +113,29 @@ export const DESIGN_LINES: Record<string, string> = {
   'nav.continue': 'Continue',
   'nav.reading': 'Reading your words',
   'photos.upload': 'Upload',
-  'seal.label': 'Hold\nto order',
   'done.stamp': 'Ordered',
   'done.title': 'Order recorded',
   'done.sub': 'This exact order becomes the brief your designer works from. Nothing gets re-interpreted.',
   'done.testmode': 'Test mode: no payment was taken.',
+
+  /* The cart: Add to cart then Confirm order (owner call 2026-08-09; the seal is retired). */
+  'sum.job': 'The job',
+  'sum.featuring': 'Featuring',
+  'sum.words': 'The words',
+  'sum.where': 'Where it goes',
+  'sum.photos': 'The photos',
+  'sum.when': 'In hand',
+  'sum.assigned': 'Assigned to',
+  'sum.assigned.who': 'Your Apnosh creative team',
+  'sum.assigned.sub': 'A named designer picks it up within 1 business day. You can follow it in Your requests.',
+  'cart.add': 'Add to cart',
+  'cart.title': 'Your cart',
+  'cart.sub': 'One more look, then confirm. Work starts right away.',
+  'cart.confirm': 'Confirm order',
+  'cart.confirm.sub': 'Goes on your Apnosh bill. Nothing else to do.',
+  'cart.change': 'Change something',
+  'done.title.order': 'Order placed',
+  'done.sub.order': 'Your team has it and work starts now. Follow progress and talk to us in Your requests.',
 
   /* Request mode: the same flow while the rate card is unsigned. No numbers appear
    * anywhere; the seal sends a quote request instead of recording an order. */
@@ -128,7 +146,6 @@ export const DESIGN_LINES: Record<string, string> = {
   'when.norush.sub.request': 'First standard day is {date}.',
   'receipt.request.label': 'What this costs to send',
   'receipt.request.note': 'We read it, then send you a plan and a real price. Work starts only after you say yes.',
-  'seal.label.request': 'Hold\nto send',
   'done.stamp.request': 'Request sent',
   'done.title.request': 'The team has your graphic.',
   'done.sub.request': 'This exact brief goes to a real person. You will get a plan and a price in your inbox. No charge until you say yes.',

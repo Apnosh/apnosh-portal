@@ -17,10 +17,11 @@ import { useState } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
 import {
-  DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, SealButton,
+  DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, ConfirmButton,
 } from '@/components/campaigns/desk/ui'
 import RequestBoard from '@/components/requests/request-boards'
-import { requestTypeById, type RequestAnswers } from '@/lib/requests/catalog'
+import { requestTypeById, questionsFor, type RequestAnswers } from '@/lib/requests/catalog'
+import { priceCreativeRequest, fmtCents } from '@/lib/requests/pricing'
 import { flowFor, bucketForDate, type FlowControl, type TicketOption } from '@/lib/requests/flows'
 
 const fmtDay = (s: string) => new Date(`${s}T12:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
@@ -95,6 +96,9 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
   /* per-question "Something else" free text (see the escape hatch below) */
   const [others, setOthers] = useState<Record<string, string>>({})
   const [otherOn, setOtherOn] = useState<Record<string, boolean>>({})
+  /* the cart screen between Add to cart and Confirm order */
+  const [cart, setCart] = useState(false)
+  const [orderAmount, setOrderAmount] = useState<number | null>(null)
 
   if (!type || !flow) return null
   const today = new Date().toISOString().slice(0, 10)
@@ -164,6 +168,9 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
     setUploading(false)
   }
 
+  /* Confirm order: the brief goes down the ORDER lane at the price sheet's number
+   * (the server computes its own and never trusts ours); the work order mints on
+   * the house team right away. */
   const send = async () => {
     if (sending) return
     setSending(true)
@@ -178,10 +185,12 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           answers: { ...answers, when: bucketForDate(dueISO, today), ...(composedNotes ? { notes: composedNotes } : {}) },
           ...(dueISO ? { due_date: dueISO } : {}),
           ...(files.length ? { attachments: files } : {}),
+          order: true,
         }),
       })
-      const j = (await r.json().catch(() => ({}))) as { error?: string }
+      const j = (await r.json().catch(() => ({}))) as { error?: string; order?: { amount_cents?: number } }
       if (!r.ok) throw new Error(typeof j.error === 'string' ? j.error : 'Could not send. Try again.')
+      if (typeof j.order?.amount_cents === 'number') setOrderAmount(j.order.amount_cents)
       setSubmitted(true)
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Could not send. Try again.')
@@ -197,19 +206,62 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
       <div style={{ ...ground, textAlign: 'center', paddingTop: 40 }}>
         <DeskKeyframes />
         <RequestBoard typeId={type.id} answers={answers} />
-        <div style={{ marginTop: 6 }}><Stamp mint>Request sent</Stamp></div>
+        <div style={{ marginTop: 6 }}><Stamp mint>Order placed</Stamp></div>
         <div style={{ fontFamily: DESK.disp, fontSize: 22, fontWeight: 700, color: DESK.ink, marginTop: 14 }}>
-          The team has {type.noun}.
+          Your team has {type.noun}.
         </div>
         <div style={{ fontSize: 13.5, color: DESK.ink2, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
-          This exact brief goes to a real person. You will get a plan and a price in your inbox. No charge until you say yes.
+          Work starts now. Follow progress and talk to us in Your requests.
         </div>
+        {orderAmount != null && (
+          <div style={{ fontFamily: DESK.mono, fontSize: 14, fontWeight: 700, color: DESK.mintDeep, marginTop: 12 }}>
+            {fmtCents(orderAmount)} · Your Apnosh creative team
+          </div>
+        )}
         <button
           type="button" onClick={onDone ?? onBack}
           style={{ marginTop: 24, padding: '13px 26px', borderRadius: 999, border: 'none', cursor: 'pointer', background: DESK.grad, color: '#fff', fontFamily: DESK.disp, fontWeight: 700, fontSize: 14.5 }}
         >
-          See your request
+          See your order
         </button>
+      </div>
+    )
+  }
+
+  /* ── THE CART: one item, one honest total, one tap to confirm ── */
+  if (cart) {
+    const price = priceCreativeRequest(type.id, answers)
+    return (
+      <div style={ground}>
+        <DeskKeyframes />
+        <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: DESK.mute, margin: '4px 0 10px' }}>Your cart</div>
+        <RequestBoard typeId={type.id} answers={answers} />
+        <div style={{ fontSize: 13, color: DESK.ink2, margin: '10px 0 12px', lineHeight: 1.5 }}>One more look, then confirm. Work starts right away.</div>
+        {price && (
+          <ReceiptFrame>
+            {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
+            <ReceiptRule />
+            <ReceiptTotal label="Total" big={fmtCents(price.totalCents)} />
+          </ReceiptFrame>
+        )}
+        <div style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '12px 14px', margin: '12px 0' }}>
+          <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>Assigned to</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: DESK.ink }}>Your Apnosh creative team</div>
+          <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.45 }}>A named creator picks it up within 1 business day. You can follow it in Your requests.</div>
+        </div>
+        {sendError && (
+          <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, marginBottom: 12, lineHeight: 1.45 }}>
+            {sendError}
+          </div>
+        )}
+        <ConfirmButton
+          label={sending ? 'Placing your order...' : `Confirm order${price ? ` · ${fmtCents(price.totalCents)}` : ''}`}
+          sub="Goes on your Apnosh bill. Nothing else to do."
+          disabled={sending}
+          onClick={() => { void send() }}
+        />
+        <div style={{ height: 10 }} />
+        <ConfirmButton label="Change something" tone="paper" disabled={sending} onClick={() => setCart(false)} />
       </div>
     )
   }
@@ -385,11 +437,25 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           </div>
         </div>
       ) : (
-        /* ── review: the spoken sentence, the $0 receipt, the seal ── */
+        /* ── review: the WHOLE brief itemized, the real price, then Add to cart ── */
         <div className="dk-ink">
           <StepHead n={total} total={total} title="Look right?" sub="This exact brief is what the team works from." />
-          <div className="dk-ink" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '14px 16px', fontSize: 13.5, color: DESK.ink, lineHeight: 1.6, boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
-            {flow.sentence(answers, dueLabel)}
+          <div className="dk-ink" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '4px 16px 2px', boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
+            {questionsFor(type).filter((q) => q.id !== 'notes' && q.id !== 'when' && (answers[q.id] ?? '').trim()).map((q) => (
+              <div key={q.id} style={{ padding: '10px 0', borderBottom: `1px solid ${DESK.line}` }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 3 }}>{q.prompt.replace(/\?$/, '')}</div>
+                <div style={{ fontSize: 13.5, color: DESK.ink, lineHeight: 1.5 }}>{answers[q.id]}</div>
+              </div>
+            ))}
+            <div style={{ padding: '10px 0', borderBottom: `1px solid ${DESK.line}` }}>
+              <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 3 }}>In hand</div>
+              <div style={{ fontSize: 13.5, color: DESK.ink, lineHeight: 1.5 }}>{dueLabel ?? 'No firm date'}</div>
+            </div>
+            <div style={{ padding: '10px 0' }}>
+              <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 3 }}>Assigned to</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>Your Apnosh creative team</div>
+              <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>A named creator picks it up within 1 business day. You can follow it in Your requests.</div>
+            </div>
           </div>
           <div style={{ margin: '12px 0' }}>
             <textarea
@@ -434,20 +500,26 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
               </div>
             )}
           </div>
-          <ReceiptFrame>
-            <ReceiptRow label="What this costs to send" amount="$0" />
-            <ReceiptRule />
-            <div style={{ fontSize: 12.5, color: DESK.ink2, lineHeight: 1.5 }}>
-              We read it, then send you a plan and a real price. Work starts only after you say yes.
-            </div>
-          </ReceiptFrame>
+          {(() => {
+            const price = priceCreativeRequest(type.id, answers)
+            return price ? (
+              <ReceiptFrame>
+                {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
+                <ReceiptRule />
+                <ReceiptTotal label="Total" big={fmtCents(price.totalCents)} />
+              </ReceiptFrame>
+            ) : null
+          })()}
           {sendError && (
             <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, margin: '12px 0', lineHeight: 1.45 }}>
               {sendError}
             </div>
           )}
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <SealButton label={sending ? 'Sending...' : 'Hold\nto send'} disabled={sending} onSealed={() => { void send() }} />
+          <div style={{ marginTop: 16 }}>
+            <ConfirmButton
+              label={`Add to cart${priceCreativeRequest(type.id, answers) ? ` · ${fmtCents(priceCreativeRequest(type.id, answers)!.totalCents)}` : ''}`}
+              onClick={() => { setSendError(null); setCart(true) }}
+            />
           </div>
         </div>
       )}

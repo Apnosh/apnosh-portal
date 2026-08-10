@@ -25,7 +25,7 @@ import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
 import { draftNeedsShoot } from '@/lib/campaigns/gates/derive'
 import { summarize, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
 import type { ResolvedGates, CustomGate } from '@/lib/campaigns/gates/config'
-import { DeskKeyframes, Stamp, SealButton, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, paperGround } from '@/components/campaigns/desk/ui'
+import { DeskKeyframes, Stamp, ConfirmButton, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, paperGround } from '@/components/campaigns/desk/ui'
 
 const MINT = '#4abd98'
 const MINT_DARK = '#3f7d6a'
@@ -835,9 +835,9 @@ export function FreeCheckout({ clientId, draft, producerChoices, gates, initialG
       </div>
       <div style={{ flexShrink: 0, textAlign: 'center', padding: '2px 18px calc(14px + env(safe-area-inset-bottom))' }}>
         {error && <div role="alert" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#b3462e', textAlign: 'center', marginBottom: 4 }}>{error}</div>}
-        <SealButton key={attempt} label={'Hold to\nplace order'} disabled={busy || blocked} onSealed={place} />
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 2 }}>
-          {busy ? 'Placing your order…' : blocked ? (blockedGate(customGates, gateAnswers) ? 'This cannot be ordered yet' : 'Answer the questions above') : 'Press and hold. This starts your campaign.'}
+        <ConfirmButton key={attempt} label={busy ? 'Placing your order...' : 'Confirm order'} disabled={busy || blocked} onClick={place} />
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 6 }}>
+          {busy ? 'Placing your order…' : blocked ? (blockedGate(customGates, gateAnswers) ? 'This cannot be ordered yet' : 'Answer the questions above') : 'This starts your campaign.'}
         </div>
       </div>
     </>

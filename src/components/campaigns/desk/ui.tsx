@@ -220,7 +220,43 @@ export function YouSlip({ minutes, children, onClick }: { minutes?: number; chil
   )
 }
 
-/* ── the seal: approval as a physical act ────────────────────────────────────────────────── */
+/* ── the confirm button: a plain, honest tap (owner call 2026-08-09: the press-and-hold
+ * seal is retired; ordering is Add to cart then Confirm order, like any store) ─────────── */
+export function ConfirmButton({ label, sub, disabled, tone = 'mint', onClick }: {
+  label: string
+  /** small line under the label (like "You pay $250 when it is delivered") */
+  sub?: string
+  disabled?: boolean
+  /** 'mint' = the primary money action; 'paper' = the quiet secondary */
+  tone?: 'mint' | 'paper'
+  onClick: () => void
+}) {
+  const mint = tone === 'mint'
+  return (
+    <button
+      type="button" disabled={disabled} onClick={onClick}
+      style={{
+        width: '100%', minHeight: 52, borderRadius: 26, padding: '13px 20px',
+        border: mint ? 'none' : `1.5px solid ${DESK.line}`,
+        cursor: disabled ? 'default' : 'pointer',
+        background: disabled ? '#E7E4DB' : mint ? DESK.grad : DESK.card,
+        color: disabled ? DESK.mute : mint ? '#fff' : DESK.ink,
+        fontFamily: DESK.disp, fontWeight: 700, fontSize: 16, lineHeight: 1.2,
+        boxShadow: disabled ? 'none' : mint ? '0 8px 20px rgba(46,154,120,0.3)' : '0 1px 3px rgba(22,33,28,0.06)',
+        transition: 'box-shadow .15s ease, background .15s ease',
+      }}
+    >
+      {label}
+      {sub && (
+        <span style={{ display: 'block', fontFamily: DESK.body, fontWeight: 500, fontSize: 11.5, marginTop: 3, color: disabled ? DESK.mute : mint ? 'rgba(255,255,255,0.85)' : DESK.ink2 }}>
+          {sub}
+        </span>
+      )}
+    </button>
+  )
+}
+
+/* ── the seal (RETIRED from owner flows 2026-08-09; kept for reference only) ─────────────── */
 export function SealButton({ label = 'Press\nto approve', holdMs = 550, disabled, onSealed }: {
   label?: string
   holdMs?: number
