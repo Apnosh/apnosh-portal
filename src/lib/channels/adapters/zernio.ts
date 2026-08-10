@@ -102,6 +102,10 @@ async function zer(path: string, init: RequestInit = {}): Promise<Record<string,
   })
   const j = (await r.json().catch(() => ({}))) as Record<string, unknown>
   if (r.status === 401 || r.status === 403) throw new ChannelError('auth', `Zernio rejected our key on ${path}`)
+  if (r.status === 402) {
+    throw new ChannelError('upstream',
+      'Zernio says its account limit is full. If your Instagram or Facebook shows connected inside Zernio itself, disconnect it there first (that frees the slot), then tap Connect here again. Relinking the same account uses no extra slots.')
+  }
   if (r.status === 429) throw new ChannelError('rate_limit', 'Zernio throttled us; the next run retries')
   if (!r.ok) throw new ChannelError('upstream', `Zernio ${path} returned ${r.status}: ${String(j.message ?? j.error ?? '').slice(0, 140)}`)
   return j
