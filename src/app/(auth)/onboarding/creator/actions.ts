@@ -69,7 +69,7 @@ export async function completeCreatorOnboarding(input: CreatorOnboardingInput): 
   if (!name) return { ok: false, error: 'Add your name.' }
   const skills = (input.skills ?? []).filter(Boolean)
   if (!skills.length) return { ok: false, error: 'Pick at least one thing you do.' }
-  const areas = (input.serviceArea ?? []).map((s) => s.trim().toUpperCase()).filter(Boolean)
+  const areas = (input.serviceArea ?? []).map((s) => s.trim()).map((s) => (s.length <= 3 ? s.toUpperCase() : s)).filter(Boolean)
   if (!areas.length) return { ok: false, error: 'Add where you work, like WA.' }
   const badArea = areas.find((a) => !US_STATES.has(a))
   if (badArea) return { ok: false, error: `"${badArea}" is not a state code. Use 2-letter codes like WA or OR.` }

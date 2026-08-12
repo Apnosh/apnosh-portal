@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Question, OptionCard, ChipGroup, Input, TextArea, FieldLabel, Hint } from '../full/ui'
-import { CREATOR_SKILLS, categoriesForSkills } from '@/lib/marketplace/creator-skills'
+import { CREATOR_SKILLS, categoriesForSkills, hasOnSiteSkill } from '@/lib/marketplace/creator-skills'
 import { productsForCraft, productById } from '@/lib/marketplace/creative-catalog'
 import { CREATOR_AGREEMENT_VERSION } from '@/lib/marketplace/creator-agreement'
 import { completeCreatorOnboarding } from './actions'
@@ -26,7 +26,10 @@ const STYLE_TAGS = ['Bright', 'Moody', 'Minimal', 'Editorial', 'Warm', 'Bold', '
 interface CData {
   name: string
   skills: string[]
-  area: string
+  /** home base, e.g. "Seattle, WA" */
+  base: string
+  /** areas they can travel to for on-site work (comma list) — only asked when a picked skill is on-site */
+  coverage: string
   bio: string
   styleTags: string[]
   links: string[]
@@ -35,7 +38,7 @@ interface CData {
   price: string
   agreed: boolean
 }
-const INITIAL: CData = { name: '', skills: [], area: 'WA', bio: '', styleTags: [], links: ['', '', ''], offerId: '', offerCustomTitle: '', price: '', agreed: false }
+const INITIAL: CData = { name: '', skills: [], base: '', coverage: '', bio: '', styleTags: [], links: ['', '', ''], offerId: '', offerCustomTitle: '', price: '', agreed: false }
 const DRAFT_KEY = 'apnosh-creator-onboarding'
 
 export default function CreatorOnboarding() {
@@ -57,12 +60,15 @@ export default function CreatorOnboarding() {
   const toggleSkill = (id: string) => setData((d) => ({ ...d, skills: d.skills.includes(id) ? d.skills.filter((x) => x !== id) : [...d.skills, id] }))
   const toggleTag = (t: string) => setData((d) => ({ ...d, styleTags: d.styleTags.includes(t) ? d.styleTags.filter((x) => x !== t) : [...d.styleTags, t] }))
 
-  const areaTokens = data.area.split(',').map((s) => s.trim()).filter(Boolean)
+  const onSite = hasOnSiteSkill(data.skills)
+  const coverageTokens = data.coverage.split(',').map((s) => s.trim()).filter(Boolean)
+  /* serviceArea = home base first, then the coverage list (on-site skills only) */
+  const areaTokens = [data.base.trim(), ...(onSite ? coverageTokens : [])].filter(Boolean)
   const priceNum = Number(data.price)
   const offerReady = data.offerId === '' || (priceNum > 0 && (data.offerId !== 'custom' || !!data.offerCustomTitle.trim()))
   const canContinue = [
     !!data.name.trim(),
-    data.skills.length > 0 && areaTokens.length > 0,
+    data.skills.length > 0 && !!data.base.trim() && (!onSite || coverageTokens.length > 0),
     !!data.bio.trim(),
     offerReady,
     data.agreed,
@@ -86,7 +92,7 @@ export default function CreatorOnboarding() {
       const res = await completeCreatorOnboarding({
         name: data.name.trim(),
         skills: data.skills,
-        serviceArea: areaTokens.map((s) => s.toUpperCase()),
+        serviceArea: areaTokens,
         bio: data.bio.trim(),
         styleTags: data.styleTags,
         portfolioLinks: data.links.map((l) => l.trim()).filter(Boolean),
@@ -140,9 +146,16 @@ export default function CreatorOnboarding() {
                   </OptionCard>
                 ))}
               </div>
-              <FieldLabel>Where you work (state codes)</FieldLabel>
-              <Input value={data.area} onChange={(v) => set('area', v)} placeholder="WA" />
-              <Hint>2-letter codes like WA or OR. Add a few with commas.</Hint>
+              <FieldLabel>Your home base</FieldLabel>
+              <Input value={data.base} onChange={(v) => set('base', v)} placeholder="Seattle, WA" />
+              <Hint>The city you live and work in.</Hint>
+              {onSite && (
+                <>
+                  <FieldLabel>Areas you can travel to for shoots and visits</FieldLabel>
+                  <Input value={data.coverage} onChange={(v) => set('coverage', v)} placeholder="Seattle, Bellevue, Tacoma" />
+                  <Hint>Cities or neighborhoods, commas between. This decides which restaurants we match you with, so be honest about how far you will go.</Hint>
+                </>
+              )}
             </>
           )}
 
@@ -200,7 +213,8 @@ export default function CreatorOnboarding() {
               <div className="mt-4 rounded-[12px] p-4" style={{ background: 'white', border: '1.5px solid #eee' }}>
                 <Recap label="Name" value={data.name.trim() || '—'} />
                 <Recap label="Skills" value={data.skills.map((id) => CREATOR_SKILLS.find((s) => s.id === id)?.label).filter(Boolean).join(', ') || '—'} />
-                <Recap label="Works in" value={areaTokens.map((s) => s.toUpperCase()).join(', ') || '—'} />
+                <Recap label="Based in" value={data.base.trim() || '—'} />
+                {onSite && <Recap label="Covers" value={coverageTokens.join(', ') || '—'} />}
               </div>
               <label className="flex items-start gap-2 cursor-pointer mt-4">
                 <input type="checkbox" checked={data.agreed} onChange={(e) => set('agreed', e.target.checked)} className="mt-0.5" />

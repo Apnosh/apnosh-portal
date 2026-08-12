@@ -28,17 +28,32 @@ export interface CreatorSkill {
   category: PackageCategory | null
   /** The coarse craft the campaign router uses. */
   dispatch: Dispatch
+  /** True when the work happens AT the restaurant (shoots, visits) — drives the
+   *  coverage-area question in onboarding. Remote skills deliver from anywhere. */
+  onSite: boolean
 }
 
 export const CREATOR_SKILLS: CreatorSkill[] = [
-  { id: 'photo', label: 'Photographer', emoji: '📷', desc: 'Food + space photos', category: 'photographer', dispatch: 'Photo' },
-  { id: 'video', label: 'Videographer', emoji: '🎬', desc: 'Reels + short video', category: 'videographer', dispatch: 'Video' },
-  { id: 'social', label: 'Social / Influencer', emoji: '📱', desc: 'Posts to your audience', category: 'food_influencer', dispatch: 'Social' },
-  { id: 'design', label: 'Designer', emoji: '🎨', desc: 'Menus, logos, graphics', category: 'graphic_designer', dispatch: 'Design' },
-  { id: 'web', label: 'Web / Sites', emoji: '🌐', desc: 'Sites + landing pages', category: 'web_designer', dispatch: 'Design' },
-  { id: 'marketing', label: 'Marketing / SEO', emoji: '📈', desc: 'Social + local SEO', category: 'social_manager', dispatch: 'Social' },
-  { id: 'writing', label: 'Writing / Content', emoji: '✍️', desc: 'Copy, captions, blogs', category: null, dispatch: 'Social' },
+  /* On-site crafts: the work happens at the restaurant. */
+  { id: 'photo', label: 'Photographer', emoji: '📷', desc: 'Food + space photos', category: 'photographer', dispatch: 'Photo', onSite: true },
+  { id: 'video', label: 'Videographer', emoji: '🎬', desc: 'Reels + short video', category: 'videographer', dispatch: 'Video', onSite: true },
+  { id: 'social', label: 'Food influencer', emoji: '📱', desc: 'Visits + posts to your audience', category: 'food_influencer', dispatch: 'Social', onSite: true },
+  { id: 'agency', label: 'Full-service agency', emoji: '🏢', desc: 'The whole thing, done for you', category: 'full_service_agency', dispatch: 'Social', onSite: true },
+  /* Remote crafts: delivered from anywhere. */
+  { id: 'design', label: 'Designer', emoji: '🎨', desc: 'Menus, logos, graphics', category: 'graphic_designer', dispatch: 'Design', onSite: false },
+  { id: 'web', label: 'Web / Sites', emoji: '🌐', desc: 'Sites + landing pages', category: 'web_designer', dispatch: 'Design', onSite: false },
+  { id: 'marketing', label: 'Social media manager', emoji: '📈', desc: 'Posting + growth, month to month', category: 'social_manager', dispatch: 'Social', onSite: false },
+  { id: 'seo', label: 'Local SEO', emoji: '🔍', desc: 'Show up when locals search', category: 'local_seo', dispatch: 'Social', onSite: false },
+  { id: 'email', label: 'Email marketing', emoji: '📬', desc: 'Emails that bring guests back', category: 'email_marketer', dispatch: 'Social', onSite: false },
+  { id: 'pr', label: 'PR / Press', emoji: '📰', desc: 'Press, features, local buzz', category: 'pr_specialist', dispatch: 'Social', onSite: false },
+  { id: 'strategy', label: 'Marketing strategist', emoji: '🧭', desc: 'The plan behind it all', category: 'strategist', dispatch: 'Social', onSite: false },
+  { id: 'writing', label: 'Writing / Content', emoji: '✍️', desc: 'Copy, captions, blogs', category: null, dispatch: 'Social', onSite: false },
 ]
+
+/** Does any picked skill involve showing up in person? Drives the coverage-area ask. */
+export function hasOnSiteSkill(ids: string[]): boolean {
+  return ids.some((id) => BY_ID.get(id)?.onSite)
+}
 
 const BY_ID = new Map(CREATOR_SKILLS.map((s) => [s.id, s]))
 
