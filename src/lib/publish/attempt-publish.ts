@@ -13,6 +13,7 @@ import { publishToAllPlatforms, resolveOverallStatus } from '@/lib/publish'
 import { getPublishConnectionsForClient } from './get-connections'
 import { getApprovalSettings } from '@/lib/work/approval-settings'
 import { mintTrackedLinkForDraft } from './tracked-link'
+import { publishViaVendor, getVendorProfileId } from './zernio'
 import type { PlatformPublishResult } from '@/types/database'
 
 export interface AttemptPublishResult {
@@ -116,7 +117,12 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
   }
 
   const connections = await getPublishConnectionsForClient(draft.client_id)
-  if (connections.length === 0) {
+  // Clients who linked their accounts on the vendor's hosted page have NO per-platform tokens
+  // of ours — they publish through the vendor instead. Checking this BEFORE the connection
+  // gates is the whole fix: without it every vendor-connected client died on 'no_connections'
+  // with the content already made, approved and scheduled.
+  const vendorProfileId = await getVendorProfileId(draft.client_id).catch(() => null)
+  if (connections.length === 0 && !vendorProfileId) {
     return {
       ok: false,
       errorCode: 'no_connections',
@@ -124,14 +130,17 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
     }
   }
 
-  // Ensure every requested platform has a matching connection.
-  const haveByPlatform = new Set(connections.map(c => c.platform))
-  const missing = platforms.filter(p => !haveByPlatform.has(p))
-  if (missing.length > 0) {
-    return {
-      ok: false,
-      errorCode: 'missing_platform_connection',
-      error: `Connect ${missing.join(', ')} before publishing.`,
+  // Ensure every requested platform has a matching connection. The vendor's own per-platform
+  // result reports an unlinked platform honestly, so this pre-check only guards the direct lane.
+  if (!vendorProfileId) {
+    const haveByPlatform = new Set(connections.map(c => c.platform))
+    const missing = platforms.filter(p => !haveByPlatform.has(p))
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        errorCode: 'missing_platform_connection',
+        error: `Connect ${missing.join(', ')} before publishing.`,
+      }
     }
   }
 
@@ -161,7 +170,25 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
     : /\.(mp4|mov|m4v|webm)(\?|$)/i.test(mediaUrls[0]) ? 'video'
     : 'image'
 
-  const perPlatform = await publishToAllPlatforms(
+  /* Vendor platforms (the five socials on the hosted link) publish through the vendor; Google
+   * Business posts keep their own API, which we do hold. Splitting here rather than inside the
+   * publisher keeps each pipe's receipt exactly as that pipe reported it. */
+  const VENDOR_PLATFORMS = new Set(['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'])
+  const viaVendor = vendorProfileId ? platforms.filter(p => VENDOR_PLATFORMS.has(p)) : []
+  const viaDirect = platforms.filter(p => !viaVendor.includes(p))
+
+  const vendorOutcome = viaVendor.length > 0
+    ? await publishViaVendor({
+        clientId: draft.client_id,
+        text,
+        mediaUrls,
+        mediaType,
+        platforms: viaVendor,
+        scheduledFor: null,
+      })
+    : { available: false as const }
+
+  const directResults = viaDirect.length > 0 ? await publishToAllPlatforms(
     {
       text,
       mediaUrls,
@@ -170,7 +197,7 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
       // GBP posts get the link as a real tappable CTA button — the caption-appended
       // URL can be silently cut by GBP's 1500-char trim, the button never is.
       gbpCallToAction: trackedUrl ? { actionType: 'LEARN_MORE', url: trackedUrl } : null,
-      platforms,
+      platforms: viaDirect,
     },
     // Map our adapter shape to the publish lib's expected shape.
     connections.map(c => ({
@@ -181,7 +208,12 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
       gbp_resource_name: c.gbp_resource_name ?? null,
       linkedin_urn: c.linkedin_urn ?? null,
     })),
-  )
+  ) : {}
+
+  const perPlatform = {
+    ...directResults,
+    ...(vendorOutcome.available ? vendorOutcome.results : {}),
+  }
 
   const overall = resolveOverallStatus(perPlatform)
   const firstWin = Object.values(perPlatform).find(r => r.status === 'published')
@@ -193,6 +225,12 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
   async function buildPermalink(
     map: Record<string, PlatformPublishResult>,
   ): Promise<string | undefined> {
+    /* The vendor hands back the real post URL with the publish receipt, so when it published
+     * there is nothing to reconstruct — prefer it over the guesswork below. */
+    for (const key of ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube']) {
+      const r = map[key] as (PlatformPublishResult & { post_url?: string }) | undefined
+      if (r?.status === 'published' && typeof r.post_url === 'string' && r.post_url) return r.post_url
+    }
     const ig = map.instagram
     if (ig?.status === 'published' && ig.post_id) {
       const igConn = connections.find(c => c.platform === 'instagram')
