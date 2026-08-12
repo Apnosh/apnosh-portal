@@ -113,13 +113,19 @@ export default function ConnectedAccountsPage() {
     if (!vendor) return
     const cameBack = new URLSearchParams(window.location.search).get('connected') === 'social'
     const staleMs = vendor.lastSyncAt ? Date.now() - new Date(vendor.lastSyncAt).getTime() : Infinity
-    if (vendor.status !== 'pending' && !cameBack && staleMs < 10 * 60_000) return
+    /* A platform the vendor now holds but that has no numbers yet is the "just connected"
+     * case: its native posts have not been pulled in. Sync immediately rather than making
+     * the owner wait out the staleness rule and read zeros in the meantime. */
+    const linked = vendor.linkedPlatforms ?? []
+    const counted = vendor.accountCounts ?? {}
+    const freshlyLinked = linked.some((p) => !(p in counted) || counted[p] === 0)
+    if (vendor.status !== 'pending' && !cameBack && !freshlyLinked && staleMs < 10 * 60_000) return
     autoChecked.current = true
     ;(async () => {
       setBanner({ ok: true, text: 'Checking your social login...' })
       const r = await syncConnection(vendor.source, vendor.id)
       if (r.success) {
-        setBanner({ ok: true, text: 'Linked. Your numbers start flowing tonight.' })
+        setBanner({ ok: true, text: 'Linked. Pulling in your recent posts now.' })
         load()
       } else {
         /* say exactly where the chain is stuck — a silent card reads as broken */

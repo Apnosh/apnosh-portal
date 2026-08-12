@@ -214,6 +214,31 @@ async function ensureProfile(clientId: string): Promise<string> {
  * Returns null when we cannot ask (no key, no profile, vendor down) so the caller can fall
  * back to the cache and say honestly that it is showing the last known state.
  */
+/**
+ * Pull in posts the owner published NATIVELY (not through us).
+ *
+ * VERIFIED FROM THE VENDOR'S DOCS, after a newly connected YouTube channel reported zeros
+ * while Instagram and TikTok reported real numbers: /analytics covers posts published
+ * THROUGH Zernio. Native posts arrive via a background sync that runs "roughly every 90
+ * minutes per account", with POST /posts/sync-external to fetch on demand.
+ *
+ * That is the whole difference. The accounts with numbers had been linked for days, so that
+ * background pass had run many times. A freshly linked account has nothing until it runs,
+ * which reads to the owner as "connected but all zeros" — a wait dressed up as a bug.
+ *
+ * So every sync asks for each account's external posts first. Their side debounces per
+ * account (~15s) and serves cache when it is warm, so calling it each run is cheap and makes
+ * a new connection show real numbers immediately instead of up to an hour and a half later.
+ * Best effort: a failure here just means we report what the analytics call already knows.
+ */
+async function pullExternalPosts(accountIds: string[]): Promise<void> {
+  await Promise.all(accountIds.map(async (accountId) => {
+    try {
+      await zer('/posts/sync-external', { method: 'POST', body: JSON.stringify({ accountId }) })
+    } catch { /* one account failing must not cost the others their pull */ }
+  }))
+}
+
 export async function liveLinkedPlatforms(profileId: string): Promise<{ platforms: string[]; counts: Record<string, number> } | null> {
   if (!process.env.ZERNIO_API_KEY || !profileId) return null
   try {
@@ -337,6 +362,12 @@ export const zernioAdapter: ChannelAdapter = {
         if (p && f) followersByPlatform[p] = f
       }
     } catch { followersByPlatform = {} /* follower stats missing is a gap, not a failure */ }
+
+    /* Native posts first (see pullExternalPosts): without this a freshly linked account has
+     * nothing in /analytics until the vendor's own ~90 minute background pass happens. */
+    await pullExternalPosts(rawAccounts
+      .map((a) => str(a._id) || str(a.id))
+      .filter((id) => id.length > 0))
 
     // 3. Content totals from post analytics — a 30-day window folded PER DAY, so the
     //    first sync backfills real daily history and the dashboard has numbers now.
