@@ -141,8 +141,8 @@ s.group('Ayrshare mapper: canonical columns from vendor aliases (P3)')
   const li = mapSocialAnalytics({ impressionCount: 3000, commentCount: 12, likeCount: 88, followers: { totalFollowerCount: 640 } })
   s.check('LinkedIn documented names: impressionCount + nested followers object',
     li.impressions === 3000 && li.followers_total === 640 && li.engagement === 100)
-  s.check('the platform list matches the social_metrics CHECK constraint',
-    JSON.stringify(AYRSHARE_PLATFORMS) === JSON.stringify(['instagram', 'facebook', 'tiktok', 'linkedin']))
+  s.check('the platform list matches the social_metrics CHECK constraint (239 adds youtube)',
+    JSON.stringify(AYRSHARE_PLATFORMS) === JSON.stringify(['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube']))
   s.check('the adapter is hosted_link and env kill-switched',
     CHANNELS.ayrshare.kind === 'hosted_link' && (Boolean(process.env.AYRSHARE_API_KEY) || CHANNELS.ayrshare.isConfigured() === false))
 }
@@ -163,7 +163,7 @@ s.group('Zernio fold: post analytics -> daily platform totals (bake-off)')
   s.check('platforms outside our table are dropped, null analytics is a zero row',
     !('x' in out) && out.tiktok.reach === 0 && out.tiktok.engagement === 0)
   s.check('empty and null inputs fold to empty', Object.keys(aggregateZernioPosts([])).length === 0 && Object.keys(aggregateZernioPosts(null)).length === 0)
-  s.check('zernio and ayrshare cover the same four platforms',
+  s.check('zernio and ayrshare cover the same five platforms',
     JSON.stringify(ZERNIO_PLATFORMS) === JSON.stringify(AYRSHARE_PLATFORMS))
   s.check('the adapter is hosted_link and env kill-switched',
     CHANNELS.zernio.kind === 'hosted_link' && (Boolean(process.env.ZERNIO_API_KEY) || CHANNELS.zernio.isConfigured() === false))

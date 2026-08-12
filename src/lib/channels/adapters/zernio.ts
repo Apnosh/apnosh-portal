@@ -35,7 +35,7 @@ const API = 'https://api.zernio.com/v1'
 const REDIRECT = 'https://portal.apnosh.com/dashboard/connected-accounts?connected=social'
 
 /** The platforms our canonical table accepts (same constraint as the ayrshare adapter). */
-export const ZERNIO_PLATFORMS = ['instagram', 'facebook', 'tiktok', 'linkedin'] as const
+export const ZERNIO_PLATFORMS = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const
 export type ZernioPlatform = (typeof ZERNIO_PLATFORMS)[number]
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : 0)

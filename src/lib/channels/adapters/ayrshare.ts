@@ -28,7 +28,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 const API = 'https://api.ayrshare.com/api'
 
 /** The platforms our canonical table accepts (migration 026 CHECK constraint). */
-export const AYRSHARE_PLATFORMS = ['instagram', 'facebook', 'tiktok', 'linkedin'] as const
+export const AYRSHARE_PLATFORMS = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const
 export type AyrsharePlatform = (typeof AYRSHARE_PLATFORMS)[number]
 
 export interface MappedMetrics {

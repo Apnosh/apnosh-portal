@@ -193,6 +193,8 @@ export async function loadStageValues(
       out.facebook_reach = best('facebook')
       out.tiktok_video_views = (imprBy.tiktok ?? 0) > 0 ? (imprBy.tiktok ?? 0) : (reachBy.tiktok ?? 0)
       out.linkedin_reach = best('linkedin')
+      /* YouTube reports views (mapped to impressions by the sync), never reach */
+      out.youtube_views = (imprBy.youtube ?? 0) > 0 ? (imprBy.youtube ?? 0) : (reachBy.youtube ?? 0)
       out.ig_follower_growth = gained
       /* profile visits only when the vendor actually provides them (ayrshare does,
        * zernio does not) — a permanent 0 would read as data for a missing metric */

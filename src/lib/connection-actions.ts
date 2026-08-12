@@ -67,6 +67,12 @@ const PLATFORM_META: Record<string, {
     category: 'social',
     reconnectPath: '/api/channels/social/start?platform=linkedin',
   },
+  youtube: {
+    label: 'YouTube',
+    category: 'social',
+    reconnectPath: '/api/channels/social/start?platform=youtube',
+    profileUrlBuilder: (n) => n ? `https://youtube.com/@${n.replace(/^@/, '')}` : null,
+  },
   google_analytics: {
     label: 'Google Analytics',
     category: 'google',

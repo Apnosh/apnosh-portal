@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Camera, Globe, Tv, Briefcase, BarChart3, Search, MapPin, Star,
   CreditCard, Store, Link as LinkIcon, RefreshCw, ExternalLink, Loader2, Plus, X,
-  CheckCircle2, AlertCircle, ThumbsUp, Music2,
+  CheckCircle2, AlertCircle, ThumbsUp, Music2, Play,
 } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { getConnectionsForClient, disconnectPlatform, syncConnection, type UnifiedConnection } from '@/lib/connection-actions'
@@ -34,6 +34,7 @@ const CATALOG: CatalogItem[] = [
   { id: 'facebook', label: 'Facebook', authPath: '/api/channels/social/start?platform=facebook', category: 'social', Icon: ThumbsUp, description: 'Log in with your Facebook page' },
   { id: 'tiktok', label: 'TikTok', authPath: '/api/channels/social/start?platform=tiktok', category: 'social', Icon: Music2, description: 'Log in with your TikTok' },
   { id: 'linkedin', label: 'LinkedIn', authPath: '/api/channels/social/start?platform=linkedin', category: 'social', Icon: Briefcase, description: 'Log in with your LinkedIn page' },
+  { id: 'youtube', label: 'YouTube', authPath: '/api/channels/social/start?platform=youtube', category: 'social', Icon: Play, description: 'Log in with your YouTube channel' },
   { id: 'google_analytics', label: 'Google Analytics', authPath: '/api/auth/google', category: 'google', Icon: BarChart3, description: 'Website visitors and traffic' },
   { id: 'google_search_console', label: 'Google Search Console', authPath: '/api/auth/google-search-console', category: 'google', Icon: Search, description: 'What people search to find you' },
   { id: 'google_business_profile', label: 'Google Business Profile', authPath: '/api/auth/google-business', category: 'google', Icon: MapPin, description: 'Calls, directions, search views' },
@@ -44,7 +45,7 @@ const CATALOG: CatalogItem[] = [
 const CAT_LABEL: Record<Cat, string> = { social: 'Social media', google: 'Google', reviews: 'Reviews', pos: 'Point of sale' }
 const CAT_ORDER: Cat[] = ['pos', 'social', 'google', 'reviews']
 const SOCIAL_VENDORS = ['zernio', 'ayrshare']
-const SOCIAL_PLATFORM_LABEL: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn' }
+const SOCIAL_PLATFORM_LABEL: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn', youtube: 'YouTube' }
 const iconFor = (id: string) => (SOCIAL_VENDORS.includes(id) ? Camera : CATALOG.find(c => c.id === id)?.Icon ?? LinkIcon)
 
 /* Per-platform rows synthesized from a social vendor connection keep the vendor's

@@ -39,6 +39,7 @@ export type SourceProvider =
   | 'tiktok'
   | 'facebook'
   | 'linkedin'
+  | 'youtube'
   | 'social'
   | 'ads'
   | 'yelp'
@@ -175,6 +176,18 @@ export const SOURCES: SourceDef[] = [
     authType: 'oauth',
     docsUrl: null,
     notes: 'Real metric — the social vendor sync (zernio/ayrshare) writes facebook rows into social_metrics; stage-values splits reach per platform.',
+    wired: true,
+  },
+  {
+    id: 'youtube_views',
+    displayName: 'Views on your YouTube videos',
+    provider: 'youtube',
+    stage: 1,
+    metricKeys: ['reach'],
+    baseStatus: 'CONNECTED',
+    authType: 'oauth',
+    docsUrl: null,
+    notes: 'Real metric — the social vendor sync writes youtube rows into social_metrics; YouTube reports views (no reach), so stage-values takes views first.',
     wired: true,
   },
   {
@@ -696,6 +709,7 @@ export const SHORT_LABELS: Record<string, string> = {
   tiktok_video_views: 'TikTok views',
   facebook_reach: 'Facebook reach',
   linkedin_reach: 'LinkedIn reach',
+  youtube_views: 'YouTube views',
   social_link_clicks: 'Post link clicks',
   paid_ads_impressions: 'Ad views',
   paid_ads_clicks: 'Ad clicks',
@@ -772,8 +786,9 @@ export const PROVIDER_CHANNELS: Partial<Record<SourceProvider, (ConnectorChannel
   facebook: ['facebook'],
   tiktok: ['tiktok'],
   linkedin: ['linkedin'],
+  youtube: ['youtube'],
   /* 'social' = any vendor-linked platform proves it */
-  social: ['instagram', 'facebook', 'tiktok', 'linkedin'],
+  social: ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'],
   pos: ['square', 'clover'],
   delivery: ['statements'],
 }
