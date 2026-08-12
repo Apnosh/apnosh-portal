@@ -415,10 +415,10 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     key: 'interactions', label: 'Interactions', sub: 'Directions, calls, bookings and order clicks', fmt: 'num',
     mainMap: interMain,
     comps: [
-      { label: 'Directions', icon: 'pin', map: gDir },
-      { label: 'Calls', icon: 'phone', map: gCall },
-      { label: 'Bookings', icon: 'calendar', map: gBook },
-      { label: 'Order clicks', icon: 'cursor', map: wOrder },
+      { label: 'Directions (Google)', icon: 'pin', map: gDir },
+      { label: 'Calls (Google)', icon: 'phone', map: gCall },
+      { label: 'Bookings (Google)', icon: 'calendar', map: gBook },
+      { label: 'Order clicks (your site)', icon: 'cursor', map: wOrder },
     ],
   }, today, earliestOf(interMain), frontier)
 

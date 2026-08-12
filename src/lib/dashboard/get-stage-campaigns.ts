@@ -11,6 +11,21 @@
 
 import { listCampaigns } from '@/lib/campaigns/server'
 import { funnelStageForSection } from '@/lib/campaigns/funnel-plays'
+import { createAdminClient } from '@/lib/supabase/admin'
+
+/* Creative ORDERS (the request-desk order lane) also move the funnel, so they
+   pin on "Did it move" and list under their stage like campaigns do. Each
+   request type pushes on the stages its deliverable actually affects. */
+const ORDER_TYPE_STAGES: Record<string, string[]> = {
+  photos: ['shown'], video: ['shown'], graphic: ['shown'], social: ['shown', 'engaged'],
+  menu: ['engaged'], logo: ['shown'], website: ['engaged'], print: ['shown'],
+  copy: ['shown'], ads: ['shown'], email: ['back'],
+}
+const ORDER_TYPE_LABEL: Record<string, string> = {
+  photos: 'Photo order', video: 'Video order', graphic: 'Graphic order', social: 'Social posts order',
+  menu: 'Menu order', logo: 'Logo order', website: 'Website order', print: 'Print order',
+  copy: 'Copy order', ads: 'Ads order', email: 'Email order',
+}
 
 // campaign-funnel key (from funnelStageForSection) → insights/home funnel stage key
 const FUNNEL_TO_INSIGHTS: Record<string, string> = {
@@ -26,6 +41,8 @@ export interface StageCampaign {
   name: string
   /** When the campaign actually went live (campaigns.shipped_at). Null if unknown. */
   shippedAt: string | null
+  /** Where a tap goes; campaigns default to /dashboard/campaigns/{id}. */
+  href?: string
 }
 
 /** Active campaigns grouped by the insights stage key their live pieces work on. */
@@ -53,6 +70,32 @@ export async function getStageCampaigns(clientId: string): Promise<StageCampaign
     }
     for (const ins of hit) out[ins]?.push({ id: c.draft.id, name: c.draft.name, shippedAt: c.shippedAt })
   }
+
+  // Creative orders in flight or freshly delivered join their stages.
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('creative_requests')
+      .select('id, type, status, accepted_at, created_at')
+      .eq('client_id', clientId)
+      .in('status', ['in_progress', 'delivered'])
+      .order('created_at', { ascending: false })
+      .limit(20)
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      const type = String(r.type ?? '')
+      const stages = ORDER_TYPE_STAGES[type]
+      if (!stages) continue
+      const when = (r.accepted_at ?? r.created_at) as string | null
+      for (const ins of stages) {
+        out[ins]?.push({
+          id: String(r.id),
+          name: ORDER_TYPE_LABEL[type] ?? 'Creative order',
+          shippedAt: when ? String(when) : null,
+          href: '/dashboard/requests',
+        })
+      }
+    }
+  } catch { /* an orders read failure never hides the campaigns */ }
 
   return out
 }

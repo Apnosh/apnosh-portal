@@ -587,7 +587,18 @@ function GroupCards({ groups }: { groups: StageGroup[] }) {
         <div key={g.key} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '14px 15px', minHeight: 70 }}>
           <div style={{ fontSize: 12.5, color: C.mute, fontWeight: 500 }}>{g.label}</div>
           {g.state === 'has'
-            ? <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', marginTop: 3, lineHeight: 1 }}>{(g.total ?? 0).toLocaleString()}</div>
+            ? <>
+                <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', marginTop: 3, lineHeight: 1 }}>{(g.total ?? 0).toLocaleString()}</div>
+                {/* the split, next to each other on the card (Search 1,234 · Maps 56);
+                    zero parts are skipped so five-platform groups stay readable */}
+                {g.parts && g.parts.filter((p) => p.value > 0).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', marginTop: 6, fontSize: 10.5, color: C.faint, lineHeight: 1.4 }}>
+                    {g.parts.filter((p) => p.value > 0).map((p) => (
+                      <span key={p.label} style={{ whiteSpace: 'nowrap' }}>{p.label} <b style={{ color: C.mute, fontWeight: 600 }}>{p.value.toLocaleString()}</b></span>
+                    ))}
+                  </div>
+                )}
+              </>
             : <div style={{ fontSize: 12, color: C.faint, marginTop: 8 }}>{g.state === 'connect' ? 'Connect to see' : 'Coming soon'}</div>}
         </div>
       ))}
@@ -1128,7 +1139,7 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {m.items.map((c) => (
-                      <Link key={c.id} href={`/dashboard/campaigns/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', color: 'inherit' }}>
+                      <Link key={c.id} href={c.href ?? `/dashboard/campaigns/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', color: 'inherit' }}>
                         <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
                         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
                       </Link>
@@ -1158,7 +1169,7 @@ function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
       {list.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {shown.map((c) => (
-            <Link key={c.id} href={`/dashboard/campaigns/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, textDecoration: 'none', color: 'inherit' }}>
+            <Link key={c.id} href={c.href ?? `/dashboard/campaigns/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, textDecoration: 'none', color: 'inherit' }}>
               <div style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={C.greenDk} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>

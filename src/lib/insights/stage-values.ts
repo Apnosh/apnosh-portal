@@ -191,18 +191,23 @@ export async function loadStageValues(
       const reachBy: Record<string, number> = {}
       const imprBy: Record<string, number> = {}
       const engBy: Record<string, number> = {}
+      const folBy: Record<string, number> = {}
+      const ssBy: Record<string, number> = {}
       let gained = 0, visits = 0, linkClicks = 0, savesShares = 0
       for (const r of data as Record<string, unknown>[]) {
         const p = typeof r.platform === 'string' ? r.platform : 'instagram'
         reachBy[p] = (reachBy[p] ?? 0) + num(r.reach)
         imprBy[p] = (imprBy[p] ?? 0) + num(r.impressions)
         engBy[p] = (engBy[p] ?? 0) + num(r.engagement)
+        folBy[p] = (folBy[p] ?? 0) + num(r.followers_gained)
         gained += num(r.followers_gained)
         visits += num(r.profile_visits)
         /* per-post link clicks + saves + shares live in the day row's raw_data.totals */
         const totals = (r.raw_data as { totals?: { clicks?: unknown; saves?: unknown; shares?: unknown } } | null)?.totals
         linkClicks += num(totals?.clicks)
-        savesShares += num(totals?.saves) + num(totals?.shares)
+        const ss = num(totals?.saves) + num(totals?.shares)
+        ssBy[p] = (ssBy[p] ?? 0) + ss
+        savesShares += ss
       }
       /* Platforms report differently: IG/FB have reach; TikTok and LinkedIn report
        * views/impressions and no reach. Each chip shows the platform's real number
@@ -228,6 +233,11 @@ export async function loadStageValues(
       out.social_link_clicks = linkClicks
       out.social_follows = gained
       out.social_saves_shares = savesShares
+      /* per-platform splits (owner ask: follows + saves/shares BY SOURCE) */
+      for (const pl of ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const) {
+        out[`${pl}_follows`] = folBy[pl] ?? 0
+        out[`${pl}_saves_shares`] = ssBy[pl] ?? 0
+      }
     }
   } catch { /* social unavailable */ }
 

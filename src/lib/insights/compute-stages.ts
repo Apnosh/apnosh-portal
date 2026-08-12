@@ -85,6 +85,8 @@ export interface StageGroup {
   state: 'has' | 'connect' | 'soon'
   /** the by-source ids that roll up into this group (the specifics under it) */
   sourceIds: string[]
+  /** short inline split shown ON the group card ("Search 1,234 · Maps 56") */
+  parts?: { label: string; value: number }[]
 }
 
 export interface ComputedStage {
@@ -126,7 +128,7 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
   // count (usable() requires CONNECTED) but they SHOW as by-source cards so the
   // Interest grid lists every channel, exactly like Awareness (which carries
   // tiktok/facebook/yelp the same way).
-  2: ['social_follows', 'social_saves_shares', 'ga4_website_visits', 'gbp_website_clicks'],
+  2: ['instagram_follows', 'facebook_follows', 'tiktok_follows', 'linkedin_follows', 'youtube_follows', 'instagram_saves_shares', 'facebook_saves_shares', 'tiktok_saves_shares', 'linkedin_saves_shares', 'youtube_saves_shares', 'ga4_website_visits', 'gbp_website_clicks'],
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'reservations', 'ga4_order_clicks'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
@@ -136,25 +138,43 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
  *  by-source ids; its total is the sum of the group's COUNTED sources, so the 4
  *  totals reconcile to the stage headline. The by-source cards below the groups
  *  stay the specifics (e.g. Google = Maps + Search; Calls = Google + website). */
+/* One-word split labels shown ON a group card next to each other. */
+const PART_LABEL: Record<string, string> = {
+  gbp_impressions_search: 'Search',
+  gbp_impressions_maps: 'Maps',
+  ga4_website_visits: 'Visits',
+  gbp_website_clicks: 'From Google',
+  gbp_booking_clicks: 'Bookings',
+  reservations: 'Reservations',
+  ig_reach: 'Instagram',
+  facebook_reach: 'Facebook',
+  tiktok_video_views: 'TikTok',
+  linkedin_reach: 'LinkedIn',
+  youtube_views: 'YouTube',
+  instagram_follows: 'Instagram', facebook_follows: 'Facebook', tiktok_follows: 'TikTok', linkedin_follows: 'LinkedIn', youtube_follows: 'YouTube',
+  instagram_saves_shares: 'Instagram', facebook_saves_shares: 'Facebook', tiktok_saves_shares: 'TikTok', linkedin_saves_shares: 'LinkedIn', youtube_saves_shares: 'YouTube',
+}
+
 const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds: string[] }[]> = {
   /* Owner spec 2026-08-12: SHORT lists, all daily sources, so the headline,
-     the group cards and the chart bars are literally the same numbers. */
+     the group cards and the chart bars are literally the same numbers. Google
+     search + maps share ONE card (split shown inline), same for Website; the
+     social groups split BY PLATFORM in the drill-down; Actions cards name
+     where each number comes from. */
   1: [
     { key: 'social', label: 'Social reach', sourceIds: ['ig_reach', 'facebook_reach', 'tiktok_video_views', 'linkedin_reach', 'youtube_views'] },
-    { key: 'gbp_search', label: 'Google search', sourceIds: ['gbp_impressions_search'] },
-    { key: 'gbp_maps', label: 'Google Maps', sourceIds: ['gbp_impressions_maps'] },
+    { key: 'google', label: 'Google', sourceIds: ['gbp_impressions_search', 'gbp_impressions_maps'] },
   ],
   2: [
-    { key: 'follows', label: 'New followers', sourceIds: ['social_follows'] },
-    { key: 'saves', label: 'Saves + shares', sourceIds: ['social_saves_shares'] },
-    { key: 'website', label: 'Website sessions', sourceIds: ['ga4_website_visits'] },
-    { key: 'gbpclicks', label: 'Website clicks on Google', sourceIds: ['gbp_website_clicks'] },
+    { key: 'follows', label: 'New followers', sourceIds: ['instagram_follows', 'facebook_follows', 'tiktok_follows', 'linkedin_follows', 'youtube_follows'] },
+    { key: 'saves', label: 'Saves + shares', sourceIds: ['instagram_saves_shares', 'facebook_saves_shares', 'tiktok_saves_shares', 'linkedin_saves_shares', 'youtube_saves_shares'] },
+    { key: 'website', label: 'Website', sourceIds: ['ga4_website_visits', 'gbp_website_clicks'] },
   ],
   3: [
-    { key: 'directions', label: 'Directions', sourceIds: ['gbp_direction_requests'] },
-    { key: 'calls', label: 'Calls', sourceIds: ['gbp_calls'] },
-    { key: 'bookings', label: 'Reservations + bookings', sourceIds: ['gbp_booking_clicks', 'reservations'] },
-    { key: 'orders', label: 'Order-link clicks', sourceIds: ['ga4_order_clicks'] },
+    { key: 'directions', label: 'Directions (Google)', sourceIds: ['gbp_direction_requests'] },
+    { key: 'calls', label: 'Calls (Google)', sourceIds: ['gbp_calls'] },
+    { key: 'bookings', label: 'Reservations + bookings (Google)', sourceIds: ['gbp_booking_clicks', 'reservations'] },
+    { key: 'orders', label: 'Order-link clicks (your website)', sourceIds: ['ga4_order_clicks'] },
   ],
   4: [
     { key: 'guests', label: 'Orders', sourceIds: ['pos_covers'] },
@@ -353,7 +373,11 @@ export function computeStagesFrom(
         total != null ? 'has'
           : gs.some(s => s.status === 'AVAILABLE_NOT_CONNECTED' || s.status === 'ERROR') ? 'connect'
             : 'soon'
-      return { key: g.key, label: g.label, total, state, sourceIds: gs.map(s => s.id) }
+      /* inline split on the card, only for multi-source groups */
+      const parts = counted.length > 1
+        ? counted.map(s => ({ label: PART_LABEL[s.id] ?? s.displayName, value: s.value ?? 0 }))
+        : undefined
+      return { key: g.key, label: g.label, total, state, sourceIds: gs.map(s => s.id), parts }
     })
 
     stages.push({
