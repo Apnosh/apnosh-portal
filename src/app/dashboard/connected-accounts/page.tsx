@@ -339,6 +339,12 @@ function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedC
             <a href={connectHref(`/api/channels/social/start?platform=${conn.platform}`)} style={actionBtn}>
               <Plus size={16} /> Add another {SOCIAL_PLATFORM_LABEL[conn.platform]} account
             </a>
+            {/* When a platform is linked but its numbers read zero there are five places the
+                chain can be empty, and they all look identical from here. This says which. */}
+            <a href="/api/dashboard/social-diagnostic" target="_blank" rel="noopener noreferrer"
+              style={{ display: 'block', marginTop: 10, fontSize: 12, color: C.mute, textDecoration: 'underline' }}>
+              Numbers showing zero? See where it is stuck
+            </a>
             <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.45, margin: '2px 2px 10px' }}>
               Personal or business, they all count. All your {SOCIAL_PLATFORM_LABEL[conn.platform]} accounts add into one {SOCIAL_PLATFORM_LABEL[conn.platform]} number.
             </div>
