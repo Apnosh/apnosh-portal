@@ -58,15 +58,25 @@ export async function syncChannels(only?: string[]): Promise<EngineRun> {
   const admin = createAdminClient()
   const run: EngineRun = { scanned: 0, synced: 0, failed: 0, skipped: 0, alerts: 0 }
 
-  /* Walk ACTIVE and PENDING connections. Pending is the normal state of a
-   * hosted_link lane right after the owner connects (the vendor holds the login;
-   * we only learn about it by syncing) — skipping pending meant a client who
-   * linked socials and never tapped "Sync now" stayed dark forever. The cron IS
-   * the thing that notices the link. */
+  /* Walk ACTIVE, PENDING and ERROR connections.
+   *
+   * Pending is the normal state of a hosted_link lane right after the owner connects (the
+   * vendor holds the login; we only learn about it by syncing) — skipping pending meant a
+   * client who linked socials and never tapped "Sync now" stayed dark forever. The cron IS
+   * the thing that notices the link.
+   *
+   * ERROR is here because leaving it out built a ROACH MOTEL (found live 2026-08-12): three
+   * counted failures flip a connection to 'error', and an engine that only walks
+   * active+pending then never touches it again. The cause can be fixed — a constraint
+   * widened, a token replaced, a vendor outage ending — and the connection stays dark
+   * forever anyway, because nothing is left that would notice. Retrying is cheap and the
+   * failure-state machine already handles a still-broken connection (it just stays in
+   * error, and the owner alert fires once AT the threshold, never again). A connection
+   * that can never retry is not a safety feature, it is a permanent outage. */
   let query = admin
     .from('channel_connections')
     .select('id, client_id, channel, connection_type, platform_account_id, access_token, refresh_token, status, consecutive_failures, metadata')
-    .in('status', ['active', 'pending'])
+    .in('status', ['active', 'pending', 'error'])
   if (only && only.length > 0) query = query.in('channel', only)
   const { data: connections, error } = await query
   if (error) throw new Error(`channels engine could not list connections: ${error.message}`)

@@ -439,9 +439,18 @@ export async function syncConnection(
     if (!adapter) return { success: false, error: 'Sync not supported for this connection yet' }
     try {
       const r = await adapter.sync(existing as import('@/lib/channels/types').ChannelConnection)
+      /* A successful check RESTORES the connection: status back to active and the failure
+       * count back to zero. Without this a connection that had tripped the three-strike
+       * counter stayed 'error' forever even after it started working again — the owner
+       * fixed the cause, the check succeeded, and the portal still called it broken. */
       await admin
         .from('channel_connections')
-        .update({ last_sync_at: new Date().toISOString(), sync_error: null })
+        .update({
+          last_sync_at: new Date().toISOString(),
+          sync_error: null,
+          status: 'active',
+          consecutive_failures: 0,
+        })
         .eq('id', connectionId)
       return { success: true, locationsDiscovered: 0, metricsImported: r.itemsWritten, reviewsImported: 0, errors: [] }
     } catch (e) {
