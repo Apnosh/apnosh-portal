@@ -12,7 +12,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { onboardCreatorCore, type CreatorCraft } from '@/lib/marketplace/onboard-creator'
 import { CREATOR_AGREEMENT_VERSION } from '@/lib/marketplace/creator-agreement'
 
-export async function becomeCreator(input: { name: string; craft: CreatorCraft; serviceArea?: string[]; agreementVersion?: string }): Promise<{ ok: boolean; error?: string; slug?: string }> {
+export async function becomeCreator(input: { name: string; craft: CreatorCraft; crafts?: string[]; serviceArea?: string[]; agreementVersion?: string }): Promise<{ ok: boolean; error?: string; slug?: string }> {
  try {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -34,6 +34,7 @@ export async function becomeCreator(input: { name: string; craft: CreatorCraft; 
     name: input.name,
     email: user.email ?? '',
     craft: input.craft,
+    crafts: input.crafts,
     serviceArea: input.serviceArea,
     personId: user.id,   // they just signed up — link THIS login, no email
     invite: false,

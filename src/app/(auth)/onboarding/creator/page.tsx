@@ -15,7 +15,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Question, OptionCard, ChipGroup, Input, TextArea, FieldLabel, Hint } from '../full/ui'
-import { CREATOR_SKILLS, categoriesForSkills, hasOnSiteSkill } from '@/lib/marketplace/creator-skills'
+import { CREATOR_SKILLS, categoriesForSkills, hasOnSiteSkill, buildServiceArea, namesAState, splitPlaces } from '@/lib/marketplace/creator-skills'
 import { productsForCraft, productById } from '@/lib/marketplace/creative-catalog'
 import { CREATOR_AGREEMENT_VERSION } from '@/lib/marketplace/creator-agreement'
 import { completeCreatorOnboarding } from './actions'
@@ -61,14 +61,14 @@ export default function CreatorOnboarding() {
   const toggleTag = (t: string) => setData((d) => ({ ...d, styleTags: d.styleTags.includes(t) ? d.styleTags.filter((x) => x !== t) : [...d.styleTags, t] }))
 
   const onSite = hasOnSiteSkill(data.skills)
-  const coverageTokens = data.coverage.split(',').map((s) => s.trim()).filter(Boolean)
-  /* serviceArea = home base first, then the coverage list (on-site skills only) */
-  const areaTokens = [data.base.trim(), ...(onSite ? coverageTokens : [])].filter(Boolean)
+  const coverageTokens = splitPlaces(data.coverage)
+  /* serviceArea = typed places + extracted state codes (the store matches by code) */
+  const areaTokens = buildServiceArea(data.base, onSite ? coverageTokens : [])
   const priceNum = Number(data.price)
   const offerReady = data.offerId === '' || (priceNum > 0 && (data.offerId !== 'custom' || !!data.offerCustomTitle.trim()))
   const canContinue = [
     !!data.name.trim(),
-    data.skills.length > 0 && !!data.base.trim() && (!onSite || coverageTokens.length > 0),
+    data.skills.length > 0 && namesAState(data.base) && (!onSite || coverageTokens.length > 0),
     !!data.bio.trim(),
     offerReady,
     data.agreed,
@@ -148,7 +148,7 @@ export default function CreatorOnboarding() {
               </div>
               <FieldLabel>Your home base</FieldLabel>
               <Input value={data.base} onChange={(v) => set('base', v)} placeholder="Seattle, WA" />
-              <Hint>The city you live and work in.</Hint>
+              <Hint>City and state, like Seattle, WA. The state is how restaurants find you.</Hint>
               {onSite && (
                 <>
                   <FieldLabel>Areas you can travel to for shoots and visits</FieldLabel>

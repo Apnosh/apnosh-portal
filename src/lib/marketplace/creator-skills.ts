@@ -92,3 +92,52 @@ export function labelsForSkills(ids: string[]): string[] {
 export function skillIdsForDispatch(d: Dispatch): string[] {
   return CREATOR_SKILLS.filter((s) => s.dispatch === d).map((s) => s.id)
 }
+
+/** All 50 states + DC — used to extract matchable codes from typed places. */
+const US_STATES = new Set(['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'])
+
+/** True when the text names a US state ("WA" alone, or trailing like "Seattle, WA"). */
+export function namesAState(place: string): boolean {
+  const t = place.trim()
+  if (US_STATES.has(t.toUpperCase())) return true
+  const m = t.match(/[,\s]([A-Za-z]{2})$/)
+  return !!m && US_STATES.has(m[1].toUpperCase())
+}
+
+/**
+ * Split a comma-separated list of places, re-pairing "City, ST" — "Tacoma, WA, Portland, OR"
+ * becomes ["Tacoma, WA", "Portland, OR"], not four orphaned tokens. A bare state code with no
+ * city before it stays its own token.
+ */
+export function splitPlaces(raw: string): string[] {
+  const parts = raw.split(',').map((t) => t.trim()).filter(Boolean)
+  const out: string[] = []
+  for (const part of parts) {
+    const prev = out[out.length - 1]
+    if (US_STATES.has(part.toUpperCase()) && prev && !namesAState(prev)) {
+      out[out.length - 1] = `${prev}, ${part.toUpperCase()}`
+    } else {
+      out.push(part)
+    }
+  }
+  return out
+}
+
+/**
+ * Build the stored service_area array from human places. The store matches creators
+ * by ARRAY CONTAINMENT of bare 2-letter state codes (vq.contains('service_area',
+ * [state])), so this keeps the typed places AND extracts every state code they name
+ * as its own token — cities stay readable for future geo routing, codes keep
+ * today's matching working. Deduped, codes uppercased.
+ */
+export function buildServiceArea(base: string, coverage: string[]): string[] {
+  const places = [base.trim(), ...coverage.map((c) => c.trim())].filter(Boolean)
+  const out: string[] = []
+  const push = (t: string) => { if (t && !out.includes(t)) out.push(t) }
+  for (const place of places) {
+    push(US_STATES.has(place.toUpperCase()) ? place.toUpperCase() : place)
+    const m = place.match(/[,\s]([A-Za-z]{2})$/)
+    if (m && US_STATES.has(m[1].toUpperCase())) push(m[1].toUpperCase())
+  }
+  return out
+}

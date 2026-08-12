@@ -10,27 +10,17 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { becomeCreator } from './actions'
-import type { CreatorCraft } from '@/lib/marketplace/onboard-creator'
+import { CREATOR_SKILLS, dispatchForSkills, hasOnSiteSkill, buildServiceArea, namesAState, splitPlaces } from '@/lib/marketplace/creator-skills'
 import { CREATOR_AGREEMENT_VERSION } from '@/lib/marketplace/creator-agreement'
-
-const CRAFTS: { value: CreatorCraft; label: string }[] = [
-  { value: 'Photo', label: 'Photographer' },
-  { value: 'Video', label: 'Videographer' },
-  { value: 'Social', label: 'Social / influencer' },
-  { value: 'Design', label: 'Designer' },
-]
-
-// The store matches creators to restaurants by 2-letter US state code, so a free-text area like
-// "Seattle" would make a creator invisible. Validate to real codes before we ever save one.
-const US_STATES = new Set(['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY', 'DC'])
 
 export default function CreatorSignupPage() {
   const [fullName, setFullName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [craft, setCraft] = useState<CreatorCraft>('Photo')
-  const [area, setArea] = useState('WA')
+  const [skills, setSkills] = useState<string[]>([])
+  const [base, setBase] = useState('')
+  const [coverage, setCoverage] = useState('')
   const [agree, setAgree] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -39,15 +29,23 @@ export default function CreatorSignupPage() {
   const [accountReady, setAccountReady] = useState(false)
   const router = useRouter()
 
+  const onSite = hasOnSiteSkill(skills)
+
+  function toggleSkill(id: string) {
+    setSkills((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     if (!fullName.trim()) { setError('Enter your name'); return }
+    if (skills.length === 0) { setError('Pick at least one thing you do'); return }
 
-    const areas = area.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
-    if (areas.length === 0) { setError('Enter where you work, like WA'); return }
-    const badArea = areas.find((a) => !US_STATES.has(a))
-    if (badArea) { setError(`"${badArea}" is not a state code. Use 2-letter codes like WA or OR, separated by commas.`); return }
+    // The store matches creators to restaurants by state, so the home base must name one
+    // ("Seattle, WA" or just "WA") — otherwise the creator would be invisible to every restaurant.
+    if (!namesAState(base)) { setError('Add your city and state, like Seattle, WA'); return }
+    const coverageTokens = onSite ? splitPlaces(coverage) : []
+    const areas = buildServiceArea(base, coverageTokens)
 
     setLoading(true)
 
@@ -67,7 +65,8 @@ export default function CreatorSignupPage() {
       // Step 2 — turn the login into a creator. Idempotent, so a retry after a failure is safe.
       const res = await becomeCreator({
         name: fullName.trim(),
-        craft,
+        craft: dispatchForSkills(skills),
+        crafts: skills,
         serviceArea: areas,
         agreementVersion: CREATOR_AGREEMENT_VERSION,
       })
@@ -102,23 +101,32 @@ export default function CreatorSignupPage() {
               placeholder="Your name or studio" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-2 mb-1">What you do</label>
-            <div className="grid grid-cols-2 gap-2">
-              {CRAFTS.map((c) => (
-                <button key={c.value} type="button" onClick={() => setCraft(c.value)}
-                  className={`text-xs font-medium rounded-lg px-3 py-2 border transition-colors ${craft === c.value ? 'border-brand bg-brand/10 text-ink' : 'border-ink-5 text-ink-2 hover:bg-bg-2'}`}>
-                  {c.label}
+            <label className="block text-xs font-medium text-ink-2 mb-1">What you do <span className="font-normal text-ink-4">(pick all that apply)</span></label>
+            <div className="grid grid-cols-2 gap-1.5">
+              {CREATOR_SKILLS.map((c) => (
+                <button key={c.id} type="button" onClick={() => toggleSkill(c.id)}
+                  className={`text-left text-xs font-medium rounded-lg px-2.5 py-2 border transition-colors ${skills.includes(c.id) ? 'border-brand bg-brand/10 text-ink' : 'border-ink-5 text-ink-2 hover:bg-bg-2'}`}>
+                  <span className="mr-1">{c.emoji}</span>{c.label}
                 </button>
               ))}
             </div>
           </div>
           <div>
-            <label className="block text-xs font-medium text-ink-2 mb-1">Where you work (state codes)</label>
-            <input type="text" value={area} onChange={(e) => setArea(e.target.value)}
+            <label className="block text-xs font-medium text-ink-2 mb-1">Your home base</label>
+            <input type="text" value={base} onChange={(e) => setBase(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
-              placeholder="WA" />
-            <p className="text-[10px] text-ink-4 mt-1">2-letter codes like WA or OR. Add a few with commas.</p>
+              placeholder="Seattle, WA" />
+            <p className="text-[10px] text-ink-4 mt-1">City and state. The state is how restaurants find you.</p>
           </div>
+          {onSite && (
+            <div>
+              <label className="block text-xs font-medium text-ink-2 mb-1">Areas you can travel to <span className="font-normal text-ink-4">(optional)</span></label>
+              <input type="text" value={coverage} onChange={(e) => setCoverage(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-ink-5 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand transition-colors"
+                placeholder="Tacoma, WA, Portland, OR" />
+              <p className="text-[10px] text-ink-4 mt-1">For shoots and visits. Separate places with commas.</p>
+            </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-ink-2 mb-1">Email</label>
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required
