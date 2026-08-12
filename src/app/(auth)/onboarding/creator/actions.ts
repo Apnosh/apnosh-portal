@@ -70,14 +70,20 @@ export async function completeCreatorOnboarding(input: CreatorOnboardingInput): 
   const skills = (input.skills ?? []).filter(Boolean)
   if (!skills.length) return { ok: false, error: 'Pick at least one thing you do.' }
   const areas = (input.serviceArea ?? []).map((s) => s.trim()).map((s) => (s.length <= 3 ? s.toUpperCase() : s)).filter(Boolean)
-  if (!areas.length) return { ok: false, error: 'Add where you work, like WA.' }
-  const badArea = areas.find((a) => !US_STATES.has(a))
-  if (badArea) return { ok: false, error: `"${badArea}" is not a state code. Use 2-letter codes like WA or OR.` }
+  if (!areas.length) return { ok: false, error: 'Add where you work, like Seattle, WA.' }
+  // The store finds creators by bare 2-letter state code, so at least one token must be one —
+  // buildServiceArea puts the codes in alongside the readable city names. City tokens ride along
+  // for finer routing later; rejecting them (as this once did) would refuse every real address.
+  if (!areas.some((a) => US_STATES.has(a))) return { ok: false, error: 'Add the state too, like Seattle, WA.' }
   if (input.agreementVersion !== CREATOR_AGREEMENT_VERSION) return { ok: false, error: 'Please accept the Creator Agreement to continue.' }
 
   const admin = createAdminClient()
   const { data: cu } = await admin.from('client_users').select('id').eq('auth_user_id', user.id).maybeSingle()
   if (cu) return { ok: false, error: 'This email is already a restaurant account. Sign up as a creator with a different email.' }
+  // An Apnosh admin must not become a creator on the same login either: creator_logins wins the
+  // routing race and would strand them in /creator/work instead of /admin. Use a + alias instead.
+  const { data: adminProfile } = await admin.from('profiles').select('role').eq('id', user.id).maybeSingle()
+  if (adminProfile?.role === 'admin') return { ok: false, error: 'This is an Apnosh staff account. Use a different email for a creator profile.' }
 
   const res = await onboardCreatorCore({
     name,
