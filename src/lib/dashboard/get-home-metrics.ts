@@ -230,6 +230,26 @@ function frontierFor(maps: Maps, today: Date, settleDays: number): Date {
    has real data and never invent zeros. */
 const SETTLE = { gbp: 2, social: 1, web: 1, email: 1 }
 
+/* The COMPLETE-data frontier for a multi-source metric: the last day where every
+   active source has reported. Anchoring a merged chart on its freshest source
+   (the old behavior) left the window's last few days carrying only the fast
+   sources — a "30 days" that held just 26 days of Google data (owner catch,
+   2026-08-12). Sources that haven't reported in 2 weeks are treated as dormant
+   so a dead feed can never freeze the whole chart in the past. */
+function completeFrontier(sources: Maps[], today: Date, settleDays: number): Date {
+  const cutoff = startOfDay(new Date(today.getTime() - settleDays * DAY))
+  const dormant = startOfDay(new Date(today.getTime() - 14 * DAY))
+  let oldest: Date | null = null
+  for (const m of sources) {
+    if (m.size === 0) continue
+    const last = latestNonZeroOf(m) ?? latestOf(m)
+    if (!last || last.getTime() < dormant.getTime()) continue
+    if (oldest === null || last.getTime() < oldest.getTime()) oldest = last
+  }
+  if (!oldest) return cutoff
+  return oldest.getTime() < cutoff.getTime() ? oldest : cutoff
+}
+
 const EMPTY: HomeMetrics = { metrics: [] }
 
 export async function getHomeMetrics(clientId: string): Promise<HomeMetrics> {
@@ -361,7 +381,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Profile visits', icon: 'user', map: sVis },
       { label: 'New followers', icon: 'heart', map: sFol },
     ],
-  }, today, earliestOf(reachMain), frontierFor(reachMain, today, SETTLE.gbp))
+  }, today, earliestOf(reachMain), completeFrontier([sReach, gImpr, gscImpr], today, SETTLE.gbp))
 
   /* ── 1b. Interest — people who TOOK AN INTEREST (owner definition): website
      clicks + menu page views + post engagement (profile visits retired). The SAME
@@ -376,7 +396,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Site clicks', icon: 'cursor', map: gClick },
       { label: 'Engaged', icon: 'heart', map: sEng },
     ],
-  }, today, earliestOf(engMain), frontierFor(engMain, today, SETTLE.gbp))
+  }, today, earliestOf(engMain), completeFrontier([wVisits, gClick, sEng, wMenu], today, SETTLE.gbp))
 
   /* ── 2. Interactions — people who actually DID something (owner definition):
      calls + directions + bookings. The SAME GBP actions the funnel's Actions
@@ -391,7 +411,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Directions', icon: 'pin', map: gDir },
       { label: 'Bookings', icon: 'calendar', map: gBook },
     ],
-  }, today, earliestOf(interMain), frontierFor(interMain, today, SETTLE.gbp))
+  }, today, earliestOf(interMain), completeFrontier([gDir, gCall, gBook], today, SETTLE.gbp))
 
   /* ── 3. Bookings & orders — people who acted ── */
   const bookMain = addInto(gBook, gFood)
@@ -404,7 +424,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Menu clicks', icon: 'cursor', map: gMenu },
       { label: 'Reservations', icon: 'clock', map: reservations },
     ],
-  }, today, earliestOf(bookMain), frontierFor(bookMain, today, SETTLE.gbp))
+  }, today, earliestOf(bookMain), completeFrontier([gBook, gFood], today, SETTLE.gbp))
 
   /* ── 4. Loyalty — people you brought back (email today; SMS soon) ── */
   const eSent: Maps = new Map(), eOpen: Maps = new Map(), eClick: Maps = new Map(), eRev: Maps = new Map()
