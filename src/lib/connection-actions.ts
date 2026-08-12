@@ -274,14 +274,37 @@ export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
       friendlyStatus = 'Connected (pending data)'
     }
 
-    const md = (r as { metadata?: { platforms?: unknown; account_counts?: unknown } }).metadata
-    const linkedPlatforms = Array.isArray(md?.platforms)
+    const md = (r as { metadata?: { platforms?: unknown; account_counts?: unknown; profile_id?: unknown } }).metadata
+    let linkedPlatforms = Array.isArray(md?.platforms)
       ? (md.platforms as unknown[]).filter((p): p is string => typeof p === 'string')
       : undefined
-    const accountCounts = md?.account_counts && typeof md.account_counts === 'object'
+    let accountCounts = md?.account_counts && typeof md.account_counts === 'object'
       ? Object.fromEntries(Object.entries(md.account_counts as Record<string, unknown>)
           .filter(([, v]) => typeof v === 'number') as [string, number][])
       : undefined
+
+    /* ASK THE VENDOR, do not trust our notes. The cached list above is only as fresh as the
+     * last sync that ran all the way through; every failure in that pipeline used to show up
+     * here as "not connected" even while the account was plainly linked on the vendor's side.
+     * One cheap call makes the portal's answer the same answer the vendor would give, and we
+     * write it back so the rest of the app (insights, publishing) sees it too. */
+    if (r.channel === 'zernio' && r.platform_account_id) {
+      try {
+        const { liveLinkedPlatforms } = await import('@/lib/channels/adapters/zernio')
+        const live = await liveLinkedPlatforms(r.platform_account_id)
+        if (live && live.platforms.length > 0) {
+          linkedPlatforms = live.platforms
+          accountCounts = live.counts
+          const cached = Array.isArray(md?.platforms) ? (md.platforms as unknown[]).join(',') : ''
+          if (cached !== live.platforms.join(',')) {
+            await admin.from('channel_connections')
+              .update({ metadata: { ...(md ?? {}), platforms: live.platforms, account_counts: live.counts } })
+              .eq('id', r.id)
+          }
+          if (status !== 'connected') { status = 'connected'; friendlyStatus = 'Connected' }
+        }
+      } catch { /* vendor unreachable: keep the cached list, which the row already reflects */ }
+    }
 
     results.push({
       id: r.id,

@@ -201,6 +201,41 @@ async function ensureProfile(clientId: string): Promise<string> {
   return profileId
 }
 
+/**
+ * LIVE connection truth: which platforms the vendor holds for this profile, right now.
+ *
+ * One call, no analytics, no database writes. It exists because the portal used to answer
+ * "is YouTube connected?" from `metadata.platforms` — a CACHE that only got rewritten when a
+ * whole nightly sync finished. Any failure anywhere in that sync (a constraint, a parse, a
+ * failure counter) left the cache stale, and stale renders as "not connected". Four different
+ * causes, one identical wrong answer, none of them about the connection.
+ *
+ * Reading the vendor at display time means our answer cannot drift from theirs: it IS theirs.
+ * Returns null when we cannot ask (no key, no profile, vendor down) so the caller can fall
+ * back to the cache and say honestly that it is showing the last known state.
+ */
+export async function liveLinkedPlatforms(profileId: string): Promise<{ platforms: string[]; counts: Record<string, number> } | null> {
+  if (!process.env.ZERNIO_API_KEY || !profileId) return null
+  try {
+    let res = await zer(`/accounts?profileId=${encodeURIComponent(profileId)}`)
+    let rows = unwrapList(res, 'accounts')
+    if (rows.length === 0) {
+      try {
+        res = await zer(`/profiles/${encodeURIComponent(profileId)}/accounts`)
+        rows = unwrapList(res, 'accounts')
+      } catch { /* alternate path unsupported */ }
+    }
+    const counts: Record<string, number> = {}
+    for (const a of rows) {
+      const p = normalizePlatform(a.platform ?? a.provider ?? a.type)
+      if (p) counts[p] = (counts[p] ?? 0) + 1
+    }
+    return { platforms: Object.keys(counts), counts }
+  } catch {
+    return null
+  }
+}
+
 export const zernioAdapter: ChannelAdapter = {
   id: 'zernio',
   kind: 'hosted_link',
