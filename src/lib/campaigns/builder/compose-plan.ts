@@ -134,6 +134,7 @@ export const ITEM_SHAPE: Record<string, ItemShape> = {
   // Discovery foundations (2026-07-09): the real "set up your profiles so you can be
   // found" work — previously buyable ONLY inside the $4k+ programs — surfaced as cards.
   listings: { title: 'Get listed everywhere', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['listings-sync'], seed: [] },
+  socialprofiles: { title: 'Set up your social profiles', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['social-profiles'], seed: [] },
   website: { title: 'Fix your website and menu', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['site-menu'], seed: [] },
   localseo: { title: 'Show up in local search', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['local-seo'], seed: [] },
   delivery: { title: 'Tune up your delivery apps', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['delivery-opt'], seed: [] },

@@ -457,6 +457,56 @@ export const GENERATED_CATALOG: PricedService[] = [
     }
   },
   {
+    "id": "social-profiles",
+    "section": "foundation",
+    "name": "Social profile setup",
+    "desc": "Every social profile complete and matching: name, bio, link, photo and hours on Instagram, Facebook, TikTok, LinkedIn and YouTube.",
+    "essential": true,
+    "handler": "hybrid",
+    "handlerWhy": "A checklist and copy-ready lines do the guiding; a human does the done-for-you version inside access the client grants.",
+    "prices": [
+      {
+        "cost": {
+          "us": 1,
+          "offshore": 1.5
+        },
+        "kind": "one-time",
+        "amount": 145
+      }
+    ],
+    "evidence": "Incomplete or mismatched social profiles lose the guests who check a restaurant's page before visiting; every platform's own setup guide starts here.",
+    "metric": {
+      "label": "Profiles complete everywhere",
+      "expect": "Five platforms with matching name, bio, link, photo and hours"
+    },
+    "goalPlays": [
+      {
+        "goal": "firstvisit",
+        "role": "Make every social profile complete and matching so people who look you up find the right info.",
+        "stage": "be-found",
+        "weight": 1,
+        "minTier": "aggressive"
+      }
+    ],
+    "fit": {
+      "great": [
+        "multi",
+        "preOpening"
+      ]
+    },
+    "deliverables": {
+      "summary": "All five social profiles set up properly, by hand.",
+      "included": [
+        "Instagram bio, link, photo and business details",
+        "Facebook page info, hours, and action button",
+        "TikTok bio and link",
+        "LinkedIn page basics",
+        "YouTube channel name, art and description",
+        "Names, handles and photos matching across all five"
+      ]
+    }
+  },
+  {
     "id": "listings-sync",
     "section": "foundation",
     "name": "Listings & menu sync",

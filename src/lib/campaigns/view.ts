@@ -167,6 +167,10 @@ export interface CampaignExecution {
    *  above, and named the same way as the other self-serve stamps so nobody mistakes it for
    *  something we verified. */
   citationsSelfDoneAt?: string
+  /** social-profiles walkthrough: platforms the owner ticked done */
+  socialProfilesFixed?: string[]
+  /** social-profiles walkthrough: the owner's all-done stamp */
+  socialProfilesSelfDoneAt?: string
   /** ISO stamp: the completion sweep sent the owner's wrap-up letter. System-written
    *  (cron via admin client); NOT in the owner PATCH whitelist, so it cannot be forged
    *  or cleared through the API. */

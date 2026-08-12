@@ -69,6 +69,7 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
     return v ? `Your listing was seen ${n(v)} times in the last 30 days. A complete profile turns more of those views into visits.` : null
   },
   listings: (s) => { const v = views(s); return v ? `People found you on Google ${n(v)} times last month. Matching info everywhere helps the other apps catch up.` : null },
+  socialprofiles: (s) => { const v = views(s); return v ? `People looked you up ${n(v)} times on Google last month. The ones who check your socials next should find the same story.` : null },
   /* The one card whose "why" is about what we CANNOT tell them. If a client has real Google
    * numbers, that is precisely the proof that everything past the click is dark: we can see people
    * heading for the website and nothing at all about what happened when they got there. Saying so

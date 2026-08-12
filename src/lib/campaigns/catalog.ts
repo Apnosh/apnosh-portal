@@ -35,7 +35,7 @@ const PLAIN_NAMES: Record<string, string> = {
   'cross-promo': 'Team up with neighbors', 'friend-hook': 'Bring-a-friend reward', 'creator-collab': 'Team up with a creator',
   // The rest of the catalog, in plain owner language (was rendering raw technical names).
   'website-care': 'Keep your site fresh', 'email-found': 'Set up your email', 'brand-kit': 'Your look and voice',
-  'channel-connect': 'Connect your accounts', 'listings-sync': 'Same info everywhere', 'ordering-setup': 'Take orders on your site',
+  'channel-connect': 'Connect your accounts', 'listings-sync': 'Same info everywhere', 'social-profiles': 'Set up your socials', 'ordering-setup': 'Take orders on your site',
   'video-single': 'One short video', 'delivery-opt': 'Win on delivery apps', 'pr-media': 'Get in the news',
   'truck-location': 'Tell fans where you are', 'graphic': 'A graphic for your event', 'gbp-event-post': 'Post your event on Google',
   'fb-event': 'A Facebook event page', 'concierge': 'Get hotels to send guests', 'landing-page': 'A signup page for your offer',

@@ -48,6 +48,7 @@ const SOURCE = [
   { id: 'edit', title: 'Edit my footage', goal: 'new-customers', stages: ['interest'] },
   { id: 'gpost', title: 'A Google Business post', goal: 'new-customers', stages: ['aware'] },
   { id: 'listings', title: 'Get listed everywhere', goal: 'new-customers', stages: ['aware'] },
+  { id: 'socialprofiles', title: 'Set up your social profiles', goal: 'new-customers', stages: ['aware'] },
   { id: 'website', title: 'Fix your website and menu', goal: 'new-customers', stages: ['aware', 'actions'] },
   { id: 'localseo', title: 'Show up in local search', goal: 'new-customers', stages: ['aware'] },
   { id: 'promoevent', title: 'Promote an event', goal: 'slow-nights', stages: ['orders', 'aware'] },

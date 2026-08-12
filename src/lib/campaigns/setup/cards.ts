@@ -499,7 +499,77 @@ const DELIVERYMENU: SetupCard = {
   ],
 }
 
-export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, LISTINGS, MEASURE, EMAILDELIVER, DELIVERYMENU]
+
+/* ── Social profiles ────────────────────────────────────────────────────────────────────────────
+ * The social platforms give us NO write path to a profile, and the vendor connection (Zernio)
+ * reads numbers, not bios — so this card takes the listings shape: the free and AI lanes are
+ * guides that end in the owner's word, and the paid lane is a person working inside access the
+ * client grants. The walkthrough lives at /dashboard/social-profiles: per platform, what to fix,
+ * the exact lines to paste, and a link straight to that platform's edit screen. */
+const SOCIALPROFILES: SetupCard = {
+  id: 'socialprofiles',
+  serviceId: 'social-profiles',
+  platform: {
+    canRead: false,
+    canWrite: false,
+    hasProbe: false,
+    limitation: 'Instagram, Facebook, TikTok, LinkedIn and YouTube give us no way to read or edit your profile text, so every lane here ends with you telling us it is done.',
+  },
+  lanes: [
+    {
+      kind: 'diy',
+      label: 'You do it yourself, step by step',
+      delivery: 'owner-applies',
+      proof: 'owner-word',
+      whatYouGet: [
+        'One checklist per platform: name, bio, link, photo and hours',
+        'A link straight to the edit screen on each platform',
+        'You fix each one and mark it done',
+      ],
+      needs: ['NAP', 'HOURS'],
+      ownerTask: {
+        title: 'Set up your social profiles',
+        why: 'One platform at a time, with a link straight to its edit screen.',
+        href: '/dashboard/social-profiles',
+        actionLabel: 'Start',
+        claimedField: 'socialProfilesSelfDoneAt',
+      },
+    },
+    {
+      kind: 'ai',
+      label: 'You do it with Apnosh AI, step by step',
+      /* The AI GUIDE shape: it writes the bio and the link list from your business info, so
+       * every platform ends up saying the same right thing. It never touches the account. */
+      delivery: 'owner-applies',
+      proof: 'owner-word',
+      proOnly: true,
+      whatYouGet: [
+        'A bio written for you, sized to each platform',
+        'The same name, link and hours lines to paste, so all five match',
+        'It remembers where you got to, so you can do a couple and come back',
+      ],
+      needs: ['NAP', 'HOURS'],
+      ownerTask: {
+        title: 'Set up your social profiles',
+        why: 'The exact lines to paste on each platform, written from your business info.',
+        href: '/dashboard/social-profiles',
+        actionLabel: 'Start',
+        claimedField: 'socialProfilesSelfDoneAt',
+      },
+    },
+    {
+      kind: 'team',
+      label: 'Done for you by Apnosh',
+      /* Hands inside accounts the client grants us — no API exists. */
+      delivery: 'we-operate',
+      proof: 'owner-word',
+      needs: ['NAP', 'HOURS', 'META', 'AGREE'],
+      whatYouGet: whatYouGetForServices(['social-profiles']),
+    },
+  ],
+}
+
+export const SETUP_CARDS: readonly SetupCard[] = [GBP, FRICTION, REVIEWSREPLY, LISTINGS, SOCIALPROFILES, MEASURE, EMAILDELIVER, DELIVERYMENU]
 
 export const setupCardById = (id: string): SetupCard | undefined =>
   SETUP_CARDS.find((c) => c.id === id)

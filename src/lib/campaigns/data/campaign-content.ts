@@ -179,6 +179,16 @@ export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
     expectation: "A post keeps your listing fresh. It works best done often.",
     heroImage: null,
   },
+  socialprofiles: {
+    id: 'socialprofiles',
+    title: "Set up your social profiles",
+    tagline: "Five platforms, complete and matching",
+    description: "Your Instagram, Facebook, TikTok, LinkedIn and YouTube profiles made complete and matching: right name, a bio that says what and where you are, the right link, photo and hours.",
+    promise: "Every social profile complete, correct, and matching.",
+    why: "People check your page before they visit. A half-empty profile loses them.",
+    expectation: "A complete profile makes every post work harder. It does not create demand by itself.",
+    heroImage: null,
+  },
   listings: {
     id: 'listings',
     title: "Get listed everywhere",

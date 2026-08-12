@@ -60,7 +60,7 @@ export const CARD_AVAILABILITY_VALUES: readonly CardAvailability[] = ['live', 'c
  * apart. The old 'creative' hub card is gone on purpose: the owner asked for individual
  * cards only, so the Creatives shelf IS the desk's storefront. */
 export const FULLY_BUILT_LIVE: readonly string[] = [
-  'gbp', 'friction', 'reviewsreply', 'listings', 'measure', 'emaildeliver', 'deliverymenu',
+  'gbp', 'friction', 'reviewsreply', 'listings', 'socialprofiles', 'measure', 'emaildeliver', 'deliverymenu',
   'design', ...REQUEST_TYPES.map((t) => `creative-${t.id}`),
   /* Owner call 2026-08-09 ("all except the email/text for now"): these three sell the plan
    * WITHOUT its email leg. Their spine (reels, posts, photos, Google posts) is fully
