@@ -173,14 +173,15 @@ export async function loadStageValues(
     if (!error && data) {
       const reachBy: Record<string, number> = {}
       const imprBy: Record<string, number> = {}
-      let gained = 0, visits = 0, engaged = 0, linkClicks = 0
+      const engBy: Record<string, number> = {}
+      let gained = 0, visits = 0, linkClicks = 0
       for (const r of data as Record<string, unknown>[]) {
         const p = typeof r.platform === 'string' ? r.platform : 'instagram'
         reachBy[p] = (reachBy[p] ?? 0) + num(r.reach)
         imprBy[p] = (imprBy[p] ?? 0) + num(r.impressions)
+        engBy[p] = (engBy[p] ?? 0) + num(r.engagement)
         gained += num(r.followers_gained)
         visits += num(r.profile_visits)
-        engaged += num(r.engagement)
         /* per-post link clicks live in the day row's raw_data.totals (vendor sync) */
         const totals = (r.raw_data as { totals?: { clicks?: unknown } } | null)?.totals
         linkClicks += num(totals?.clicks)
@@ -199,7 +200,13 @@ export async function loadStageValues(
       /* profile visits only when the vendor actually provides them (ayrshare does,
        * zernio does not) — a permanent 0 would read as data for a missing metric */
       if (visits > 0) out.ig_profile_visits = visits
-      out.ig_engaged = engaged
+      /* engagement splits per platform (owner ask 2026-08-12) — the five sources
+       * sum to the old all-platform ig_engaged, so the Interest total is unchanged */
+      out.ig_engaged = engBy.instagram ?? 0
+      out.facebook_engaged = engBy.facebook ?? 0
+      out.tiktok_engaged = engBy.tiktok ?? 0
+      out.linkedin_engaged = engBy.linkedin ?? 0
+      out.youtube_engaged = engBy.youtube ?? 0
       out.social_link_clicks = linkClicks
     }
   } catch { /* social unavailable */ }

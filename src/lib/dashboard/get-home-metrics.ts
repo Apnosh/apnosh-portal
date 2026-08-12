@@ -267,14 +267,17 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     return { data: out }
   }
 
-  const [gbp, social, reviews, localReviews, email, website] = await Promise.all([
+  const [gbp, social, reviews, localReviews, email, website, search] = await Promise.all([
     fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks', 'date', bound),
-    fetchAll('social_metrics', 'date, reach, engagement, posts_published, followers_gained, profile_visits', 'date', bound),
+    fetchAll('social_metrics', 'date, platform, reach, impressions, engagement, posts_published, followers_gained, profile_visits', 'date', bound),
     fetchAll('reviews', 'rating, response_text, posted_at', 'posted_at', bound + 'T00:00:00'),
     fetchAll('local_reviews', 'rating, reply_text, created_at_platform', 'created_at_platform', bound + 'T00:00:00'),
     fetchAll('email_metrics', 'sent_date, sent_count, open_count, click_count, revenue_attributed', 'sent_date', bound),
     // website visits (sessions) + menu page views. A missing column/table just yields no rows.
     fetchAll('website_metrics', 'date, sessions, menu_views', 'date', bound),
+    // Google Search impressions — counted by the funnel's Awareness headline, so
+    // the chart bars must carry them too or the two drift apart.
+    fetchAll('search_metrics', 'date, total_impressions', 'date', bound),
   ])
 
   /* Per-day source maps. We only create+populate a map when the source
@@ -306,14 +309,25 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     const mv = num(r.menu_views)
     if (mv > 0) wMenu.set(d, (wMenu.get(d) ?? 0) + mv)
   }
-  // Social
+  // Social. Platforms report differently: IG/FB have reach; TikTok, LinkedIn and
+  // YouTube report views/impressions and no reach — the funnel's Awareness stage
+  // takes each platform's real number (reach when it has one, views otherwise),
+  // so each day row folds the same way here or the bars undercount by exactly
+  // the views-reporting platforms (TikTok's whole number was missing).
   const sReach: Maps = new Map(), sEng: Maps = new Map(), sFol: Maps = new Map(), sVis: Maps = new Map()
   for (const r of (social.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
-    sReach.set(d, (sReach.get(d) ?? 0) + num(r.reach))
+    const seen = num(r.reach) > 0 ? num(r.reach) : num(r.impressions)
+    sReach.set(d, (sReach.get(d) ?? 0) + seen)
     sEng.set(d, (sEng.get(d) ?? 0) + num(r.engagement))
     sFol.set(d, (sFol.get(d) ?? 0) + num(r.followers_gained))
     sVis.set(d, (sVis.get(d) ?? 0) + num(r.profile_visits))
+  }
+  // Google Search (GSC) — daily site impressions
+  const gscImpr: Maps = new Map()
+  for (const r of (search.data ?? []) as Record<string, unknown>[]) {
+    const d = String(r.date).slice(0, 10)
+    gscImpr.set(d, (gscImpr.get(d) ?? 0) + num(r.total_impressions))
   }
 
   /* Reservations + delivery aren't wired to a daily source yet, so these
@@ -327,12 +341,13 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   }
 
   /* ── 1. Reach — people who saw you (social reach + Google views) ── */
-  const reachMain = addInto(sReach, gImpr)
+  const reachMain = addInto(sReach, gImpr, gscImpr)
   const reach = buildMetric({
     key: 'reach', label: 'Reach', sub: 'People who saw you on Google and social', fmt: 'num',
     mainMap: reachMain,
     comps: [
       { label: 'Social reach', icon: 'eye', map: sReach },
+      { label: 'Google Search', icon: 'eye', map: gscImpr },
       { label: 'Google views', icon: 'pin', map: gImpr },
       { label: 'Profile visits', icon: 'user', map: sVis },
       { label: 'New followers', icon: 'heart', map: sFol },
@@ -340,17 +355,16 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   }, today, earliestOf(reachMain), frontierFor(reachMain, today, SETTLE.gbp))
 
   /* ── 1b. Interest — people who TOOK AN INTEREST (owner definition): website
-     clicks + menu page views + IG profile visits + IG post engagement. The SAME
+     clicks + menu page views + post engagement (profile visits retired). The SAME
      sources the honest funnel's Interest stage counts, so the insights chart
      total matches the stage's source cards. ── */
-  const engMain = addInto(wVisits, gClick, sVis, sEng, wMenu)
+  const engMain = addInto(wVisits, gClick, sEng, wMenu)
   const engagement = buildMetric({
-    key: 'engagement', label: 'Interest', sub: 'Website visits, site clicks, and profile looks', fmt: 'num',
+    key: 'engagement', label: 'Interest', sub: 'Website visits, site clicks, and engagement', fmt: 'num',
     mainMap: engMain,
     comps: [
       { label: 'Website visits', icon: 'eye', map: wVisits },
       { label: 'Site clicks', icon: 'cursor', map: gClick },
-      { label: 'Profile visits', icon: 'user', map: sVis },
       { label: 'Engaged', icon: 'heart', map: sEng },
     ],
   }, today, earliestOf(engMain), frontierFor(engMain, today, SETTLE.gbp))

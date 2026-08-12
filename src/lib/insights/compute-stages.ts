@@ -126,7 +126,7 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
   // count (usable() requires CONNECTED) but they SHOW as by-source cards so the
   // Interest grid lists every channel, exactly like Awareness (which carries
   // tiktok/facebook/yelp the same way).
-  2: ['ga4_website_visits', 'gbp_website_clicks', 'ga4_menu_views', 'gbp_menu_clicks', 'ig_engaged', 'ig_profile_visits', 'facebook_page_visits', 'tiktok_profile_views', 'paid_ads_clicks'],
+  2: ['ga4_website_visits', 'gbp_website_clicks', 'ga4_menu_views', 'gbp_menu_clicks', 'ig_engaged', 'facebook_engaged', 'tiktok_engaged', 'linkedin_engaged', 'youtube_engaged', 'ig_profile_visits', 'facebook_page_visits', 'tiktok_profile_views', 'paid_ads_clicks'],
   3: ['gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'ga4_order_clicks', 'ga4_phone_taps', 'reservations', 'social_link_clicks', 'paid_ads_conversions'],
   4: ['pos_covers', 'delivery_orders'],
   5: ['pos_repeat_customers'],
@@ -146,7 +146,7 @@ const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds:
   2: [
     { key: 'website', label: 'Website visits', sourceIds: ['ga4_website_visits', 'gbp_website_clicks'] },
     { key: 'menu', label: 'Menu views', sourceIds: ['ga4_menu_views', 'gbp_menu_clicks'] },
-    { key: 'engagement', label: 'Engagement', sourceIds: ['ig_engaged'] },
+    { key: 'engagement', label: 'Engagement', sourceIds: ['ig_engaged', 'facebook_engaged', 'tiktok_engaged', 'linkedin_engaged', 'youtube_engaged'] },
     { key: 'ads', label: 'Paid ads', sourceIds: ['paid_ads_clicks'] },
   ],
   3: [
