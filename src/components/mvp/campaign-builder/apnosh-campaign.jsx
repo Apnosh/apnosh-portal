@@ -2158,6 +2158,7 @@ const CATALOG = [
   { id: "reviewsreply", type: "task", icon: "chat", title: "Reply to reviews", sub: "Every review gets a drafted reply, monthly", cad: "recurring" },
   { id: "friction", type: "task", icon: "cart", title: "Smooth out ordering", sub: "Get the order button working on your Google listing", cad: "setup" },
   { id: "listings", type: "task", icon: "pin", title: "Get listed everywhere", sub: "Yelp, Apple Maps and more: synced and correct", cad: "recurring" },
+  { id: "socialprofiles", type: "task", icon: "share", title: "Set up your social profiles", sub: "Five platforms, complete and matching", cad: "once" },
   { id: "website", type: "task", icon: "store", title: "Fix your website and menu", sub: "Fast, correct, and easy to order from", cad: "setup" },
   { id: "localseo", type: "task", icon: "pin", title: "Show up in local search", sub: "Be the answer when neighbors search food near me", cad: "recurring" },
   { id: "giftcard", type: "task", icon: "gift", title: "Push gift cards", sub: "Sell gift cards for gifts and slow seasons", cad: "once", season: true },
@@ -2278,7 +2279,7 @@ const PICK = {
   reviewsplan: "reviews", reviewsreply: "reviews", reviewreq: "reviews",
   launch: "offer", slowoffer: "offer", giftcard: "offer",
   reel: "reel", videoplan: "reel", story: "story", carousel: "carousel", dish: "dish",
-  gpost: "listing", gbp: "listing", listings: "listing", localseo: "map", website: "ordering",
+  gpost: "listing", gbp: "listing", listings: "listing", socialprofiles: "social", localseo: "map", website: "ordering",
   welcome: "mail", second: "mail", news: "mail", referral: "mail", earlyaccess: "mail",
   birthday: "birthday", shoot: "camera", qr: "qr", friction: "ordering", ticket: "ticket",
   listgrow: "auto", segment: "auto", utm: "chart", winback: "winback", edit: "reel", direct: "ordering",
@@ -2313,7 +2314,7 @@ const ROWS = [
   // The goal shelves hold TOOLS AND FIXES (concrete, one price, one job); the big
   // multi-month programs live on their own "Full campaigns" shelf below, so a $70
   // fix never sits next to an $8k system (the audit's price-cliff finding).
-  { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "website", "localseo", "creator", "gpost"] },
+  { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "socialprofiles", "website", "localseo", "creator", "gpost"] },
   { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["design", "creative-video", "creative-photos", "creative-social", "reviewsplan", "reviewsreply"] },
   // Every creative request type as its own card, straight from the request catalog.
   // Sending a request is free; the team answers with a plan and a price.
