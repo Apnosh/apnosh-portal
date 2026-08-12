@@ -263,7 +263,11 @@ export async function updateSession(request: NextRequest) {
             .eq('person_id', user.id)
             .maybeSingle()
           const url = request.nextUrl.clone()
-          url.pathname = creatorLogin ? '/creator/work' : '/onboarding/full'
+          // A creator who signed up but closed the tab before finishing setup has no creator_logins
+          // row yet — the signup_intent stamp is what keeps them out of the restaurant flow.
+          url.pathname = creatorLogin ? '/creator/work'
+            : user.user_metadata?.signup_intent === 'creator' ? '/onboarding/creator'
+            : '/onboarding/full'
           return NextResponse.redirect(url)
         }
 
@@ -322,6 +326,15 @@ export async function updateSession(request: NextRequest) {
     if (creatorLogin) {
       const url = request.nextUrl.clone()
       url.pathname = '/creator/work'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+
+    // Signed up as a creator but never finished setup (no creator_logins row yet) — resume the
+    // wizard rather than dropping them into the restaurant portal.
+    if (user.user_metadata?.signup_intent === 'creator') {
+      const url = request.nextUrl.clone()
+      url.pathname = '/onboarding/creator'
       url.search = ''
       return NextResponse.redirect(url)
     }

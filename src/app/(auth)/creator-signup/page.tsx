@@ -29,7 +29,9 @@ export default function CreatorSignupPage() {
 
     try {
       const supabase = createClient()
-      const { error: signErr } = await supabase.auth.signUp({ email, password })
+      // Stamp the intent on the login. If they close the tab before finishing the wizard, this is
+      // what tells the middleware to send them back to creator setup instead of restaurant onboarding.
+      const { error: signErr } = await supabase.auth.signUp({ email, password, options: { data: { signup_intent: 'creator' } } })
       if (signErr) { setError(signErr.message); setLoading(false); return }
       router.push('/onboarding/creator')
       router.refresh()
