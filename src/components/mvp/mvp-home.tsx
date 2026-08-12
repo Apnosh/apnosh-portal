@@ -673,8 +673,8 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
           </div>
         )}
       </div>
-      {/* chart */}
-      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} />
+      {/* chart — the hero above already shows this card's one number */}
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} />
       {/* breakdown tiles */}
       {mv.tiles.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8, margin: '10px 0 0' }}>
@@ -895,13 +895,18 @@ export function relDate(lastDataDate: string): string {
 }
 
 export function ActionsChart({
-  range, setRange, cStart, setCStart, cEnd, setCEnd, summary, noun = 'took action',
+  range, setRange, cStart, setCStart, cEnd, setCEnd, summary, noun = 'took action', showTotal = true,
 }: {
   range: ChartRange; setRange: (r: ChartRange) => void
   cStart: string; setCStart: (s: string) => void
   cEnd: string; setCEnd: (s: string) => void
   summary: RangeSummary
   noun?: string
+  /* The insights stage card already states ONE authoritative number above the
+     chart (the by-source total). Printing the bars' own sum under it put two
+     close-but-different numbers on one card — owner-confirmed confusing. There
+     the caption is off; the home card keeps it (it IS that card's number). */
+  showTotal?: boolean
 }) {
   const { C } = useMvpTheme()
   const H = 62
@@ -927,9 +932,11 @@ export function ActionsChart({
           <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>To<input type="date" value={cEnd} min={cStart} onChange={(e) => { setCEnd(e.target.value); setPicked(null) }} style={dateInput} /></label>
         </div>
       )}
-      <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 8 }}>
-        <b style={{ color: C.ink, fontWeight: 700 }}>{total.toLocaleString()}</b> {noun}
-      </div>
+      {showTotal && (
+        <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 8 }}>
+          <b style={{ color: C.ink, fontWeight: 700 }}>{total.toLocaleString()}</b> {noun}
+        </div>
+      )}
       <div style={{ position: 'relative', height: H }}>
         <div style={{ position: 'absolute', left: 0, right: 0, bottom: avgY, borderTop: `1px dashed ${C.faint}`, opacity: 0.6 }} />
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: dense ? 3 : 10, height: '100%' }}>

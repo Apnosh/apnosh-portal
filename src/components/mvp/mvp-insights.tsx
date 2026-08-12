@@ -915,8 +915,9 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
           </div>
         )}
       </div>
-      {/* histogram — the same series as the number + arrow above */}
-      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} />
+      {/* histogram — trend/shape only; the ONE number for this card is the
+          by-source total above, so the chart's own sum caption stays off */}
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} />
       {/* inline source cards (legacy single-column layout only — the swipeable
           layout renders them below the dots instead via RangeSources) */}
       {showBreakdown && (rangeStage ?? cs) ? <SourceBreakdown stage={(rangeStage ?? cs)!} unit={unit} title={breakdownTitle} sub={sub} showReconcile={false} showExtras={false} /> : null}
