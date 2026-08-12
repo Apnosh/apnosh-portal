@@ -30,6 +30,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getDataFrontier } from './data-frontier'
 
 export type HomeSub = 'day' | 'month'
 export type HomeFmt = 'num' | 'rate'
@@ -287,17 +288,14 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     return { data: out }
   }
 
-  const [gbp, social, reviews, localReviews, email, website, search] = await Promise.all([
-    fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks', 'date', bound),
-    fetchAll('social_metrics', 'date, platform, reach, impressions, engagement, posts_published, followers_gained, profile_visits', 'date', bound),
+  const [gbp, social, reviews, localReviews, email, website] = await Promise.all([
+    fetchAll('gbp_metrics', 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, conversations, food_orders, food_menu_clicks', 'date', bound),
+    fetchAll('social_metrics', 'date, platform, reach, impressions, engagement, posts_published, followers_gained, profile_visits, raw_data', 'date', bound),
     fetchAll('reviews', 'rating, response_text, posted_at', 'posted_at', bound + 'T00:00:00'),
     fetchAll('local_reviews', 'rating, reply_text, created_at_platform', 'created_at_platform', bound + 'T00:00:00'),
     fetchAll('email_metrics', 'sent_date, sent_count, open_count, click_count, revenue_attributed', 'sent_date', bound),
     // website visits (sessions) + menu page views. A missing column/table just yields no rows.
-    fetchAll('website_metrics', 'date, sessions, menu_views', 'date', bound),
-    // Google Search impressions — counted by the funnel's Awareness headline, so
-    // the chart bars must carry them too or the two drift apart.
-    fetchAll('search_metrics', 'date, total_impressions', 'date', bound),
+    fetchAll('website_metrics', 'date, sessions, menu_views, order_clicks', 'date', bound),
   ])
 
   /* Per-day source maps. We only create+populate a map when the source
@@ -309,8 +307,12 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   const gBook: Maps = new Map(), gFood: Maps = new Map()
   for (const r of (gbp.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
-    const views = num(r.impressions_total) || num(r.search_views)
-    gImpr.set(d, (gImpr.get(d) ?? 0) + views)
+    /* search + maps, per-row split fallback — the EXACT rule the funnel's
+       Awareness stage uses, so bars and headline are the same numbers */
+    const split = num(r.impressions_search_mobile) + num(r.impressions_search_desktop)
+    const search = split > 0 ? split : num(r.search_views ?? r.impressions_total)
+    const maps = num(r.impressions_maps_mobile) + num(r.impressions_maps_desktop)
+    gImpr.set(d, (gImpr.get(d) ?? 0) + search + maps)
     gDir.set(d, (gDir.get(d) ?? 0) + num(r.directions))
     gCall.set(d, (gCall.get(d) ?? 0) + num(r.calls))
     gClick.set(d, (gClick.get(d) ?? 0) + num(r.website_clicks))
@@ -321,13 +323,15 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
   }
   // Website (GA4) — visits (sessions, always ingested when GA4 connected) +
   // menu page views (only when the owner configured the menu path)
-  const wVisits: Maps = new Map(), wMenu: Maps = new Map()
+  const wVisits: Maps = new Map(), wMenu: Maps = new Map(), wOrder: Maps = new Map()
   for (const r of (website.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
     const sv = num(r.sessions)
     if (sv > 0) wVisits.set(d, (wVisits.get(d) ?? 0) + sv)
     const mv = num(r.menu_views)
     if (mv > 0) wMenu.set(d, (wMenu.get(d) ?? 0) + mv)
+    const oc = num(r.order_clicks)
+    if (oc > 0) wOrder.set(d, (wOrder.get(d) ?? 0) + oc)
   }
   // Social. Platforms report differently: IG/FB have reach; TikTok, LinkedIn and
   // YouTube report views/impressions and no reach. The funnel's Awareness stage
@@ -342,7 +346,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     const p = typeof r.platform === 'string' ? r.platform : 'instagram'
     reachTotalBy[p] = (reachTotalBy[p] ?? 0) + num(r.reach)
   }
-  const sReach: Maps = new Map(), sEng: Maps = new Map(), sFol: Maps = new Map(), sVis: Maps = new Map()
+  const sReach: Maps = new Map(), sEng: Maps = new Map(), sFol: Maps = new Map(), sVis: Maps = new Map(), sSave: Maps = new Map()
   for (const r of (social.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
     const p = typeof r.platform === 'string' ? r.platform : 'instagram'
@@ -351,12 +355,9 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     sEng.set(d, (sEng.get(d) ?? 0) + num(r.engagement))
     sFol.set(d, (sFol.get(d) ?? 0) + num(r.followers_gained))
     sVis.set(d, (sVis.get(d) ?? 0) + num(r.profile_visits))
-  }
-  // Google Search (GSC) — daily site impressions
-  const gscImpr: Maps = new Map()
-  for (const r of (search.data ?? []) as Record<string, unknown>[]) {
-    const d = String(r.date).slice(0, 10)
-    gscImpr.set(d, (gscImpr.get(d) ?? 0) + num(r.total_impressions))
+    const totals = (r.raw_data as { totals?: { saves?: unknown; shares?: unknown } } | null)?.totals
+    const ss = num(totals?.saves) + num(totals?.shares)
+    if (ss > 0) sSave.set(d, (sSave.get(d) ?? 0) + ss)
   }
 
   /* Reservations + delivery aren't wired to a daily source yet, so these
@@ -369,49 +370,57 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     return out
   }
 
-  /* ── 1. Reach — people who saw you (social reach + Google views) ── */
-  const reachMain = addInto(sReach, gImpr, gscImpr)
+  /* THE shared frontier — the same anchor the funnel headline uses, so a
+     "last 30 days" is the same 30 days on both. */
+  const frontier = await getDataFrontier(admin, clientId).then(
+    (d) => startOfDay(new Date(d + 'T00:00:00')),
+    () => completeFrontier([sReach, gImpr], today, SETTLE.gbp),
+  )
+
+  /* ── 1. Reach — owner spec: social impressions/reach + GBP search + maps ── */
+  const reachMain = addInto(sReach, gImpr)
   const reach = buildMetric({
-    key: 'reach', label: 'Reach', sub: 'People who saw you on Google and social', fmt: 'num',
+    key: 'reach', label: 'Reach', sub: 'Social reach and Google views', fmt: 'num',
     mainMap: reachMain,
     comps: [
       { label: 'Social reach', icon: 'eye', map: sReach },
-      { label: 'Google Search', icon: 'eye', map: gscImpr },
       { label: 'Google views', icon: 'pin', map: gImpr },
       { label: 'Profile visits', icon: 'user', map: sVis },
       { label: 'New followers', icon: 'heart', map: sFol },
     ],
-  }, today, earliestOf(reachMain), completeFrontier([sReach, gImpr, gscImpr], today, SETTLE.gbp))
+  }, today, earliestOf(reachMain), frontier)
 
   /* ── 1b. Interest — people who TOOK AN INTEREST (owner definition): website
      clicks + menu page views + post engagement (profile visits retired). The SAME
      sources the honest funnel's Interest stage counts, so the insights chart
      total matches the stage's source cards. ── */
-  const engMain = addInto(wVisits, gClick, sEng, wMenu)
+  const engMain = addInto(sFol, sSave, wVisits, gClick)
   const engagement = buildMetric({
-    key: 'engagement', label: 'Interest', sub: 'Website visits, site clicks, and engagement', fmt: 'num',
+    key: 'engagement', label: 'Interest', sub: 'Follows, saves, website sessions and clicks', fmt: 'num',
     mainMap: engMain,
     comps: [
-      { label: 'Website visits', icon: 'eye', map: wVisits },
+      { label: 'New followers', icon: 'user', map: sFol },
+      { label: 'Saves + shares', icon: 'heart', map: sSave },
+      { label: 'Website sessions', icon: 'eye', map: wVisits },
       { label: 'Site clicks', icon: 'cursor', map: gClick },
-      { label: 'Engaged', icon: 'heart', map: sEng },
     ],
-  }, today, earliestOf(engMain), completeFrontier([wVisits, gClick, sEng, wMenu], today, SETTLE.gbp))
+  }, today, earliestOf(engMain), frontier)
 
   /* ── 2. Interactions — people who actually DID something (owner definition):
      calls + directions + bookings. The SAME GBP actions the funnel's Actions
      stage counts (site clicks moved to Interest above), so the chart total
      matches the stage's source cards. ── */
-  const interMain = addInto(gDir, gCall, gBook)
+  const interMain = addInto(gDir, gCall, gBook, wOrder)
   const interactions = buildMetric({
-    key: 'interactions', label: 'Interactions', sub: 'Calls, directions and bookings', fmt: 'num',
+    key: 'interactions', label: 'Interactions', sub: 'Directions, calls, bookings and order clicks', fmt: 'num',
     mainMap: interMain,
     comps: [
-      { label: 'Calls', icon: 'phone', map: gCall },
       { label: 'Directions', icon: 'pin', map: gDir },
+      { label: 'Calls', icon: 'phone', map: gCall },
       { label: 'Bookings', icon: 'calendar', map: gBook },
+      { label: 'Order clicks', icon: 'cursor', map: wOrder },
     ],
-  }, today, earliestOf(interMain), completeFrontier([gDir, gCall, gBook], today, SETTLE.gbp))
+  }, today, earliestOf(interMain), frontier)
 
   /* ── 3. Bookings & orders — people who acted ── */
   const bookMain = addInto(gBook, gFood)
@@ -424,7 +433,7 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
       { label: 'Menu clicks', icon: 'cursor', map: gMenu },
       { label: 'Reservations', icon: 'clock', map: reservations },
     ],
-  }, today, earliestOf(bookMain), completeFrontier([gBook, gFood], today, SETTLE.gbp))
+  }, today, earliestOf(bookMain), frontier)
 
   /* ── 4. Loyalty — people you brought back (email today; SMS soon) ── */
   const eSent: Maps = new Map(), eOpen: Maps = new Map(), eClick: Maps = new Map(), eRev: Maps = new Map()

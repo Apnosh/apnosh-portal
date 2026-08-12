@@ -71,6 +71,8 @@ export interface PlatformTotals {
   /** new followers attributed to posts that day (Zernio per-post 'follows') */
   follows: number
   clicks: number
+  saves: number
+  shares: number
 }
 
 /**
@@ -113,12 +115,14 @@ export function aggregateZernioPosts(rows: ZernioPostRow[] | null | undefined): 
     const platform = normalizePlatform(r?.platform)
     if (!platform) continue
     const a = (r?.analytics ?? {}) as Record<string, unknown>
-    const cur = out[platform] ?? { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0 }
+    const cur = out[platform] ?? { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0, saves: 0, shares: 0 }
     cur.reach += num(a.reach)
     cur.impressions += num(a.impressions) || num(a.views)
     cur.engagement += num(a.likes) + num(a.comments) + num(a.shares) + num(a.saves)
     cur.follows += num(a.follows)
     cur.clicks += num(a.clicks)
+    cur.saves += num(a.saves)
+    cur.shares += num(a.shares)
     out[platform] = cur
   }
   return out
@@ -361,7 +365,7 @@ export const zernioAdapter: ChannelAdapter = {
         written++
       }
 
-      const t = byDay[today]?.[platform] ?? { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0 }
+      const t = byDay[today]?.[platform] ?? { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0, saves: 0, shares: 0 }
       const followersTotal = num(followersByPlatform[platform])
 
       const { data: prev } = await admin

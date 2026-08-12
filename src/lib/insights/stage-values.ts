@@ -22,6 +22,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { getDataFrontier } from '@/lib/dashboard/data-frontier'
 import type { InsightsWindow, StageExplore } from './compute-stages'
 
 /** source id -> real value for the window (null = unavailable, excluded from sums). */
@@ -55,9 +56,22 @@ function ymd(d: Date): string {
 function windowBounds(
   w: InsightsWindow,
   periodsBack = 0,
+  endAnchor?: string,
 ): { gbpStart: string; gbpEnd: string; otherStart: string; otherEnd: string | null } {
   const days = windowDays(w)
   const shift = days * periodsBack
+
+  // ONE window for every source, ending at the shared data frontier (the last
+  // day all active sources reported — see getDataFrontier). The chart bars use
+  // the same anchor, so headline and bars cover the SAME days. Without an
+  // anchor (frontier read failed) fall back to the old per-source lags.
+  if (endAnchor) {
+    const end = new Date(endAnchor + 'T00:00:00Z')
+    end.setUTCDate(end.getUTCDate() - shift)
+    const start = new Date(end)
+    start.setUTCDate(start.getUTCDate() - (days - 1))
+    return { gbpStart: ymd(start), gbpEnd: ymd(end), otherStart: ymd(start), otherEnd: ymd(end) }
+  }
 
   const gbpEnd = new Date()
   gbpEnd.setUTCDate(gbpEnd.getUTCDate() - 3 - shift)
@@ -94,8 +108,10 @@ export async function loadStageValues(
   periodsBack = 0,
 ): Promise<StageValueMap> {
   const out: StageValueMap = {}
-  const { gbpStart, gbpEnd, otherStart, otherEnd } = windowBounds(w, periodsBack)
   const admin = createAdminClient()
+  // Shared complete-data frontier — the same anchor the chart bars use.
+  const frontier = await getDataFrontier(admin, clientId).catch(() => undefined)
+  const { gbpStart, gbpEnd, otherStart, otherEnd } = windowBounds(w, periodsBack, frontier)
   // Close the top of the window only when looking back, so a past period stops where
   // the next one starts. On the live period this is a no-op and the query is untouched.
   const capDate = <T extends { lte: (col: string, v: string) => T }>(q: T, col = 'date'): T =>
@@ -112,12 +128,14 @@ export async function loadStageValues(
       .gte('date', gbpStart)
       .lte('date', gbpEnd)
     if (!error && data) {
-      let searchSplit = 0, searchFallback = 0, maps = 0
+      let search = 0, maps = 0
       let directions = 0, calls = 0, clicks = 0, bookings = 0, menuClicks = 0
       for (const r of data as Record<string, unknown>[]) {
-        searchSplit += num(r.impressions_search_mobile) + num(r.impressions_search_desktop)
-        // fallback per legacy rows with no split columns: search_views mirrors the total
-        searchFallback += num(r.search_views ?? r.impressions_total)
+        // per-ROW fallback (same rule as the chart's daily fold, so the two
+        // always sum identically): the real split when the row has it, else
+        // the legacy search_views/impressions_total
+        const split = num(r.impressions_search_mobile) + num(r.impressions_search_desktop)
+        search += split > 0 ? split : num(r.search_views ?? r.impressions_total)
         maps += num(r.impressions_maps_mobile) + num(r.impressions_maps_desktop)
         directions += num(r.directions)
         calls += num(r.calls)
@@ -125,8 +143,7 @@ export async function loadStageValues(
         bookings += num(r.bookings)
         menuClicks += num(r.food_menu_clicks)
       }
-      // prefer the real split; only fall back to search_views/total when the split is empty
-      out.gbp_impressions_search = searchSplit > 0 ? searchSplit : searchFallback
+      out.gbp_impressions_search = search
       out.gbp_impressions_maps = maps
       out.gbp_direction_requests = directions
       out.gbp_calls = calls
@@ -174,7 +191,7 @@ export async function loadStageValues(
       const reachBy: Record<string, number> = {}
       const imprBy: Record<string, number> = {}
       const engBy: Record<string, number> = {}
-      let gained = 0, visits = 0, linkClicks = 0
+      let gained = 0, visits = 0, linkClicks = 0, savesShares = 0
       for (const r of data as Record<string, unknown>[]) {
         const p = typeof r.platform === 'string' ? r.platform : 'instagram'
         reachBy[p] = (reachBy[p] ?? 0) + num(r.reach)
@@ -182,9 +199,10 @@ export async function loadStageValues(
         engBy[p] = (engBy[p] ?? 0) + num(r.engagement)
         gained += num(r.followers_gained)
         visits += num(r.profile_visits)
-        /* per-post link clicks live in the day row's raw_data.totals (vendor sync) */
-        const totals = (r.raw_data as { totals?: { clicks?: unknown } } | null)?.totals
+        /* per-post link clicks + saves + shares live in the day row's raw_data.totals */
+        const totals = (r.raw_data as { totals?: { clicks?: unknown; saves?: unknown; shares?: unknown } } | null)?.totals
         linkClicks += num(totals?.clicks)
+        savesShares += num(totals?.saves) + num(totals?.shares)
       }
       /* Platforms report differently: IG/FB have reach; TikTok and LinkedIn report
        * views/impressions and no reach. Each chip shows the platform's real number
@@ -208,6 +226,8 @@ export async function loadStageValues(
       out.linkedin_engaged = engBy.linkedin ?? 0
       out.youtube_engaged = engBy.youtube ?? 0
       out.social_link_clicks = linkClicks
+      out.social_follows = gained
+      out.social_saves_shares = savesShares
     }
   } catch { /* social unavailable */ }
 
