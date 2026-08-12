@@ -138,6 +138,12 @@ export const ITEM_SHAPE: Record<string, ItemShape> = {
   website: { title: 'Fix your website and menu', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['site-menu'], seed: [] },
   localseo: { title: 'Show up in local search', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['local-seo'], seed: [] },
   delivery: { title: 'Tune up your delivery apps', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['delivery-opt'], seed: [] },
+  /* Finished 2026-08-12: these three were sellable in the store but composed an EMPTY plan
+     (no beats, no services) and had no render card, so they could be recommended and never
+     opened. Each now carries the real catalog service its setup card already names. */
+  measure: { title: 'Get measurable', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['tracking'], seed: [] },
+  emaildeliver: { title: 'Land in the inbox', kind: 'setup', goal: 'retain', dur: 'setup', services: ['email-found'], seed: [] },
+  deliverymenu: { title: 'Price your delivery menu', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['delivery-opt'], seed: [] },
   nextdoor: { title: 'Get known on Nextdoor', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['nextdoor-local'], seed: [] },
 
   // Events (offers around a moment)
