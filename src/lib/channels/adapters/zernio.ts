@@ -279,6 +279,18 @@ export const zernioAdapter: ChannelAdapter = {
         `Zernio lists no account on our profile yet (their reply: ${JSON.stringify(accountsRes).slice(0, 180)})`)
     }
 
+    /* CONNECTED STATE FIRST. What the vendor holds is known the moment we read the
+     * accounts list, so record it here — before any analytics call that could fail.
+     *
+     * It used to be written at the very END, after every metrics row. That meant one
+     * platform's write failing (a YouTube row hitting a CHECK constraint that had not
+     * been widened yet, say) aborted the whole sync and left the connection showing
+     * NOTHING as connected — including the platforms that were fine. Connection state
+     * and metric collection are separate promises, and this is the line between them. */
+    await admin.from('channel_connections')
+      .update({ status: 'active', metadata: { platforms: linked, account_counts: accountCounts } })
+      .eq('id', connection.id)
+
     // 2. Followers per platform.
     let followersByPlatform: Record<string, number> = {}
     try {
@@ -338,9 +350,16 @@ export const zernioAdapter: ChannelAdapter = {
       if (postsErr) throw new ChannelError('upstream', `social_posts write failed: ${postsErr.message}`)
     }
 
-    // 4. One daily row per linked platform (even a zero day is a real day).
+    /* 4. One daily row per linked platform (even a zero day is a real day).
+     *
+     * Each platform is written INSIDE its own try: a platform we cannot store yet (a new
+     * one the database has not been widened for, a bad row) must not cost the others their
+     * numbers. Failures are collected and reported in the note, so the problem is visible
+     * without being fatal. */
     let written = 0
+    const failed: string[] = []
     for (const platform of linked) {
+     try {
       /* history: content numbers only (no follower columns — those are only known
        * for today; historical rows must not clobber a real value with zero) */
       for (const [day, dayTotals] of Object.entries(byDay)) {
@@ -400,12 +419,21 @@ export const zernioAdapter: ChannelAdapter = {
       )
       if (error) throw new ChannelError('upstream', `social_metrics write failed: ${error.message}`)
       written++
+     } catch (e) {
+       failed.push(`${platform} (${e instanceof Error ? e.message : 'write failed'})`)
+     }
     }
 
+    /* Refresh the account counts after the run (the platforms list was already stamped
+     * above, so the connection has been showing the truth throughout). */
     await admin.from('channel_connections')
       .update({ status: 'active', metadata: { platforms: linked, account_counts: accountCounts } })
       .eq('id', connection.id)
 
-    return { itemsWritten: written, note: `${linked.join(', ')} synced (zernio)` }
+    const ok = linked.filter((p) => !failed.some((f) => f.startsWith(p)))
+    const note = failed.length > 0
+      ? `${ok.join(', ') || 'nothing'} synced (zernio). Could not store: ${failed.join('; ')}`
+      : `${linked.join(', ')} synced (zernio)`
+    return { itemsWritten: written, note }
   },
 }
