@@ -310,14 +310,23 @@ async function loadHomeMetrics(clientId: string): Promise<HomeMetrics> {
     if (mv > 0) wMenu.set(d, (wMenu.get(d) ?? 0) + mv)
   }
   // Social. Platforms report differently: IG/FB have reach; TikTok, LinkedIn and
-  // YouTube report views/impressions and no reach — the funnel's Awareness stage
-  // takes each platform's real number (reach when it has one, views otherwise),
-  // so each day row folds the same way here or the bars undercount by exactly
-  // the views-reporting platforms (TikTok's whole number was missing).
+  // YouTube report views/impressions and no reach. The funnel's Awareness stage
+  // decides PER PLATFORM: a platform with any reach counts reach only (its
+  // impressions never mix in), a platform with none counts impressions. The bars
+  // must apply the same platform-level rule — deciding per DAY-ROW instead let
+  // old rows with impressions-but-no-reach leak in and the bars overshot the
+  // headline (the first per-row attempt), while summing only reach dropped
+  // TikTok/LinkedIn/YouTube entirely (the original bug).
+  const reachTotalBy: Record<string, number> = {}
+  for (const r of (social.data ?? []) as Record<string, unknown>[]) {
+    const p = typeof r.platform === 'string' ? r.platform : 'instagram'
+    reachTotalBy[p] = (reachTotalBy[p] ?? 0) + num(r.reach)
+  }
   const sReach: Maps = new Map(), sEng: Maps = new Map(), sFol: Maps = new Map(), sVis: Maps = new Map()
   for (const r of (social.data ?? []) as Record<string, unknown>[]) {
     const d = String(r.date).slice(0, 10)
-    const seen = num(r.reach) > 0 ? num(r.reach) : num(r.impressions)
+    const p = typeof r.platform === 'string' ? r.platform : 'instagram'
+    const seen = (reachTotalBy[p] ?? 0) > 0 ? num(r.reach) : num(r.impressions)
     sReach.set(d, (sReach.get(d) ?? 0) + seen)
     sEng.set(d, (sEng.get(d) ?? 0) + num(r.engagement))
     sFol.set(d, (sFol.get(d) ?? 0) + num(r.followers_gained))
