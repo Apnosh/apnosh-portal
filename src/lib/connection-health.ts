@@ -114,6 +114,11 @@ export async function runConnectionHealthProbe(): Promise<HealthReport> {
   const gbpConns = conns.filter((c) => c.channel === 'google_business_profile' && c.status !== 'error')
   await checkFeedFreshness(admin, gbpConns, report)
 
+  /* Google is probed above; social is judged on whether numbers actually arrived. */
+
+  await probeSocialSilence(admin, report).catch(() => {})
+
+
   return report
 }
 
@@ -158,6 +163,85 @@ async function checkFeedFreshness(admin: any, gbpConns: Connection[], report: He
       report.notificationsCreated += 1
     } catch {
       /* a freshness read failing must never break the health probe */
+    }
+  }
+}
+
+/**
+ * SOCIAL CONNECTED, BUT SILENT.
+ *
+ * The probe above covers Google only. A social connection could link successfully and then
+ * produce nothing at all — bad field mapping, an analytics add-on the client does not have, a
+ * vendor profile with no accounts on it — and no one would find out until the owner noticed a
+ * dashboard of zeros and said so. That is exactly how a whole evening got spent (2026-08-13),
+ * and it is the failure mode that scales worst: every client we onboard is one more account
+ * that can go quiet without telling anybody.
+ *
+ * So: any social connection old enough to have synced at least once, that has written NO
+ * metrics rows at all, raises a notification naming what is missing. This checks the thing the
+ * owner actually cares about — did numbers arrive — rather than whether a token is valid, which
+ * was true the whole time this was broken.
+ */
+const SOCIAL_GRACE_HOURS = 26 // one nightly cron plus a margin
+
+export async function probeSocialSilence(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  report: HealthReport,
+): Promise<void> {
+  const { data } = await admin
+    .from('channel_connections')
+    .select('id, client_id, channel, status, connected_at, last_sync_at, connected_by, sync_error')
+    .eq('channel', 'zernio')
+    .in('status', ['active', 'pending', 'error'])
+
+  const conns = (data ?? []) as {
+    id: string; client_id: string; status: string
+    connected_at: string | null; last_sync_at: string | null
+    connected_by: string | null; sync_error: string | null
+  }[]
+
+  const graceCutoff = new Date(Date.now() - SOCIAL_GRACE_HOURS * 3600_000).toISOString()
+
+  for (const conn of conns) {
+    try {
+      /* Brand new connections are not broken, they are new. Only judge one that has had a
+       * nightly cron pass since it was connected. */
+      const connectedAt = conn.connected_at ?? conn.last_sync_at
+      if (!connectedAt || connectedAt > graceCutoff) continue
+
+      const { count } = await admin
+        .from('social_metrics')
+        .select('id', { count: 'exact', head: true })
+        .eq('client_id', conn.client_id)
+      if ((count ?? 0) > 0) continue
+
+      report.staleFeeds += 1
+
+      /* Once per stall window, not daily — a nagged owner stops reading these. */
+      const { data: recent } = await admin
+        .from('notifications')
+        .select('id')
+        .eq('client_id', conn.client_id)
+        .eq('type', 'social_silent')
+        .gte('created_at', graceCutoff)
+        .limit(1)
+      if (recent && recent.length) continue
+
+      await admin.from('notifications').insert({
+        user_id: conn.connected_by,
+        client_id: conn.client_id,
+        type: 'social_silent',
+        title: 'Your social accounts are connected but no numbers have arrived',
+        body: conn.sync_error
+          ? `We connected, but the last sync reported: ${String(conn.sync_error).slice(0, 160)}`
+          : 'The accounts are linked and the sync is running, but nothing has come back yet. Our team has been alerted.',
+        link: '/dashboard/connected-accounts',
+      })
+      report.notificationsCreated += 1
+      report.failures.push({ id: conn.id, channel: 'zernio', clientId: conn.client_id, message: 'connected but wrote no metrics' })
+    } catch {
+      /* one bad row must never cost the others their check */
     }
   }
 }
