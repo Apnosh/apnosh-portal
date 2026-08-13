@@ -1,10 +1,10 @@
 'use client'
 
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { type OnboardingData, FOOD_BIZ_TYPES } from '../data'
 import { Question, Input, FieldLabel, Hint } from '../ui'
 import { matchCuisine } from '../cuisine'
-import { extractFromWebsite } from '@/lib/onboarding-lookup'
+import { extractFromWebsite, isLookupEnabled, searchBusinesses, getBusinessPrefill, type PlaceCandidate } from '@/lib/onboarding-lookup'
 
 interface Props {
   data: OnboardingData
@@ -24,6 +24,64 @@ function summarize(found: string[]): string {
 export default function StepBizName({ data, update, nav, onJumpToReview }: Props) {
   const [scanning, setScanning] = useState(false)
   const [scanNote, setScanNote] = useState<string>('')
+  /* GOOGLE MATCHES, ASKED FOR HERE RATHER THAN SIX SCREENS LATER.
+   * The Places lookup already existed, but it only ran on the LOCATION step, which for a
+   * restaurant sits after cuisine, price range, signature dishes, ordering and the menu — all
+   * things Google or their own site can answer. The owner was being interrogated for facts we
+   * could already see. Asking at the name, where the name is, means every later step arrives
+   * pre-filled and is mostly a confirmation. */
+  const [lookupOn, setLookupOn] = useState(false)
+  useEffect(() => { isLookupEnabled().then(setLookupOn) }, [])
+  const [matches, setMatches] = useState<PlaceCandidate[] | null>(null)
+  const [finding, setFinding] = useState(false)
+  const [pickedNote, setPickedNote] = useState('')
+
+  async function findOnGoogle() {
+    const q = data.biz_name.trim()
+    if (!q || !lookupOn) return
+    setFinding(true); setMatches(null); setPickedNote('')
+    try {
+      const found = await searchBusinesses(q)
+      setMatches(found.slice(0, 4))
+      if (!found.length) setPickedNote('No Google match yet. Keep going and we will fill this in as we go.')
+    } catch {
+      setPickedNote('Could not reach Google just now. Keep going, nothing is lost.')
+    }
+    setFinding(false)
+  }
+
+  async function usePlace(c: PlaceCandidate) {
+    setFinding(true)
+    const p = await getBusinessPrefill(c.placeId).catch(() => null)
+    setFinding(false)
+    if (!p) { setPickedNote('Could not read that listing. Keep going and we will fill it in together.'); return }
+
+    /* Only ever fill BLANKS. Anything already typed is the owner's and outranks Google. */
+    const got: string[] = []
+    update('primary_place_id', c.placeId)
+    if (!data.biz_name.trim() && p.name) update('biz_name', p.name)
+    if (p.full_address) { update('full_address', p.full_address); got.push('address') }
+    if (p.city) update('city', p.city)
+    if (p.state) update('state', p.state)
+    if (p.zip) update('zip', p.zip)
+    if (p.phone && !data.phone) { update('phone', p.phone); got.push('phone') }
+    if (p.website && !data.website.trim()) { update('website', p.website); got.push('website') }
+    if (p.price_range && !data.price_range) { update('price_range', p.price_range); got.push('price range') }
+    if (p.hours && Object.keys(p.hours).length && !Object.keys(data.hours || {}).length) {
+      update('hours', p.hours); got.push('opening hours')
+    }
+    if (!data.biz_type && p.is_food) update('biz_type', FOOD_BIZ_TYPES[0])
+    if (got.length) setFilledSomething(true)
+
+    /* Their own site answers the things Google cannot: cuisine, signature dishes, the menu.
+     * Run it straight away so the owner never has to think about a second button. */
+    if (p.website) await runScan(p.website)
+
+    setPickedNote(got.length
+      ? `Got your ${summarize(got)} from Google. Everything below is already filled in — change anything that looks off.`
+      : 'Found your listing. We will fill the rest in as we go.')
+    setMatches(null)
+  }
   // True once a website scan has actually populated fields, so we can offer
   // a shortcut straight to the review screen instead of every step.
   const [filledSomething, setFilledSomething] = useState(false)
@@ -94,6 +152,43 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             autoFocus
           />
           <Hint>Your brand name. You will add each location on the next step.</Hint>
+
+          {/* One tap, and most of what follows is already answered. */}
+          {lookupOn && data.biz_name.trim().length > 1 && (
+            <div className="mt-2.5">
+              <button
+                type="button"
+                onClick={findOnGoogle}
+                disabled={finding || scanning}
+                className="w-full rounded-[12px] border text-[13px] font-semibold disabled:opacity-50"
+                style={{ borderColor: '#d8ece4', background: '#f2faf7', color: '#2f8f70', minHeight: 46 }}
+              >
+                {finding || scanning ? 'Looking you up…' : 'Find us on Google and fill this in'}
+              </button>
+
+              {matches && matches.length > 0 && (
+                <div className="mt-2 space-y-1.5">
+                  <div className="text-[12px]" style={{ color: '#9aa1ab' }}>Which one is you?</div>
+                  {matches.map((m) => (
+                    <button
+                      key={m.placeId}
+                      type="button"
+                      onClick={() => usePlace(m)}
+                      className="w-full text-left rounded-[12px] border bg-white px-3 py-2.5"
+                      style={{ borderColor: '#e8e9ec', minHeight: 52 }}
+                    >
+                      <div className="text-[14px] font-semibold" style={{ color: '#16181d' }}>{m.name}</div>
+                      <div className="text-[12px]" style={{ color: '#9aa1ab' }}>{m.address}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {pickedNote && (
+                <div className="mt-2 text-[12px] leading-relaxed" style={{ color: '#6b7280' }}>{pickedNote}</div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Website + optional scan — paste a site and we draft the story,

@@ -495,17 +495,25 @@ export const INITIAL_DATA: OnboardingData = {
   agreed_terms: false,
 }
 
-// Validation — which steps require data to continue
+/**
+ * Which steps genuinely BLOCK the owner from continuing.
+ *
+ * Owner call (2026-08-13): make the answers optional. Every question here was a wall a
+ * restaurant owner had to climb on a phone, often for something Google already knows and we
+ * now prefill. A blocked Continue on a field we could have filled ourselves is the worst of
+ * both: it reads as busywork and it is the moment people abandon setup.
+ *
+ * Only two remain required, and only because the product cannot function without them:
+ *   role     — decides which flow they are even in (a freelancer is not a restaurant)
+ *   biz_name — everything downstream, including the Google lookup, keys off the name
+ *
+ * Everything else can be skipped and filled later from the dashboard. The review screen
+ * shows what is still blank, so skipping is visible rather than silently lossy.
+ */
 export function canContinue(stepId: StepId, data: OnboardingData): boolean {
   switch (stepId) {
     case 'role': return !!data.role
     case 'biz_name': return !!data.biz_name.trim()
-    case 'biz_type': return !!(data.biz_type && (data.biz_type !== 'Other' || data.biz_other.trim()))
-    case 'serve': return !!data.cuisine && !!data.price_range
-      && (data.cuisine !== 'Other' || !!data.cuisine_other.trim())
-    case 'menu_details': return data.signature_items.some((s) => s.trim().length > 0)
-    case 'story': return !!data.biz_desc.trim()
-    case 'goals': return !!data.primary_goal
     default: return true
   }
 }
