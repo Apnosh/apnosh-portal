@@ -109,6 +109,9 @@ export async function GET(req: NextRequest) {
     const dl = gbp.value.daily
     asOf = dl.length ? dl[dl.length - 1].date : gbp.value.end
     windowStart = gbp.value.start // the window's first day (today−3 − (rangeDays−1))
+    /* Google's own last day, kept only as the fallback below. The label used to be THIS and
+     * nothing else, so it read "as of Aug 8" while social had data through Aug 13 — the
+     * window and the label disagreeing about what the graph covers. */
     // per-stage YoY, computed on the SAME fields both years so each % is like-for-like
     const p = gbp.value.prevTotals
     const chg = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null)
@@ -213,6 +216,22 @@ export async function GET(req: NextRequest) {
       socialEngagement += Number(r.engagement) || 0
     }
   }
+
+  /* THE LABEL MUST MATCH THE WINDOW. Both the funnel numbers and the chart bars end at the
+   * shared data frontier (the newest day any connected source has real data), so the "as of"
+   * date has to be that same day — otherwise the header describes a different period than the
+   * numbers under it, which is exactly how a correct dashboard reads as broken. */
+  try {
+    const { getDataFrontier } = await import('@/lib/dashboard/data-frontier')
+    const frontier = await getDataFrontier(createAdminClient(), clientId)
+    if (frontier) {
+      asOf = frontier
+      const days = range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30
+      const start = new Date(frontier + 'T00:00:00Z')
+      start.setUTCDate(start.getUTCDate() - (days - 1))
+      windowStart = start.toISOString().slice(0, 10)
+    }
+  } catch { /* keep the Google-derived dates rather than showing none */ }
 
   return NextResponse.json({ findYou, topQueries, topPosts, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, audience, yoy, stages })
 }

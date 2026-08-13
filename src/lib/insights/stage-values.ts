@@ -399,7 +399,14 @@ export async function loadStageFreshness(clientId: string): Promise<StageFreshne
       const p = typeof r.platform === 'string' ? r.platform : ''
       if (!p) continue
       const stamp = (r.raw_data as { source_updated_at?: unknown } | null)?.source_updated_at
-      const v = typeof stamp === 'string' && stamp ? stamp : ''
+      /* The vendor's own refresh time when we have it. When we do not — rows written before
+       * we started keeping it, or a source that does not report one — fall back to the day
+       * the row covers, so the card still dates its number instead of showing nothing. A
+       * date-only fallback renders as midnight, which reads as "that day" rather than
+       * claiming a precision we do not have. */
+      const v = typeof stamp === 'string' && stamp
+        ? stamp
+        : (typeof r.date === 'string' ? `${r.date} 00:00:00` : '')
       if (v && (!newest[p] || v > newest[p])) newest[p] = v
     }
     /* map platform -> the source ids that platform feeds */
