@@ -45,7 +45,10 @@ const nextConfig: NextConfig = {
       // /dashboard/insights (exactly the silent-vanish the comment above warns about). The
       // old half-built /insights/setup wizard route moved to the real surface at /measure.
       { source: '/dashboard/insights/setup', destination: '/dashboard/measure', permanent: false },
-      { source: '/dashboard/insights/:path((?!analyst$).+)', destination: '/dashboard/insights', permanent: false },
+      /* Retired insight sub-tools fold back into the one Insights screen. The exceptions are the
+      // sub-routes that really exist — add a name here when you add a page under /insights, or the
+      // page will build fine, deploy fine, and silently redirect away (cost a live debug 2026-08-13). */
+      { source: '/dashboard/insights/:path((?!analyst$|posts$).+)', destination: '/dashboard/insights', permanent: false },
     ]
   },
 }
