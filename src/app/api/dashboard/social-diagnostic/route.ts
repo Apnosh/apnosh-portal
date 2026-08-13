@@ -126,10 +126,25 @@ export async function GET(req: NextRequest) {
     const k = String(p.platform ?? p.provider ?? p.type ?? 'unknown').toLowerCase()
     byPlatform[k] = (byPlatform[k] ?? 0) + 1
   }
+  /* The raw analytics object for the newest post of each platform. This is the field that
+   * decides whether a number lands: our fold reads specific keys, and a platform that names
+   * its metrics differently stores zeros while looking perfectly connected. */
+  const rawSample: Record<string, unknown> = {}
+  for (const p of posts) {
+    const k = String(p.platform ?? p.provider ?? p.type ?? 'unknown').toLowerCase()
+    if (!(k in rawSample)) {
+      rawSample[k] = {
+        published: p.publishedAt ?? p.postedAt ?? p.date ?? null,
+        analytics: p.analytics ?? null,
+      }
+    }
+  }
+
   steps['4_analytics_read'] = {
     http: analyticsRes.status,
     total_posts: posts.length,
     posts_per_platform: byPlatform,
+    newest_post_analytics_per_platform: rawSample,
     ...(posts.length === 0 ? { note: 'The analytics call returned nothing. Numbers cannot exist downstream of this.' } : {}),
   }
 

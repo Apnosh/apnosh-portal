@@ -117,7 +117,13 @@ export function aggregateZernioPosts(rows: ZernioPostRow[] | null | undefined): 
     const a = (r?.analytics ?? {}) as Record<string, unknown>
     const cur = out[platform] ?? { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0, saves: 0, shares: 0 }
     cur.reach += num(a.reach)
-    cur.impressions += num(a.impressions) || num(a.views)
+    /* Views under any of the names vendors use. YouTube reports "Views" and no impressions at
+     * all (their Analytics API does not expose impressions), so a fold that only understood
+     * `impressions`/`views` stored a zero for a channel with real traffic. Reading the family
+     * of names costs nothing and removes a whole class of silent zero. */
+    cur.impressions += num(a.impressions)
+      || num(a.views) || num(a.viewCount) || num(a.viewsCount) || num(a.view_count)
+      || num(a.videoViews) || num(a.plays) || num(a.playCount)
     cur.engagement += num(a.likes) + num(a.comments) + num(a.shares) + num(a.saves)
     cur.follows += num(a.follows)
     cur.clicks += num(a.clicks)
@@ -403,7 +409,8 @@ export const zernioAdapter: ChannelAdapter = {
         comments: num(a.comments),
         saves: num(a.saves),
         shares: num(a.shares),
-        video_views: num(a.views) || num(a.impressions),
+        video_views: num(a.views) || num(a.viewCount) || num(a.viewsCount) || num(a.view_count)
+          || num(a.videoViews) || num(a.plays) || num(a.playCount) || num(a.impressions),
         total_interactions: num(a.likes) + num(a.comments) + num(a.shares) + num(a.saves),
         raw_data: o,
         synced_at: new Date().toISOString(),
