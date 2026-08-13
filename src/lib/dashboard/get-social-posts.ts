@@ -19,6 +19,9 @@ export interface SocialPost {
   shares: number | null
   video_views: number | null
   total_interactions: number | null
+  /** the vendor's payload: carries sync_state (synced|pending|unavailable) and the
+   *  reel-only metrics the feed uses to name a post type from real fields */
+  raw_data: Record<string, unknown> | null
 }
 
 /**
@@ -30,7 +33,7 @@ export async function getSocialPosts(clientId: string, limit: number = 90): Prom
   const supabase = await createClient()
   const { data } = await supabase
     .from('social_posts')
-    .select('id, platform, external_id, permalink, media_type, media_product_type, caption, thumbnail_url, posted_at, reach, likes, comments, saves, shares, video_views, total_interactions')
+    .select('id, platform, external_id, permalink, media_type, media_product_type, caption, thumbnail_url, posted_at, reach, likes, comments, saves, shares, video_views, total_interactions, raw_data')
     .eq('client_id', clientId)
     .order('posted_at', { ascending: false })
     .limit(limit)

@@ -359,15 +359,28 @@ export const zernioAdapter: ChannelAdapter = {
 
     // 2. Followers per platform.
     let followersByPlatform: Record<string, number> = {}
+    let followerNote = ''
     try {
       const fs = await zer(`/accounts/follower-stats?profileId=${encodeURIComponent(profileId)}`)
       const rows = unwrapList(fs, 'accounts', 'stats')
       for (const r of rows) {
-        const p = str(r.platform).toLowerCase()
-        const f = num(r.followers) || num(r.followersCount) || num(r.followerCount)
+        const p = normalizePlatform(r.platform)
+        /* THE FIELD IS `currentFollowers`. Verified against their OpenAPI spec after every
+         * platform reported 0 followers: we were reading followers/followersCount/
+         * followerCount, none of which exist on this response, so every account looked like
+         * it had no audience. The others stay as fallbacks in case the shape widens. */
+        const f = num(r.currentFollowers) || num(r.followers) || num(r.followersCount) || num(r.followerCount)
         if (p && f) followersByPlatform[p] = f
       }
-    } catch { followersByPlatform = {} /* follower stats missing is a gap, not a failure */ }
+      if (rows.length > 0 && Object.keys(followersByPlatform).length === 0) {
+        followerNote = 'follower counts came back empty'
+      }
+    } catch (e) {
+      /* Their follower endpoint can refuse for plan reasons (403 analytics add-on). That is a
+       * real answer the owner should see, not a silent zero. */
+      followersByPlatform = {}
+      followerNote = e instanceof Error ? e.message.slice(0, 120) : 'follower stats unavailable'
+    }
 
     /* Native posts first (see pullExternalPosts): without this a freshly linked account has
      * nothing in /analytics until the vendor's own ~90 minute background pass happens. */
@@ -409,11 +422,25 @@ export const zernioAdapter: ChannelAdapter = {
       const a = (o.analytics ?? {}) as Record<string, unknown>
       const rawDate = str(o.publishedAt) || str(o.postedAt) || str(o.posted_at) || str(o.date) || str(o.createdAt) || str(o.created_at)
       const t = Date.parse(rawDate)
+      /* THE LINK IS `platformPostUrl` (their spec: "Canonical URL (permalink) of the post on
+       * the platform"), at the top level and again per platform inside `platforms[]`. We were
+       * reading permalink/url/link — none of which their analytics list returns — so most rows
+       * stored no link and the card had nothing to open. Null when they genuinely have none,
+       * so the UI can say so instead of offering a dead tap. */
+      const perPlatform = (Array.isArray(o.platforms) ? o.platforms : []) as Record<string, unknown>[]
+      const mine = perPlatform.find((x) => normalizePlatform(x.platform) === platform) ?? perPlatform[0]
+      const link = str(o.platformPostUrl) || str(mine?.platformPostUrl)
+        || str(o.permalink) || str(o.url) || str(o.link)
+      /* Their sync state for this post's numbers: synced | pending | unavailable. A post whose
+       * analytics have not synced arrives with zeros, which is NOT the same as a post nobody
+       * watched — the owner saw a video with 88 real views reported as 0. Carry the state so
+       * the card can say "numbers pending" instead of lying with a zero. */
+      const syncState = str(mine?.syncStatus) || str(o.syncStatus) || (o.analytics ? 'synced' : 'pending')
       return [{
         client_id: connection.client_id,
         platform,
         external_id: externalId,
-        permalink: str(o.permalink) || str(o.url) || str(o.link) || null,
+        permalink: link || null,
         media_type: str(o.mediaType) || str(o.media_type) || null,
         caption: (str(o.caption) || str(o.content) || str(o.text) || '').slice(0, 500) || null,
         thumbnail_url: str(o.thumbnailUrl) || str(o.mediaUrl) || str(o.imageUrl) || null,
@@ -426,7 +453,7 @@ export const zernioAdapter: ChannelAdapter = {
         video_views: num(a.views) || num(a.viewCount) || num(a.viewsCount) || num(a.view_count)
           || num(a.videoViews) || num(a.plays) || num(a.playCount) || num(a.impressions),
         total_interactions: num(a.likes) + num(a.comments) + num(a.shares) + num(a.saves),
-        raw_data: o,
+        raw_data: { ...o, sync_state: syncState, is_external: o.isExternal ?? null },
         synced_at: new Date().toISOString(),
       }]
     })
@@ -524,9 +551,10 @@ export const zernioAdapter: ChannelAdapter = {
       .eq('id', connection.id)
 
     const ok = linked.filter((p) => !failed.some((f) => f.startsWith(p)))
-    const note = failed.length > 0
+    const base = failed.length > 0
       ? `${ok.join(', ') || 'nothing'} synced (zernio). Could not store: ${failed.join('; ')}`
       : `${linked.join(', ')} synced (zernio)`
+    const note = followerNote ? `${base}. Followers: ${followerNote}` : base
     return { itemsWritten: written, note }
   },
 }

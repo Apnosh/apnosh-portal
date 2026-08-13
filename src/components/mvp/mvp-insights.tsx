@@ -78,7 +78,7 @@ interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
 // Lazy-fetched from /api/dashboard/insights-detail.
-export interface InsightsPost { id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; likes: number; saves: number; postedAt: string | null }
+export interface InsightsPost { id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; likes: number; saves: number; postedAt: string | null }
 interface InsightsDetail {
   findYou: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } | null
   topQueries: { query: string; impressions: number }[]
@@ -1601,32 +1601,46 @@ function TopSearches({ queries }: { queries: { query: string; impressions: numbe
   )
 }
 
-// ── Recent posts, newest first (a zero-reach post still shows — honesty) ──
+// ── Recent posts, newest first ────────────────────────────────────────────────
+//    Three honesty rules the owner asked for by name:
+//    · a post whose numbers have NOT synced says so instead of showing a false 0
+//    · the type chip names what it is (Photo / Video / Reel / Carousel) from real fields
+//    · a row only looks tappable when there IS a link; otherwise it says the link is
+//      unavailable, because a tap that goes nowhere reads as broken
 function BestPosts({ posts }: { posts: InsightsPost[] }) {
   return (
     <Section title="Recent posts">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {posts.map((p) => (
-          <a key={p.id} href={p.permalink ?? undefined} target="_blank" rel="noreferrer noopener" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', gap: 11, alignItems: 'center', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 10 }}>
-            <div style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: p.thumbnailUrl ? '#000' : C.bg, backgroundImage: p.thumbnailUrl ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {!p.thumbnailUrl && <ImageIcon size={18} color={C.faint} />}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}>{p.type}</span>
-                <span style={{ fontSize: 11, color: C.faint, textTransform: 'capitalize' }}>{p.platform}</span>
-                {p.postedAt && reviewDate(p.postedAt) && <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{reviewDate(p.postedAt)}</span>}
+        {posts.map((p) => {
+          const inner = (
+            <>
+              <div style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: p.thumbnailUrl ? '#000' : C.bg, backgroundImage: p.thumbnailUrl ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {!p.thumbnailUrl && <ImageIcon size={18} color={C.faint} />}
               </div>
-              <div style={{ display: 'flex', gap: 14, fontSize: 12 }}>
-                <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.reach.toLocaleString()}</b> reached</span>
-                {p.likes > 0 && <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.likes.toLocaleString()}</b> likes</span>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}>{p.type}</span>
+                  <span style={{ fontSize: 11, color: C.faint, textTransform: 'capitalize' }}>{p.platform}</span>
+                  {p.postedAt && reviewDate(p.postedAt) && <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{reviewDate(p.postedAt)}</span>}
+                </div>
+                <div style={{ display: 'flex', gap: 14, fontSize: 12, flexWrap: 'wrap' }}>
+                  {p.pending
+                    ? <span style={{ color: C.faint }}>numbers still coming in</span>
+                    : <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.reach.toLocaleString()}</b> reached</span>}
+                  {p.likes > 0 && <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.likes.toLocaleString()}</b> likes</span>}
+                  {!p.permalink && <span style={{ color: C.faint }}>link unavailable</span>}
+                </div>
               </div>
-            </div>
-            <ExternalLink size={15} color={C.faint} style={{ flexShrink: 0 }} />
-          </a>
-        ))}
+              {p.permalink && <ExternalLink size={15} color={C.faint} style={{ flexShrink: 0 }} />}
+            </>
+          )
+          const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 11, alignItems: 'center', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 10 }
+          return p.permalink
+            ? <a key={p.id} href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
+            : <div key={p.id} style={box}>{inner}</div>
+        })}
       </div>
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>Your latest posts across every connected account, with what each one reached so far.</div>
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>Your latest posts across every connected account, with what each one reached so far. A post added very recently can take a day for its numbers to arrive.</div>
     </Section>
   )
 }

@@ -26,14 +26,27 @@ type TopPost = {
   type: string; reach: number; likes: number; saves: number; postedAt: string | null
 }
 
-// Plain-English post type from the raw IG/FB media fields.
-function postType(mediaType: string | null, product: string | null): string {
+/**
+ * Plain-English post type. Covers the old IG/FB product fields AND the social vendor's
+ * mediaType enum (image | video | gif | document | carousel | text), because the owner could
+ * not tell a video from a photo from a story in the feed.
+ *
+ * HONESTY: the vendor's analytics list does not flag stories, so we never label one. A Reel is
+ * only called a Reel when the platform's own reel-specific metric proves it. Anything we cannot
+ * name from real fields stays "Post" rather than being guessed into a category.
+ */
+function postType(mediaType: string | null, product: string | null, isReel = false): string {
   const p = (product ?? '').toUpperCase()
   const m = (mediaType ?? '').toUpperCase()
-  if (p === 'REELS') return 'Reel'
+  if (p === 'REELS' || isReel) return 'Reel'
+  if (p === 'STORY') return 'Story'
   if (m === 'VIDEO') return 'Video'
-  if (m === 'CAROUSEL_ALBUM') return 'Carousel'
-  return 'Photo'
+  if (m === 'CAROUSEL_ALBUM' || m === 'CAROUSEL') return 'Carousel'
+  if (m === 'IMAGE') return 'Photo'
+  if (m === 'GIF') return 'GIF'
+  if (m === 'TEXT') return 'Text post'
+  if (m === 'DOCUMENT') return 'Document'
+  return 'Post'
 }
 
 export async function GET(req: NextRequest) {
@@ -133,17 +146,31 @@ export async function GET(req: NextRequest) {
       .slice()
       .sort((a, b) => new Date(b.posted_at ?? 0).getTime() - new Date(a.posted_at ?? 0).getTime())
       .slice(0, 5)
-      .map((p) => ({
-        id: p.id,
-        platform: p.platform,
-        permalink: p.permalink,
-        thumbnailUrl: p.thumbnail_url,
-        type: postType(p.media_type, p.media_product_type),
-        reach: (p.reach ?? 0) > 0 ? (p.reach ?? 0) : (p.video_views ?? 0),
-        likes: p.likes ?? 0,
-        saves: p.saves ?? 0,
-        postedAt: p.posted_at ?? null,
-      }))
+      .map((p) => {
+        const raw = (p.raw_data ?? {}) as Record<string, unknown>
+        const a = (raw.analytics ?? {}) as Record<string, unknown>
+        /* Reel only when the platform's own reel-only metric is present (their spec: these are
+         * "Instagram Reels only, 0 for non-Reels media"). Never inferred from anything else. */
+        const isReel = Number(a.igReelsAvgWatchTime ?? 0) > 0 || Number(a.igReelsVideoViewTotalTime ?? 0) > 0
+        /* Their per-post sync state. A post whose numbers have not synced arrives as zeros,
+         * which is not the same fact as "nobody watched it" — the owner saw a video with 88
+         * real views reported as 0. Say pending instead of showing a false zero. */
+        const state = String(raw.sync_state ?? 'synced')
+        const value = (p.reach ?? 0) > 0 ? (p.reach ?? 0) : (p.video_views ?? 0)
+        return {
+          id: p.id,
+          platform: p.platform,
+          permalink: p.permalink || null,
+          thumbnailUrl: p.thumbnail_url,
+          type: postType(p.media_type, p.media_product_type, isReel),
+          reach: value,
+          /* true when the number is not trustworthy YET (their sync is still catching up) */
+          pending: value === 0 && state !== 'synced',
+          likes: p.likes ?? 0,
+          saves: p.saves ?? 0,
+          postedAt: p.posted_at ?? null,
+        }
+      })
   }
 
   // Fold social REACH into the funnel's TOP stage only — Awareness = "people who saw you"
