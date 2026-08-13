@@ -148,7 +148,60 @@ export async function GET(req: NextRequest) {
     ...(posts.length === 0 ? { note: 'The analytics call returned nothing. Numbers cannot exist downstream of this.' } : {}),
   }
 
-  // 5. what we actually stored
+  /* 5. RUN THE REAL SYNC, then look. Fixes to how we READ the vendor do nothing to rows
+   * already written by the old code — a corrected permalink or follower count only lands when
+   * a sync rewrites the row. Making the owner trigger one and then come back to check turned
+   * every fix into a second round trip, so this does both: refresh, then report. */
+  let syncNote = 'not run'
+  try {
+    const { adapterFor } = await import('@/lib/channels/registry')
+    const adapter = adapterFor('zernio')
+    if (adapter) {
+      const { data: full } = await db.from('channel_connections').select('*').eq('id', conn.id).maybeSingle()
+      if (full) {
+        const r = await adapter.sync(full as unknown as import('@/lib/channels/types').ChannelConnection)
+        syncNote = r.note ?? `${r.itemsWritten} rows written`
+      }
+    }
+  } catch (e) {
+    syncNote = e instanceof Error ? e.message.slice(0, 300) : 'sync failed'
+  }
+  steps['5_sync_just_run'] = syncNote
+
+  /* 6. Did the things the owner reported actually land? Post links and follower counts are
+   * the two that were reading fields that do not exist, so they get counted explicitly. */
+  const { data: postRows } = await db
+    .from('social_posts')
+    .select('platform, permalink, video_views, reach')
+    .eq('client_id', clientId)
+    .order('posted_at', { ascending: false })
+    .limit(40)
+  const linkCheck: Record<string, { posts: number; with_link: number }> = {}
+  for (const r of (postRows ?? []) as Record<string, unknown>[]) {
+    const k = String(r.platform)
+    const c = linkCheck[k] ?? { posts: 0, with_link: 0 }
+    c.posts += 1
+    if (typeof r.permalink === 'string' && r.permalink) c.with_link += 1
+    linkCheck[k] = c
+  }
+  steps['6_post_links'] = Object.keys(linkCheck).length ? linkCheck : 'no posts stored'
+
+  const { data: folRows } = await db
+    .from('social_metrics')
+    .select('platform, date, followers_total')
+    .eq('client_id', clientId)
+    .order('date', { ascending: false })
+    .limit(40)
+  const followers: Record<string, number> = {}
+  for (const r of (folRows ?? []) as Record<string, unknown>[]) {
+    const k = String(r.platform)
+    const v = Number(r.followers_total ?? 0)
+    if (!(k in followers) && v > 0) followers[k] = v
+    if (!(k in followers)) followers[k] = 0
+  }
+  steps['7_followers_stored'] = followers
+
+  // 8. what we actually stored
   const { data: metrics } = await db
     .from('social_metrics')
     .select('platform, date, reach, impressions, engagement')
@@ -164,7 +217,7 @@ export async function GET(req: NextRequest) {
     s.impressions += Number(m.impressions ?? 0)
     stored[k] = s
   }
-  steps['5_what_we_stored'] = Object.keys(stored).length > 0 ? stored : 'No rows in the last 30 days.'
+  steps['8_what_we_stored'] = Object.keys(stored).length > 0 ? stored : 'No rows in the last 30 days.'
 
   /* The verdict: name the FIRST stage that came up empty, because that is the one to fix. */
   const linkedPlatforms = accounts.map((a) => String(a.platform ?? a.provider ?? a.type ?? '').toLowerCase())
