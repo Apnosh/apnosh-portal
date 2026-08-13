@@ -1,7 +1,7 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
-import { type OnboardingData, CUISINES, PRICE_TIERS, FOOD_BIZ_TYPES, BIZ_TYPES } from '../data'
+import { type OnboardingData, type LocationDraft, CUISINES, PRICE_TIERS, FOOD_BIZ_TYPES, BIZ_TYPES } from '../data'
 import { Question, Input, SingleChipGroup } from '../ui'
 
 interface Props {
@@ -29,6 +29,16 @@ interface Props {
 export default function StepConfirm({ data, update, nav }: Props) {
   const [openRow, setOpenRow] = useState<string | null>(null)
   const isFood = FOOD_BIZ_TYPES.includes(data.biz_type as typeof FOOD_BIZ_TYPES[number])
+
+  /* `locations` holds the EXTRA spots; the primary one is the address rows above, so a
+     single-location owner keeps an empty array and never sees a list. */
+  const extras = data.locations ?? []
+  const toDraft = (l: LocationDraft): LocationDraft => l
+  const blankLocation = (): LocationDraft => ({
+    name: '', full_address: '', city: '', state: '', zip: '', place_id: '', phone: '', hours: {},
+  })
+  const setExtra = (i: number, next: LocationDraft) =>
+    update('locations', extras.map((l, j) => (j === i ? next : l)))
 
   const hoursCount = Object.values(data.hours || {}).filter((h) => h && !h.closed).length
   const dishes = data.signature_items.filter((s) => s.trim()).length
@@ -95,6 +105,49 @@ export default function StepConfirm({ data, update, nav }: Props) {
 
         <Row id="site" label="WEBSITE" value={data.website}>
           <Input value={data.website} onChange={(v) => update('website', v)} placeholder="yourplace.com" />
+        </Row>
+
+        {/* MORE THAN ONE LOCATION.
+            The old flow had a whole screen for this. Most owners have one place, so a screen
+            asking "how many?" taxed everyone to serve a few. It lives here instead: one line
+            that says how many we have, opening a small list when there genuinely are more.
+            Dropping this in the redesign was a real regression — a chain could not add its
+            other locations at all (caught by the owner, 2026-08-13). */}
+        <Row id="locs" label="LOCATIONS" value={extras.length ? `${extras.length + 1} locations` : 'Just this one'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {extras.map((loc, i) => (
+              <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <Input
+                  value={loc.name}
+                  onChange={(v) => setExtra(i, { ...loc, name: v })}
+                  placeholder={`Location ${i + 2} name, e.g. Capitol Hill`}
+                />
+                <Input
+                  value={loc.full_address}
+                  onChange={(v) => setExtra(i, { ...loc, full_address: v })}
+                  placeholder="Street address"
+                />
+                <button
+                  type="button"
+                  onClick={() => update('locations', extras.filter((_, j) => j !== i).map(toDraft))}
+                  style={{ alignSelf: 'flex-start', border: 'none', background: 'none', color: '#9aa1ab', fontSize: 12.5, padding: '4px 0', minHeight: 32 }}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => update('locations', [...extras.map(toDraft), blankLocation()])}
+              style={{ border: '1px solid #d8ece4', background: '#f2faf7', color: '#2f8f70', fontSize: 13, fontWeight: 600, borderRadius: 12, minHeight: 44 }}
+            >
+              Add another location
+            </button>
+            <span style={{ fontSize: 11.5, color: '#9aa1ab', lineHeight: 1.5 }}>
+              Just a name and address here. Hours, phone and their Google listings are easier to
+              set per location from your dashboard.
+            </span>
+          </div>
         </Row>
 
         {/* Read-only counts. Editing a whole menu on a phone during setup is the kind of task
