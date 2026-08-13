@@ -587,20 +587,7 @@ function GroupCards({ groups }: { groups: StageGroup[] }) {
         <div key={g.key} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '14px 15px', minHeight: 70 }}>
           <div style={{ fontSize: 12.5, color: C.mute, fontWeight: 500 }}>{g.label}</div>
           {g.state === 'has'
-            ? <>
-                <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', marginTop: 3, lineHeight: 1 }}>{(g.total ?? 0).toLocaleString()}</div>
-                {/* The split, next to each other on the card (Search 1,234 · Maps 56).
-                    ZEROS ARE SHOWN: a connected platform reporting 0 is a fact the owner
-                    asked to see, and hiding it makes the platform look unmeasured instead
-                    of measured-and-quiet (owner rule, restated 2026-08-13). */}
-                {g.parts && g.parts.length > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', marginTop: 6, fontSize: 10.5, color: C.faint, lineHeight: 1.4 }}>
-                    {g.parts.map((p) => (
-                      <span key={p.label} style={{ whiteSpace: 'nowrap' }}>{p.label} <b style={{ color: p.value > 0 ? C.mute : C.faint, fontWeight: 600 }}>{p.value.toLocaleString()}</b></span>
-                    ))}
-                  </div>
-                )}
-              </>
+            ? <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', marginTop: 3, lineHeight: 1 }}>{(g.total ?? 0).toLocaleString()}</div>
             : <div style={{ fontSize: 12, color: C.faint, marginTop: 8 }}>{g.state === 'connect' ? 'Connect to see' : 'Coming soon'}</div>}
         </div>
       ))}

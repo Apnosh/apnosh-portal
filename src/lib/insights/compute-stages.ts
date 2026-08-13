@@ -88,8 +88,6 @@ export interface StageGroup {
   state: 'has' | 'connect' | 'soon'
   /** the by-source ids that roll up into this group (the specifics under it) */
   sourceIds: string[]
-  /** short inline split shown ON the group card ("Search 1,234 · Maps 56") */
-  parts?: { label: string; value: number }[]
 }
 
 export interface ComputedStage {
@@ -141,23 +139,6 @@ const SUMMABLE: Record<FunnelStage, string[]> = {
  *  by-source ids; its total is the sum of the group's COUNTED sources, so the 4
  *  totals reconcile to the stage headline. The by-source cards below the groups
  *  stay the specifics (e.g. Google = Maps + Search; Calls = Google + website). */
-/* One-word split labels shown ON a group card next to each other. */
-const PART_LABEL: Record<string, string> = {
-  gbp_impressions_search: 'Search',
-  gbp_impressions_maps: 'Maps',
-  ga4_website_visits: 'Visits',
-  gbp_website_clicks: 'From Google',
-  gbp_booking_clicks: 'Bookings',
-  reservations: 'Reservations',
-  ig_reach: 'Instagram',
-  facebook_reach: 'Facebook',
-  tiktok_video_views: 'TikTok',
-  linkedin_reach: 'LinkedIn',
-  youtube_views: 'YouTube',
-  instagram_follows: 'Instagram', facebook_follows: 'Facebook', tiktok_follows: 'TikTok', linkedin_follows: 'LinkedIn', youtube_follows: 'YouTube',
-  instagram_saves_shares: 'Instagram', facebook_saves_shares: 'Facebook', tiktok_saves_shares: 'TikTok', linkedin_saves_shares: 'LinkedIn', youtube_saves_shares: 'YouTube',
-}
-
 const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds: string[] }[]> = {
   /* Owner spec 2026-08-12: SHORT lists, all daily sources, so the headline,
      the group cards and the chart bars are literally the same numbers. Google
@@ -379,14 +360,10 @@ export function computeStagesFrom(
         total != null ? 'has'
           : gs.some(s => s.status === 'AVAILABLE_NOT_CONNECTED' || s.status === 'ERROR') ? 'connect'
             : 'soon'
-      /* Inline split on the card, only for a clean PAIR (Search 41 · Maps 20). A five-platform
-       * group turns the same treatment into a wall of small print under every card, so those
-       * keep the headline number only; their per-platform detail lives in the breakdown below,
-       * which is the place built for it. (Owner call 2026-08-13.) */
-      const parts = counted.length === 2
-        ? counted.map(s => ({ label: PART_LABEL[s.id] ?? s.displayName, value: s.value ?? 0 }))
-        : undefined
-      return { key: g.key, label: g.label, total, state, sourceIds: gs.map(s => s.id), parts }
+      /* No inline split under the summary. The breakdown section below already lists every
+       * source with its own card, number and "as of" stamp — repeating a squeezed copy under
+       * the headline was the same fact twice in a worse font. (Owner call 2026-08-13.) */
+      return { key: g.key, label: g.label, total, state, sourceIds: gs.map(s => s.id) }
     })
 
     stages.push({
