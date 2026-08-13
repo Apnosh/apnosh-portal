@@ -274,10 +274,17 @@ export async function loadStageValues(
           if (!pl || !date || total <= 0) continue
           ;(series[pl] ??= []).push({ date, total })
         }
+        /* The delta is only the WINDOW's number if the history actually covers the window.
+         * Caught live: with two days of follower history the delta read -6 and sat under a
+         * "last 30 days" heading, replacing a real 30-day count of 8. A two-day change
+         * presented as a thirty-day change is exactly the kind of false number this whole
+         * pass exists to remove, so the history must reach back to the window's start. */
+        const spanFrom = new Date(new Date(otherStart).getTime() + 2 * 86400000).toISOString().slice(0, 10)
         for (const pl of ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const) {
           const pts = series[pl] ?? []
           const days = new Set(pts.map((x) => x.date))
-          if (days.size >= 2) {
+          const spansWindow = pts.length > 0 && pts[0].date <= spanFrom
+          if (days.size >= 2 && spansWindow) {
             out[`${pl}_follows`] = pts[pts.length - 1].total - pts[0].total
           } else if ((folBy[pl] ?? 0) === 0) {
             out[`${pl}_follows`] = null
