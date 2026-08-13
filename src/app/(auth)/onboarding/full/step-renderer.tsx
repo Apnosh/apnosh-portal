@@ -4,6 +4,7 @@ import { type ReactNode } from 'react'
 import { type OnboardingData, type StepId } from './data'
 import StepRole from './steps/step-role'
 import StepBizName from './steps/step-biz-name'
+import StepConfirm from './steps/step-confirm'
 import StepBizType from './steps/step-biz-type'
 import StepServe from './steps/step-serve'
 import StepMenuDetails from './steps/step-menu-details'
@@ -71,6 +72,7 @@ export default function StepRenderer(props: Props) {
     switch (stepId) {
       case 'role': return <StepRole data={data} update={update} nav={n} />
       case 'biz_name': return <StepBizName data={data} update={update} nav={n} onJumpToReview={() => onGoToStep('review')} />
+      case 'confirm': return <StepConfirm data={data} update={update} nav={n} />
       case 'biz_type': return <StepBizType data={data} update={update} nav={n} />
       case 'serve': return <StepServe data={data} update={update} nav={n} />
       case 'menu_details': return <StepMenuDetails data={data} update={update} nav={n} />

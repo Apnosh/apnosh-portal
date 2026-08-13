@@ -202,7 +202,7 @@ export function rangesForDay(day: DayHours | undefined): HourRange[] {
 
 // Step IDs in order — food steps are inserted dynamically
 export type StepId =
-  | 'role' | 'biz_name' | 'biz_type' | 'serve'
+  | 'role' | 'biz_name' | 'confirm' | 'biz_type' | 'serve'
   | 'menu_details' | 'ordering' | 'menu' | 'specials'
   | 'location' | 'location_details' | 'rhythm' | 'story' | 'audience' | 'goals'
   | 'promote' | 'brand_voice' | 'discovery' | 'approval' | 'connect'
@@ -217,7 +217,7 @@ export type PhaseLabel = typeof PHASE_ORDER[number]
 
 export const STEP_PHASES: Record<StepId, PhaseLabel> = {
   role: 'You',
-  biz_name: 'Business', biz_type: 'Business', location: 'Business', location_details: 'Business',
+  biz_name: 'Business', confirm: 'Business', biz_type: 'Business', location: 'Business', location_details: 'Business',
   serve: 'Menu', menu_details: 'Menu',
   ordering: 'Menu', menu: 'Menu', specials: 'Menu', rhythm: 'Menu',
   story: 'Story', audience: 'Story', goals: 'Story', promote: 'Story',
@@ -235,7 +235,7 @@ export interface PhaseInfo {
 
 /** Resolve the phase label + position for a step, given the active flow. */
 export function getPhaseInfo(stepId: StepId, bizType: string): PhaseInfo {
-  const steps = getSteps(bizType)
+  const steps = getSteps()
   const label = STEP_PHASES[stepId]
   const inPhase = steps.filter((s) => STEP_PHASES[s] === label)
   const presentPhases = PHASE_ORDER.filter((p) => steps.some((s) => STEP_PHASES[s] === p))
@@ -276,7 +276,7 @@ export function skipsDineInSteps(data: OnboardingData): boolean {
 // index (keyed on each screen's first step) stay stable either way.
 export function getScreens(bizType: string, data?: OnboardingData): StepId[][] {
   const dropDineIn = data ? skipsDineInSteps(data) : false
-  const steps = getSteps(bizType).filter((s) => !(dropDineIn && DINE_IN_ONLY_STEPS.includes(s)))
+  const steps = getSteps().filter((s) => !(dropDineIn && DINE_IN_ONLY_STEPS.includes(s)))
   const screens: StepId[][] = []
   for (const phase of PHASE_ORDER) {
     const inPhase = steps.filter((s) => STEP_PHASES[s] === phase)
@@ -307,7 +307,7 @@ export function getScreenPhase(screen: StepId[]): PhaseLabel {
 
 /** Map a saved 1-based step index to the 1-based screen that contains it. */
 export function stepIndexToScreen(bizType: string, stepIndex1: number): number {
-  const steps = getSteps(bizType)
+  const steps = getSteps()
   const stepId = steps[stepIndex1 - 1]
   if (!stepId) return 1
   const idx = getScreens(bizType).findIndex((sc) => sc.includes(stepId))
@@ -318,28 +318,33 @@ export function stepIndexToScreen(bizType: string, stepIndex1: number): number {
 export function screenToStepIndex(bizType: string, screen1: number): number {
   const sc = getScreens(bizType)[screen1 - 1]
   if (!sc) return 1
-  return getSteps(bizType).indexOf(sc[0]) + 1
+  return getSteps().indexOf(sc[0]) + 1
 }
 
-export function getSteps(bizType: string): StepId[] {
-  const isFood = FOOD_BIZ_TYPES.includes(bizType as typeof FOOD_BIZ_TYPES[number])
-  const steps: StepId[] = ['role', 'biz_name', 'biz_type']
-  if (isFood) {
-    // Restaurant core: what they serve, how much it costs, signatures, dietary,
-    // how people order, the real menu, and any recurring specials.
-    steps.push('serve', 'menu_details', 'ordering', 'menu', 'specials')
-  }
-  // Locations: list each spot, then a review page pulls + records per-location
-  // details (hours, phone) for each one.
-  steps.push('location', 'location_details')
-  // Busy/slow rhythm sits right after hours — it's the same mental model
-  if (isFood) steps.push('rhythm')
-  steps.push(
-    'story', 'audience', 'goals',
-    'promote', 'brand_voice', 'discovery', 'approval', 'connect',
-    'assets', 'review',
-  )
-  return steps
+export function getSteps(): StepId[] {
+  /* SIX SCREENS.
+   *
+   * It was twenty for a restaurant, about a hundred inputs, and it read as an interrogation.
+   * The Google + website lookup at the name step now answers most of it before we ask, so the
+   * dozen fact-gathering screens collapse into ONE confirmation the owner reads rather than
+   * types (see step-confirm).
+   *
+   * What survives is only what the owner alone can answer:
+   *   role     — which flow they are even in
+   *   biz_name — the key everything else is looked up by
+   *   confirm  — read what we found, fix anything wrong
+   *   goals    — the top three, which steer the plan
+   *   approval — how hands-on they want to be
+   *   connect  — the accounts, without which none of this works
+   * then review, which is a finish line rather than a question.
+   *
+   * Brand voice, audience, busy/slow rhythm and brand assets moved to the dashboard (owner
+   * call, 2026-08-13). They are real questions, but asking them here is what made setup feel
+   * endless, and every one is better answered later with a reason in front of you. Their
+   * fields and steps still exist, so nothing that reads them broke, and a prompt can surface
+   * any of them on the dashboard when it matters.
+   */
+  return ['role', 'biz_name', 'confirm', 'goals', 'approval', 'connect', 'review']
 }
 
 // A single menu row captured during onboarding. Promoted to a
