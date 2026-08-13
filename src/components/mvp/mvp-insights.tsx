@@ -669,6 +669,15 @@ const DASH = '–'
  *  "2026-08-12 23:29:55" (UTC, no T or Z) as well as real ISO, and renders in local time. */
 function friendlyStamp(raw: string | null | undefined): string {
   if (!raw) return ''
+  /* A BARE date means the source reports by day and has no clock of its own (Google, GA4).
+   * Parsing it as a timestamp would both shift the day backwards through the timezone and
+   * print an hour we invented — "as of Aug 10, 5:00 PM" for a number Google filed on Aug 11.
+   * Read the parts literally and print the day alone. */
+  const dayOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw)
+  if (dayOnly) {
+    const d = new Date(Number(dayOnly[1]), Number(dayOnly[2]) - 1, Number(dayOnly[3]))
+    return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
   const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw
   const d = new Date(iso)
   if (isNaN(d.getTime())) return ''

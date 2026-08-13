@@ -434,7 +434,7 @@ export async function loadStageFreshness(clientId: string): Promise<StageFreshne
         .order('date', { ascending: false })
         .limit(1)
       const d = (data ?? [])[0] as { date?: unknown } | undefined
-      if (d && typeof d.date === 'string') for (const id of ids) out[id] = `${d.date} 00:00:00`
+      if (d && typeof d.date === 'string') for (const id of ids) out[id] = d.date
     }
     await Promise.all([
       dayStamp('gbp_metrics', [
