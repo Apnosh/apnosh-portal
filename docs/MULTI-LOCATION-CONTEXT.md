@@ -105,9 +105,12 @@ Concrete, testable, in order of value:
 
 Stated so scope creep has to argue with a written decision:
 
-- **Per-location social accounts.** Wrong grain, double counts.
-- **Per-location menus, brand voice, or audience.** Most groups run one of each. Add only if a
-  real client asks.
+- **A per-channel RULE about scope.** Superseded: scope is per connection now, so a group that
+  runs an Instagram per site is supported by the same code path as one that shares a single
+  account. What we are not doing is FORCING either shape.
+- **Per-location menus, brand voice, or audience.** Most groups run one of each, and these are
+  content rather than measurement, so a wrong guess is visible and cheap to fix. Add the split
+  only when a real client asks.
 - **A parent "group" object over separate accounts.** That is the *other* architecture. Mixing
   both gives two sources of truth for one restaurant, which is how the Do Si duplicate happened
   earlier.
@@ -137,6 +140,22 @@ fixing now, because each is expensive to retrofit:
   does) becomes the real path for large groups, and the manual list stays for the small ones.
 
 ## 8. The risks worth naming up front
+
+- **The nightly sync changes for every client, not just chains.** A mistake there produces wrong
+  numbers days later, for people who are not the reason we made the change. This is the riskiest
+  step and should ship with a diagnostic that reports what it wrote per location, the way the
+  social sync now does — silence must never be the report.
+- **Reads that assume one row per day.** Today one Google row per client per date is accidentally
+  guaranteed. The moment per-location rows are written, any code doing `.single()` or `[0]`
+  silently takes ONE location's number as the whole client's. These must be found BEFORE the
+  writes change, not after. This is the specific mechanism by which this project could reproduce
+  the exact failure of the last week, and it is why the technical plan leads with finding them.
+- **Mixed-scope totals are the new sharp edge.** With per-connection scope, a group can have a
+  brand Instagram AND per-site Instagrams at once. "All locations" must count the brand account
+  once and each site account once — never the brand account per site. That is one query written
+  carefully, or a double count that looks plausible.
+- **Pricing follows structure.** If billing is per location, the account model and the billing
+  model should be decided together rather than discovered to disagree later.
 
 ## 9. What I need from the owner to finish the plan
 
