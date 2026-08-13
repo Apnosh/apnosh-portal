@@ -589,12 +589,14 @@ function GroupCards({ groups }: { groups: StageGroup[] }) {
           {g.state === 'has'
             ? <>
                 <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', marginTop: 3, lineHeight: 1 }}>{(g.total ?? 0).toLocaleString()}</div>
-                {/* the split, next to each other on the card (Search 1,234 · Maps 56);
-                    zero parts are skipped so five-platform groups stay readable */}
-                {g.parts && g.parts.filter((p) => p.value > 0).length > 0 && (
+                {/* The split, next to each other on the card (Search 1,234 · Maps 56).
+                    ZEROS ARE SHOWN: a connected platform reporting 0 is a fact the owner
+                    asked to see, and hiding it makes the platform look unmeasured instead
+                    of measured-and-quiet (owner rule, restated 2026-08-13). */}
+                {g.parts && g.parts.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', marginTop: 6, fontSize: 10.5, color: C.faint, lineHeight: 1.4 }}>
-                    {g.parts.filter((p) => p.value > 0).map((p) => (
-                      <span key={p.label} style={{ whiteSpace: 'nowrap' }}>{p.label} <b style={{ color: C.mute, fontWeight: 600 }}>{p.value.toLocaleString()}</b></span>
+                    {g.parts.map((p) => (
+                      <span key={p.label} style={{ whiteSpace: 'nowrap' }}>{p.label} <b style={{ color: p.value > 0 ? C.mute : C.faint, fontWeight: 600 }}>{p.value.toLocaleString()}</b></span>
                     ))}
                   </div>
                 )}
