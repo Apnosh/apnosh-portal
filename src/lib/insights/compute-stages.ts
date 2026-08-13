@@ -59,6 +59,9 @@ export interface StageSourceView {
   isManual?: boolean
   manualBy?: string | null
   manualAt?: string | null
+  /** When the PLATFORM last refreshed this number (not when we synced). Owner ask
+   *  2026-08-13: a number you cannot date is a number you cannot trust. */
+  asOf?: string | null
 }
 
 /** Interest-only enrichment: the real, already-collected GA4 detail behind the
@@ -216,6 +219,7 @@ function toView(
   statuses: ResolvedSourceMap,
   values: Record<string, number | null>,
   manual: ManualStore,
+  freshness: Record<string, string> = {},
 ): StageSourceView {
   const def = SOURCE_BY_ID[id]
   const resolved = statuses[id]
@@ -242,6 +246,7 @@ function toView(
 
   return {
     id,
+    asOf: freshness[id] ?? null,
     displayName: def.displayName,
     shortLabel: shortLabelFor(id),
     provider: def.provider,
@@ -269,12 +274,13 @@ export function computeStagesFrom(
   statuses: ResolvedSourceMap,
   values: Record<string, number | null>,
   manual: ManualStore = {},
+  freshness: Record<string, string> = {},
 ): ComputedStage[] {
   const stages: ComputedStage[] = []
 
   for (const stage of [1, 2, 3, 4, 5] as FunnelStage[]) {
     const defs = sourcesForStage(stage)
-    const sources = defs.map(d => toView(d.id, statuses, values, manual))
+    const sources = defs.map(d => toView(d.id, statuses, values, manual, freshness))
     const byId = (id: string) => sources.find(s => s.id === id)
 
     let heroSourceId: string | undefined
@@ -417,12 +423,14 @@ export async function computeStages(
 ): Promise<ComputedStage[]> {
   const { resolveSourceStatuses } = await import('./resolve-source-statuses')
   const { loadStageValues, loadInterestExplore } = await import('./stage-values')
-  const [statuses, values, explore] = await Promise.all([
+  const { loadStageFreshness } = await import('./stage-values')
+  const [statuses, values, explore, freshness] = await Promise.all([
     resolveSourceStatuses(clientId),
     loadStageValues(clientId, window, periodsBack),
     periodsBack === 0 ? loadInterestExplore(clientId, window) : Promise.resolve(null),
+    loadStageFreshness(clientId),
   ])
-  const stages = computeStagesFrom(statuses, values, {})
+  const stages = computeStagesFrom(statuses, values, {}, freshness)
   // Interest (stage 2) carries the real "what they explored" GA4 detail. Never
   // enters any sum — the headline stays the honest sum of counted sources.
   if (explore) {

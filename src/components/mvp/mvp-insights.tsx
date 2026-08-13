@@ -678,6 +678,16 @@ function WhatFeedsThis({ feed, unit }: { feed: StageFeed; unit: string }) {
 const DASH = '–'
 
 // Friendly "Jul 3, 2026" for a manual entry's timestamp; '' when unknown/invalid.
+/** "Aug 12, 11:29 PM" — the moment a platform last refreshed a number. Accepts the vendor's
+ *  "2026-08-12 23:29:55" (UTC, no T or Z) as well as real ISO, and renders in local time. */
+function friendlyStamp(raw: string | null | undefined): string {
+  if (!raw) return ''
+  const iso = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(raw) ? raw.replace(' ', 'T') + 'Z' : raw
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 function friendlyDate(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
@@ -760,10 +770,14 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
   // CONNECTED + data — a genuine queried number. Hero (the stage's primary
   // sub-metric) gets a light green accent.
   if (s.status === 'CONNECTED' && s.hasData && s.value != null) {
+    /* When the PLATFORM last refreshed this number. Platforms run on their own clocks, so a
+     * single dashboard-wide "updated" line would be a guess for four of five cards. */
+    const asOf = friendlyStamp(s.asOf)
     return (
       <div style={{ ...base, background: hero ? C.greenSoft : '#fff', border: hero ? `1px solid ${C.greenLine}` : `0.5px solid ${C.line}` }}>
         {num(s.value, hero ? C.greenDk : C.ink)}
         {label}
+        {asOf && <span style={{ fontSize: 9, color: C.faint, lineHeight: 1.2 }}>as of {asOf}</span>}
       </div>
     )
   }
@@ -775,6 +789,7 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
       {dash}
       {label}
       {!small && <span style={{ fontSize: 9.5, color: C.faint }}>no activity yet</span>}
+      {friendlyStamp(s.asOf) && <span style={{ fontSize: 9, color: C.faint, lineHeight: 1.2 }}>as of {friendlyStamp(s.asOf)}</span>}
     </div>
   )
 }

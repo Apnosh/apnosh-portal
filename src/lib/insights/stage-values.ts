@@ -102,6 +102,9 @@ const num = (v: unknown): number => {
  * leaves its sources null. Only wired sources that can plausibly resolve
  * CONNECTED are read — the rest are simply never added to the map (=> null).
  */
+/** Per-source "as of" stamps, filled alongside the values (see loadStageFreshness). */
+export type StageFreshnessMap = Record<string, string>
+
 export async function loadStageValues(
   clientId: string,
   w: InsightsWindow = '30d',
@@ -369,4 +372,47 @@ function labelForPath(path: string): string {
   const seg = clean.split('/').pop() || clean
   const words = seg.replace(/[-_]+/g, ' ').trim()
   return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
+/**
+ * WHEN each platform's numbers were last refreshed BY THE PLATFORM, keyed by source id.
+ *
+ * Not "when we synced": the owner asked for the date they can actually trust, and those are
+ * different facts. A sync that runs every night still reports Instagram numbers the platform
+ * refreshed an hour ago and TikTok numbers it refreshed yesterday. The vendor stamps each
+ * analytics row with its own lastUpdated; the sync keeps the newest per platform, and this
+ * reads it back for the cards.
+ */
+export async function loadStageFreshness(clientId: string): Promise<StageFreshnessMap> {
+  const out: StageFreshnessMap = {}
+  try {
+    const admin = createAdminClient()
+    const since = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10)
+    const { data } = await admin
+      .from('social_metrics')
+      .select('platform, date, raw_data')
+      .eq('client_id', clientId)
+      .gte('date', since)
+      .order('date', { ascending: false })
+    const newest: Record<string, string> = {}
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      const p = typeof r.platform === 'string' ? r.platform : ''
+      if (!p) continue
+      const stamp = (r.raw_data as { source_updated_at?: unknown } | null)?.source_updated_at
+      const v = typeof stamp === 'string' && stamp ? stamp : ''
+      if (v && (!newest[p] || v > newest[p])) newest[p] = v
+    }
+    /* map platform -> the source ids that platform feeds */
+    const FEEDS: Record<string, string[]> = {
+      instagram: ['ig_reach', 'instagram_follows', 'instagram_saves_shares'],
+      facebook: ['facebook_reach', 'facebook_follows', 'facebook_saves_shares'],
+      tiktok: ['tiktok_video_views', 'tiktok_follows', 'tiktok_saves_shares'],
+      linkedin: ['linkedin_reach', 'linkedin_follows', 'linkedin_saves_shares'],
+      youtube: ['youtube_views', 'youtube_follows', 'youtube_saves_shares'],
+    }
+    for (const [platform, stamp] of Object.entries(newest)) {
+      for (const id of FEEDS[platform] ?? []) out[id] = stamp
+    }
+  } catch { /* freshness is a nicety; never break the numbers for it */ }
+  return out
 }

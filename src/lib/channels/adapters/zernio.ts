@@ -385,6 +385,20 @@ export const zernioAdapter: ChannelAdapter = {
     const rows = unwrapList(posts, 'posts', 'analytics') as ZernioPostRow[]
     const byDay = aggregateZernioPostsByDay(rows, today)
 
+    /* The vendor stamps every analytics row with when IT last refreshed those numbers from
+     * the platform (lastUpdated). Platforms refresh on their own clocks — Instagram minutes
+     * ago, TikTok hours ago — so keeping the newest per platform lets the dashboard say
+     * "as of" per platform instead of implying every number is equally fresh. */
+    const freshBy: Record<string, string> = {}
+    for (const r of rows) {
+      const o = (r ?? {}) as Record<string, unknown>
+      const p2 = normalizePlatform(o.platform ?? o.provider ?? o.type)
+      if (!p2) continue
+      const a = (o.analytics ?? {}) as Record<string, unknown>
+      const stamp = str(a.lastUpdated) || str(a.updatedAt) || str(a.last_updated)
+      if (stamp && (!freshBy[p2] || stamp > freshBy[p2])) freshBy[p2] = stamp
+    }
+
     /* 3b. Per-POST rows into social_posts — this is what "Recent posts" and the
      * content views read. One row per post, refreshed every sync. */
     const postRows = rows.flatMap((r) => {
@@ -486,7 +500,13 @@ export const zernioAdapter: ChannelAdapter = {
           followers_total: followersTotal,
           followers_gained: gained,
           engagement: t.engagement,
-          raw_data: { vendor: 'zernio', note: 'reach is summed post reach, not unique account reach', totals: t },
+          raw_data: {
+            vendor: 'zernio',
+            note: 'reach is summed post reach, not unique account reach',
+            totals: t,
+            /* when the PLATFORM last refreshed these numbers, per the vendor */
+            source_updated_at: freshBy[platform] ?? null,
+          },
         },
         { onConflict: 'client_id,platform,date' },
       )
