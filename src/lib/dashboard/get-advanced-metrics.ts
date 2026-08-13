@@ -22,6 +22,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllRows } from './fetch-all'
 import type { AdvMetric, AdvPeriod, AdvSource } from '@/components/dashboard/advanced-analytics'
 
 export interface AdvancedMetrics { metrics: AdvMetric[] }
@@ -279,15 +280,23 @@ async function load(clientId: string): Promise<AdvancedMetrics> {
   const bound = ymd(new Date(today.getTime() - BOUND_DAYS * DAY))
 
   const [gbp, reviews, localReviews, gbpLoc] = await Promise.all([
-    admin.from('gbp_metrics')
-      .select('date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks')
-      .eq('client_id', clientId).gte('date', bound).order('date', { ascending: true }),
-    admin.from('reviews')
-      .select('rating, posted_at')
-      .eq('client_id', clientId).gte('posted_at', bound + 'T00:00:00'),
-    admin.from('local_reviews')
-      .select('rating, created_at_platform')
-      .eq('client_id', clientId).gte('created_at_platform', bound + 'T00:00:00'),
+    /* PAGINATED. This window is BOUND_DAYS (800), so a two-location client is already past
+       PostgREST's 1000-row cap — and because the order is ascending, the rows silently dropped
+       are the most RECENT ones. Prod has two multi-location clients today, so this page has
+       been showing a data cliff to them rather than an error. */
+    fetchAllRows(admin, {
+      table: 'gbp_metrics',
+      cols: 'date, directions, calls, website_clicks, bookings, search_views, impressions_total, conversations, food_orders, food_menu_clicks',
+      clientId, dateCol: 'date', gte: bound,
+    }).then((data) => ({ data })),
+    fetchAllRows(admin, {
+      table: 'reviews', cols: 'rating, posted_at',
+      clientId, dateCol: 'posted_at', gte: bound + 'T00:00:00',
+    }).then((data) => ({ data })),
+    fetchAllRows(admin, {
+      table: 'local_reviews', cols: 'rating, created_at_platform',
+      clientId, dateCol: 'created_at_platform', gte: bound + 'T00:00:00',
+    }).then((data) => ({ data })),
     admin.from('gbp_locations')
       .select('place_rating, place_rating_count, is_primary')
       .eq('client_id', clientId),

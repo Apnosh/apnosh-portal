@@ -9,6 +9,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllRows } from './fetch-all'
 import { getMarketingCalendar, daysUntil } from '@/lib/dashboard/marketing-calendar'
 import { getPrimaryStrategist } from '@/lib/dashboard/get-primary-strategist'
 
@@ -145,11 +146,14 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
     try { const r = await p; return r.data ?? [] } catch { return [] }
   }
   const [gbp, social, web, reviews, localRevs, gbpConn, socialConn, clientRow, places] = await Promise.all([
-    safe(admin.from('gbp_metrics').select('date, search_views, photo_views').eq('client_id', clientId).gte('date', bound)),
-    safe(admin.from('social_metrics').select('date, reach, followers_total').eq('client_id', clientId).gte('date', bound)),
-    safe(admin.from('website_metrics').select('date, visitors').eq('client_id', clientId).gte('date', bound)),
-    safe(admin.from('reviews').select('rating, posted_at').eq('client_id', clientId)),
-    safe(admin.from('local_reviews').select('rating, created_at_platform').eq('client_id', clientId)),
+    /* PAGINATED. gbp_metrics is one row per LISTING per day, so a chain reaches the 1000-row
+       cap in half the days a single location would. The two review reads had no date bound at
+       ALL, so a long-lived client was already capped regardless of locations. */
+    fetchAllRows(admin, { table: 'gbp_metrics', cols: 'date, search_views, photo_views', clientId, dateCol: 'date', gte: bound }),
+    fetchAllRows(admin, { table: 'social_metrics', cols: 'date, reach, followers_total', clientId, dateCol: 'date', gte: bound }),
+    fetchAllRows(admin, { table: 'website_metrics', cols: 'date, visitors', clientId, dateCol: 'date', gte: bound }),
+    fetchAllRows(admin, { table: 'reviews', cols: 'rating, posted_at', clientId, dateCol: 'posted_at', gte: '1970-01-01T00:00:00' }),
+    fetchAllRows(admin, { table: 'local_reviews', cols: 'rating, created_at_platform', clientId, dateCol: 'created_at_platform', gte: '1970-01-01T00:00:00' }),
     safe(admin.from('gbp_connections').select('id').eq('client_id', clientId)),
     safe(admin.from('social_connections').select('sync_status').eq('client_id', clientId)),
     safe(admin.from('clients').select('has_apnosh_website').eq('id', clientId)),

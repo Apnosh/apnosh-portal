@@ -16,6 +16,7 @@
  */
 
 import { createClient as createAdminClient, SupabaseClient } from '@supabase/supabase-js'
+import { fetchAllRows } from '@/lib/dashboard/fetch-all'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -68,10 +69,14 @@ export async function getAllClientGbpStatuses(): Promise<Map<string, ClientGbpSt
   const [clientsRes, connectionsRes, metricsRes] = await Promise.all([
     db.from('clients').select('id, gbp_invite_sent_at'),
     db.from('gbp_connections').select('client_id, location_name, last_sync_at, sync_status'),
-    db.from('gbp_metrics')
-      .select('client_id, date, source')
-      .gte('date', metricsQueryCutoffIso)
-      .order('date', { ascending: false }),
+    /* PAGINATED. This sweeps EVERY client with no client filter, so the 1000-row cap was
+       reached almost immediately — clients past the cap had their freshness computed from no
+       rows at all and rendered as "stale" when their data was fine. Multi-location clients
+       make it arrive sooner still, one row per listing per day. */
+    fetchAllRows(db, {
+      table: 'gbp_metrics', cols: 'client_id, date, source',
+      dateCol: 'date', gte: metricsQueryCutoffIso, descending: true,
+    }).then((data) => ({ data })),
   ])
 
   const clients = (clientsRes.data ?? []) as Array<{

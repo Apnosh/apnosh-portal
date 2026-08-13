@@ -22,6 +22,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { fetchAllRows } from '@/lib/dashboard/fetch-all'
 import { getDataFrontier } from '@/lib/dashboard/data-frontier'
 import type { InsightsWindow, StageExplore } from './compute-stages'
 
@@ -124,13 +125,14 @@ export async function loadStageValues(
 
   // ── Google Business Profile (gbp_metrics) ──────────────────────────────
   try {
-    const { data, error } = await admin
-      .from('gbp_metrics')
-      .select('impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, search_views, impressions_total, directions, calls, website_clicks, bookings, food_menu_clicks')
-      .eq('client_id', clientId)
-      .gte('date', gbpStart)
-      .lte('date', gbpEnd)
-    if (!error && data) {
+    /* PAGINATED: a multi-location client writes one row per LISTING per day, so a long window
+       passes PostgREST's 1000-row cap and the newest days vanish without an error. */
+    const data = await fetchAllRows(admin, {
+      table: 'gbp_metrics',
+      cols: 'impressions_search_mobile, impressions_search_desktop, impressions_maps_mobile, impressions_maps_desktop, search_views, impressions_total, directions, calls, website_clicks, bookings, food_menu_clicks',
+      clientId, dateCol: 'date', gte: gbpStart, lte: gbpEnd,
+    })
+    if (data) {
       let search = 0, maps = 0
       let directions = 0, calls = 0, clicks = 0, bookings = 0, menuClicks = 0
       for (const r of data as Record<string, unknown>[]) {
