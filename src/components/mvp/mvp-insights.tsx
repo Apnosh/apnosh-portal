@@ -78,7 +78,7 @@ interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
 // Lazy-fetched from /api/dashboard/insights-detail.
-export interface InsightsPost { id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; likes: number; saves: number; postedAt: string | null }
+export interface InsightsPost { id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; /** this post kind never reports reach (e.g. a Story) — an absence, not a zero */ unreported?: boolean; likes: number; saves: number; postedAt: string | null }
 interface InsightsDetail {
   findYou: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } | null
   topQueries: { query: string; impressions: number }[]
@@ -764,6 +764,7 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
       <div style={{ ...base, background: hero ? C.greenSoft : '#fff', border: hero ? `1px solid ${C.greenLine}` : `0.5px solid ${C.line}` }}>
         {num(s.value, hero ? C.greenDk : C.ink)}
         {label}
+        {s.context && <span style={{ fontSize: 9.5, color: C.mute, lineHeight: 1.2 }}>{s.context}</span>}
         {asOf && <span style={{ fontSize: 9, color: C.faint, lineHeight: 1.2 }}>as of {asOf}</span>}
       </div>
     )
@@ -775,7 +776,11 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
     <div style={{ ...base, background: '#fff', border: `0.5px solid ${C.line}` }}>
       {dash}
       {label}
-      {!small && <span style={{ fontSize: 9.5, color: C.faint }}>no activity yet</span>}
+      {/* "0 new followers" with no other number reads as "you have no followers". The real
+          audience size rides along so the row cannot be misread that way. */}
+      {s.context
+        ? <span style={{ fontSize: 9.5, color: C.mute, lineHeight: 1.2 }}>{s.context}</span>
+        : !small && <span style={{ fontSize: 9.5, color: C.faint }}>no activity yet</span>}
       {friendlyStamp(s.asOf) && <span style={{ fontSize: 9, color: C.faint, lineHeight: 1.2 }}>as of {friendlyStamp(s.asOf)}</span>}
     </div>
   )
@@ -1624,7 +1629,9 @@ function BestPosts({ posts }: { posts: InsightsPost[] }) {
                   {p.postedAt && reviewDate(p.postedAt) && <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{reviewDate(p.postedAt)}</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 14, fontSize: 12, flexWrap: 'wrap' }}>
-                  {p.pending
+                  {p.unreported
+                    ? <span style={{ color: C.faint }}>reach not reported</span>
+                    : p.pending
                     ? <span style={{ color: C.faint }}>numbers still coming in</span>
                     : <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.reach.toLocaleString()}</b> reached</span>}
                   {p.likes > 0 && <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.likes.toLocaleString()}</b> likes</span>}

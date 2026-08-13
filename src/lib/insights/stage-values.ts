@@ -420,6 +420,66 @@ export async function loadStageFreshness(clientId: string): Promise<StageFreshne
     for (const [platform, stamp] of Object.entries(newest)) {
       for (const id of FEEDS[platform] ?? []) out[id] = stamp
     }
+
+    /* Google and the website report BY DAY, with no per-pull timestamp of their own — but
+     * "no stamp at all" reads as "we have no idea when this came from", which is worse than
+     * a date. The owner asked for a stamp on every platform (2026-08-13) and Google was the
+     * one still bare. Stamp them with the last day they actually reported, date-only, so the
+     * card says "as of Aug 8" rather than claiming an hour we cannot know. */
+    const dayStamp = async (table: string, ids: string[]) => {
+      const { data } = await admin
+        .from(table)
+        .select('date')
+        .eq('client_id', clientId)
+        .order('date', { ascending: false })
+        .limit(1)
+      const d = (data ?? [])[0] as { date?: unknown } | undefined
+      if (d && typeof d.date === 'string') for (const id of ids) out[id] = `${d.date} 00:00:00`
+    }
+    await Promise.all([
+      dayStamp('gbp_metrics', [
+        'gbp_impressions_search', 'gbp_impressions_maps', 'gbp_website_clicks',
+        'gbp_direction_requests', 'gbp_calls', 'gbp_booking_clicks', 'gbp_menu_clicks',
+      ]),
+      dayStamp('website_metrics', ['ga4_website_visits', 'ga4_order_clicks', 'ga4_returning_users']),
+    ])
   } catch { /* freshness is a nicety; never break the numbers for it */ }
+  return out
+}
+
+/**
+ * Per-source CONTEXT lines — a second true number the card needs to not mislead.
+ *
+ * Built for one specific lie: the Interest breakdown lists "Instagram followers 0",
+ * "TikTok followers 0" and so on, because those rows measure follows GAINED in the window
+ * and only Instagram reports that. The owner reads a row labelled followers showing 0 and
+ * concludes we lost their audience — reasonably. We now store the real audience size
+ * (social_metrics.followers_total), so each row can carry it.
+ *
+ * This never enters a sum. Followers are a STOCK (how many you have) and the stage headline
+ * is a FLOW (what happened in 30 days); adding them would be the same category error that
+ * produced the disagreeing numbers this dashboard has been chased over all week.
+ */
+export async function loadSourceContext(clientId: string): Promise<StageFreshnessMap> {
+  const out: StageFreshnessMap = {}
+  try {
+    const admin = createAdminClient()
+    const { data } = await admin
+      .from('social_metrics')
+      .select('platform, date, followers_total')
+      .eq('client_id', clientId)
+      .order('date', { ascending: false })
+      .limit(60)
+    const seen: Record<string, number> = {}
+    for (const r of (data ?? []) as Record<string, unknown>[]) {
+      const p = typeof r.platform === 'string' ? r.platform : ''
+      const v = num(r.followers_total)
+      if (!p || p in seen) continue
+      if (v > 0) seen[p] = v
+    }
+    for (const [platform, total] of Object.entries(seen)) {
+      out[`${platform}_follows`] = `${total.toLocaleString()} followers now`
+    }
+  } catch { /* context is a nicety; never break the numbers for it */ }
   return out
 }

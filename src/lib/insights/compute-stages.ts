@@ -62,6 +62,9 @@ export interface StageSourceView {
   /** When the PLATFORM last refreshed this number (not when we synced). Owner ask
    *  2026-08-13: a number you cannot date is a number you cannot trust. */
   asOf?: string | null
+  /** a second true number this card needs to not mislead (e.g. "2,194 followers now"
+   *  under a row that measures followers GAINED). Never summed. */
+  context?: string | null
 }
 
 /** Interest-only enrichment: the real, already-collected GA4 detail behind the
@@ -201,6 +204,7 @@ function toView(
   values: Record<string, number | null>,
   manual: ManualStore,
   freshness: Record<string, string> = {},
+  context: Record<string, string> = {},
 ): StageSourceView {
   const def = SOURCE_BY_ID[id]
   const resolved = statuses[id]
@@ -228,6 +232,7 @@ function toView(
   return {
     id,
     asOf: freshness[id] ?? null,
+    context: context[id] ?? null,
     displayName: def.displayName,
     shortLabel: shortLabelFor(id),
     provider: def.provider,
@@ -256,12 +261,13 @@ export function computeStagesFrom(
   values: Record<string, number | null>,
   manual: ManualStore = {},
   freshness: Record<string, string> = {},
+  context: Record<string, string> = {},
 ): ComputedStage[] {
   const stages: ComputedStage[] = []
 
   for (const stage of [1, 2, 3, 4, 5] as FunnelStage[]) {
     const defs = sourcesForStage(stage)
-    const sources = defs.map(d => toView(d.id, statuses, values, manual, freshness))
+    const sources = defs.map(d => toView(d.id, statuses, values, manual, freshness, context))
     const byId = (id: string) => sources.find(s => s.id === id)
 
     let heroSourceId: string | undefined
@@ -400,14 +406,15 @@ export async function computeStages(
 ): Promise<ComputedStage[]> {
   const { resolveSourceStatuses } = await import('./resolve-source-statuses')
   const { loadStageValues, loadInterestExplore } = await import('./stage-values')
-  const { loadStageFreshness } = await import('./stage-values')
-  const [statuses, values, explore, freshness] = await Promise.all([
+  const { loadStageFreshness, loadSourceContext } = await import('./stage-values')
+  const [statuses, values, explore, freshness, context] = await Promise.all([
     resolveSourceStatuses(clientId),
     loadStageValues(clientId, window, periodsBack),
     periodsBack === 0 ? loadInterestExplore(clientId, window) : Promise.resolve(null),
     loadStageFreshness(clientId),
+    loadSourceContext(clientId),
   ])
-  const stages = computeStagesFrom(statuses, values, {}, freshness)
+  const stages = computeStagesFrom(statuses, values, {}, freshness, context)
   // Interest (stage 2) carries the real "what they explored" GA4 detail. Never
   // enters any sum — the headline stays the honest sum of counted sources.
   if (explore) {

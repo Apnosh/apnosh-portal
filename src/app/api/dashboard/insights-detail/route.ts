@@ -160,6 +160,13 @@ export async function GET(req: NextRequest) {
          * real views reported as 0. Say pending instead of showing a false zero. */
         const state = String(raw.sync_state ?? 'synced')
         const value = (p.reach ?? 0) > 0 ? (p.reach ?? 0) : (p.video_views ?? 0)
+        /* Some post kinds simply have no reach to report — an Instagram Story is the one the
+         * owner hit (2026-08-13): it sat in the list saying "0 reached" next to reels pulling
+         * thousands, which reads as a flop rather than as a number the platform never sent.
+         * A synced post whose analytics carries NO view-family key at all was never measured,
+         * and that is a different fact from measured-zero. Say which one it is. */
+        const VIEW_KEYS = ['reach', 'impressions', 'views', 'viewCount', 'playCount', 'videoViews']
+        const measured = VIEW_KEYS.some((k) => a[k] != null)
         return {
           id: p.id,
           platform: p.platform,
@@ -169,6 +176,8 @@ export async function GET(req: NextRequest) {
           reach: value,
           /* true when the number is not trustworthy YET (their sync is still catching up) */
           pending: value === 0 && state !== 'synced',
+          /* true when this post kind never reports reach at all — not a zero, an absence */
+          unreported: value === 0 && state === 'synced' && !measured,
           likes: p.likes ?? 0,
           saves: p.saves ?? 0,
           postedAt: p.posted_at ?? null,
