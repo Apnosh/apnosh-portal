@@ -12,6 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { postType, toPostView, newestFirst } from '@/lib/insights/post-view'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getGbpAnalytics, type AnalyticsRange } from '@/lib/dashboard/get-gbp-analytics'
 import { getSocialPosts } from '@/lib/dashboard/get-social-posts'
@@ -26,28 +27,6 @@ type TopPost = {
   type: string; reach: number; likes: number; saves: number; postedAt: string | null
 }
 
-/**
- * Plain-English post type. Covers the old IG/FB product fields AND the social vendor's
- * mediaType enum (image | video | gif | document | carousel | text), because the owner could
- * not tell a video from a photo from a story in the feed.
- *
- * HONESTY: the vendor's analytics list does not flag stories, so we never label one. A Reel is
- * only called a Reel when the platform's own reel-specific metric proves it. Anything we cannot
- * name from real fields stays "Post" rather than being guessed into a category.
- */
-function postType(mediaType: string | null, product: string | null, isReel = false): string {
-  const p = (product ?? '').toUpperCase()
-  const m = (mediaType ?? '').toUpperCase()
-  if (p === 'REELS' || isReel) return 'Reel'
-  if (p === 'STORY') return 'Story'
-  if (m === 'VIDEO') return 'Video'
-  if (m === 'CAROUSEL_ALBUM' || m === 'CAROUSEL') return 'Carousel'
-  if (m === 'IMAGE') return 'Photo'
-  if (m === 'GIF') return 'GIF'
-  if (m === 'TEXT') return 'Text post'
-  if (m === 'DOCUMENT') return 'Document'
-  return 'Post'
-}
 
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')
@@ -131,6 +110,8 @@ export async function GET(req: NextRequest) {
   }
 
   let topPosts: TopPost[] = []
+  /* how many we actually hold, so the "view all" link states a true count */
+  let postCount = 0
   // Social reach + whether any social account is even connected. The Visibility
   // tab always shows the social channel in its data flow; these stay 0 / false
   // (an honest "connect to unlock") until an Instagram/Facebook sync exists.
@@ -141,48 +122,12 @@ export async function GET(req: NextRequest) {
   const googleConnected = gbp.status === 'fulfilled' && !!gbp.value
   if (posts.status === 'fulfilled' && Array.isArray(posts.value)) {
     socialConnected = posts.value.length > 0
+    postCount = posts.value.length
     socialReach = posts.value.reduce((s, p) => s + (p.reach ?? 0), 0)
-    /* Recent posts, newest first — a fresh post with zero reach still shows
-     * (owner call: even a 0 must be visible and accurate). Platforms that report
-     * views instead of reach (TikTok, LinkedIn) fall back to video_views. */
-    topPosts = posts.value
-      .slice()
-      .sort((a, b) => new Date(b.posted_at ?? 0).getTime() - new Date(a.posted_at ?? 0).getTime())
-      .slice(0, 5)
-      .map((p) => {
-        const raw = (p.raw_data ?? {}) as Record<string, unknown>
-        const a = (raw.analytics ?? {}) as Record<string, unknown>
-        /* Reel only when the platform's own reel-only metric is present (their spec: these are
-         * "Instagram Reels only, 0 for non-Reels media"). Never inferred from anything else. */
-        const isReel = Number(a.igReelsAvgWatchTime ?? 0) > 0 || Number(a.igReelsVideoViewTotalTime ?? 0) > 0
-        /* Their per-post sync state. A post whose numbers have not synced arrives as zeros,
-         * which is not the same fact as "nobody watched it" — the owner saw a video with 88
-         * real views reported as 0. Say pending instead of showing a false zero. */
-        const state = String(raw.sync_state ?? 'synced')
-        const value = (p.reach ?? 0) > 0 ? (p.reach ?? 0) : (p.video_views ?? 0)
-        /* Some post kinds simply have no reach to report — an Instagram Story is the one the
-         * owner hit (2026-08-13): it sat in the list saying "0 reached" next to reels pulling
-         * thousands, which reads as a flop rather than as a number the platform never sent.
-         * A synced post whose analytics carries NO view-family key at all was never measured,
-         * and that is a different fact from measured-zero. Say which one it is. */
-        const VIEW_KEYS = ['reach', 'impressions', 'views', 'viewCount', 'playCount', 'videoViews']
-        const measured = VIEW_KEYS.some((k) => a[k] != null)
-        return {
-          id: p.id,
-          platform: p.platform,
-          permalink: p.permalink || null,
-          thumbnailUrl: p.thumbnail_url,
-          type: postType(p.media_type, p.media_product_type, isReel),
-          reach: value,
-          /* true when the number is not trustworthy YET (their sync is still catching up) */
-          pending: value === 0 && state !== 'synced',
-          /* true when this post kind never reports reach at all — not a zero, an absence */
-          unreported: value === 0 && state === 'synced' && !measured,
-          likes: p.likes ?? 0,
-          saves: p.saves ?? 0,
-          postedAt: p.posted_at ?? null,
-        }
-      })
+    /* The five newest. A fresh post with zero reach still shows (owner call: even a 0 must be
+     * visible and accurate). The full list at /dashboard/insights/posts sorts and maps through
+     * the SAME helpers, so its first five are literally these five. */
+    topPosts = newestFirst(posts.value).slice(0, 5).map(toPostView)
   }
 
   // Fold social REACH into the funnel's TOP stage only — Awareness = "people who saw you"
@@ -242,5 +187,5 @@ export async function GET(req: NextRequest) {
     }
   } catch { /* keep the Google-derived dates rather than showing none */ }
 
-  return NextResponse.json({ findYou, topQueries, topPosts, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, audience, yoy, stages })
+  return NextResponse.json({ findYou, topQueries, topPosts, postCount, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, audience, yoy, stages })
 }

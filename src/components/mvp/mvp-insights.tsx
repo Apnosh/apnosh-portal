@@ -20,9 +20,10 @@
  * from /api/dashboard/insights-detail, keyed on clientId, so the home stays lean.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { usePullToRefresh, PullIndicator } from './pull-to-refresh'
 import {
   ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Minus, Star,
   Eye, MousePointerClick, CalendarDays, Mail, BarChart3,
@@ -83,6 +84,8 @@ interface InsightsDetail {
   findYou: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } | null
   topQueries: { query: string; impressions: number }[]
   topPosts: InsightsPost[]
+  /** total posts we hold, so "view all" can state a true count */
+  postCount?: number
   // total now folds social reach in (for the home funnel); this Google-framed tab reads the
   // Google-only `google` field so its "Real · Google" numbers + Maps/Search split stay honest.
   views: { total: number; maps: number; search: number; google?: number; social?: number } | null
@@ -256,6 +259,25 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
     return () => { live = false }
   }, [clientId])
 
+  /* Pull down to refresh. force=1 tells the route this is the owner asking rather than a
+   * routine view, so it drops from the 90 minute interval to a 30 second floor, then we reload
+   * the numbers. A pull that finds nothing new still ends with genuinely current data. */
+  const scroller = useRef<HTMLDivElement | null>(null)
+  const onPullRefresh = useCallback(async () => {
+    if (!clientId) return { ok: false, changed: false }
+    try {
+      const r = await fetch(`/api/dashboard/social-refresh?clientId=${clientId}&force=1`, { cache: 'no-store' })
+      const j = await r.json().catch(() => ({}))
+      const d = await fetch(`/api/dashboard/insights-detail?clientId=${clientId}`, { cache: 'no-store' })
+        .then((x) => (x.ok ? x.json() : null))
+      if (d) setDetail(d)
+      return { ok: true, changed: !!j?.synced }
+    } catch {
+      return { ok: false, changed: false }
+    }
+  }, [clientId])
+  const { pull, phase } = usePullToRefresh(useCallback(() => scroller.current, []), onPullRefresh)
+
   const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard') }
 
   return (
@@ -278,7 +300,8 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
         <AnalystButton />
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <PullIndicator pull={pull} phase={phase} />
         {loading ? (
           <Centered>Loading your numbers&hellip;</Centered>
         ) : error ? (
@@ -503,7 +526,7 @@ function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; 
           {cs
             ? <RangeSources cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" title="Views by source" range={range} />
             : <WhatFeedsThis feed={buildAwarenessFeed(toFeedInput(detail))} unit="Times you showed up" />}
-          {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
+          {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} total={detail?.postCount} />}
           {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
         </>
       )
@@ -1631,11 +1654,12 @@ function TopSearches({ queries }: { queries: { query: string; impressions: numbe
 //    · the type chip names what it is (Photo / Video / Reel / Carousel) from real fields
 //    · a row only looks tappable when there IS a link; otherwise it says the link is
 //      unavailable, because a tap that goes nowhere reads as broken
-function BestPosts({ posts }: { posts: InsightsPost[] }) {
-  return (
-    <Section title="Recent posts">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {posts.map((p) => {
+/**
+ * ONE post row, exported so the "view all" page renders the SAME row rather than a copy that
+ * drifts. The honesty rules below live here once: a re-implementation on the full list would
+ * be the next place a false zero or a dead link comes back.
+ */
+export function PostRow({ p }: { p: InsightsPost }) {
           const inner = (
             <>
               <div style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: p.thumbnailUrl ? '#000' : C.bg, backgroundImage: p.thumbnailUrl ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1662,11 +1686,27 @@ function BestPosts({ posts }: { posts: InsightsPost[] }) {
           )
           const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 11, alignItems: 'center', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 10 }
           return p.permalink
-            ? <a key={p.id} href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
-            : <div key={p.id} style={box}>{inner}</div>
-        })}
+            ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
+            : <div style={box}>{inner}</div>
+}
+
+export const POSTS_FOOTNOTE = 'Your latest posts across every connected account, with what each one reached so far. A post added very recently can take a day for its numbers to arrive.'
+
+/** The five newest, with a way through to everything. The count is the REAL total we hold,
+ *  so the link never promises a fuller list than exists. */
+function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) {
+  const more = typeof total === 'number' && total > posts.length
+  return (
+    <Section title="Recent posts">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {posts.map((p) => <PostRow key={p.id} p={p} />)}
       </div>
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>Your latest posts across every connected account, with what each one reached so far. A post added very recently can take a day for its numbers to arrive.</div>
+      {more && (
+        <Link href="/dashboard/insights/posts" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 10, padding: '11px 12px', borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', textDecoration: 'none', color: C.greenDk, fontSize: 13, fontWeight: 600 }}>
+          View all {total} posts <ChevronRight size={15} />
+        </Link>
+      )}
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>{POSTS_FOOTNOTE}</div>
     </Section>
   )
 }

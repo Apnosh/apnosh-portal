@@ -30,6 +30,12 @@ export const maxDuration = 60
 /** Vendor-grounded: below this they have no fresher data. */
 const STALE_AFTER_MS = 90 * 60 * 1000
 
+/* A pull-to-refresh is the owner SAYING "get me everything you can right now", so it skips the
+ * 90 minute interval. It keeps a short floor anyway: repeated tugs a few seconds apart would
+ * hammer the vendor for numbers that cannot have changed, and their own on-demand post pull is
+ * debounced around 15 seconds regardless. */
+const FORCE_FLOOR_MS = 30 * 1000
+
 export async function GET(req: NextRequest) {
   const { user, clientId } = await resolveCurrentClient(req.nextUrl.searchParams.get('clientId'))
   if (!user || !clientId) return NextResponse.json({ synced: false, reason: 'no client' }, { status: 200 })
@@ -46,11 +52,16 @@ export async function GET(req: NextRequest) {
 
   if (!conn) return NextResponse.json({ synced: false, reason: 'no social connection' })
 
-  const cutoff = new Date(Date.now() - STALE_AFTER_MS).toISOString()
+  const forced = req.nextUrl.searchParams.get('force') === '1'
+  const window = forced ? FORCE_FLOOR_MS : STALE_AFTER_MS
+  const cutoff = new Date(Date.now() - window).toISOString()
   const last = conn.last_sync_at as string | null
   if (last && last > cutoff) {
-    const mins = Math.ceil((new Date(last).getTime() + STALE_AFTER_MS - Date.now()) / 60000)
-    return NextResponse.json({ synced: false, reason: 'fresh', nextInMinutes: mins })
+    const mins = Math.ceil((new Date(last).getTime() + window - Date.now()) / 60000)
+    /* A forced pull that lands inside the floor is still a SUCCESS from the owner's side: they
+     * asked for the newest data and the newest data is what is already on screen. Saying
+     * "already up to date" is true; saying nothing would read as a gesture that did nothing. */
+    return NextResponse.json({ synced: false, reason: forced ? 'already up to date' : 'fresh', upToDate: forced, nextInMinutes: mins })
   }
 
   /* Claim the window before doing the work. The filter makes this a compare-and-set: whoever

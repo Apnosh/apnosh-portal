@@ -25,6 +25,7 @@ import type { UpcomingWorkItem } from '@/lib/dashboard/get-upcoming-work'
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { selectHomeOrders } from '@/lib/campaigns/home-cards'
 import { HomeFunnelLive } from './home-funnel'
+import { usePullToRefresh, PullIndicator } from './pull-to-refresh'
 import { MvpThemeProvider, useMvpTheme } from './mvp-theme'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
@@ -178,6 +179,28 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
   // shows an honest connect card in its place — never a blank screen (the sim's most-hit
   // defect: 6 of 20 owners finished onboarding onto an empty white page).
   const [funnelVis, setFunnelVis] = useState<'loading' | 'shown' | 'empty'>('loading')
+  /* Pull down to refresh, on the shell's own scroller. Home does not own its scroll container
+   * (MvpShell does), so it is found by class rather than by ref — the alternative was threading
+   * a ref through the shell for every screen that will eventually want this gesture.
+   * force=1 skips the routine 90 minute interval: a deliberate tug means "right now". */
+  const [pulls, setPulls] = useState(0)
+  const onPullRefresh = useCallback(async () => {
+    if (!clientId) return { ok: false, changed: false }
+    try {
+      const r = await fetch(`/api/dashboard/social-refresh?clientId=${clientId}&force=1`, { cache: 'no-store' })
+      const j = await r.json().catch(() => ({}))
+      /* Remount the funnel so it refetches: it owns its own data and range state, and this is
+       * cheaper and less brittle than lifting all of that up just to force a reload. */
+      setPulls((n) => n + 1)
+      return { ok: true, changed: !!j?.synced }
+    } catch {
+      return { ok: false, changed: false }
+    }
+  }, [clientId])
+  const { pull, phase } = usePullToRefresh(
+    useCallback(() => (typeof document === 'undefined' ? null : document.querySelector<HTMLElement>('.mvp-frame-scroll')), []),
+    onPullRefresh,
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const onScroll = () => {
@@ -233,7 +256,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             funnel (Awareness → Interest → Customer actions → Orders → Retention)
             in the glass-vessel view. Renders only when the business has Google data. */}
         <div style={{ margin: '-16px -18px 0' }}>
-          <HomeFunnelLive clientId={clientId} height={620} fill onVisibility={setFunnelVis} />
+          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} /></>
         </div>
 
         {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
