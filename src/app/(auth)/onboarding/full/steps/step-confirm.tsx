@@ -1,8 +1,9 @@
 'use client'
 
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { type OnboardingData, type LocationDraft, CUISINES, PRICE_TIERS, FOOD_BIZ_TYPES, BIZ_TYPES } from '../data'
 import { Question, Input, SingleChipGroup } from '../ui'
+import { isLookupEnabled, searchBusinesses, getBusinessPrefill, type PlaceCandidate } from '@/lib/onboarding-lookup'
 
 interface Props {
   data: OnboardingData
@@ -39,6 +40,42 @@ export default function StepConfirm({ data, update, nav }: Props) {
   })
   const setExtra = (i: number, next: LocationDraft) =>
     update('locations', extras.map((l, j) => (j === i ? next : l)))
+
+  /* GOOGLE SEARCH FOR EXTRA LOCATIONS.
+   * The screen this replaced ran a Places lookup per location, and typing a second address by
+   * hand is exactly the chore a chain feels most. Same helpers as the name step: search, pick,
+   * and the whole draft (address, city, state, zip, phone, hours, place_id) arrives filled.
+   * place_id matters beyond convenience — it is what later links this spot to its own Google
+   * listing, which hand-typing can never produce. */
+  const [lookupOn, setLookupOn] = useState(false)
+  useEffect(() => { isLookupEnabled().then(setLookupOn) }, [])
+  const [adding, setAdding] = useState(false)
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<PlaceCandidate[]>([])
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!adding || !lookupOn || q.trim().length < 3) { setHits([]); return }
+    let live = true
+    const t = setTimeout(async () => {
+      setBusy(true)
+      const found = await searchBusinesses(q.trim()).catch(() => [])
+      if (live) { setHits(found.slice(0, 4)); setBusy(false) }
+    }, 350)
+    return () => { live = false; clearTimeout(t) }
+  }, [q, adding, lookupOn])
+
+  async function addFromGoogle(c: PlaceCandidate) {
+    setBusy(true)
+    const p = await getBusinessPrefill(c.placeId).catch(() => null)
+    setBusy(false)
+    const draft: LocationDraft = p
+      ? { name: c.name, full_address: p.full_address, city: p.city, state: p.state, zip: p.zip,
+          place_id: c.placeId, phone: p.phone, hours: p.hours }
+      : { ...blankLocation(), name: c.name, full_address: c.address, place_id: c.placeId }
+    update('locations', [...extras, draft])
+    setQ(''); setHits([]); setAdding(false)
+  }
 
   const hoursCount = Object.values(data.hours || {}).filter((h) => h && !h.closed).length
   const dishes = data.signature_items.filter((s) => s.trim()).length
@@ -136,13 +173,49 @@ export default function StepConfirm({ data, update, nav }: Props) {
                 </button>
               </div>
             ))}
-            <button
-              type="button"
-              onClick={() => update('locations', [...extras.map(toDraft), blankLocation()])}
-              style={{ border: '1px solid #d8ece4', background: '#f2faf7', color: '#2f8f70', fontSize: 13, fontWeight: 600, borderRadius: 12, minHeight: 44 }}
-            >
-              Add another location
-            </button>
+            {adding ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Input value={q} onChange={setQ} placeholder="Search Google for the location" autoFocus />
+                {busy && <span style={{ fontSize: 12, color: '#9aa1ab' }}>Searching…</span>}
+                {hits.map((h) => (
+                  <button
+                    key={h.placeId}
+                    type="button"
+                    onClick={() => addFromGoogle(h)}
+                    className="w-full text-left"
+                    style={{ border: '1px solid #e8e9ec', background: '#fff', borderRadius: 12, padding: '10px 12px', minHeight: 52 }}
+                  >
+                    <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#16181d' }}>{h.name}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: '#9aa1ab' }}>{h.address}</span>
+                  </button>
+                ))}
+                <div style={{ display: 'flex', gap: 14 }}>
+                  {/* Google does not know every spot — a brand new one may not be listed yet. */}
+                  <button
+                    type="button"
+                    onClick={() => { update('locations', [...extras.map(toDraft), blankLocation()]); setAdding(false); setQ('') }}
+                    style={{ border: 'none', background: 'none', color: '#2f8f70', fontSize: 12.5, fontWeight: 600, padding: '6px 0', minHeight: 34 }}
+                  >
+                    Type it instead
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setAdding(false); setQ(''); setHits([]) }}
+                    style={{ border: 'none', background: 'none', color: '#9aa1ab', fontSize: 12.5, padding: '6px 0', minHeight: 34 }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => (lookupOn ? setAdding(true) : update('locations', [...extras.map(toDraft), blankLocation()]))}
+                style={{ border: '1px solid #d8ece4', background: '#f2faf7', color: '#2f8f70', fontSize: 13, fontWeight: 600, borderRadius: 12, minHeight: 44 }}
+              >
+                Add another location
+              </button>
+            )}
             <span style={{ fontSize: 11.5, color: '#9aa1ab', lineHeight: 1.5 }}>
               Just a name and address here. Hours, phone and their Google listings are easier to
               set per location from your dashboard.
