@@ -132,13 +132,52 @@ export default function StepConfirm({ data, update, nav }: Props) {
           </>
         )}
 
-        <Row id="address" label="WHERE" value={data.full_address}>
-          <Input value={data.full_address} onChange={(v) => update('full_address', v)} placeholder="Street address" />
-        </Row>
-
-        <Row id="phone" label="PHONE" value={data.phone}>
-          <Input value={data.phone} onChange={(v) => update('phone', v)} placeholder="(555) 555-5555" />
-        </Row>
+        {/* ONE PLACE READS AS A FIELD; SEVERAL MUST READ AS A LIST.
+            The card first showed the main address under "WHERE" and hid the others behind a
+            collapsed line, so a two-location business still looked like one place (owner,
+            2026-08-13). Past the first location the address stops being an attribute of the
+            business and becomes a set of places, so it is drawn as one — numbered, each with
+            its own name and address, the main one included rather than floating above. */}
+        {extras.length === 0 ? (
+          <>
+            <Row id="address" label="WHERE" value={data.full_address}>
+              <Input value={data.full_address} onChange={(v) => update('full_address', v)} placeholder="Street address" />
+            </Row>
+            <Row id="phone" label="PHONE" value={data.phone}>
+              <Input value={data.phone} onChange={(v) => update('phone', v)} placeholder="(555) 555-5555" />
+            </Row>
+          </>
+        ) : (
+          <div style={{ borderBottom: '1px solid #f0f0f2', padding: '14px 2px 16px' }}>
+            <div style={{ fontSize: 11.5, color: '#9aa1ab', marginBottom: 10 }}>
+              {extras.length + 1} LOCATIONS
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[{ name: data.biz_name, addr: data.full_address, primary: true },
+                ...extras.map((l) => ({ name: l.name, addr: l.full_address, primary: false }))]
+                .map((loc, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 11, alignItems: 'flex-start', border: '1px solid #e8e9ec', borderRadius: 12, padding: '11px 12px', background: '#fff' }}>
+                    <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: '#f2faf7', color: '#2f8f70', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+                      {i + 1}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: loc.name ? '#16181d' : '#c3c7cd' }}>
+                        {loc.name || `Location ${i + 1}`}
+                      </span>
+                      <span style={{ display: 'block', fontSize: 12.5, color: loc.addr ? '#6b7280' : '#c3c7cd', marginTop: 1 }}>
+                        {loc.addr || 'No address yet'}
+                      </span>
+                      {loc.primary && (
+                        <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 700, color: '#2f8f70', background: '#f2faf7', borderRadius: 99, padding: '2px 7px', marginTop: 6 }}>
+                          MAIN
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
 
         <Row id="site" label="WEBSITE" value={data.website}>
           <Input value={data.website} onChange={(v) => update('website', v)} placeholder="yourplace.com" />
@@ -150,7 +189,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
             that says how many we have, opening a small list when there genuinely are more.
             Dropping this in the redesign was a real regression — a chain could not add its
             other locations at all (caught by the owner, 2026-08-13). */}
-        <Row id="locs" label="LOCATIONS" value={extras.length ? `${extras.length + 1} locations` : 'Just this one'}>
+        <Row id="locs" label={extras.length ? "EDIT LOCATIONS" : "LOCATIONS"} value={extras.length ? `${extras.length + 1} places` : 'Just this one'}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {extras.map((loc, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
