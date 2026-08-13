@@ -100,6 +100,12 @@ export default function OnboardingPage() {
           customer_types: biz.customer_types || [],
           why_choose: biz.why_choose || [],
           primary_goal: biz.primary_goal || '',
+          /* Rebuild the three picks on resume from the columns we already store, so coming
+             back mid-setup shows the same chips lit rather than an empty screen. */
+          top_goals: [
+            ...(biz.primary_goal ? [String(biz.primary_goal)] : []),
+            ...String(biz.goal_detail || '').split(',').map((g) => g.trim()).filter(Boolean),
+          ].slice(0, 3),
           goal_detail: biz.goal_detail || '',
           success_signs: biz.success_signs || [],
           timeline: biz.timeline || '',

@@ -409,6 +409,8 @@ export interface OnboardingData {
   customer_age_range: string
   why_choose: string[]
   primary_goal: string
+  /** the owner's top three, in priority order. primary_goal stays the first. */
+  top_goals: string[]
   goal_detail: string
   success_signs: string[]
   timeline: string
@@ -470,6 +472,7 @@ export const INITIAL_DATA: OnboardingData = {
   customer_age_range: '',
   why_choose: [],
   primary_goal: '',
+  top_goals: [],
   goal_detail: '',
   success_signs: [],
   timeline: '',
