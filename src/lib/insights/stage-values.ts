@@ -526,14 +526,25 @@ export async function loadSourceContext(clientId: string): Promise<StageFreshnes
       .order('date', { ascending: false })
       .limit(60)
     const seen: Record<string, number> = {}
+    const days: Record<string, Set<string>> = {}
     for (const r of (data ?? []) as Record<string, unknown>[]) {
       const p = typeof r.platform === 'string' ? r.platform : ''
       const v = num(r.followers_total)
-      if (!p || p in seen) continue
-      if (v > 0) seen[p] = v
+      if (!p) continue
+      if (v > 0) {
+        if (!(p in seen)) seen[p] = v
+        ;(days[p] ??= new Set()).add(typeof r.date === 'string' ? r.date : '')
+      }
     }
     for (const [platform, total] of Object.entries(seen)) {
-      out[`${platform}_follows`] = `${total.toLocaleString()} followers now`
+      /* A bare dash asks the owner to guess why the number is missing. Instagram has follower
+       * history going back months (the older direct integration), the other four only started
+       * when the vendor sync began, so their new-follower count cannot exist yet. Say that
+       * rather than leaving a silent gap. */
+      const thin = (days[platform]?.size ?? 0) < 2
+      out[`${platform}_follows`] = thin
+        ? `${total.toLocaleString()} followers now · new count starts soon`
+        : `${total.toLocaleString()} followers now`
     }
   } catch { /* context is a nicety; never break the numbers for it */ }
   return out
