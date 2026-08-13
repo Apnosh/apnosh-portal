@@ -12,8 +12,18 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * Rules:
  *  - a family (Google Business, social, website) counts only if it has a
  *    non-zero day within the last 14 days — a dead feed can't freeze the charts
- *  - the frontier is the OLDEST active family's newest non-zero day
- *  - floored at today-2 (settling: the newest 1-2 days under-report everywhere)
+ *  - the frontier is the NEWEST day any active family has real data
+ *
+ * IT USED TO BE THE OLDEST, and that hid real numbers (found live 2026-08-13). A freshly
+ * connected YouTube channel had 1,772 views stored from Aug 12-13, while Google — which
+ * always reports 3-4 days behind — pinned the window's end to Aug 8. The views existed,
+ * were correct, and sat outside the window, so the dashboard showed 0 and every check said
+ * "healthy". Ending on the oldest source makes each window uniformly deep, but it silently
+ * throws away whatever the fresher sources know, which is the opposite of the point.
+ *
+ * The tradeoff, stated plainly: the newest few days of a window now carry the fast sources
+ * only, because the slow ones have not reported yet. That is visible and self-correcting
+ * (the staleness pill names the last update). Hiding real numbers is not.
  */
 
 const DAY = 86_400_000
@@ -56,6 +66,6 @@ export async function getDataFrontier(admin: SupabaseClient, clientId: string): 
   ].filter((d): d is string => !!d && d >= dormantBefore)
 
   if (!lasts.length) return floor
-  const oldest = lasts.reduce((a, b) => (a < b ? a : b))
-  return oldest < floor ? oldest : floor
+  /* newest, not oldest: show everything any source actually knows */
+  return lasts.reduce((a, b) => (a > b ? a : b))
 }
