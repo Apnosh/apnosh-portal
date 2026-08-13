@@ -373,8 +373,11 @@ export function computeStagesFrom(
         total != null ? 'has'
           : gs.some(s => s.status === 'AVAILABLE_NOT_CONNECTED' || s.status === 'ERROR') ? 'connect'
             : 'soon'
-      /* inline split on the card, only for multi-source groups */
-      const parts = counted.length > 1
+      /* Inline split on the card, only for a clean PAIR (Search 41 · Maps 20). A five-platform
+       * group turns the same treatment into a wall of small print under every card, so those
+       * keep the headline number only; their per-platform detail lives in the breakdown below,
+       * which is the place built for it. (Owner call 2026-08-13.) */
+      const parts = counted.length === 2
         ? counted.map(s => ({ label: PART_LABEL[s.id] ?? s.displayName, value: s.value ?? 0 }))
         : undefined
       return { key: g.key, label: g.label, total, state, sourceIds: gs.map(s => s.id), parts }
