@@ -241,6 +241,54 @@ export async function loadStageValues(
         out[`${pl}_follows`] = folBy[pl] ?? 0
         out[`${pl}_saves_shares`] = ssBy[pl] ?? 0
       }
+
+      /* ── New followers: prefer the AUDIENCE DELTA, and never print an unreported 0 ──
+       *
+       * The per-post `follows` field above is the vendor's, and only Instagram ever fills it:
+       * across 90 days this account had 2,235 Instagram follows and EXACTLY 0 on Facebook,
+       * TikTok, LinkedIn and YouTube, over twenty-odd posts with real reach. Four platforms
+       * landing on precisely zero for three months is a field they do not report, not a fact
+       * about the business — but it rendered as a hard 0, which reads as "you gained nobody".
+       *
+       * We now store followers_total daily for every platform, so the truthful number is the
+       * change in audience across the window. That works everywhere, needs no per-post support,
+       * and is what the owner means by "new followers". It needs two days of history to exist.
+       *
+       * So, per platform, in order:
+       *   1. two or more days of followers_total in the window -> last minus first. Real.
+       *   2. otherwise, a non-zero per-post count -> keep it (Instagram today).
+       *   3. otherwise -> null, which renders as a dash, not a zero. We do not know yet.
+       * A dash alongside "614 followers now" says the honest thing; a 0 does not. */
+      try {
+        const { data: fRows } = await capDate(admin
+          .from('social_metrics')
+          .select('platform, date, followers_total')
+          .eq('client_id', clientId)
+          .gte('date', otherStart)
+          .order('date', { ascending: true }))
+        const series: Record<string, { date: string; total: number }[]> = {}
+        for (const r of (fRows ?? []) as Record<string, unknown>[]) {
+          const pl = typeof r.platform === 'string' ? r.platform : ''
+          const total = num(r.followers_total)
+          const date = typeof r.date === 'string' ? r.date : ''
+          if (!pl || !date || total <= 0) continue
+          ;(series[pl] ??= []).push({ date, total })
+        }
+        for (const pl of ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const) {
+          const pts = series[pl] ?? []
+          const days = new Set(pts.map((x) => x.date))
+          if (days.size >= 2) {
+            out[`${pl}_follows`] = pts[pts.length - 1].total - pts[0].total
+          } else if ((folBy[pl] ?? 0) === 0) {
+            out[`${pl}_follows`] = null
+          }
+        }
+        /* the roll-up follows the same rule: sum only what we actually know */
+        const known = (['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const)
+          .map((pl) => out[`${pl}_follows`])
+          .filter((v): v is number => typeof v === 'number')
+        out.social_follows = known.length ? known.reduce((a, b) => a + b, 0) : null
+      } catch { /* keep the per-post numbers if the audience read fails */ }
     }
   } catch { /* social unavailable */ }
 
