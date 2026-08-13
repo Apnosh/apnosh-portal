@@ -1168,7 +1168,20 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
     if (!clientId) { onVisibility?.('empty'); return }
     let alive = true
     setLoading(true)
-    fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}`)
+
+    /* Draw what we have, THEN quietly ask whether anything newer exists. Never the other way
+     * round: a refresh in front of the first paint would trade a working screen for a spinner,
+     * and most views find nothing new anyway. The route decides whether a sync is due (it holds
+     * the vendor-grounded 90 minute interval and an atomic claim), so this can fire on every
+     * mount, including React's doubled mount in development, without doing the work twice. */
+    const refreshThenReload = (load: () => void) => {
+      fetch(`/api/dashboard/social-refresh?clientId=${clientId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((res) => { if (alive && res?.synced) load() })
+        .catch(() => { /* the numbers on screen are still the last good ones */ })
+    }
+
+    const load = () => fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!alive) return
@@ -1188,6 +1201,8 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
       })
       .catch(() => { if (alive) onVisibility?.('empty') /* Home stays lean if this fails */ })
       .finally(() => { if (alive) setLoading(false) })
+
+    load().then(() => { if (alive) refreshThenReload(load) })
     return () => { alive = false }
     // onVisibility identity is caller-stable; depend on the data inputs only
     // eslint-disable-next-line react-hooks/exhaustive-deps

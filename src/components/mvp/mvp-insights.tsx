@@ -226,10 +226,20 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
     if (!clientId) return
     let live = true
     setDetail(null)
-    fetch(`/api/dashboard/insights-detail?clientId=${clientId}`)
+    const load = () => fetch(`/api/dashboard/insights-detail?clientId=${clientId}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (live && j) setDetail(j) })
       .catch(() => { /* leave the sections quiet on failure */ })
+    /* Same self-refresh as the home funnel: show the stored numbers first, then ask the route
+     * whether a sync is due and redraw only if one actually ran. The route owns the interval,
+     * so opening Insights right after Home costs one cheap "already fresh" reply. */
+    load().then(() => {
+      if (!live) return
+      fetch(`/api/dashboard/social-refresh?clientId=${clientId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((res) => { if (live && res?.synced) load() })
+        .catch(() => { /* the numbers on screen are still the last good ones */ })
+    })
     return () => { live = false }
   }, [clientId])
 
