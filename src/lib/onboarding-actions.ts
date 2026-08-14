@@ -546,19 +546,49 @@ export async function getConnectedPlatforms(clientId: string): Promise<Record<st
     }
   }
 
-  /* socials linked through the vendor (zernio/ayrshare): one connection row,
-   * per-platform state in metadata.platforms */
+  /* SOCIALS: ASK THE VENDOR LIVE, NEVER ONLY THE CACHE.
+   *
+   * metadata.platforms is written by the nightly SYNC, not at connect time. So the owner's
+   * exact complaint happened: connect Instagram on the hosted page, come back, and this
+   * function reads an empty cache and says "not connected". The connections dashboard was
+   * given a live read for this precise bug days ago (connection-actions.ts); onboarding never
+   * got the same fix — the recurring disease of this codebase, state written in one place and
+   * read stale from another. The cache is healed on the way through so every other reader
+   * benefits, and it remains the fallback when the vendor is unreachable. */
   const { data: vendor } = await supabase
     .from('channel_connections')
-    .select('metadata')
+    .select('id, channel, platform_account_id, metadata')
     .eq('client_id', clientId)
     .in('channel', ['zernio', 'ayrshare'])
+
+  const NAME: Record<string, string> = {
+    instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok',
+    linkedin: 'LinkedIn', youtube: 'YouTube',
+  }
   for (const v of vendor ?? []) {
-    const platforms = (v.metadata as { platforms?: unknown } | null)?.platforms
-    if (!Array.isArray(platforms)) continue
+    let platforms: string[] = []
+    if (v.channel === 'zernio' && typeof v.platform_account_id === 'string' && v.platform_account_id) {
+      try {
+        const { liveLinkedPlatforms } = await import('@/lib/channels/adapters/zernio')
+        const live = await liveLinkedPlatforms(v.platform_account_id)
+        if (live && live.platforms.length > 0) {
+          platforms = live.platforms
+          const md = (v.metadata ?? {}) as Record<string, unknown>
+          const cached = Array.isArray(md.platforms) ? (md.platforms as unknown[]).join(',') : ''
+          if (cached !== platforms.join(',')) {
+            await supabase.from('channel_connections')
+              .update({ metadata: { ...md, platforms } })
+              .eq('id', v.id)
+          }
+        }
+      } catch { /* vendor unreachable: the cache below still answers */ }
+    }
+    if (platforms.length === 0) {
+      const cached = (v.metadata as { platforms?: unknown } | null)?.platforms
+      if (Array.isArray(cached)) platforms = cached as string[]
+    }
     for (const p of platforms) {
-      const name = p === 'instagram' ? 'Instagram' : p === 'facebook' ? 'Facebook'
-        : p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : null
+      const name = NAME[String(p).toLowerCase()]
       if (name) connected[name] = true
     }
   }

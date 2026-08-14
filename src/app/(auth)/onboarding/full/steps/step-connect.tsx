@@ -98,6 +98,33 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [businessId])
 
+  /* RE-ASK WHEN THE OWNER COMES BACK. The connect finishes in ANOTHER tab (or app), so this
+   * tab's one on-mount read is guaranteed stale at exactly the moment it matters. Refresh on
+   * focus and visibility, which is when a human returns from the vendor page — the chip flips
+   * to Connected without anyone having to know to reload. */
+  useEffect(() => {
+    if (!clientId) return
+    let busy = false
+    const refresh = async () => {
+      if (busy || document.visibilityState !== 'visible') return
+      busy = true
+      try {
+        const connected = await getConnectedPlatforms(clientId)
+        if (Object.keys(connected).length > 0) {
+          update('connected', { ...data.connected, ...connected })
+        }
+      } catch { /* keep the chips we have */ }
+      busy = false
+    }
+    window.addEventListener('focus', refresh)
+    document.addEventListener('visibilitychange', refresh)
+    return () => {
+      window.removeEventListener('focus', refresh)
+      document.removeEventListener('visibilitychange', refresh)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId])
+
   // Listen for OAuth popup callback messages
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === 'oauth-callback') {
