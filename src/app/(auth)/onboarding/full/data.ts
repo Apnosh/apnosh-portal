@@ -334,9 +334,18 @@ export function getSteps(): StepId[] {
    *   biz_name — the key everything else is looked up by
    *   confirm  — read what we found, fix anything wrong
    *   goals    — the top three, which steer the plan
-   *   approval — how hands-on they want to be
    *   connect  — the accounts, without which none of this works
    * then review, which is a finish line rather than a question.
+   *
+   * The approval step went too (owner call, 2026-08-13): "how hands-on do you want to be?",
+   * "who can appear on camera?" and "can we tag @apnosh?" are questions about work that has not
+   * been ordered yet. They belong at the moment a monthly campaign is bought, when the owner
+   * has a reason to care and a concrete thing to consent about, not in setup where they read as
+   * paperwork. The step file and its renderer case survive so that surfacing is a wiring job.
+   *
+   * IMPORTANT: can_film and can_tag stay EMPTY, never defaulted to a yes. They are consent, and
+   * consent that was never given must not be inferred from silence. The admin profile tab
+   * already renders them blank, which is the honest state.
    *
    * Brand voice, audience, busy/slow rhythm and brand assets moved to the dashboard (owner
    * call, 2026-08-13). They are real questions, but asking them here is what made setup feel
@@ -344,7 +353,7 @@ export function getSteps(): StepId[] {
    * fields and steps still exist, so nothing that reads them broke, and a prompt can surface
    * any of them on the dashboard when it matters.
    */
-  return ['role', 'biz_name', 'confirm', 'goals', 'approval', 'connect', 'review']
+  return ['role', 'biz_name', 'confirm', 'goals', 'connect', 'review']
 }
 
 // A single menu row captured during onboarding. Promoted to a
