@@ -22,11 +22,17 @@ const OAUTH_PATHS: Record<string, string> = {
    * chip fell through to the coming-soon branch. origin=onboarding is what makes the callback
    * come back here instead of dropping the owner on the dashboard location picker mid-setup. */
   'Google Business': '/api/auth/google-business?origin=onboarding',
+  /* THE REGISTERS. Both have had real OAuth start routes and token exchange since the channels
+   * work, and both are live on the dashboard's Connected accounts page — they were simply never
+   * offered during setup. Connecting the register is what turns the funnel's Orders stage from
+   * "we cannot see sales yet" into a real number, so asking here is worth a row. */
+  Square: '/api/channels/square/start',
+  Clover: '/api/channels/clover/start',
 }
 
 /** Platforms whose connect is a plain Google redirect: no app on the phone intercepts
  *  accounts.google.com, so these navigate directly and never need the copy-link path. */
-const DIRECT_NAV = new Set(['Google Business'])
+const DIRECT_NAV = new Set(['Google Business', 'Square', 'Clover'])
 
 interface Props {
   data: OnboardingData
@@ -38,6 +44,31 @@ interface Props {
 export default function StepConnect({ data, update, nav, businessId }: Props) {
   const [clientId, setClientId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  /* WHAT IS ACTUALLY CONNECTABLE, ASKED RATHER THAN ASSUMED.
+   * Availability used to be implied by whether a platform had an entry in the map above, which
+   * is a hand-kept list in a component nobody edits when a key is added to Vercel. That is how
+   * Google Business showed "Coming soon" for a route that worked. The server reports which
+   * adapters have their keys, so a Connect button exists only where it can succeed. */
+  const [available, setAvailable] = useState<Record<string, boolean> | null>(null)
+  useEffect(() => {
+    fetch('/api/channels/available')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!j) return
+        setAvailable({
+          Instagram: !!j.socialPerPlatform, Facebook: !!j.socialPerPlatform,
+          TikTok: !!j.socialPerPlatform, LinkedIn: !!j.socialPerPlatform,
+          YouTube: !!j.socialPerPlatform,
+          Square: !!j.channels?.square, Clover: !!j.channels?.clover,
+          /* GBP is its own Google OAuth route, not a channels adapter, so it is not in the
+           * report. It is configured wherever the app can talk to Google at all. */
+          'Google Business': true,
+          Yelp: false,
+        })
+      })
+      .catch(() => { /* leave null: fall back to the map, which is the old behaviour */ })
+  }, [])
+
   const [connectUrl, setConnectUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
@@ -168,7 +199,8 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
       <Question title="Connect your accounts" subtitle="Link the platforms you want us to manage" />
       <div className="mt-4 space-y-2">
         {PLATFORMS.map((p) => {
-          const hasOAuth = !!OAUTH_PATHS[p.name]
+          /* A route must exist AND its keys must be set. Either missing means no button. */
+          const hasOAuth = !!OAUTH_PATHS[p.name] && (available === null || available[p.name] !== false)
           // A platform with no OAuth can never really be connected here — ignore any stale
           // persisted flag from the old fake toggle so "Connected" is never a lie.
           const isConn = !!data.connected[p.name] && hasOAuth

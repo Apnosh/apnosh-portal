@@ -158,6 +158,8 @@ export const PLATFORMS = [
   { name: 'Google Business', emoji: '🔍', color: '#4285f4', desc: 'Posts and review management' },
   { name: 'YouTube', emoji: '▶️', color: '#ff0000', desc: 'Video and Shorts' },
   { name: 'LinkedIn', emoji: '💼', color: '#0a66c2', desc: 'Professional content' },
+  { name: 'Square', emoji: '🟦', color: '#3e4348', desc: 'Daily sales from your register' },
+  { name: 'Clover', emoji: '🍀', color: '#00a862', desc: 'Daily sales from your register' },
   { name: 'Yelp', emoji: '⭐', color: '#d32323', desc: 'Review management' },
 ] as const
 
