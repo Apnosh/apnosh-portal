@@ -12,7 +12,21 @@ const OAUTH_PATHS: Record<string, string> = {
   Facebook: '/api/channels/social/start?platform=facebook',
   TikTok: '/api/channels/social/start?platform=tiktok',
   LinkedIn: '/api/channels/social/start?platform=linkedin',
+  /* youtube is in ZERNIO_PLATFORMS (adapters/zernio.ts:38) and its metrics already flow, so
+   * this is the same hosted lane as the rest — it was simply never listed here. */
+  YouTube: '/api/channels/social/start?platform=youtube',
+  /* GOOGLE BUSINESS WAS NEVER "COMING SOON". The OAuth route has existed and worked all along
+   * (api/auth/google-business), and its callback even has a dedicated onboarding branch that
+   * returns to the wizard. Its only entry point in setup lived on the LOCATION step, and the
+   * six-screen redesign removed that step — so a working connect silently vanished and the
+   * chip fell through to the coming-soon branch. origin=onboarding is what makes the callback
+   * come back here instead of dropping the owner on the dashboard location picker mid-setup. */
+  'Google Business': '/api/auth/google-business?origin=onboarding',
 }
+
+/** Platforms whose connect is a plain Google redirect: no app on the phone intercepts
+ *  accounts.google.com, so these navigate directly and never need the copy-link path. */
+const DIRECT_NAV = new Set(['Google Business'])
 
 interface Props {
   data: OnboardingData
@@ -124,7 +138,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
      * hand-off. So on a phone the copy panel IS the flow, not a fallback for when the flow
      * fails — offering the tap first just spends the owner's patience on a path that cannot
      * succeed. Desktop is unaffected and still opens directly. */
-    if (isPhone()) return
+    if (isPhone() && !DIRECT_NAV.has(name)) return
 
     const tab = window.open(url, '_blank', 'noopener')
     if (!tab) window.location.href = url
@@ -217,7 +231,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
           already jumped to the Instagram app by then and the owner needs somewhere to land when
           they come back. Copying the link and pasting it into Safari or Chrome is the one route
           the OS does not intercept. */}
-      {connectUrl && (
+      {connectUrl && !DIRECT_NAV.has(connectingPlatform ?? '') && (
         <div className="mt-4 rounded-[14px] p-3.5" style={{ background: '#f7f7f9', border: '0.5px solid #e8e9ec' }}>
           <div className="text-[13px] font-semibold" style={{ color: '#16181d' }}>
             One more step: finish this in your browser

@@ -156,6 +156,7 @@ export const PLATFORMS = [
   { name: 'Facebook', emoji: '👥', color: '#1877f2', desc: 'Posts and community engagement' },
   { name: 'TikTok', emoji: '🎵', color: '#010101', desc: 'Short-form video content' },
   { name: 'Google Business', emoji: '🔍', color: '#4285f4', desc: 'Posts and review management' },
+  { name: 'YouTube', emoji: '▶️', color: '#ff0000', desc: 'Video and Shorts' },
   { name: 'LinkedIn', emoji: '💼', color: '#0a66c2', desc: 'Professional content' },
   { name: 'Yelp', emoji: '⭐', color: '#d32323', desc: 'Review management' },
 ] as const

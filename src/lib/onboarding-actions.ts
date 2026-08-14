@@ -518,6 +518,22 @@ export async function getConnectedPlatforms(clientId: string): Promise<Record<st
     .not('access_token', 'is', null)
 
   const connected: Record<string, boolean> = {}
+
+  /* GOOGLE BUSINESS IS READ FROM WHERE IT IS ACTUALLY WRITTEN.
+   * The loop below queries platform_connections, and nothing has written a google_business row
+   * to that table in a long time — the GBP callback writes channel_connections with channel
+   * 'google_business_profile' (auth/google-business/callback/route.ts:138-141). So an owner who
+   * connected Google successfully still saw an unconnected chip, which is the same silent-lie
+   * failure mode as a metric that reads zero. */
+  const { data: gbpConn } = await supabase
+    .from('channel_connections')
+    .select('id')
+    .eq('client_id', clientId)
+    .eq('channel', 'google_business_profile')
+    .in('status', ['active', 'pending'])
+    .limit(1)
+  if (gbpConn && gbpConn.length > 0) connected['Google Business'] = true
+
   if (data) {
     for (const row of data) {
       /* legacy per-network social rows no longer count as connected — socials now
