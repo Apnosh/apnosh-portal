@@ -161,10 +161,37 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Onboarding flow: hand control back to the wizard, which reads the pending
-    // token and offers the owner their locations to import. The pending row is
-    // compatible with the dashboard picker later if they want to fully connect.
+    /* ONBOARDING MUST FINISH THE JOB, NOT PARK IT.
+     *
+     * This used to return to the wizard leaving the row 'pending' — awaiting a location pick
+     * the wizard never offers. A perfect connect therefore produced no location, no sync and
+     * no data, forever, while the chip said Connected. The owner's words (2026-08-14): "if
+     * it's connected, show it's connected, and populate the data."
+     *
+     * The machinery to finish has existed all along: fetch the account's listings, finalize
+     * the pick (which activates the row, creates gbp_locations and auto-backfills metrics).
+     * Most restaurants have exactly one listing, so most connects now complete without a
+     * single extra tap. Several listings -> the existing picker, returning to the wizard.
+     * Listing fails -> the old pending behaviour, finishable from the dashboard: no worse
+     * than before, and the wizard still says so honestly. */
     if (state.origin === 'onboarding') {
+      try {
+        const { fetchGBPLocationsForClient, finalizeGBPConnections } = await import('@/lib/gbp-actions')
+        const listed = await fetchGBPLocationsForClient(state.clientId)
+        if (listed.success) {
+          const flat = listed.data.flatMap((a) => a.locations.map((location) => ({ accountName: a.account.name, location })))
+          if (flat.length === 1) {
+            const fin = await finalizeGBPConnections(state.clientId, [flat[0]])
+            if (fin.success) return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=connected`)
+          } else if (flat.length > 1) {
+            return NextResponse.redirect(
+              `${APP_URL}/dashboard/connect-accounts/google-business-location?clientId=${state.clientId}&returnTo=${encodeURIComponent('/onboarding/full?gbp=connected')}`,
+            )
+          }
+        }
+      } catch (e) {
+        console.error('[gbp callback] onboarding auto-finalize failed:', (e as Error).message)
+      }
       return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=connected`)
     }
 

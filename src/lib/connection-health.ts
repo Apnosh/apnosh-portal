@@ -118,6 +118,11 @@ export async function runConnectionHealthProbe(): Promise<HealthReport> {
 
   await probeSocialSilence(admin, report).catch(() => {})
 
+  /* Two more fleet-wide silences, both learned from Do Si (2026-08-14):
+   * a connection on a client nobody is linked to, and a GBP connect parked in pending. */
+  await probeOrphanTenants(admin, report).catch(() => {})
+  await probeStuckPendingGbp(admin, report).catch(() => {})
+
 
   return report
 }
@@ -464,5 +469,125 @@ function labelFor(channel: string): string {
     case 'google_analytics': return 'Google Analytics'
     case 'google_business_profile': return 'Google Business Profile'
     default: return channel
+  }
+}
+
+
+/**
+ * A CONNECTION ON A CLIENT NOBODY CAN SEE.
+ *
+ * The tenant fork (ensureClientForBusiness's old exact-name match) created clients that hold
+ * real connections but have no client_users row — so no dashboard ever resolves them and every
+ * number they collect is invisible. Do Si lived this: connected in onboarding, dark everywhere
+ * else, and nothing anywhere said so. The fork is closed in code, but any client can still end
+ * up orphaned by a future bug, and the failure is silent by construction. The nightly probe now
+ * asks the one question that catches it: does every client that HOLDS connections have at least
+ * one login that can see it?
+ */
+export async function probeOrphanTenants(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  report: HealthReport,
+): Promise<void> {
+  const { data: conns } = await admin
+    .from('channel_connections')
+    .select('client_id, channel, connected_by')
+    .in('status', ['active', 'pending'])
+  const byClient = new Map<string, { channels: string[]; connectedBy: string | null }>()
+  for (const c of (conns ?? []) as { client_id: string; channel: string; connected_by: string | null }[]) {
+    const e = byClient.get(c.client_id) ?? { channels: [], connectedBy: null }
+    e.channels.push(c.channel)
+    e.connectedBy = e.connectedBy ?? c.connected_by
+    byClient.set(c.client_id, e)
+  }
+  if (byClient.size === 0) return
+
+  const { data: links } = await admin
+    .from('client_users')
+    .select('client_id')
+    .in('client_id', [...byClient.keys()])
+  const linked = new Set(((links ?? []) as { client_id: string }[]).map((l) => l.client_id))
+
+  for (const [clientId, info] of byClient) {
+    if (linked.has(clientId)) continue
+    report.staleFeeds += 1
+    report.failures.push({
+      id: clientId,
+      channel: info.channels.join(','),
+      clientId,
+      message: 'ORPHAN TENANT: holds connections but no login resolves it — its data is invisible to everyone',
+    })
+    if (info.connectedBy) {
+      const { data: recent } = await admin
+        .from('notifications')
+        .select('id')
+        .eq('client_id', clientId)
+        .eq('type', 'orphan_tenant')
+        .gte('created_at', new Date(Date.now() - 26 * 3600_000).toISOString())
+        .limit(1)
+      if (!recent || recent.length === 0) {
+        await admin.from('notifications').insert({
+          user_id: info.connectedBy,
+          client_id: clientId,
+          type: 'orphan_tenant',
+          title: 'Your connected accounts may not be showing',
+          body: 'An account connection finished but is not attached to your workspace. Our team has been alerted; nothing needs reconnecting.',
+          link: '/dashboard/connected-accounts',
+        })
+        report.notificationsCreated += 1
+      }
+    }
+  }
+}
+
+/**
+ * A GOOGLE CONNECT PARKED IN PENDING.
+ *
+ * The GBP OAuth writes a pending row awaiting a location pick. Onboarding now auto-finishes
+ * the single-listing case, but any path can still strand a pending row (picker abandoned,
+ * listing fetch failed), and a stranded pending row means no location, no sync and no data —
+ * while the connect step says Connected. More than a day in pending is not "in progress"; it
+ * is stuck, and someone should hear about it.
+ */
+export async function probeStuckPendingGbp(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  report: HealthReport,
+): Promise<void> {
+  const cutoff = new Date(Date.now() - 26 * 3600_000).toISOString()
+  const { data } = await admin
+    .from('channel_connections')
+    .select('id, client_id, connected_by, connected_at')
+    .eq('channel', 'google_business_profile')
+    .eq('status', 'pending')
+    .lt('connected_at', cutoff)
+  for (const row of (data ?? []) as { id: string; client_id: string; connected_by: string | null; connected_at: string }[]) {
+    report.staleFeeds += 1
+    report.failures.push({
+      id: row.id,
+      channel: 'google_business_profile',
+      clientId: row.client_id,
+      message: `GBP stuck in pending since ${row.connected_at}: connected but no location chosen, so no data will ever arrive`,
+    })
+    if (row.connected_by) {
+      const { data: recent } = await admin
+        .from('notifications')
+        .select('id')
+        .eq('client_id', row.client_id)
+        .eq('type', 'gbp_pending_stuck')
+        .gte('created_at', cutoff)
+        .limit(1)
+      if (!recent || recent.length === 0) {
+        await admin.from('notifications').insert({
+          user_id: row.connected_by,
+          client_id: row.client_id,
+          type: 'gbp_pending_stuck',
+          title: 'One more tap to finish connecting Google',
+          body: 'Your Google sign-in worked, but a business location still needs to be chosen before data can flow. It takes a few seconds.',
+          link: '/dashboard/connect-accounts/google-business-location?clientId=' + row.client_id,
+        })
+        report.notificationsCreated += 1
+      }
+    }
   }
 }

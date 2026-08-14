@@ -49,12 +49,28 @@ export async function ensureClientForBusiness(businessId: string): Promise<strin
       .eq('auth_user_id', biz.owner_id)
     const myClientIds = (myLinks ?? []).map((l) => l.client_id).filter((x): x is string => !!x)
     if (myClientIds.length) {
-      const { data: existingClient } = await supabase
-        .from('clients')
-        .select('id')
-        .in('id', myClientIds)
-        .ilike('name', biz.name || 'My Business')
-        .maybeSingle()
+      /* THE TENANT FORK, CLOSED. This used to reuse the owner's client only on an EXACT
+       * (case-insensitive) name match. Type "Do Si KBBQ" where the client row says
+       * "do-si-kbbq" and a second client was silently created — after which every connect
+       * landed on the new client while every dashboard read resolved the old one via
+       * client_users. Connected in onboarding, invisible everywhere else. This is also how
+       * the original Do Si duplicate happened, and it recurred live on 2026-08-14.
+       *
+       * The rule now: an owner with exactly ONE client gets that client, full stop — a
+       * restaurant owner re-doing setup is the same restaurant no matter how they spell it.
+       * Name matching survives only as a tiebreaker for genuine multi-business owners. */
+      let existingClient: { id: string } | null = null
+      if (myClientIds.length === 1) {
+        existingClient = { id: myClientIds[0] }
+      } else {
+        const { data: byName } = await supabase
+          .from('clients')
+          .select('id')
+          .in('id', myClientIds)
+          .ilike('name', biz.name || 'My Business')
+          .maybeSingle()
+        existingClient = byName ?? null
+      }
 
       if (existingClient) {
         console.log('[ensureClient] Owner already has this client, linking:', existingClient.id)
