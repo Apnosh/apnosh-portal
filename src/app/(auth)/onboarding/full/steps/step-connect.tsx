@@ -24,6 +24,8 @@ interface Props {
 export default function StepConnect({ data, update, nav, businessId }: Props) {
   const [clientId, setClientId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [connectUrl, setConnectUrl] = useState<string | null>(null)
+  const [copied, setCopied] = useState(false)
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
 
   // Ensure a clients record exists for OAuth
@@ -95,11 +97,40 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
     setConnectingPlatform(name)
     setLoading(true)
 
-    // Full-page redirect to the vendor's hosted login. The path already carries
-    // ?platform=, so append with the right separator.
+    /* WHY THIS IS NOT A PLAIN REDIRECT ANY MORE.
+     *
+     * This used to be `window.location.href = url`. That is a TOP-LEVEL navigation which ends
+     * up on an instagram.com URL, and both iOS and Android treat those as Universal / App
+     * Links: the OS yanks the navigation out of the browser and hands it to the installed
+     * Instagram app. The app cannot complete an OAuth handshake it did not start, so the owner
+     * sees the Instagram app open and immediately show an error (reported 2026-08-13).
+     *
+     * A web page cannot switch that OS behaviour off. What it CAN do is (a) not lose the
+     * portal when the hand-off happens, by opening in a separate tab, and (b) always leave a
+     * way to finish the job in a browser, which is the one path the OS does not intercept.
+     * The copy-link escape hatch below is that path, and it is shown to everyone rather than
+     * hidden behind a failure, because by the time you have seen the error you have already
+     * lost the tab that would have explained it. */
     const url = `${authPath}${authPath.includes('?') ? '&' : '?'}clientId=${clientId}&returnTo=/onboarding`
-    console.log('[connect] Redirecting to:', url)
-    window.location.href = url
+    setConnectUrl(new URL(url, window.location.origin).toString())
+
+    const tab = window.open(url, '_blank', 'noopener')
+    /* Popup blocked (common when the tap is not seen as a direct gesture): fall back to the
+     * old behaviour rather than appearing to do nothing. */
+    if (!tab) window.location.href = url
+    else setLoading(false)
+  }
+
+  async function copyConnectLink() {
+    if (!connectUrl) return
+    try {
+      await navigator.clipboard.writeText(connectUrl)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2200)
+    } catch {
+      /* clipboard refused (older browsers, insecure context): the input below is selectable,
+       * so there is still a way through. */
+    }
   }
 
   return (
@@ -166,6 +197,30 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
         })}
         <Hint>You can always connect more accounts from your dashboard later.</Hint>
       </div>
+      {/* THE BROWSER PATH. Shown as soon as a connect is attempted, because the phone may have
+          already jumped to the Instagram app by then and the owner needs somewhere to land when
+          they come back. Copying the link and pasting it into Safari or Chrome is the one route
+          the OS does not intercept. */}
+      {connectUrl && (
+        <div className="mt-4 rounded-[14px] p-3.5" style={{ background: '#f7f7f9', border: '0.5px solid #e8e9ec' }}>
+          <div className="text-[13px] font-semibold" style={{ color: '#16181d' }}>
+            Did the Instagram app open and show an error?
+          </div>
+          <div className="text-[12.5px] mt-1 leading-relaxed" style={{ color: '#6b7280' }}>
+            Phones hand Instagram links to the app, which cannot finish signing you in. Copy the
+            link below, paste it into Safari or Chrome, and it will work there.
+          </div>
+          <button
+            type="button"
+            onClick={copyConnectLink}
+            className="w-full mt-2.5 rounded-[12px] text-[13px] font-semibold"
+            style={{ minHeight: 44, border: '1px solid #d8ece4', background: copied ? '#e8f6f0' : '#fff', color: '#2f8f70' }}
+          >
+            {copied ? 'Copied. Now paste it in your browser.' : 'Copy the sign-in link'}
+          </button>
+        </div>
+      )}
+
       {nav}
     </>
   )
