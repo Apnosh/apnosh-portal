@@ -113,12 +113,28 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
      * lost the tab that would have explained it. */
     const url = `${authPath}${authPath.includes('?') ? '&' : '?'}clientId=${clientId}&returnTo=/onboarding`
     setConnectUrl(new URL(url, window.location.origin).toString())
+    setLoading(false)
+
+    /* ON A PHONE, DO NOT NAVIGATE. Opening in a new tab was the first attempt and it did not
+     * help: the OS intercepts the instagram.com hop wherever it happens, hands it to the app,
+     * and the app errors. There is no navigation a web page can perform that avoids this.
+     *
+     * What DOES work is pasting the link into the address bar. iOS deliberately does not apply
+     * Universal Links to a URL typed or pasted into Safari, which is the one gap in the
+     * hand-off. So on a phone the copy panel IS the flow, not a fallback for when the flow
+     * fails — offering the tap first just spends the owner's patience on a path that cannot
+     * succeed. Desktop is unaffected and still opens directly. */
+    if (isPhone()) return
 
     const tab = window.open(url, '_blank', 'noopener')
-    /* Popup blocked (common when the tap is not seen as a direct gesture): fall back to the
-     * old behaviour rather than appearing to do nothing. */
     if (!tab) window.location.href = url
-    else setLoading(false)
+  }
+
+  /** Coarse pointer OR narrow screen. Deliberately loose: a false positive costs one extra tap
+   *  on the "open it directly" link, a false negative costs a dead end. */
+  function isPhone(): boolean {
+    if (typeof window === 'undefined') return false
+    return window.matchMedia?.('(pointer: coarse)')?.matches === true || window.innerWidth < 820
   }
 
   async function copyConnectLink() {
@@ -204,11 +220,12 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
       {connectUrl && (
         <div className="mt-4 rounded-[14px] p-3.5" style={{ background: '#f7f7f9', border: '0.5px solid #e8e9ec' }}>
           <div className="text-[13px] font-semibold" style={{ color: '#16181d' }}>
-            Did the Instagram app open and show an error?
+            One more step: finish this in your browser
           </div>
           <div className="text-[12.5px] mt-1 leading-relaxed" style={{ color: '#6b7280' }}>
-            Phones hand Instagram links to the app, which cannot finish signing you in. Copy the
-            link below, paste it into Safari or Chrome, and it will work there.
+            Tapping a link sends your phone to the Instagram app, which cannot sign you in.
+            Pasting the same link into Safari or Chrome does work. Copy it, open your browser,
+            and paste it in the address bar.
           </div>
           <button
             type="button"
@@ -218,6 +235,17 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
           >
             {copied ? 'Copied. Now paste it in your browser.' : 'Copy the sign-in link'}
           </button>
+          {/* Still offered, because a phone without the app installed connects fine by tapping,
+              and this component's phone check is deliberately loose. */}
+          <a
+            href={connectUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="block text-center text-[12px] mt-2"
+            style={{ color: '#9aa1ab', minHeight: 32, paddingTop: 7 }}
+          >
+            Or try opening it directly
+          </a>
         </div>
       )}
 
