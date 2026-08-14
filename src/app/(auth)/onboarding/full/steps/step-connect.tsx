@@ -30,9 +30,6 @@ const OAUTH_PATHS: Record<string, string> = {
   Clover: '/api/channels/clover/start',
 }
 
-/** Platforms whose connect is a plain Google redirect: no app on the phone intercepts
- *  accounts.google.com, so these navigate directly and never need the copy-link path. */
-const DIRECT_NAV = new Set(['Google Business', 'Square', 'Clover'])
 
 interface Props {
   data: OnboardingData
@@ -169,18 +166,21 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
      * hand-off. So on a phone the copy panel IS the flow, not a fallback for when the flow
      * fails — offering the tap first just spends the owner's patience on a path that cannot
      * succeed. Desktop is unaffected and still opens directly. */
-    if (isPhone() && !DIRECT_NAV.has(name)) return
-
+    /* JUST TRY IT. The previous version detected a phone and refused to navigate, showing a
+     * paragraph of instructions instead. The owner's verdict was blunt and correct: it is a bad
+     * flow. It also assumed failure — a phone without the Instagram app installed connects
+     * fine, and those owners were being handed a chore for a problem they do not have.
+     *
+     * So every device attempts the connect. When the OS hands it to the app instead, the owner
+     * comes back to a portal that is still here, and the one quiet line under the list tells
+     * them the honest thing: skip it, finish setup, do this from a computer. Connecting has
+     * never been required to finish onboarding (canContinue in data.ts only blocks on role and
+     * business name), so "later" is a real answer rather than a consolation. */
     const tab = window.open(url, '_blank', 'noopener')
     if (!tab) window.location.href = url
   }
 
-  /** Coarse pointer OR narrow screen. Deliberately loose: a false positive costs one extra tap
-   *  on the "open it directly" link, a false negative costs a dead end. */
-  function isPhone(): boolean {
-    if (typeof window === 'undefined') return false
-    return window.matchMedia?.('(pointer: coarse)')?.matches === true || window.innerWidth < 820
-  }
+
 
   async function copyConnectLink() {
     if (!connectUrl) return
@@ -259,41 +259,24 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
         })}
         <Hint>You can always connect more accounts from your dashboard later.</Hint>
       </div>
-      {/* THE BROWSER PATH. Shown as soon as a connect is attempted, because the phone may have
-          already jumped to the Instagram app by then and the owner needs somewhere to land when
-          they come back. Copying the link and pasting it into Safari or Chrome is the one route
-          the OS does not intercept. */}
-      {connectUrl && !DIRECT_NAV.has(connectingPlatform ?? '') && (
-        <div className="mt-4 rounded-[14px] p-3.5" style={{ background: '#f7f7f9', border: '0.5px solid #e8e9ec' }}>
-          <div className="text-[13px] font-semibold" style={{ color: '#16181d' }}>
-            One more step: finish this in your browser
-          </div>
-          <div className="text-[12.5px] mt-1 leading-relaxed" style={{ color: '#6b7280' }}>
-            Tapping a link sends your phone to the Instagram app, which cannot sign you in.
-            Pasting the same link into Safari or Chrome does work. Copy it, open your browser,
-            and paste it in the address bar.
-          </div>
-          <button
-            type="button"
-            onClick={copyConnectLink}
-            className="w-full mt-2.5 rounded-[12px] text-[13px] font-semibold"
-            style={{ minHeight: 44, border: '1px solid #d8ece4', background: copied ? '#e8f6f0' : '#fff', color: '#2f8f70' }}
-          >
-            {copied ? 'Copied. Now paste it in your browser.' : 'Copy the sign-in link'}
-          </button>
-          {/* Still offered, because a phone without the app installed connects fine by tapping,
-              and this component's phone check is deliberately loose. */}
-          <a
-            href={connectUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="block text-center text-[12px] mt-2"
-            style={{ color: '#9aa1ab', minHeight: 32, paddingTop: 7 }}
-          >
-            Or try opening it directly
-          </a>
-        </div>
-      )}
+      {/* ONE LINE, NOT A LECTURE. Shown always, so it reads as a note about how phones behave
+          rather than as an error report about something the owner just did wrong. */}
+      <div className="mt-4 text-[12px] leading-relaxed" style={{ color: '#9aa1ab' }}>
+        Some phones open the Instagram or TikTok app instead of signing you in. If that happens,
+        skip it — you can connect from your dashboard on a computer in a few seconds.
+        {connectUrl && (
+          <>
+            {' '}
+            <button
+              type="button"
+              onClick={copyConnectLink}
+              style={{ border: 'none', background: 'none', padding: 0, color: '#2f8f70', fontWeight: 600, fontSize: 12 }}
+            >
+              {copied ? 'Link copied' : 'Or copy the link'}
+            </button>
+          </>
+        )}
+      </div>
 
       {nav}
     </>
