@@ -16,7 +16,16 @@ import { ChannelError } from '@/lib/channels/types'
 
 export const runtime = 'nodejs'
 
-async function resolveClientId(userId: string): Promise<string | null> {
+async function resolveClientId(userId: string, requestedClientId?: string | null): Promise<string | null> {
+  /* The hub sends the switcher's client on every connect link. Ignoring it (the old
+   * behaviour) re-created the tenant fork on the WRITE side: a multi-client owner
+   * switched to client B connected client A, and the hub — reading B — never showed
+   * the row. Honoring it blindly would be a cross-tenant write. So: prove access,
+   * then honor; an unauthorized request falls through to the default. */
+  if (requestedClientId) {
+    const { userMayConnectClient } = await import('@/lib/connect-access')
+    if (await userMayConnectClient(userId, requestedClientId)) return requestedClientId
+  }
   const admin = createAdminClient()
   const { data: biz } = await admin
     .from('businesses').select('client_id').eq('owner_id', userId).maybeSingle()
@@ -42,7 +51,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.redirect(new URL('/login', req.url))
-  const clientId = await resolveClientId(user.id)
+  const clientId = await resolveClientId(user.id, new URL(req.url).searchParams.get('clientId'))
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
   try {
@@ -53,7 +62,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
     const rt = params.get('returnTo')
     const returnTo = rt && rt.startsWith('/') && !rt.startsWith('//') ? rt : undefined
     const { url } = adapter.kind === 'hosted_link'
-      ? await adapter.connectStart(clientId, { ...(platform ? { platform } : {}), ...(returnTo ? { returnTo } : {}) })
+      ? await adapter.connectStart(clientId, { ...(platform ? { platform } : {}), ...(returnTo ? { returnTo } : {}), userId: user.id })
       : await adapter.connectStart(signState(clientId))
     if (!url) return NextResponse.json({ error: 'This channel does not connect by redirect' }, { status: 400 })
     return NextResponse.redirect(url)

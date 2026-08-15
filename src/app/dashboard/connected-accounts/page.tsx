@@ -93,6 +93,23 @@ export default function ConnectedAccountsPage() {
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<UnifiedConnection | null>(null)
   const [banner, setBanner] = useState<{ ok: boolean; text: string } | null>(null)
+  /* Ask the server what is actually configured instead of trusting the hardcoded
+   * CATALOG (the pre-hardening onboarding bug: a hand-maintained constant nobody
+   * updates when a key lands in Vercel). Fail OPEN — if the check itself fails,
+   * every button stays live; a dead button beats a hidden working one. */
+  const [avail, setAvail] = useState<{ channels: Record<string, boolean>; social: boolean } | null>(null)
+  useEffect(() => {
+    fetch('/api/channels/available')
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (d && d.channels) setAvail(d) })
+      .catch(() => { /* fail open */ })
+  }, [])
+  const isAvailable = (p: CatalogItem): boolean => {
+    if (!avail) return true
+    if (p.category === 'social') return avail.social
+    if (p.id === 'square' || p.id === 'clover') return avail.channels[p.id] !== false
+    return true
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -125,7 +142,7 @@ export default function ConnectedAccountsPage() {
     autoChecked.current = true
     ;(async () => {
       setBanner({ ok: true, text: 'Checking your social login...' })
-      const r = await syncConnection(vendor.source, vendor.id)
+      const r = await syncConnection(vendor.source, vendor.id, clientId || undefined)
       if (r.success) {
         setBanner({ ok: true, text: 'Linked. Pulling in your recent posts now.' })
         load()
@@ -134,15 +151,20 @@ export default function ConnectedAccountsPage() {
         setBanner({ ok: false, text: r.error })
       }
     })()
-  }, [connections, loading, load])
+  }, [connections, loading, load, clientId])
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search)
     const NAME: Record<string, string> = { square: 'Square', clover: 'Clover', ayrshare: 'Social accounts', social: 'Social accounts' }
     const connected = p.get('connected')
     const connectError = p.get('connect_error')
+    const gbp = p.get('gbp')
     if (connected && NAME[connected]) setBanner({ ok: true, text: `${NAME[connected]} connected. Your sales will show up shortly.` })
     else if (connected) setBanner({ ok: true, text: 'Connected.' })
+    else if (gbp === 'connected') setBanner({ ok: true, text: 'Google Business connected. Your numbers are on the way.' })
+    else if (gbp === 'pending') setBanner({ ok: true, text: 'Google login worked. One step left: tap Google Business Profile below to finish.' })
+    else if (gbp === 'cancelled') setBanner({ ok: false, text: 'Google was not connected. You can try again any time.' })
+    else if (gbp === 'error') setBanner({ ok: false, text: 'Could not connect Google. Try again in a moment.' })
     else if (connectError) {
       const reason = p.get('reason')
       const who = NAME[connectError] ?? 'That account'
@@ -152,6 +174,11 @@ export default function ConnectedAccountsPage() {
       setBanner({ ok: false, text })
     }
     else if (p.get('error')) setBanner({ ok: false, text: p.get('error') || 'Could not connect. Try again.' })
+    /* Clean handled params so a refresh does not replay the banner. Keep
+     * ?connected=social in place — the auto-check effect above keys off it. */
+    if (gbp || connectError || p.get('error') || (connected && connected !== 'social')) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
   }, [])
 
   const connectHref = (authPath: string) => `${authPath}${authPath.includes('?') ? '&' : '?'}clientId=${encodeURIComponent(clientId)}&returnTo=/dashboard/connected-accounts`
@@ -215,14 +242,26 @@ export default function ConnectedAccountsPage() {
                       {unByCat[cat].map((p, i) => (
                         <div key={p.id}>
                           {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 61 }} />}
-                          <a href={connectHref(p.authPath)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', textDecoration: 'none', color: 'inherit' }}>
-                            <span style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><p.Icon size={18} /></span>
-                            <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
-                              <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</span>
-                            </span>
-                            <Plus size={18} color={C.greenDk} style={{ flexShrink: 0 }} />
-                          </a>
+                          {isAvailable(p) ? (
+                            <a href={connectHref(p.authPath)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', textDecoration: 'none', color: 'inherit' }}>
+                              <span style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><p.Icon size={18} /></span>
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
+                                <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</span>
+                              </span>
+                              <Plus size={18} color={C.greenDk} style={{ flexShrink: 0 }} />
+                            </a>
+                          ) : (
+                            /* the server says this lane's keys are not set — an honest
+                               non-link beats a connect that dead-ends on a JSON error */
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', opacity: 0.55 }}>
+                              <span style={{ width: 34, height: 34, borderRadius: 9, background: '#f0f0f3', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><p.Icon size={18} /></span>
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
+                                <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>Coming soon</span>
+                              </span>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -235,7 +274,7 @@ export default function ConnectedAccountsPage() {
       </div>
 
       {detail && (
-        <DetailSheet conn={detail} connectHref={connectHref} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load() }} />
+        <DetailSheet conn={detail} clientId={clientId} connectHref={connectHref} onClose={() => setDetail(null)} onChanged={() => { setDetail(null); load() }} />
       )}
     </MvpShell>
   )
@@ -268,7 +307,15 @@ function ConnRow({ conn, onTap }: { conn: UnifiedConnection; onTap: () => void }
   )
 }
 
-function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedConnection; connectHref: (p: string) => string; onClose: () => void; onChanged: () => void }) {
+/* Google lanes that park a 'pending' row until a picker finishes; the row's
+ * "Finish setup" button leads there. */
+const FINISH_SETUP_PATH: Record<string, string> = {
+  google_business_profile: '/dashboard/connect-accounts/google-business-location',
+  google_analytics: '/dashboard/connect-accounts/google-property',
+  google_search_console: '/dashboard/connect-accounts/google-search-console-site',
+}
+
+function DetailSheet({ conn, clientId, connectHref, onClose, onChanged }: { conn: UnifiedConnection; clientId: string; connectHref: (p: string) => string; onClose: () => void; onChanged: () => void }) {
   const [busy, setBusy] = useState<'sync' | 'disc' | null>(null)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
   const [confirmDisc, setConfirmDisc] = useState(false)
@@ -277,7 +324,7 @@ function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedC
 
   async function doSync() {
     setBusy('sync'); setMsg(null)
-    const r = await syncConnection(conn.source, conn.id)
+    const r = await syncConnection(conn.source, conn.id, clientId || undefined)
     if (r.success) {
       const bits: string[] = []
       if (r.locationsDiscovered) bits.push(`${r.locationsDiscovered} location${r.locationsDiscovered === 1 ? '' : 's'}`)
@@ -291,7 +338,7 @@ function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedC
   }
   async function doDisconnect() {
     setBusy('disc')
-    const r = await disconnectPlatform(conn.source, conn.id)
+    const r = await disconnectPlatform(conn.source, conn.id, clientId || undefined)
     if (r.success) { onChanged(); return }
     setMsg({ ok: false, text: r.error }); setBusy(null); setConfirmDisc(false)
   }
@@ -325,6 +372,14 @@ function DetailSheet({ conn, connectHref, onClose, onChanged }: { conn: UnifiedC
           <div style={{ background: msg.ok ? C.greenSoft : '#fdeeee', border: `0.5px solid ${msg.ok ? 'rgba(74,189,152,0.34)' : '#f1c7c3'}`, borderRadius: 12, padding: '10px 12px', marginBottom: 14, fontSize: 12.5, color: msg.ok ? '#2e6a58' : '#8a2f28', lineHeight: 1.45 }}>{msg.text}</div>
         )}
 
+        {conn.status === 'pending' && FINISH_SETUP_PATH[conn.platform] && (
+          <a
+            href={`${FINISH_SETUP_PATH[conn.platform]}?clientId=${encodeURIComponent(clientId)}&returnTo=${encodeURIComponent('/dashboard/connected-accounts?gbp=connected')}`}
+            style={{ ...actionBtn, border: 'none', background: C.green, color: '#fff', fontWeight: 700 }}
+          >
+            <MapPin size={17} /> Finish setup
+          </a>
+        )}
         {needs && conn.actions.reconnectUrl && (
           <a href={connectHref(conn.actions.reconnectUrl)} style={{ ...actionBtn, border: 'none', background: C.green, color: '#fff', fontWeight: 700 }}><RefreshCw size={17} /> Reconnect</a>
         )}

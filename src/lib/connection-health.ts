@@ -502,11 +502,16 @@ export async function probeOrphanTenants(
   }
   if (byClient.size === 0) return
 
-  const { data: links } = await admin
-    .from('client_users')
-    .select('client_id')
-    .in('client_id', [...byClient.keys()])
+  /* A client is resolvable by EITHER path the app's resolvers use: a client_users
+   * link OR a business whose owner logs in (the fallback every read/write shares).
+   * Mid-onboarding owners have only the second — client_users arrives at finish —
+   * and flagging them here was a nightly false alarm. */
+  const [{ data: links }, { data: bizLinks }] = await Promise.all([
+    admin.from('client_users').select('client_id').in('client_id', [...byClient.keys()]),
+    admin.from('businesses').select('client_id').in('client_id', [...byClient.keys()]).not('owner_id', 'is', null),
+  ])
   const linked = new Set(((links ?? []) as { client_id: string }[]).map((l) => l.client_id))
+  for (const b of (bizLinks ?? []) as { client_id: string }[]) linked.add(b.client_id)
 
   for (const [clientId, info] of byClient) {
     if (linked.has(clientId)) continue

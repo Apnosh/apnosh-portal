@@ -3,6 +3,27 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { listGBPAccounts, listGBPLocations, type GBPAccount, type GBPLocation } from '@/lib/google'
 
+/**
+ * These actions take a clientId straight from the browser ('use server' makes
+ * them public POST endpoints). Prove the caller may act for that client before
+ * reading its tokens or writing its connections — without this, any signed-in
+ * user could list another client's Google locations or finalize onto them.
+ * Returns an error string, or null when allowed.
+ */
+async function assertCallerMayActFor(clientId: string): Promise<string | null> {
+  try {
+    const { createClient: createServerClient } = await import('@/lib/supabase/server')
+    const supabase = await createServerClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return 'Not signed in'
+    const { userMayConnectClient } = await import('@/lib/connect-access')
+    if (!(await userMayConnectClient(user.id, clientId))) return 'You do not have access to this client'
+    return null
+  } catch {
+    return 'Not signed in'
+  }
+}
+
 export interface GBPAccountWithLocations {
   account: GBPAccount
   locations: GBPLocation[]
@@ -14,6 +35,8 @@ export interface GBPAccountWithLocations {
 export async function fetchGBPLocationsForClient(
   clientId: string
 ): Promise<{ success: true; data: GBPAccountWithLocations[] } | { success: false; error: string }> {
+  const denied = await assertCallerMayActFor(clientId)
+  if (denied) return { success: false, error: denied }
   const supabase = createAdminClient()
 
   const { data: conn } = await supabase
@@ -232,6 +255,7 @@ export async function finalizeGBPConnection(
  * Used by the picker to pre-mark already-connected locations.
  */
 export async function getLinkedGBPLocationTitles(clientId: string): Promise<string[]> {
+  if (await assertCallerMayActFor(clientId)) return []
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('channel_connections')
@@ -258,6 +282,8 @@ export async function finalizeGBPConnections(
   if (picks.length === 0) {
     return { success: false, error: 'No locations selected' }
   }
+  const denied = await assertCallerMayActFor(clientId)
+  if (denied) return { success: false, error: denied }
   const supabase = createAdminClient()
 
   const { data: pending } = await supabase

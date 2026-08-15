@@ -222,11 +222,14 @@ export async function getConnectionsForClient(selectedClientId?: string | null):
       .from('platform_connections')
       .select('id, platform, username, page_name, profile_url, connected_at, expires_at, access_token')
       .eq('client_id', clientId),
+    /* Pending rows STAY VISIBLE. A Google connect with several listings parks its row
+     * platform_account_id='pending' until the picker is done — hiding those here made a
+     * perfect OAuth grant render as "never connected" on the hub, with no way to finish.
+     * They flow into the status==='pending' → "Setting up" branch below instead. */
     admin
       .from('channel_connections')
       .select('id, channel, platform_account_id, platform_account_name, platform_url, status, last_sync_at, sync_error, connected_at, access_token, metadata')
-      .eq('client_id', clientId)
-      .neq('platform_account_id', 'pending'),
+      .eq('client_id', clientId),
   ])
 
   const results: UnifiedConnection[] = []
@@ -358,14 +361,18 @@ export async function getConnectionsForClient(selectedClientId?: string | null):
 
 export async function disconnectPlatform(
   source: 'platform_connections' | 'channel_connections',
-  connectionId: string
+  connectionId: string,
+  selectedClientId?: string
 ): Promise<{ success: true } | { success: false; error: string }> {
   const userSupabase = await createServerClient()
   const { data: { user } } = await userSupabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
   const admin = createAdminClient()
-  const clientId = await resolveClientId(user.id)
+  /* Same switcher-awareness as the read path: without it, a multi-client owner
+   * viewing client B resolves client A here and every action says "Connection
+   * not found" for rows the hub itself just listed. */
+  const clientId = await resolveClientId(user.id, selectedClientId)
   if (!clientId) return { success: false, error: 'No client context' }
 
   // Verify the connection belongs to this client before deleting
@@ -394,14 +401,15 @@ export async function disconnectPlatform(
    data without needing admin access to the agency cron. */
 export async function syncConnection(
   source: 'platform_connections' | 'channel_connections',
-  connectionId: string
+  connectionId: string,
+  selectedClientId?: string
 ): Promise<{ success: true; locationsDiscovered: number; metricsImported: number; reviewsImported: number; errors: string[] } | { success: false; error: string }> {
   const userSupabase = await createServerClient()
   const { data: { user } } = await userSupabase.auth.getUser()
   if (!user) return { success: false, error: 'Not authenticated' }
 
   const admin = createAdminClient()
-  const clientId = await resolveClientId(user.id)
+  const clientId = await resolveClientId(user.id, selectedClientId)
   if (!clientId) return { success: false, error: 'No client context' }
 
   /* Each table has a different identifier column (channel_connections.channel

@@ -6,6 +6,14 @@ import { MapPin, Loader2, Check, AlertCircle, Search } from 'lucide-react'
 import { fetchGBPLocationsForClient, finalizeGBPConnections, getLinkedGBPLocationTitles, type GBPAccountWithLocations } from '@/lib/gbp-actions'
 import type { GBPLocation } from '@/lib/google'
 
+/* Where Cancel / error exits go: back to wherever the connect started (the
+ * wizard for onboarding flows, the live hub otherwise) — never to the legacy
+ * stub, and never claiming ?gbp=connected on a flow the user abandoned. */
+function exitDest(returnTo: string | null): string {
+  if (returnTo && returnTo.startsWith('/onboarding')) return '/onboarding/full'
+  return '/dashboard/connected-accounts'
+}
+
 function LocationPicker() {
   const params = useSearchParams()
   const router = useRouter()
@@ -94,7 +102,9 @@ function LocationPicker() {
     }
     const res = await finalizeGBPConnections(clientId, picks)
     if (res.success) {
-      const dest = returnTo || '/dashboard/connect-accounts?connected=google_business_profile'
+      /* Default lands on the LIVE hub (the old /dashboard/connect-accounts stub
+         drops query params, so its ?connected= never showed anything). */
+      const dest = returnTo || '/dashboard/connected-accounts?gbp=connected'
       router.push(dest)
     } else {
       setError(res.error)
@@ -136,7 +146,7 @@ function LocationPicker() {
         <p className="text-sm font-medium text-ink mb-2">Something went wrong</p>
         <p className="text-xs text-ink-4 mb-6">{error}</p>
         <button
-          onClick={() => router.push('/dashboard/connect-accounts')}
+          onClick={() => router.push(exitDest(returnTo))}
           className="text-sm font-medium text-brand hover:underline"
         >
           Back to accounts
@@ -156,7 +166,7 @@ function LocationPicker() {
           The Google account you connected doesn&apos;t manage any verified Business Profile locations. Sign in with the account that owns your listing.
         </p>
         <button
-          onClick={() => router.push('/dashboard/connect-accounts')}
+          onClick={() => router.push(exitDest(returnTo))}
           className="px-4 py-2 text-sm font-medium text-white bg-brand hover:bg-brand-dark rounded-lg"
         >
           Try again
@@ -305,7 +315,7 @@ function LocationPicker() {
 
       <div className="mt-3 text-center">
         <button
-          onClick={() => router.push('/dashboard/connect-accounts')}
+          onClick={() => router.push(exitDest(returnTo))}
           className="text-xs text-ink-4 hover:text-ink"
         >
           Cancel

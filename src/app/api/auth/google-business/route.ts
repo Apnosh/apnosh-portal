@@ -19,6 +19,12 @@ export async function GET(request: NextRequest) {
   if (!clientId) {
     return NextResponse.json({ error: 'clientId is required' }, { status: 400 })
   }
+  /* clientId comes from the browser; prove the caller may act for that client
+   * before sealing it into OAuth state the callback will trust. */
+  const { userMayConnectClient } = await import('@/lib/connect-access')
+  if (!(await userMayConnectClient(user.id, clientId))) {
+    return NextResponse.json({ error: 'You do not have access to this client' }, { status: 403 })
+  }
 
   const returnTo = request.nextUrl.searchParams.get('returnTo') || ''
   const popup = request.nextUrl.searchParams.get('popup') === '1'

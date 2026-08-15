@@ -35,13 +35,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (errorParam || !code || !stateParam) {
-    const msg = request.nextUrl.searchParams.get('error_description') || 'Google OAuth was cancelled or failed'
     if (peekOrigin() === 'onboarding') {
       return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=cancelled`)
     }
-    return NextResponse.redirect(
-      `${APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(msg)}`
-    )
+    /* Straight to the live hub with a gbp status it renders. The old target was the
+     * LEGACY /dashboard/connect-accounts stub, whose redirect drops the query string —
+     * a cancelled Google login produced zero feedback. */
+    return NextResponse.redirect(`${APP_URL}/dashboard/connected-accounts?gbp=cancelled`)
   }
 
   type State = {
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     state = JSON.parse(Buffer.from(stateParam, 'base64url').toString())
   } catch {
     return NextResponse.redirect(
-      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent('Invalid OAuth state')}`
+      `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connected-accounts?gbp=error`
     )
   }
 
@@ -123,8 +123,25 @@ export async function GET(request: NextRequest) {
     // ============================================================
     if (!state.clientId) {
       return NextResponse.redirect(
-        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent('Missing clientId in state')}`
+        `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/connected-accounts?gbp=error`
       )
+    }
+
+    /* The state token is NOT signed — it is caller-crafted base64. Before writing
+     * tokens under state.clientId, prove the browser session actually is the user
+     * who started the flow AND that they may act for that client. Without this,
+     * anyone could complete their own Google login and park their token on any
+     * client by editing the state. */
+    try {
+      const { createClient: createSessionClient } = await import('@/lib/supabase/server')
+      const session = await createSessionClient()
+      const { data: { user: caller } } = await session.auth.getUser()
+      const { userMayConnectClient } = await import('@/lib/connect-access')
+      if (!caller || caller.id !== state.userId || !(await userMayConnectClient(caller.id, state.clientId))) {
+        return NextResponse.redirect(`${APP_URL}/dashboard/connected-accounts?gbp=error`)
+      }
+    } catch {
+      return NextResponse.redirect(`${APP_URL}/dashboard/connected-accounts?gbp=error`)
     }
 
     await supabase
@@ -156,53 +173,50 @@ export async function GET(request: NextRequest) {
       if (state.origin === 'onboarding') {
         return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=error`)
       }
-      return NextResponse.redirect(
-        `${APP_URL}/dashboard/connect-accounts?error=${encodeURIComponent(insertErr.message)}`
-      )
+      return NextResponse.redirect(`${APP_URL}/dashboard/connected-accounts?gbp=error`)
     }
 
-    /* ONBOARDING MUST FINISH THE JOB, NOT PARK IT.
+    /* EVERY CONNECT MUST FINISH THE JOB, NOT PARK IT — onboarding AND the hub.
      *
-     * This used to return to the wizard leaving the row 'pending' — awaiting a location pick
-     * the wizard never offers. A perfect connect therefore produced no location, no sync and
-     * no data, forever, while the chip said Connected. The owner's words (2026-08-14): "if
-     * it's connected, show it's connected, and populate the data."
+     * This used to return leaving the row 'pending' — awaiting a location pick. A perfect
+     * connect therefore produced no location, no sync and no data while the chip said
+     * Connected. The owner's words (2026-08-14): "if it's connected, show it's connected,
+     * and populate the data."
      *
-     * The machinery to finish has existed all along: fetch the account's listings, finalize
-     * the pick (which activates the row, creates gbp_locations and auto-backfills metrics).
-     * Most restaurants have exactly one listing, so most connects now complete without a
-     * single extra tap. Several listings -> the existing picker, returning to the wizard.
-     * Listing fails -> the old pending behaviour, finishable from the dashboard: no worse
-     * than before, and the wizard still says so honestly. */
-    if (state.origin === 'onboarding') {
-      try {
-        const { fetchGBPLocationsForClient, finalizeGBPConnections } = await import('@/lib/gbp-actions')
-        const listed = await fetchGBPLocationsForClient(state.clientId)
-        if (listed.success) {
-          const flat = listed.data.flatMap((a) => a.locations.map((location) => ({ accountName: a.account.name, location })))
-          if (flat.length === 1) {
-            const fin = await finalizeGBPConnections(state.clientId, [flat[0]])
-            if (fin.success) return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=connected`)
-          } else if (flat.length > 1) {
-            return NextResponse.redirect(
-              `${APP_URL}/dashboard/connect-accounts/google-business-location?clientId=${state.clientId}&returnTo=${encodeURIComponent('/onboarding/full?gbp=connected')}`,
-            )
-          }
+     * So: fetch the account's listings and finalize (which activates the row, creates
+     * gbp_locations and auto-backfills metrics). Most restaurants have exactly one listing,
+     * so most connects complete without a single extra tap. Several listings -> the picker,
+     * returning wherever the connect started. Listing fetch fails -> the row stays pending
+     * and the destination says so honestly (?gbp=pending renders a finish-setup note, and
+     * the pending row is now visible on the hub as "Setting up"). */
+    const isOnboarding = state.origin === 'onboarding'
+    const rt = state.returnTo
+    const base = isOnboarding ? '/onboarding/full'
+      : (rt && rt.startsWith('/') && !rt.startsWith('//') ? rt : '/dashboard/connected-accounts')
+    const dest = (status: string) => `${APP_URL}${base}${base.includes('?') ? '&' : '?'}gbp=${status}`
+    try {
+      const { fetchGBPLocationsForClient, finalizeGBPConnections } = await import('@/lib/gbp-actions')
+      const listed = await fetchGBPLocationsForClient(state.clientId)
+      if (listed.success) {
+        const flat = listed.data.flatMap((a) => a.locations.map((location) => ({ accountName: a.account.name, location })))
+        if (flat.length === 1) {
+          const fin = await finalizeGBPConnections(state.clientId, [flat[0]])
+          if (fin.success) return NextResponse.redirect(dest('connected'))
+        } else if (flat.length > 1) {
+          const pickerReturn = `${base}${base.includes('?') ? '&' : '?'}gbp=connected`
+          return NextResponse.redirect(
+            `${APP_URL}/dashboard/connect-accounts/google-business-location?clientId=${state.clientId}&returnTo=${encodeURIComponent(pickerReturn)}`,
+          )
         }
-      } catch (e) {
-        console.error('[gbp callback] onboarding auto-finalize failed:', (e as Error).message)
-        /* The token landed but we could not resolve a listing. Saying ?gbp=connected here was a
-         * lie the audit caught: the row is pending, no location, no data. Say what is true so
-         * the wizard can tell the owner one step remains, and the stuck-pending probe has an
-         * honest trail. */
-        return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=pending`)
       }
-      /* Listing fetch returned but with zero locations, or finalize declined: also not done. */
-      return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=pending`)
+    } catch (e) {
+      console.error('[gbp callback] auto-finalize failed:', (e as Error).message)
+      /* Token landed, listing unresolved. Saying ?gbp=connected here was a lie the audit
+       * caught: the row is pending, no location, no data. Say what is true. */
+      return NextResponse.redirect(dest('pending'))
     }
-
-    const locationPickerUrl = `/dashboard/connect-accounts/google-business-location?clientId=${state.clientId}${state.returnTo ? `&returnTo=${encodeURIComponent(state.returnTo)}` : ''}`
-    return NextResponse.redirect(`${APP_URL}${locationPickerUrl}`)
+    /* Listing fetch returned but with zero locations, or finalize declined: also not done. */
+    return NextResponse.redirect(dest('pending'))
   } catch (err) {
     console.error('[gbp callback]', err)
     const message = err instanceof Error ? err.message : 'Unknown error'

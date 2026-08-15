@@ -75,7 +75,7 @@ export interface ChannelAdapter {
   isConfigured(): boolean
   /** Begin connecting a client. Throws ChannelError('not_configured') when unconfigured.
    *  hosted_link lanes may receive opts.platform (which network the owner tapped). */
-  connectStart(clientId: string, opts?: { platform?: string; returnTo?: string }): Promise<ConnectStart>
+  connectStart(clientId: string, opts?: { platform?: string; returnTo?: string; userId?: string }): Promise<ConnectStart>
   /** Pull fresh data for one ACTIVE connection into canonical tables. Throws
    *  ChannelError on failure; never returns partial silence. */
   sync(connection: ChannelConnection): Promise<SyncResult>

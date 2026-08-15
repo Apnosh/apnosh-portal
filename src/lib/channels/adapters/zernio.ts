@@ -166,7 +166,7 @@ async function zer(path: string, init: RequestInit = {}): Promise<Record<string,
 }
 
 /** Create (or reuse) the client's Zernio profile; returns the profileId. */
-async function ensureProfile(clientId: string): Promise<string> {
+async function ensureProfile(clientId: string, userId?: string): Promise<string> {
   const admin = createAdminClient()
   const { data: existing } = await admin
     .from('channel_connections')
@@ -205,6 +205,11 @@ async function ensureProfile(clientId: string): Promise<string> {
     platform_account_id: profileId,
     access_token: null,
     status: 'pending',
+    /* connected_by makes the row traceable to a person — the orphan-tenant probe
+     * notifies THIS user when the row ends up on a client no login resolves.
+     * Without it (all rows before 2026-08-15), the probe finds the orphan but
+     * has no one to tell. */
+    connected_by: userId ?? null,
     metadata: { platforms: [] as string[] },
   }
   /* A silent write failure here strands the whole lane (the constraint bug that hid
@@ -286,13 +291,13 @@ export const zernioAdapter: ChannelAdapter = {
 
   /** hosted_link lane: raw clientId + the platform the owner tapped (default instagram).
    *  Standard (non-headless) mode: Zernio hosts any page/board selection step. */
-  async connectStart(clientId: string, opts?: { platform?: string; returnTo?: string }): Promise<ConnectStart> {
+  async connectStart(clientId: string, opts?: { platform?: string; returnTo?: string; userId?: string }): Promise<ConnectStart> {
     if (!this.isConfigured()) throw new ChannelError('not_configured', 'ZERNIO_API_KEY is not set')
     const platform = (opts?.platform ?? 'instagram').toLowerCase()
     if (!(ZERNIO_PLATFORMS as readonly string[]).includes(platform)) {
       throw new ChannelError('upstream', `Unsupported platform: ${platform}`)
     }
-    const profileId = await ensureProfile(clientId)
+    const profileId = await ensureProfile(clientId, opts?.userId)
     const res = await zer(`/connect/${platform}?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(redirectUrl(opts?.returnTo))}`)
     const url = str(res.authUrl) || str((res.data as Record<string, unknown> | undefined)?.authUrl)
     if (!url) {
