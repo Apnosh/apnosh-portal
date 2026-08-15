@@ -124,8 +124,28 @@ const PLATFORM_META: Record<string, {
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function resolveClientId(userId: string): Promise<string | null> {
+/**
+ * Resolve which client these actions operate on.
+ *
+ * The audit's FIX NOW #11: this used to ignore the header's client switcher entirely, so a
+ * multi-client owner viewing client B connected to client A — connects vanished and Sync said
+ * "Connection not found". A requested client is honored ONLY after proving this user can see
+ * it (client_users link or business ownership); an unauthorized request falls through to the
+ * default rather than becoming a cross-tenant read.
+ */
+async function resolveClientId(userId: string, requestedClientId?: string | null): Promise<string | null> {
   const admin = createAdminClient()
+
+  if (requestedClientId) {
+    const [{ data: link }, { data: owned }] = await Promise.all([
+      admin.from('client_users').select('client_id')
+        .eq('auth_user_id', userId).eq('client_id', requestedClientId).maybeSingle(),
+      admin.from('businesses').select('client_id')
+        .eq('owner_id', userId).eq('client_id', requestedClientId).maybeSingle(),
+    ])
+    if (link?.client_id || owned?.client_id) return requestedClientId
+  }
+
   const { data: biz } = await admin
     .from('businesses').select('client_id').eq('owner_id', userId).maybeSingle()
   if (biz?.client_id) return biz.client_id
@@ -188,13 +208,13 @@ function humanizeSyncError(err: string | null): string | null {
 // getConnectionsForClient -- unified list reading both tables
 // ---------------------------------------------------------------------------
 
-export async function getConnectionsForClient(): Promise<UnifiedConnection[]> {
+export async function getConnectionsForClient(selectedClientId?: string | null): Promise<UnifiedConnection[]> {
   const userSupabase = await createServerClient()
   const { data: { user } } = await userSupabase.auth.getUser()
   if (!user) return []
 
   const admin = createAdminClient()
-  const clientId = await resolveClientId(user.id)
+  const clientId = await resolveClientId(user.id, typeof selectedClientId === 'string' ? selectedClientId : undefined)
   if (!clientId) return []
 
   const [pc, cc] = await Promise.all([

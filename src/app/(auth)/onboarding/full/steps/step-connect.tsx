@@ -66,6 +66,21 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
       .catch(() => { /* leave null: fall back to the map, which is the old behaviour */ })
   }, [])
 
+  /* The GBP callback returns with ?gbp=connected|pending|cancelled|error. The handler for
+   * these lived on the retired location step, so in the live flow the params were silently
+   * dropped — a cancelled Google login looked identical to never trying. */
+  const [gbpNote, setGbpNote] = useState<string | null>(null)
+  useEffect(() => {
+    try {
+      const v = new URLSearchParams(window.location.search).get('gbp')
+      if (v === 'connected') setGbpNote('Google connected. Your data is loading now.')
+      else if (v === 'pending') setGbpNote('Google sign-in worked. One more step: choose your business location from the dashboard, and data starts flowing.')
+      else if (v === 'cancelled') setGbpNote('Google connect was cancelled. Nothing was changed; try again whenever you like.')
+      else if (v === 'error') setGbpNote('Google connect hit an error. Nothing was broken on your side; try once more, and if it repeats, we will look into it.')
+      if (v) window.history.replaceState(null, '', window.location.pathname)
+    } catch { /* ignore */ }
+  }, [])
+
   const [connectUrl, setConnectUrl] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null)
@@ -188,7 +203,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
      * The copy-link escape hatch below is that path, and it is shown to everyone rather than
      * hidden behind a failure, because by the time you have seen the error you have already
      * lost the tab that would have explained it. */
-    const url = `${authPath}${authPath.includes('?') ? '&' : '?'}clientId=${clientId}&returnTo=/onboarding`
+    const url = `${authPath}${authPath.includes('?') ? '&' : '?'}clientId=${clientId}&returnTo=${encodeURIComponent('/onboarding/full')}`
     setConnectUrl(new URL(url, window.location.origin).toString())
     setLoading(false)
 
@@ -294,6 +309,12 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
         })}
         <Hint>You can always connect more accounts from your dashboard later.</Hint>
       </div>
+      {gbpNote && (
+        <div className="mt-4 rounded-[12px] px-3.5 py-3 text-[13px] leading-relaxed" style={{ background: '#f2faf7', border: '1px solid #d8ece4', color: '#2f8f70' }}>
+          {gbpNote}
+        </div>
+      )}
+
       {/* ONE LINE, NOT A LECTURE. Shown always, so it reads as a note about how phones behave
           rather than as an error report about something the owner just did wrong. */}
       <div className="mt-4 text-[12px] leading-relaxed" style={{ color: '#9aa1ab' }}>

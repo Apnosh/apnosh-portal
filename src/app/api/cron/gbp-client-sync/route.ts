@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     .from('channel_connections')
     .select('id, client_id, platform_account_name')
     .eq('channel', 'google_business_profile')
-    .eq('status', 'active')
+    .in('status', ['active', 'pending']) /* pending too: a stranded picker left rows the auto-finalize rescue could never reach */
 
   const connections = (rows ?? []) as Array<{ id: string; client_id: string; platform_account_name: string | null }>
 

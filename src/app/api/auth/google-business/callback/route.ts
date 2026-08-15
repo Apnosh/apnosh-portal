@@ -191,8 +191,14 @@ export async function GET(request: NextRequest) {
         }
       } catch (e) {
         console.error('[gbp callback] onboarding auto-finalize failed:', (e as Error).message)
+        /* The token landed but we could not resolve a listing. Saying ?gbp=connected here was a
+         * lie the audit caught: the row is pending, no location, no data. Say what is true so
+         * the wizard can tell the owner one step remains, and the stuck-pending probe has an
+         * honest trail. */
+        return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=pending`)
       }
-      return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=connected`)
+      /* Listing fetch returned but with zero locations, or finalize declined: also not done. */
+      return NextResponse.redirect(`${APP_URL}/onboarding/full?gbp=pending`)
     }
 
     const locationPickerUrl = `/dashboard/connect-accounts/google-business-location?clientId=${state.clientId}${state.returnTo ? `&returnTo=${encodeURIComponent(state.returnTo)}` : ''}`

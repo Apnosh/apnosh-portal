@@ -206,19 +206,23 @@ export async function finalizeGBPConnection(
       last_seen_at: new Date().toISOString(),
     }, { onConflict: 'store_code' })
 
-  /* Kick off the 18-month historical backfill in the background so a
-     brand-new client sees a full trend chart on their first visit to
-     the Overview / Full analytics pages instead of just the 7 days the
-     daily sync would catch. Fire-and-forget — we don't block the
-     redirect on it (takes 30-90 seconds for 18 months × N locations). */
-  void (async () => {
+  /* 18-month historical backfill so a brand-new client sees a full trend chart on first
+     visit. after() keeps the lambda alive past the redirect — a bare fire-and-forget could be
+     frozen mid-backfill on Vercel, which is why some clients' history quietly never arrived. */
+  const runBackfill = async () => {
     try {
       const { backfillClientGbpMetrics } = await import('@/lib/gbp-backfill')
       await backfillClientGbpMetrics(clientId, 18)
     } catch (err) {
       console.error('[finalizeGBPConnection] auto-backfill failed:', (err as Error).message)
     }
-  })()
+  }
+  try {
+    const { after } = await import('next/server')
+    after(runBackfill())
+  } catch {
+    await runBackfill()
+  }
 
   return { success: true }
 }
@@ -345,21 +349,33 @@ export async function finalizeGBPConnections(
     linked++
   }
 
-  await supabase.from('channel_connections').delete().eq('id', pending.id)
-
+  /* VERIFY BEFORE DELETING THE PLACEHOLDER. The old order deleted the pending row first and
+   * checked linked===0 after — so if every insert failed, the client ended with NO connection
+   * at all while the chip still said Connected (the audit's sharpest GBP finding). The
+   * placeholder is the retry token: it must survive a total failure. */
   if (linked === 0) {
     return { success: false, error: `Failed to link any locations. ${errors.join('; ')}` }
   }
+  await supabase.from('channel_connections').delete().eq('id', pending.id)
 
-  /* Single backfill covers every location we just linked. */
-  void (async () => {
+  /* Backfill covers every location just linked. after() keeps the lambda alive past the
+   * response — the previous fire-and-forget could be frozen mid-backfill on Vercel, which is
+   * why some clients' history quietly never arrived. The daily cron remains the floor. */
+  const runBackfill = async () => {
     try {
       const { backfillClientGbpMetrics } = await import('@/lib/gbp-backfill')
       await backfillClientGbpMetrics(clientId, 18)
     } catch (err) {
       console.error('[finalizeGBPConnections] auto-backfill failed:', (err as Error).message)
     }
-  })()
+  }
+  try {
+    const { after } = await import('next/server')
+    after(runBackfill())
+  } catch {
+    /* outside a request scope (scripts, tests): run it inline */
+    await runBackfill()
+  }
 
   return { success: true, linked }
 }

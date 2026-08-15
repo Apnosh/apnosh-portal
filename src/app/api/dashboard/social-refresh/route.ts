@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     .from('channel_connections')
     .select('id, last_sync_at')
     .eq('client_id', clientId)
-    .eq('channel', 'zernio')
+    .in('channel', ['zernio', 'ayrshare']) /* whichever lane is active; hardcoding zernio made every on-view refresh a silent no-op under the fallback adapter */
     .order('connected_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -79,8 +79,8 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { adapterFor } = await import('@/lib/channels/registry')
-    const adapter = adapterFor('zernio')
+    const { activeSocialAdapter } = await import('@/lib/channels/registry')
+    const adapter = activeSocialAdapter()
     if (!adapter) return NextResponse.json({ synced: false, reason: 'no adapter' })
     const { data: full } = await db.from('channel_connections').select('*').eq('id', conn.id).maybeSingle()
     if (!full) return NextResponse.json({ synced: false, reason: 'connection vanished' })

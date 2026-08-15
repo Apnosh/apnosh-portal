@@ -46,9 +46,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
   try {
-    const platform = new URL(req.url).searchParams.get('platform') ?? undefined
+    const params = new URL(req.url).searchParams
+    const platform = params.get('platform') ?? undefined
+    /* returnTo lets onboarding get its owner BACK. Same-origin paths only — an absolute URL
+     * here would be an open redirect through the vendor's login page. */
+    const rt = params.get('returnTo')
+    const returnTo = rt && rt.startsWith('/') && !rt.startsWith('//') ? rt : undefined
     const { url } = adapter.kind === 'hosted_link'
-      ? await adapter.connectStart(clientId, platform ? { platform } : undefined)
+      ? await adapter.connectStart(clientId, { ...(platform ? { platform } : {}), ...(returnTo ? { returnTo } : {}) })
       : await adapter.connectStart(signState(clientId))
     if (!url) return NextResponse.json({ error: 'This channel does not connect by redirect' }, { status: 400 })
     return NextResponse.redirect(url)

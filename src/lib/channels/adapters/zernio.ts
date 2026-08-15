@@ -32,7 +32,16 @@ import { ChannelError, type ChannelAdapter, type ChannelConnection, type Connect
 import { createAdminClient } from '@/lib/supabase/admin'
 
 const API = 'https://api.zernio.com/v1'
-const REDIRECT = 'https://portal.apnosh.com/dashboard/connected-accounts?connected=social'
+/* Where Zernio sends the owner back after login. Built per call now: the old hardcoded prod
+ * constant meant every onboarding connect stranded the owner on the dashboard page (their
+ * returnTo was silently ignored) and every dev/preview connect returned to PRODUCTION. The
+ * ?connected=social param is load-bearing — the connected-accounts page keys its auto-sync
+ * off it — so any custom returnTo keeps it too. */
+function redirectUrl(returnTo?: string): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL || 'https://portal.apnosh.com').replace(/\/$/, '')
+  const path = returnTo && returnTo.startsWith('/') ? returnTo : '/dashboard/connected-accounts'
+  return `${base}${path}${path.includes('?') ? '&' : '?'}connected=social`
+}
 
 /** The platforms our canonical table accepts (same constraint as the ayrshare adapter). */
 export const ZERNIO_PLATFORMS = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const
@@ -277,14 +286,14 @@ export const zernioAdapter: ChannelAdapter = {
 
   /** hosted_link lane: raw clientId + the platform the owner tapped (default instagram).
    *  Standard (non-headless) mode: Zernio hosts any page/board selection step. */
-  async connectStart(clientId: string, opts?: { platform?: string }): Promise<ConnectStart> {
+  async connectStart(clientId: string, opts?: { platform?: string; returnTo?: string }): Promise<ConnectStart> {
     if (!this.isConfigured()) throw new ChannelError('not_configured', 'ZERNIO_API_KEY is not set')
     const platform = (opts?.platform ?? 'instagram').toLowerCase()
     if (!(ZERNIO_PLATFORMS as readonly string[]).includes(platform)) {
       throw new ChannelError('upstream', `Unsupported platform: ${platform}`)
     }
     const profileId = await ensureProfile(clientId)
-    const res = await zer(`/connect/${platform}?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(REDIRECT)}`)
+    const res = await zer(`/connect/${platform}?profileId=${encodeURIComponent(profileId)}&redirect_url=${encodeURIComponent(redirectUrl(opts?.returnTo))}`)
     const url = str(res.authUrl) || str((res.data as Record<string, unknown> | undefined)?.authUrl)
     if (!url) {
       throw new ChannelError('upstream', `Zernio did not return an authUrl (body: ${JSON.stringify(res).slice(0, 200)})`)
@@ -457,11 +466,29 @@ export const zernioAdapter: ChannelAdapter = {
         synced_at: new Date().toISOString(),
       }]
     })
+    const postWriteFailures: string[] = []
     if (postRows.length > 0) {
-      const { error: postsErr } = await admin
-        .from('social_posts')
-        .upsert(postRows, { onConflict: 'client_id,platform,external_id' })
-      if (postsErr) throw new ChannelError('upstream', `social_posts write failed: ${postsErr.message}`)
+      /* PER PLATFORM, NOT ONE BATCH. A single batch meant one poison row from any platform
+       * threw before ANY metrics were written — a bad TikTok post silenced Instagram, Facebook,
+       * LinkedIn and YouTube for the whole run. Failures are now isolated and NAMED in the sync
+       * note, matching the per-platform isolation the metrics writes already have. */
+      const postsByPlatform = new Map<string, typeof postRows>()
+      for (const row of postRows) {
+        const list = postsByPlatform.get(row.platform as string) ?? []
+        list.push(row)
+        postsByPlatform.set(row.platform as string, list)
+      }
+      const postFailures: string[] = []
+      for (const [pl, rows] of postsByPlatform) {
+        const { error: postsErr } = await admin
+          .from('social_posts')
+          .upsert(rows, { onConflict: 'client_id,platform,external_id' })
+        if (postsErr) postFailures.push(`${pl} posts: ${postsErr.message.slice(0, 80)}`)
+      }
+      if (postFailures.length > 0 && postFailures.length === postsByPlatform.size) {
+        throw new ChannelError('upstream', `social_posts write failed for every platform: ${postFailures.join('; ')}`)
+      }
+      if (postFailures.length > 0) postWriteFailures.push(...postFailures)
     }
 
     /* 4. One daily row per linked platform (even a zero day is a real day).
@@ -471,7 +498,7 @@ export const zernioAdapter: ChannelAdapter = {
      * numbers. Failures are collected and reported in the note, so the problem is visible
      * without being fatal. */
     let written = 0
-    const failed: string[] = []
+    const failed: string[] = [...postWriteFailures]
     for (const platform of linked) {
      try {
       /* history: content numbers only (no follower columns — those are only known

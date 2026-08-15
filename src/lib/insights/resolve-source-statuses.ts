@@ -32,17 +32,19 @@ export async function loadClientConnections(clientId: string): Promise<Connectio
     const admin = createAdminClient()
     const { data, error } = await admin
       .from('channel_connections')
-      .select('channel, status, sync_error, last_sync_at, metadata')
+      .select('id, channel, status, sync_error, last_sync_at, platform_account_id, metadata')
       .eq('client_id', clientId)
       .order('last_sync_at', { ascending: false, nullsFirst: false })
 
     if (error || !data) return byChannel
 
     for (const row of data as Array<{
+      id: string
       channel: string
       status: string | null
       sync_error: string | null
       last_sync_at: string | null
+      platform_account_id: string | null
       metadata: { platforms?: unknown } | null
     }>) {
       const snap = {
@@ -52,9 +54,30 @@ export async function loadClientConnections(clientId: string): Promise<Connectio
       }
       if (SOCIAL_VENDOR_CHANNELS.includes(row.channel)) {
         // the vendor row proves exactly the platforms it carries — no more, no less
-        const platforms = Array.isArray(row.metadata?.platforms) ? row.metadata.platforms : []
+        let platforms = Array.isArray(row.metadata?.platforms)
+          ? row.metadata.platforms.filter((p): p is string => typeof p === 'string')
+          : []
+        /* metadata.platforms is a SYNC-written cache: empty between connect and
+         * first sync. The other two connect-state readers (connections hub,
+         * onboarding) already ask the vendor live in that window — without the
+         * same read here, insights says "not connected" for a connection that
+         * exists. Heal the cache on the way through; the vendor being
+         * unreachable falls back to the (empty) cache, which stays honest. */
+        if (platforms.length === 0 && row.channel === 'zernio' && row.platform_account_id) {
+          try {
+            const { liveLinkedPlatforms } = await import('@/lib/channels/adapters/zernio')
+            const live = await liveLinkedPlatforms(row.platform_account_id)
+            if (live && live.platforms.length > 0) {
+              platforms = live.platforms
+              const md = (row.metadata ?? {}) as Record<string, unknown>
+              await admin.from('channel_connections')
+                .update({ metadata: { ...md, platforms } })
+                .eq('id', row.id)
+            }
+          } catch { /* vendor unreachable: cache stays the answer */ }
+        }
         for (const p of platforms) {
-          if (typeof p === 'string' && !byChannel[p]) byChannel[p] = snap
+          if (!byChannel[p]) byChannel[p] = snap
         }
         continue
       }

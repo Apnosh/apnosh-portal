@@ -96,10 +96,12 @@ export default function ConnectedAccountsPage() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const d = await getConnectionsForClient()
+    /* Pass the switcher's selection so a multi-client owner sees THIS client's connections,
+       not whichever one the server resolver defaults to (audit FIX NOW #11). */
+    const d = await getConnectionsForClient(clientId || undefined)
     setConnections(d)
     setLoading(false)
-  }, [])
+  }, [clientId])
   useEffect(() => { load() }, [load])
 
   /* Keep the vendor state fresh WITHOUT the owner ever tapping anything: check with

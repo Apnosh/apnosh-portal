@@ -145,7 +145,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
   const safe = async <T,>(p: PromiseLike<{ data: T[] | null }>): Promise<T[]> => {
     try { const r = await p; return r.data ?? [] } catch { return [] }
   }
-  const [gbp, social, web, reviews, localRevs, gbpConn, socialConn, clientRow, places] = await Promise.all([
+  const [gbp, social, web, reviews, localRevs, gbpConn, gbpChanConn, socialConn, clientRow, places] = await Promise.all([
     /* PAGINATED. gbp_metrics is one row per LISTING per day, so a chain reaches the 1000-row
        cap in half the days a single location would. The two review reads had no date bound at
        ALL, so a long-lived client was already capped regardless of locations. */
@@ -154,7 +154,11 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
     fetchAllRows(admin, { table: 'website_metrics', cols: 'date, visitors', clientId, dateCol: 'date', gte: bound }),
     fetchAllRows(admin, { table: 'reviews', cols: 'rating, posted_at', clientId, dateCol: 'posted_at', gte: '1970-01-01T00:00:00' }),
     fetchAllRows(admin, { table: 'local_reviews', cols: 'rating, created_at_platform', clientId, dateCol: 'created_at_platform', gte: '1970-01-01T00:00:00' }),
+    /* BOTH registries. The cron's auto-finalize writes channel_connections but not the legacy
+       gbp_connections, so home said "not connected" while the hub said Connected — two surfaces
+       disagreeing about the same fact (audit FIX NOW #9). Read both; either counts. */
     safe(admin.from('gbp_connections').select('id').eq('client_id', clientId)),
+    safe(admin.from('channel_connections').select('id').eq('client_id', clientId).eq('channel', 'google_business_profile').in('status', ['active', 'pending'])),
     safe(admin.from('social_connections').select('sync_status').eq('client_id', clientId)),
     safe(admin.from('clients').select('has_apnosh_website').eq('id', clientId)),
     safe(admin.from('gbp_locations').select('place_rating, is_primary').eq('client_id', clientId)),
@@ -162,7 +166,7 @@ async function loadChannels(clientId: string): Promise<Channel[]> {
 
   /* Connected = a real connection record exists (not "has recent data"),
      so a freshly-linked channel still reads as connected before data lands. */
-  const gbpConnected = (gbpConn as unknown[]).length > 0
+  const gbpConnected = (gbpConn as unknown[]).length > 0 || (gbpChanConn as unknown[]).length > 0
   const socialConnected = (socialConn as { sync_status?: string }[]).some(c => c.sync_status !== 'disconnected')
   const websiteConnected = ((clientRow as { has_apnosh_website?: boolean }[])[0]?.has_apnosh_website) === true
 
