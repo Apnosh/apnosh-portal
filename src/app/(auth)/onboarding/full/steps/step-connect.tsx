@@ -112,6 +112,14 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
         const connected = await getConnectedPlatforms(clientId)
         if (Object.keys(connected).length > 0) {
           update('connected', { ...data.connected, ...connected })
+          /* CONNECTED IS NOT DONE — DATA IS DONE. The row is born pending and only a SYNC
+           * flips it active and fills the tables; until now the first sync waited for the
+           * nightly cron or a dashboard visit, so the owner saw "Connected" next to "pending
+           * data" (2026-08-14). Fire the first sync the moment a connect is seen. The route
+           * claims its own window atomically, so repeat focus events cost one cheap
+           * "already fresh" reply rather than duplicate syncs. Fire-and-forget: the chip must
+           * not wait ten seconds on a metrics pull. */
+          fetch(`/api/dashboard/social-refresh?clientId=${clientId}&force=1`).catch(() => {})
         }
       } catch { /* keep the chips we have */ }
       busy = false
