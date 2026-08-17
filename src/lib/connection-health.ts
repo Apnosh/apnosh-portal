@@ -123,6 +123,12 @@ export async function runConnectionHealthProbe(): Promise<HealthReport> {
   await probeOrphanTenants(admin, report).catch(() => {})
   await probeStuckPendingGbp(admin, report).catch(() => {})
 
+  /* THE NUMBER SENTRY (2026-08-17). Every wrong number this month was found by
+   * the OWNER's eyes on a screen — the code checks passed while the data lied.
+   * These rules check the data itself, nightly, for every client, so we find a
+   * wrong number before a client does. Team-facing only: rule breaks land in
+   * this report, never as client notifications. */
+  await probeNumberSanity(admin, report).catch(() => {})
 
   return report
 }
@@ -593,6 +599,139 @@ export async function probeStuckPendingGbp(
         })
         report.notificationsCreated += 1
       }
+    }
+  }
+}
+
+/**
+ * THE NUMBER SENTRY — data rules checked nightly for every client (2026-08-17).
+ *
+ * Every wrong number this month passed every code check and was caught by the
+ * owner's eyes: lifetime totals written as single days, windows sliding into
+ * the past, connections landing on invisible tenants. Code checks test logic;
+ * these rules test the DATA. A broken rule lands in the health report for the
+ * TEAM — never as a client notification — so we find a wrong number before a
+ * client does.
+ *
+ * Rules:
+ *  1. No negative daily values (social + Google).
+ *  2. A delta-mode social row must never hold near-lifetime totals — the
+ *     "250k Wednesday" rule: a daily-growth row holding ≥60% of the platform's
+ *     lifetime ledger (and ≥10k) means a lifetime dump leaked into a day.
+ *  3. Follower counts must not crash: latest < 50% of the 14-day peak (peaks
+ *     under 50 followers are ignored — noise, not audiences).
+ *  4. Google must not double-count: a brand-level row and per-location rows
+ *     with impressions on the SAME day is the double-count mechanism from the
+ *     multi-location audit, live.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function probeNumberSanity(admin: any, report: HealthReport): Promise<void> {
+  const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : Number(v) || 0)
+  const day = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString().slice(0, 10)
+  const since30 = day(30)
+  const since14 = day(14)
+  const flag = (clientId: string, rule: string, message: string) => {
+    report.staleFeeds += 1
+    report.failures.push({ id: `${clientId}:${rule}`, channel: 'numbers', clientId, message })
+  }
+
+  /* lifetime ledgers per client+platform (written by the zernio delta model) */
+  const { data: vconns } = await admin
+    .from('channel_connections')
+    .select('client_id, metadata')
+    .in('channel', ['zernio', 'ayrshare'])
+  const ledgers = new Map<string, Record<string, { impressions?: number }>>()
+  for (const c of (vconns ?? []) as { client_id: string; metadata: { lifetime_totals?: Record<string, { impressions?: number }> } | null }[]) {
+    if (c.metadata?.lifetime_totals) ledgers.set(c.client_id, c.metadata.lifetime_totals)
+  }
+
+  // ── social rules ────────────────────────────────────────────────────────────
+  const { data: soc } = await admin
+    .from('social_metrics')
+    .select('client_id, platform, date, reach, impressions, engagement, followers_total, followers_gained, raw_data')
+    .gte('date', since30)
+    .limit(10000)
+  const socRows = (soc ?? []) as Array<{
+    client_id: string; platform: string; date: string
+    reach: unknown; impressions: unknown; engagement: unknown
+    followers_total: unknown; followers_gained: unknown
+    raw_data: { note?: string } | null
+  }>
+
+  const flaggedNeg = new Set<string>()
+  const followers = new Map<string, { date: string; total: number }[]>()
+  for (const r of socRows) {
+    // rule 1: negatives
+    if ([r.reach, r.impressions, r.engagement, r.followers_gained].some((v) => n(v) < 0)) {
+      const k = `${r.client_id}:${r.platform}`
+      if (!flaggedNeg.has(k)) {
+        flaggedNeg.add(k)
+        flag(r.client_id, 'negative', `NUMBER RULE: negative daily value on ${r.platform} ${r.date}`)
+      }
+    }
+    // rule 2: a daily-growth row holding near-lifetime totals
+    const isDelta = typeof r.raw_data?.note === 'string' && r.raw_data.note.startsWith('daily growth')
+    if (isDelta) {
+      const lifetime = n(ledgers.get(r.client_id)?.[r.platform]?.impressions)
+      const impr = n(r.impressions)
+      if (lifetime > 0 && impr >= 10_000 && impr >= lifetime * 0.6) {
+        flag(r.client_id, 'lifetime-dump', `NUMBER RULE: ${r.platform} ${r.date} holds ${impr.toLocaleString()} impressions in ONE delta day (${Math.round((impr / lifetime) * 100)}% of lifetime) — looks like a lifetime total written as a day`)
+      }
+    }
+    // collect follower series (rule 3, judged after the loop)
+    const ft = n(r.followers_total)
+    if (ft > 0 && r.date >= since14) {
+      const k = `${r.client_id}:${r.platform}`
+      const list = followers.get(k) ?? []
+      list.push({ date: r.date, total: ft })
+      followers.set(k, list)
+    }
+  }
+  for (const [k, list] of followers) {
+    list.sort((a, b) => a.date.localeCompare(b.date))
+    const peak = Math.max(...list.map((x) => x.total))
+    const latest = list[list.length - 1].total
+    if (peak >= 50 && latest < peak * 0.5) {
+      const [clientId, platform] = k.split(':')
+      flag(clientId, 'follower-crash', `NUMBER RULE: ${platform} followers fell from ${peak} to ${latest} within 14 days with no recorded reason`)
+    }
+  }
+
+  // ── Google rules ────────────────────────────────────────────────────────────
+  const { data: g } = await admin
+    .from('gbp_metrics')
+    .select('client_id, date, location_id, impressions_total, search_views, calls, direction_requests, website_clicks')
+    .gte('date', since14)
+    .limit(10000)
+  const gRows = (g ?? []) as Array<{
+    client_id: string; date: string; location_id: string | null
+    impressions_total: unknown; search_views: unknown; calls: unknown
+    direction_requests: unknown; website_clicks: unknown
+  }>
+  const gNegFlagged = new Set<string>()
+  const byClientDay = new Map<string, { brand: number; locs: number }>()
+  for (const r of gRows) {
+    if ([r.impressions_total, r.search_views, r.calls, r.direction_requests, r.website_clicks].some((v) => n(v) < 0)) {
+      if (!gNegFlagged.has(r.client_id)) {
+        gNegFlagged.add(r.client_id)
+        flag(r.client_id, 'gbp-negative', `NUMBER RULE: negative Google value on ${r.date}`)
+      }
+    }
+    const impr = Math.max(n(r.impressions_total), n(r.search_views))
+    if (impr > 0) {
+      const k = `${r.client_id}:${r.date}`
+      const e = byClientDay.get(k) ?? { brand: 0, locs: 0 }
+      if (r.location_id) e.locs += impr
+      else e.brand += impr
+      byClientDay.set(k, e)
+    }
+  }
+  const dblFlagged = new Set<string>()
+  for (const [k, e] of byClientDay) {
+    const clientId = k.split(':')[0]
+    if (e.brand > 0 && e.locs > 0 && !dblFlagged.has(clientId)) {
+      dblFlagged.add(clientId)
+      flag(clientId, 'gbp-double', `NUMBER RULE: Google brand-level AND per-location rows both carry impressions on ${k.split(':')[1]} — totals may double-count`)
     }
   }
 }
