@@ -698,6 +698,19 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
       </div>
       {/* chart — the hero above already shows this card's one number */}
       <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} />
+      {/* THE CHART ENDS AT THE NEWEST FULLY-REPORTED DAY, and Google + the social
+          networks report 2-6 days behind — so on a fresh connect the newest bar can
+          be days old, which owners read as "my data is stuck" (2026-08-17). Say the
+          real reason. Silent past ~9 days: that is genuine staleness, and the
+          nightly silence probes own that story, not this line. */}
+      {(() => {
+        const lag = mv.lastDataDate ? Math.floor((Date.now() - Date.parse(mv.lastDataDate + 'T00:00:00')) / 86400000) : 0
+        return lag >= 2 && lag <= 9 ? (
+          <div style={{ fontSize: 12, color: C.faint, marginTop: 7, lineHeight: 1.45 }}>
+            Newest full day is {relDate(mv.lastDataDate)}. Google and the social networks send numbers a few days late, so recent days fill in on their own.
+          </div>
+        ) : null
+      })()}
       {/* breakdown tiles */}
       {mv.tiles.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(4, mv.tiles.length)},1fr)`, gap: 8, margin: '10px 0 0' }}>
