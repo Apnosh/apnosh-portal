@@ -49,6 +49,9 @@ export interface StageSourceView {
   hasData: boolean
   /** true ONLY for the sources that add up to this stage's headline */
   counted: boolean
+  /** the CLIENT switched this metric off (Choose-your-metrics, 2026-08-18):
+   *  still collected, still listed, never summed, shown with an Off badge */
+  disabledByClient?: boolean
   /** how this source reads in the breakdown: a 'sum' box (adds to the headline
    *  when connected), a 'context' row (shown, never summed), or a 'drilldown'. */
   feedRole: 'sum' | 'context' | 'drilldown'
@@ -118,7 +121,7 @@ export type ManualStore = Record<string, ManualEntry>
 
 // The sources that SUM into each stage headline (drill-downs + context are
 // excluded). Stage 4 and 5 have preference rules layered on top (see below).
-const SUMMABLE: Record<FunnelStage, string[]> = {
+export const SUMMABLE: Record<FunnelStage, string[]> = {
   1: ['gbp_impressions_search', 'gbp_impressions_maps', 'ig_reach', 'facebook_reach', 'tiktok_video_views', 'linkedin_reach', 'youtube_views'],
   // Owner redefinition (2026-07-13): Interest = people EXPLORING you but not yet
   // trying to come/buy — website visits, menu looks, profile taps. Website
@@ -262,7 +265,11 @@ export function computeStagesFrom(
   manual: ManualStore = {},
   freshness: Record<string, string> = {},
   context: Record<string, string> = {},
+  /* per-client metric toggles: source ids the CLIENT turned off. Display-only:
+     collection continues; these are simply never counted into any headline. */
+  disabledSources: Iterable<string> = [],
 ): ComputedStage[] {
+  const off = new Set(disabledSources)
   const stages: ComputedStage[] = []
 
   for (const stage of [1, 2, 3, 4, 5] as FunnelStage[]) {
@@ -352,6 +359,13 @@ export function computeStagesFrom(
       if (gc && !gc.counted && web?.counted) gc.feedRole = 'context'
     }
 
+    /* CLIENT TOGGLES LAST, so they override every per-stage counting rule:
+       an off metric is out of the headline, the groups and the trend, but its
+       card stays visible with an Off badge — hiding it entirely would make the
+       breakdown quietly disagree with what the client remembers turning off. */
+    for (const s of sources) {
+      if (off.has(s.id)) { s.counted = false; s.disabledByClient = true }
+    }
     const anyCounted = sources.some(s => s.counted)
     const headline = anyCounted ? sumCounted(sources) : null
 
@@ -407,14 +421,16 @@ export async function computeStages(
   const { resolveSourceStatuses } = await import('./resolve-source-statuses')
   const { loadStageValues, loadInterestExplore } = await import('./stage-values')
   const { loadStageFreshness, loadSourceContext } = await import('./stage-values')
-  const [statuses, values, explore, freshness, context] = await Promise.all([
+  const { getDisabledSourceSet } = await import('@/lib/metric-prefs')
+  const [statuses, values, explore, freshness, context, disabled] = await Promise.all([
     resolveSourceStatuses(clientId),
     loadStageValues(clientId, window, periodsBack),
     periodsBack === 0 ? loadInterestExplore(clientId, window) : Promise.resolve(null),
     loadStageFreshness(clientId),
     loadSourceContext(clientId),
+    getDisabledSourceSet(clientId).catch(() => new Set<string>()),
   ])
-  const stages = computeStagesFrom(statuses, values, {}, freshness, context)
+  const stages = computeStagesFrom(statuses, values, {}, freshness, context, disabled)
   // Interest (stage 2) carries the real "what they explored" GA4 detail. Never
   // enters any sum — the headline stays the honest sum of counted sources.
   if (explore) {

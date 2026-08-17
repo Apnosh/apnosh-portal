@@ -36,6 +36,7 @@ import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
+import { MetricSettingsButton } from './metric-settings'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
@@ -309,7 +310,15 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
         ) : !data || data.metrics.length === 0 ? (
           <EmptyState />
         ) : (
-          <Body data={data} focusKey={initialStageKey} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} clientId={clientId} campaigns={campaigns} />
+          <>
+            <Body data={data} focusKey={initialStageKey} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} clientId={clientId} campaigns={campaigns} />
+            {/* the setting under the graphs (owner ask 2026-08-18): per-client
+                metric toggles; the whole screen reloads so every stage,
+                headline and chart reflects the new selection at once */}
+            <div style={{ padding: '0 0 26px' }}>
+              <MetricSettingsButton onChanged={() => window.location.reload()} />
+            </div>
+          </>
         )}
       </div>
       </div>

@@ -23,6 +23,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MetricSettingsButton } from '@/components/mvp/metric-settings'
 import { useRouter } from 'next/navigation'
 import { Pencil, Sun, Moon } from 'lucide-react'
 import { useMvpTheme } from './mvp-theme'
@@ -1168,6 +1169,8 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
 }
 
 export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void }) {
+  /* bumps when the client changes their metric toggles → refetch the stages */
+  const [prefsBump, setPrefsBump] = useState(0)
   const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   const [loading, setLoading] = useState(false)
@@ -1215,9 +1218,16 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
     return () => { alive = false }
     // onVisibility identity is caller-stable; depend on the data inputs only
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, range])
+  }, [clientId, range, prefsBump])
   if (!data?.views || !data?.actions || data.views.total <= 0) return null
-  return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} /></div>
+  return (
+    <div style={fill ? undefined : { marginBottom: 14 }}>
+      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} />
+      {/* the setting under the graphs (owner ask 2026-08-18): every summed
+          metric across all five stages, per-client on/off */}
+      <MetricSettingsButton onChanged={() => setPrefsBump((b) => b + 1)} />
+    </div>
+  )
 }
 
 /* truncate text with an ellipsis to fit maxW at the ctx's current font */
