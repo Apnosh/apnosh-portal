@@ -367,8 +367,9 @@ export const zernioAdapter: ChannelAdapter = {
      * been widened yet, say) aborted the whole sync and left the connection showing
      * NOTHING as connected — including the platforms that were fine. Connection state
      * and metric collection are separate promises, and this is the line between them. */
+    const priorMd = ((connection as { metadata?: Record<string, unknown> }).metadata ?? {}) as Record<string, unknown>
     await admin.from('channel_connections')
-      .update({ status: 'active', metadata: { platforms: linked, account_counts: accountCounts } })
+      .update({ status: 'active', metadata: { ...priorMd, platforms: linked, account_counts: accountCounts } })
       .eq('id', connection.id)
 
     // 2. Followers per platform.
@@ -496,41 +497,38 @@ export const zernioAdapter: ChannelAdapter = {
       if (postFailures.length > 0) postWriteFailures.push(...postFailures)
     }
 
-    /* 4. One daily row per linked platform (even a zero day is a real day).
+    /* 4. One daily row per linked platform — TWO MODES, because the vendor only
+     * gives LIFETIME totals per post, never per-day history:
      *
-     * Each platform is written INSIDE its own try: a platform we cannot store yet (a new
-     * one the database has not been widened for, a bad row) must not cost the others their
-     * numbers. Failures are collected and reported in the note, so the problem is visible
-     * without being fatal. */
+     *   FIRST SYNC for a platform: bucket each post's lifetime totals on its
+     *   publish date. That is the only honest history available, and it is
+     *   labelled as such — a viral post reads as a spike on the day it went up.
+     *
+     *   EVERY SYNC AFTER: record only the CHANGE since the last sync, on the
+     *   day it actually happened. The old behaviour re-wrote the publish-date
+     *   buckets with ever-growing lifetime totals, so a viral video showed
+     *   246k views "on Wednesday" and zero after — the owner rightly called
+     *   the numbers unbelievable (2026-08-17). Now Wednesday keeps only what
+     *   it had when we started tracking, and every day since earns its own.
+     *
+     * The last-seen lifetime totals per platform live in the connection's
+     * metadata (lifetime_totals) and only advance after a successful write, so
+     * a failed day is retried, never lost. Deltas floor at zero: the vendor
+     * caps the post list at 100, so an old post dropping off the page must
+     * read as "no change", not negative.
+     *
+     * Each platform is written INSIDE its own try: a platform we cannot store
+     * must not cost the others their numbers. */
+    const lifetimeNow = aggregateZernioPosts(rows)
+    const ZERO: PlatformTotals = { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0, saves: 0, shares: 0 }
+    const storedTotals = (priorMd.lifetime_totals ?? {}) as Record<string, PlatformTotals>
+    const nextTotals: Record<string, PlatformTotals> = { ...storedTotals }
     let written = 0
     const failed: string[] = [...postWriteFailures]
     for (const platform of linked) {
      try {
-      /* history: content numbers only (no follower columns — those are only known
-       * for today; historical rows must not clobber a real value with zero) */
-      for (const [day, dayTotals] of Object.entries(byDay)) {
-        if (day === today) continue
-        const h = dayTotals[platform]
-        if (!h) continue
-        const { error: histErr } = await admin.from('social_metrics').upsert(
-          {
-            client_id: connection.client_id,
-            platform,
-            date: day,
-            reach: h.reach,
-            impressions: h.impressions,
-            profile_visits: 0,
-            followers_gained: h.follows,
-            engagement: h.engagement,
-            raw_data: { vendor: 'zernio', note: 'backfilled from post analytics; reach is summed post reach; followers_gained is post-attributed follows', totals: h },
-          },
-          { onConflict: 'client_id,platform,date' },
-        )
-        if (histErr) throw new ChannelError('upstream', `social_metrics write failed: ${histErr.message}`)
-        written++
-      }
-
-      const t = byDay[today]?.[platform] ?? { reach: 0, impressions: 0, engagement: 0, follows: 0, clicks: 0, saves: 0, shares: 0 }
+      const nowTot = lifetimeNow[platform] ?? ZERO
+      const stored = storedTotals[platform]
       const followersTotal = num(followersByPlatform[platform])
 
       const { data: prev } = await admin
@@ -543,43 +541,106 @@ export const zernioAdapter: ChannelAdapter = {
         .limit(1)
         .maybeSingle()
       const prevTotal = num(prev?.followers_total)
-      /* gained = post-attributed follows for the day (always real), or the total
-       * diff when follower totals exist on both sides — whichever is larger. */
       const diffGained = followersTotal > 0 && prevTotal > 0 ? Math.max(0, followersTotal - prevTotal) : 0
-      const gained = Math.max(t.follows, diffGained)
 
-      const { error } = await admin.from('social_metrics').upsert(
-        {
-          client_id: connection.client_id,
-          platform,
-          date: today,
-          reach: t.reach,
-          impressions: t.impressions,
-          profile_visits: 0,
-          followers_total: followersTotal,
-          followers_gained: gained,
-          engagement: t.engagement,
-          raw_data: {
-            vendor: 'zernio',
-            note: 'reach is summed post reach, not unique account reach',
-            totals: t,
-            /* when the PLATFORM last refreshed these numbers, per the vendor */
-            source_updated_at: freshBy[platform] ?? null,
+      if (!stored) {
+        /* FIRST SYNC: publish-date history + today's bucket, as before. */
+        for (const [day, dayTotals] of Object.entries(byDay)) {
+          if (day === today) continue
+          const h = dayTotals[platform]
+          if (!h) continue
+          const { error: histErr } = await admin.from('social_metrics').upsert(
+            {
+              client_id: connection.client_id,
+              platform,
+              date: day,
+              reach: h.reach,
+              impressions: h.impressions,
+              profile_visits: 0,
+              followers_gained: h.follows,
+              engagement: h.engagement,
+              raw_data: { vendor: 'zernio', note: 'first-sync backfill: lifetime post totals bucketed on publish date; reach is summed post reach', totals: h },
+            },
+            { onConflict: 'client_id,platform,date' },
+          )
+          if (histErr) throw new ChannelError('upstream', `social_metrics write failed: ${histErr.message}`)
+          written++
+        }
+        const t = byDay[today]?.[platform] ?? ZERO
+        const gained = Math.max(t.follows, diffGained)
+        const { error } = await admin.from('social_metrics').upsert(
+          {
+            client_id: connection.client_id,
+            platform,
+            date: today,
+            reach: t.reach,
+            impressions: t.impressions,
+            profile_visits: 0,
+            followers_total: followersTotal,
+            followers_gained: gained,
+            engagement: t.engagement,
+            raw_data: { vendor: 'zernio', note: 'reach is summed post reach, not unique account reach', totals: t, source_updated_at: freshBy[platform] ?? null },
           },
-        },
-        { onConflict: 'client_id,platform,date' },
-      )
-      if (error) throw new ChannelError('upstream', `social_metrics write failed: ${error.message}`)
-      written++
+          { onConflict: 'client_id,platform,date' },
+        )
+        if (error) throw new ChannelError('upstream', `social_metrics write failed: ${error.message}`)
+        written++
+      } else {
+        /* DELTA MODE: only the growth since the last sync, credited to TODAY. */
+        const delta = {
+          reach: Math.max(0, nowTot.reach - stored.reach),
+          impressions: Math.max(0, nowTot.impressions - stored.impressions),
+          engagement: Math.max(0, nowTot.engagement - stored.engagement),
+          follows: Math.max(0, nowTot.follows - stored.follows),
+        }
+        const { data: cur } = await admin
+          .from('social_metrics')
+          .select('reach, impressions, engagement, followers_gained')
+          .eq('client_id', connection.client_id)
+          .eq('platform', platform)
+          .eq('date', today)
+          .maybeSingle()
+        const gained = Math.max(num(cur?.followers_gained) + delta.follows, diffGained)
+        const { error } = await admin.from('social_metrics').upsert(
+          {
+            client_id: connection.client_id,
+            platform,
+            date: today,
+            reach: num(cur?.reach) + delta.reach,
+            impressions: num(cur?.impressions) + delta.impressions,
+            profile_visits: 0,
+            followers_total: followersTotal,
+            followers_gained: gained,
+            engagement: num(cur?.engagement) + delta.engagement,
+            raw_data: { vendor: 'zernio', note: 'daily growth of post lifetime totals since the last sync; reach is summed post reach', delta, source_updated_at: freshBy[platform] ?? null },
+          },
+          { onConflict: 'client_id,platform,date' },
+        )
+        if (error) throw new ChannelError('upstream', `social_metrics write failed: ${error.message}`)
+        written++
+      }
+
+      /* advance the ledger only after the write landed — and never backwards */
+      const base = stored ?? ZERO
+      nextTotals[platform] = {
+        reach: Math.max(base.reach, nowTot.reach),
+        impressions: Math.max(base.impressions, nowTot.impressions),
+        engagement: Math.max(base.engagement, nowTot.engagement),
+        follows: Math.max(base.follows, nowTot.follows),
+        clicks: Math.max(base.clicks ?? 0, nowTot.clicks),
+        saves: Math.max(base.saves ?? 0, nowTot.saves),
+        shares: Math.max(base.shares ?? 0, nowTot.shares),
+      }
      } catch (e) {
        failed.push(`${platform} (${e instanceof Error ? e.message : 'write failed'})`)
      }
     }
 
-    /* Refresh the account counts after the run (the platforms list was already stamped
-     * above, so the connection has been showing the truth throughout). */
+    /* Refresh the account counts + the lifetime-totals ledger after the run (the
+     * platforms list was already stamped above, so the connection has been showing
+     * the truth throughout). */
     await admin.from('channel_connections')
-      .update({ status: 'active', metadata: { platforms: linked, account_counts: accountCounts } })
+      .update({ status: 'active', metadata: { ...priorMd, platforms: linked, account_counts: accountCounts, lifetime_totals: nextTotals } })
       .eq('id', connection.id)
 
     const ok = linked.filter((p) => !failed.some((f) => f.startsWith(p)))
