@@ -700,18 +700,18 @@ export async function probeNumberSanity(admin: any, report: HealthReport): Promi
   // ── Google rules ────────────────────────────────────────────────────────────
   const { data: g } = await admin
     .from('gbp_metrics')
-    .select('client_id, date, location_id, impressions_total, search_views, calls, direction_requests, website_clicks')
+    .select('client_id, date, location_id, impressions_total, search_views, calls, directions, website_clicks')
     .gte('date', since14)
     .limit(10000)
   const gRows = (g ?? []) as Array<{
     client_id: string; date: string; location_id: string | null
     impressions_total: unknown; search_views: unknown; calls: unknown
-    direction_requests: unknown; website_clicks: unknown
+    directions: unknown; website_clicks: unknown
   }>
   const gNegFlagged = new Set<string>()
   const byClientDay = new Map<string, { brand: number; locs: number }>()
   for (const r of gRows) {
-    if ([r.impressions_total, r.search_views, r.calls, r.direction_requests, r.website_clicks].some((v) => n(v) < 0)) {
+    if ([r.impressions_total, r.search_views, r.calls, r.directions, r.website_clicks].some((v) => n(v) < 0)) {
       if (!gNegFlagged.has(r.client_id)) {
         gNegFlagged.add(r.client_id)
         flag(r.client_id, 'gbp-negative', `NUMBER RULE: negative Google value on ${r.date}`)
