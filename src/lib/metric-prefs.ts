@@ -14,16 +14,29 @@
 import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-export async function getDisabledSourceSet(clientId: string): Promise<Set<string>> {
+export interface MetricPrefs {
+  /** summed-by-default metrics the client turned OFF */
+  disabled: Set<string>
+  /** optional metrics the client turned ON */
+  enabled: Set<string>
+}
+
+const strSet = (raw: unknown): Set<string> =>
+  new Set(Array.isArray(raw) ? raw.filter((v): v is string => typeof v === 'string') : [])
+
+export async function getMetricPrefs(clientId: string): Promise<MetricPrefs> {
   try {
     const admin = createAdminClient()
     const { data } = await admin
       .from('client_metric_prefs')
-      .select('disabled_sources')
+      .select('disabled_sources, enabled_sources')
       .eq('client_id', clientId)
       .maybeSingle()
-    const raw = data?.disabled_sources
-    if (Array.isArray(raw)) return new Set(raw.filter((v): v is string => typeof v === 'string'))
+    return { disabled: strSet(data?.disabled_sources), enabled: strSet(data?.enabled_sources) }
   } catch { /* prefs must never break a dashboard */ }
-  return new Set()
+  return { disabled: new Set(), enabled: new Set() }
+}
+
+export async function getDisabledSourceSet(clientId: string): Promise<Set<string>> {
+  return (await getMetricPrefs(clientId)).disabled
 }

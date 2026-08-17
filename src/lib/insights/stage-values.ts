@@ -247,6 +247,11 @@ export async function loadStageValues(
       for (const pl of ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const) {
         out[`${pl}_follows`] = folBy[pl] ?? 0
         out[`${pl}_saves_shares`] = ssBy[pl] ?? 0
+        /* optional metric (2026-08-18): engagement holds likes+comments+saves+shares,
+           so likes+comments = engagement minus saves+shares — enabling it next to
+           the saves+shares metric can never double-count */
+        const lcId = pl === 'instagram' ? 'ig_likes_comments' : `${pl}_likes_comments`
+        out[lcId] = Math.max(0, (engBy[pl] ?? 0) - (ssBy[pl] ?? 0))
       }
 
       /* ── New followers: prefer the AUDIENCE DELTA, and never print an unreported 0 ──

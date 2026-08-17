@@ -141,6 +141,22 @@ export const SUMMABLE: Record<FunnelStage, string[]> = {
   5: ['pos_repeat_customers'],
 }
 
+/** OPTIONAL metrics (Choose-your-metrics, 2026-08-18): off by default, and a
+ *  client can switch them INTO the stage sums. Two kinds live here:
+ *   - existing context cards promoted to counted when enabled (menu taps,
+ *     website menu views, search appearances)
+ *   - the likes+comments five, which are HIDDEN entirely until enabled
+ *     (they are new — showing them uncounted would change every dashboard) */
+export const OPTIONAL: Record<FunnelStage, string[]> = {
+  1: ['gsc_site_impressions'],
+  2: ['gbp_menu_clicks', 'ga4_menu_views', 'ig_likes_comments', 'facebook_likes_comments', 'tiktok_likes_comments', 'linkedin_likes_comments', 'youtube_likes_comments'],
+  3: [],
+  4: [],
+  5: [],
+}
+/** the optional ids that stay INVISIBLE (not just uncounted) until enabled */
+const OPTIONAL_HIDDEN = new Set(['ig_likes_comments', 'facebook_likes_comments', 'tiktok_likes_comments', 'linkedin_likes_comments', 'youtube_likes_comments'])
+
 /** The "best 4" grouped highlight cards per stage. Each group rolls up a set of
  *  by-source ids; its total is the sum of the group's COUNTED sources, so the 4
  *  totals reconcile to the stage headline. The by-source cards below the groups
@@ -268,8 +284,11 @@ export function computeStagesFrom(
   /* per-client metric toggles: source ids the CLIENT turned off. Display-only:
      collection continues; these are simply never counted into any headline. */
   disabledSources: Iterable<string> = [],
+  /* optional metrics the CLIENT turned ON (see OPTIONAL above) */
+  enabledSources: Iterable<string> = [],
 ): ComputedStage[] {
   const off = new Set(disabledSources)
+  const on = new Set(enabledSources)
   const stages: ComputedStage[] = []
 
   for (const stage of [1, 2, 3, 4, 5] as FunnelStage[]) {
@@ -359,21 +378,27 @@ export function computeStagesFrom(
       if (gc && !gc.counted && web?.counted) gc.feedRole = 'context'
     }
 
-    /* CLIENT TOGGLES LAST, so they override every per-stage counting rule:
-       an off metric is out of the headline, the groups and the trend, but its
-       card stays visible with an Off badge — hiding it entirely would make the
-       breakdown quietly disagree with what the client remembers turning off. */
+    /* CLIENT TOGGLES LAST, so they override every per-stage counting rule.
+       Off = GONE (owner call 2026-08-18: "I feel like it should disappear") —
+       removed from the headline, the groups AND the visible breakdown.
+       Optional metrics count only when switched on; the likes+comments five
+       are invisible until then (new cards must not appear uninvited). */
+    const optionalHere = new Set(OPTIONAL[stage] ?? [])
     for (const s of sources) {
+      if (optionalHere.has(s.id) && on.has(s.id) && usable(s)) s.counted = true
       if (off.has(s.id)) { s.counted = false; s.disabledByClient = true }
     }
-    const anyCounted = sources.some(s => s.counted)
-    const headline = anyCounted ? sumCounted(sources) : null
+    const visible = sources.filter(s =>
+      !s.disabledByClient && !(OPTIONAL_HIDDEN.has(s.id) && !on.has(s.id)))
+    const anyCounted = visible.some(s => s.counted)
+    const headline = anyCounted ? sumCounted(visible) : null
 
     // The 4 grouped highlight cards: each total is the sum of that group's
     // COUNTED sources, so the four reconcile to the headline. A group with no
     // counted source shows "connect" (some source is connectable) or "soon".
+    const visById = new Map(visible.map(v => [v.id, v]))
     const groups: StageGroup[] = (STAGE_GROUPS[stage] || []).map(g => {
-      const gs = g.sourceIds.map(id => byId(id)).filter((v): v is StageSourceView => !!v)
+      const gs = g.sourceIds.map(id => visById.get(id)).filter((v): v is StageSourceView => !!v)
       const counted = gs.filter(s => s.counted)
       const total = counted.length ? counted.reduce((a, s) => a + (s.value ?? 0), 0) : null
       const state: StageGroup['state'] =
@@ -384,7 +409,7 @@ export function computeStagesFrom(
        * source with its own card, number and "as of" stamp — repeating a squeezed copy under
        * the headline was the same fact twice in a worse font. (Owner call 2026-08-13.) */
       return { key: g.key, label: g.label, total, state, sourceIds: gs.map(s => s.id) }
-    })
+    }).filter(g => g.sourceIds.length > 0)  /* a group whose sources are all off disappears with them */
 
     stages.push({
       stage,
@@ -392,7 +417,7 @@ export function computeStagesFrom(
       headline,
       groups,
       unit: STAGE_UNIT[stage],
-      sources,
+      sources: visible,
       heroSourceId,
       isEmpty: !anyCounted,
       note,
@@ -421,16 +446,16 @@ export async function computeStages(
   const { resolveSourceStatuses } = await import('./resolve-source-statuses')
   const { loadStageValues, loadInterestExplore } = await import('./stage-values')
   const { loadStageFreshness, loadSourceContext } = await import('./stage-values')
-  const { getDisabledSourceSet } = await import('@/lib/metric-prefs')
-  const [statuses, values, explore, freshness, context, disabled] = await Promise.all([
+  const { getMetricPrefs } = await import('@/lib/metric-prefs')
+  const [statuses, values, explore, freshness, context, prefs] = await Promise.all([
     resolveSourceStatuses(clientId),
     loadStageValues(clientId, window, periodsBack),
     periodsBack === 0 ? loadInterestExplore(clientId, window) : Promise.resolve(null),
     loadStageFreshness(clientId),
     loadSourceContext(clientId),
-    getDisabledSourceSet(clientId).catch(() => new Set<string>()),
+    getMetricPrefs(clientId).catch(() => ({ disabled: new Set<string>(), enabled: new Set<string>() })),
   ])
-  const stages = computeStagesFrom(statuses, values, {}, freshness, context, disabled)
+  const stages = computeStagesFrom(statuses, values, {}, freshness, context, prefs.disabled, prefs.enabled)
   // Interest (stage 2) carries the real "what they explored" GA4 detail. Never
   // enters any sum — the headline stays the honest sum of counted sources.
   if (explore) {

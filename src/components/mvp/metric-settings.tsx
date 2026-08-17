@@ -90,8 +90,8 @@ function MetricSettingsSheet({ onClose, onDirty }: { onClose: () => void; onDirt
           ) : groups.length === 0 ? (
             <div style={{ textAlign: 'center', color: C.mute, fontSize: 13.5, padding: '30px 0' }}>Could not load your metrics. Try again in a moment.</div>
           ) : groups.map((g, gi) => (
-            <div key={g.stage} style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 4px 7px' }}>{g.stageLabel}</div>
+            <div key={g.providerLabel} style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 4px 7px' }}>{g.providerLabel}</div>
               <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
                 {g.items.map((it, ii) => (
                   <div key={it.id}>
@@ -100,7 +100,7 @@ function MetricSettingsSheet({ onClose, onDirty }: { onClose: () => void; onDirt
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: it.available ? C.ink : C.faint }}>{it.label}</span>
                         <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.4 }}>
-                          {it.available ? (it.description ? `${it.providerLabel} · ${it.description}` : it.providerLabel) : it.hint}
+                          {it.available ? `${it.stageLabel}${it.optional ? ' · optional' : ''}` : it.hint}
                         </span>
                       </span>
                       {it.available ? (

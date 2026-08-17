@@ -10,3 +10,9 @@ create table if not exists client_metric_prefs (
 );
 alter table client_metric_prefs enable row level security;
 -- service role only (all reads/writes go through the server)
+
+-- 2026-08-18b: optional metrics a client can switch ON (likes+comments,
+-- menu taps, search appearances). Separate from disabled_sources so
+-- defaults stay exactly as shipped.
+alter table client_metric_prefs
+  add column if not exists enabled_sources jsonb not null default '[]'::jsonb;
