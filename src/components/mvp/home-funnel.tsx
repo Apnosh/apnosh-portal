@@ -1097,7 +1097,12 @@ export default function HomeFunnel({
         </div>
         {/* the real window this graph covers — pinned to the RIGHT of the audience line */}
         {rangeLabel && (
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', flexShrink: 0 }}>As of {rangeLabel}</div>
+          <div style={{ whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{rangeLabel}</div>
+            {/* the standing honesty line (owner ask, 2026-08-18): platforms report
+                late by nature — Google by days — so the newest days always trail */}
+            <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>Platforms report a few days behind</div>
+          </div>
         )}
       </div>
       </div>
