@@ -171,21 +171,22 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  /* THE LABEL MUST MATCH THE WINDOW. Both the funnel numbers and the chart bars end at the
-   * shared data frontier (the newest day any connected source has real data), so the "as of"
-   * date has to be that same day — otherwise the header describes a different period than the
-   * numbers under it, which is exactly how a correct dashboard reads as broken. */
+  /* THE LABEL MUST MATCH THE WINDOW, and the window now ENDS TODAY (owner call
+   * 2026-08-17): "last 30 days" is the literal last 30 days, with the not-yet-
+   * reported trailing days shown as filling in. windowStart/windowEnd describe
+   * the window; asOf stays the data frontier (the newest day with real numbers)
+   * so the UI can say how far reporting has caught up. */
+  const days = range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30
+  const todayD = new Date()
+  const windowEnd = todayD.toISOString().slice(0, 10)
+  const ws = new Date(todayD)
+  ws.setUTCDate(ws.getUTCDate() - (days - 1))
+  windowStart = ws.toISOString().slice(0, 10)
   try {
     const { getDataFrontier } = await import('@/lib/dashboard/data-frontier')
     const frontier = await getDataFrontier(createAdminClient(), clientId)
-    if (frontier) {
-      asOf = frontier
-      const days = range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30
-      const start = new Date(frontier + 'T00:00:00Z')
-      start.setUTCDate(start.getUTCDate() - (days - 1))
-      windowStart = start.toISOString().slice(0, 10)
-    }
-  } catch { /* keep the Google-derived dates rather than showing none */ }
+    if (frontier) asOf = frontier
+  } catch { /* keep the Google-derived asOf rather than showing none */ }
 
-  return NextResponse.json({ findYou, topQueries, topPosts, postCount, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, audience, yoy, stages })
+  return NextResponse.json({ findYou, topQueries, topPosts, postCount, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, windowEnd, audience, yoy, stages })
 }

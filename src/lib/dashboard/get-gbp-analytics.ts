@@ -136,10 +136,12 @@ export async function getGbpAnalytics(
     metricsLocationId = (loc?.gbp_location_id as string | null) ?? null
   }
 
-  /* Build the current window. Custom ranges use the caller-supplied
-     dates verbatim; preset ranges anchor to "today − 3" (the Performance
-     API's documented reporting lag boundary) so we never include
-     dates Google hasn't aggregated yet. */
+  /* Build the current window. Custom ranges use the caller-supplied dates
+     verbatim; preset ranges end TODAY. Google's Performance API reports a few
+     days behind, so the trailing days simply have no rows yet — they add
+     nothing to the totals and the charts draw them as still filling in. The
+     old "today − 3" end made every window END in the past, which owners read
+     as stuck data (2026-08-17). */
   let startDate: Date
   let endDate: Date
   if (range === 'custom' && opts.customStart && opts.customEnd) {
@@ -147,7 +149,6 @@ export async function getGbpAnalytics(
     endDate = new Date(opts.customEnd + 'T00:00:00Z')
   } else {
     endDate = new Date()
-    endDate.setUTCDate(endDate.getUTCDate() - 3)
     startDate = new Date(endDate)
     startDate.setUTCDate(startDate.getUTCDate() - (days - 1))
   }

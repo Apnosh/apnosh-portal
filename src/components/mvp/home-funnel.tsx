@@ -116,10 +116,12 @@ export interface HomeFunnelProps {
   fill?: boolean
   /** target-audience label shown at the very top (left of the "as of" date) */
   audience?: string
-  /** ISO date (YYYY-MM-DD) of the freshest day Google has data for (the window's end) */
+  /** ISO date (YYYY-MM-DD) of the freshest day any source has data for (reporting lags a few days) */
   asOf?: string
-  /** ISO date (YYYY-MM-DD) of the window's first day → the date range shown is windowStart–asOf */
+  /** ISO date (YYYY-MM-DD) of the window's first day */
   windowStart?: string
+  /** ISO date (YYYY-MM-DD) of the window's last day (today — windows are calendar-true) */
+  windowEnd?: string
   /** signed year-over-year % change per stage (same window last year), null where no baseline */
   yoy?: FunnelYoY | null
   /** selected time range — the tabs replace the header and drive the data */
@@ -285,6 +287,7 @@ export default function HomeFunnel({
   audience = 'Your area',
   asOf,
   windowStart,
+  windowEnd,
   yoy,
   range,
   onRange,
@@ -1024,11 +1027,12 @@ export default function HomeFunnel({
 
   const pickRange = onRange ?? setLocRange
   const shownAudience = audOverride ?? audience // owner override → detected city → "Your area"
-  // the real window this graph covers: "‹start› – ‹asOf›" (asOf = freshest day Google has,
-  // a few days behind today). Falls back to just the end date if the start is missing.
+  // the real window this graph covers: "‹start› – ‹today›". The window is calendar-true;
+  // reporting for the newest days arrives a few days late and fills in on its own.
   const rangeLabel = useMemo(() => {
-    if (!asOf) return null
-    const e = new Date(asOf + 'T00:00:00')
+    const endISO = windowEnd ?? asOf
+    if (!endISO) return null
+    const e = new Date(endISO + 'T00:00:00')
     if (Number.isNaN(e.getTime())) return null
     const s = windowStart ? new Date(windowStart + 'T00:00:00') : null
     const sValid = s != null && !Number.isNaN(s.getTime())
@@ -1036,7 +1040,7 @@ export default function HomeFunnel({
     const opts: Intl.DateTimeFormatOptions = sameYear ? { month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }
     const eStr = e.toLocaleDateString('en-US', opts)
     return sValid ? `${(s as Date).toLocaleDateString('en-US', opts)} – ${eStr}` : eStr
-  }, [asOf, windowStart])
+  }, [asOf, windowStart, windowEnd])
 
   return (
     <div ref={wrapRef} style={{ position: 'relative', height: effH, background: C.funnelBg, overflow: 'hidden', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, ...(fill ? { border: 'none', borderRadius: 0, boxShadow: 'none' } : { border: `0.5px solid ${C.line}`, borderRadius: 20, boxShadow: '0 24px 60px -24px rgba(18,80,58,.30), 0 6px 18px -6px rgba(0,0,0,.06)' }) }}>
@@ -1159,7 +1163,7 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
 }
 
 export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void }) {
-  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
+  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   const [loading, setLoading] = useState(false)
   useEffect(() => {
@@ -1195,7 +1199,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
         setData({
           views, actions,
           counts: derived?.counts,
-          asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null,
+          asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, windowEnd: d.windowEnd ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null,
         })
         onVisibility?.(views && actions && views.total > 0 ? 'shown' : 'empty')
       })
@@ -1208,7 +1212,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, range])
   if (!data?.views || !data?.actions || data.views.total <= 0) return null
-  return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} /></div>
+  return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} /></div>
 }
 
 /* truncate text with an ellipsis to fit maxW at the ctx's current font */

@@ -113,9 +113,14 @@ export async function loadStageValues(
 ): Promise<StageValueMap> {
   const out: StageValueMap = {}
   const admin = createAdminClient()
-  // Shared complete-data frontier — the same anchor the chart bars use.
-  const frontier = await getDataFrontier(admin, clientId).catch(() => undefined)
-  const { gbpStart, gbpEnd, otherStart, otherEnd } = windowBounds(w, periodsBack, frontier)
+  /* WINDOWS END TODAY — third iteration of this anchor (owner call 2026-08-17).
+   * v1 ended at the OLDEST source's last day (hid fresh data). v2 ended at the
+   * NEWEST source's last day (the shared frontier) — but when every source lags,
+   * "last 30 days" rendered as a window ending days in the past, which owners
+   * read as stuck. v3: the window is the literal calendar window; days no source
+   * has reported yet simply contribute nothing, and the charts draw them as
+   * still filling in. */
+  const { gbpStart, gbpEnd, otherStart, otherEnd } = windowBounds(w, periodsBack, ymd(new Date()))
   // Close the top of the window only when looking back, so a past period stops where
   // the next one starts. On the live period this is a no-op and the query is untouched.
   const capDate = <T extends { lte: (col: string, v: string) => T }>(q: T, col = 'date'): T =>
@@ -375,7 +380,7 @@ export async function loadStageValues(
  *  the Interest panel simply hides rather than inventing an empty state. Every
  *  number is a real sum/weighted-average of rows — nothing estimated. */
 export async function loadInterestExplore(clientId: string, w: InsightsWindow = '30d'): Promise<StageExplore | null> {
-  const { otherStart } = windowBounds(w)
+  const { otherStart } = windowBounds(w, 0, ymd(new Date()))
   const admin = createAdminClient()
   try {
     const { data, error } = await admin

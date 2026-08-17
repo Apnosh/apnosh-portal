@@ -784,12 +784,17 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     })
   } else if (range === '30d') {
     curLbl = 'Last 30 days'; cmpLbl = 'Prior 30 days'; cmpFrame = 'vs prior 30 days'; periodDays = 30
-    const rows = daily.slice(-30)
-    bars = rows.map((d, i) => {
-      const dt = parseISO(d.date); const prior = new Date(dt); prior.setDate(prior.getDate() - 30)
-      // The `daily` series ends AT the frontier, so only the last row is the
-      // still-filling day → not settled; every day has elapsed.
-      return { value: d.value, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior), settled: i < rows.length - 1, elapsed: true, ago: yearAgo(dt) }
+    /* The literal last 30 calendar days, ending TODAY (owner call 2026-08-17).
+       Days past the frontier have not been reported yet: elapsed=false (out of
+       the total), settled=false (out of the %), drawn as filling in. */
+    const now = new Date()
+    const todayD = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    bars = Array.from({ length: 30 }, (_, i) => {
+      const dt = new Date(todayD.getFullYear(), todayD.getMonth(), todayD.getDate() - (29 - i))
+      const prior = new Date(dt); prior.setDate(prior.getDate() - 30)
+      const elapsed = frontier ? dt.getTime() <= frontier.getTime() : true
+      const settled = frontier ? dt.getTime() < frontier.getTime() : i < 29
+      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt) }
     })
   } else if (range === '1y') {
     curLbl = 'Last 12 months'; cmpLbl = 'Prior year'; cmpFrame = 'vs prior year'; periodDays = 365
@@ -979,9 +984,16 @@ export function ActionsChart({
           {bars.map((b, i) => {
             const isPicked = picked === i
             const edge = i < 2 ? 'left' : i > bars.length - 3 ? 'right' : 'mid'
+            const pending = b.elapsed === false
             return (
               <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: dense ? 1.5 : 3, cursor: 'pointer' }}>
+                {/* a day no source has reported yet: a faint dashed stub, not an
+                    empty slot — the window is current, the numbers are en route */}
+                {pending ? (
+                  <div style={{ width: '42%', maxWidth: 17, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '3px 3px 0 0', opacity: 0.55 }} />
+                ) : (
                 <div className="mvp-grow" style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0', boxShadow: b.value > 0 ? '0 1px 7px rgba(74,189,152,0.45)' : 'none', animationDelay: `${20 + i * 14}ms` }} />
+                )}
                 <div style={{ width: '42%', maxWidth: 17, height: `${(b.compare / max) * 100}%`, background: C.ghost, borderRadius: '3px 3px 0 0' }} />
                 {isPicked && (() => {
                   const delta = b.value - b.compare

@@ -79,9 +79,17 @@ function buildMetricView(m: HomeMetric): MetricView {
   // it is elapsed-but-not-settled: SHOWN and in the total, but never in the %
   // (a half-reported day must not fake a trend).
   const DAY = 86400000
+  /* The week ends TODAY (calendar-true window, owner call 2026-08-17), not at the
+   * data frontier. Days the sources have not reported yet are elapsed=false —
+   * shown as filling in, never counted in the total — and only days BEFORE the
+   * frontier are settled (counted in the up/down %). The old frontier-anchored
+   * window slid whole days into the past whenever every source lagged, which
+   * owners read as stuck data. */
   const week: { label: string; value: number; prev: number; settled: boolean; elapsed: boolean }[] = []
   if (lastDataDate) {
-    const f = new Date(lastDataDate + 'T00:00:00')
+    const now = new Date()
+    const f = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const frontierT = new Date(lastDataDate + 'T00:00:00').getTime()
     for (let i = 6; i >= 0; i--) {
       const d = new Date(f.getTime() - i * DAY)
       const p = new Date(d.getTime() - 7 * DAY)
@@ -89,8 +97,8 @@ function buildMetricView(m: HomeMetric): MetricView {
         label: DOW[d.getDay()],
         value: dmap.get(ymd(d)) ?? 0,
         prev: dmap.get(ymd(p)) ?? 0,
-        settled: i > 0,   // the newest day (i === 0) is still filling in; the rest are settled
-        elapsed: true,    // all 7 are real, past days
+        settled: d.getTime() < frontierT,
+        elapsed: d.getTime() <= frontierT,
       })
     }
   }
@@ -104,7 +112,7 @@ function buildMetricView(m: HomeMetric): MetricView {
     ? week.map((w) => ({ label: w.label, value: w.value, prev: w.prev, settled: w.settled, elapsed: w.elapsed }))
     : DOW.map((label, i) => ({ label, value: Number((thisWeek?.vals ?? [])[i] ?? 0), prev: Number((lastWeek?.vals ?? [])[i] ?? 0), settled: true, elapsed: true }))
   const chartStartISO = week.length && lastDataDate
-    ? ymd(new Date(new Date(lastDataDate + 'T00:00:00').getTime() - 6 * DAY))
+    ? (() => { const now = new Date(); return ymd(new Date(new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - 6 * DAY)) })()
     : thisWeek?.start
   const elapsedDays = week.filter((w) => w.elapsed)
   const total = week.length ? elapsedDays.reduce((s, w) => s + w.value, 0) : (thisWeek?.total ?? 0)
