@@ -324,7 +324,11 @@ const MEASURE: SetupCard = {
         'The gotchas for your host, like the www-only trap that quietly halves your data',
         'We watch for your data and tell you the moment it is really flowing',
       ],
-      needs: ['GOOGLE', 'SITE'],
+      /* No SITE here: this lane is owner-applies — the OWNER pastes the tag with the AI
+       * guiding, so we never need hands inside their website admin. Host detection reads
+       * the public site, and the done-probe reads the Google side. SITE belongs only to
+       * the team lane, whose delivery genuinely is our hands in their admin. */
+      needs: ['GOOGLE'],
       ownerTask: {
         title: 'Get measurable',
         why: 'We work out who hosts your site and walk you through that host\'s own path, gotchas included.',
