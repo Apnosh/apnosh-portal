@@ -442,6 +442,8 @@ export async function computeStages(
   clientId: string,
   window: InsightsWindow = '30d',
   periodsBack = 0,
+  /** the CLIENT'S local today (YYYY-MM-DD); UTC today when absent */
+  endYmd?: string,
 ): Promise<ComputedStage[]> {
   const { resolveSourceStatuses } = await import('./resolve-source-statuses')
   const { loadStageValues, loadInterestExplore } = await import('./stage-values')
@@ -449,7 +451,7 @@ export async function computeStages(
   const { getMetricPrefs } = await import('@/lib/metric-prefs')
   const [statuses, values, explore, freshness, context, prefs] = await Promise.all([
     resolveSourceStatuses(clientId),
-    loadStageValues(clientId, window, periodsBack),
+    loadStageValues(clientId, window, periodsBack, endYmd),
     periodsBack === 0 ? loadInterestExplore(clientId, window) : Promise.resolve(null),
     loadStageFreshness(clientId),
     loadSourceContext(clientId),

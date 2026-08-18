@@ -110,6 +110,8 @@ export async function loadStageValues(
   clientId: string,
   w: InsightsWindow = '30d',
   periodsBack = 0,
+  /** the CLIENT'S local today (YYYY-MM-DD); UTC today when absent */
+  endYmd?: string,
 ): Promise<StageValueMap> {
   const out: StageValueMap = {}
   const admin = createAdminClient()
@@ -120,7 +122,7 @@ export async function loadStageValues(
    * read as stuck. v3: the window is the literal calendar window; days no source
    * has reported yet simply contribute nothing, and the charts draw them as
    * still filling in. */
-  const { gbpStart, gbpEnd, otherStart, otherEnd } = windowBounds(w, periodsBack, ymd(new Date()))
+  const { gbpStart, gbpEnd, otherStart, otherEnd } = windowBounds(w, periodsBack, endYmd ?? ymd(new Date()))
   // Close the top of the window only when looking back, so a past period stops where
   // the next one starts. On the live period this is a no-op and the query is untouched.
   const capDate = <T extends { lte: (col: string, v: string) => T }>(q: T, col = 'date'): T =>

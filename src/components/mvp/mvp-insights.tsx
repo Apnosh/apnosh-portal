@@ -41,6 +41,13 @@ import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom,
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
 
+/* the browser's local calendar date — the server must never guess the client's timezone */
+function localYmd(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
   ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
@@ -230,7 +237,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
     if (!clientId) return
     let live = true
     setDetail(null)
-    const load = () => fetch(`/api/dashboard/insights-detail?clientId=${clientId}`)
+    const load = () => fetch(`/api/dashboard/insights-detail?clientId=${clientId}&today=${localYmd()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (live && j) setDetail(j) })
       .catch(() => { /* leave the sections quiet on failure */ })
@@ -269,7 +276,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
     try {
       const r = await fetch(`/api/dashboard/social-refresh?clientId=${clientId}&force=1`, { cache: 'no-store' })
       const j = await r.json().catch(() => ({}))
-      const d = await fetch(`/api/dashboard/insights-detail?clientId=${clientId}`, { cache: 'no-store' })
+      const d = await fetch(`/api/dashboard/insights-detail?clientId=${clientId}&today=${localYmd()}`, { cache: 'no-store' })
         .then((x) => (x.ok ? x.json() : null))
       if (d) setDetail(d)
       return { ok: true, changed: !!j?.synced }

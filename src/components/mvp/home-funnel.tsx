@@ -28,6 +28,13 @@ import { useRouter } from 'next/navigation'
 import { Pencil, Sun, Moon } from 'lucide-react'
 import { useMvpTheme } from './mvp-theme'
 
+/* the browser's local calendar date — the server must never guess the client's timezone */
+function localYmd(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const SPINE_X = 0.5   // the ring/crowd path runs down the MIDDLE; the numbers alternate to either side
 // per-timeline crowd caps — a LONGER window genuinely shows a BIGGER crowd (7d < 30d < 90d < 12m), so switching
@@ -1193,7 +1200,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
         .catch(() => { /* the numbers on screen are still the last good ones */ })
     }
 
-    const load = () => fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}`)
+    const load = () => fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}&today=${localYmd()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!alive) return

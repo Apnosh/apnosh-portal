@@ -42,6 +42,17 @@ export async function GET(req: NextRequest) {
   const rp = req.nextUrl.searchParams.get('range')
   const range: AnalyticsRange = rp === '7d' || rp === '90d' || rp === '12m' ? rp : '30d'
 
+  /* "Today" is the CLIENT'S today, not the server's. The server clock runs on
+   * UTC, which flips to tomorrow in the US evening — the owner saw a window
+   * ending "Aug 18" on the evening of Aug 17. The browser sends its local date;
+   * we accept it only in shape and only within a day of UTC (any real timezone),
+   * falling back to the UTC date for headless callers (crons, the analyst). */
+  const tp = req.nextUrl.searchParams.get('today')
+  const utcYmd = new Date().toISOString().slice(0, 10)
+  const todayYmd = tp && /^\d{4}-\d{2}-\d{2}$/.test(tp)
+    && Math.abs(Date.parse(tp + 'T00:00:00Z') - Date.parse(utcYmd + 'T00:00:00Z')) <= 86_400_000
+    ? tp : utcYmd
+
   const admin = createAdminClient()
   const [gbp, posts, primaryLoc, stagesRes] = await Promise.allSettled([
     getGbpAnalytics(clientId, range),
@@ -50,7 +61,7 @@ export async function GET(req: NextRequest) {
     admin.from('client_locations').select('city, state').eq('client_id', clientId).eq('is_primary', true).maybeSingle(),
     // the honest outcome-funnel stages: every headline is the SUM of its CONNECTED
     // sources only (Phase 2). Best-effort; never throws.
-    computeStages(clientId, range),
+    computeStages(clientId, range, 0, todayYmd),
   ])
   const stages: ComputedStage[] = stagesRes.status === 'fulfilled' ? stagesRes.value : []
 
@@ -177,9 +188,8 @@ export async function GET(req: NextRequest) {
    * the window; asOf stays the data frontier (the newest day with real numbers)
    * so the UI can say how far reporting has caught up. */
   const days = range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30
-  const todayD = new Date()
-  const windowEnd = todayD.toISOString().slice(0, 10)
-  const ws = new Date(todayD)
+  const windowEnd = todayYmd
+  const ws = new Date(todayYmd + 'T00:00:00Z')
   ws.setUTCDate(ws.getUTCDate() - (days - 1))
   windowStart = ws.toISOString().slice(0, 10)
   try {
