@@ -2321,7 +2321,7 @@ const ROWS = [
   // The goal shelves hold TOOLS AND FIXES (concrete, one price, one job); the big
   // multi-month programs live on their own "Full campaigns" shelf below, so a $70
   // fix never sits next to an $8k system (the audit's price-cliff finding).
-  { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "socialprofiles", "website", "localseo", "creator", "gpost"] },
+  { id: "aware", title: "Get discovered", note: "Set up your profiles and get seen by new people", ids: ["gbp", "listings", "socialprofiles", "measure", "website", "localseo", "creator", "gpost"] },
   { id: "interest", title: "Create interest", note: "Make people want your food once they see you", ids: ["design", "creative-video", "creative-photos", "creative-social", "reviewsplan", "reviewsreply"] },
   // Every creative request type as its own card, straight from the request catalog.
   // Sending a request is free; the team answers with a plan and a price.
