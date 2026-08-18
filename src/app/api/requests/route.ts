@@ -18,7 +18,9 @@ import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { mintRequestWorkOrder } from '@/lib/requests/bridge'
 import { priceDesignOrder, type DesignOrderAnswers } from '@/lib/design/design-pricing'
 import { DESTINATIONS, type DestinationId } from '@/lib/design/destinations'
-import { RATE_CARD } from '@/lib/design/rate-card'
+import type { RateCard } from '@/lib/design/rate-card'
+import { getActiveRateCard } from '@/lib/design/price-sheet'
+import { TIER_SPECS } from '@/lib/design/tier-specs'
 import { notifyStaffForClient } from '@/lib/notifications'
 
 export const runtime = 'nodejs'
@@ -31,7 +33,7 @@ export const runtime = 'nodejs'
  * the same bridge the quote-accept path proved. The client's displayed number is
  * never trusted; the server computes its own.
  */
-function graphicOrderCents(design: unknown): number | null {
+function graphicOrderCents(design: unknown, card: RateCard): number | null {
   if (typeof design !== 'object' || design === null) return null
   const d = design as Record<string, unknown>
   const destIds = (Array.isArray(d.destinations) ? d.destinations : [])
@@ -51,8 +53,15 @@ function graphicOrderCents(design: unknown): number | null {
     rushConfirmed: d.rushConfirmed === true,
   }
   /* fee-inclusive, same rounding as the flow shows: listed total = charged total */
-  const t = priceDesignOrder(answers, RATE_CARD).total
+  const t = priceDesignOrder(answers, card).total
   return Math.round((t + Math.round(t * 0.1)) * 100)
+}
+
+/** The tier the sanitizer will price with — mirrored so the spec snapshot matches. */
+function graphicTier(design: unknown): 1 | 2 | 3 {
+  if (typeof design !== 'object' || design === null) return 2
+  const t = (design as Record<string, unknown>).tier
+  return t === 1 || t === 3 ? t : 2
 }
 
 async function resolveClientId(userId: string): Promise<string | null> {
@@ -88,13 +97,22 @@ export async function POST(req: Request) {
   const attachments = validateAttachments(body.attachments)
   const dueDate = validateDueDate(body.due_date, new Date().toISOString().slice(0, 10))
 
-  /* The order lane: price at the server's own number and land pre-accepted. */
+  /* The order lane: price at the server's own number and land pre-accepted.
+   * Graphic orders price from the ACTIVE price sheet (GD-1) and snapshot the
+   * sheet version + the tier's delivery spec into the brief, so what this
+   * client bought is on the record even after prices or specs change. */
   const isOrder = body.order === true
   let orderCents: number | null = null
+  let brief: Record<string, unknown> = v.clean
   if (isOrder) {
-    orderCents = v.type.id === 'graphic'
-      ? graphicOrderCents(body.design)
-      : priceCreativeRequest(v.type.id, v.clean)?.totalCents ?? null
+    if (v.type.id === 'graphic') {
+      const { card, version } = await getActiveRateCard()
+      orderCents = graphicOrderCents(body.design, card)
+      const tier = graphicTier(body.design)
+      brief = { ...v.clean, _pricing: { priceSheetVersion: version, tier, spec: TIER_SPECS[tier] } }
+    } else {
+      orderCents = priceCreativeRequest(v.type.id, v.clean)?.totalCents ?? null
+    }
     if (orderCents == null) {
       return NextResponse.json({ error: 'Could not price this order. Send it as a request instead.' }, { status: 400 })
     }
@@ -104,7 +122,7 @@ export async function POST(req: Request) {
   const baseRow = {
     client_id: clientId,
     type: v.type.id,
-    brief: v.clean,
+    brief,
     status: isOrder ? 'in_progress' : 'requested',
     created_by: user.id,
   }

@@ -25,6 +25,7 @@ import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, t
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
 import { DESIGN_JOBS, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
+import { TIER_SPECS, specLine, specBullets } from '@/lib/design/tier-specs'
 import { DESIGN_TITLES, DESIGN_SUBS, DESIGN_LINES, fill } from '@/lib/design/design-copy'
 
 /* Shorthands: every owner-facing string lives in the question bank (design-copy.ts), same
@@ -686,9 +687,9 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
               {L['tier.title']}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Ticket on={tier === 1} name={L['tier.basic.label']} sub={L['tier.basic.sub']} price={`$${RATE_CARD.tierBase[1]}`} onClick={() => setTier(1)} />
-              <Ticket on={tier === 2} name={<span>{L['tier.custom.label']} <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>{L['tier.most']}</span></span>} sub={L['tier.custom.sub']} price={`$${RATE_CARD.tierBase[2]}`} onClick={() => setTier(2)} />
-              <Ticket on={tier === 3} name={L['tier.works.label']} sub={L['tier.works.sub']} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => setTier(3)} />
+              <Ticket on={tier === 1} name={L['tier.basic.label']} sub={`${L['tier.basic.sub']} · ${specLine(1)}`} price={`$${RATE_CARD.tierBase[1]}`} onClick={() => setTier(1)} />
+              <Ticket on={tier === 2} name={<span>{L['tier.custom.label']} <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>{L['tier.most']}</span></span>} sub={`${L['tier.custom.sub']} · ${specLine(2)}`} price={`$${RATE_CARD.tierBase[2]}`} onClick={() => setTier(2)} />
+              <Ticket on={tier === 3} name={L['tier.works.label']} sub={`${L['tier.works.sub']} · ${specLine(3)}`} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => setTier(3)} />
             </div>
             <button
               type="button" disabled={!canNext || reading} onClick={() => (described.trim().length >= 8 ? describe() : setStep(2))}
@@ -1111,8 +1112,20 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
                   <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{L['sum.assigned.sub']}</div>
                 </div>
               </div>
+              {/* THE EXCHANGE, spelled out (GD-1): the picked tier's hard spec renders
+                  before money so client and designer read the same list. A snapshot of
+                  this spec also rides inside the order's brief server-side. */}
+              <div style={{ marginTop: 12, padding: '10px 12px', background: DESK.card, border: `1.5px solid ${DESK.line}`, borderRadius: 12 }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 6 }}>What you get</div>
+                {specBullets(tier).map((line) => (
+                  <div key={line} style={{ display: 'flex', gap: 7, fontSize: 12, color: DESK.ink2, lineHeight: 1.55 }}>
+                    <span style={{ color: DESK.mintDeep, flexShrink: 0 }}>✓</span>
+                    <span>{line}</span>
+                  </div>
+                ))}
+              </div>
               <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 10, lineHeight: 1.5 }}>
-                {fill(L['review.revisions'], { n: String(RATE_CARD.includedRevisions), next: String(RATE_CARD.includedRevisions + 1) })}
+                {fill(L['review.revisions'], { n: String(TIER_SPECS[tier].revisionRounds), next: String(TIER_SPECS[tier].revisionRounds + 1) })}
               </div>
               <div style={{ margin: '14px 0 14px' }}>
                 <ReceiptFrame>
