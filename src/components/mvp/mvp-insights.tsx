@@ -888,6 +888,7 @@ export function SourceBreakdown({ stage, unit, showReconcile = true, showExtras 
 const RANGE_WINDOW: Record<string, { w: string; label: string } | null> = {
   '7d': { w: '7d', label: 'last 7 days' },
   '30d': { w: '30d', label: 'last 30 days' },
+  '90d': { w: '90d', label: 'last 90 days' },
   '1y': { w: '12m', label: 'last year' },
   custom: null,
 }
@@ -912,7 +913,7 @@ async function loadStagesWindow(clientId: string, w: string): Promise<ComputedSt
 // Warm the windows the range chips can pick (30d is already in `detail`).
 function prewarmStageWindows(clientId: string | undefined) {
   if (!clientId) return
-  for (const w of ['7d', '12m']) void loadStagesWindow(clientId, w)
+  for (const w of ['7d', '90d', '12m']) void loadStagesWindow(clientId, w)
 }
 
 // ── Re-scope a computed stage to a picked chart range: served INSTANTLY from the

@@ -40,7 +40,6 @@ export async function GET(req: NextRequest) {
 
   // the funnel + visibility tabs pick the window; default to 30 days
   const rp = req.nextUrl.searchParams.get('range')
-  const range: AnalyticsRange = rp === '7d' || rp === '90d' || rp === '12m' ? rp : '30d'
 
   /* "Today" is the CLIENT'S today, not the server's. The server clock runs on
    * UTC, which flips to tomorrow in the US evening — the owner saw a window
@@ -53,6 +52,37 @@ export async function GET(req: NextRequest) {
     && Math.abs(Date.parse(tp + 'T00:00:00Z') - Date.parse(utcYmd + 'T00:00:00Z')) <= 86_400_000
     ? tp : utcYmd
 
+  /* Custom window (owner ask 2026-08-18): the funnel's own date pickers. Shape-
+   * validated; end clamped to today (future days cannot have data); span clamped
+   * to a year. Anything malformed falls back to the plain 30-day window. */
+  const isYmd = (s: string | null): s is string => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'))
+  let customStart: string | null = null
+  let customEnd: string | null = null
+  let customDays: number | undefined
+  if (rp === 'custom') {
+    const sp = req.nextUrl.searchParams.get('start')
+    const ep = req.nextUrl.searchParams.get('end')
+    if (isYmd(sp) && isYmd(ep)) {
+      let s = sp <= ep ? sp : ep
+      let e = sp <= ep ? ep : sp
+      if (e > todayYmd) e = todayYmd
+      if (s > e) s = e
+      const span = Math.round((Date.parse(e + 'T00:00:00Z') - Date.parse(s + 'T00:00:00Z')) / 86_400_000) + 1
+      customDays = Math.min(366, span)
+      if (span > 366) {
+        const d = new Date(e + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 365)
+        s = d.toISOString().slice(0, 10)
+      }
+      customStart = s
+      customEnd = e
+    }
+  }
+  const isCustom = customStart != null && customEnd != null && customDays != null
+  // the nearest named window feeds the legacy Google/social reads for a custom span
+  const range: AnalyticsRange = rp === '7d' || rp === '90d' || rp === '12m' ? rp
+    : isCustom ? (customDays! <= 10 ? '7d' : customDays! <= 45 ? '30d' : customDays! <= 120 ? '90d' : '12m')
+    : '30d'
+
   const admin = createAdminClient()
   const [gbp, posts, primaryLoc, stagesRes] = await Promise.allSettled([
     getGbpAnalytics(clientId, range),
@@ -61,7 +91,7 @@ export async function GET(req: NextRequest) {
     admin.from('client_locations').select('city, state').eq('client_id', clientId).eq('is_primary', true).maybeSingle(),
     // the honest outcome-funnel stages: every headline is the SUM of its CONNECTED
     // sources only (Phase 2). Best-effort; never throws.
-    computeStages(clientId, range, 0, todayYmd),
+    computeStages(clientId, range, 0, isCustom ? customEnd! : todayYmd, isCustom ? customDays : undefined),
   ])
   const stages: ComputedStage[] = stagesRes.status === 'fulfilled' ? stagesRes.value : []
 
@@ -187,9 +217,9 @@ export async function GET(req: NextRequest) {
    * reported trailing days shown as filling in. windowStart/windowEnd describe
    * the window; asOf stays the data frontier (the newest day with real numbers)
    * so the UI can say how far reporting has caught up. */
-  const days = range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30
-  const windowEnd = todayYmd
-  const ws = new Date(todayYmd + 'T00:00:00Z')
+  const days = isCustom ? customDays! : range === '7d' ? 7 : range === '90d' ? 90 : range === '12m' ? 365 : 30
+  const windowEnd = isCustom ? customEnd! : todayYmd
+  const ws = new Date(windowEnd + 'T00:00:00Z')
   ws.setUTCDate(ws.getUTCDate() - (days - 1))
   windowStart = ws.toISOString().slice(0, 10)
   try {

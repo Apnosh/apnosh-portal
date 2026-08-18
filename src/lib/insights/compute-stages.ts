@@ -444,6 +444,8 @@ export async function computeStages(
   periodsBack = 0,
   /** the CLIENT'S local today (YYYY-MM-DD); UTC today when absent */
   endYmd?: string,
+  /** owner-picked custom span (days) ending at endYmd — the funnel's Custom range */
+  customDays?: number,
 ): Promise<ComputedStage[]> {
   const { resolveSourceStatuses } = await import('./resolve-source-statuses')
   const { loadStageValues, loadInterestExplore } = await import('./stage-values')
@@ -451,7 +453,7 @@ export async function computeStages(
   const { getMetricPrefs } = await import('@/lib/metric-prefs')
   const [statuses, values, explore, freshness, context, prefs] = await Promise.all([
     resolveSourceStatuses(clientId),
-    loadStageValues(clientId, window, periodsBack, endYmd),
+    loadStageValues(clientId, window, periodsBack, endYmd, customDays),
     periodsBack === 0 ? loadInterestExplore(clientId, window) : Promise.resolve(null),
     loadStageFreshness(clientId),
     loadSourceContext(clientId),

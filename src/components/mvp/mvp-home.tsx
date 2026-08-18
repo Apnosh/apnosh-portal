@@ -730,8 +730,8 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
    tooltip, and a legend. Now CONTROLLED: the range + the computed summary come
    from useChartRange (shared with the hero), so switching the range moves the
    headline number and delta, not only the bars. */
-export type ChartRange = '7d' | '30d' | '1y' | 'custom'
-const CHART_RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['1y', 'Last year'], ['custom', 'Custom']]
+export type ChartRange = '7d' | '30d' | '90d' | '1y' | 'custom'
+const CHART_RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['1y', 'Last year'], ['custom', 'Custom']]
 
 export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -794,6 +794,19 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       const elapsed = frontier ? dt.getTime() <= frontier.getTime() : true
       const settled = frontier ? dt.getTime() < frontier.getTime() : i < 29
       return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt) }
+    })
+  } else if (range === '90d') {
+    curLbl = 'Last 90 days'; cmpLbl = 'Prior 90 days'; cmpFrame = 'vs prior 90 days'; periodDays = 90
+    /* The literal last 90 calendar days ending TODAY, same date-aware
+       elapsed/settled rules as the 30-day view. */
+    const now = new Date()
+    const todayD = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    bars = Array.from({ length: 90 }, (_, i) => {
+      const dt = new Date(todayD.getFullYear(), todayD.getMonth(), todayD.getDate() - (89 - i))
+      const prior = new Date(dt); prior.setDate(prior.getDate() - 90)
+      const elapsed = frontier ? dt.getTime() <= frontier.getTime() : true
+      const settled = frontier ? dt.getTime() < frontier.getTime() : i < 89
+      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: '90 days earlier', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt) }
     })
   } else if (range === '1y') {
     curLbl = 'Last 12 months'; cmpLbl = 'Prior year'; cmpFrame = 'vs prior year'; periodDays = 365
@@ -866,7 +879,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
    Insights, and back. 30 days is the default because that is what the funnel and the
    analyst read, and those are the numbers the rest of the product is built around. */
 const RANGE_KEY = 'apnosh.chartRange'
-const isChartRange = (v: unknown): v is ChartRange => v === '7d' || v === '30d' || v === '1y' || v === 'custom'
+const isChartRange = (v: unknown): v is ChartRange => v === '7d' || v === '30d' || v === '90d' || v === '1y' || v === 'custom'
 
 const defaultCStart = () => { const t = new Date(); return isoDate(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) }
 

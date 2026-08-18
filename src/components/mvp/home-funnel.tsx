@@ -29,7 +29,9 @@ import { useMvpTheme } from './mvp-theme'
 
 /* the browser's local calendar date — the server must never guess the client's timezone */
 function localYmd(): string {
-  const d = new Date()
+  return localYmdOf(new Date())
+}
+function localYmdOf(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
@@ -44,6 +46,8 @@ const RANGE_CAPS: Record<FunnelRange, { aware: number; people: number }> = {
   '30d': { aware: 22, people: 15 },
   '90d': { aware: 30, people: 21 },
   '12m': { aware: 40, people: 27 },
+  // a custom span can be any length; the 30-day crowd reads well for most picks
+  'custom': { aware: 22, people: 15 },
 }
 
 type Zone = 'measured' | 'estimate' | 'locked'
@@ -103,8 +107,8 @@ export interface FunnelYoY { awareness: number | null; interest: number | null; 
 type Emblem = 'eye' | 'spark' | 'tap' | 'door' | 'heart'
 interface HStage { key: string; label: string; sub?: string; count: number | null; zone: Zone; conv?: string; tag: string; split?: string; emblem?: Emblem; deltaYoY?: number | null; insightsStage?: string }
 
-export type FunnelRange = '7d' | '30d' | '90d' | '12m'
-const RANGES: [FunnelRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['12m', 'Last year']]
+export type FunnelRange = '7d' | '30d' | '90d' | '12m' | 'custom'
+const RANGES: [FunnelRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['12m', 'Last year'], ['custom', 'Custom']]
 
 export interface HomeFunnelProps {
   businessName?: string
@@ -134,6 +138,11 @@ export interface HomeFunnelProps {
   /** selected time range — the tabs replace the header and drive the data */
   range?: FunnelRange
   onRange?: (r: FunnelRange) => void
+  /** custom-range bounds (YYYY-MM-DD) + setters — shown as date pickers when range is 'custom' */
+  cStart?: string
+  cEnd?: string
+  onCStart?: (v: string) => void
+  onCEnd?: (v: string) => void
   loading?: boolean
 }
 
@@ -298,6 +307,10 @@ export default function HomeFunnel({
   yoy,
   range,
   onRange,
+  cStart,
+  cEnd,
+  onCStart,
+  onCEnd,
   loading = false,
 }: HomeFunnelProps) {
   const { C, theme } = useMvpTheme() // the active skin (light / dark) — drives the whole hero
@@ -1069,6 +1082,29 @@ export default function HomeFunnel({
             chart control */}
       </div>
 
+      {/* custom-range date pickers (owner ask 2026-08-18) — shown only while the
+          Custom tab is active, right under the tabs so the pick reads as part of
+          the range choice */}
+      {curRange === 'custom' && onCStart && onCEnd && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 16px 6px' }}>
+          <input
+            type="date"
+            value={cStart ?? ''}
+            max={cEnd || undefined}
+            onChange={(e) => e.currentTarget.value && onCStart(e.currentTarget.value)}
+            style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, background: C.card, color: C.ink, borderRadius: 10, padding: '6px 9px', fontSize: 12.5, fontFamily: 'inherit', colorScheme: theme === 'dark' ? 'dark' : 'light' }}
+          />
+          <span style={{ fontSize: 12, color: C.faint, flexShrink: 0 }}>to</span>
+          <input
+            type="date"
+            value={cEnd ?? ''}
+            min={cStart || undefined}
+            onChange={(e) => e.currentTarget.value && onCEnd(e.currentTarget.value)}
+            style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, background: C.card, color: C.ink, borderRadius: 10, padding: '6px 9px', fontSize: 12.5, fontFamily: 'inherit', colorScheme: theme === 'dark' ? 'dark' : 'light' }}
+          />
+        </div>
+      )}
+
       {/* WHO the funnel is for (left) + the date window (right) — directly under the tabs */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 16px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
@@ -1170,6 +1206,13 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
 export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void }) {
   const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
+  /* custom-range bounds — default to the last 14 days ending today */
+  const [cStart, setCStart] = useState(() => { const t = new Date(); return localYmdOf(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) })
+  const [cEnd, setCEnd] = useState(() => localYmd())
+  /* once the funnel has shown real numbers, an empty window (e.g. a custom pick
+   * with no data) must NOT unmount it — the tabs live inside it, and vanishing
+   * would strand the owner with no way to pick a different range */
+  const everShown = useRef(false)
   const [loading, setLoading] = useState(false)
   useEffect(() => {
     // No client, or no Google data: tell the parent, so Home can render its
@@ -1190,7 +1233,8 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
         .catch(() => { /* the numbers on screen are still the last good ones */ })
     }
 
-    const load = () => fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}&today=${localYmd()}`)
+    const custom = range === 'custom' ? `&start=${cStart}&end=${cEnd}` : ''
+    const load = () => fetch(`/api/dashboard/insights-detail?clientId=${clientId}&range=${range}${custom}&today=${localYmd()}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!alive) return
@@ -1206,7 +1250,9 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
           counts: derived?.counts,
           asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, windowEnd: d.windowEnd ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null,
         })
-        onVisibility?.(views && actions && views.total > 0 ? 'shown' : 'empty')
+        const shown = !!(views && actions && views.total > 0)
+        if (shown) everShown.current = true
+        onVisibility?.(shown || everShown.current ? 'shown' : 'empty')
       })
       .catch(() => { if (alive) onVisibility?.('empty') /* Home stays lean if this fails */ })
       .finally(() => { if (alive) setLoading(false) })
@@ -1215,11 +1261,13 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
     return () => { alive = false }
     // onVisibility identity is caller-stable; depend on the data inputs only
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, range])
-  if (!data?.views || !data?.actions || data.views.total <= 0) return null
+  }, [clientId, range, range === 'custom' ? cStart : '', range === 'custom' ? cEnd : ''])
+  if (!data?.views || !data?.actions) return null
+  // never shown anything yet AND this window is empty → let Home render its Day-0 body
+  if (data.views.total <= 0 && !everShown.current) return null
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
-      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} />
+      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
       {/* "Choose your metrics" lives ONLY on the Insights detail screen (owner
           ask 2026-08-18) — the home graph stays clean with nothing below it.
           Toggles saved there still apply here: the funnel refetches every time
