@@ -14,6 +14,7 @@
 import DesignOrderFlow, { type DesignSeed } from '@/components/design/design-order-flow'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { occasionById } from '@/lib/design/occasions'
 import { FIXTURE_ASSETS, FIXTURE_MENU } from '@/lib/design/fixture-assets'
 import { listMyDesignPhotos } from '@/lib/design/client-photos'
 import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
@@ -21,7 +22,7 @@ import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 export const metadata = { title: 'Get a graphic made' }
 export const dynamic = 'force-dynamic'
 
-export default async function DesignOrderPage({ searchParams }: { searchParams: Promise<{ draft?: string | string[] }> }) {
+export default async function DesignOrderPage({ searchParams }: { searchParams: Promise<{ draft?: string | string[]; occasion?: string | string[] }> }) {
   /* GD-2: opened from an existing draft ("Have a designer finish this").
    * The deliverable is read with the CALLER'S session, so row-level security
    * decides ownership — a foreign id simply loads nothing and the flow opens
@@ -45,6 +46,16 @@ export default async function DesignOrderPage({ searchParams }: { searchParams: 
         }
       }
     } catch { /* flow opens blank; never blocks on a draft read */ }
+  }
+  /* GD-3: opened from an occasion card on the Campaigns page. The date is
+   * derived server-side from the occasion id — never trusted from the URL. */
+  if (!seed && typeof sp.occasion === 'string') {
+    const occ = occasionById(sp.occasion)
+    if (occ) {
+      const next = occ.nextOn(new Date())
+      const iso = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`
+      seed = { described: occ.brief, eventDateISO: iso }
+    }
   }
   /* The signed-in client's real menu feeds the Featuring chips. An empty or failed read
    * falls back to nothing-to-feature rather than fake dishes; fixtures are preview-only. */

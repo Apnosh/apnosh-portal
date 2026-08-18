@@ -15,6 +15,8 @@ import {
   ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Eye, Loader2, Minus, Plus, TrendingDown, TrendingUp,
 } from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
+import { upcomingOccasions } from '@/lib/design/occasions'
+import { RATE_CARD } from '@/lib/design/rate-card'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -115,6 +117,13 @@ export default function MvpCampaigns() {
           </span>
           <ChevronRight size={17} style={{ color: C.faint, flex: '0 0 auto' }} />
         </Link>
+
+        {/* GD-3: the occasion calendar brings graphic demand to the owner. The
+            next few national moments, each with enough lead time to order today
+            and have the piece in hand — one tap opens the design order
+            pre-filled with the occasion and its date. Campaigns page by owner
+            call (2026-08-19): Home stays pure dashboard. */}
+        <OccasionsRail />
 
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: C.faint, fontSize: 13.5 }}><Loader2 size={16} className="animate-spin" /> Loading your campaigns…</div>
@@ -263,6 +272,40 @@ function CampaignCalendar({ saved }: { saved: SavedCampaign[] }) {
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 12, fontSize: 11, color: C.mute }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: 99, background: C.green }} /> Campaign date</span>
+      </div>
+    </div>
+  )
+}
+
+
+/* ── Occasions coming up (GD-3) ──────────────────────────────────────────────
+   Pure client-side date math (occasions.ts); shows nothing when no occasion is
+   inside the window, so the rail never renders an empty promise. */
+function OccasionsRail() {
+  const occs = upcomingOccasions()
+  if (occs.length === 0) return null
+  const fmt = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 2px 8px' }}>Coming up</div>
+      <div className="cc-scroll" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+        {occs.map((o) => (
+          <Link
+            key={o.id}
+            href={`/dashboard/design/order?occasion=${o.id}`}
+            className="mvp-row"
+            style={{ flex: '0 0 auto', width: 200, textDecoration: 'none', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 14px' }}
+          >
+            <span style={{ display: 'block', fontSize: 22, lineHeight: 1 }}>{o.emoji}</span>
+            <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: C.ink, marginTop: 8, lineHeight: 1.25 }}>{o.name}</span>
+            <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 2 }}>
+              {fmt(o.dateISO)} · in {o.daysAway} days
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 700, color: C.greenDk, marginTop: 9 }}>
+              Get a graphic · from ${RATE_CARD.tierBase[1]} <ArrowRight size={13} />
+            </span>
+          </Link>
+        ))}
       </div>
     </div>
   )

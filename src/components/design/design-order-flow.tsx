@@ -313,7 +313,7 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
  * draft, the seed carries the draft's id, its text as the starting description,
  * and a preview image — the designer POLISHES the draft instead of starting
  * over, and the order records where it came from. */
-export interface DesignSeed { draftId: string; described?: string; referenceUrl?: string | null }
+export interface DesignSeed { draftId?: string; described?: string; referenceUrl?: string | null; eventDateISO?: string }
 
 export default function DesignOrderFlow({ menu, assets, businessName, seed }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null; seed?: DesignSeed | null }) {
   /* Client-side back to the store keeps the app shell mounted (owner ask 2026-08-18). */
@@ -367,7 +367,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [measured, setMeasured] = useState<Record<string, { width: number; height: number } | null>>({})
   /* The event's own date, from the read. NEVER the delivery date: a flyer due the night of
    * the event promotes nothing. The need-by date (due) is always the owner's tap. */
-  const [eventDate, setEventDate] = useState<string | null>(null)
+  const [eventDate, setEventDate] = useState<string | null>(seed?.eventDateISO ?? null)
   const [due, setDue] = useState<string | null>(null)
   const [rushConfirmed, setRushConfirmed] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -532,7 +532,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     const days = due ? Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86400000) : null
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
     const noteBits = [
-      seed ? 'START FROM THE CLIENT\'S EXISTING DRAFT — polish it, do not start over' : '',
+      seed?.draftId ? 'START FROM THE CLIENT\'S EXISTING DRAFT — polish it, do not start over' : '',
       printPicked && allQtysIn ? printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label}`).join(', ') : '',
       /* print runs are off: any picked print size is a print ready FILE handoff */
       printPicked && !PRINT_AVAILABLE ? 'Print ready files only; they handle the printing' :
@@ -564,7 +564,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           ...(attachments.length ? { attachments } : {}),
           order: true,
           design: {
-            ...(seed ? { fromDraftId: seed.draftId } : {}),
+            ...(seed?.draftId ? { fromDraftId: seed.draftId } : {}),
             tier,
             destinations: dests,
             photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
@@ -649,7 +649,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       <DeskKeyframes />
       <BoardKeyframes />
       {/* step 1's exit: back to the store where the cards live (later steps use Back) */}
-      {step === 1 && seed && (
+      {step === 1 && seed?.draftId && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: DESK.card, border: `1.5px solid ${DESK.line}`, borderRadius: 12, padding: '9px 11px', marginBottom: 10 }}>
           {seed.referenceUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
