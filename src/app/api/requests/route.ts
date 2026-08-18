@@ -110,6 +110,12 @@ export async function POST(req: Request) {
       orderCents = graphicOrderCents(body.design, card)
       const tier = graphicTier(body.design)
       brief = { ...v.clean, _pricing: { priceSheetVersion: version, tier, spec: TIER_SPECS[tier] } }
+      /* GD-2: the order remembers the draft it upgrades, so the designer opens
+       * the client's existing draft instead of a blank page. */
+      const fd = (body.design as Record<string, unknown> | null | undefined)?.fromDraftId
+      if (typeof fd === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(fd)) {
+        brief = { ...brief, _source: { draftId: fd } }
+      }
     } else {
       orderCents = priceCreativeRequest(v.type.id, v.clean)?.totalCents ?? null
     }

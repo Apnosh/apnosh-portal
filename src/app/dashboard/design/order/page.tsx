@@ -11,8 +11,9 @@
  * until the reviewed rate card flips the flag.
  */
 
-import DesignOrderFlow from '@/components/design/design-order-flow'
+import DesignOrderFlow, { type DesignSeed } from '@/components/design/design-order-flow'
 import MvpShell from '@/components/mvp/mvp-shell'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 import { FIXTURE_ASSETS, FIXTURE_MENU } from '@/lib/design/fixture-assets'
 import { listMyDesignPhotos } from '@/lib/design/client-photos'
 import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
@@ -20,7 +21,31 @@ import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 export const metadata = { title: 'Get a graphic made' }
 export const dynamic = 'force-dynamic'
 
-export default async function DesignOrderPage() {
+export default async function DesignOrderPage({ searchParams }: { searchParams: Promise<{ draft?: string | string[] }> }) {
+  /* GD-2: opened from an existing draft ("Have a designer finish this").
+   * The deliverable is read with the CALLER'S session, so row-level security
+   * decides ownership — a foreign id simply loads nothing and the flow opens
+   * blank. */
+  const sp = await searchParams
+  const draftId = typeof sp.draft === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sp.draft) ? sp.draft : null
+  let seed: DesignSeed | null = null
+  if (draftId) {
+    try {
+      const supabase = await createServerClient()
+      const { data: d } = await supabase
+        .from('deliverables')
+        .select('id, title, description, type, preview_urls, file_urls')
+        .eq('id', draftId)
+        .maybeSingle()
+      if (d) {
+        seed = {
+          draftId: d.id as string,
+          described: [d.title, d.description].filter(Boolean).join('. ') || undefined,
+          referenceUrl: (Array.isArray(d.preview_urls) && d.preview_urls[0]) || (Array.isArray(d.file_urls) && d.file_urls[0]) || null,
+        }
+      }
+    } catch { /* flow opens blank; never blocks on a draft read */ }
+  }
   /* The signed-in client's real menu feeds the Featuring chips. An empty or failed read
    * falls back to nothing-to-feature rather than fake dishes; fixtures are preview-only. */
   const [res, library] = await Promise.all([
@@ -45,7 +70,7 @@ export default async function DesignOrderPage() {
   return (
     <MvpShell active="campaigns">
       <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100%', background: '#F5F5F7' }}>
-        <DesignOrderFlow menu={menu} assets={assets} businessName={library.businessName} />
+        <DesignOrderFlow menu={menu} assets={assets} businessName={library.businessName} seed={seed} />
       </div>
     </MvpShell>
   )

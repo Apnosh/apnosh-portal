@@ -517,6 +517,18 @@ export default function ApprovalDetailPage() {
                 </button>
               </div>
             )}
+
+            {/* GD-2: the free-draft to paid-polish ladder. A graphic draft can be
+                approved as-is (free) or handed to a designer who starts FROM it. */}
+            {!showFeedback && deliverable.type === 'graphic' && (
+              <Link
+                href={`/dashboard/design/order?draft=${deliverable.id}`}
+                className="inline-flex items-center gap-1.5 text-sm font-medium text-brand hover:text-brand-dark"
+              >
+                <ImageIcon className="w-4 h-4" /> Have a designer finish this
+                <span className="text-ink-3 font-normal">· starts from this draft, priced per piece</span>
+              </Link>
+            )}
           </div>
         )}
       </div>

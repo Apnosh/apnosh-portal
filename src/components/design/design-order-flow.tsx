@@ -309,13 +309,19 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
   )
 }
 
-export default function DesignOrderFlow({ menu, assets, businessName }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null }) {
+/** GD-2: the draft-to-designer bridge. When the flow opens from an existing AI
+ * draft, the seed carries the draft's id, its text as the starting description,
+ * and a preview image — the designer POLISHES the draft instead of starting
+ * over, and the order records where it came from. */
+export interface DesignSeed { draftId: string; described?: string; referenceUrl?: string | null }
+
+export default function DesignOrderFlow({ menu, assets, businessName, seed }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null; seed?: DesignSeed | null }) {
   /* Client-side back to the store keeps the app shell mounted (owner ask 2026-08-18). */
   const router = useRouter()
   const today = todayISO()
 
   const [step, setStep] = useState(1)
-  const [described, setDescribed] = useState('')
+  const [described, setDescribed] = useState(seed?.described ?? '')
   const [reading, setReading] = useState(false)
   const [read, setRead] = useState<DesignRead | null>(null)
   const [job, setJob] = useState<DesignJobId | null>(null)
@@ -526,6 +532,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
     const days = due ? Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86400000) : null
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
     const noteBits = [
+      seed ? 'START FROM THE CLIENT\'S EXISTING DRAFT — polish it, do not start over' : '',
       printPicked && allQtysIn ? printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label}`).join(', ') : '',
       /* print runs are off: any picked print size is a print ready FILE handoff */
       printPicked && !PRINT_AVAILABLE ? 'Print ready files only; they handle the printing' :
@@ -557,6 +564,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
           ...(attachments.length ? { attachments } : {}),
           order: true,
           design: {
+            ...(seed ? { fromDraftId: seed.draftId } : {}),
             tier,
             destinations: dests,
             photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
@@ -641,6 +649,18 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
       <DeskKeyframes />
       <BoardKeyframes />
       {/* step 1's exit: back to the store where the cards live (later steps use Back) */}
+      {step === 1 && seed && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: DESK.card, border: `1.5px solid ${DESK.line}`, borderRadius: 12, padding: '9px 11px', marginBottom: 10 }}>
+          {seed.referenceUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={seed.referenceUrl} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />
+          ) : null}
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: DESK.disp, fontWeight: 700, fontSize: 13, color: DESK.ink }}>Starting from your draft</div>
+            <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.ink2, lineHeight: 1.4 }}>The designer polishes what you already have, not a blank page.</div>
+          </div>
+        </div>
+      )}
       {step === 1 && (
         <button
           type="button"
