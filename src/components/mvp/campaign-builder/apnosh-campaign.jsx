@@ -2259,6 +2259,8 @@ const PIC = {
   story: (<><rect x="17" y="6" width="22" height="44" rx="6" fill="#fff" /><rect x="20" y="15" width="16" height="25" rx="3" fill="rgba(18,26,24,0.16)" /><circle cx="28" cy="11" r="4.4" fill="none" stroke="#ff9166" strokeWidth="2" /><circle cx="28" cy="11" r="1.7" fill="#fff" /><circle cx="28" cy="27" r="4.8" fill="#fff" /><path d="M26.5 24.6l3.6 2.4-3.6 2.4z" fill="rgba(18,26,24,0.42)" /></>),
   carousel: (<><rect x="13" y="13" width="24" height="27" rx="4" fill="rgba(255,255,255,0.45)" transform="rotate(-7 25 26)" /><rect x="19" y="13" width="24" height="27" rx="4" fill="#fff" /><circle cx="26" cy="22" r="2.6" fill="rgba(18,26,24,0.16)" /><path d="M22 36l5-5 3.4 3 4-4 5.6 6z" fill="rgba(18,26,24,0.16)" /><g fill="#fff"><circle cx="25" cy="45.5" r="1.4" /><circle cx="30" cy="45.5" r="1.4" /><circle cx="35" cy="45.5" r="1.4" /></g></>),
   dish: (<><circle cx="28" cy="28" r="17" fill="#fff" /><circle cx="28" cy="28" r="11.5" fill="none" stroke="rgba(18,26,24,0.1)" strokeWidth="1.6" /><circle cx="24.5" cy="26" r="4" fill="#ff9166" /><circle cx="31" cy="25" r="3.2" fill="#6fcf97" /><circle cx="29" cy="31.5" r="3.6" fill="#ffce5b" /><rect x="6" y="19" width="2" height="19" rx="1" fill="#fff" /><rect x="48" y="19" width="2" height="19" rx="1" fill="#fff" /></>),
+  social: (<><circle cx="17" cy="28" r="6" fill="#fff" /><circle cx="38" cy="15" r="6" fill="#fff" /><circle cx="38" cy="41" r="6" fill="#fff" /><path d="M22 25l11-7M22 31l11 7" stroke="#fff" strokeWidth="3" strokeLinecap="round" /><circle cx="38" cy="15" r="2.4" fill="#6fcf97" /><circle cx="38" cy="41" r="2.4" fill="#6fcf97" /><circle cx="17" cy="28" r="2.4" fill="#6fcf97" /></>),
+  site: (<><path d="M12 42h32" stroke="#fff" strokeWidth="3" strokeLinecap="round" /><rect x="15" y="30" width="6" height="9" rx="1.5" fill="#fff" /><rect x="25" y="24" width="6" height="15" rx="1.5" fill="#fff" /><rect x="35" y="17" width="6" height="22" rx="1.5" fill="#fff" /><path d="M15 20l9-6 7 4 10-8" stroke="#6fcf97" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" /><path d="M41 8l1.5 4.5L47 14" stroke="#6fcf97" strokeWidth="3" strokeLinecap="round" fill="none" /></>),
   listing: (<><path d="M12 22l2.6-7h26.8l2.6 7z" fill="#fff" /><rect x="14" y="22" width="28" height="18" rx="1.5" fill="#fff" /><rect x="24" y="29" width="8" height="11" fill="rgba(18,26,24,0.14)" /><circle cx="39" cy="15" r="7" fill="#6fcf97" /><path d="M39 11.6c-2.1 0-3.7 1.6-3.7 3.7 0 2.6 3.7 6 3.7 6s3.7-3.4 3.7-6c0-2.1-1.6-3.7-3.7-3.7z" fill="#fff" /><circle cx="39" cy="15.3" r="1.7" fill="#6fcf97" /></>),
   offer: (<><rect x="9" y="15" width="38" height="26" rx="5" fill="#fff" /><line x1="28" y1="17" x2="28" y2="39" stroke="rgba(18,26,24,0.14)" strokeWidth="1.6" strokeDasharray="2 2.4" /><text x="18.5" y="34" fontSize="17" fontWeight="800" fill="#ff9166" fontFamily="Inter, sans-serif" textAnchor="middle">%</text><path d={STAR} transform="translate(38,28) scale(.62)" fill="#ffce5b" /></>),
   mail: (<><rect x="6" y="16" width="30" height="22" rx="4" fill="#fff" /><path d="M8 20l13 8.5 13-8.5" fill="none" stroke="rgba(18,26,24,0.18)" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /><path d="M51 13l-15 6.5 5.5 2 1 5.5z" fill="#8cc0ff" /><path d="M51 13l-9 8.4" stroke="rgba(255,255,255,0.65)" strokeWidth="1.4" /></>),
@@ -2290,7 +2292,9 @@ const PICK = {
 };
 export function Art({ id, size = 62 }) {
   const key = PICK[id] || "offer";
-  return <svg viewBox="0 0 56 56" width={size} height={size} fill="none">{PIC[key]}</svg>;
+  /* a kind the artist has no drawing for must never render an empty tile —
+     the blank socialprofiles/measure squares the owner caught (2026-08-18) */
+  return <svg viewBox="0 0 56 56" width={size} height={size} fill="none">{PIC[key] || PIC.offer}</svg>;
 }
 
 
@@ -4384,6 +4388,14 @@ const LIST_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.listings && IT
 // are real. AI reads the live listing, lays out the owner's actual options, then writes and
 // reads back to prove it took. Same load-bearing tokens as the gbp lanes: "yourself" => diy,
 // "Apnosh AI" => the ai lane, plain "Apnosh" => the done-for-you team lane.
+const SOCIAL_DOER_SELF = "done by you yourself, step by step, free";
+const SOCIAL_DOER_AI = "done with Apnosh AI, step by step, free";
+const SOCIAL_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.socialprofiles && ITEM_PRICES.socialprofiles.oneTime) || 145}`;
+
+const MEASURE_DOER_SELF = "done by you yourself, step by step, free";
+const MEASURE_DOER_AI = "done with Apnosh AI, step by step, free";
+const MEASURE_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.measure && ITEM_PRICES.measure.oneTime) || 365}`;
+
 const ORDER_DOER_SELF = "done by you yourself, step by step, free";
 const ORDER_DOER_AI = "done with Apnosh AI, step by step, free";
 const ORDER_DOER_APNOSH = `done for you by Apnosh, $${(ITEM_PRICES.friction && ITEM_PRICES.friction.oneTime) || 165}`;
@@ -4411,6 +4423,8 @@ const QL = {
   birthday: { lead: "Send {treat} on a guest's birthday, by {channel}.", slots: { treat: { k: "pick", v: "a free dessert", o: ["a free dessert", "a free drink", "a free appetizer", "10% off the table", "a free birthday combo"], custom: true }, channel: { k: "multi", v: ["email", "text"], o: ["email", "text"] } }, extras: [{ id: "limits", k: "text", label: "Add any limits", ph: "dine-in only, valid that week", clause: (v) => `, ${v}` }, { id: "code", k: "text", label: "Add a code", ph: "like BDAY", clause: (v) => `, code ${v}` }] },
   earlyaccess: { lead: "Give subscribers early access to {what}, {timing} before everyone.", slots: { what: { k: "multi", v: ["new menu items"], o: ["new menu items", "events", "specials", "reservations"] }, timing: { k: "pick", v: "a few days", o: ["a day", "a few days", "a week"] } } },
   shoot: { lead: "Book a {kind} shoot of {what}, on {date}.", slots: { kind: { k: "pick", v: "photo and video", o: ["photo", "video", "photo and video"] }, what: { k: "pick", v: "a few key dishes", o: ["your whole menu", "a few key dishes", "one dish", "your space inside", "your storefront", "your team"], custom: true }, date: { k: "date", v: 14 } }, extras: [{ id: "notes", k: "text", label: "Add a note", ph: "must-have shots, the vibe, props, parking", clause: (v) => `, plus ${v}` }] },
+  socialprofiles: { lead: "Set up your social profiles, {doer}.", slots: { doer: { k: "pick", label: "Who does it", v: SOCIAL_DOER_APNOSH, o: [SOCIAL_DOER_SELF, SOCIAL_DOER_AI, SOCIAL_DOER_APNOSH] } } },
+  measure: { lead: "Set up Search Console and Analytics, {doer}.", slots: { doer: { k: "pick", label: "Who does it", v: MEASURE_DOER_APNOSH, o: [MEASURE_DOER_SELF, MEASURE_DOER_AI, MEASURE_DOER_APNOSH] } } },
   gbp: { lead: "Update your Google profile: {what}, {doer}.", slots: { what: { k: "multi", v: ["hours", "photos", "menu"], o: ["hours", "photos", "menu", "description", "attributes"] }, doer: { k: "pick", label: "Who does it", v: GBP_DOER_APNOSH, o: [GBP_DOER_SELF, GBP_DOER_AI, GBP_DOER_APNOSH] } } },
   reviewsreply: { lead: "Reply to {which} reviews, {doer}.", slots: { which: { k: "pick", v: "all", o: ["all", "just critical ones", "4 stars and below", "unanswered ones"] }, doer: { k: "pick", label: "Who does it", v: REVIEW_DOER_APNOSH, o: [REVIEW_DOER_SELF, REVIEW_DOER_AI, REVIEW_DOER_APNOSH] } } },
   friction: { lead: "Make {channel} easier for guests, {doer}.", slots: { channel: { k: "pick", v: "online ordering", o: ["online ordering", "booking a table", "finding your menu", "joining your list"] }, doer: { k: "pick", label: "Who does it", v: ORDER_DOER_APNOSH, o: [ORDER_DOER_SELF, ORDER_DOER_AI, ORDER_DOER_APNOSH] } } },
