@@ -50,12 +50,15 @@ function MetricSettingsSheet({ onClose, onDirty }: { onClose: () => void; onDirt
     listMetricToggles(clientId).then(setGroups).catch(() => setGroups([]))
   }, [clientId])
 
-  async function flip(groupIdx: number, itemIdx: number) {
+  async function flip(gi: number, pi: number, ii: number) {
     if (!groups) return
-    const item = groups[groupIdx].items[itemIdx]
-    const next = groups.map((g, gi) => gi !== groupIdx ? g : {
+    const item = groups[gi].providers[pi].items[ii]
+    const next = groups.map((g, a) => a !== gi ? g : {
       ...g,
-      items: g.items.map((it, ii) => ii !== itemIdx ? it : { ...it, enabled: !it.enabled }),
+      providers: g.providers.map((pr, b) => b !== pi ? pr : {
+        ...pr,
+        items: pr.items.map((it, c) => c !== ii ? it : { ...it, enabled: !it.enabled }),
+      }),
     })
     setGroups(next)
     onDirty()
@@ -90,36 +93,44 @@ function MetricSettingsSheet({ onClose, onDirty }: { onClose: () => void; onDirt
           ) : groups.length === 0 ? (
             <div style={{ textAlign: 'center', color: C.mute, fontSize: 13.5, padding: '30px 0' }}>Could not load your metrics. Try again in a moment.</div>
           ) : groups.map((g, gi) => (
-            <div key={g.providerLabel} style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 4px 7px' }}>{g.providerLabel}</div>
-              <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
-                {g.items.map((it, ii) => (
-                  <div key={it.id}>
-                    {ii > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 14 }} />}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px' }}>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: it.available ? C.ink : C.faint }}>{it.label}</span>
-                        <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.4 }}>
-                          {it.available ? `${it.stageLabel}${it.optional ? ' · optional' : ''}` : it.hint}
-                        </span>
-                      </span>
-                      {it.available ? (
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={it.enabled}
-                          onClick={() => flip(gi, ii)}
-                          style={{ flexShrink: 0, width: 44, height: 26, borderRadius: 99, border: 'none', cursor: 'pointer', background: it.enabled ? C.green : '#d8dade', position: 'relative', transition: 'background .15s' }}
-                        >
-                          <span style={{ position: 'absolute', top: 3, left: it.enabled ? 21 : 3, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left .15s' }} />
-                        </button>
-                      ) : (
-                        <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: C.faint, letterSpacing: '.03em' }}>—</span>
-                      )}
-                    </div>
+            <div key={g.stage} style={{ marginBottom: 22 }}>
+              {/* stage section header — the sheet reads the way the funnel reads */}
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, padding: '0 2px 9px' }}>{g.stageLabel}</div>
+              {g.providers.map((pr, pi) => (
+                <div key={pr.providerLabel} style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 4px 6px' }}>{pr.providerLabel}</div>
+                  <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+                    {pr.items.map((it, ii) => (
+                      <div key={it.id}>
+                        {ii > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 14 }} />}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px' }}>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: it.available ? C.ink : C.faint }}>{it.label}</span>
+                            {(it.optional || !it.available) && (
+                              <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.4 }}>
+                                {it.available ? 'Optional' : it.hint}
+                              </span>
+                            )}
+                          </span>
+                          {it.available ? (
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={it.enabled}
+                              onClick={() => flip(gi, pi, ii)}
+                              style={{ flexShrink: 0, width: 44, height: 26, borderRadius: 99, border: 'none', cursor: 'pointer', background: it.enabled ? C.green : '#d8dade', position: 'relative', transition: 'background .15s' }}
+                            >
+                              <span style={{ position: 'absolute', top: 3, left: it.enabled ? 21 : 3, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.25)', transition: 'left .15s' }} />
+                            </button>
+                          ) : (
+                            <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: C.faint, letterSpacing: '.03em' }}>—</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>

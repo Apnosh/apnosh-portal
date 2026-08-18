@@ -40,11 +40,17 @@ export interface MetricToggle {
   available: boolean
   hint: string | null
 }
-/** Grouped BY PLATFORM (owner ask 2026-08-18): Instagram together, Google
- *  together — the sheet scrolls by where the numbers come from. */
-export interface MetricToggleGroup {
+/** Two-level grouping (owner ask 2026-08-18): stage sections (Awareness,
+ *  Interest, ...) on the outside, platform groups inside each — so the sheet
+ *  reads the way the funnel reads, and each platform's metrics sit together. */
+export interface MetricProviderGroup {
   providerLabel: string
   items: MetricToggle[]
+}
+export interface MetricToggleGroup {
+  stage: number
+  stageLabel: string
+  providers: MetricProviderGroup[]
 }
 
 async function resolveClient(requestedClientId?: string): Promise<{ userId: string; clientId: string } | null> {
@@ -73,8 +79,10 @@ export async function listMetricToggles(selectedClientId?: string): Promise<Metr
     resolveSourceStatuses(who.clientId),
   ])
   const byId = new Map(SOURCES.map((d) => [d.id, d]))
-  const byProvider = new Map<string, MetricToggle[]>()
+  const order = (l: string) => { const i = PROVIDER_ORDER.indexOf(l); return i === -1 ? 99 : i }
+  const groups: MetricToggleGroup[] = []
   for (const stage of [1, 2, 3, 4, 5] as FunnelStage[]) {
+    const byProvider = new Map<string, MetricToggle[]>()
     for (const kind of ['summed', 'optional'] as const) {
       const ids = kind === 'summed' ? SUMMABLE[stage] ?? [] : OPTIONAL[stage] ?? []
       for (const id of ids) {
@@ -100,11 +108,12 @@ export async function listMetricToggles(selectedClientId?: string): Promise<Metr
         byProvider.set(providerLabel, list)
       }
     }
+    const providers = [...byProvider.entries()]
+      .sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0]))
+      .map(([providerLabel, items]) => ({ providerLabel, items }))
+    if (providers.length) groups.push({ stage, stageLabel: STAGE_NAMES[stage], providers })
   }
-  const order = (l: string) => { const i = PROVIDER_ORDER.indexOf(l); return i === -1 ? 99 : i }
-  return [...byProvider.entries()]
-    .sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0]))
-    .map(([providerLabel, items]) => ({ providerLabel, items }))
+  return groups
 }
 
 export async function setMetricToggle(
