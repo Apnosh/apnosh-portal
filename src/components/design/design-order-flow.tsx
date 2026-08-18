@@ -17,6 +17,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Check } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
 import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, ConfirmButton } from '@/components/campaigns/desk/ui'
@@ -308,6 +309,8 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
 }
 
 export default function DesignOrderFlow({ menu, assets, businessName }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null }) {
+  /* Client-side back to the store keeps the app shell mounted (owner ask 2026-08-18). */
+  const router = useRouter()
   const today = todayISO()
 
   const [step, setStep] = useState(1)
@@ -640,7 +643,7 @@ export default function DesignOrderFlow({ menu, assets, businessName }: { menu: 
       {step === 1 && (
         <button
           type="button"
-          onClick={() => window.location.assign('/dashboard/campaigns/new?lens=creatives')}
+          onClick={() => router.push('/dashboard/campaigns/new?lens=creatives')}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '2px 0', marginBottom: 8, cursor: 'pointer', fontFamily: DESK.body, fontSize: 14, fontWeight: 600, color: DESK.ink2 }}
         >
           {'‹'} Store

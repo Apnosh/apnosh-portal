@@ -1,6 +1,7 @@
 "use client";
 /* eslint-disable */
 import React, { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import AppHeader from "../app-header";
 import { priceLabel, ITEM_PRICES, priceNotes, passthroughNotesForServices, withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from "@/lib/campaigns/builder/item-prices";
@@ -5523,6 +5524,8 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
      onClose    : () => void                           — exit the builder
    ============================================================ */
 export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, creatorCards = [], onScratch, onBookCreator, onHoldCreator, onCreatorSlots, onCreatorProfile, tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
+  /* Client-side hops into the creative desks keep the bottom nav mounted (owner ask 2026-08-18). */
+  const router = useRouter();
   // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
   // Set during render so every child render below reads the current map; a late fetch just
   // re-renders this tree with the fresh edits.
@@ -5590,12 +5593,12 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
     // The graphic configurator prices itself question by question; it has no product page.
     // Only when the card is actually buyable — while it sits coming-soon (rate card unsigned)
     // a tap falls through to the PDP so the owner sees the honest reason, never live prices.
-    if (id === "design" && buyableId("design")) { window.location.assign("/dashboard/design/order"); return; }
+    if (id === "design" && buyableId("design")) { router.push("/dashboard/design/order"); return; }
     // A graphic goes to THE ONE graphic builder (the Drafting Table), which runs in
     // request mode while the rate card is unsigned and becomes the priced order after.
-    if (id === "creative-graphic" && buyableId(id)) { window.location.assign("/dashboard/design/order"); return; }
+    if (id === "creative-graphic" && buyableId(id)) { router.push("/dashboard/design/order"); return; }
     // Every other Creatives-shelf card deep-links into that type's questions on the desk.
-    if (id.startsWith("creative-") && buyableId(id)) { window.location.assign(`/dashboard/requests?type=${id.slice("creative-".length)}`); return; }
+    if (id.startsWith("creative-") && buyableId(id)) { router.push(`/dashboard/requests?type=${id.slice("creative-".length)}`); return; }
     if (catGet(id)) setRoute({ name: "pdp", itemId: id, from, rowId });
     else setRoute({ name: "build", itemId: buildIdFor(id), from, rowId });
   };

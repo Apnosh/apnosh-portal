@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { DESK, paperGround, DeskKeyframes, Ticket } from '@/components/campaigns/desk/ui'
 import {
@@ -62,6 +63,9 @@ const STATUS_TONE: Record<RequestStatus, { fg: string; bg: string }> = {
 }
 
 export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: string }[] }) {
+  /* Client-side hops (owner ask 2026-08-18): back to the store must keep the app
+   * shell mounted — a full page load flashed the bottom nav away mid-flow. */
+  const router = useRouter()
   const [type, setType] = useState<RequestType | null>(null)
   const [mine, setMine] = useState<RequestRow[]>([])
   const [loadingMine, setLoadingMine] = useState(true)
@@ -123,7 +127,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
         typeId={type.id}
         menu={menu}
         /* Backing out of a flow returns to where the cards live: the store. */
-        onBack={() => window.location.assign('/dashboard/campaigns/new?lens=creatives')}
+        onBack={() => router.push('/dashboard/campaigns/new?lens=creatives')}
         /* After a send, land on the ledger (and drop ?type so refresh stays here). */
         onDone={() => {
           window.history.replaceState(null, '', window.location.pathname)
@@ -150,7 +154,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
         name="Ask for something new"
         sub="Menus, logos, videos, photos, websites: pick one from the store"
         right={<ChevronRight size={17} />}
-        onClick={() => window.location.assign('/dashboard/campaigns/new?lens=creatives')}
+        onClick={() => router.push('/dashboard/campaigns/new?lens=creatives')}
       />
 
       <div style={{ ...label, margin: '26px 2px 10px' }}>Sent</div>
