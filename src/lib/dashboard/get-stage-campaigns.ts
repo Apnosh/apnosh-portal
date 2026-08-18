@@ -32,6 +32,7 @@ const SERVICE_STAGES: Array<[string, string[]]> = [
   ['website', ['engaged']],
   ['social', ['shown', 'engaged']],
   ['measure', ['moved']],            // measurement setups support the action stage
+  ['tracking', ['moved']],           // the Get-measurable service (Analytics + Search Console)
   ['email', ['back']],
 ]
 
