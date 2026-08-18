@@ -184,3 +184,23 @@ button, [role="button"] { -webkit-user-select: none; user-select: none; }
   to { opacity: 1; }
 }
 .sheet-backdrop { animation: sheet-backdrop 0.2s ease both; }
+
+/* ── Dark mode across the whole platform (owner ask 2026-08-18) ──────────────
+   One switch in Settings stamps data-apnosh-theme on <html> (mvp-theme.tsx).
+   Screens are built on the light kit with inline styles, so dark comes from one
+   inversion at the body — except:
+   - .apnosh-native-skin (the Home tree): its palette is genuinely theme-aware,
+     so it inverts BACK and renders its hand-tuned dark skin natively.
+   - photos / video / embeds invert back so food never looks like a negative.
+   Fixed-position surfaces are safe: the mvp shell is the scroll container, the
+   document itself never scrolls, so the filter containing-block quirk is moot. */
+html[data-apnosh-theme='dark'] { background: #0c1310; }
+html[data-apnosh-theme='dark'] body {
+  filter: invert(1) hue-rotate(180deg);
+}
+html[data-apnosh-theme='dark'] body :is(img, video, canvas, iframe, [data-no-invert]):not(.apnosh-native-skin *) {
+  filter: invert(1) hue-rotate(180deg);
+}
+html[data-apnosh-theme='dark'] .apnosh-native-skin {
+  filter: invert(1) hue-rotate(180deg);
+}

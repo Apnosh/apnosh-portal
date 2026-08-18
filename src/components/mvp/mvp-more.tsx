@@ -62,7 +62,7 @@ const GROUPS: { title: string; rows: Row[] }[] = [
     rows: [
       { label: 'Plan & billing', sub: 'Plan, invoices, card', href: '/dashboard/billing', Icon: CreditCard },
       { label: 'Agreements', sub: 'Read & sign', href: '/dashboard/agreements', Icon: FileText },
-      { label: 'Settings', sub: 'Login, password, alerts', href: '/dashboard/settings', Icon: Settings },
+      { label: 'Settings', sub: 'Login, password, alerts, dark mode', href: '/dashboard/settings', Icon: Settings },
     ],
   },
 ]

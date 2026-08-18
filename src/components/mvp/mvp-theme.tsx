@@ -102,6 +102,14 @@ export function MvpThemeProvider({ children }: { children: React.ReactNode }) {
     } catch { /* defaults to light */ }
   }, [])
 
+  // Stamp the choice on <html> so global CSS can skin the WHOLE platform
+  // (owner ask 2026-08-18): screens built on the light kit go dark through the
+  // inversion rules in globals.css; Home opts out and renders its own dark
+  // palette natively (.apnosh-native-skin).
+  useEffect(() => {
+    try { document.documentElement.setAttribute('data-apnosh-theme', theme) } catch { /* SSR */ }
+  }, [theme])
+
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t)
     try { localStorage.setItem(STORAGE_KEY, t) } catch { /* ignore */ }

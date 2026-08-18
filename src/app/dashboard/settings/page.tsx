@@ -18,6 +18,7 @@ import { useEffect, useState } from 'react'
 import { Bell, Plug, Eye, EyeOff, LifeBuoy, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import MvpShell from '@/components/mvp/mvp-shell'
+import { useMvpTheme } from '@/components/mvp/mvp-theme'
 import { MvpDetailHeader, MvpGroup, MvpRow, MvpToggle, MvpPill, C, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
 import { EditorField } from '../business-info/editor-shell'
 
@@ -31,6 +32,7 @@ const APPROVAL_TYPES = [
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
+  const { theme, setTheme } = useMvpTheme()
 
   // Profile
   const [fullName, setFullName] = useState('')
@@ -181,6 +183,14 @@ export default function SettingsPage() {
                 <button type="button" onClick={handleSaveApprovals} disabled={approvalSaving} style={btn(approvalSaving)}>
                   {approvalSaving && <Loader2 size={16} className="mvp-spin" />}Save preferences
                 </button>
+              </div>
+            </MvpGroup>
+
+            {/* Appearance (owner ask 2026-08-18): the dark-mode switch moved
+                here from the home graph, and it skins the whole platform. */}
+            <MvpGroup title="Appearance">
+              <div style={{ padding: 14 }}>
+                <ToggleRow label="Dark mode" desc="The whole app, not just the home graph" on={theme === 'dark'} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
               </div>
             </MvpGroup>
 

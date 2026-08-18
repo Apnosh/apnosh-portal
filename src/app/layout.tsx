@@ -39,6 +39,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable} ${dmSans.variable} h-full`}>
+      <head>
+        {/* Restore the saved dark-mode choice BEFORE first paint so a dark
+            owner never sees a white flash. The provider (mvp-theme.tsx) takes
+            over after hydration and keeps this attribute in sync. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem('apnosh:home-theme')==='dark')document.documentElement.setAttribute('data-apnosh-theme','dark')}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="font-[family-name:var(--font-inter)] bg-bg text-ink min-h-full">{children}</body>
     </html>
   )

@@ -23,6 +23,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { ToastProvider } from '@/components/ui/toast'
+import { MvpThemeProvider } from '@/components/mvp/mvp-theme'
 import { RealtimeProvider } from '@/lib/realtime'
 import { ClientProvider, useClient } from '@/lib/client-context'
 import SentryUserContext from '@/components/sentry-user-context'
@@ -36,6 +37,7 @@ const AgentChat = dynamic(() => import('@/components/dashboard/agent-chat'), { s
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
+      <MvpThemeProvider>
       <ToastProvider>
         <RealtimeProvider>
           {/* ClientProvider reads useSearchParams (admin ?clientId= handoff),
@@ -51,6 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Suspense>
         </RealtimeProvider>
       </ToastProvider>
+      </MvpThemeProvider>
   )
 }
 

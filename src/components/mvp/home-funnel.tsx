@@ -23,9 +23,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { MetricSettingsButton } from '@/components/mvp/metric-settings'
 import { useRouter } from 'next/navigation'
-import { Pencil, Sun, Moon } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { useMvpTheme } from './mvp-theme'
 
 /* the browser's local calendar date — the server must never guess the client's timezone */
@@ -301,7 +300,7 @@ export default function HomeFunnel({
   onRange,
   loading = false,
 }: HomeFunnelProps) {
-  const { C, theme, toggle } = useMvpTheme() // the active skin (light / dark) — drives the whole hero
+  const { C, theme } = useMvpTheme() // the active skin (light / dark) — drives the whole hero
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const particlesRef = useRef<Traveler[]>([])
@@ -1065,16 +1064,9 @@ export default function HomeFunnel({
             )
           })}
         </div>
-        {/* one switch flips the whole home between the light + dark skins */}
-        <button
-          type="button"
-          onClick={toggle}
-          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          title={theme === 'dark' ? 'Light mode' : 'Dark mode'}
-          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: 99, border: `1px solid ${C.line}`, background: C.card, color: C.mute, cursor: 'pointer', flexShrink: 0, padding: 0 }}
-        >
-          {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-        </button>
+        {/* the light/dark switch moved to Settings (owner ask 2026-08-18) — it
+            now skins the whole platform, so it is an account preference, not a
+            chart control */}
       </div>
 
       {/* WHO the funnel is for (left) + the date window (right) — directly under the tabs */}
@@ -1176,8 +1168,6 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
 }
 
 export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void }) {
-  /* bumps when the client changes their metric toggles → refetch the stages */
-  const [prefsBump, setPrefsBump] = useState(0)
   const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   const [loading, setLoading] = useState(false)
@@ -1225,14 +1215,15 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
     return () => { alive = false }
     // onVisibility identity is caller-stable; depend on the data inputs only
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, range, prefsBump])
+  }, [clientId, range])
   if (!data?.views || !data?.actions || data.views.total <= 0) return null
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
       <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} loading={loading} />
-      {/* the setting under the graphs (owner ask 2026-08-18): every summed
-          metric across all five stages, per-client on/off */}
-      <MetricSettingsButton onChanged={() => setPrefsBump((b) => b + 1)} />
+      {/* "Choose your metrics" lives ONLY on the Insights detail screen (owner
+          ask 2026-08-18) — the home graph stays clean with nothing below it.
+          Toggles saved there still apply here: the funnel refetches every time
+          Home mounts. */}
     </div>
   )
 }

@@ -26,7 +26,7 @@ import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgres
 import { selectHomeOrders } from '@/lib/campaigns/home-cards'
 import { HomeFunnelLive } from './home-funnel'
 import { usePullToRefresh, PullIndicator } from './pull-to-refresh'
-import { MvpThemeProvider, useMvpTheme } from './mvp-theme'
+import { useMvpTheme } from './mvp-theme'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
@@ -162,13 +162,12 @@ const LEGACY_HOME = false
 const SHOW_HOME_BODY = false
 
 export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
-  // One theme provider wraps the whole Home tree, so the funnel and every card
-  // below read the same light/dark skin and the one toggle flips all of it.
-  return (
-    <MvpThemeProvider>
-      <MvpHomeInner {...props} />
-    </MvpThemeProvider>
-  )
+  // The theme provider now lives in the dashboard layout (the toggle moved to
+  // Settings and skins the whole platform); Home just reads it like everyone
+  // else. Its palette is genuinely theme-aware, so the root below carries
+  // .apnosh-native-skin — globals.css exempts it from the dark-mode inversion
+  // and lets the hand-tuned Oyster Night palette render natively.
+  return <MvpHomeInner {...props} />
 }
 
 function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = true }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
@@ -211,7 +210,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
   const goTo = (i: number) => { const el = scrollRef.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
 
   return (
-    <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: C.pageBg, minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
+    <div className="apnosh-native-skin" style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: C.pageBg, minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{MVP_ANIM_CSS}</style>
       {/* sticky greeting bar — suppressed when embedded under the portal's
           own top bar (the design's full chrome lands in the nav-shell step). */}
