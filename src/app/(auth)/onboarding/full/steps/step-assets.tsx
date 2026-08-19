@@ -18,7 +18,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
 
   return (
     <>
-      <Question title="Got any brand materials?" subtitle="Logo, photos, colors, whatever you have" />
+      <Question title="Got any brand materials?" subtitle="Logo, photos, colors, whatever you have. All optional — just continue if nothing is handy, and add it anytime later. With these, the graphics we make match your brand from day one." />
       <div className="mt-4 space-y-4">
         {/* Logo upload */}
         <button
@@ -108,6 +108,12 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
             />
           </div>
           <Hint>Don't know your colors? No worries, we'll figure it out.</Hint>
+          <div className="text-[13px] mt-2" style={{ color: '#777' }}>
+            No logo yet?{' '}
+            <a href="/dashboard/requests?type=logo" target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: '#0f6e56' }}>
+              Have one made →
+            </a>
+          </div>
         </div>
 
         {/* Brand drive */}

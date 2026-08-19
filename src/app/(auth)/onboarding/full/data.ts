@@ -356,7 +356,11 @@ export function getSteps(): StepId[] {
    * fields and steps still exist, so nothing that reads them broke, and a prompt can surface
    * any of them on the dashboard when it matters.
    */
-  return ['role', 'biz_name', 'confirm', 'goals', 'connect', 'review']
+  /* 'assets' is BACK by owner call (2026-08-19): the free AI graphic drafts
+   * compose from the client's logo/colors/photos, so a clear place to hand
+   * them over pays off immediately. Every field on it is optional and the
+   * step says so — skipping costs nothing and it can all be added later. */
+  return ['role', 'biz_name', 'confirm', 'goals', 'connect', 'assets', 'review']
 }
 
 // A single menu row captured during onboarding. Promoted to a

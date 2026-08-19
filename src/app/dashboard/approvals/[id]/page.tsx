@@ -461,6 +461,26 @@ export default function ApprovalDetailPage() {
           </div>
         )}
 
+        {/* GD-4 honesty note: an AI draft made without the brand says so, and
+            points at the fix — add the brand, or order a logo if none exists. */}
+        {content.source === 'ai-draft' && (() => {
+          const bu = (content.brandUsed ?? {}) as { logo?: boolean; color?: boolean }
+          if (bu.logo && bu.color) return null
+          return (
+            <div className="mx-5 mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-800 leading-relaxed">
+              This draft was made {!bu.logo && !bu.color ? 'without your logo and brand colors' : !bu.logo ? 'without your logo' : 'without your brand colors'}.
+              Add them and every future draft matches your brand.{' '}
+              <Link href="/dashboard/business-info/brand" className="font-semibold underline">Add your brand →</Link>
+              {!bu.logo && (
+                <>
+                  {' '}· Don&apos;t have a logo?{' '}
+                  <Link href="/dashboard/requests?type=logo" className="font-semibold underline">Have one made →</Link>
+                </>
+              )}
+            </div>
+          )
+        })()}
+
         {/* ============================================================ */}
         {/*  Action buttons                                               */}
         {/* ============================================================ */}

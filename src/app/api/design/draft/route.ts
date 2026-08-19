@@ -156,7 +156,7 @@ export async function POST(req: Request) {
         status: 'client_review',
         preview_urls: [url],
         file_urls: [url],
-        content: { source: 'ai-draft', occasion: occ?.id ?? null, template: inputs.template, headline: inputs.headline, subline: inputs.subline, aiCopy: !!copy },
+        content: { source: 'ai-draft', occasion: occ?.id ?? null, template: inputs.template, headline: inputs.headline, subline: inputs.subline, aiCopy: !!copy, brandUsed: { logo: !!brand?.logo_url, color: !!primary, photo: !!photoUrl } },
       })
       .select('id')
       .single()
