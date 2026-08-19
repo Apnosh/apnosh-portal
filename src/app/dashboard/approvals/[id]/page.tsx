@@ -112,12 +112,20 @@ export default function ApprovalDetailPage() {
     setTimeout(() => setToast(null), 4000)
   }
 
+  const [showSendOff, setShowSendOff] = useState(false)
+
   const handleApprove = async () => {
     setActionLoading(true)
     const result = await approveDeliverable(id)
     if (result.success) {
       showToast('success', 'Content approved!')
-      setTimeout(() => router.push('/dashboard/approvals'), 1500)
+      /* SO-1: a postable piece does not dead-end at Approved — the Send-off
+       * asks how it reaches their feed. Everything else redirects as before. */
+      if (deliverable && ['graphic', 'video'].includes(deliverable.type)) {
+        setShowSendOff(true)
+      } else {
+        setTimeout(() => router.push('/dashboard/approvals'), 1500)
+      }
     } else {
       showToast('error', result.error || 'Failed to approve')
     }
@@ -531,7 +539,103 @@ export default function ApprovalDetailPage() {
             )}
           </div>
         )}
+
+        {/* SO-1: the Send-off — how does this piece get posted? Shown right
+            after approval, and on any already-approved postable piece that has
+            not chosen yet. */}
+        {deliverable && ['graphic', 'video'].includes(deliverable.type)
+          && (showSendOff || (deliverable.status === 'approved' && !(deliverable.content as Record<string, unknown>)?.sendOff)) && (
+          <SendOffPanel deliverableId={deliverable.id} onDone={() => router.push('/dashboard/approvals')} />
+        )}
       </div>
+    </div>
+  )
+}
+
+/* ── SO-1: the Send-off chooser ─────────────────────────────────────────────
+   Three lanes, the platform's own language. 'auto' is approval-first: the API
+   returns the exact caption + accounts, the owner can edit the caption, and
+   nothing is scheduled until their explicit confirm. The choice is remembered
+   as their posting preference (changeable on any piece). */
+function SendOffPanel({ deliverableId, onDone }: { deliverableId: string; onDone: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{ caption: string; platforms: string[] } | null>(null)
+  const [caption, setCaption] = useState('')
+
+  const call = async (payload: Record<string, unknown>) => {
+    const r = await fetch('/api/deliverables/send-off', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ deliverableId, ...payload }),
+    })
+    const d = await r.json().catch(() => ({}))
+    if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
+    return d
+  }
+
+  const pick = async (lane: 'auto' | 'human' | 'self') => {
+    setBusy(lane); setErr(null)
+    try {
+      if (lane === 'auto') {
+        const d = await call({ lane })
+        if (d.preview) { setPreview(d.preview); setCaption(d.preview.caption) }
+      } else {
+        await call({ lane })
+        onDone()
+        return
+      }
+    } catch (e) { setErr(e instanceof Error ? e.message : 'That did not go through.') }
+    setBusy(null)
+  }
+
+  const confirmAuto = async () => {
+    setBusy('confirm'); setErr(null)
+    try {
+      await call({ lane: 'auto', confirm: true, caption })
+      onDone()
+      return
+    } catch (e) { setErr(e instanceof Error ? e.message : 'That did not go through.') }
+    setBusy(null)
+  }
+
+  return (
+    <div className="border-t border-ink-6 p-5">
+      <div className="text-sm font-semibold text-ink">How should this get posted?</div>
+      <div className="text-xs text-ink-3 mt-0.5 mb-3">We&apos;ll remember your choice. You can pick differently on any piece.</div>
+      {err && <div className="text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 mb-3">{err}</div>}
+      {!preview ? (
+        <div className="flex flex-col gap-2">
+          <button onClick={() => pick('auto')} disabled={busy !== null}
+            className="text-left px-4 py-3 rounded-lg bg-brand text-white text-sm font-medium disabled:opacity-50">
+            {busy === 'auto' ? 'Writing the caption…' : 'Post it for me'}
+            <span className="block text-xs font-normal opacity-85 mt-0.5">We write the caption, you confirm, it posts to your connected accounts.</span>
+          </button>
+          <button onClick={() => pick('human')} disabled={busy !== null}
+            className="text-left px-4 py-3 rounded-lg bg-white border border-ink-6 text-ink text-sm font-medium disabled:opacity-50">
+            Have someone post it
+            <span className="block text-xs font-normal text-ink-3 mt-0.5">Your team handles the caption, timing, and posting.</span>
+          </button>
+          <button onClick={() => pick('self')} disabled={busy !== null}
+            className="text-left px-4 py-3 rounded-lg bg-white border border-ink-6 text-ink text-sm font-medium disabled:opacity-50">
+            I&apos;ll post it myself
+            <span className="block text-xs font-normal text-ink-3 mt-0.5">Download the files above and post whenever you like.</span>
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="text-xs font-semibold text-ink-2 uppercase tracking-wide">Your caption — edit anything</div>
+          <textarea value={caption} onChange={(e) => setCaption(e.target.value)}
+            className="w-full border border-ink-6 rounded-lg p-2.5 text-sm min-h-[90px] focus:outline-none focus:ring-2 focus:ring-brand/30" />
+          <div className="text-xs text-ink-3">Posting to: <span className="font-medium text-ink-2 capitalize">{preview.platforms.join(', ')}</span></div>
+          <div className="flex items-center gap-2">
+            <button onClick={confirmAuto} disabled={busy !== null || !caption.trim()}
+              className="px-5 py-2.5 rounded-lg bg-brand text-white text-sm font-medium disabled:opacity-50">
+              {busy === 'confirm' ? 'Scheduling…' : 'Post it'}
+            </button>
+            <button onClick={() => { setPreview(null); setErr(null) }} className="px-3 py-2 text-sm text-ink-3">Back</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
