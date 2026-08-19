@@ -38,6 +38,7 @@ interface InvoiceRow {
   issued_at: string | null
   due_at: string | null
   paid_at: string | null
+  payment_processing_at: string | null
   description: string | null
   hosted_invoice_url: string | null
   clients: { name: string; slug: string } | null
@@ -72,12 +73,21 @@ function formatDate(iso: string | null): string {
 
 function isOverdue(inv: InvoiceRow): boolean {
   if (inv.status !== 'open' || !inv.due_at) return false
+  /* a bank payment in flight (payment_intent.processing) is money moving, not
+   * money missing — it must never read as Overdue while it settles */
+  if (inv.payment_processing_at) return false
   return new Date(inv.due_at) < new Date()
+}
+
+/** ACH in flight: Stripe says the payment is processing but not yet settled. */
+function inTransit(inv: InvoiceRow): boolean {
+  return inv.status === 'open' && !!inv.payment_processing_at
 }
 
 const STATUS_BADGE: Record<string, string> = {
   draft: 'bg-ink-6 text-ink-3',
   open: 'bg-amber-50 text-amber-700',
+  in_transit: 'bg-blue-50 text-blue-700',
   paid: 'bg-emerald-50 text-emerald-700',
   failed: 'bg-red-50 text-red-700',
   void: 'bg-ink-6 text-ink-4',
@@ -193,7 +203,7 @@ export default function AdminBillingPage() {
         .from('invoices')
         .select(`
           id, client_id, invoice_number, type, status, total_cents,
-          amount_paid_cents, issued_at, due_at, paid_at, description,
+          amount_paid_cents, issued_at, due_at, paid_at, payment_processing_at, description,
           hosted_invoice_url,
           clients!inner(name, slug)
         `)
@@ -545,7 +555,8 @@ export default function AdminBillingPage() {
                     )
                     : filtered.map(inv => {
                         const overdue = isOverdue(inv)
-                        const displayStatus = overdue ? 'failed' : inv.status
+                        const transit = inTransit(inv)
+                        const displayStatus = transit ? 'in_transit' : overdue ? 'failed' : inv.status
                         return (
                           <tr
                             key={inv.id}
@@ -570,7 +581,7 @@ export default function AdminBillingPage() {
                             </td>
                             <td className="px-4 py-3">
                               <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_BADGE[displayStatus] ?? ''}`}>
-                                {overdue ? 'Overdue' : (INVOICE_STATUS_LABEL[inv.status] ?? inv.status)}
+                                {transit ? 'Payment in transit' : overdue ? 'Overdue' : (INVOICE_STATUS_LABEL[inv.status] ?? inv.status)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-sm text-ink-3">

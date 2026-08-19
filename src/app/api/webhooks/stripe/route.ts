@@ -156,6 +156,8 @@ async function dispatch(event: Stripe.Event, supabase: AdminClient) {
       return handleCampaignPaymentSucceeded(supabase, event.data.object as Stripe.PaymentIntent)
     case 'payment_intent.payment_failed':
       return handleCampaignPaymentFailed(supabase, event.data.object as Stripe.PaymentIntent)
+    case 'payment_intent.processing':
+      return handleInvoicePaymentProcessing(supabase, event.data.object as Stripe.PaymentIntent)
 
     // --- Legacy (orders self-serve flow) ---
     case 'checkout.session.completed':
@@ -530,8 +532,41 @@ async function handleInvoiceUpserted(supabase: AdminClient, invoice: Stripe.Invo
   await upsertInvoice(supabase, invoice)
 }
 
+/* An ACH/bank payment takes days to settle. Stripe announces the in-flight
+ * window via payment_intent.processing; stamping the invoice lets admin show
+ * "Payment in transit" instead of "Unpaid" (the Anchovies scare, 2026-08-19).
+ * No-op for PaymentIntents that are not paying an invoice (campaign checkout),
+ * and pre-242 the column is absent (42703) → skip silently. */
+async function handleInvoicePaymentProcessing(supabase: AdminClient, pi: Stripe.PaymentIntent) {
+  const raw = (pi as unknown as { invoice?: string | { id: string } | null }).invoice
+  const invoiceId = typeof raw === 'string' ? raw : raw?.id
+  if (!invoiceId) return
+  const method = pi.payment_method_types?.includes('us_bank_account') ? 'ach' : pi.payment_method_types?.[0] ?? null
+  const { error } = await supabase
+    .from('invoices')
+    .update({ payment_processing_at: new Date().toISOString(), ...(method ? { payment_method: method } : {}) })
+    .eq('stripe_invoice_id', invoiceId)
+  if (error && error.code !== '42703') {
+    console.warn('[stripe webhook] processing stamp failed:', error.message)
+  }
+}
+
+/* The in-flight stamp must not outlive the outcome: cleared the moment the
+ * invoice resolves either way. Best-effort; pre-242 (42703) is silent. */
+async function clearProcessingStamp(supabase: AdminClient, invoice: Stripe.Invoice) {
+  if (!invoice.id) return
+  const { error } = await supabase
+    .from('invoices')
+    .update({ payment_processing_at: null })
+    .eq('stripe_invoice_id', invoice.id)
+  if (error && error.code !== '42703') {
+    console.warn('[stripe webhook] processing clear failed:', error.message)
+  }
+}
+
 async function handleInvoicePaid(supabase: AdminClient, invoice: Stripe.Invoice) {
   await upsertInvoice(supabase, invoice, 'paid')
+  await clearProcessingStamp(supabase, invoice)
 
   // If this was a subscription invoice that had failed before, flip
   // subscription back to active.
@@ -581,6 +616,7 @@ async function handleInvoicePaid(supabase: AdminClient, invoice: Stripe.Invoice)
 
 async function handleInvoiceFailed(supabase: AdminClient, invoice: Stripe.Invoice) {
   await upsertInvoice(supabase, invoice, 'failed')
+  await clearProcessingStamp(supabase, invoice)
 
   if (invoice.subscription) {
     const subId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription.id
@@ -601,6 +637,7 @@ async function handleInvoiceFailed(supabase: AdminClient, invoice: Stripe.Invoic
 
 async function handleInvoiceVoided(supabase: AdminClient, invoice: Stripe.Invoice) {
   await upsertInvoice(supabase, invoice, 'void')
+  await clearProcessingStamp(supabase, invoice)
 
   if (invoice.metadata?.apnosh_quote_id && invoice.id) {
     const { markQuoteVoided } = await import('@/lib/admin/quote-invoice')
