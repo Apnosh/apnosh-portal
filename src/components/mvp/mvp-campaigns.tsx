@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import {
@@ -282,29 +283,60 @@ function CampaignCalendar({ saved }: { saved: SavedCampaign[] }) {
    Pure client-side date math (occasions.ts); shows nothing when no occasion is
    inside the window, so the rail never renders an empty promise. */
 function OccasionsRail() {
+  const router = useRouter()
+  const [drafting, setDrafting] = useState<string | null>(null)
+  const [note, setNote] = useState<string | null>(null)
   const occs = upcomingOccasions()
   if (occs.length === 0) return null
   const fmt = (iso: string) => new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  /* The full ladder on one card (GD-4c): free AI draft (Pro) on top, the paid
+   * designer order underneath. The draft lands in approvals, where posting it
+   * free and "Have a designer finish this" both already live. */
+  const draftIt = async (id: string) => {
+    if (drafting) return
+    setDrafting(id); setNote(null)
+    try {
+      const r = await fetch('/api/design/draft', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ occasion: id }) })
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.id) { router.push(`/dashboard/approvals/${d.id}`); return }
+      setNote(typeof d.error === 'string' ? d.error : 'Could not make the draft. Try again.')
+    } catch {
+      setNote('Could not make the draft. Try again.')
+    }
+    setDrafting(null)
+  }
   return (
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 2px 8px' }}>Coming up</div>
+      {note && <div style={{ fontSize: 12.5, color: '#8a5a0c', background: '#fbf3e4', border: '0.5px solid #eed9b3', borderRadius: 10, padding: '8px 11px', margin: '0 0 8px' }}>{note}</div>}
       <div className="cc-scroll" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
         {occs.map((o) => (
-          <Link
+          <div
             key={o.id}
-            href={`/dashboard/design/order?occasion=${o.id}`}
             className="mvp-row"
-            style={{ flex: '0 0 auto', width: 200, textDecoration: 'none', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 14px' }}
+            style={{ flex: '0 0 auto', width: 210, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 14px' }}
           >
             <span style={{ display: 'block', fontSize: 22, lineHeight: 1 }}>{o.emoji}</span>
             <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: C.ink, marginTop: 8, lineHeight: 1.25 }}>{o.name}</span>
             <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 2 }}>
               {fmt(o.dateISO)} · in {o.daysAway} days
             </span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 700, color: C.greenDk, marginTop: 9 }}>
-              Get a graphic · from ${RATE_CARD.tierBase[1]} <ArrowRight size={13} />
-            </span>
-          </Link>
+            <button
+              type="button"
+              onClick={() => draftIt(o.id)}
+              disabled={drafting !== null}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 700, color: '#fff', background: C.greenDk, border: 'none', borderRadius: 999, padding: '7px 12px', marginTop: 10, cursor: 'pointer', opacity: drafting && drafting !== o.id ? 0.5 : 1 }}
+            >
+              {drafting === o.id ? 'Drafting…' : 'Draft it free'}
+              <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: '.05em', background: 'rgba(255,255,255,0.25)', borderRadius: 5, padding: '1.5px 5px' }}>PRO</span>
+            </button>
+            <Link
+              href={`/dashboard/design/order?occasion=${o.id}`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12.5, fontWeight: 700, color: C.greenDk, textDecoration: 'none', marginTop: 8 }}
+            >
+              Designer · from ${RATE_CARD.tierBase[1]} <ArrowRight size={13} />
+            </Link>
+          </div>
         ))}
       </div>
     </div>
