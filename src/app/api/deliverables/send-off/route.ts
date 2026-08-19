@@ -154,7 +154,10 @@ export async function POST(req: Request) {
       target_platforms: platforms,
       status: 'scheduled',
       scheduled_for: when,
-      proposed_via: 'send-off',
+      /* 'client_request' is the constraint-approved value that fits: the owner
+       * asked for their own piece to be posted. The idea prefix carries the
+       * send-off traceability. (23514 caught live on the first real run.) */
+      proposed_via: 'client_request',
       client_signed_off_at: new Date().toISOString(), // the confirm tap IS the sign-off
     })
     .select('id')
