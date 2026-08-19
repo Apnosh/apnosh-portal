@@ -114,15 +114,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, lane })
   }
 
-  // lane 'auto' — connected platforms from the social connection's cache
-  const { data: conn } = await admin
+  // lane 'auto' — connected platforms from the social connection's cache.
+  // The social channel is stored under its VENDOR name (zernio today, ayrshare
+  // in the bake-off era) — caught live 2026-08-19 when 'social' matched nothing
+  // for a client with five linked platforms.
+  const { data: conns } = await admin
     .from('channel_connections')
-    .select('metadata')
+    .select('channel, metadata')
     .eq('client_id', business.client_id)
-    .eq('channel', 'social')
-    .maybeSingle()
-  const cached = ((conn?.metadata as Record<string, unknown> | null)?.platforms as string[] | undefined) ?? []
-  const platforms = cached.length ? cached.filter((p) => ['instagram', 'facebook', 'tiktok', 'linkedin'].includes(p)) : []
+    .in('channel', ['zernio', 'ayrshare', 'social'])
+  const cached = (conns ?? [])
+    .map((r) => ((r.metadata as Record<string, unknown> | null)?.platforms as string[] | undefined) ?? [])
+    .find((p) => p.length > 0) ?? []
+  const platforms = cached.filter((p) => ['instagram', 'facebook', 'tiktok', 'linkedin'].includes(p))
   if (platforms.length === 0) {
     return NextResponse.json({ error: 'No social accounts connected yet. Connect them first, or post it yourself.' }, { status: 409 })
   }
