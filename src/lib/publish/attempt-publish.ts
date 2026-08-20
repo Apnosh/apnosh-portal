@@ -282,6 +282,18 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
   }
 
   if (!firstWin) {
+    // Audit the FAILURE too. Without this row the vendor's per-platform reasons
+    // exist only in the cron's HTTP response nobody can read — the 2026-08-20
+    // send-off retry loop was undiagnosable until this was added.
+    await admin.from('events').insert({
+      client_id: draft.client_id,
+      event_type: 'draft.publish_failed',
+      subject_type: 'content_draft',
+      subject_id: draftId,
+      actor_role: 'system',
+      summary: `Publish failed on ${Object.keys(perPlatform).join(', ')}`,
+      payload: { perPlatform, overall },
+    }).then(({ error }) => { if (error) console.error('[publish] failure audit write failed:', error.message) })
     return {
       ok: false,
       errorCode: 'all_platforms_failed',
