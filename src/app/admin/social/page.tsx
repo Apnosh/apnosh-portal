@@ -82,6 +82,22 @@ export default async function AdminSocialProfilesPage() {
 
   const totalAccounts = rows.reduce((n, r) => n + (r.accounts?.length ?? 0), 0)
 
+  /* Same social login on more than one client's profile = a wrong link waiting
+   * to post publicly (dosikbbq on the Apnosh profile, 2026-08-20) AND a wasted
+   * plan slot. Flag it loudly. */
+  const linkedOn = new Map<string, string[]>()
+  for (const r of rows) {
+    for (const a of r.accounts ?? []) {
+      if (!a.name) continue
+      const k = `${a.platform}|${a.name.toLowerCase()}`
+      linkedOn.set(k, [...(linkedOn.get(k) ?? []), r.clientName])
+    }
+  }
+  const duplicates = [...linkedOn.entries()]
+    .filter(([, clients]) => clients.length > 1)
+    .map(([k, clients]) => ({ platform: k.split('|')[0], name: k.split('|')[1], clients }))
+  const dupeKeys = new Set(duplicates.map((d) => `${d.platform}|${d.name}`))
+
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
@@ -92,6 +108,21 @@ export default async function AdminSocialProfilesPage() {
           Read-only — relink logins or delete posts in Zernio&apos;s own dashboard; never rename or delete a profile there.
         </p>
       </div>
+
+      {duplicates.length > 0 && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-4">
+          <div className="text-sm font-semibold text-amber-900">Same account linked on more than one profile</div>
+          <div className="text-xs text-amber-800 mt-1 flex flex-col gap-1">
+            {duplicates.map((d) => (
+              <div key={`${d.platform}|${d.name}`}>
+                <span className="capitalize font-medium">{d.platform}</span> <span className="font-medium">{d.name}</span> is
+                linked on {d.clients.join(' and ')}. Each extra link uses a plan slot, and posts for the wrong client can land
+                on it. In Zernio&apos;s dashboard, disconnect it from the profile it doesn&apos;t belong to.
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {rows.length === 0 && (
         <div className="bg-white border border-gray-200 rounded-xl p-6 text-sm text-gray-500">
@@ -119,12 +150,16 @@ export default async function AdminSocialProfilesPage() {
                 <div className="text-sm text-gray-400">None linked yet.</div>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {r.accounts.map((a) => (
-                    <span key={a.id} className="inline-flex items-center gap-1.5 text-sm bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1">
-                      <span className="capitalize text-gray-500">{a.platform}</span>
-                      <span className="font-medium text-gray-900">{a.name || '(no name)'}</span>
-                    </span>
-                  ))}
+                  {r.accounts.map((a) => {
+                    const isDupe = a.name !== '' && dupeKeys.has(`${a.platform}|${a.name.toLowerCase()}`)
+                    return (
+                      <span key={a.id} className={`inline-flex items-center gap-1.5 text-sm rounded-lg px-2.5 py-1 border ${isDupe ? 'bg-amber-50 border-amber-300' : 'bg-gray-50 border-gray-200'}`}>
+                        <span className="capitalize text-gray-500">{a.platform}</span>
+                        <span className="font-medium text-gray-900">{a.name || '(no name)'}</span>
+                        {isDupe && <span className="text-[10px] font-semibold text-amber-700 uppercase">on 2+ profiles</span>}
+                      </span>
+                    )
+                  })}
                 </div>
               )}
             </div>
