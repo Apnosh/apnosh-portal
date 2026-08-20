@@ -31,6 +31,7 @@ import { attemptPublish } from '@/lib/publish/attempt-publish'
 import { sendEmailDraft } from '@/lib/email/rail'
 import { isEmailDraft } from '@/lib/email/rail-core'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
+import { getVendorProfileId, listVendorPosts } from '@/lib/publish/zernio'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -137,6 +138,94 @@ export async function GET(req: Request) {
   // Pull due drafts. We claim them one-at-a-time to keep the cron's
   // happy path simple; volumes are tiny at our scale (a handful of
   // scheduled posts per hour, max).
+  /* VERIFY SWEEP — vendors answer the creation call optimistically and can fail
+   * a platform seconds later (TikTok did, live, 2026-08-20: creation said
+   * 'published', the record said 'failed', the feed showed nothing). For each
+   * recent publish receipt that hasn't been verified, re-read the vendor's own
+   * post records and write the truth as a draft.publish_verified event; when a
+   * platform quietly regressed, tell staff AND the owner. Best-effort: the
+   * sweep must never block the publishing below. */
+  try {
+    const dayAgo = new Date(Date.now() - 24 * 3600_000).toISOString()
+    const settleCutoff = new Date(Date.now() - 10 * 60_000).toISOString()
+    const { data: pubEvents } = await admin
+      .from('events')
+      .select('client_id, subject_id, created_at, payload')
+      .eq('event_type', 'draft.published_to_platforms')
+      .gte('created_at', dayAgo)
+      .lte('created_at', settleCutoff)
+      .limit(25)
+    if (pubEvents && pubEvents.length > 0) {
+      const { data: doneEvents } = await admin
+        .from('events')
+        .select('subject_id')
+        .eq('event_type', 'draft.publish_verified')
+        .gte('created_at', dayAgo)
+      const done = new Set((doneEvents ?? []).map((e) => e.subject_id as string))
+      const todo = pubEvents.filter((e) => !done.has(e.subject_id as string))
+      const byClient = new Map<string, typeof todo>()
+      for (const e of todo) {
+        const arr = byClient.get(e.client_id as string) ?? []
+        arr.push(e)
+        byClient.set(e.client_id as string, arr)
+      }
+      for (const [clientId, evs] of byClient) {
+        const profileId = await getVendorProfileId(clientId)
+        if (!profileId) continue
+        const records = await listVendorPosts(profileId)
+        if (!records) continue
+        for (const ev of evs) {
+          const payload = (ev.payload ?? {}) as { perPlatform?: Record<string, { record_id?: string; status?: string }> }
+          const claimed = payload.perPlatform ?? {}
+          const recIds = new Set(Object.values(claimed).map((r) => r.record_id).filter(Boolean) as string[])
+          const evTime = new Date(ev.created_at as string).getTime()
+          // Receipts written before record_ids existed fall back to a time match.
+          const matched = records.filter((r) => recIds.size > 0
+            ? recIds.has(r.id)
+            : r.createdAt !== null && Math.abs(new Date(r.createdAt).getTime() - evTime) < 10 * 60_000)
+          if (matched.length === 0) continue
+          const truth: Record<string, { status: string; url: string | null; error: string | null }> = {}
+          for (const rec of matched) {
+            for (const pl of rec.platforms) {
+              if (pl.platform) truth[pl.platform] = { status: pl.status ?? rec.status ?? 'unknown', url: pl.url, error: pl.error }
+            }
+          }
+          if (Object.keys(truth).length === 0) continue
+          const regressed = Object.entries(truth)
+            .filter(([k, v]) => v.status === 'failed' && claimed[k]?.status === 'published')
+            .map(([k]) => k)
+          await admin.from('events').insert({
+            client_id: clientId,
+            event_type: 'draft.publish_verified',
+            subject_type: 'content_draft',
+            subject_id: ev.subject_id,
+            actor_role: 'system',
+            summary: regressed.length > 0
+              ? `Verified: ${regressed.join(', ')} did not actually publish`
+              : 'Verified: all platforms live on the vendor record',
+            payload: { truth, regressed },
+          })
+          if (regressed.length > 0) {
+            await notifyStaffForClient(clientId, ['strategist', 'community_mgr'], {
+              kind: 'client_request',
+              title: 'A post the vendor accepted never went live',
+              body: `${regressed.join(', ')} failed after acceptance. The other platforms published.`,
+              link: `/work/drafts?focus=${ev.subject_id}`,
+            }).catch(() => ({ notified: 0 }))
+            await notifyClientOwners(clientId, {
+              kind: 'client_signoff',
+              title: `Your post didn't reach ${regressed.join(', ')}`,
+              body: 'The rest went out fine. You can post it there yourself, or your team can retry.',
+              link: '/dashboard/approvals',
+            }).catch(() => ({ notified: 0 }))
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[publish-scheduled] verify sweep failed:', e instanceof Error ? e.message : e)
+  }
+
   const { data: due } = await admin
     .from('content_drafts')
     .select('id, client_id, scheduled_for, target_platforms')

@@ -46,6 +46,10 @@ export interface VendorPlatformResult {
   post_id?: string
   post_url?: string
   error?: string
+  /** The vendor's post RECORD id — the row the verify sweep re-reads later.
+   *  A platform can fail asynchronously after the creation call said
+   *  'published' (TikTok did exactly this, live, 2026-08-20). */
+  record_id?: string
 }
 
 export type VendorPublishOutcome =
@@ -182,11 +186,12 @@ export async function publishViaVendor(input: VendorPublishInput): Promise<Vendo
       const status = String((row?.status ?? post.status ?? '') as string).toLowerCase()
       const failed = status === 'failed' || !!row?.error
       results[t.p] = failed
-        ? { status: 'failed', error: String((row?.error ?? 'The social service could not post this.') as string).slice(0, 300) }
+        ? { status: 'failed', error: String((row?.error ?? 'The social service could not post this.') as string).slice(0, 300), record_id: postId || undefined }
         : {
             status: 'published',
             post_id: String((row?.platformPostId ?? row?._id ?? postId) as string) || undefined,
             post_url: typeof row?.platformPostUrl === 'string' ? row.platformPostUrl : undefined,
+            record_id: postId || undefined,
           }
     }
   }
@@ -211,4 +216,43 @@ export async function publishViaVendor(input: VendorPublishInput): Promise<Vendo
   }
 
   return { available: true, results }
+}
+
+export interface VendorPostRecord {
+  id: string
+  createdAt: string | null
+  status: string | null
+  platforms: { platform: string | null; status: string | null; error: string | null; url: string | null }[]
+}
+
+/** The vendor's recent API-created post records — the ground truth the verify
+ *  sweep compares against the optimistic creation receipts. Read-only. */
+export async function listVendorPosts(profileId: string): Promise<VendorPostRecord[] | null> {
+  const key = apiKey()
+  if (!key) return null
+  let res: Response
+  try {
+    res = await fetch(`${API}/posts?profileId=${encodeURIComponent(profileId)}&limit=10`, {
+      headers: { Authorization: `Bearer ${key}` },
+      cache: 'no-store',
+    })
+  } catch {
+    return null
+  }
+  if (!res.ok) return null
+  const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
+  const raw = (body?.data ?? body) as Record<string, unknown> | unknown[] | null
+  const list = Array.isArray(raw) ? raw : ((raw as Record<string, unknown> | null)?.posts ?? [])
+  if (!Array.isArray(list)) return null
+  return (list as Record<string, unknown>[]).map((post) => ({
+    id: String(post._id ?? post.id ?? ''),
+    createdAt: typeof post.createdAt === 'string' ? post.createdAt : null,
+    status: typeof post.status === 'string' ? post.status : null,
+    platforms: (Array.isArray(post.platforms) ? (post.platforms as Record<string, unknown>[]) : []).map((r) => ({
+      platform: normalizePlatform(r.platform),
+      status: typeof r.status === 'string' ? r.status : null,
+      error: typeof r.error === 'string' ? r.error : null,
+      url: typeof r.platformPostUrl === 'string' ? r.platformPostUrl : null,
+    })),
+  }))
 }

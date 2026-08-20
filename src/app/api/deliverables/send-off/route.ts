@@ -134,13 +134,28 @@ export async function POST(req: Request) {
   const media = Array.isArray(d.file_urls) ? (d.file_urls as string[]).filter(Boolean) : []
   if (media.length === 0) return NextResponse.json({ error: 'This piece has no files to post.' }, { status: 409 })
 
+  /* TikTok takes only VIDEOS from auto-posting. Photo posts get accepted by
+   * the vendor and then fail on TikTok's side minutes later with no error
+   * (proven live 2026-08-20) — so for image pieces we say so up front instead
+   * of promising a post that quietly never lands. */
+  const isVideoPiece = d.type === 'video' || media.some((u) => /\.(mp4|mov|m4v|webm)(\?|$)/i.test(u))
+  const skipped: { platform: string; reason: string }[] = []
+  let postPlatforms = platforms
+  if (!isVideoPiece && postPlatforms.includes('tiktok')) {
+    postPlatforms = postPlatforms.filter((p) => p !== 'tiktok')
+    skipped.push({ platform: 'tiktok', reason: 'TikTok only takes videos from auto-posting. Post this one there yourself if you want it on TikTok.' })
+  }
+  if (postPlatforms.length === 0) {
+    return NextResponse.json({ error: 'Only TikTok is connected, and TikTok only takes videos from auto-posting. Post this one yourself, or connect another account.' }, { status: 409 })
+  }
+
   const caption = typeof body.caption === 'string' && body.caption.trim()
     ? body.caption.trim().slice(0, 400)
     : (await aiCaption(d.title, d.description, business.name)) ?? `${d.title} — at ${business.name}.`
 
   if (!body.confirm) {
     // approval-first: show the exact caption + accounts; nothing moves yet
-    return NextResponse.json({ preview: { caption, platforms } })
+    return NextResponse.json({ preview: { caption, platforms: postPlatforms, skipped } })
   }
 
   const when = new Date(Date.now() + 2 * 60_000).toISOString()
@@ -151,7 +166,7 @@ export async function POST(req: Request) {
       idea: `Send-off: ${d.title}`.slice(0, 280),
       caption,
       media_urls: media,
-      target_platforms: platforms,
+      target_platforms: postPlatforms,
       status: 'scheduled',
       scheduled_for: when,
       /* 'client_request' is the constraint-approved value that fits: the owner
@@ -168,5 +183,5 @@ export async function POST(req: Request) {
   }
   await stampSendOff({ sendOffDraftId: draft.id })
   await savePref()
-  return NextResponse.json({ ok: true, lane, draftId: draft.id, platforms, scheduledFor: when })
+  return NextResponse.json({ ok: true, lane, draftId: draft.id, platforms: postPlatforms, scheduledFor: when })
 }

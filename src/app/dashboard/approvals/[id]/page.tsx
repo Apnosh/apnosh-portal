@@ -582,7 +582,7 @@ function ApprovalDetailPageInner() {
 function SendOffPanel({ deliverableId, onDone }: { deliverableId: string; onDone: () => void }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [preview, setPreview] = useState<{ caption: string; platforms: string[] } | null>(null)
+  const [preview, setPreview] = useState<{ caption: string; platforms: string[]; skipped?: { platform: string; reason: string }[] } | null>(null)
   const [caption, setCaption] = useState('')
 
   const call = async (payload: Record<string, unknown>) => {
@@ -649,6 +649,11 @@ function SendOffPanel({ deliverableId, onDone }: { deliverableId: string; onDone
           <textarea value={caption} onChange={(e) => setCaption(e.target.value)}
             className="w-full border border-ink-6 rounded-lg p-2.5 text-sm min-h-[90px] focus:outline-none focus:ring-2 focus:ring-brand/30" />
           <div className="text-xs text-ink-3">Posting to: <span className="font-medium text-ink-2 capitalize">{preview.platforms.join(', ')}</span></div>
+          {(preview.skipped ?? []).map((sk) => (
+            <div key={sk.platform} className="text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-2">
+              <span className="capitalize font-medium">{sk.platform}</span>: {sk.reason}
+            </div>
+          ))}
           <div className="flex items-center gap-2">
             <button onClick={confirmAuto} disabled={busy !== null || !caption.trim()}
               className="px-5 py-2.5 rounded-lg bg-brand text-white text-sm font-medium disabled:opacity-50">
