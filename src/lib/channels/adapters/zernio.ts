@@ -378,11 +378,16 @@ export const zernioAdapter: ChannelAdapter = {
      * account each platform's data came from, and the moment it differs, delete the
      * client's posts + metric history for that platform and drop its lifetime-totals
      * baseline so the new account re-seeds clean on this very sync. */
+    /* Identity = id AND username. Zernio REUSES the account _id when a login is
+     * reconnected in place (verified live: dosikbbq -> apnoshmedia kept
+     * 6a79b32e...), so the id alone misses exactly the swap this purge exists
+     * to catch. The username is the part a human changed. */
     const currentIdentity: Record<string, string> = {}
     for (const a of rawAccounts) {
       const pl = normalizePlatform(a.platform ?? a.provider ?? a.type)
       const aid = str(a._id) || str(a.id)
-      if (pl && aid && !currentIdentity[pl]) currentIdentity[pl] = aid
+      const aname = (str(a.name) || str(a.username) || str(a.handle)).toLowerCase()
+      if (pl && aid && !currentIdentity[pl]) currentIdentity[pl] = `${aid}|${aname}`
     }
     const storedIdentity = (priorMd.account_identity ?? {}) as Record<string, string>
     const changedPlatforms = Object.keys(currentIdentity)
@@ -401,6 +406,13 @@ export const zernioAdapter: ChannelAdapter = {
       const lt = (priorMd.lifetime_totals ?? {}) as Record<string, unknown>
       delete lt[pl]
       priorMd.lifetime_totals = lt
+      /* The vendor caches the account's post list too — ask it to re-pull from
+       * the platform NOW so the re-seed below reads the new login's posts, not
+       * the old account's cached history. Best-effort; their side debounces. */
+      const acctId = currentIdentity[pl].split('|')[0]
+      try {
+        await zer('/posts/sync-external', { method: 'POST', body: JSON.stringify({ accountId: acctId }) })
+      } catch { /* re-pull refused — the next background sync catches up */ }
       console.warn(`[zernio sync] ${pl} account changed for client ${connection.client_id} — purged old posts/metrics, re-seeding`)
     }
     priorMd.account_identity = currentIdentity
