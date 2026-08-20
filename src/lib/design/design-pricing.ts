@@ -42,6 +42,9 @@ export interface DesignOrderAnswers {
    *  (a holiday-hours notice needs no photos).
    *  Absent while the photos step is unanswered: a question, never a guessed charge (law 4). */
   photos?: DesignFact<'own' | 'source' | 'none' | 'shoot'>
+  /** carousel posts only: total slide count. The first slide rides the tier base;
+   *  extras bill rates.carouselPerSlide each. Absent for single graphics. */
+  slides?: number
   /** from design history (Phase C); the engine never asks for it */
   tier: 1 | 2 | 3
   /** true when history could support a higher tier: price the lower one, flag for review */
@@ -107,6 +110,16 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
     id: 'tier', label: TIER_LABEL[tier], amount: rates.tierBase[tier],
     why: TIER_WHY[tier], source: 'known',
   })
+
+  /* Carousel: the first slide is the design; every extra slide is its own layout. */
+  if ((a.slides ?? 1) > 1) {
+    const extra = (a.slides as number) - 1
+    lines.push({
+      id: 'slides', label: `Carousel slides ×${a.slides}`, amount: extra * rates.carouselPerSlide,
+      why: `The first slide rides the design. ${extra} more slide${extra === 1 ? '' : 's'} at $${rates.carouselPerSlide} each.`,
+      source: 'known',
+    })
+  }
 
   /* Every destination gets a line (law 3). The most expensive one is INCLUDED with the design,
    * a visible zero; the rest are adaptations priced by their own production reality. Ranked by

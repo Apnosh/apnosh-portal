@@ -329,6 +329,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [reading, setReading] = useState(false)
   const [read, setRead] = useState<DesignRead | null>(null)
   const [job, setJob] = useState<DesignJobId | null>(null)
+  /* carousel only: total slide count (first included, extras priced per slide) */
+  const [slides, setSlides] = useState(5)
   /* THE TIER (persona-tested): the engine's three tiers, now the owner's own pick.
    * Custom is the default so this is never a required decision; each ticket shows its
    * own price so picking visibly changes the number (never a picker that is theater). */
@@ -460,6 +462,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
   const answers: DesignOrderAnswers = {
     jobType: { value: job ?? 'other', source: src('jobType'), citedWords: read?.cited.jobType },
+    ...(job === 'carousel' ? { slides } : {}),
     destinations: { value: dests, source: src('destinations'), citedWords: read?.cited.destinations },
     ...(printPicked && allQtysIn ? { printQtys: { value: printQtys, source: 'asked' as const } } : {}),
     ...(printer != null ? { printer: { value: printer, source: 'asked' as const } } : {}),
@@ -569,6 +572,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     const days = due ? Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86400000) : null
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
     const noteBits = [
+      job === 'carousel' ? `CAROUSEL POST: ${slides} slides total. Slide 1 is the hook; keep one idea per slide and end on the offer or call to action` : '',
       seed?.draftId ? 'START FROM THE CLIENT\'S EXISTING DRAFT — polish it, do not start over' : '',
       printPicked && allQtysIn ? printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label}`).join(', ') : '',
       /* print runs are off: any picked print size is a print ready FILE handoff */
@@ -740,6 +744,19 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 <Chip key={j.id} on={job === j.id} label={j.label} onClick={() => setJob(job === j.id ? null : j.id)} />
               ))}
             </div>
+            {job === 'carousel' && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
+                  {L['job.slides.title']}
+                </div>
+                <div style={{ display: 'flex', gap: 7 }}>
+                  {[3, 5, 7, 10].map((n) => (
+                    <Chip key={n} on={slides === n} label={`${n} slides`} onClick={() => setSlides(n)} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
+              </div>
+            )}
             <button
               type="button" disabled={!canNext || reading} onClick={() => (described.trim().length >= 8 ? describe() : setStep(2))}
               style={{
@@ -1165,13 +1182,17 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 {L['tier.title']}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-                <Ticket on={method === 'ai'} name={L['tier.ai.label']} sub={L['tier.ai.sub']} price="Free" onClick={() => setMethod('ai')} />
+                {job === 'carousel' ? (
+                  <div style={{ fontSize: 11.5, color: DESK.mute, lineHeight: 1.45, padding: '2px 2px 0' }}>{L['tier.ai.carousel']}</div>
+                ) : (
+                  <Ticket on={method === 'ai'} name={L['tier.ai.label']} sub={L['tier.ai.sub']} price="Free" onClick={() => setMethod('ai')} />
+                )}
                 <Ticket on={method === 'designer' && tier === 1} name={L['tier.basic.label']} sub={`${L['tier.basic.sub']} · ${specLine(1)}`} price={`$${RATE_CARD.tierBase[1]}`} onClick={() => { setMethod('designer'); setTier(1) }} />
                 <Ticket on={method === 'designer' && tier === 2} name={<span>{L['tier.custom.label']} <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>{L['tier.most']}</span></span>} sub={`${L['tier.custom.sub']} · ${specLine(2)}`} price={`$${RATE_CARD.tierBase[2]}`} onClick={() => { setMethod('designer'); setTier(2) }} />
                 <Ticket on={method === 'designer' && tier === 3} name={L['tier.works.label']} sub={`${L['tier.works.sub']} · ${specLine(3)}`} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => { setMethod('designer'); setTier(3) }} />
               </div>
               <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '4px 16px 2px', boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
-                {sumRow(L['sum.job'], [jobLabel ?? 'A design'])}
+                {sumRow(L['sum.job'], [job === 'carousel' ? `${jobLabel} · ${slides} slides` : jobLabel ?? 'A design'])}
                 {sumRow(L['sum.featuring'], [promoteItems.length ? sayList(promoteItems) : null])}
                 {sumRow(L['sum.words'], [headline ? `“${headline}”` : null, details || null, offer ? `Deal: ${offer}` : null])}
                 {sumRow(L['sum.where'], whereLines)}

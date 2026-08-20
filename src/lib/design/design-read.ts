@@ -16,13 +16,14 @@ import { DESTINATIONS, type DestinationId } from './destinations'
 
 /* ── the job vocabulary ───────────────────────────────────────────────────────────────────── */
 
-export type DesignJobId = 'weekly-special' | 'event-promo' | 'announcement' | 'new-menu' | 'holiday-hours' | 'hiring' | 'other'
+export type DesignJobId = 'weekly-special' | 'event-promo' | 'announcement' | 'new-menu' | 'carousel' | 'holiday-hours' | 'hiring' | 'other'
 
 export const DESIGN_JOBS: readonly { id: DesignJobId; label: string }[] = [
   { id: 'weekly-special', label: 'Weekly special' },
   { id: 'event-promo', label: 'Event promo' },
   { id: 'announcement', label: 'Announcement' },
   { id: 'new-menu', label: 'New menu' },
+  { id: 'carousel', label: 'Carousel post' },
   { id: 'holiday-hours', label: 'Holiday hours' },
   { id: 'hiring', label: 'Hiring post' },
   { id: 'other', label: 'Something else' },
@@ -38,6 +39,7 @@ const JOB_CUES: readonly { id: DesignJobId; phrases: readonly string[]; words: r
   { id: 'event-promo', phrases: ['live music', 'trivia night', 'event this', 'one night'], words: ['event', 'party', 'concert', 'dj', 'night'] },
   { id: 'announcement', phrases: ['grand opening', 'now open', 'just got on', 'big news', 'reopening', 'new location'], words: ['announcement', 'announce', 'opening', 'doordash', 'ubereats', 'grubhub'] },
   { id: 'new-menu', phrases: ['new menu', 'menu redesign', 'updated menu', 'menu board'], words: ['menu'] },
+  { id: 'carousel', phrases: ['carousel post', 'multi slide', 'swipe post', 'slide deck'], words: ['carousel', 'slides', 'slideshow'] },
   { id: 'holiday-hours', phrases: ['holiday hours', 'closed for', 'open late', 'special hours', 'closing early', 'labor day', 'memorial day', 'new years'], words: ['hours', 'holiday', 'thanksgiving', 'christmas', 'closed'] },
   { id: 'hiring', phrases: ['now hiring', 'help wanted', 'join our team', 'we are hiring'], words: ['hiring', 'hire', 'staff'] },
 ]

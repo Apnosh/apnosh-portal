@@ -23,6 +23,9 @@ export interface RateCard {
    *  included with the design; every other one bills at its own adder, so the total never
    *  depends on tap order. */
   destinationAdder: Record<DestinationId, number>
+  /** Carousel posts: the first slide rides the tier base; each extra slide is its own
+   *  layout on the same brand and bills this adder. */
+  carouselPerSlide: number
   /** We find or license usable photos when nothing in the client's library clears the gate. */
   photoSourcing: number
   /** We run the print job end to end. Printing cost itself passes through at cost. */
@@ -55,6 +58,7 @@ export const RATE_CARD: RateCard = {
     'gift-card': 65,
     banner: 85,
   },
+  carouselPerSlide: 30,
   photoSourcing: 60,
   printManagement: 50,
   rushMultiplier: 1.5,
