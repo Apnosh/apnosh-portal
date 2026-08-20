@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { approveDeliverable, requestRevision } from '@/lib/actions'
+import MvpShell from '@/components/mvp/mvp-shell'
+import { MvpDetailHeader } from '@/components/mvp/mvp-detail'
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -70,7 +72,7 @@ const REVISION_LIMIT = 3
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
-export default function ApprovalDetailPage() {
+function ApprovalDetailPageInner() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
@@ -657,5 +659,20 @@ function SendOffPanel({ deliverableId, onDone }: { deliverableId: string; onDone
         </div>
       )}
     </div>
+  )
+}
+
+
+/* MVP port (owner ask 2026-08-19): the approvals surfaces were pre-redesign
+ * survivors — desktop-era layout with no shell. Wrapping every render path in
+ * MvpShell gives them the standard header, phone frame, and bottom nav without
+ * re-plumbing any of the working actions. */
+export default function ApprovalDetailPage() {
+  return (
+    <MvpShell active="inbox" header={<MvpDetailHeader title="Review" subtitle="Approve, request changes, or send it off" backHref="/dashboard/approvals" backLabel="Approvals" />}>
+      <div style={{ background: '#f5f5f7', minHeight: '100%', padding: '14px 14px 28px', boxSizing: 'border-box' }}>
+        <ApprovalDetailPageInner />
+      </div>
+    </MvpShell>
   )
 }

@@ -15,6 +15,8 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { useBusiness } from '@/lib/supabase/hooks'
 import { approveDeliverable, requestRevision } from '@/lib/actions'
+import MvpShell from '@/components/mvp/mvp-shell'
+import { MvpDetailHeader } from '@/components/mvp/mvp-detail'
 
 /* ------------------------------------------------------------------ */
 /*  Local types                                                        */
@@ -103,7 +105,7 @@ function mapDbToDeliverable(d: any): Deliverable {
   }
 }
 
-export default function ApprovalsPage() {
+function ApprovalsPageInner() {
   const { data: business } = useBusiness()
 
   /* ---------- state ---------- */
@@ -932,5 +934,20 @@ export default function ApprovalsPage() {
         .animate-slide-up { animation: slide-up 0.2s ease-out; }
       `}</style>
     </div>
+  )
+}
+
+
+/* MVP port (owner ask 2026-08-19): the approvals surfaces were pre-redesign
+ * survivors — desktop-era layout with no shell. Wrapping every render path in
+ * MvpShell gives them the standard header, phone frame, and bottom nav without
+ * re-plumbing any of the working actions. */
+export default function ApprovalsPage() {
+  return (
+    <MvpShell active="inbox" header={<MvpDetailHeader title="Approvals" subtitle="Review and approve your content" backHref="/dashboard/inbox" backLabel="Inbox" />}>
+      <div style={{ background: '#f5f5f7', minHeight: '100%', padding: '14px 14px 28px', boxSizing: 'border-box' }}>
+        <ApprovalsPageInner />
+      </div>
+    </MvpShell>
   )
 }
