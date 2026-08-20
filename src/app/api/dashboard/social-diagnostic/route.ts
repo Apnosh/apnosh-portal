@@ -117,6 +117,30 @@ export async function GET(req: NextRequest) {
   }
   steps['3_vendor_native_posts'] = external
 
+  // 3b. posts CREATED through the vendor's API — the publish rail's real receipts.
+  // Added 2026-08-20: Zernio reported a TikTok slideshow 'published' but the
+  // account feed showed nothing; the per-platform status on the vendor's own
+  // post record is the only place that can say what actually happened.
+  const createdRes = await zernio(`/posts?profileId=${encodeURIComponent(profileId)}&limit=5`)
+  const createdList = listFrom(createdRes.body, 'posts')
+  steps['3b_vendor_api_posts'] = {
+    http: createdRes.status,
+    count: createdList.length,
+    posts: createdList.slice(0, 5).map((post) => ({
+      id: String(post._id ?? post.id ?? ''),
+      created: post.createdAt ?? null,
+      status: post.status ?? null,
+      content: typeof post.content === 'string' ? post.content.slice(0, 60) : null,
+      platforms: (Array.isArray(post.platforms) ? post.platforms as Record<string, unknown>[] : []).map((r) => ({
+        platform: r.platform ?? null,
+        status: r.status ?? null,
+        error: r.error ?? null,
+        url: r.platformPostUrl ?? null,
+      })),
+    })),
+    ...(createdRes.ok ? {} : { error: createdRes.body }),
+  }
+
   // 4. what the analytics call returns (the read our sync actually folds)
   const from = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
   const analyticsRes = await zernio(`/analytics?profileId=${encodeURIComponent(profileId)}&fromDate=${from}&limit=100`)
