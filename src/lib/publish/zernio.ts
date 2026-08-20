@@ -256,3 +256,32 @@ export async function listVendorPosts(profileId: string): Promise<VendorPostReco
     })),
   }))
 }
+
+export interface VendorAccount { id: string; platform: string; name: string }
+
+/** The vendor's linked accounts for a profile, WITH their real usernames —
+ *  the read that makes a wrong-account link (dosikbbq on the Apnosh profile,
+ *  2026-08-17) visible at a glance instead of after a public post. */
+export async function listVendorAccounts(profileId: string): Promise<VendorAccount[] | null> {
+  const key = apiKey()
+  if (!key) return null
+  let res: Response
+  try {
+    res = await fetch(`${API}/accounts?profileId=${encodeURIComponent(profileId)}`, {
+      headers: { Authorization: `Bearer ${key}` },
+      cache: 'no-store',
+    })
+  } catch {
+    return null
+  }
+  if (!res.ok) return null
+  const body = (await res.json().catch(() => null)) as Record<string, unknown> | null
+  const raw = (body?.data ?? body) as Record<string, unknown> | unknown[] | null
+  const list = Array.isArray(raw) ? raw : ((raw as Record<string, unknown> | null)?.accounts ?? [])
+  if (!Array.isArray(list)) return null
+  return (list as Record<string, unknown>[]).map((a) => ({
+    id: String(a._id ?? a.id ?? ''),
+    platform: normalizePlatform(a.platform ?? a.provider ?? a.type) || String(a.platform ?? ''),
+    name: String(a.name ?? a.username ?? a.handle ?? ''),
+  }))
+}
