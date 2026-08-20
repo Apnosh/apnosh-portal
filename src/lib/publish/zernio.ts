@@ -133,58 +133,81 @@ export async function publishViaVendor(input: VendorPublishInput): Promise<Vendo
     url,
   }))
 
-  const body: Record<string, unknown> = {
-    content: input.text,
-    platforms: targets.map((t) => ({ platform: t.p, accountId: t.accountId })),
-    ...(mediaItems.length > 0 ? { mediaItems } : {}),
-    ...(input.scheduledFor ? { scheduledFor: input.scheduledFor } : { publishNow: true }),
+  type Target = { p: string; accountId: string }
+  const postBatch = async (batch: Target[], text: string): Promise<void> => {
+    if (batch.length === 0) return
+    const body: Record<string, unknown> = {
+      content: text,
+      platforms: batch.map((t) => ({ platform: t.p, accountId: t.accountId })),
+      ...(mediaItems.length > 0 ? { mediaItems } : {}),
+      ...(input.scheduledFor ? { scheduledFor: input.scheduledFor } : { publishNow: true }),
+    }
+
+    let res: Response
+    try {
+      res = await fetch(`${API}/posts`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        cache: 'no-store',
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Could not reach the social service.'
+      for (const t of batch) results[t.p] = { status: 'failed', error: msg }
+      return
+    }
+
+    const payload = (await res.json().catch(() => null)) as Record<string, unknown> | null
+    if (!res.ok) {
+      const msg = String(
+        (payload?.message ?? payload?.error ?? `Social service returned ${res.status}`) as string,
+      ).slice(0, 300)
+      for (const t of batch) results[t.p] = { status: 'failed', error: msg }
+      return
+    }
+
+    // The created post carries per-platform detail; a platform entry that reports its own
+    // failure is reported as failed even when the request itself was accepted.
+    const post = ((payload?.data ?? payload) ?? {}) as Record<string, unknown>
+    const postId = String((post._id ?? post.id ?? '') as string)
+    const perPlatform = (post.platforms ?? []) as Record<string, unknown>[]
+    const byPlatform = new Map<string, Record<string, unknown>>()
+    for (const row of Array.isArray(perPlatform) ? perPlatform : []) {
+      const p = normalizePlatform(row.platform)
+      if (p) byPlatform.set(p, row)
+    }
+
+    for (const t of batch) {
+      const row = byPlatform.get(t.p)
+      const status = String((row?.status ?? post.status ?? '') as string).toLowerCase()
+      const failed = status === 'failed' || !!row?.error
+      results[t.p] = failed
+        ? { status: 'failed', error: String((row?.error ?? 'The social service could not post this.') as string).slice(0, 300) }
+        : {
+            status: 'published',
+            post_id: String((row?.platformPostId ?? row?._id ?? postId) as string) || undefined,
+            post_url: typeof row?.platformPostUrl === 'string' ? row.platformPostUrl : undefined,
+          }
+    }
   }
 
-  let res: Response
-  try {
-    res = await fetch(`${API}/posts`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      cache: 'no-store',
-    })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Could not reach the social service.'
-    for (const t of targets) results[t.p] = { status: 'failed', error: msg }
-    return { available: true, results }
-  }
+  /* TikTok photo posts use the post content as the slideshow TITLE, which TikTok caps at 90
+   * characters — and Zernio validates the whole request upfront, so ONE long caption used to
+   * fail ALL platforms in the batch (caught live 2026-08-20: a 167-char caption killed
+   * facebook/instagram/linkedin too). Split: everyone else keeps the owner's approved caption
+   * verbatim; TikTok alone gets a word-boundary shortening only when it must. */
+  const TIKTOK_TITLE_CAP = 90
+  const isPhotoPost = mediaItems.length > 0 && mediaItems.every((m) => m.type === 'image')
+  const needsShortTitle = isPhotoPost && input.text.length > TIKTOK_TITLE_CAP
+  const tiktokTargets = needsShortTitle ? targets.filter((t) => t.p === 'tiktok') : []
+  const mainTargets = needsShortTitle ? targets.filter((t) => t.p !== 'tiktok') : targets
 
-  const payload = (await res.json().catch(() => null)) as Record<string, unknown> | null
-  if (!res.ok) {
-    const msg = String(
-      (payload?.message ?? payload?.error ?? `Social service returned ${res.status}`) as string,
-    ).slice(0, 300)
-    for (const t of targets) results[t.p] = { status: 'failed', error: msg }
-    return { available: true, results }
-  }
-
-  // The created post carries per-platform detail; a platform entry that reports its own
-  // failure is reported as failed even when the request itself was accepted.
-  const post = ((payload?.data ?? payload) ?? {}) as Record<string, unknown>
-  const postId = String((post._id ?? post.id ?? '') as string)
-  const perPlatform = (post.platforms ?? []) as Record<string, unknown>[]
-  const byPlatform = new Map<string, Record<string, unknown>>()
-  for (const row of Array.isArray(perPlatform) ? perPlatform : []) {
-    const p = normalizePlatform(row.platform)
-    if (p) byPlatform.set(p, row)
-  }
-
-  for (const t of targets) {
-    const row = byPlatform.get(t.p)
-    const status = String((row?.status ?? post.status ?? '') as string).toLowerCase()
-    const failed = status === 'failed' || !!row?.error
-    results[t.p] = failed
-      ? { status: 'failed', error: String((row?.error ?? 'The social service could not post this.') as string).slice(0, 300) }
-      : {
-          status: 'published',
-          post_id: String((row?.platformPostId ?? row?._id ?? postId) as string) || undefined,
-          post_url: typeof row?.platformPostUrl === 'string' ? row.platformPostUrl : undefined,
-        }
+  await postBatch(mainTargets, input.text)
+  if (tiktokTargets.length > 0) {
+    const cut = input.text.slice(0, TIKTOK_TITLE_CAP - 1)
+    const lastSpace = cut.lastIndexOf(' ')
+    const short = `${(lastSpace > 40 ? cut.slice(0, lastSpace) : cut).trim()}…`
+    await postBatch(tiktokTargets, short)
   }
 
   return { available: true, results }
