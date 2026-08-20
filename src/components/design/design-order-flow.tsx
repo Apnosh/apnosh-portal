@@ -329,6 +329,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
    * Custom is the default so this is never a required decision; each ticket shows its
    * own price so picking visibly changes the number (never a picker that is theater). */
   const [tier, setTier] = useState<1 | 2 | 3>(2)
+  /* HOW IT'S MADE moved to the END (owner call 2026-08-20): describe the piece first,
+   * then choose the maker — AI free draft or a designer tier — so the price is
+   * calculated at the end, like every other flow. */
+  const [method, setMethod] = useState<'designer' | 'ai'>('designer')
+  const [aiBusy, setAiBusy] = useState(false)
   const [dests, setDests] = useState<DestinationId[]>([])
   /* The somewhere-else escape hatch: a place our 11 formats missed, in the owner's own
    * words. Never priced by the engine (it has no spec to cite) — it rides the request
@@ -378,6 +383,28 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [panelOpen, setPanelOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+
+  /* The AI pathway: the whole brief the owner just wrote feeds the free draft
+   * (same route the occasion cards use), and the piece lands in approvals. */
+  const aiDraft = async () => {
+    setAiBusy(true); setSendError(null)
+    try {
+      const brief = described.trim().length >= 8
+        ? described.trim()
+        : [jobLabel ?? 'a graphic', headline ? `headline: ${headline}` : null, offer ? `deal: ${offer}` : null]
+            .filter(Boolean).join(' — ')
+      const r = await fetch('/api/design/draft', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ brief }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || !d.id) throw new Error(typeof d.error === 'string' ? d.error : 'Could not make the draft. Try again.')
+      router.push(`/dashboard/approvals/${d.id}`)
+    } catch (e) {
+      setSendError(e instanceof Error ? e.message : 'Could not make the draft. Try again.')
+      setAiBusy(false)
+    }
+  }
 
   /* REQUEST MODE: the same flow with every number removed, until the rate card is
    * signed. The seal sends a quote request (creative_requests) instead of recording
@@ -702,14 +729,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               {DESIGN_JOBS.map((j) => (
                 <Chip key={j.id} on={job === j.id} label={j.label} onClick={() => setJob(job === j.id ? null : j.id)} />
               ))}
-            </div>
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '16px 0 8px' }}>
-              {L['tier.title']}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Ticket on={tier === 1} name={L['tier.basic.label']} sub={`${L['tier.basic.sub']} · ${specLine(1)}`} price={`$${RATE_CARD.tierBase[1]}`} onClick={() => setTier(1)} />
-              <Ticket on={tier === 2} name={<span>{L['tier.custom.label']} <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>{L['tier.most']}</span></span>} sub={`${L['tier.custom.sub']} · ${specLine(2)}`} price={`$${RATE_CARD.tierBase[2]}`} onClick={() => setTier(2)} />
-              <Ticket on={tier === 3} name={L['tier.works.label']} sub={`${L['tier.works.sub']} · ${specLine(3)}`} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => setTier(3)} />
             </div>
             <button
               type="button" disabled={!canNext || reading} onClick={() => (described.trim().length >= 8 ? describe() : setStep(2))}
@@ -1115,6 +1134,17 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           return (
             <>
               <StepHead n={6} title={T.review} sub={S.review} />
+              {/* HOW IT'S MADE — asked LAST (owner call 2026-08-20): the brief is written,
+                  so the maker choice prices the whole thing right here, AI included. */}
+              <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '4px 0 8px' }}>
+                {L['tier.title']}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                <Ticket on={method === 'ai'} name={L['tier.ai.label']} sub={L['tier.ai.sub']} price="Free" onClick={() => setMethod('ai')} />
+                <Ticket on={method === 'designer' && tier === 1} name={L['tier.basic.label']} sub={`${L['tier.basic.sub']} · ${specLine(1)}`} price={`$${RATE_CARD.tierBase[1]}`} onClick={() => { setMethod('designer'); setTier(1) }} />
+                <Ticket on={method === 'designer' && tier === 2} name={<span>{L['tier.custom.label']} <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>{L['tier.most']}</span></span>} sub={`${L['tier.custom.sub']} · ${specLine(2)}`} price={`$${RATE_CARD.tierBase[2]}`} onClick={() => { setMethod('designer'); setTier(2) }} />
+                <Ticket on={method === 'designer' && tier === 3} name={L['tier.works.label']} sub={`${L['tier.works.sub']} · ${specLine(3)}`} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => { setMethod('designer'); setTier(3) }} />
+              </div>
               <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '4px 16px 2px', boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
                 {sumRow(L['sum.job'], [jobLabel ?? 'A design'])}
                 {sumRow(L['sum.featuring'], [promoteItems.length ? sayList(promoteItems) : null])}
@@ -1132,6 +1162,17 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{L['sum.assigned.sub']}</div>
                 </div>
               </div>
+              {method === 'ai' && (
+                <>
+                  <div style={{ marginTop: 12, padding: '10px 12px', background: DESK.card, border: `1.5px solid ${DESK.line}`, borderRadius: 12, fontSize: 12.5, color: DESK.ink2, lineHeight: 1.55 }}>
+                    {L['tier.ai.note']}
+                  </div>
+                  <div style={{ margin: '14px 0 6px' }}>
+                    <ConfirmButton label={aiBusy ? 'Making your draft…' : L['tier.ai.cta']} onClick={() => { if (!aiBusy) void aiDraft() }} />
+                  </div>
+                </>
+              )}
+              {method === 'designer' && (<>
               {/* THE EXCHANGE, spelled out (GD-1): the picked tier's hard spec renders
                   before money so client and designer read the same list. A snapshot of
                   this spec also rides inside the order's brief server-side. */}
@@ -1156,6 +1197,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 </ReceiptFrame>
               </div>
               <ConfirmButton label={`${L['cart.add']} · $${orderTotal}`} onClick={() => { setSendError(null); setCart(true) }} />
+              </>)}
               <div style={{ height: 6 }} />
             </>
           )
@@ -1180,7 +1222,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
       {/* ── the running receipt: pinned, cited, live (order mode only; a request has no
             numbers to run) ── */}
-      {!requestMode && step > 1 && step < 6 && (
+      {/* Mid-flow running total RETIRED (owner call 2026-08-20): the price is
+          calculated at the end, after the maker is chosen — same as every other flow. */}
+      {false && !requestMode && step > 1 && step < 6 && (
         <div style={{ position: 'sticky', bottom: 0, margin: '0 -16px 0', zIndex: 3 }}>
           {panelOpen ? (
             <div onClick={() => setPanelOpen(false)} style={{ cursor: 'pointer', padding: '0 10px' }}>
