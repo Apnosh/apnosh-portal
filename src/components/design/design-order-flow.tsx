@@ -278,6 +278,10 @@ function DestFrame({ d, on, amount, photoUrl, headline, onClick }: {
         )}
       </span>
       <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: on ? DESK.mintDeep : DESK.ink2, lineHeight: 1.2, textAlign: 'center' }}>{d.label}</span>
+      {/* the size itself, dimension-forward (owner call 2026-08-20): one design, many uses */}
+      <span style={{ fontFamily: DESK.mono, fontSize: 8.5, fontWeight: 600, color: DESK.mute, lineHeight: 1 }}>
+        {d.dimensions.w}×{d.dimensions.h}{d.dimensions.unit === 'px' ? '' : d.dimensions.unit}
+      </span>
       <span style={{ fontFamily: DESK.mono, fontSize: 9.5, fontWeight: 700, color: DESK.mintDeep, minHeight: 12 }}>
         {on && amount != null ? (amount === 0 ? L['dest.included'] : `+$${amount}`) : ''}
       </span>
@@ -340,6 +344,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
    * and the team sizes and quotes it. */
   const [destOtherOn, setDestOtherOn] = useState(false)
   const [destOther, setDestOther] = useState('')
+  /* custom dimensions (owner call 2026-08-20): a size the 11 frames missed can be
+   * exact numbers, not just words */
+  const [customW, setCustomW] = useState('')
+  const [customH, setCustomH] = useState('')
   const [printQtys, setPrintQtys] = useState<Partial<Record<DestinationId, number>>>({})
   const [printer, setPrinter] = useState<'client' | 'us' | null>(null)
   const [headline, setHeadline] = useState('')
@@ -475,6 +483,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const rushDelta = Math.round(quote.total * (RATE_CARD.rushMultiplier - 1))
   /* The board's photo: the first picked asset paints the artwork everywhere it appears. */
   const boardPhoto = usingOwn ? allAssets.find((a) => picked.includes(a.id))?.url ?? null : null
+  /* the custom spot, words and numbers folded into one line every consumer reads */
+  const destOtherFinal = [destOther.trim(), customW && customH ? `${customW}×${customH}px` : ''].filter(Boolean).join(' · ')
   const jobLabel = job ? DESIGN_JOBS.find((j) => j.id === job)?.label ?? null : null
   const boardTag = due ? fill(L['tag.inhand'], { date: fmtDay(due) }) : eventDate ? fill(L['tag.event'], { date: fmtDay(eventDate) }) : null
   const destAmount = (id: string): number | null => {
@@ -510,10 +520,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
-    : step === 2 ? (dests.length > 0 || destOther.trim().length > 1) && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
-    : step === 3 ? headline.trim().length > 0
-    : step === 4 ? usingOwn || (photoMode === 'other' ? photoOther.trim().length > 1 : photoMode != null)
-    : step === 5 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
+    : step === 2 ? headline.trim().length > 0
+    : step === 3 ? usingOwn || (photoMode === 'other' ? photoOther.trim().length > 1 : photoMode != null)
+    : step === 4 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
+    : step === 5 ? (dests.length > 0 || destOtherFinal.length > 1) && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
     : true
 
   const upload = (files: FileList | null) => {
@@ -564,7 +574,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       /* print runs are off: any picked print size is a print ready FILE handoff */
       printPicked && !PRINT_AVAILABLE ? 'Print ready files only; they handle the printing' :
       printer === 'us' ? 'We print and deliver' : printer === 'client' ? 'Their shop prints' : '',
-      destOther.trim() ? `CUSTOM SPOT (not on our format list): "${destOther.trim()}". Size it with them and quote it on its own` : '',
+      destOtherFinal ? `CUSTOM SPOT (not on our format list): "${destOtherFinal}". Size it with them and quote it on its own` : '',
       photoMode === 'none' ? 'No photos: custom artwork on their brand'
         : photoMode === 'shoot' ? 'Wants a PHOTO SHOOT at their place. Set the shoot date with them before design starts'
         : photoMode === 'source' ? 'Find photos for them'
@@ -582,7 +592,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           type: 'graphic',
           answers: {
             what: `${jobLabel ?? 'A graphic'}${promoteItems.length ? ` featuring ${sayList(promoteItems)}` : ''}`,
-            where: [...dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean), ...(destOther.trim() ? [destOther.trim()] : [])].join(', '),
+            where: [...dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean), ...(destOtherFinal ? [destOtherFinal] : [])].join(', '),
             words: saidText || undefined,
             when,
             notes: noteBits || undefined,
@@ -750,9 +760,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
             <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: DESK.mute, marginBottom: 7 }}>{L['read.prefix']}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
               {job && read.cited.jobType && <Chip on label={DESIGN_JOBS.find((j) => j.id === job)?.label ?? ''} onClick={() => setStep(1)} />}
-              {eventDate && read.cited.eventDate && <Chip on label={`Event: ${fmtDay(eventDate)}`} onClick={() => setStep(5)} />}
-              {offer && read.cited.offer && <Chip on label={offer} onClick={() => setStep(3)} />}
-              {read.ownPhotos && read.cited.ownPhotos && <Chip on label={L['read.ownphotos']} onClick={() => setStep(4)} />}
+              {eventDate && read.cited.eventDate && <Chip on label={`Event: ${fmtDay(eventDate)}`} onClick={() => setStep(4)} />}
+              {offer && read.cited.offer && <Chip on label={offer} onClick={() => setStep(2)} />}
+              {read.ownPhotos && read.cited.ownPhotos && <Chip on label={L['read.ownphotos']} onClick={() => setStep(3)} />}
             </div>
             {(read.unplaced?.length ?? 0) > 0 && (
               <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 10, lineHeight: 1.45 }}>
@@ -762,10 +772,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           </div>
         )}
 
-        {/* ── 2. where is it going: your artwork, cut to every size ── */}
-        {step === 2 && (
+        {/* ── 5. the sizes: your artwork, cut to every size (asked LAST before review,
+              owner call 2026-08-20: it is really "where is it posted") ── */}
+        {step === 5 && (
           <>
-            <StepHead n={2} title={T.where} sub={S.where} />
+            <StepHead n={5} title={T.where} sub={S.where} />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
               {DESTINATIONS.map((d) => (
                 <DestFrame
@@ -777,7 +788,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               {/* the escape hatch: a place the 11 frames missed, in the owner's words */}
               <button
                 type="button" aria-pressed={destOtherOn}
-                onClick={() => { if (destOtherOn) setDestOther(''); setDestOtherOn(!destOtherOn) }}
+                onClick={() => { if (destOtherOn) { setDestOther(''); setCustomW(''); setCustomH('') } setDestOtherOn(!destOtherOn) }}
                 style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', padding: 4, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
               >
                 <span style={{
@@ -797,6 +808,20 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   placeholder={L['dest.other.ph']} aria-label={L['dest.other.label']}
                   style={inputStyle}
                 />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                  <input
+                    inputMode="numeric" value={customW} aria-label={L['dest.custom.w']}
+                    onChange={(e) => setCustomW(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+                    placeholder={L['dest.custom.w']} style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <span style={{ color: DESK.mute, fontWeight: 700 }}>×</span>
+                  <input
+                    inputMode="numeric" value={customH} aria-label={L['dest.custom.h']}
+                    onChange={(e) => setCustomH(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+                    placeholder={L['dest.custom.h']} style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <span style={{ fontSize: 12, color: DESK.mute, fontWeight: 600 }}>px</span>
+                </div>
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['dest.other.note']}</div>
               </div>
             )}
@@ -834,7 +859,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         )}
 
         {/* ── 3. what should it say: the words ink straight onto the board above ── */}
-        {step === 3 && (() => {
+        {step === 2 && (() => {
           const headlineSugs = [...new Set([
             read?.message ? titleCase(read.message) : null,
             promoteItems[0] ?? null,
@@ -851,7 +876,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           )
           return (
             <>
-              <StepHead n={3} title={T.say} sub={S.say} />
+              <StepHead n={2} title={T.say} sub={S.say} />
               <div style={{ fontSize: 11, color: DESK.mute, marginTop: -8, marginBottom: 4, textAlign: 'center' }}>
                 {L['say.caption']}
               </div>
@@ -941,9 +966,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         })()}
 
         {/* ── 4. photos: real library ranked sharpest first, or hand it to us ── */}
-        {step === 4 && (
+        {step === 3 && (
           <>
-            <StepHead n={4} title={T.photos} sub={S.photos} />
+            <StepHead n={3} title={T.photos} sub={S.photos} />
             {usable.length > 0 && (
               <div style={{ fontSize: 11.5, color: DESK.mute, margin: '-6px 0 10px', lineHeight: 1.45 }}>
                 {L['photos.best']}
@@ -1033,10 +1058,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         )}
 
         {/* ── 5. when: the date sticks onto the board as a tape tag ── */}
-        {step === 5 && (
+        {step === 4 && (
           <>
             <StepHead
-              n={5}
+              n={4}
               title={eventDate ? T['when.event'] : T.when}
               sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })}
             />
@@ -1123,7 +1148,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               const amt = destAmount(d)
               return spec ? `${spec.label}${amt != null ? (amt === 0 ? ' (included)' : ` (+$${amt})`) : ''}` : null
             }),
-            destOther.trim() ? `${destOther.trim()} (custom spot, we size and quote it with your team)` : null,
+            destOtherFinal ? `${destOtherFinal} (custom size, we check it and quote it with your team)` : null,
           ]
           const photoLine =
             photoMode === 'none' ? 'Custom artwork, no photos'

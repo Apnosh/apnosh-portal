@@ -20,7 +20,7 @@ export { fill }
 
 export const DESIGN_TITLES: Record<string, string> = {
   job: 'What do you need made?',
-  where: 'Where is it going?',
+  where: 'What sizes do you need?',
   say: 'What should it say?',
   photos: 'Which photos should we use?',
   when: 'When do you need it?',
@@ -30,7 +30,7 @@ export const DESIGN_TITLES: Record<string, string> = {
 
 export const DESIGN_SUBS: Record<string, string> = {
   job: 'Say it your way, or tap a job. We work out the rest.',
-  where: 'Each place gets its own size. Your first one is included.',
+  where: 'One design, cut to every size you pick. Your first size is included.',
   say: 'Watch it take shape. Tap a suggestion or write your own.',
   /* The walk's assets line, verbatim: the promise is the same promise. */
   photos: WALK_SUBS.assets,
@@ -67,9 +67,11 @@ export const DESIGN_LINES: Record<string, string> = {
   'say.preview.details': 'The when and where',
   'say.caption': 'A rough layout of the words, not the design. Your designer makes it look good.',
   'say.note': 'We design exactly these words. Changes after design starts count as a revision.',
-  'dest.other.label': 'Somewhere else',
-  'dest.other.ph': 'Say where it goes, like a sticker or a billboard',
-  'dest.other.note': 'We size it right and quote it with the rest.',
+  'dest.other.label': 'Custom size',
+  'dest.other.ph': 'What is it for, like a sticker or a billboard',
+  'dest.other.note': 'Enter the exact size if you know it. We check it and quote it with the rest.',
+  'dest.custom.w': 'Width',
+  'dest.custom.h': 'Height',
   'photos.other.label': 'Something else',
   'photos.other.sub': 'Tell us your idea in your own words',
   'photos.other.ph': 'Like: use the photos on my Instagram',
@@ -123,7 +125,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'sum.job': 'The job',
   'sum.featuring': 'Featuring',
   'sum.words': 'The words',
-  'sum.where': 'Where it goes',
+  'sum.where': 'Sizes',
   'sum.photos': 'The photos',
   'sum.when': 'In hand',
   'sum.assigned': 'Assigned to',
