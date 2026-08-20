@@ -368,6 +368,43 @@ export const zernioAdapter: ChannelAdapter = {
      * NOTHING as connected — including the platforms that were fine. Connection state
      * and metric collection are separate promises, and this is the line between them. */
     const priorMd = ((connection as { metadata?: Record<string, unknown> }).metadata ?? {}) as Record<string, unknown>
+
+    /* ACCOUNT-CHANGE PURGE. Metrics and posts belong to an ACCOUNT, not a platform
+     * slot. When the linked account for a platform changes (owner relinks the right
+     * login after a wrong one — dosikbbq on the Apnosh profile, 2026-08-20), every
+     * stored row from the old account is someone else's data wearing this client's
+     * id: the post upsert never removes them (different external_ids) and the delta
+     * ledger would baseline against the wrong account's totals. So: remember which
+     * account each platform's data came from, and the moment it differs, delete the
+     * client's posts + metric history for that platform and drop its lifetime-totals
+     * baseline so the new account re-seeds clean on this very sync. */
+    const currentIdentity: Record<string, string> = {}
+    for (const a of rawAccounts) {
+      const pl = normalizePlatform(a.platform ?? a.provider ?? a.type)
+      const aid = str(a._id) || str(a.id)
+      if (pl && aid && !currentIdentity[pl]) currentIdentity[pl] = aid
+    }
+    const storedIdentity = (priorMd.account_identity ?? {}) as Record<string, string>
+    const changedPlatforms = Object.keys(currentIdentity)
+      .filter((pl) => storedIdentity[pl] && storedIdentity[pl] !== currentIdentity[pl])
+    for (const pl of changedPlatforms) {
+      const { error: e1 } = await admin.from('social_posts').delete()
+        .eq('client_id', connection.client_id).eq('platform', pl)
+      const { error: e2 } = await admin.from('social_metrics').delete()
+        .eq('client_id', connection.client_id).eq('platform', pl)
+      if (e1 || e2) {
+        /* A half-purged platform would mix two accounts' numbers — worse than stale.
+         * Fail the sync loudly; the cron retries. */
+        throw new ChannelError('upstream',
+          `${pl} account changed but old data could not be cleared: ${(e1 ?? e2)?.message}`)
+      }
+      const lt = (priorMd.lifetime_totals ?? {}) as Record<string, unknown>
+      delete lt[pl]
+      priorMd.lifetime_totals = lt
+      console.warn(`[zernio sync] ${pl} account changed for client ${connection.client_id} — purged old posts/metrics, re-seeding`)
+    }
+    priorMd.account_identity = currentIdentity
+
     await admin.from('channel_connections')
       .update({ status: 'active', metadata: { ...priorMd, platforms: linked, account_counts: accountCounts } })
       .eq('id', connection.id)
