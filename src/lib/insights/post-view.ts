@@ -72,8 +72,10 @@ export function toPostView(p: Row): PostView {
   const a = (raw.analytics ?? {}) as Record<string, unknown>
   const isReel = Number(a.igReelsAvgWatchTime ?? 0) > 0 || Number(a.igReelsVideoViewTotalTime ?? 0) > 0
   const state = String(raw.sync_state ?? 'synced')
-  /* Platforms that report views instead of reach (TikTok, YouTube) fall back to video_views. */
-  const value = (p.reach ?? 0) > 0 ? (p.reach ?? 0) : (p.video_views ?? 0)
+  /* VIEWS first (owner call 2026-08-20): views is the number owners recognize —
+   * it's what Instagram/TikTok lead with in-app. Posts that report no view
+   * count (some photo formats) fall back to reach so a real number still shows. */
+  const value = (p.video_views ?? 0) > 0 ? (p.video_views ?? 0) : (p.reach ?? 0)
   const measured = VIEW_KEYS.some((k) => a[k] != null)
   return {
     id: p.id,

@@ -1690,10 +1690,10 @@ export function PostRow({ p }: { p: InsightsPost }) {
                 </div>
                 <div style={{ display: 'flex', gap: 14, fontSize: 12, flexWrap: 'wrap' }}>
                   {p.unreported
-                    ? <span style={{ color: C.faint }}>reach not reported</span>
+                    ? <span style={{ color: C.faint }}>views not reported</span>
                     : p.pending
                     ? <span style={{ color: C.faint }}>numbers still coming in</span>
-                    : <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.reach.toLocaleString()}</b> reached</span>}
+                    : <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.reach.toLocaleString()}</b> views</span>}
                   {p.likes > 0 && <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.likes.toLocaleString()}</b> likes</span>}
                   {!p.permalink && <span style={{ color: C.faint }}>link unavailable</span>}
                 </div>
@@ -1707,7 +1707,7 @@ export function PostRow({ p }: { p: InsightsPost }) {
             : <div style={box}>{inner}</div>
 }
 
-export const POSTS_FOOTNOTE = 'Your latest posts across every connected account, with what each one reached so far. A post added very recently can take a day for its numbers to arrive.'
+export const POSTS_FOOTNOTE = 'Your latest posts across every connected account, with how many views each one has so far. A post added very recently can take a day for its numbers to arrive.'
 
 /** The five newest, with a way through to everything. The count is the REAL total we hold,
  *  so the link never promises a fuller list than exists. */
