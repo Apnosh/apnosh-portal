@@ -57,13 +57,22 @@ export async function getVendorProfileId(clientId: string): Promise<string | nul
   const admin = createAdminClient()
   const { data } = await admin
     .from('channel_connections')
-    .select('metadata, status')
+    .select('platform_account_id, metadata, status')
     .eq('client_id', clientId)
     .eq('channel', 'zernio')
     .eq('status', 'active')
     .order('connected_at', { ascending: false })
     .limit(1)
     .maybeSingle()
+  /* The connect flow stores the vendor profile id in platform_account_id (a
+   * hosted_link vendor holds no token, that column IS its identity) — reading
+   * only metadata.profile_id here left every Zernio client publishing as if
+   * unconnected (hard-failed 'missing_platform_connection', caught live
+   * 2026-08-19 on the first real send-off). Keep the metadata fallback for
+   * any older rows that stored it there. */
+  if (typeof data?.platform_account_id === 'string' && data.platform_account_id.length > 0) {
+    return data.platform_account_id
+  }
   const meta = (data?.metadata ?? {}) as Record<string, unknown>
   const id = meta.profile_id ?? meta.profileId
   return typeof id === 'string' && id.length > 0 ? id : null
