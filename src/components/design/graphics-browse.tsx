@@ -115,7 +115,7 @@ button:active .gb-board{transform:scale(.97)}
             <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
             {g.name}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
             {g.jobs.map((j) => <BoardTile key={j.id} job={j} dot={g.dot} index={i++} onClick={() => open(j.id)} />)}
           </div>
         </div>

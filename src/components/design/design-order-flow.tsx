@@ -911,15 +911,18 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         </div>
       )}
 
-      {/* the artboard rides every step once the first answer exists */}
-      {(step > 1 || job != null) && (
-        <Artboard
-          jobLabel={jobLabel}
-          jobId={job} dot={dot}
-          headline={headline} details={boardDetails} offer={offer}
-          photoUrl={boardPhoto} businessName={businessName} tag={boardTag} rush={quote.rush}
-          compact={step !== 3 && step !== 6}
-        />
+      {/* the proof appears at the END: the review step shows everything the
+       * order collected, laid out on the glass board (owner call 2026-08-21:
+       * no preview riding along while questions are being answered) */}
+      {step === 6 && (
+        <div style={{ maxWidth: 460, margin: '0 auto', width: '100%' }}>
+          <Artboard
+            jobLabel={jobLabel}
+            jobId={job} dot={dot}
+            headline={headline} details={boardDetails} offer={offer}
+            photoUrl={boardPhoto} businessName={businessName} tag={boardTag} rush={quote.rush}
+          />
+        </div>
       )}
 
       <div style={{ flex: 1 }}>
@@ -980,7 +983,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                       <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
                       {g.name}
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
                       {g.jobs.map((j) => (
                         <JobTile key={j.id} job={j} tint={g.tint} on={j.id === job} onClick={() => { setJob(j.id); setShelfOpen(false) }} />
                       ))}
@@ -1166,7 +1169,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                         <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
                         {g.name}
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
                         {g.jobs.map((j) => (
                           <JobTile key={j.id} job={j} tint={g.tint} on={j.id === job} onClick={() => { setJob(j.id); setShelfOpen(false) }} />
                         ))}
@@ -1175,9 +1178,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   ))}
                 </div>
               )}
-              <div style={{ fontSize: 11, color: DESK.mute, marginTop: -2, marginBottom: 4, textAlign: 'center' }}>
-                {L['say.caption']}
-              </div>
+
 
               {/* the figure-it-out assist: for the owner who has not planned the post yet */}
               {ideas === null ? (
@@ -1274,7 +1275,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   return (
                     <>
                       {slotLabel(L['say.whichstory'])}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
                         {jobAngles.map((a) => {
                           const on = angle === a.id
                           return (
@@ -1450,7 +1451,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 style={{ ...inputStyle, marginBottom: 8 }}
               />
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
               {(() => {
                 if (photosOpen) {
                   const q = photoQ.trim().toLowerCase()
