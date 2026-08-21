@@ -331,8 +331,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [job, setJob] = useState<DesignJobId | null>(null)
   /* carousel only: total slide count (first included, extras priced per slide) */
   const [slides, setSlides] = useState(5)
-  /* the free-number box beside the preset chips (owner ask 2026-08-20): any count 2-20 */
-  const [slideInput, setSlideInput] = useState('')
   /* THE TIER (persona-tested): the engine's three tiers, now the owner's own pick.
    * Custom is the default so this is never a required decision; each ticket shows its
    * own price so picking visibly changes the number (never a picker that is theater). */
@@ -751,20 +749,21 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
                   {L['job.slides.title']}
                 </div>
-                <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
-                  {[3, 5, 7, 10].map((n) => (
-                    <Chip key={n} on={slides === n && slideInput === ''} label={`${n} slides`} onClick={() => { setSlides(n); setSlideInput('') }} />
-                  ))}
+                {/* one slider, one number — no preset-vs-other split (owner call 2026-08-20) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <input
-                    inputMode="numeric" value={slideInput} aria-label="Custom slide count"
+                    type="range" min={2} max={20} step={1} value={slides} aria-label="Slide count"
+                    onChange={(e) => setSlides(Number(e.target.value))}
+                    style={{ flex: 1, accentColor: DESK.mint, height: 32, cursor: 'pointer' }}
+                  />
+                  <input
+                    inputMode="numeric" value={String(slides)} aria-label="Slide count number"
                     onChange={(e) => {
                       const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
-                      setSlideInput(v)
                       const n = Number(v)
                       if (n >= 2 && n <= 20) setSlides(n)
                     }}
-                    placeholder="Other"
-                    style={{ ...inputStyle, width: 72, textAlign: 'center', height: 36, borderRadius: 99, borderColor: slideInput !== '' ? DESK.mint : undefined }}
+                    style={{ ...inputStyle, width: 58, height: 40, textAlign: 'center', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep }}
                   />
                 </div>
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
