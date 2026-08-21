@@ -1703,12 +1703,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         })()}
 
         {/* back / next (review keeps Back too, under the seal, so a typo is one tap away) */}
-        {step > (seededFlow ? 2 : 1) && (
+        {step > 1 && (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
-            <button type="button" onClick={() => setStep(step - 1)}
-              style={{ flexShrink: 0, flex: step === 6 ? 1 : undefined, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
-              {L['nav.back']}
-            </button>
+            {/* a seeded flow's first screen has nowhere back to go; Next stays */}
+            {step > (seededFlow ? 2 : 1) && (
+              <button type="button" onClick={() => setStep(step - 1)}
+                style={{ flexShrink: 0, flex: step === 6 ? 1 : undefined, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
+                {L['nav.back']}
+              </button>
+            )}
             {step < 6 && (
               <button type="button" disabled={!canNext} onClick={() => setStep(step + 1)}
                 style={{ flex: 1, height: 50, borderRadius: 25, border: 'none', cursor: canNext ? 'pointer' : 'default', background: canNext ? DESK.grad : '#E7E4DB', color: canNext ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: canNext ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}>
