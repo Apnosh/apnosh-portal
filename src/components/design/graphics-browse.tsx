@@ -21,40 +21,34 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
       className="gb-rise"
       style={{
         animationDelay: `${Math.min(index * 45, 500)}ms`,
-        display: 'flex', flexDirection: 'column', gap: 8, padding: 0, border: 'none',
-        background: 'none', cursor: 'pointer', textAlign: 'left', WebkitTapHighlightColor: 'transparent',
+        display: 'flex', flexDirection: 'column', gap: 5, padding: 0, border: 'none',
+        background: 'none', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
       }}
     >
       <span
         className="gb-board"
         style={{
           position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center',
-          aspectRatio: '5 / 4', width: '100%', borderRadius: 16, overflow: 'hidden',
+          aspectRatio: '1 / 1', width: '100%', borderRadius: 13, overflow: 'hidden',
           background: `radial-gradient(120% 120% at 85% 0%, ${dot}33, transparent 55%), linear-gradient(150deg, #1D2B24, #14201A)`,
-          boxShadow: '0 6px 18px rgba(22,33,28,0.16), inset 0 1px 0 rgba(255,255,255,0.06)',
-          padding: '14px 14px 12px',
+          boxShadow: '0 4px 12px rgba(22,33,28,0.14), inset 0 1px 0 rgba(255,255,255,0.06)',
+          padding: '10px 10px 9px',
         }}
       >
         {/* corner ticks, same language as the order flow's artboard */}
         {([['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'right']] as const).map(([v, h]) => (
           <span key={v + h} aria-hidden style={{
-            position: 'absolute', [v]: 7, [h]: 7, width: 9, height: 9,
+            position: 'absolute', [v]: 5, [h]: 5, width: 7, height: 7,
             [`border${v[0].toUpperCase() + v.slice(1)}` as never]: '1.5px solid rgba(255,255,255,0.4)',
             [`border${h[0].toUpperCase() + h.slice(1)}` as never]: '1.5px solid rgba(255,255,255,0.4)',
           }} />
         ))}
-        <span style={{ fontFamily: DESK.mono, fontSize: 7.5, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', marginBottom: 6 }}>
-          {jobLabelOf(job.id)}
-        </span>
-        <span style={{ fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, lineHeight: 1.16, color: '#fff', letterSpacing: '-0.01em', textWrap: 'balance' as never }}>
+        <span style={{ fontFamily: DESK.disp, fontSize: 12, fontWeight: 700, lineHeight: 1.15, color: '#fff', letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' as never }}>
           {job.headline ?? jobLabelOf(job.id)}
         </span>
-        <span aria-hidden style={{ position: 'absolute', right: 10, bottom: 8, fontSize: 15, opacity: 0.85 }}>{job.emoji}</span>
+        <span aria-hidden style={{ position: 'absolute', right: 7, bottom: 5, fontSize: 12, opacity: 0.8 }}>{job.emoji}</span>
       </span>
-      <span style={{ display: 'flex', alignItems: 'center', gap: 6, paddingLeft: 2 }}>
-        <span aria-hidden style={{ width: 5, height: 5, borderRadius: 99, background: dot, flexShrink: 0 }} />
-        <span style={{ fontFamily: DESK.body, fontSize: 11.5, fontWeight: 600, color: DESK.ink2 }}>{jobLabelOf(job.id)}</span>
-      </span>
+      <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: DESK.ink2, textAlign: 'center', lineHeight: 1.2 }}>{jobLabelOf(job.id)}</span>
     </button>
   )
 }
@@ -114,12 +108,12 @@ button:active .gb-board{transform:scale(.97)}
       )}
 
       {shelf.map((g) => (
-        <div key={g.name} style={{ marginTop: 22 }}>
+        <div key={g.name} style={{ marginTop: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 10 }}>
             <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
             {g.name}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
             {g.jobs.map((j) => <BoardTile key={j.id} job={j} dot={g.dot} index={i++} onClick={() => open(j.id)} />)}
           </div>
         </div>
