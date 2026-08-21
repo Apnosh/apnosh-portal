@@ -25,7 +25,8 @@ import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, t
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
 import { DESIGN_JOBS, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
-import { JOB_SHELF, jobSpec } from '@/lib/design/job-registry'
+import { JOB_GROUP_META, JOB_SHELF, jobSpec } from '@/lib/design/job-registry'
+import { BoardArt } from './board-art'
 import { JobTile } from '@/components/design/job-tile'
 import { TIER_SPECS, specLine, specBullets } from '@/lib/design/tier-specs'
 import { DESIGN_TITLES, DESIGN_SUBS, DESIGN_LINES, fill } from '@/lib/design/design-copy'
@@ -95,11 +96,18 @@ function BoardKeyframes() {
 }
 
 /* ── the step ticker: the order sheet's own header ───────────────────────────────────────── */
-function StepHead({ n, title, sub, total = 6 }: { n: number; title: string; sub: string; total?: number }) {
+function StepHead({ n, title, sub, total = 6, accent = DESK.mint }: { n: number; title: string; sub: string; total?: number; accent?: string }) {
   return (
     <div className="db-pop" style={{ marginBottom: 14 }}>
-      <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', color: DESK.mute, marginBottom: 7 }}>
-        {'ORDER SHEET · '}{n}{' / '}{total}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        <span style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', color: DESK.mute, whiteSpace: 'nowrap' }}>
+          {n}{' / '}{total}
+        </span>
+        <span aria-hidden style={{ flex: 1, display: 'flex', gap: 4 }}>
+          {Array.from({ length: total }).map((_, i) => (
+            <span key={i} style={{ height: 3, flex: 1, borderRadius: 2, background: i < n ? accent : 'rgba(22,33,28,0.09)', transition: 'background .25s ease' }} />
+          ))}
+        </span>
       </div>
       <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: '0 0 5px', letterSpacing: '-0.02em' }}>{title}</h2>
       <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, lineHeight: 1.5, margin: 0, maxWidth: '36ch' }}>{sub}</p>
@@ -114,8 +122,12 @@ function StepHead({ n, title, sub, total = 6 }: { n: number; title: string; sub:
  * under a hairline. The photo is graded (slight saturate + a bottom-weighted scrim) so
  * white type always reads; with no photo the ground is a deep ink gradient with a quiet
  * mint glow behind the words. */
-function Artboard({ jobLabel, headline, details, offer, photoUrl, businessName, tag, rush, stamped, compact }: {
+function Artboard({ jobLabel, jobId, dot = DESK.mint, headline, details, offer, photoUrl, businessName, tag, rush, stamped, compact }: {
   jobLabel?: string | null
+  /** the type behind the board: its illustration ghosts behind the words */
+  jobId?: DesignJobId | null
+  /** the type's group color, threading the board into the browse language */
+  dot?: string
   headline: string
   details: string
   offer: string
@@ -130,8 +142,12 @@ function Artboard({ jobLabel, headline, details, offer, photoUrl, businessName, 
   compact?: boolean
 }) {
   const hasWords = !!(headline || details || offer)
+  /* no photo yet: the board is frosted glass in the type's color, like the
+   * browse wall; a photo flips it to the dark proof so white type reads */
+  const lite = !photoUrl
+  const mark = lite ? `${dot}88` : '#fff'
   const cropMark = (pos: React.CSSProperties): React.CSSProperties => ({
-    position: 'absolute', width: 10, height: 10, zIndex: 2, opacity: 0.4, ...pos,
+    position: 'absolute', width: 10, height: 10, zIndex: 2, opacity: lite ? 0.9 : 0.4, ...pos,
   })
   return (
     <div style={{ position: 'relative', padding: '10px 4px 2px', marginBottom: 14 }}>
@@ -139,9 +155,14 @@ function Artboard({ jobLabel, headline, details, offer, photoUrl, businessName, 
       <span aria-hidden style={{ position: 'absolute', top: 2, left: '50%', transform: 'translateX(-50%)', width: 11, height: 11, borderRadius: '50%', background: DESK.grad, boxShadow: '0 2px 5px rgba(22,33,28,0.35), inset 0 1px 2px rgba(255,255,255,0.5)', zIndex: 4 }} />
       <div style={{
         position: 'relative', transform: 'rotate(-1.1deg)', borderRadius: 8, overflow: 'hidden',
-        background: photoUrl ? '#16211C' : 'linear-gradient(148deg, #22312A 0%, #16211C 52%, #101A15 100%)',
+        background: photoUrl ? '#16211C' : `linear-gradient(165deg, ${dot}16, rgba(255,255,255,0.05) 55%), rgba(255,255,255,0.6)`,
+        backdropFilter: lite ? 'blur(10px) saturate(1.3)' : undefined,
+        WebkitBackdropFilter: lite ? 'blur(10px) saturate(1.3)' : undefined,
+        border: lite ? '1px solid rgba(255,255,255,0.88)' : undefined,
         minHeight: compact ? 122 : 168,
-        boxShadow: '0 14px 30px rgba(22,33,28,0.18), 0 2px 6px rgba(22,33,28,0.12)',
+        boxShadow: lite
+          ? 'inset 0 1px 0 rgba(255,255,255,0.95), 0 14px 30px rgba(22,33,28,0.13)'
+          : '0 14px 30px rgba(22,33,28,0.18), 0 2px 6px rgba(22,33,28,0.12)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: compact ? '18px 18px 14px' : '26px 22px 16px', textAlign: 'center',
         transition: 'min-height .25s ease',
@@ -153,25 +174,32 @@ function Artboard({ jobLabel, headline, details, offer, photoUrl, businessName, 
             <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(22,33,28,0.22) 0%, rgba(22,33,28,0.42) 55%, rgba(22,33,28,0.74) 100%)' }} />
           </>
         ) : (
-          <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 32%, rgba(46,154,120,0.30), transparent 62%)' }} />
+          <>
+            <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.5) 50%, transparent 58%)' }} />
+            {jobId && (
+              <span aria-hidden style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -52%)', width: '52%', opacity: 0.13, zIndex: 1 }}>
+                <BoardArt id={jobId} dot={dot} />
+              </span>
+            )}
+          </>
         )}
         {/* crop marks: this is a proof on the drafting table */}
-        <span aria-hidden style={{ ...cropMark({ top: 7, left: 7 }), borderTop: '1.5px solid #fff', borderLeft: '1.5px solid #fff' }} />
-        <span aria-hidden style={{ ...cropMark({ top: 7, right: 7 }), borderTop: '1.5px solid #fff', borderRight: '1.5px solid #fff' }} />
-        <span aria-hidden style={{ ...cropMark({ bottom: 7, left: 7 }), borderBottom: '1.5px solid #fff', borderLeft: '1.5px solid #fff' }} />
-        <span aria-hidden style={{ ...cropMark({ bottom: 7, right: 7 }), borderBottom: '1.5px solid #fff', borderRight: '1.5px solid #fff' }} />
+        <span aria-hidden style={{ ...cropMark({ top: 7, left: 7 }), borderTop: `1.5px solid ${mark}`, borderLeft: `1.5px solid ${mark}` }} />
+        <span aria-hidden style={{ ...cropMark({ top: 7, right: 7 }), borderTop: `1.5px solid ${mark}`, borderRight: `1.5px solid ${mark}` }} />
+        <span aria-hidden style={{ ...cropMark({ bottom: 7, left: 7 }), borderBottom: `1.5px solid ${mark}`, borderLeft: `1.5px solid ${mark}` }} />
+        <span aria-hidden style={{ ...cropMark({ bottom: 7, right: 7 }), borderBottom: `1.5px solid ${mark}`, borderRight: `1.5px solid ${mark}` }} />
         <div style={{ position: 'relative', zIndex: 2, width: '100%' }}>
           {jobLabel && (
             <div className="db-pop" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: compact ? 7 : 10 }}>
-              <span aria-hidden style={{ height: 1, width: 22, background: 'rgba(255,255,255,0.3)' }} />
-              <span style={{ fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.24em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.68)', whiteSpace: 'nowrap' }}>{jobLabel}</span>
-              <span aria-hidden style={{ height: 1, width: 22, background: 'rgba(255,255,255,0.3)' }} />
+              <span aria-hidden style={{ height: 1, width: 22, background: lite ? `${dot}55` : 'rgba(255,255,255,0.3)' }} />
+              <span style={{ fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.24em', textTransform: 'uppercase', color: lite ? `${dot}DD` : 'rgba(255,255,255,0.68)', whiteSpace: 'nowrap' }}>{jobLabel}</span>
+              <span aria-hidden style={{ height: 1, width: 22, background: lite ? `${dot}55` : 'rgba(255,255,255,0.3)' }} />
             </div>
           )}
           {hasWords ? (
             <>
               {headline && (
-                <div key={headline} className="db-pop" style={{ fontFamily: DESK.disp, fontSize: compact ? 21 : 27, fontWeight: 700, color: '#fff', letterSpacing: '-0.02em', lineHeight: 1.1, overflowWrap: 'break-word', textShadow: '0 1px 10px rgba(0,0,0,0.35)', textWrap: 'balance' as never }}>
+                <div key={headline} className="db-pop" style={{ fontFamily: DESK.disp, fontSize: compact ? 21 : 27, fontWeight: 700, color: lite ? DESK.ink : '#fff', letterSpacing: '-0.02em', lineHeight: 1.1, overflowWrap: 'break-word', textShadow: lite ? 'none' : '0 1px 10px rgba(0,0,0,0.35)', textWrap: 'balance' as never }}>
                   {headline}
                 </div>
               )}
@@ -179,7 +207,7 @@ function Artboard({ jobLabel, headline, details, offer, photoUrl, businessName, 
                 <span aria-hidden className="db-pop" style={{ display: 'block', width: 26, height: 2.5, borderRadius: 2, background: DESK.grad, margin: `${compact ? 7 : 9}px auto 0`, boxShadow: '0 1px 6px rgba(46,154,120,0.5)' }} />
               )}
               {details && (
-                <div key={details} className="db-pop" style={{ fontFamily: DESK.body, fontSize: 12.5, fontWeight: 500, color: 'rgba(255,255,255,0.85)', marginTop: 7, letterSpacing: '0.01em' }}>
+                <div key={details} className="db-pop" style={{ fontFamily: DESK.body, fontSize: 12.5, fontWeight: 500, color: lite ? DESK.ink2 : 'rgba(255,255,255,0.85)', marginTop: 7, letterSpacing: '0.01em' }}>
                   {details}
                 </div>
               )}
@@ -190,14 +218,14 @@ function Artboard({ jobLabel, headline, details, offer, photoUrl, businessName, 
               )}
             </>
           ) : (
-            <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: 'rgba(255,255,255,0.4)', border: '1.5px dashed rgba(255,255,255,0.25)', borderRadius: 10, padding: '14px 16px', display: 'inline-block' }}>
+            <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: lite ? DESK.mute : 'rgba(255,255,255,0.4)', border: lite ? `1.5px dashed ${dot}55` : '1.5px dashed rgba(255,255,255,0.25)', background: lite ? 'rgba(255,255,255,0.4)' : undefined, borderRadius: 10, padding: '14px 16px', display: 'inline-block' }}>
               {L['board.empty']}
             </div>
           )}
           {businessName && (
             <div style={{ marginTop: compact ? 10 : 14 }}>
-              <span aria-hidden style={{ display: 'block', height: 1, width: '38%', margin: '0 auto 6px', background: 'rgba(255,255,255,0.22)' }} />
-              <div style={{ fontFamily: DESK.mono, fontSize: 8.5, letterSpacing: '0.3em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <span aria-hidden style={{ display: 'block', height: 1, width: '38%', margin: '0 auto 6px', background: lite ? DESK.line : 'rgba(255,255,255,0.22)' }} />
+              <div style={{ fontFamily: DESK.mono, fontSize: 8.5, letterSpacing: '0.3em', textTransform: 'uppercase', color: lite ? DESK.mute : 'rgba(255,255,255,0.55)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {businessName}
               </div>
             </div>
@@ -294,8 +322,11 @@ function DestFrame({ d, on, amount, photoUrl, headline, onClick }: {
 /* ── small shared inputs, desk-inked ─────────────────────────────────────────────────────── */
 const inputStyle = {
   width: '100%', boxSizing: 'border-box' as const, height: 46, padding: '0 13px',
-  border: `1.5px solid ${DESK.line}`, borderRadius: 12, background: DESK.card, outline: 'none',
-  fontFamily: DESK.body, fontSize: 14.5, color: DESK.ink,
+  border: '1px solid rgba(255,255,255,0.9)', borderRadius: 13,
+  background: 'rgba(255,255,255,0.66)',
+  backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 2px 8px rgba(22,33,28,0.06)',
+  outline: 'none', fontFamily: DESK.body, fontSize: 14.5, color: DESK.ink,
 }
 
 function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () => void }) {
@@ -303,10 +334,11 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
     <button
       type="button" onClick={onClick}
       style={{
-        cursor: 'pointer', background: on ? DESK.mintWash : DESK.card,
-        border: `1.5px solid ${on ? DESK.mint : DESK.line}`, borderRadius: 99,
+        cursor: 'pointer', background: on ? DESK.mintWash : 'rgba(255,255,255,0.6)',
+        backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
+        border: `1px solid ${on ? DESK.mint : 'rgba(255,255,255,0.9)'}`, borderRadius: 99,
         padding: '8px 13px', fontSize: 12.5, fontWeight: 600, color: on ? DESK.mintDeep : DESK.ink,
-        fontFamily: DESK.body, boxShadow: on ? 'none' : '0 1px 2px rgba(22,33,28,0.04)',
+        fontFamily: DESK.body, boxShadow: on ? 'none' : 'inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 6px rgba(22,33,28,0.05)',
         transition: 'border-color .15s ease, background .15s ease', WebkitTapHighlightColor: 'transparent',
       }}
     >
@@ -514,6 +546,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   })()
   const stepNo = (n: number) => (seededFlow ? n - 1 : n)
   const stepTotal = seededFlow ? 5 : 6
+  /* the picked type's group color threads the whole sheet */
+  const jobGroup = job ? jobSpec(job)?.group : null
+  const dot = jobGroup ? JOB_GROUP_META[jobGroup].dot : DESK.mint
   /* the type's interview: angle types pick a story first, each with its own
    * questions; plain interview types go straight to theirs */
   const jobAngles = job ? jobSpec(job)?.voice?.angles ?? [] : []
@@ -767,7 +802,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         <DeskKeyframes />
         <BoardKeyframes />
         <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
-          <Artboard jobLabel={jobLabel} headline={headline} details={boardDetails} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} stamped />
+          <Artboard jobLabel={jobLabel} jobId={job} dot={dot} headline={headline} details={boardDetails} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} stamped />
         </div>
         <div style={{ fontFamily: DESK.disp, fontSize: 23, fontWeight: 700, color: DESK.ink, letterSpacing: '-0.02em', marginTop: 10 }}>{L['done.title.order']}</div>
         <div style={{ fontSize: 13.5, color: DESK.ink2, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
@@ -806,7 +841,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           </div>
         )}
         <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
-          <Artboard jobLabel={jobLabel} headline={headline} details={boardDetails} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} compact />
+          <Artboard jobLabel={jobLabel} jobId={job} dot={dot} headline={headline} details={boardDetails} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} compact />
         </div>
         <div style={{ fontSize: 13, color: DESK.ink2, margin: '2px 0 12px', lineHeight: 1.5 }}>{L['cart.sub']}</div>
         <ReceiptFrame>
@@ -880,6 +915,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       {(step > 1 || job != null) && (
         <Artboard
           jobLabel={jobLabel}
+          jobId={job} dot={dot}
           headline={headline} details={boardDetails} offer={offer}
           photoUrl={boardPhoto} businessName={businessName} tag={boardTag} rush={quote.rush}
           compact={step !== 3 && step !== 6}
@@ -892,7 +928,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {step === 1 && (
           <>
             <StepHead
-              n={1}
+              n={1} total={stepTotal} accent={dot}
               title={job !== null ? (jobLabel ?? T.job) : T.job}
               sub={job !== null ? (jobSpec(job)?.voice?.blurb ?? S.job) : S.job}
             />
@@ -909,7 +945,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                * shelf below with the current pick lit, tap another to swap */
               <button
                 type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: DESK.mintWash, border: `1.5px solid ${DESK.mint}`, borderRadius: 14, padding: '10px 14px', cursor: 'pointer', textAlign: 'left', fontFamily: DESK.body }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: `linear-gradient(165deg, ${dot}16, rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.6)`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.9)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 4px 12px rgba(22,33,28,0.07)', borderRadius: 14, padding: '10px 14px', cursor: 'pointer', textAlign: 'left', fontFamily: DESK.body }}
               >
                 <span aria-hidden style={{ fontSize: 20 }}>{jobSpec(job)?.emoji ?? '✨'}</span>
                 <span style={{ flex: 1, minWidth: 0, display: 'block' }}>
@@ -1001,7 +1037,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               owner call 2026-08-20: it is really "where is it posted") ── */}
         {step === 5 && (
           <>
-            <StepHead n={stepNo(5)} total={stepTotal} title={T.where} sub={S.where} />
+            <StepHead n={stepNo(5)} total={stepTotal} accent={dot} title={T.where} sub={S.where} />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
               {DESTINATIONS.map((d) => (
                 <DestFrame
@@ -1110,14 +1146,14 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           return (
             <>
               <StepHead
-                n={stepNo(2)} total={stepTotal}
+                n={stepNo(2)} total={stepTotal} accent={dot}
                 title={job !== null ? (jobLabel ?? T.say) : (isQuestion ? L['say.question.title'] : T.say)}
                 sub={jv?.ask ?? S.say}
               />
               {job !== null && (
                 <button
                   type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 10, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: `1px solid ${DESK.mint}66`, background: DESK.mintWash, fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 10, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.9)', background: `linear-gradient(165deg, ${dot}18, rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.6)`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 3px 10px rgba(22,33,28,0.07)', fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}
                 >
                   <span aria-hidden>{jobSpec(job)?.emoji}</span> {jobLabel} · {L['job.swap']} {shelfOpen ? '‹' : '›'}
                 </button>
@@ -1147,7 +1183,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               {ideas === null ? (
                 <button
                   type="button" onClick={() => void getIdeas()} disabled={ideaBusy}
-                  style={{ width: '100%', marginTop: 8, padding: '11px 14px', borderRadius: 12, cursor: 'pointer', border: `1.5px dashed ${DESK.mint}`, background: DESK.mintWash, color: DESK.mintDeep, fontFamily: DESK.body, fontSize: 13, fontWeight: 700 }}
+                  style={{ width: '100%', marginTop: 8, padding: '11px 14px', borderRadius: 13, cursor: 'pointer', border: `1.5px dashed ${DESK.mint}AA`, background: 'linear-gradient(165deg, rgba(46,154,120,0.10), rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9)', color: DESK.mintDeep, fontFamily: DESK.body, fontSize: 13, fontWeight: 700 }}
                 >
                   {ideaBusy ? `${L['say.ideas.busy']}…` : `✨ ${L['say.ideas.btn']}`}
                 </button>
@@ -1238,10 +1274,33 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   return (
                     <>
                       {slotLabel(L['say.whichstory'])}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                        {jobAngles.map((a) => (
-                          <Chip key={a.id} on={angle === a.id} label={a.label} onClick={() => setAngle(a.id)} />
-                        ))}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                        {jobAngles.map((a) => {
+                          const on = angle === a.id
+                          return (
+                            <button
+                              key={a.id} type="button" aria-pressed={on} onClick={() => setAngle(a.id)}
+                              style={{
+                                position: 'relative', overflow: 'hidden', cursor: 'pointer', textAlign: 'left',
+                                padding: '13px 14px', borderRadius: 14,
+                                background: `linear-gradient(165deg, ${dot}${on ? '22' : '10'}, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.55)`,
+                                backdropFilter: 'blur(8px) saturate(1.25)', WebkitBackdropFilter: 'blur(8px) saturate(1.25)',
+                                border: `1px solid ${on ? DESK.mint : 'rgba(255,255,255,0.85)'}`,
+                                boxShadow: on
+                                  ? 'inset 0 1px 0 rgba(255,255,255,0.95), 0 6px 16px rgba(46,154,120,0.2)'
+                                  : 'inset 0 1px 0 rgba(255,255,255,0.95), 0 4px 12px rgba(22,33,28,0.06)',
+                                transform: on ? 'translateY(-1px)' : undefined,
+                                transition: 'transform .15s ease, box-shadow .15s ease, border-color .15s ease',
+                                fontFamily: DESK.disp, fontSize: 13.5, fontWeight: 700,
+                                color: on ? DESK.mintDeep : DESK.ink, lineHeight: 1.25,
+                                WebkitTapHighlightColor: 'transparent',
+                              }}
+                            >
+                              <span aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.45) 50%, transparent 58%)' }} />
+                              <span style={{ position: 'relative' }}>{a.label}</span>
+                            </button>
+                          )
+                        })}
                       </div>
                       {activeAngle && interview}
                     </>
@@ -1373,7 +1432,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {/* ── 4. photos: real library ranked sharpest first, or hand it to us ── */}
         {step === 3 && (
           <>
-            <StepHead n={stepNo(3)} total={stepTotal} title={T.photos} sub={S.photos} />
+            <StepHead n={stepNo(3)} total={stepTotal} accent={dot} title={T.photos} sub={S.photos} />
             {job !== null && jobSpec(job)?.voice?.photoHint && (
               <div style={{ fontSize: 12, fontWeight: 600, color: DESK.mintDeep, background: DESK.mintWash, border: `1px solid ${DESK.mint}55`, borderRadius: 10, padding: '8px 12px', margin: '-4px 0 10px', lineHeight: 1.45 }}>
                 {jobSpec(job)?.voice?.photoHint}
@@ -1471,7 +1530,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {step === 4 && (
           <>
             <StepHead
-              n={stepNo(4)} total={stepTotal}
+              n={stepNo(4)} total={stepTotal} accent={dot}
               title={eventDate ? T['when.event'] : T.when}
               sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })}
             />
@@ -1568,7 +1627,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
             : usingOwn ? `Your own photos (${picked.length} picked)` : null
           return (
             <>
-              <StepHead n={stepNo(6)} total={stepTotal} title={T.review} sub={S.review} />
+              <StepHead n={stepNo(6)} total={stepTotal} accent={dot} title={T.review} sub={S.review} />
               {/* HOW IT'S MADE — asked LAST (owner call 2026-08-20): the brief is written,
                   so the maker choice prices the whole thing right here, AI included. */}
               <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '4px 0 8px' }}>
