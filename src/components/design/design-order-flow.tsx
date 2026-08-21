@@ -336,6 +336,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [ideaBusy, setIdeaBusy] = useState(false)
   const [ideaError, setIdeaError] = useState<string | null>(null)
   const [job, setJob] = useState<DesignJobId | null>(seed?.job ?? null)
+  /* Apple-simple step 1 (owner call 2026-08-21): one question, one input, six
+   * favorites; the full shelf is one tap away, and a chosen type collapses
+   * everything to a single pill. */
+  const [shelfOpen, setShelfOpen] = useState(false)
   /* carousel only: total slide count (first included, extras priced per slide) */
   const [slides, setSlides] = useState(5)
   /* THE TIER (persona-tested): the engine's three tiers, now the owner's own pick.
@@ -845,19 +849,60 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               rows={3}
               style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
             />
-            {JOB_GROUPS.map((g) => (
-              <div key={g.name} style={{ marginTop: 16 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 8 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
-                  {g.name}
+            {job !== null ? (
+              (() => {
+                const spec2 = jobSpec(job)
+                const g = JOB_GROUPS.find((x) => x.jobs.some((j) => j.id === job))
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, background: DESK.mintWash, border: `1.5px solid ${DESK.mint}`, borderRadius: 14, padding: '10px 14px' }}>
+                    <span aria-hidden style={{ fontSize: 20 }}>{spec2?.emoji ?? '✨'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep }}>{L['job.making']}</div>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: DESK.ink }}>{jobLabel}</div>
+                    </div>
+                    <button type="button" aria-label="Clear type" onClick={() => { setJob(null); setShelfOpen(false) }}
+                      style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 99, border: 'none', background: '#fff', color: DESK.ink2, cursor: 'pointer', fontSize: 15, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      ×
+                    </button>
+                  </div>
+                )
+              })()
+            ) : (
+              <>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '16px 0 8px' }}>
+                  {L['job.popular']}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                  {g.jobs.map((j) => (
-                    <JobTile key={j.id} job={j} tint={g.tint} on={job === j.id} onClick={() => setJob(job === j.id ? null : j.id)} />
-                  ))}
-                </div>
-              </div>
-            ))}
+                {!shelfOpen ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                    {(['weekly-special', 'new-item', 'story-behind', 'carousel', 'hiring', 'announcement'] as const).map((id) => {
+                      const sp = jobSpec(id)
+                      return sp ? <Chip key={id} on={false} label={`${sp.emoji} ${DESIGN_JOBS.find((x) => x.id === id)?.label ?? id}`} onClick={() => setJob(id)} /> : null
+                    })}
+                    <Chip on={false} label={`${L['job.alltypes']} ›`} onClick={() => setShelfOpen(true)} />
+                  </div>
+                ) : (
+                  <>
+                    {JOB_GROUPS.map((g) => (
+                      <div key={g.name} style={{ marginBottom: 14 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 8 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
+                          {g.name}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                          {g.jobs.map((j) => (
+                            <JobTile key={j.id} job={j} tint={g.tint} on={false} onClick={() => { setJob(j.id); setShelfOpen(false) }} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                    <button type="button" onClick={() => setShelfOpen(false)}
+                      style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontFamily: DESK.body, fontSize: 12.5, fontWeight: 600, color: DESK.ink2 }}>
+                      {L['job.less']}
+                    </button>
+                  </>
+                )}
+              </>
+            )}
             {job === 'carousel' && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
