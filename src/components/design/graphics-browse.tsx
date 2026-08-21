@@ -30,22 +30,23 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
         className="gb-board"
         style={{
           position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center',
-          aspectRatio: '1 / 1', width: '100%', borderRadius: 13, overflow: 'hidden',
-          background: `radial-gradient(130% 130% at 85% 0%, ${dot}38, transparent 60%), linear-gradient(155deg, ${dot}1F, #FFFFFF 82%)`,
-          border: `1px solid ${dot}40`,
-          boxShadow: '0 3px 10px rgba(22,33,28,0.08)',
+          aspectRatio: '1 / 1', width: '100%', borderRadius: 16, overflow: 'hidden',
+          /* liquid glass: frosted translucent white over the paper grid, a
+             whisper of the group color, and a soft top-light sheen */
+          background: `linear-gradient(165deg, ${dot}12, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.55)`,
+          backdropFilter: 'blur(10px) saturate(1.3)',
+          WebkitBackdropFilter: 'blur(10px) saturate(1.3)',
+          border: '1px solid rgba(255,255,255,0.85)',
+          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 0 rgba(22,33,28,0.04), 0 8px 22px rgba(22,33,28,0.09)',
           padding: '10px 10px 9px',
         }}
       >
-        {/* corner ticks, same language as the order flow's artboard */}
-        {([['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'right']] as const).map(([v, h]) => (
-          <span key={v + h} aria-hidden style={{
-            position: 'absolute', [v]: 5, [h]: 5, width: 7, height: 7,
-            [`border${v[0].toUpperCase() + v.slice(1)}` as never]: `1.5px solid ${dot}66`,
-            [`border${h[0].toUpperCase() + h.slice(1)}` as never]: `1.5px solid ${dot}66`,
-          }} />
-        ))}
-        <span aria-hidden style={{ display: 'block', width: '78%', margin: '0 auto', flexShrink: 0 }}>
+        <span aria-hidden style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.55) 50%, transparent 58%)',
+          pointerEvents: 'none',
+        }} />
+        <span aria-hidden style={{ display: 'block', width: '78%', margin: '0 auto', flexShrink: 0, position: 'relative' }}>
           <BoardArt id={job.id} dot={dot} />
         </span>
       </span>
@@ -83,7 +84,7 @@ export default function GraphicsBrowse() {
 .gb-rise{animation:gbRise .4s cubic-bezier(.2,.7,.3,1) both}
 .gb-board{transition:transform .16s ease, box-shadow .16s ease}
 button:active .gb-board{transform:scale(.97)}
-@media (hover:hover){button:hover .gb-board{transform:translateY(-2px);box-shadow:0 10px 26px rgba(22,33,28,0.22), inset 0 1px 0 rgba(255,255,255,0.06)}}
+@media (hover:hover){button:hover .gb-board{transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(255,255,255,0.95), 0 14px 30px rgba(22,33,28,0.14)}}
 @media (prefers-reduced-motion:reduce){.gb-rise{animation:none}.gb-board{transition:none}}`}</style>
 
       <button type="button" onClick={() => router.push('/dashboard/campaigns/new?lens=creatives')}
