@@ -66,11 +66,47 @@ const QTY_HINT: Partial<Record<DestinationId, string>> = {
  * read (their message, their menu item, their deal) always ranks first. */
 const JOB_HEADLINES: Partial<Record<DesignJobId, string>> = {
   'weekly-special': 'This Week Only',
+  'happy-hour': 'Happy Hour, Every Day',
+  'event-promo': 'One Night Only',
+  seasonal: 'New Season, New Flavors',
+  giveaway: 'Enter To Win',
+  'sports-night': 'Watch It Here',
+  'story-behind': 'The Story Behind Us',
+  'team-spotlight': 'Meet The Team',
+  'behind-scenes': 'Behind The Scenes',
+  'guest-love': 'What Our Guests Say',
+  milestone: 'Thank You For The Years',
   announcement: 'Big News',
   'new-menu': 'Our New Menu',
+  'new-item': 'New On The Menu',
+  collab: 'A Special Collab',
+  catering: 'Let Us Cater Your Day',
+  'order-online': 'Order Online Now',
   'holiday-hours': 'Holiday Hours',
   hiring: 'Join Our Team',
+  'gift-cards': 'Give The Gift Of Dinner',
 }
+
+/* the visual job shelf: every graphic a restaurant reaches for, grouped the way
+ * owners think about them (owner call 2026-08-21: all of them, visually) */
+const JOB_GROUPS: readonly { name: string; dot: string; tint: string; jobs: readonly { id: DesignJobId; emoji: string }[] }[] = [
+  { name: 'Promote something', dot: '#2E9A78', tint: '#EAF6F1', jobs: [
+    { id: 'weekly-special', emoji: '🍽️' }, { id: 'happy-hour', emoji: '🍸' }, { id: 'event-promo', emoji: '🎶' },
+    { id: 'seasonal', emoji: '🍂' }, { id: 'giveaway', emoji: '🎁' }, { id: 'sports-night', emoji: '🏈' },
+  ] },
+  { name: 'Tell your story', dot: '#B7791F', tint: '#FBF3E4', jobs: [
+    { id: 'story-behind', emoji: '👋' }, { id: 'team-spotlight', emoji: '🧑‍🍳' }, { id: 'behind-scenes', emoji: '🎬' },
+    { id: 'guest-love', emoji: '⭐' }, { id: 'milestone', emoji: '🎂' }, { id: 'carousel', emoji: '🎠' },
+  ] },
+  { name: 'Announce', dot: '#3A6B9E', tint: '#EAF1F8', jobs: [
+    { id: 'new-menu', emoji: '📖' }, { id: 'new-item', emoji: '🍜' }, { id: 'announcement', emoji: '📣' },
+    { id: 'collab', emoji: '🤝' }, { id: 'catering', emoji: '🥂' }, { id: 'order-online', emoji: '🛵' },
+  ] },
+  { name: 'The practical stuff', dot: '#7A5EA8', tint: '#F3EDF8', jobs: [
+    { id: 'holiday-hours', emoji: '🕐' }, { id: 'hiring', emoji: '📋' }, { id: 'gift-cards', emoji: '💳' },
+    { id: 'other', emoji: '✨' },
+  ] },
+]
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const addDays = (iso: string, n: number) => {
   const d = new Date(iso + 'T12:00:00')
@@ -763,11 +799,46 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               rows={3}
               style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
             />
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
-              {DESIGN_JOBS.map((j) => (
-                <Chip key={j.id} on={job === j.id} label={j.label} onClick={() => setJob(job === j.id ? null : j.id)} />
-              ))}
-            </div>
+            {JOB_GROUPS.map((g) => (
+              <div key={g.name} style={{ marginTop: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 8 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
+                  {g.name}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  {g.jobs.map((j) => {
+                    const label = DESIGN_JOBS.find((x) => x.id === j.id)?.label ?? j.id
+                    const on = job === j.id
+                    return (
+                      <button
+                        key={j.id} type="button" aria-pressed={on}
+                        onClick={() => setJob(on ? null : j.id)}
+                        style={{
+                          position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                          padding: '12px 4px 10px', borderRadius: 14, cursor: 'pointer',
+                          border: `1.5px solid ${on ? DESK.mint : DESK.line}`,
+                          background: on ? DESK.mintWash : DESK.card,
+                          boxShadow: on ? '0 4px 14px rgba(46,154,120,0.18)' : '0 1px 3px rgba(22,33,28,0.05)',
+                          transform: on ? 'translateY(-1px)' : undefined,
+                          transition: 'transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease',
+                          WebkitTapHighlightColor: 'transparent', fontFamily: DESK.body,
+                        }}
+                      >
+                        <span aria-hidden style={{ width: 38, height: 38, borderRadius: 12, background: on ? '#fff' : g.tint, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, transition: 'background .15s ease' }}>
+                          {j.emoji}
+                        </span>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink2, lineHeight: 1.2, textAlign: 'center' }}>{label}</span>
+                        {on && (
+                          <span style={{ position: 'absolute', top: 5, right: 5, width: 15, height: 15, borderRadius: '50%', background: DESK.mint, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Check size={9} strokeWidth={3.6} />
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
             {job === 'carousel' && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>

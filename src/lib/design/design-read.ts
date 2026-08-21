@@ -16,16 +16,38 @@ import { DESTINATIONS, type DestinationId } from './destinations'
 
 /* ── the job vocabulary ───────────────────────────────────────────────────────────────────── */
 
-export type DesignJobId = 'weekly-special' | 'event-promo' | 'announcement' | 'new-menu' | 'carousel' | 'holiday-hours' | 'hiring' | 'other'
+export type DesignJobId =
+  | 'weekly-special' | 'happy-hour' | 'event-promo' | 'seasonal' | 'giveaway' | 'sports-night'
+  | 'story-behind' | 'team-spotlight' | 'behind-scenes' | 'guest-love' | 'milestone' | 'carousel'
+  | 'new-menu' | 'new-item' | 'announcement' | 'collab' | 'catering' | 'order-online'
+  | 'holiday-hours' | 'hiring' | 'gift-cards' | 'other'
 
 export const DESIGN_JOBS: readonly { id: DesignJobId; label: string }[] = [
+  // promote
   { id: 'weekly-special', label: 'Weekly special' },
+  { id: 'happy-hour', label: 'Happy hour' },
   { id: 'event-promo', label: 'Event promo' },
-  { id: 'announcement', label: 'Announcement' },
-  { id: 'new-menu', label: 'New menu' },
+  { id: 'seasonal', label: 'Seasonal menu' },
+  { id: 'giveaway', label: 'Giveaway' },
+  { id: 'sports-night', label: 'Game night' },
+  // story
+  { id: 'story-behind', label: 'Story behind us' },
+  { id: 'team-spotlight', label: 'Meet the team' },
+  { id: 'behind-scenes', label: 'Behind the scenes' },
+  { id: 'guest-love', label: 'Guest love' },
+  { id: 'milestone', label: 'Milestone' },
   { id: 'carousel', label: 'Carousel post' },
+  // announce
+  { id: 'new-menu', label: 'New menu' },
+  { id: 'new-item', label: 'New menu item' },
+  { id: 'announcement', label: 'Big announcement' },
+  { id: 'collab', label: 'Collab' },
+  { id: 'catering', label: 'Catering' },
+  { id: 'order-online', label: 'Order online' },
+  // practical
   { id: 'holiday-hours', label: 'Holiday hours' },
   { id: 'hiring', label: 'Hiring post' },
+  { id: 'gift-cards', label: 'Gift cards' },
   { id: 'other', label: 'Something else' },
 ]
 
@@ -40,6 +62,20 @@ const JOB_CUES: readonly { id: DesignJobId; phrases: readonly string[]; words: r
   { id: 'announcement', phrases: ['grand opening', 'now open', 'just got on', 'big news', 'reopening', 'new location'], words: ['announcement', 'announce', 'opening', 'doordash', 'ubereats', 'grubhub'] },
   { id: 'new-menu', phrases: ['new menu', 'menu redesign', 'updated menu', 'menu board'], words: ['menu'] },
   { id: 'carousel', phrases: ['carousel post', 'multi slide', 'swipe post', 'slide deck'], words: ['carousel', 'slides', 'slideshow'] },
+  { id: 'happy-hour', phrases: ['happy hour', 'drink special', 'half off drinks'], words: ['cocktails', 'drinks'] },
+  { id: 'seasonal', phrases: ['seasonal menu', 'fall menu', 'summer menu', 'winter menu', 'spring menu', 'pumpkin'], words: ['seasonal'] },
+  { id: 'giveaway', phrases: ['give away', 'free meal', 'enter to win'], words: ['giveaway', 'contest', 'win', 'raffle'] },
+  { id: 'sports-night', phrases: ['watch party', 'game day', 'game night', 'big game'], words: ['game', 'football', 'playoffs', 'superbowl'] },
+  { id: 'story-behind', phrases: ['story behind', 'our story', 'who we are', 'the owners', 'family owned', 'about us'], words: ['story', 'owners', 'founder'] },
+  { id: 'team-spotlight', phrases: ['meet the team', 'meet our chef', 'staff spotlight', 'employee of'], words: ['team', 'chef', 'staff'] },
+  { id: 'behind-scenes', phrases: ['behind the scenes', 'how we make', 'in the kitchen'], words: ['kitchen', 'prep'] },
+  { id: 'guest-love', phrases: ['what guests say', 'customer review', 'five star', '5 star'], words: ['review', 'reviews', 'testimonial'] },
+  { id: 'milestone', phrases: ['years of', 'anniversary', 'thank you for'], words: ['anniversary', 'milestone', 'birthday'] },
+  { id: 'new-item', phrases: ['new item', 'new dish', 'just added', 'now serving'], words: ['dish'] },
+  { id: 'collab', phrases: ['collab with', 'partnered with', 'in partnership'], words: ['collab', 'collaboration', 'partnership'] },
+  { id: 'catering', phrases: ['we cater', 'catering menu', 'private events', 'book your event'], words: ['catering', 'cater'] },
+  { id: 'order-online', phrases: ['order online', 'online ordering', 'delivery is live'], words: ['delivery', 'pickup', 'takeout'] },
+  { id: 'gift-cards', phrases: ['gift card', 'gift cards'], words: ['giftcard'] },
   { id: 'holiday-hours', phrases: ['holiday hours', 'closed for', 'open late', 'special hours', 'closing early', 'labor day', 'memorial day', 'new years'], words: ['hours', 'holiday', 'thanksgiving', 'christmas', 'closed'] },
   { id: 'hiring', phrases: ['now hiring', 'help wanted', 'join our team', 'we are hiring'], words: ['hiring', 'hire', 'staff'] },
 ]
