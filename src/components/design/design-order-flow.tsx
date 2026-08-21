@@ -370,13 +370,14 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [details, setDetails] = useState('')
   const [offer, setOffer] = useState('')
   const [action, setAction] = useState('')
+  /* the interview's answers, keyed `${job}-${index}` so a type swap starts clean */
+  const [qa, setQa] = useState<Record<string, string>>({})
   /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
    * the same list (featureOtherText tracks which member is the typed one). */
   const [promoteItems, setPromoteItems] = useState<string[]>([])
   /* Featuring explores the WHOLE menu, not a taste of it: collapsed shows 8, Show-all
    * opens everything with a search box, and Something-else takes a dish we do not hold. */
   const [menuOpen, setMenuOpen] = useState(false)
-  const [showDeal, setShowDeal] = useState(false)
   const [menuQ, setMenuQ] = useState('')
   const [featureOtherOn, setFeatureOtherOn] = useState(false)
   const [featureOtherText, setFeatureOtherText] = useState('')
@@ -423,6 +424,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       const brief = [
         described.trim().length >= 4 ? described.trim() : null,
         jobLabel ? `graphic type: ${jobLabel}` : null,
+        ...qaPairs.map((p) => `${p.label} ${p.text}`),
         details.trim() || null,
       ].filter(Boolean).join('. ') || 'a post for a local business'
       const r = await fetch('/api/design/ideate', {
@@ -445,7 +447,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     try {
       const brief = described.trim().length >= 8
         ? described.trim()
-        : [jobLabel ?? 'a graphic', headline ? `headline: ${headline}` : null, details ? `details: ${details}` : null, offer ? `deal: ${offer}` : null, action ? `how to respond: ${action}` : null]
+        : [jobLabel ?? 'a graphic', headline ? `headline: ${headline}` : null, ...qaPairs.map((p) => `${p.label} ${p.text}`), details ? `details: ${details}` : null, offer ? `deal: ${offer}` : null, action ? `how to respond: ${action}` : null]
             .filter(Boolean).join('; ')
       const r = await fetch('/api/design/draft', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -508,6 +510,14 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   })()
   const stepNo = (n: number) => (seededFlow ? n - 1 : n)
   const stepTotal = seededFlow ? 5 : 6
+  /* the type's interview and its answered pairs, in order */
+  const jobQs = job ? jobSpec(job)?.voice?.questions ?? [] : []
+  const qaPairs = jobQs
+    .map((q, i) => ({ label: q.label, text: (qa[`${job}-${i}`] ?? '').trim() }))
+    .filter((x) => x.text.length > 0)
+  /* menu chips only make sense where food can star */
+  const MENU_JOBS = ['new-menu', 'new-item', 'weekly-special', 'happy-hour', 'catering', 'carousel']
+  const menuRelevant = job === null || job === 'other' || MENU_JOBS.includes(job)
 
   /* A sensible head start before a known event; offered as one tap, never silently applied. */
   const suggestedDue = eventDate ? addDays(eventDate, -3) : null
@@ -534,7 +544,14 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
    * from the first screen a total appears on; listed total = charged total, always. */
   const svcFee = Math.round(quote.total * 0.1)
   const orderTotal = quote.total + svcFee
-  const saidText = [headline, details, offer].map((t) => t.trim()).filter(Boolean).join('. ')
+  const saidText = [
+    headline.trim(),
+    ...qaPairs.map((p) => `${p.label} ${p.text}`),
+    details.trim(),
+    offer.trim(),
+  ].filter(Boolean).join('. ')
+  /* the live board previews the first real answer as its supporting line */
+  const boardDetails = details.trim() || qaPairs[0]?.text || ''
   /* The rush question shows real dollars: the engine's own delta, before it is agreed to. */
   const rushDelta = Math.round(quote.total * (RATE_CARD.rushMultiplier - 1))
   /* The board's photo: the first picked asset paints the artwork everywhere it appears. */
@@ -576,7 +593,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
-    : step === 2 ? (primaryAsk === 'subject' ? details.trim().length > 0 || headline.trim().length > 0 : headline.trim().length > 0)
+    : step === 2 ? (jobQs.length > 0 ? qaPairs.length > 0 || headline.trim().length > 0 : primaryAsk === 'subject' ? details.trim().length > 0 || headline.trim().length > 0 : headline.trim().length > 0)
     : step === 3 ? usingOwn || (photoMode === 'other' ? photoOther.trim().length > 1 : photoMode != null)
     : step === 4 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
     : step === 5 ? (dests.length > 0 || destOtherFinal.length > 1) && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
@@ -638,7 +655,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         : usingOwn ? 'Using their photos' : '',
       eventDate ? `Event on ${fmtDay(eventDate)}` : '',
       action.trim() ? `How people respond: "${action.trim()}"` : '',
-      !headline.trim() && details.trim() ? 'No title given. Write one from their words' : '',
+      !headline.trim() && (details.trim() || qaPairs.length > 0) ? 'No title given. Write one from their words' : '',
       described.trim() ? `In their own words: "${described.trim()}"` : '',
       due ? `In hand by ${fmtDay(due)}` : '',
       rushConfirmed ? 'Rush agreed' : '',
@@ -671,7 +688,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setShowDeal(false); setPromoteItems([])
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setPromoteItems([])
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
@@ -739,7 +756,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         <DeskKeyframes />
         <BoardKeyframes />
         <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
-          <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} stamped />
+          <Artboard jobLabel={jobLabel} headline={headline} details={boardDetails} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} stamped />
         </div>
         <div style={{ fontFamily: DESK.disp, fontSize: 23, fontWeight: 700, color: DESK.ink, letterSpacing: '-0.02em', marginTop: 10 }}>{L['done.title.order']}</div>
         <div style={{ fontSize: 13.5, color: DESK.ink2, marginTop: 8, maxWidth: '36ch', marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.55 }}>
@@ -778,7 +795,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           </div>
         )}
         <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
-          <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} compact />
+          <Artboard jobLabel={jobLabel} headline={headline} details={boardDetails} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} compact />
         </div>
         <div style={{ fontSize: 13, color: DESK.ink2, margin: '2px 0 12px', lineHeight: 1.5 }}>{L['cart.sub']}</div>
         <ReceiptFrame>
@@ -852,7 +869,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       {(step > 1 || job != null) && (
         <Artboard
           jobLabel={jobLabel}
-          headline={headline} details={details} offer={offer}
+          headline={headline} details={boardDetails} offer={offer}
           photoUrl={boardPhoto} businessName={businessName} tag={boardTag} rush={quote.rush}
           compact={step !== 3 && step !== 6}
         />
@@ -936,31 +953,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 rows={2}
                 style={{ ...inputStyle, height: 'auto', padding: '11px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14, marginTop: 12 }}
               />
-            )}
-            {job === 'carousel' && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
-                  {L['job.slides.title']}
-                </div>
-                {/* one slider, one number — no preset-vs-other split (owner call 2026-08-20) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <input
-                    type="range" min={2} max={10} step={1} value={slides} aria-label="Slide count"
-                    onChange={(e) => setSlides(Number(e.target.value))}
-                    style={{ flex: 1, accentColor: DESK.mint, height: 32, cursor: 'pointer' }}
-                  />
-                  <input
-                    inputMode="numeric" value={String(slides)} aria-label="Slide count number"
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
-                      const n = Number(v)
-                      if (n >= 2 && n <= 10) setSlides(n)
-                    }}
-                    style={{ ...inputStyle, width: 58, height: 40, textAlign: 'center', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep }}
-                  />
-                </div>
-                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
-              </div>
             )}
             <button
               type="button" disabled={!canNext || reading} onClick={() => (described.trim().length >= 8 ? describe() : setStep(2))}
@@ -1213,8 +1205,26 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                     )}
                   </>
                 )
-                /* subject types lead with the content itself; the title follows,
-                 * optional, with the seed ideas one tap away */
+                /* an interview type asks ITS questions and nothing else; the
+                 * title trails, optional. Other types keep their shapes. */
+                if (jobQs.length > 0) {
+                  return (
+                    <>
+                      {jobQs.map((q, i) => (
+                        <div key={`${job}-${i}`}>
+                          {slotLabel(q.label, i > 0)}
+                          <textarea
+                            value={qa[`${job}-${i}`] ?? ''}
+                            onChange={(e) => setQa((prev) => ({ ...prev, [`${job}-${i}`]: e.target.value }))}
+                            placeholder={q.ph} rows={i === 0 ? 3 : 2} aria-label={q.label}
+                            style={{ ...inputStyle, height: 'auto', padding: '11px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
+                          />
+                        </div>
+                      ))}
+                      {titleSlot(true)}
+                    </>
+                  )
+                }
                 return primaryAsk === 'subject'
                   ? <>{subjectSlot(true)}{titleSlot(true)}</>
                   : <>{titleSlot(false)}{subjectSlot(false)}</>
@@ -1232,18 +1242,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 </>
               )}
 
-              {wantsOffer || showDeal || offer ? (
+              {(wantsOffer || offer.trim().length > 0) && (
                 <>
                   {slotLabel(L['say.deal'], true)}
                   {slotInput(offer, setOffer, jv?.offerPh ?? L['say.deal.ph'], L['say.deal'])}
                 </>
-              ) : (
-                <button
-                  type="button" onClick={() => setShowDeal(true)}
-                  style={{ marginTop: 14, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: `1px dashed ${DESK.line}`, background: 'transparent', color: DESK.mute, fontFamily: DESK.body, fontSize: 11.5, fontWeight: 600 }}
-                >
-                  + {L['say.adddeal']}
-                </button>
               )}
 
               {jspec2?.asks.includes('action') && jv?.actionLabel && (
@@ -1253,7 +1256,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 </>
               )}
 
-              {menu.length > 0 && (() => {
+              {menu.length > 0 && menuRelevant && (() => {
                 const q = menuQ.trim().toLowerCase()
                 const shown = menuOpen
                   ? menu.filter((m) => !q || m.name.toLowerCase().includes(q))
@@ -1310,6 +1313,32 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   </>
                 )
               })()}
+
+              {job === 'carousel' && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
+                  {L['job.slides.title']}
+                </div>
+                {/* one slider, one number — no preset-vs-other split (owner call 2026-08-20) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <input
+                    type="range" min={2} max={10} step={1} value={slides} aria-label="Slide count"
+                    onChange={(e) => setSlides(Number(e.target.value))}
+                    style={{ flex: 1, accentColor: DESK.mint, height: 32, cursor: 'pointer' }}
+                  />
+                  <input
+                    inputMode="numeric" value={String(slides)} aria-label="Slide count number"
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
+                      const n = Number(v)
+                      if (n >= 2 && n <= 10) setSlides(n)
+                    }}
+                    style={{ ...inputStyle, width: 58, height: 40, textAlign: 'center', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep }}
+                  />
+                </div>
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
+              </div>
+            )}
 
               <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
                 {L['say.note']}
