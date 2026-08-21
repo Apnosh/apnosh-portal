@@ -34,7 +34,6 @@ export default function GraphicsBrowse() {
   }, [q])
 
   const open = (id: string) => router.push(`/dashboard/design/order?job=${encodeURIComponent(id)}`)
-  const total = JOB_SHELF.reduce((n, g) => n + g.jobs.length, 0)
 
   return (
     <div style={{ ...paperGround, minHeight: '100%', padding: '16px 16px 40px', fontFamily: DESK.body, color: DESK.ink }}>
@@ -43,9 +42,6 @@ export default function GraphicsBrowse() {
         ‹ Store
       </button>
       <div style={{ fontFamily: DESK.disp, fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>Graphics</div>
-      <div style={{ fontSize: 12.5, color: DESK.ink2, marginTop: 3, lineHeight: 1.5 }}>
-        Know the exact graphic you need? {total} kinds, or say it in your own words. Free AI draft or a designer, price at the end.
-      </div>
 
       <div style={{ position: 'relative', marginTop: 14 }}>
         <Search size={15} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: DESK.mute }} />
