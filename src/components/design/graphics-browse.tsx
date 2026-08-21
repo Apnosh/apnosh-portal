@@ -30,8 +30,9 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
         style={{
           position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center',
           aspectRatio: '1 / 1', width: '100%', borderRadius: 13, overflow: 'hidden',
-          background: `radial-gradient(120% 120% at 85% 0%, ${dot}33, transparent 55%), linear-gradient(150deg, #1D2B24, #14201A)`,
-          boxShadow: '0 4px 12px rgba(22,33,28,0.14), inset 0 1px 0 rgba(255,255,255,0.06)',
+          background: `radial-gradient(130% 130% at 85% 0%, ${dot}38, transparent 60%), linear-gradient(155deg, ${dot}1F, #FFFFFF 82%)`,
+          border: `1px solid ${dot}40`,
+          boxShadow: '0 3px 10px rgba(22,33,28,0.08)',
           padding: '10px 10px 9px',
         }}
       >
@@ -39,14 +40,14 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
         {([['top', 'left'], ['top', 'right'], ['bottom', 'left'], ['bottom', 'right']] as const).map(([v, h]) => (
           <span key={v + h} aria-hidden style={{
             position: 'absolute', [v]: 5, [h]: 5, width: 7, height: 7,
-            [`border${v[0].toUpperCase() + v.slice(1)}` as never]: '1.5px solid rgba(255,255,255,0.4)',
-            [`border${h[0].toUpperCase() + h.slice(1)}` as never]: '1.5px solid rgba(255,255,255,0.4)',
+            [`border${v[0].toUpperCase() + v.slice(1)}` as never]: `1.5px solid ${dot}66`,
+            [`border${h[0].toUpperCase() + h.slice(1)}` as never]: `1.5px solid ${dot}66`,
           }} />
         ))}
-        <span style={{ fontFamily: DESK.disp, fontSize: 12, fontWeight: 700, lineHeight: 1.15, color: '#fff', letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' as never }}>
+        <span style={{ fontFamily: DESK.disp, fontSize: 12, fontWeight: 700, lineHeight: 1.15, color: DESK.ink, letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' as never }}>
           {job.headline ?? jobLabelOf(job.id)}
         </span>
-        <span aria-hidden style={{ position: 'absolute', right: 7, bottom: 5, fontSize: 12, opacity: 0.8 }}>{job.emoji}</span>
+        <span aria-hidden style={{ position: 'absolute', right: 7, bottom: 5, fontSize: 14 }}>{job.emoji}</span>
       </span>
       <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: DESK.ink2, textAlign: 'center', lineHeight: 1.2 }}>{jobLabelOf(job.id)}</span>
     </button>
