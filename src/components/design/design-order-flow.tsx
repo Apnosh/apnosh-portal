@@ -752,7 +752,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 {/* one slider, one number — no preset-vs-other split (owner call 2026-08-20) */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <input
-                    type="range" min={2} max={20} step={1} value={slides} aria-label="Slide count"
+                    type="range" min={2} max={10} step={1} value={slides} aria-label="Slide count"
                     onChange={(e) => setSlides(Number(e.target.value))}
                     style={{ flex: 1, accentColor: DESK.mint, height: 32, cursor: 'pointer' }}
                   />
@@ -761,7 +761,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                     onChange={(e) => {
                       const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
                       const n = Number(v)
-                      if (n >= 2 && n <= 20) setSlides(n)
+                      if (n >= 2 && n <= 10) setSlides(n)
                     }}
                     style={{ ...inputStyle, width: 58, height: 40, textAlign: 'center', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep }}
                   />
