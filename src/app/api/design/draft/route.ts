@@ -47,7 +47,7 @@ async function aiCopy(brief: string, businessName: string): Promise<Copy | null>
         max_tokens: 300,
         messages: [{
           role: 'user',
-          content: `You write short graphic copy for a restaurant called "${businessName}". The graphic is about: ${brief}\n\nReply with ONLY a JSON object: {"headline": string (max 6 words, punchy, no quotes inside), "subline": string (max 14 words, plain and warm), "template": one of ${JSON.stringify(TEMPLATE_IDS)}}. Pick the template that fits the message.`,
+          content: `You write short graphic copy for a local business called "${businessName}". The graphic is about: ${brief}\n\nReply with ONLY a JSON object: {"headline": string (max 6 words, punchy, no quotes inside), "subline": string (max 14 words, plain and warm), "template": one of ${JSON.stringify(TEMPLATE_IDS)}}. Pick the template that fits the message.`,
         }],
       }),
       signal: AbortSignal.timeout(15_000),

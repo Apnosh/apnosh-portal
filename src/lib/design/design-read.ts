@@ -17,37 +17,50 @@ import { DESTINATIONS, type DestinationId } from './destinations'
 /* ── the job vocabulary ───────────────────────────────────────────────────────────────────── */
 
 export type DesignJobId =
-  | 'weekly-special' | 'happy-hour' | 'event-promo' | 'seasonal' | 'giveaway' | 'sports-night'
-  | 'story-behind' | 'team-spotlight' | 'behind-scenes' | 'guest-love' | 'milestone' | 'carousel'
-  | 'new-menu' | 'new-item' | 'announcement' | 'collab' | 'catering' | 'order-online'
-  | 'holiday-hours' | 'hiring' | 'gift-cards' | 'other'
+  | 'weekly-special' | 'flash-sale' | 'happy-hour' | 'event-promo' | 'seasonal' | 'giveaway' | 'sports-night'
+  | 'story-behind' | 'team-spotlight' | 'behind-scenes' | 'before-after' | 'guest-love' | 'milestone' | 'community' | 'carousel'
+  | 'new-menu' | 'new-item' | 'announcement' | 'collab' | 'catering' | 'book-us' | 'order-online' | 'press'
+  | 'tips' | 'faq' | 'poll' | 'countdown' | 'recap'
+  | 'holiday-hours' | 'hiring' | 'gift-cards' | 'referral' | 'other'
 
 export const DESIGN_JOBS: readonly { id: DesignJobId; label: string }[] = [
   // promote
   { id: 'weekly-special', label: 'Weekly special' },
+  { id: 'flash-sale', label: 'Flash sale' },
   { id: 'happy-hour', label: 'Happy hour' },
   { id: 'event-promo', label: 'Event promo' },
-  { id: 'seasonal', label: 'Seasonal menu' },
+  { id: 'seasonal', label: 'Seasonal push' },
   { id: 'giveaway', label: 'Giveaway' },
   { id: 'sports-night', label: 'Game night' },
   // story
   { id: 'story-behind', label: 'Story behind us' },
   { id: 'team-spotlight', label: 'Meet the team' },
   { id: 'behind-scenes', label: 'Behind the scenes' },
-  { id: 'guest-love', label: 'Guest love' },
+  { id: 'before-after', label: 'Before and after' },
+  { id: 'guest-love', label: 'Customer love' },
   { id: 'milestone', label: 'Milestone' },
+  { id: 'community', label: 'Giving back' },
   { id: 'carousel', label: 'Carousel post' },
   // announce
-  { id: 'new-menu', label: 'New menu' },
-  { id: 'new-item', label: 'New menu item' },
+  { id: 'new-menu', label: 'Menu or price list' },
+  { id: 'new-item', label: 'New item' },
   { id: 'announcement', label: 'Big announcement' },
   { id: 'collab', label: 'Collab' },
   { id: 'catering', label: 'Catering' },
+  { id: 'book-us', label: 'Book us' },
   { id: 'order-online', label: 'Order online' },
+  { id: 'press', label: 'In the news' },
+  // engage
+  { id: 'tips', label: 'Tips and how to' },
+  { id: 'faq', label: 'Q and A' },
+  { id: 'poll', label: 'Ask a question' },
+  { id: 'countdown', label: 'Countdown' },
+  { id: 'recap', label: 'Event recap' },
   // practical
   { id: 'holiday-hours', label: 'Holiday hours' },
   { id: 'hiring', label: 'Hiring post' },
   { id: 'gift-cards', label: 'Gift cards' },
+  { id: 'referral', label: 'Referral program' },
   { id: 'other', label: 'Something else' },
 ]
 
@@ -76,6 +89,17 @@ const JOB_CUES: readonly { id: DesignJobId; phrases: readonly string[]; words: r
   { id: 'catering', phrases: ['we cater', 'catering menu', 'private events', 'book your event'], words: ['catering', 'cater'] },
   { id: 'order-online', phrases: ['order online', 'online ordering', 'delivery is live'], words: ['delivery', 'pickup', 'takeout'] },
   { id: 'gift-cards', phrases: ['gift card', 'gift cards'], words: ['giftcard'] },
+  { id: 'flash-sale', phrases: ['flash sale', 'one day only', 'today only', 'limited time'], words: ['sale', 'discount'] },
+  { id: 'before-after', phrases: ['before and after', 'before after', 'the transformation'], words: ['transformation', 'makeover'] },
+  { id: 'community', phrases: ['giving back', 'fundraiser', 'charity night', 'community event', 'donate'], words: ['charity', 'community', 'fundraiser'] },
+  { id: 'book-us', phrases: ['book us', 'book now', 'appointments open', 'book your'], words: ['book', 'booking', 'appointment', 'appointments'] },
+  { id: 'press', phrases: ['in the news', 'featured in', 'as seen in', 'we won'], words: ['press', 'award', 'featured'] },
+  { id: 'tips', phrases: ['how to', 'tips for', 'did you know'], words: ['tips', 'tip', 'guide'] },
+  { id: 'faq', phrases: ['frequently asked', 'you asked', 'common questions'], words: ['faq', 'questions'] },
+  { id: 'poll', phrases: ['this or that', 'which one', 'ask our followers', 'vote for'], words: ['poll', 'vote'] },
+  { id: 'countdown', phrases: ['days until', 'days left', 'counting down', 'almost here'], words: ['countdown'] },
+  { id: 'recap', phrases: ['thank you for coming', 'what a night', 'event recap', 'last night was'], words: ['recap'] },
+  { id: 'referral', phrases: ['refer a friend', 'referral program', 'bring a friend'], words: ['referral', 'refer'] },
   { id: 'holiday-hours', phrases: ['holiday hours', 'closed for', 'open late', 'special hours', 'closing early', 'labor day', 'memorial day', 'new years'], words: ['hours', 'holiday', 'thanksgiving', 'christmas', 'closed'] },
   { id: 'hiring', phrases: ['now hiring', 'help wanted', 'join our team', 'we are hiring'], words: ['hiring', 'hire', 'staff'] },
 ]

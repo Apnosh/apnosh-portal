@@ -38,7 +38,7 @@ async function aiCaption(title: string, description: string | null, businessName
         max_tokens: 200,
         messages: [{
           role: 'user',
-          content: `Write a social media caption for a restaurant called "${businessName}". The post is: ${title}${description ? ` — ${description}` : ''}\n\nRules: 1-2 short sentences, warm and plain, at most 2 fitting hashtags at the end, no quotes around it. Reply with ONLY the caption text.`,
+          content: `Write a social media caption for a local business called "${businessName}". The post is: ${title}${description ? ` — ${description}` : ''}\n\nRules: 1-2 short sentences, warm and plain, at most 2 fitting hashtags at the end, no quotes around it. Reply with ONLY the caption text.`,
         }],
       }),
       signal: AbortSignal.timeout(15_000),

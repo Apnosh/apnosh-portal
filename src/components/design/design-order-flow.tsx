@@ -71,7 +71,18 @@ const JOB_HEADLINES: Partial<Record<DesignJobId, string>> = {
   seasonal: 'New Season, New Flavors',
   giveaway: 'Enter To Win',
   'sports-night': 'Watch It Here',
+  'flash-sale': 'Today Only',
   'story-behind': 'The Story Behind Us',
+  'before-after': 'The Before And After',
+  community: 'Giving Back',
+  'book-us': 'Book Your Spot',
+  press: 'As Seen In',
+  tips: 'Three Things To Know',
+  faq: 'You Asked, We Answered',
+  poll: 'You Tell Us',
+  countdown: 'Almost Here',
+  recap: 'What A Night',
+  referral: 'Bring A Friend',
   'team-spotlight': 'Meet The Team',
   'behind-scenes': 'Behind The Scenes',
   'guest-love': 'What Our Guests Say',
@@ -91,20 +102,27 @@ const JOB_HEADLINES: Partial<Record<DesignJobId, string>> = {
  * owners think about them (owner call 2026-08-21: all of them, visually) */
 const JOB_GROUPS: readonly { name: string; dot: string; tint: string; jobs: readonly { id: DesignJobId; emoji: string }[] }[] = [
   { name: 'Promote something', dot: '#2E9A78', tint: '#EAF6F1', jobs: [
-    { id: 'weekly-special', emoji: '🍽️' }, { id: 'happy-hour', emoji: '🍸' }, { id: 'event-promo', emoji: '🎶' },
-    { id: 'seasonal', emoji: '🍂' }, { id: 'giveaway', emoji: '🎁' }, { id: 'sports-night', emoji: '🏈' },
+    { id: 'weekly-special', emoji: '🍽️' }, { id: 'flash-sale', emoji: '⚡' }, { id: 'happy-hour', emoji: '🍸' },
+    { id: 'event-promo', emoji: '🎶' }, { id: 'seasonal', emoji: '🍂' }, { id: 'giveaway', emoji: '🎁' },
+    { id: 'sports-night', emoji: '🏈' },
   ] },
   { name: 'Tell your story', dot: '#B7791F', tint: '#FBF3E4', jobs: [
     { id: 'story-behind', emoji: '👋' }, { id: 'team-spotlight', emoji: '🧑‍🍳' }, { id: 'behind-scenes', emoji: '🎬' },
-    { id: 'guest-love', emoji: '⭐' }, { id: 'milestone', emoji: '🎂' }, { id: 'carousel', emoji: '🎠' },
+    { id: 'before-after', emoji: '🔁' }, { id: 'guest-love', emoji: '⭐' }, { id: 'milestone', emoji: '🎂' },
+    { id: 'community', emoji: '💚' }, { id: 'carousel', emoji: '🎠' },
   ] },
   { name: 'Announce', dot: '#3A6B9E', tint: '#EAF1F8', jobs: [
-    { id: 'new-menu', emoji: '📖' }, { id: 'new-item', emoji: '🍜' }, { id: 'announcement', emoji: '📣' },
-    { id: 'collab', emoji: '🤝' }, { id: 'catering', emoji: '🥂' }, { id: 'order-online', emoji: '🛵' },
+    { id: 'new-menu', emoji: '📖' }, { id: 'new-item', emoji: '✨' }, { id: 'announcement', emoji: '📣' },
+    { id: 'collab', emoji: '🤝' }, { id: 'catering', emoji: '🥂' }, { id: 'book-us', emoji: '📅' },
+    { id: 'order-online', emoji: '🛵' }, { id: 'press', emoji: '📰' },
+  ] },
+  { name: 'Get people talking', dot: '#C25E8B', tint: '#FAEEF3', jobs: [
+    { id: 'tips', emoji: '💡' }, { id: 'faq', emoji: '💬' }, { id: 'poll', emoji: '🗳️' },
+    { id: 'countdown', emoji: '⏳' }, { id: 'recap', emoji: '🙌' },
   ] },
   { name: 'The practical stuff', dot: '#7A5EA8', tint: '#F3EDF8', jobs: [
     { id: 'holiday-hours', emoji: '🕐' }, { id: 'hiring', emoji: '📋' }, { id: 'gift-cards', emoji: '💳' },
-    { id: 'other', emoji: '✨' },
+    { id: 'referral', emoji: '🫶' }, { id: 'other', emoji: '❓' },
   ] },
 ]
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -795,7 +813,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
             <StepHead n={1} title={T.job} sub={S.job} />
             <textarea
               value={described} onChange={(e) => setDescribed(e.target.value)}
-              placeholder="A flyer and an Instagram post for our live music night on the 15th, 20% off pitchers…"
+              placeholder="A flyer and an Instagram post for our event on the 15th, 20% off that night…"
               rows={3}
               style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
             />

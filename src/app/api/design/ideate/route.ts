@@ -20,9 +20,9 @@ export const maxDuration = 30
 interface Direction { angle: string; headline: string; subline: string; feature: string }
 
 const FALLBACK: Direction[] = [
-  { angle: 'The people', headline: 'Meet the faces behind it', subline: 'The story of who we are and why we cook', feature: 'A warm photo of the owners or team together' },
+  { angle: 'The people', headline: 'Meet the faces behind it', subline: 'The story of who we are and why we do this', feature: 'A warm photo of the owners or team together' },
   { angle: 'The journey', headline: 'How it all started', subline: 'From the first day to today, in one post', feature: 'An early photo next to a recent one' },
-  { angle: 'The why', headline: 'Why we do this', subline: 'The thing that keeps us opening the doors every day', feature: 'A candid moment with a guest or a signature dish' },
+  { angle: 'The why', headline: 'Why we do this', subline: 'The thing that keeps us opening the doors every day', feature: 'A candid moment with a customer or your best work' },
 ]
 
 async function aiDirections(brief: string, businessName: string): Promise<Direction[] | null> {
@@ -37,7 +37,7 @@ async function aiDirections(brief: string, businessName: string): Promise<Direct
         max_tokens: 600,
         messages: [{
           role: 'user',
-          content: `A restaurant called "${businessName}" wants a social graphic about: ${brief}\n\nThe owner has not fully planned it. Give 3 distinct creative directions. Reply with ONLY a JSON array of 3 objects: {"angle": string (2-4 word name for the direction), "headline": string (max 6 words, goes on the graphic), "subline": string (max 14 words, supports the headline), "feature": string (one plain sentence: what photo or content to feature)}. Plain warm language, no hashtags, no quotes inside strings.`,
+          content: `A local business called "${businessName}" wants a social graphic about: ${brief}\n\nThe owner has not fully planned it. Give 3 distinct creative directions. Reply with ONLY a JSON array of 3 objects: {"angle": string (2-4 word name for the direction), "headline": string (max 6 words, goes on the graphic), "subline": string (max 14 words, supports the headline), "feature": string (one plain sentence: what photo or content to feature)}. Plain warm language, no hashtags, no quotes inside strings.`,
         }],
       }),
       signal: AbortSignal.timeout(20_000),
@@ -85,6 +85,6 @@ export async function POST(req: Request) {
     }
   }
 
-  const directions = (await aiDirections(brief, name ?? 'the restaurant')) ?? FALLBACK
+  const directions = (await aiDirections(brief, name ?? 'the business')) ?? FALLBACK
   return NextResponse.json({ directions, ai: directions !== FALLBACK })
 }
