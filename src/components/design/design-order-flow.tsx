@@ -26,6 +26,7 @@ import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
 import { DESIGN_JOBS, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
 import { JOB_SHELF, jobSpec } from '@/lib/design/job-registry'
+import { JobTile } from '@/components/design/job-tile'
 import { TIER_SPECS, specLine, specBullets } from '@/lib/design/tier-specs'
 import { DESIGN_TITLES, DESIGN_SUBS, DESIGN_LINES, fill } from '@/lib/design/design-copy'
 
@@ -318,7 +319,7 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
  * draft, the seed carries the draft's id, its text as the starting description,
  * and a preview image — the designer POLISHES the draft instead of starting
  * over, and the order records where it came from. */
-export interface DesignSeed { draftId?: string; described?: string; referenceUrl?: string | null; eventDateISO?: string }
+export interface DesignSeed { draftId?: string; described?: string; referenceUrl?: string | null; eventDateISO?: string; job?: DesignJobId }
 
 export default function DesignOrderFlow({ menu, assets, businessName, seed }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null; seed?: DesignSeed | null }) {
   /* Client-side back to the store keeps the app shell mounted (owner ask 2026-08-18). */
@@ -334,7 +335,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [ideas, setIdeas] = useState<{ angle: string; headline: string; subline: string; feature: string }[] | null>(null)
   const [ideaBusy, setIdeaBusy] = useState(false)
   const [ideaError, setIdeaError] = useState<string | null>(null)
-  const [job, setJob] = useState<DesignJobId | null>(null)
+  const [job, setJob] = useState<DesignJobId | null>(seed?.job ?? null)
   /* carousel only: total slide count (first included, extras priced per slide) */
   const [slides, setSlides] = useState(5)
   /* THE TIER (persona-tested): the engine's three tiers, now the owner's own pick.
@@ -772,36 +773,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   {g.name}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                  {g.jobs.map((j) => {
-                    const label = DESIGN_JOBS.find((x) => x.id === j.id)?.label ?? j.id
-                    const on = job === j.id
-                    return (
-                      <button
-                        key={j.id} type="button" aria-pressed={on}
-                        onClick={() => setJob(on ? null : j.id)}
-                        style={{
-                          position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-                          padding: '12px 4px 10px', borderRadius: 14, cursor: 'pointer',
-                          border: `1.5px solid ${on ? DESK.mint : DESK.line}`,
-                          background: on ? DESK.mintWash : DESK.card,
-                          boxShadow: on ? '0 4px 14px rgba(46,154,120,0.18)' : '0 1px 3px rgba(22,33,28,0.05)',
-                          transform: on ? 'translateY(-1px)' : undefined,
-                          transition: 'transform .15s ease, box-shadow .15s ease, border-color .15s ease, background .15s ease',
-                          WebkitTapHighlightColor: 'transparent', fontFamily: DESK.body,
-                        }}
-                      >
-                        <span aria-hidden style={{ width: 38, height: 38, borderRadius: 12, background: on ? '#fff' : g.tint, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, transition: 'background .15s ease' }}>
-                          {j.emoji}
-                        </span>
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink2, lineHeight: 1.2, textAlign: 'center' }}>{label}</span>
-                        {on && (
-                          <span style={{ position: 'absolute', top: 5, right: 5, width: 15, height: 15, borderRadius: '50%', background: DESK.mint, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <Check size={9} strokeWidth={3.6} />
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
+                  {g.jobs.map((j) => (
+                    <JobTile key={j.id} job={j} tint={g.tint} on={job === j.id} onClick={() => setJob(job === j.id ? null : j.id)} />
+                  ))}
                 </div>
               </div>
             ))}

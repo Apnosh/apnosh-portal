@@ -15,6 +15,7 @@ import DesignOrderFlow, { type DesignSeed } from '@/components/design/design-ord
 import MvpShell from '@/components/mvp/mvp-shell'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { occasionById } from '@/lib/design/occasions'
+import { jobSpec } from '@/lib/design/job-registry'
 import { FIXTURE_ASSETS, FIXTURE_MENU } from '@/lib/design/fixture-assets'
 import { listMyDesignPhotos } from '@/lib/design/client-photos'
 import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
@@ -22,7 +23,7 @@ import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 export const metadata = { title: 'Get a graphic made' }
 export const dynamic = 'force-dynamic'
 
-export default async function DesignOrderPage({ searchParams }: { searchParams: Promise<{ draft?: string | string[]; occasion?: string | string[] }> }) {
+export default async function DesignOrderPage({ searchParams }: { searchParams: Promise<{ draft?: string | string[]; occasion?: string | string[]; job?: string | string[] }> }) {
   /* GD-2: opened from an existing draft ("Have a designer finish this").
    * The deliverable is read with the CALLER'S session, so row-level security
    * decides ownership — a foreign id simply loads nothing and the flow opens
@@ -49,6 +50,12 @@ export default async function DesignOrderPage({ searchParams }: { searchParams: 
   }
   /* GD-3: opened from an occasion card on the Campaigns page. The date is
    * derived server-side from the occasion id — never trusted from the URL. */
+  /* P2: opened from the store's Graphics section — the tapped type arrives
+   * pre-selected (registry-validated, never trusted raw from the URL). */
+  if (!seed && typeof sp.job === 'string') {
+    const spec = jobSpec(sp.job)
+    if (spec) seed = { job: spec.id }
+  }
   if (!seed && typeof sp.occasion === 'string') {
     const occ = occasionById(sp.occasion)
     if (occ) {
