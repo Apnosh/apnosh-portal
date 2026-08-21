@@ -847,19 +847,25 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {/* ── 1. what do you need ── */}
         {step === 1 && (
           <>
-            <StepHead n={1} title={T.job} sub={S.job} />
-            <textarea
-              value={described} onChange={(e) => setDescribed(e.target.value)}
-              placeholder="A flyer and an Instagram post for our event on the 15th, 20% off that night…"
-              rows={3}
-              style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
+            <StepHead
+              n={1}
+              title={job !== null ? (jobLabel ?? T.job) : T.job}
+              sub={job !== null ? (jobSpec(job)?.voice?.blurb ?? S.job) : S.job}
             />
+            {job === null && (
+              <textarea
+                value={described} onChange={(e) => setDescribed(e.target.value)}
+                placeholder="A flyer and an Instagram post for our event on the 15th, 20% off that night…"
+                rows={3}
+                style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
+              />
+            )}
             {job !== null ? (
               /* the Making pill is itself the swap control: tap to open the
                * shelf below with the current pick lit, tap another to swap */
               <button
                 type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, background: DESK.mintWash, border: `1.5px solid ${DESK.mint}`, borderRadius: 14, padding: '10px 14px', cursor: 'pointer', textAlign: 'left', fontFamily: DESK.body }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, background: DESK.mintWash, border: `1.5px solid ${DESK.mint}`, borderRadius: 14, padding: '10px 14px', cursor: 'pointer', textAlign: 'left', fontFamily: DESK.body }}
               >
                 <span aria-hidden style={{ fontSize: 20 }}>{jobSpec(job)?.emoji ?? '✨'}</span>
                 <span style={{ flex: 1, minWidth: 0, display: 'block' }}>
@@ -906,6 +912,14 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   {L['job.less']}
                 </button>
               </div>
+            )}
+            {job !== null && (
+              <textarea
+                value={described} onChange={(e) => setDescribed(e.target.value)}
+                placeholder={L['job.describe.opt']}
+                rows={2}
+                style={{ ...inputStyle, height: 'auto', padding: '11px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14, marginTop: 12 }}
+              />
             )}
             {job === 'carousel' && (
               <div style={{ marginTop: 14 }}>
