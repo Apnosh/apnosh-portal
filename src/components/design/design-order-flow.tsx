@@ -395,6 +395,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [submitted, setSubmitted] = useState(false)
   /* the cart screen between Add to cart and Confirm order */
   const [cart, setCart] = useState(false)
+  /* MULTI-PIECE CART (owner call 2026-08-21): "several different graphics this
+   * week" is a cart loop, never a multi-select — each piece keeps its own full
+   * brief and its own type tag. Held pieces are finished payload snapshots. */
+  const [heldPieces, setHeldPieces] = useState<{ key: string; label: string; total: number; body: Record<string, unknown> }[]>([])
+  const [holding, setHolding] = useState(false)
   /* the server's own total, echoed on the placed screen */
   const [orderAmount, setOrderAmount] = useState<number | null>(null)
   const [panelOpen, setPanelOpen] = useState(false)
@@ -590,10 +595,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* Confirm order: the finished brief goes down the Request Desk ORDER lane at the
    * engine's price (server computes its own number and never trusts ours); the row lands
    * pre-accepted and the work order mints on the house team right away. */
-  const placeOrder = async () => {
-    if (sending) return
-    setSending(true)
-    setSendError(null)
+  /* The current piece's finished POST body, exactly as the single-piece order
+   * sent it — snapshotted for the cart so held pieces survive a state reset. */
+  const buildOrderBody = async (): Promise<Record<string, unknown>> => {
     const attachments = await attachmentsForRequest()
     const days = due ? Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86400000) : null
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
@@ -614,12 +618,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       due ? `In hand by ${fmtDay(due)}` : '',
       rushConfirmed ? 'Rush agreed' : '',
     ].filter(Boolean).join('. ')
-    try {
-      const r = await fetch('/api/requests', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          type: 'graphic',
+    return {
+      type: 'graphic',
           answers: {
             what: `${jobLabel ?? 'A graphic'}${promoteItems.length ? ` featuring ${sayList(promoteItems)}` : ''}`,
             designType: job ?? undefined,
@@ -630,20 +630,75 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           },
           ...(due ? { due_date: due } : {}),
           ...(attachments.length ? { attachments } : {}),
-          order: true,
-          design: {
-            ...(seed?.draftId ? { fromDraftId: seed.draftId } : {}),
-            tier,
-            destinations: dests,
-            photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
-            dueDateISO: due ?? undefined,
-            rushConfirmed,
-          },
-        }),
-      })
-      const j = (await r.json().catch(() => ({}))) as { error?: string; order?: { amount_cents?: number } }
-      if (!r.ok) throw new Error(typeof j.error === 'string' ? j.error : L['send.error'])
-      setOrderAmount(typeof j.order?.amount_cents === 'number' ? Math.round(j.order.amount_cents / 100) : quote.total)
+      order: true,
+      design: {
+        ...(seed?.draftId ? { fromDraftId: seed.draftId } : {}),
+        tier,
+        destinations: dests,
+        photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
+        dueDateISO: due ?? undefined,
+        rushConfirmed,
+      },
+    }
+  }
+
+  /* Reset the piece-shaped state for "+ Add another graphic" — the cart holds
+   * the finished snapshots; a fresh piece starts clean at step 1. */
+  const resetPiece = () => {
+    setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
+    setHeadline(''); setDetails(''); setOffer(''); setPromoteItems([])
+    setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
+    setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
+    setPrintQtys({}); setPrinter(null)
+    setPhotoMode(null); setPhotoOther(''); setPicked([])
+    setEventDate(null); setDue(null); setRushConfirmed(false)
+    setTier(2); setMethod('designer'); setSlides(5)
+    setSendError(null); setCart(false); setStep(1)
+  }
+
+  const holdAndAddAnother = async () => {
+    if (holding || sending) return
+    setHolding(true); setSendError(null)
+    try {
+      const body = await buildOrderBody()
+      setHeldPieces((prev) => [...prev, {
+        key: `${Date.now()}-${prev.length}`,
+        label: `${jobLabel ?? 'A graphic'}${headline ? ` · "${headline}"` : ''}`.slice(0, 70),
+        total: orderTotal,
+        body,
+      }])
+      resetPiece()
+    } catch {
+      setSendError(L['send.error'])
+    }
+    setHolding(false)
+  }
+
+  const placeOrder = async () => {
+    if (sending) return
+    setSending(true)
+    setSendError(null)
+    try {
+      const currentBody = await buildOrderBody()
+      const queue = [...heldPieces.map((p) => ({ label: p.label, body: p.body })), { label: 'current', body: currentBody }]
+      let placedCents = 0
+      for (let i = 0; i < queue.length; i++) {
+        const r = await fetch('/api/requests', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(queue[i].body),
+        })
+        const j = (await r.json().catch(() => ({}))) as { error?: string; order?: { amount_cents?: number } }
+        if (!r.ok) {
+          /* held pieces that made it through are DONE — drop them so a retry
+           * never double-orders; the failed one stays visible with the error */
+          setHeldPieces((prev) => prev.slice(i))
+          throw new Error(typeof j.error === 'string' ? j.error : L['send.error'])
+        }
+        placedCents += typeof j.order?.amount_cents === 'number' ? j.order.amount_cents : quote.total * 100
+      }
+      setHeldPieces([])
+      setOrderAmount(Math.round(placedCents / 100))
       setSubmitted(true)
     } catch (e) {
       setSendError(e instanceof Error ? e.message : L['send.error'])
@@ -674,11 +729,29 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
   /* ── THE CART: one item, one honest total, one tap to confirm ─────────────────────── */
   if (cart) {
+    const grandTotal = heldPieces.reduce((n, h) => n + h.total, 0) + orderTotal
     return (
       <div style={{ ...ground, padding: '24px 18px 40px' }}>
         <DeskKeyframes />
         <BoardKeyframes />
         <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: DESK.mute, marginBottom: 10 }}>{L['cart.title']}</div>
+        {heldPieces.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 6 }}>{L['cart.held']}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {heldPieces.map((h) => (
+                <div key={h.key} style={{ display: 'flex', alignItems: 'center', gap: 10, background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 12, padding: '10px 12px' }}>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 600, color: DESK.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.label}</div>
+                  <div style={{ fontFamily: DESK.mono, fontSize: 12.5, fontWeight: 700, color: DESK.mintDeep, flexShrink: 0 }}>{`$${h.total}`}</div>
+                  <button type="button" onClick={() => setHeldPieces((prev) => prev.filter((x) => x.key !== h.key))}
+                    style={{ flexShrink: 0, background: 'none', border: 'none', padding: 2, cursor: 'pointer', fontSize: 11, fontWeight: 600, color: DESK.mute, fontFamily: DESK.body }}>
+                    {L['cart.remove']}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         <div style={{ maxWidth: 300, margin: '0 auto', width: '100%' }}>
           <Artboard jobLabel={jobLabel} headline={headline} details={details} offer={offer} photoUrl={boardPhoto} businessName={businessName} tag={boardTag} compact />
         </div>
@@ -700,14 +773,20 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           </div>
         )}
         <ConfirmButton
-          label={sending ? 'Placing your order...' : `${L['cart.confirm']} · $${orderTotal}`}
+          label={sending ? 'Placing your order...' : `${L['cart.confirm']} · $${grandTotal}${heldPieces.length > 0 ? ` (${heldPieces.length + 1} ${L['cart.pieces']})` : ''}`}
           sub={L['cart.confirm.sub']}
-          disabled={sending}
+          disabled={sending || holding}
           onClick={() => { void placeOrder() }}
         />
         <div style={{ fontSize: 11.5, color: DESK.mute, margin: '8px 2px 0', lineHeight: 1.5, textAlign: 'center' }}>{L['cart.valve']}</div>
         <div style={{ height: 10 }} />
-        <ConfirmButton label={L['cart.change']} tone="paper" disabled={sending} onClick={() => setCart(false)} />
+        <ConfirmButton
+          label={holding ? 'Saving this one…' : `+ ${L['cart.another']}`}
+          tone="paper" disabled={sending || holding}
+          onClick={() => { void holdAndAddAnother() }}
+        />
+        <div style={{ height: 10 }} />
+        <ConfirmButton label={L['cart.change']} tone="paper" disabled={sending || holding} onClick={() => setCart(false)} />
       </div>
     )
   }

@@ -158,6 +158,10 @@ export const DESIGN_LINES: Record<string, string> = {
   'cart.confirm': 'Confirm order',
   'cart.confirm.sub': 'Goes on your Apnosh bill. Nothing else to do.',
   'cart.change': 'Change something',
+  'cart.another': 'Add another graphic',
+  'cart.held': 'Also in your cart',
+  'cart.remove': 'Remove',
+  'cart.pieces': 'graphics in this order',
   'done.title.order': 'Order placed',
   'done.sub.order': 'Your team has it and work starts now. Follow progress and talk to us in Your requests.',
 
