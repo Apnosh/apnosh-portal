@@ -366,6 +366,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [headline, setHeadline] = useState('')
   const [details, setDetails] = useState('')
   const [offer, setOffer] = useState('')
+  const [action, setAction] = useState('')
   /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
    * the same list (featureOtherText tracks which member is the typed one). */
   const [promoteItems, setPromoteItems] = useState<string[]>([])
@@ -441,8 +442,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     try {
       const brief = described.trim().length >= 8
         ? described.trim()
-        : [jobLabel ?? 'a graphic', headline ? `headline: ${headline}` : null, offer ? `deal: ${offer}` : null]
-            .filter(Boolean).join(' — ')
+        : [jobLabel ?? 'a graphic', headline ? `headline: ${headline}` : null, details ? `details: ${details}` : null, offer ? `deal: ${offer}` : null, action ? `how to respond: ${action}` : null]
+            .filter(Boolean).join('; ')
       const r = await fetch('/api/design/draft', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ brief, type: job ?? undefined }),
@@ -624,6 +625,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         : photoMode === 'other' ? `Photos, in their own words: "${photoOther.trim()}"`
         : usingOwn ? 'Using their photos' : '',
       eventDate ? `Event on ${fmtDay(eventDate)}` : '',
+      action.trim() ? `How people respond: "${action.trim()}"` : '',
+      described.trim() ? `In their own words: "${described.trim()}"` : '',
       due ? `In hand by ${fmtDay(due)}` : '',
       rushConfirmed ? 'Rush agreed' : '',
     ].filter(Boolean).join('. ')
@@ -655,7 +658,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setPromoteItems([])
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setShowDeal(false); setPromoteItems([])
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
@@ -1175,6 +1178,13 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 </button>
               )}
 
+              {jspec2?.asks.includes('action') && jv?.actionLabel && (
+                <>
+                  {slotLabel(jv.actionLabel)}
+                  {slotInput(action, setAction, jv.actionPh ?? '', jv.actionLabel)}
+                </>
+              )}
+
               {menu.length > 0 && (() => {
                 const q = menuQ.trim().toLowerCase()
                 const shown = menuOpen
@@ -1244,6 +1254,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {step === 3 && (
           <>
             <StepHead n={3} title={T.photos} sub={S.photos} />
+            {job !== null && jobSpec(job)?.voice?.photoHint && (
+              <div style={{ fontSize: 12, fontWeight: 600, color: DESK.mintDeep, background: DESK.mintWash, border: `1px solid ${DESK.mint}55`, borderRadius: 10, padding: '8px 12px', margin: '-4px 0 10px', lineHeight: 1.45 }}>
+                {jobSpec(job)?.voice?.photoHint}
+              </div>
+            )}
             {usable.length > 0 && (
               <div style={{ fontSize: 11.5, color: DESK.mute, margin: '-6px 0 10px', lineHeight: 1.45 }}>
                 {L['photos.best']}

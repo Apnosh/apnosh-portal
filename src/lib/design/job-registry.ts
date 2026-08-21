@@ -17,7 +17,7 @@
 import { DESIGN_JOBS, type DesignJobId } from './design-read'
 
 /** What a type genuinely needs from the owner beyond the shared steps. */
-export type JobAsk = 'eventDate' | 'endDate' | 'subject' | 'offer' | 'question'
+export type JobAsk = 'eventDate' | 'endDate' | 'subject' | 'offer' | 'question' | 'action'
 
 export interface JobSpec {
   id: DesignJobId
@@ -49,6 +49,11 @@ export interface JobSpec {
     /** extra tap-in title ideas beyond the headline seed */
     headlines?: readonly string[]
     offerPh?: string
+    /** how people act on the post (apply, book, buy) when asks has 'action' */
+    actionLabel?: string
+    actionPh?: string
+    /** step-3 note when this type needs particular photos */
+    photoHint?: string
   }
   /** honest timing note, e.g. a countdown is pointless without lead time */
   timing?: 'needs-lead-time' | 'date-anchored' | 'evergreen'
@@ -71,10 +76,10 @@ const spec = (
 export const JOB_REGISTRY: readonly JobSpec[] = [
   // your story and brand
   spec('story-behind', 'brand', '👋', { headline: 'The Story Behind Us', asks: ['subject'], voice: { blurb: 'The post that tells people who you are and why you started.', ask: 'Tell your story in one line. We shape the rest.', subject: 'The story', subjectPh: 'Two sisters, one dream, opened in 2019', headlinePh: 'How It All Started', headlines: ['How It All Started', 'From Our Family To Yours'] } }),
-  spec('team-spotlight', 'brand', '🧑‍🍳', { headline: 'Meet The Team', asks: ['subject'], voice: { blurb: 'Put a face to the business. People buy from people.', ask: 'Who are we introducing?', subject: 'About them', subjectPh: 'Maria has run our kitchen for 6 years', headlinePh: 'Meet Maria', headlines: ['The Face Behind The Counter'] } }),
+  spec('team-spotlight', 'brand', '🧑‍🍳', { headline: 'Meet The Team', asks: ['subject'], voice: { photoHint: 'A clear photo of them beats a perfect one.', blurb: 'Put a face to the business. People buy from people.', ask: 'Who are we introducing?', subject: 'About them', subjectPh: 'Maria has run our kitchen for 6 years', headlinePh: 'Meet Maria', headlines: ['The Face Behind The Counter'] } }),
   spec('behind-scenes', 'brand', '🎬', { headline: 'Behind The Scenes', voice: { blurb: 'Show how the work gets done. People love a peek inside.', ask: 'What are we letting people see?', subject: 'What we are showing', subjectPh: 'How we prep everything fresh each morning', headlinePh: 'A Look Inside', headlines: ['How We Make It', 'A Look Inside'] } }),
-  spec('before-after', 'brand', '🔁', { headline: 'The Before And After', asks: ['subject'], voice: { blurb: 'Show the change side by side. The proof does the talking.', ask: 'What changed? We show the difference.', subject: 'The change', subjectPh: 'Our space, before and after the remodel', headlinePh: 'What A Difference', headlines: ['What A Difference'] } }),
-  spec('guest-love', 'brand', '⭐', { headline: 'What Our Guests Say', asks: ['subject'], voice: { blurb: 'Turn a happy customer\'s words into a post worth sharing.', ask: 'Which review or kind words are we featuring?', subject: 'The quote, their words', subjectPh: 'Best in town, hands down. From Maria G.', headlinePh: 'You Said It Best', headlines: ['Five Stars', 'You Said It Best'] } }),
+  spec('before-after', 'brand', '🔁', { headline: 'The Before And After', asks: ['subject'], voice: { photoHint: 'This one needs both photos: the before and the after.', blurb: 'Show the change side by side. The proof does the talking.', ask: 'What changed? We show the difference.', subject: 'The change', subjectPh: 'Our space, before and after the remodel', headlinePh: 'What A Difference', headlines: ['What A Difference'] } }),
+  spec('guest-love', 'brand', '⭐', { headline: 'What Our Guests Say', asks: ['subject'], voice: { photoHint: 'A screenshot of the review works, or a photo of your place.', blurb: 'Turn a happy customer\'s words into a post worth sharing.', ask: 'Which review or kind words are we featuring?', subject: 'The quote, their words', subjectPh: 'Best in town, hands down. From Maria G.', headlinePh: 'You Said It Best', headlines: ['Five Stars', 'You Said It Best'] } }),
   spec('milestone', 'brand', '🎂', { headline: 'Thank You For The Years', asks: ['subject'], timing: 'date-anchored', voice: { blurb: 'Celebrate a win with the people who got you there.', ask: 'What are we celebrating?', subject: 'The milestone', subjectPh: '10 years serving this neighborhood', headlinePh: 'Ten Years Strong', headlines: ['Ten Years Strong', 'Cheers To You'] } }),
   spec('community', 'brand', '💚', { headline: 'Giving Back', asks: ['subject'], voice: { blurb: 'Show the good you do around town.', ask: 'Who or what are we supporting?', subject: 'The cause', subjectPh: 'A fundraiser night for Lincoln Elementary', headlinePh: 'For Our Neighbors', headlines: ['For Our Neighbors'] } }),
   // menus and announcements
@@ -83,7 +88,7 @@ export const JOB_REGISTRY: readonly JobSpec[] = [
   spec('announcement', 'info', '📣', { headline: 'Big News', asks: ['subject'], voice: { blurb: 'Big news, told simply and proudly.', ask: 'What is the news?', subject: 'The news', subjectPh: 'We are opening a second location downtown', headlinePh: 'Big News', headlines: ['It Is Official'] } }),
   spec('press', 'info', '📰', { headline: 'As Seen In', asks: ['subject'], voice: { blurb: 'Someone wrote you up. Let everyone know.', ask: 'Who featured you, and what did they say?', subject: 'The mention', subjectPh: 'Named a top 10 spot by the Weekly', headlinePh: 'As Seen In The Weekly', headlines: ['In The News'] } }),
   spec('collab', 'info', '🤝', { headline: 'A Special Collab', asks: ['subject'], voice: { blurb: 'Two names, one moment. Tell both crowds.', ask: 'Who is the collab with, and what are you doing together?', subject: 'The partner and the plan', subjectPh: 'One night only menu with Blue Door Brewing', headlinePh: 'A Special Collab', headlines: ['Better Together'] } }),
-  spec('catering', 'info', '🥂', { headline: 'Let Us Cater Your Day', voice: { blurb: 'Remind people you can handle their big day.', ask: 'What do you cater, and for how many?', subject: 'What you offer', subjectPh: 'Weddings, office lunches, parties up to 200', headlinePh: 'We Bring The Food', headlines: ['We Bring The Food'] } }),
+  spec('catering', 'info', '🥂', { headline: 'Let Us Cater Your Day', asks: ['action'], voice: { actionLabel: 'How to book', actionPh: 'Call us or use the form on our site', blurb: 'Remind people you can handle their big day.', ask: 'What do you cater, and for how many?', subject: 'What you offer', subjectPh: 'Weddings, office lunches, parties up to 200', headlinePh: 'We Bring The Food', headlines: ['We Bring The Food'] } }),
   spec('holiday-hours', 'info', '🕐', { headline: 'Holiday Hours', timing: 'date-anchored', voice: { blurb: 'Clear hours so nobody shows up to a locked door.', ask: 'Which days change, and to what?', subject: 'The hours', subjectPh: 'Closed Dec 24 and 25. Open New Years Day.', headlinePh: 'Holiday Hours' } }),
   // posts that engage
   spec('carousel', 'engage', '🎠', { asks: ['subject'], voice: { blurb: 'One idea per slide. Great for lists and stories.', ask: 'What is the carousel about? Rough is fine.', subject: 'The idea, slide by slide or loosely', subjectPh: 'Five things to try, one per slide', headlinePh: 'Five Things To Try', headlines: ['Five Things To Try'] } }),
@@ -91,12 +96,12 @@ export const JOB_REGISTRY: readonly JobSpec[] = [
   spec('faq', 'engage', '💬', { headline: 'You Asked, We Answered', asks: ['question'], voice: { blurb: 'Answer the question you hear every week, once and for all.', ask: 'What question do people always ask you?', subject: 'The answer', subjectPh: 'Yes, book online or give us a call', headlinePh: 'Do you take reservations?' } }),
   spec('poll', 'engage', '🗳️', { headline: 'You Tell Us', asks: ['question'], voice: { blurb: 'Ask your followers to pick a side. Easy engagement.', ask: 'What are we asking your followers?', subject: 'The choices', subjectPh: 'Team spicy or team mild', headlinePh: 'Spicy or mild: pick a side' } }),
   spec('countdown', 'engage', '⏳', { headline: 'Almost Here', asks: ['eventDate'], timing: 'needs-lead-time', voice: { blurb: 'Build excitement for something coming soon.', ask: 'What are we counting down to?', subject: 'What is coming', subjectPh: 'Our patio opens for the season', headlinePh: 'Almost Here', headlines: ['The Countdown Is On'] } }),
-  spec('recap', 'engage', '🙌', { headline: 'What A Night', asks: ['eventDate'], voice: { blurb: 'Relive a great moment and thank the crowd.', ask: 'What are we recapping? Brag a little.', subject: 'How it went', subjectPh: 'Sold out our first tasting night', headlinePh: 'What A Night', headlines: ['Thank You For Coming Out'] } }),
+  spec('recap', 'engage', '🙌', { headline: 'What A Night', asks: ['eventDate'], voice: { photoHint: 'Photos from the day itself work best.', blurb: 'Relive a great moment and thank the crowd.', ask: 'What are we recapping? Brag a little.', subject: 'How it went', subjectPh: 'Sold out our first tasting night', headlinePh: 'What A Night', headlines: ['Thank You For Coming Out'] } }),
   // everyday needs
   spec('weekly-special', 'everyday', '🍽️', { headline: 'This Week Only', asks: ['offer'], timing: 'date-anchored', voice: { blurb: 'Give people a reason to come in this week.', ask: 'What is the special?', subject: 'The fine print', subjectPh: 'Dine in only, 4pm to close', headlinePh: 'This Week Only', offerPh: '$12 burger and a drink, Tuesdays', headlines: ['Tuesday Just Got Better'] } }),
   spec('happy-hour', 'everyday', '🍸', { headline: 'Happy Hour, Every Day', asks: ['offer'], voice: { blurb: 'The deal, the days, the times. Easy to share.', ask: 'What is the happy hour deal, and when?', subject: 'Days and times', subjectPh: 'Monday through Friday, 3 to 6', headlinePh: 'Happy Hour', offerPh: 'Half off drafts, 3 to 6pm' } }),
-  spec('hiring', 'everyday', '📋', { headline: 'Join Our Team', asks: ['subject'], voice: { blurb: 'Reach people who already love your business.', ask: 'What role are you hiring for?', subject: 'The role and the hours', subjectPh: 'Weekend team members, part time', headlinePh: 'We Are Hiring', headlines: ['We Are Hiring', 'Come Work With Us'] } }),
-  spec('gift-cards', 'everyday', '💳', { headline: 'Give The Gift Of Dinner', voice: { blurb: 'Remind people you sell the easiest gift there is.', ask: 'Anything special about your gift cards?', subject: 'The details', subjectPh: 'Any amount, online or in store', headlinePh: 'The Perfect Gift', headlines: ['The Perfect Gift'] } }),
+  spec('hiring', 'everyday', '📋', { headline: 'Join Our Team', asks: ['subject', 'action'], voice: { actionLabel: 'How to apply', actionPh: 'Text us, or come in and ask for Sam', blurb: 'Reach people who already love your business.', ask: 'What role are you hiring for?', subject: 'The role and the hours', subjectPh: 'Weekend team members, part time', headlinePh: 'We Are Hiring', headlines: ['We Are Hiring', 'Come Work With Us'] } }),
+  spec('gift-cards', 'everyday', '💳', { headline: 'Give The Gift Of Dinner', asks: ['action'], voice: { actionLabel: 'Where to get one', actionPh: 'At the counter or on our website', blurb: 'Remind people you sell the easiest gift there is.', ask: 'Anything special about your gift cards?', subject: 'The details', subjectPh: 'Any amount, online or in store', headlinePh: 'The Perfect Gift', headlines: ['The Perfect Gift'] } }),
   spec('referral', 'everyday', '🫶', { headline: 'Bring A Friend', asks: ['offer'], voice: { blurb: 'Turn regulars into your best marketing.', ask: 'What do they get for bringing a friend?', subject: 'How it works', subjectPh: 'Mention this post when you come in', headlinePh: 'Bring A Friend', offerPh: 'Bring a friend, you both get 10% off' } }),
   spec('other', 'everyday', '❓'),
   // campaign MOMENTS — push scope, off the graphics shelf, wired later as campaign cards
