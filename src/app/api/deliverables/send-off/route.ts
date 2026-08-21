@@ -164,6 +164,9 @@ export async function POST(req: Request) {
     .insert({
       client_id: business.client_id,
       idea: `Send-off: ${d.title}`.slice(0, 280),
+      /* P1 tag spine: the piece's type rides onto the posting rail, so the
+       * published post's metrics can be grouped by type later. */
+      media_brief: { designType: ((d.content ?? {}) as Record<string, unknown>).designType ?? null, deliverableId: d.id },
       caption,
       media_urls: media,
       target_platforms: postPlatforms,

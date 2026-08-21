@@ -14,6 +14,7 @@ import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { validateRequestPayload, summaryLine, validateAttachments, validateDueDate } from '@/lib/requests/catalog'
+import { jobSpec } from '@/lib/design/job-registry'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { mintRequestWorkOrder } from '@/lib/requests/bridge'
 import { priceDesignOrder, type DesignOrderAnswers } from '@/lib/design/design-pricing'
@@ -104,6 +105,14 @@ export async function POST(req: Request) {
   const isOrder = body.order === true
   let orderCents: number | null = null
   let brief: Record<string, unknown> = v.clean
+  /* P1 TAG SPINE: the graphic TYPE rides the brief as queryable data
+   * (registry-validated), so "what does what" is a query later — never
+   * just a sentence inside the notes. */
+  if (v.type.id === 'graphic') {
+    const dt = (body.answers as Record<string, unknown> | null | undefined)?.designType
+    const spec = jobSpec(typeof dt === 'string' ? dt : null)
+    if (spec) brief = { ...brief, _type: spec.id, _tags: ['graphic', spec.tag] }
+  }
   if (isOrder) {
     if (v.type.id === 'graphic') {
       const { card, version } = await getActiveRateCard()

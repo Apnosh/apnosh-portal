@@ -27,6 +27,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { isProTier } from '@/lib/entitlements'
 import { listMyDesignPhotos } from '@/lib/design/client-photos'
 import { occasionById } from '@/lib/design/occasions'
+import { jobSpec } from '@/lib/design/job-registry'
 import { renderTemplate, TEMPLATE_IDS, type DraftInputs, type TemplateId } from '@/lib/design/templates'
 
 export const maxDuration = 30
@@ -72,7 +73,7 @@ export async function POST(req: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
 
-  let body: { occasion?: string; brief?: string }
+  let body: { occasion?: string; brief?: string; type?: string }
   try { body = await req.json() } catch { body = {} }
 
   const admin = createAdminClient()
@@ -156,7 +157,7 @@ export async function POST(req: Request) {
         status: 'client_review',
         preview_urls: [url],
         file_urls: [url],
-        content: { source: 'ai-draft', occasion: occ?.id ?? null, template: inputs.template, headline: inputs.headline, subline: inputs.subline, aiCopy: !!copy, brandUsed: { logo: !!brand?.logo_url, color: !!primary, photo: !!photoUrl } },
+        content: { source: 'ai-draft', designType: jobSpec(body.type)?.id ?? null, occasion: occ?.id ?? null, template: inputs.template, headline: inputs.headline, subline: inputs.subline, aiCopy: !!copy, brandUsed: { logo: !!brand?.logo_url, color: !!primary, photo: !!photoUrl } },
       })
       .select('id')
       .single()

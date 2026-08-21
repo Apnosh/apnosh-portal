@@ -25,6 +25,7 @@ import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, t
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
 import { DESIGN_JOBS, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
+import { JOB_SHELF, jobSpec } from '@/lib/design/job-registry'
 import { TIER_SPECS, specLine, specBullets } from '@/lib/design/tier-specs'
 import { DESIGN_TITLES, DESIGN_SUBS, DESIGN_LINES, fill } from '@/lib/design/design-copy'
 
@@ -64,67 +65,13 @@ const QTY_HINT: Partial<Record<DestinationId, string>> = {
 
 /* Starter headlines per job: the honest fallback when nothing was read. What was actually
  * read (their message, their menu item, their deal) always ranks first. */
-const JOB_HEADLINES: Partial<Record<DesignJobId, string>> = {
-  'weekly-special': 'This Week Only',
-  'happy-hour': 'Happy Hour, Every Day',
-  'event-promo': 'One Night Only',
-  seasonal: 'New Season, New Flavors',
-  giveaway: 'Enter To Win',
-  'sports-night': 'Watch It Here',
-  'flash-sale': 'Today Only',
-  'story-behind': 'The Story Behind Us',
-  'before-after': 'The Before And After',
-  community: 'Giving Back',
-  'book-us': 'Book Your Spot',
-  press: 'As Seen In',
-  tips: 'Three Things To Know',
-  faq: 'You Asked, We Answered',
-  poll: 'You Tell Us',
-  countdown: 'Almost Here',
-  recap: 'What A Night',
-  referral: 'Bring A Friend',
-  'team-spotlight': 'Meet The Team',
-  'behind-scenes': 'Behind The Scenes',
-  'guest-love': 'What Our Guests Say',
-  milestone: 'Thank You For The Years',
-  announcement: 'Big News',
-  'new-menu': 'Our New Menu',
-  'new-item': 'New On The Menu',
-  collab: 'A Special Collab',
-  catering: 'Let Us Cater Your Day',
-  'order-online': 'Order Online Now',
-  'holiday-hours': 'Holiday Hours',
-  hiring: 'Join Our Team',
-  'gift-cards': 'Give The Gift Of Dinner',
-}
+/* headline seeds live in the registry now — one record per type */
+const JOB_HEADLINES: Partial<Record<DesignJobId, string>> = Object.fromEntries(
+  JOB_SHELF.flatMap((g) => g.jobs.filter((j) => j.headline).map((j) => [j.id, j.headline as string])),
+)
 
-/* the visual job shelf: every graphic a restaurant reaches for, grouped the way
- * owners think about them (owner call 2026-08-21: all of them, visually) */
-const JOB_GROUPS: readonly { name: string; dot: string; tint: string; jobs: readonly { id: DesignJobId; emoji: string }[] }[] = [
-  { name: 'Promote something', dot: '#2E9A78', tint: '#EAF6F1', jobs: [
-    { id: 'weekly-special', emoji: '🍽️' }, { id: 'flash-sale', emoji: '⚡' }, { id: 'happy-hour', emoji: '🍸' },
-    { id: 'event-promo', emoji: '🎶' }, { id: 'seasonal', emoji: '🍂' }, { id: 'giveaway', emoji: '🎁' },
-    { id: 'sports-night', emoji: '🏈' },
-  ] },
-  { name: 'Tell your story', dot: '#B7791F', tint: '#FBF3E4', jobs: [
-    { id: 'story-behind', emoji: '👋' }, { id: 'team-spotlight', emoji: '🧑‍🍳' }, { id: 'behind-scenes', emoji: '🎬' },
-    { id: 'before-after', emoji: '🔁' }, { id: 'guest-love', emoji: '⭐' }, { id: 'milestone', emoji: '🎂' },
-    { id: 'community', emoji: '💚' }, { id: 'carousel', emoji: '🎠' },
-  ] },
-  { name: 'Announce', dot: '#3A6B9E', tint: '#EAF1F8', jobs: [
-    { id: 'new-menu', emoji: '📖' }, { id: 'new-item', emoji: '✨' }, { id: 'announcement', emoji: '📣' },
-    { id: 'collab', emoji: '🤝' }, { id: 'catering', emoji: '🥂' }, { id: 'book-us', emoji: '📅' },
-    { id: 'order-online', emoji: '🛵' }, { id: 'press', emoji: '📰' },
-  ] },
-  { name: 'Get people talking', dot: '#C25E8B', tint: '#FAEEF3', jobs: [
-    { id: 'tips', emoji: '💡' }, { id: 'faq', emoji: '💬' }, { id: 'poll', emoji: '🗳️' },
-    { id: 'countdown', emoji: '⏳' }, { id: 'recap', emoji: '🙌' },
-  ] },
-  { name: 'The practical stuff', dot: '#7A5EA8', tint: '#F3EDF8', jobs: [
-    { id: 'holiday-hours', emoji: '🕐' }, { id: 'hiring', emoji: '📋' }, { id: 'gift-cards', emoji: '💳' },
-    { id: 'referral', emoji: '🫶' }, { id: 'other', emoji: '❓' },
-  ] },
-]
+/* the visual job shelf renders straight from the registry (one source of truth) */
+const JOB_GROUPS = JOB_SHELF
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const addDays = (iso: string, n: number) => {
   const d = new Date(iso + 'T12:00:00')
@@ -483,7 +430,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
             .filter(Boolean).join(' — ')
       const r = await fetch('/api/design/draft', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ brief }),
+        body: JSON.stringify({ brief, type: job ?? undefined }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok || !d.id) throw new Error(typeof d.error === 'string' ? d.error : 'Could not make the draft. Try again.')
@@ -674,6 +621,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           type: 'graphic',
           answers: {
             what: `${jobLabel ?? 'A graphic'}${promoteItems.length ? ` featuring ${sayList(promoteItems)}` : ''}`,
+            designType: job ?? undefined,
             where: [...dests.map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean), ...(destOtherFinal ? [destOtherFinal] : [])].join(', '),
             words: saidText || undefined,
             when,
