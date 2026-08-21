@@ -330,7 +330,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* arrived from a type tile: the intro screen is skipped, so the sheet is 5
    * screens and every number shifts down one */
   const [seededFlow, setSeededFlow] = useState(!!seed?.job)
-  useEffect(() => { setAngle(null) }, [job])
   const [described, setDescribed] = useState(seed?.described ?? '')
   const [reading, setReading] = useState(false)
   const [read, setRead] = useState<DesignRead | null>(null)
@@ -373,8 +372,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [action, setAction] = useState('')
   /* the interview's answers, keyed by job + angle + index so a swap starts clean */
   const [qa, setQa] = useState<Record<string, string>>({})
-  /* which of the type's stories they chose to tell */
+  /* which of the type's stories they chose to tell; a type swap forgets it */
   const [angle, setAngle] = useState<string | null>(null)
+  useEffect(() => { setAngle(null) }, [job])
   /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
    * the same list (featureOtherText tracks which member is the typed one). */
   const [promoteItems, setPromoteItems] = useState<string[]>([])
