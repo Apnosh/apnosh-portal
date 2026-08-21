@@ -29,7 +29,7 @@ export const DESIGN_TITLES: Record<string, string> = {
 }
 
 export const DESIGN_SUBS: Record<string, string> = {
-  job: 'Say it your way, or tap a job. We work out the rest.',
+  job: 'Describe exactly what you want, or tap a type below.',
   where: 'One design, cut to every size you pick. Your first size is included.',
   say: 'Watch it take shape. Tap a suggestion or write your own.',
   /* The walk's assets line, verbatim: the promise is the same promise. */

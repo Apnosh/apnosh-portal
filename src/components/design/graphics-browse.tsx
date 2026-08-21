@@ -44,7 +44,7 @@ export default function GraphicsBrowse() {
       </button>
       <div style={{ fontFamily: DESK.disp, fontSize: 24, fontWeight: 700, letterSpacing: '-0.01em' }}>Graphics</div>
       <div style={{ fontSize: 12.5, color: DESK.ink2, marginTop: 3, lineHeight: 1.5 }}>
-        {total} kinds of graphics. Free AI draft or a designer, price at the end.
+        Know the exact graphic you need? {total} kinds, or say it in your own words. Free AI draft or a designer, price at the end.
       </div>
 
       <div style={{ position: 'relative', marginTop: 14 }}>
