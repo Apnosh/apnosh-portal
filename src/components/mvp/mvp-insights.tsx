@@ -199,6 +199,10 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
   const [topicsData, setTopicsData] = useState<ReviewTopicsData | null>(null)
   const [topicsLoading, setTopicsLoading] = useState(false)
   const [detail, setDetail] = useState<InsightsDetail | null>(null)
+  /* true while the background sync is fetching newer numbers from the vendor —
+   * without this the first minute after opening reads as stale-and-static when
+   * it is actually mid-update (owner hit this live 2026-08-21). */
+  const [refreshing, setRefreshing] = useState(false)
   // active (shipped) campaigns grouped by the stage they work on → "campaigns working on this"
   const [campaigns, setCampaigns] = useState<Record<string, StageCampaign[]> | null>(null)
 
@@ -246,10 +250,12 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
      * so opening Insights right after Home costs one cheap "already fresh" reply. */
     load().then(() => {
       if (!live) return
+      setRefreshing(true)
       fetch(`/api/dashboard/social-refresh?clientId=${clientId}`)
         .then((r) => (r.ok ? r.json() : null))
-        .then((res) => { if (live && res?.synced) load() })
+        .then((res) => { if (live && res?.synced) return load() })
         .catch(() => { /* the numbers on screen are still the last good ones */ })
+        .finally(() => { if (live) setRefreshing(false) })
     })
     return () => { live = false }
   }, [clientId])
@@ -295,14 +301,23 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
           carried a visible scrollbar here. Declared locally so the class actually
           applies wherever it is used. */}
       <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
-.mvp-swipe::-webkit-scrollbar{display:none}`}</style>
+.mvp-swipe::-webkit-scrollbar{display:none}
+.mvp-spin{animation:mvpspin .8s linear infinite}
+@keyframes mvpspin{to{transform:rotate(360deg)}}`}</style>
       <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
       {/* sticky back header */}
       <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
         <button onClick={back} aria-label="Back" style={{ width: 38, height: 38, borderRadius: 99, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.ink }}><ChevronLeft size={24} /></button>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>Insights</div>
-          {data?.businessName && <div style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.businessName}</div>}
+          {refreshing ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute, whiteSpace: 'nowrap' }}>
+              <span className="mvp-spin" style={{ width: 10, height: 10, border: `2px solid ${C.line}`, borderTopColor: C.green, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
+              Getting the latest numbers…
+            </div>
+          ) : data?.businessName ? (
+            <div style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.businessName}</div>
+          ) : null}
         </div>
         {/* one button, reads the WHOLE funnel (the drop-off is cross-stage) */}
         <AnalystButton />
