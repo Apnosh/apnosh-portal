@@ -87,7 +87,7 @@ export default async function DesignOrderPage({ searchParams }: { searchParams: 
    * disappear on a creatives flow — it reads as leaving the app. */
   return (
     <MvpShell active="campaigns">
-      <div style={{ maxWidth: 430, margin: '0 auto', minHeight: '100%', background: '#F5F5F7' }}>
+      <div style={{ minHeight: '100%' }}>
         <DesignOrderFlow menu={menu} assets={assets} businessName={library.businessName} seed={seed} />
       </div>
     </MvpShell>
