@@ -116,7 +116,7 @@
     },
     {
       "path": "/api/cron/sync-channels",
-      "schedule": "30 11 * * *"
+      "schedule": "30 * * * *"
     }
   ]
 }
