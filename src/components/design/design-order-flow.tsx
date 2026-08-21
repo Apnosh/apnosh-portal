@@ -372,6 +372,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* Featuring explores the WHOLE menu, not a taste of it: collapsed shows 8, Show-all
    * opens everything with a search box, and Something-else takes a dish we do not hold. */
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showDeal, setShowDeal] = useState(false)
   const [menuQ, setMenuQ] = useState('')
   const [featureOtherOn, setFeatureOtherOn] = useState(false)
   const [featureOtherText, setFeatureOtherText] = useState('')
@@ -415,7 +416,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     if (ideaBusy) return
     setIdeaBusy(true); setIdeaError(null)
     try {
-      const brief = described.trim().length >= 4 ? described.trim() : (jobLabel ?? 'a post for the restaurant')
+      const brief = [
+        described.trim().length >= 4 ? described.trim() : null,
+        jobLabel ? `graphic type: ${jobLabel}` : null,
+        details.trim() || null,
+      ].filter(Boolean).join('. ') || 'a post for a local business'
       const r = await fetch('/api/design/ideate', {
         method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ brief }),
@@ -1048,10 +1053,18 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
         {/* ── 3. what should it say: the words ink straight onto the board above ── */}
         {step === 2 && (() => {
+          /* the type's own voice reshapes this step: its question leads, its
+           * labels and examples fill the blanks, and only its slots show */
+          const jspec2 = job ? jobSpec(job) : null
+          const jv = jspec2?.voice ?? null
+          const isQuestion = jspec2?.asks.includes('question') ?? false
+          const wantsOffer = !job || job === 'other' || (jspec2?.asks.includes('offer') ?? false)
+          const wantsDate = jspec2?.asks.includes('eventDate') ?? false
           const headlineSugs = [...new Set([
             read?.message ? titleCase(read.message) : null,
             promoteItems[0] ?? null,
             job ? JOB_HEADLINES[job] : null,
+            ...(jv?.headlines ?? []),
           ].filter((x): x is string => !!x && x !== headline))].slice(0, 3)
           const detailSugs = eventDate && details !== fmtLong(eventDate) ? [fmtLong(eventDate)] : []
           const slotInput = (v: string, set: (x: string) => void, ph: string, label: string) => (
@@ -1064,7 +1077,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           )
           return (
             <>
-              <StepHead n={2} title={T.say} sub={S.say} />
+              <StepHead n={2} title={isQuestion ? L['say.question.title'] : T.say} sub={jv?.ask ?? S.say} />
               <div style={{ fontSize: 11, color: DESK.mute, marginTop: -8, marginBottom: 4, textAlign: 'center' }}>
                 {L['say.caption']}
               </div>
@@ -1107,24 +1120,47 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               )}
               {ideaError && <div style={{ fontSize: 11.5, color: DESK.amber, marginTop: 6 }}>{ideaError}</div>}
 
-              {slotLabel(L['say.headline'])}
-              {slotInput(headline, setHeadline, L['say.headline.ph'], L['say.headline'])}
+              {slotLabel(isQuestion ? L['say.question'] : L['say.headline'])}
+              {slotInput(headline, setHeadline, jv?.headlinePh ?? L['say.headline.ph'], isQuestion ? L['say.question'] : L['say.headline'])}
               {headlineSugs.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
                   {headlineSugs.map((h) => <Chip key={h} on={false} label={h} onClick={() => setHeadline(h)} />)}
                 </div>
               )}
 
-              {slotLabel(L['say.details'], true)}
-              {slotInput(details, setDetails, eventDate ? fmtLong(eventDate) : L['say.details.ph'], L['say.details'])}
+              {slotLabel(jv?.subject ?? L['say.details'], true)}
+              {slotInput(details, setDetails, eventDate ? fmtLong(eventDate) : jv?.subjectPh ?? L['say.details.ph'], jv?.subject ?? L['say.details'])}
               {detailSugs.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
                   {detailSugs.map((d) => <Chip key={d} on={false} label={d} onClick={() => setDetails(d)} />)}
                 </div>
               )}
 
-              {slotLabel(L['say.deal'], true)}
-              {slotInput(offer, setOffer, L['say.deal.ph'], L['say.deal'])}
+              {wantsDate && (
+                <>
+                  {slotLabel(job === 'recap' ? L['say.date.past'] : L['say.date'])}
+                  <input
+                    type="date" value={eventDate ?? ''}
+                    onChange={(e) => setEventDate(e.target.value || null)}
+                    aria-label={job === 'recap' ? L['say.date.past'] : L['say.date']}
+                    style={inputStyle}
+                  />
+                </>
+              )}
+
+              {wantsOffer || showDeal || offer ? (
+                <>
+                  {slotLabel(L['say.deal'], true)}
+                  {slotInput(offer, setOffer, jv?.offerPh ?? L['say.deal.ph'], L['say.deal'])}
+                </>
+              ) : (
+                <button
+                  type="button" onClick={() => setShowDeal(true)}
+                  style={{ marginTop: 14, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: `1px dashed ${DESK.line}`, background: 'transparent', color: DESK.mute, fontFamily: DESK.body, fontSize: 11.5, fontWeight: 600 }}
+                >
+                  + {L['say.adddeal']}
+                </button>
+              )}
 
               {menu.length > 0 && (() => {
                 const q = menuQ.trim().toLowerCase()
