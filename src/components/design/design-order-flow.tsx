@@ -330,6 +330,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* arrived from a type tile: the intro screen is skipped, so the sheet is 5
    * screens and every number shifts down one */
   const [seededFlow, setSeededFlow] = useState(!!seed?.job)
+  useEffect(() => { setAngle(null) }, [job])
   const [described, setDescribed] = useState(seed?.described ?? '')
   const [reading, setReading] = useState(false)
   const [read, setRead] = useState<DesignRead | null>(null)
@@ -370,8 +371,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [details, setDetails] = useState('')
   const [offer, setOffer] = useState('')
   const [action, setAction] = useState('')
-  /* the interview's answers, keyed `${job}-${index}` so a type swap starts clean */
+  /* the interview's answers, keyed by job + angle + index so a swap starts clean */
   const [qa, setQa] = useState<Record<string, string>>({})
+  /* which of the type's stories they chose to tell */
+  const [angle, setAngle] = useState<string | null>(null)
   /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
    * the same list (featureOtherText tracks which member is the typed one). */
   const [promoteItems, setPromoteItems] = useState<string[]>([])
@@ -424,6 +427,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       const brief = [
         described.trim().length >= 4 ? described.trim() : null,
         jobLabel ? `graphic type: ${jobLabel}` : null,
+        activeAngle ? `the story: ${activeAngle.label}` : null,
         ...qaPairs.map((p) => `${p.label} ${p.text}`),
         details.trim() || null,
       ].filter(Boolean).join('. ') || 'a post for a local business'
@@ -510,10 +514,16 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   })()
   const stepNo = (n: number) => (seededFlow ? n - 1 : n)
   const stepTotal = seededFlow ? 5 : 6
-  /* the type's interview and its answered pairs, in order */
-  const jobQs = job ? jobSpec(job)?.voice?.questions ?? [] : []
+  /* the type's interview: angle types pick a story first, each with its own
+   * questions; plain interview types go straight to theirs */
+  const jobAngles = job ? jobSpec(job)?.voice?.angles ?? [] : []
+  const activeAngle = jobAngles.find((a) => a.id === angle) ?? null
+  const jobQs = jobAngles.length > 0
+    ? (activeAngle?.questions ?? [])
+    : (job ? jobSpec(job)?.voice?.questions ?? [] : [])
+  const qaKey = (i: number) => `${job}-${angle ?? 'base'}-${i}`
   const qaPairs = jobQs
-    .map((q, i) => ({ label: q.label, text: (qa[`${job}-${i}`] ?? '').trim() }))
+    .map((q, i) => ({ label: q.label, text: (qa[qaKey(i)] ?? '').trim() }))
     .filter((x) => x.text.length > 0)
   /* menu chips only make sense where food can star */
   const MENU_JOBS = ['new-menu', 'new-item', 'weekly-special', 'happy-hour', 'catering', 'carousel']
@@ -593,7 +603,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
-    : step === 2 ? (jobQs.length > 0 ? qaPairs.length > 0 || headline.trim().length > 0 : primaryAsk === 'subject' ? details.trim().length > 0 || headline.trim().length > 0 : headline.trim().length > 0)
+    : step === 2 ? (jobAngles.length > 0 ? qaPairs.length > 0 : jobQs.length > 0 ? qaPairs.length > 0 || headline.trim().length > 0 : primaryAsk === 'subject' ? details.trim().length > 0 || headline.trim().length > 0 : headline.trim().length > 0)
     : step === 3 ? usingOwn || (photoMode === 'other' ? photoOther.trim().length > 1 : photoMode != null)
     : step === 4 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
     : step === 5 ? (dests.length > 0 || destOtherFinal.length > 1) && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
@@ -654,6 +664,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         : photoMode === 'other' ? `Photos, in their own words: "${photoOther.trim()}"`
         : usingOwn ? 'Using their photos' : '',
       eventDate ? `Event on ${fmtDay(eventDate)}` : '',
+      activeAngle ? `The story they chose: ${activeAngle.label}` : '',
       action.trim() ? `How people respond: "${action.trim()}"` : '',
       !headline.trim() && (details.trim() || qaPairs.length > 0) ? 'No title given. Write one from their words' : '',
       described.trim() ? `In their own words: "${described.trim()}"` : '',
@@ -688,7 +699,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setPromoteItems([])
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(null); setPromoteItems([])
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
@@ -1207,24 +1218,36 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 )
                 /* an interview type asks ITS questions and nothing else; the
                  * title trails, optional. Other types keep their shapes. */
-                if (jobQs.length > 0) {
+                const interview = (
+                  <>
+                    {jobQs.map((q, i) => (
+                      <div key={qaKey(i)}>
+                        {slotLabel(q.label, i > 0)}
+                        <textarea
+                          value={qa[qaKey(i)] ?? ''}
+                          onChange={(e) => setQa((prev) => ({ ...prev, [qaKey(i)]: e.target.value }))}
+                          placeholder={q.ph} rows={i === 0 ? 3 : 2} aria-label={q.label}
+                          style={{ ...inputStyle, height: 'auto', padding: '11px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
+                        />
+                      </div>
+                    ))}
+                    {titleSlot(true)}
+                  </>
+                )
+                if (jobAngles.length > 0) {
                   return (
                     <>
-                      {jobQs.map((q, i) => (
-                        <div key={`${job}-${i}`}>
-                          {slotLabel(q.label, i > 0)}
-                          <textarea
-                            value={qa[`${job}-${i}`] ?? ''}
-                            onChange={(e) => setQa((prev) => ({ ...prev, [`${job}-${i}`]: e.target.value }))}
-                            placeholder={q.ph} rows={i === 0 ? 3 : 2} aria-label={q.label}
-                            style={{ ...inputStyle, height: 'auto', padding: '11px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
-                          />
-                        </div>
-                      ))}
-                      {titleSlot(true)}
+                      {slotLabel(L['say.whichstory'])}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                        {jobAngles.map((a) => (
+                          <Chip key={a.id} on={angle === a.id} label={a.label} onClick={() => setAngle(a.id)} />
+                        ))}
+                      </div>
+                      {activeAngle && interview}
                     </>
                   )
                 }
+                if (jobQs.length > 0) return interview
                 return primaryAsk === 'subject'
                   ? <>{subjectSlot(true)}{titleSlot(true)}</>
                   : <>{titleSlot(false)}{subjectSlot(false)}</>

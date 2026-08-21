@@ -58,6 +58,10 @@ export interface JobSpec {
      *  post. When present, the words step is these questions and nothing else
      *  (plus an optional title). First one is required. */
     questions?: readonly { label: string; ph: string }[]
+    /** Some types hold MORE THAN ONE story. When present, the words step
+     *  starts by asking which story to tell; each angle has its own
+     *  interview. Takes precedence over questions. */
+    angles?: readonly { id: string; label: string; questions: readonly { label: string; ph: string }[] }[]
   }
   /** honest timing note, e.g. a countdown is pointless without lead time */
   timing?: 'needs-lead-time' | 'date-anchored' | 'evergreen'
@@ -79,7 +83,31 @@ const spec = (
 
 export const JOB_REGISTRY: readonly JobSpec[] = [
   // your story and brand
-  spec('story-behind', 'brand', '👋', { headline: 'The Story Behind Us', asks: ['subject'], voice: { questions: [{ label: 'How did it start?', ph: 'We started with one table and a big dream in 2019' }, { label: 'Who is behind it?', ph: 'Two sisters, born and raised here' }, { label: 'What keeps you going?', ph: 'Our regulars feel like family now' }], blurb: 'The post that tells people who you are and why you started.', ask: 'Tell your story in one line. We shape the rest.', subject: 'The story', subjectPh: 'Two sisters, one dream, opened in 2019', headlinePh: 'How It All Started', headlines: ['How It All Started', 'From Our Family To Yours'] } }),
+  spec('story-behind', 'brand', '👋', { headline: 'The Story Behind Us', asks: ['subject'], voice: { blurb: 'The post that tells people who you are and why you started.', ask: 'Pick the story you want to tell. Then answer a few easy questions.', angles: [
+      { id: 'origin', label: 'How we started', questions: [
+        { label: 'How did it start?', ph: 'We started with one table and a big dream in 2019' },
+        { label: 'What was the hardest early moment?', ph: 'We almost closed in the first winter' },
+        { label: 'What is different today?', ph: 'Now we know half our customers by name' },
+      ] },
+      { id: 'people', label: 'The people behind it', questions: [
+        { label: 'Who is behind it?', ph: 'Two sisters, born and raised here' },
+        { label: 'Why do you do this?', ph: 'We grew up cooking with our grandmother' },
+        { label: 'A detail people would love?', ph: 'We still use her handwritten recipes' },
+      ] },
+      { id: 'craft', label: 'Why we do it our way', questions: [
+        { label: 'What do you do differently?', ph: 'Everything is made fresh, never frozen' },
+        { label: 'Why does that matter to you?', ph: 'It is how our family always did it' },
+      ] },
+      { id: 'overcome', label: 'A moment that tested us', questions: [
+        { label: 'What happened?', ph: 'The flood shut us down for two months' },
+        { label: 'How did you get through it?', ph: 'Neighbors showed up to help rebuild' },
+        { label: 'What did it teach you?', ph: 'This town has our back' },
+      ] },
+      { id: 'roots', label: 'Where we come from', questions: [
+        { label: 'Where do your roots come from?', ph: 'Our recipes came here with our mom' },
+        { label: 'How does it show up in the business?', ph: 'The mole takes three days, same as home' },
+      ] },
+    ], subject: 'The story', subjectPh: 'Two sisters, one dream, opened in 2019', headlinePh: 'How It All Started', headlines: ['How It All Started', 'From Our Family To Yours'] } }),
   spec('team-spotlight', 'brand', '🧑‍🍳', { headline: 'Meet The Team', asks: ['subject'], voice: { questions: [{ label: 'Who are we introducing?', ph: 'Maria, our head baker' }, { label: 'What do they do here?', ph: 'She has run the kitchen for 6 years' }, { label: 'Something people would love to know about them?', ph: 'She names every sourdough starter' }], photoHint: 'A clear photo of them beats a perfect one.', blurb: 'Put a face to the business. People buy from people.', ask: 'Who are we introducing?', subject: 'About them', subjectPh: 'Maria has run our kitchen for 6 years', headlinePh: 'Meet Maria', headlines: ['The Face Behind The Counter'] } }),
   spec('behind-scenes', 'brand', '🎬', { headline: 'Behind The Scenes', voice: { questions: [{ label: 'What are we showing?', ph: 'How we make everything fresh each morning' }, { label: 'Why do you do it this way?', ph: 'Fresh just tastes different' }], blurb: 'Show how the work gets done. People love a peek inside.', ask: 'What are we letting people see?', subject: 'What we are showing', subjectPh: 'How we prep everything fresh each morning', headlinePh: 'A Look Inside', headlines: ['How We Make It', 'A Look Inside'] } }),
   spec('before-after', 'brand', '🔁', { headline: 'The Before And After', asks: ['subject'], voice: { questions: [{ label: 'What changed?', ph: 'Our dining room got a full remodel' }, { label: 'What did it take?', ph: 'Three months and a lot of paint' }], photoHint: 'This one needs both photos: the before and the after.', blurb: 'Show the change side by side. The proof does the talking.', ask: 'What changed? We show the difference.', subject: 'The change', subjectPh: 'Our space, before and after the remodel', headlinePh: 'What A Difference', headlines: ['What A Difference'] } }),
