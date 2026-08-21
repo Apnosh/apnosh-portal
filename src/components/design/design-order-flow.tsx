@@ -95,11 +95,11 @@ function BoardKeyframes() {
 }
 
 /* ── the step ticker: the order sheet's own header ───────────────────────────────────────── */
-function StepHead({ n, title, sub }: { n: number; title: string; sub: string }) {
+function StepHead({ n, title, sub, total = 6 }: { n: number; title: string; sub: string; total?: number }) {
   return (
     <div className="db-pop" style={{ marginBottom: 14 }}>
       <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', color: DESK.mute, marginBottom: 7 }}>
-        {'ORDER SHEET · '}{n}{' / 6'}
+        {'ORDER SHEET · '}{n}{' / '}{total}
       </div>
       <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: '0 0 5px', letterSpacing: '-0.02em' }}>{title}</h2>
       <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, lineHeight: 1.5, margin: 0, maxWidth: '36ch' }}>{sub}</p>
@@ -326,7 +326,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const router = useRouter()
   const today = todayISO()
 
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(seed?.job ? 2 : 1)
+  /* arrived from a type tile: the intro screen is skipped, so the sheet is 5
+   * screens and every number shifts down one */
+  const [seededFlow, setSeededFlow] = useState(!!seed?.job)
   const [described, setDescribed] = useState(seed?.described ?? '')
   const [reading, setReading] = useState(false)
   const [read, setRead] = useState<DesignRead | null>(null)
@@ -497,6 +500,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* Standard delivery: design time plus the slowest destination's production buffer. */
   const standardDelivery = addDays(today, 4 + bufferDays)
   const rushEligible = rushApplies(due ?? undefined, today, RATE_CARD.rushWindowHours)
+  /* Each type's first question is its OWN essential: the story for subject
+   * types, the question for polls, the headline otherwise. */
+  const primaryAsk: 'question' | 'subject' | 'headline' = (() => {
+    const a = job ? jobSpec(job)?.asks ?? [] : []
+    return a.includes('question') ? 'question' : a.includes('subject') ? 'subject' : 'headline'
+  })()
+  const stepNo = (n: number) => (seededFlow ? n - 1 : n)
+  const stepTotal = seededFlow ? 5 : 6
+
   /* A sensible head start before a known event; offered as one tap, never silently applied. */
   const suggestedDue = eventDate ? addDays(eventDate, -3) : null
   const afterEvent = due != null && eventDate != null && due > eventDate
@@ -564,7 +576,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
-    : step === 2 ? headline.trim().length > 0
+    : step === 2 ? (primaryAsk === 'subject' ? details.trim().length > 0 || headline.trim().length > 0 : headline.trim().length > 0)
     : step === 3 ? usingOwn || (photoMode === 'other' ? photoOther.trim().length > 1 : photoMode != null)
     : step === 4 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
     : step === 5 ? (dests.length > 0 || destOtherFinal.length > 1) && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
@@ -626,6 +638,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         : usingOwn ? 'Using their photos' : '',
       eventDate ? `Event on ${fmtDay(eventDate)}` : '',
       action.trim() ? `How people respond: "${action.trim()}"` : '',
+      !headline.trim() && details.trim() ? 'No title given. Write one from their words' : '',
       described.trim() ? `In their own words: "${described.trim()}"` : '',
       due ? `In hand by ${fmtDay(due)}` : '',
       rushConfirmed ? 'Rush agreed' : '',
@@ -665,7 +678,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     setPhotoMode(null); setPhotoOther(''); setPicked([])
     setEventDate(null); setDue(null); setRushConfirmed(false)
     setTier(2); setMethod('designer'); setSlides(5)
-    setSendError(null); setCart(false); setStep(1)
+    setSendError(null); setCart(false); setStep(1); setSeededFlow(false)
   }
 
   const holdAndAddAnother = async () => {
@@ -985,7 +998,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               owner call 2026-08-20: it is really "where is it posted") ── */}
         {step === 5 && (
           <>
-            <StepHead n={5} title={T.where} sub={S.where} />
+            <StepHead n={stepNo(5)} total={stepTotal} title={T.where} sub={S.where} />
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
               {DESTINATIONS.map((d) => (
                 <DestFrame
@@ -1093,8 +1106,37 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           )
           return (
             <>
-              <StepHead n={2} title={isQuestion ? L['say.question.title'] : T.say} sub={jv?.ask ?? S.say} />
-              <div style={{ fontSize: 11, color: DESK.mute, marginTop: -8, marginBottom: 4, textAlign: 'center' }}>
+              <StepHead
+                n={stepNo(2)} total={stepTotal}
+                title={job !== null ? (jobLabel ?? T.say) : (isQuestion ? L['say.question.title'] : T.say)}
+                sub={jv?.ask ?? S.say}
+              />
+              {job !== null && (
+                <button
+                  type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 10, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: `1px solid ${DESK.mint}66`, background: DESK.mintWash, fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}
+                >
+                  <span aria-hidden>{jobSpec(job)?.emoji}</span> {jobLabel} · {L['job.swap']} {shelfOpen ? '‹' : '›'}
+                </button>
+              )}
+              {shelfOpen && job !== null && (
+                <div style={{ marginBottom: 12 }}>
+                  {JOB_GROUPS.map((g) => (
+                    <div key={g.name} style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 8 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
+                        {g.name}
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                        {g.jobs.map((j) => (
+                          <JobTile key={j.id} job={j} tint={g.tint} on={j.id === job} onClick={() => { setJob(j.id); setShelfOpen(false) }} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: DESK.mute, marginTop: -2, marginBottom: 4, textAlign: 'center' }}>
                 {L['say.caption']}
               </div>
 
@@ -1136,21 +1178,47 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               )}
               {ideaError && <div style={{ fontSize: 11.5, color: DESK.amber, marginTop: 6 }}>{ideaError}</div>}
 
-              {slotLabel(isQuestion ? L['say.question'] : L['say.headline'])}
-              {slotInput(headline, setHeadline, jv?.headlinePh ?? L['say.headline.ph'], isQuestion ? L['say.question'] : L['say.headline'])}
-              {headlineSugs.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
-                  {headlineSugs.map((h) => <Chip key={h} on={false} label={h} onClick={() => setHeadline(h)} />)}
-                </div>
-              )}
-
-              {slotLabel(jv?.subject ?? L['say.details'], true)}
-              {slotInput(details, setDetails, eventDate ? fmtLong(eventDate) : jv?.subjectPh ?? L['say.details.ph'], jv?.subject ?? L['say.details'])}
-              {detailSugs.length > 0 && (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
-                  {detailSugs.map((d) => <Chip key={d} on={false} label={d} onClick={() => setDetails(d)} />)}
-                </div>
-              )}
+              {(() => {
+                const titleSlot = (opt: boolean) => (
+                  <>
+                    {slotLabel(isQuestion ? L['say.question'] : opt ? L['say.title'] : L['say.headline'], opt)}
+                    {slotInput(headline, setHeadline, jv?.headlinePh ?? L['say.headline.ph'], isQuestion ? L['say.question'] : L['say.headline'])}
+                    {headlineSugs.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
+                        {headlineSugs.map((h) => <Chip key={h} on={false} label={h} onClick={() => setHeadline(h)} />)}
+                      </div>
+                    )}
+                    {opt && !headline.trim() && (
+                      <div style={{ fontSize: 11, color: DESK.mute, marginTop: 6 }}>{L['say.title.blank']}</div>
+                    )}
+                  </>
+                )
+                const subjectSlot = (asPrimary: boolean) => (
+                  <>
+                    {slotLabel(jv?.subject ?? L['say.details'], !asPrimary)}
+                    {asPrimary ? (
+                      <textarea
+                        value={details} onChange={(e) => setDetails(e.target.value)}
+                        placeholder={jv?.subjectPh ?? L['say.details.ph']} rows={3}
+                        aria-label={jv?.subject ?? L['say.details']}
+                        style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
+                      />
+                    ) : (
+                      slotInput(details, setDetails, eventDate ? fmtLong(eventDate) : jv?.subjectPh ?? L['say.details.ph'], jv?.subject ?? L['say.details'])
+                    )}
+                    {detailSugs.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
+                        {detailSugs.map((d) => <Chip key={d} on={false} label={d} onClick={() => setDetails(d)} />)}
+                      </div>
+                    )}
+                  </>
+                )
+                /* subject types lead with the content itself; the title follows,
+                 * optional, with the seed ideas one tap away */
+                return primaryAsk === 'subject'
+                  ? <>{subjectSlot(true)}{titleSlot(true)}</>
+                  : <>{titleSlot(false)}{subjectSlot(false)}</>
+              })()}
 
               {wantsDate && (
                 <>
@@ -1253,7 +1321,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {/* ── 4. photos: real library ranked sharpest first, or hand it to us ── */}
         {step === 3 && (
           <>
-            <StepHead n={3} title={T.photos} sub={S.photos} />
+            <StepHead n={stepNo(3)} total={stepTotal} title={T.photos} sub={S.photos} />
             {job !== null && jobSpec(job)?.voice?.photoHint && (
               <div style={{ fontSize: 12, fontWeight: 600, color: DESK.mintDeep, background: DESK.mintWash, border: `1px solid ${DESK.mint}55`, borderRadius: 10, padding: '8px 12px', margin: '-4px 0 10px', lineHeight: 1.45 }}>
                 {jobSpec(job)?.voice?.photoHint}
@@ -1351,7 +1419,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {step === 4 && (
           <>
             <StepHead
-              n={4}
+              n={stepNo(4)} total={stepTotal}
               title={eventDate ? T['when.event'] : T.when}
               sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })}
             />
@@ -1448,7 +1516,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
             : usingOwn ? `Your own photos (${picked.length} picked)` : null
           return (
             <>
-              <StepHead n={6} title={T.review} sub={S.review} />
+              <StepHead n={stepNo(6)} total={stepTotal} title={T.review} sub={S.review} />
               {/* HOW IT'S MADE — asked LAST (owner call 2026-08-20): the brief is written,
                   so the maker choice prices the whole thing right here, AI included. */}
               <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '4px 0 8px' }}>
@@ -1523,7 +1591,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         })()}
 
         {/* back / next (review keeps Back too, under the seal, so a typo is one tap away) */}
-        {step > 1 && (
+        {step > (seededFlow ? 2 : 1) && (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
             <button type="button" onClick={() => setStep(step - 1)}
               style={{ flexShrink: 0, flex: step === 6 ? 1 : undefined, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>

@@ -52,6 +52,8 @@ export const DESIGN_LINES: Record<string, string> = {
   'print.us.sub': 'We run the job. Printing is billed at cost, and you see the receipt.',
   'say.headline': 'The headline',
   'say.question': 'The question',
+  'say.title': 'The title',
+  'say.title.blank': 'Leave it blank and your designer writes one from your story.',
   'say.question.title': 'What are we asking?',
   'say.date': 'The big day',
   'say.date.past': 'When it happened',
