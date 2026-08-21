@@ -328,6 +328,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [described, setDescribed] = useState(seed?.described ?? '')
   const [reading, setReading] = useState(false)
   const [read, setRead] = useState<DesignRead | null>(null)
+  /* the figure-it-out assist (owner ask 2026-08-21): a half-formed idea gets three
+   * concrete directions instead of empty promo slots */
+  const [ideas, setIdeas] = useState<{ angle: string; headline: string; subline: string; feature: string }[] | null>(null)
+  const [ideaBusy, setIdeaBusy] = useState(false)
+  const [ideaError, setIdeaError] = useState<string | null>(null)
   const [job, setJob] = useState<DesignJobId | null>(null)
   /* carousel only: total slide count (first included, extras priced per slide) */
   const [slides, setSlides] = useState(5)
@@ -393,6 +398,25 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [panelOpen, setPanelOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
+
+  /* Three directions for a half-formed idea; tapping one inks the board. */
+  const getIdeas = async () => {
+    if (ideaBusy) return
+    setIdeaBusy(true); setIdeaError(null)
+    try {
+      const brief = described.trim().length >= 4 ? described.trim() : (jobLabel ?? 'a post for the restaurant')
+      const r = await fetch('/api/design/ideate', {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ brief }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || !Array.isArray(d.directions)) throw new Error(typeof d.error === 'string' ? d.error : 'no directions')
+      setIdeas(d.directions)
+    } catch {
+      setIdeaError(L['say.ideas.error'])
+    }
+    setIdeaBusy(false)
+  }
 
   /* The AI pathway: the whole brief the owner just wrote feeds the free draft
    * (same route the occasion cards use), and the piece lands in approvals. */
@@ -909,6 +933,44 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               <div style={{ fontSize: 11, color: DESK.mute, marginTop: -8, marginBottom: 4, textAlign: 'center' }}>
                 {L['say.caption']}
               </div>
+
+              {/* the figure-it-out assist: for the owner who has not planned the post yet */}
+              {ideas === null ? (
+                <button
+                  type="button" onClick={() => void getIdeas()} disabled={ideaBusy}
+                  style={{ width: '100%', marginTop: 8, padding: '11px 14px', borderRadius: 12, cursor: 'pointer', border: `1.5px dashed ${DESK.mint}`, background: DESK.mintWash, color: DESK.mintDeep, fontFamily: DESK.body, fontSize: 13, fontWeight: 700 }}
+                >
+                  {ideaBusy ? `${L['say.ideas.busy']}…` : `✨ ${L['say.ideas.btn']}`}
+                </button>
+              ) : (
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
+                    {L['say.ideas.title']}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {ideas.map((d) => {
+                      const on = headline === d.headline
+                      return (
+                        <button
+                          key={d.angle + d.headline} type="button"
+                          onClick={() => { setHeadline(d.headline); setDetails(d.subline) }}
+                          style={{ textAlign: 'left', padding: '11px 13px', borderRadius: 12, cursor: 'pointer', border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : DESK.card, fontFamily: DESK.body }}
+                        >
+                          <div style={{ fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep }}>{d.angle}</div>
+                          <div style={{ fontSize: 14.5, fontWeight: 700, color: DESK.ink, marginTop: 3 }}>{d.headline}</div>
+                          <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{d.subline}</div>
+                          {d.feature && <div style={{ fontSize: 11, color: DESK.mute, marginTop: 4, lineHeight: 1.4 }}>{L['say.ideas.feature']}: {d.feature}</div>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button type="button" onClick={() => void getIdeas()} disabled={ideaBusy}
+                    style={{ marginTop: 8, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink2, fontFamily: DESK.body, fontSize: 11.5, fontWeight: 600 }}>
+                    {ideaBusy ? `${L['say.ideas.busy']}…` : '↻ 3 more'}
+                  </button>
+                </div>
+              )}
+              {ideaError && <div style={{ fontSize: 11.5, color: DESK.amber, marginTop: 6 }}>{ideaError}</div>}
 
               {slotLabel(L['say.headline'])}
               {slotInput(headline, setHeadline, L['say.headline.ph'], L['say.headline'])}
