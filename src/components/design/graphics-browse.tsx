@@ -13,6 +13,7 @@ import { useRouter } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { DESK, paperGround } from '@/components/campaigns/desk/ui'
 import { JOB_SHELF, jobLabelOf, type JobSpec } from '@/lib/design/job-registry'
+import { BoardArt } from '@/components/design/board-art'
 
 function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; index: number; onClick: () => void }) {
   return (
@@ -44,10 +45,9 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
             [`border${h[0].toUpperCase() + h.slice(1)}` as never]: `1.5px solid ${dot}66`,
           }} />
         ))}
-        <span style={{ fontFamily: DESK.disp, fontSize: 12, fontWeight: 700, lineHeight: 1.15, color: DESK.ink, letterSpacing: '-0.01em', textAlign: 'center', textWrap: 'balance' as never }}>
-          {job.headline ?? jobLabelOf(job.id)}
+        <span aria-hidden style={{ display: 'block', width: '78%', margin: '0 auto', flexShrink: 0 }}>
+          <BoardArt id={job.id} dot={dot} />
         </span>
-        <span aria-hidden style={{ position: 'absolute', right: 7, bottom: 5, fontSize: 14 }}>{job.emoji}</span>
       </span>
       <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: DESK.ink2, textAlign: 'center', lineHeight: 1.2 }}>{jobLabelOf(job.id)}</span>
     </button>
