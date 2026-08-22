@@ -96,7 +96,7 @@ function BoardKeyframes() {
 }
 
 /* ── the step ticker: the order sheet's own header ───────────────────────────────────────── */
-function StepHead({ n, title, sub, total = 6, accent = DESK.mint }: { n: number; title: string; sub: string; total?: number; accent?: string }) {
+function StepHead({ n, title, sub, total = 6, accent = DESK.mint, aside }: { n: number; title: string; sub?: string; total?: number; accent?: string; aside?: React.ReactNode }) {
   return (
     <div className="db-pop" style={{ marginBottom: 14 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
@@ -109,8 +109,11 @@ function StepHead({ n, title, sub, total = 6, accent = DESK.mint }: { n: number;
           ))}
         </span>
       </div>
-      <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: '0 0 5px', letterSpacing: '-0.02em' }}>{title}</h2>
-      <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, lineHeight: 1.5, margin: 0, maxWidth: '36ch' }}>{sub}</p>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: sub ? '0 0 5px' : 0, letterSpacing: '-0.02em' }}>{title}</h2>
+        {aside}
+      </div>
+      {sub ? <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, lineHeight: 1.5, margin: 0, maxWidth: '36ch' }}>{sub}</p> : null}
     </div>
   )
 }
@@ -896,10 +899,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
           </div>
         </div>
       )}
-      {step === 1 && (
+      {(step === 1 || (seededFlow && step === 2)) && (
         <button
           type="button"
-          onClick={() => router.push('/dashboard/campaigns/new?lens=creatives')}
+          onClick={() => router.push(seededFlow ? '/dashboard/design/browse' : '/dashboard/campaigns/new?lens=creatives')}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '2px 0', marginBottom: 8, cursor: 'pointer', fontFamily: DESK.body, fontSize: 14, fontWeight: 600, color: DESK.ink2 }}
         >
           {'‹'} Store
@@ -1151,16 +1154,16 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               <StepHead
                 n={stepNo(2)} total={stepTotal} accent={dot}
                 title={job !== null ? (jobLabel ?? T.say) : (isQuestion ? L['say.question.title'] : T.say)}
-                sub={jv?.ask ?? S.say}
+                sub={jobAngles.length > 0 ? undefined : jv?.ask ?? S.say}
+                aside={job !== null ? (
+                  <button
+                    type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.9)', background: `linear-gradient(165deg, ${dot}18, rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.6)`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 3px 10px rgba(22,33,28,0.07)', fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}
+                  >
+                    {L['job.swap']} {shelfOpen ? '‹' : '›'}
+                  </button>
+                ) : undefined}
               />
-              {job !== null && (
-                <button
-                  type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginBottom: 10, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.9)', background: `linear-gradient(165deg, ${dot}18, rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.6)`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 3px 10px rgba(22,33,28,0.07)', fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}
-                >
-                  <span aria-hidden>{jobSpec(job)?.emoji}</span> {jobLabel} · {L['job.swap']} {shelfOpen ? '‹' : '›'}
-                </button>
-              )}
               {shelfOpen && job !== null && (
                 <div style={{ marginBottom: 12 }}>
                   {JOB_GROUPS.map((g) => (
