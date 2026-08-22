@@ -38,7 +38,7 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
           WebkitBackdropFilter: 'blur(10px) saturate(1.3)',
           border: `1px solid ${'#EAE7DE'}`,
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 0 rgba(22,33,28,0.04), 0 8px 22px rgba(22,33,28,0.09)',
-          padding: '10px 10px 9px',
+          padding: '8px 8px 7px',
         }}
       >
         <span aria-hidden style={{
@@ -50,7 +50,7 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
           <BoardArt id={job.id} dot={dot} />
         </span>
       </span>
-      <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: DESK.ink2, textAlign: 'center', lineHeight: 1.2 }}>{jobLabelOf(job.id)}</span>
+      <span style={{ fontFamily: DESK.body, fontSize: 10, fontWeight: 600, color: DESK.ink2, textAlign: 'center', lineHeight: 1.2 }}>{jobLabelOf(job.id)}</span>
     </button>
   )
 }
@@ -115,7 +115,7 @@ button:active .gb-board{transform:scale(.97)}
             <span style={{ width: 6, height: 6, borderRadius: 99, background: g.dot, display: 'inline-block' }} />
             {g.name}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(98px, 1fr))', gap: 7 }}>
             {g.jobs.map((j) => <BoardTile key={j.id} job={j} dot={g.dot} index={i++} onClick={() => open(j.id)} />)}
           </div>
         </div>
