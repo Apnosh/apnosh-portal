@@ -61,6 +61,8 @@ export const DESIGN_LINES: Record<string, string> = {
   'say.exact.ph': 'Write it exactly as it should appear on the graphic',
   'say.answer.ph': 'Type your answer',
   'say.like': 'Like',
+  'fmt.multi': 'Carousel · {n} pages',
+  'fmt.single': 'Single graphic · one page',
   'say.youanswer': 'You will answer',
   'say.title.blank': 'Leave it blank and your designer writes one from your story.',
   'say.question.title': 'What are we asking?',

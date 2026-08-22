@@ -557,6 +557,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* the picked type's group color threads the whole sheet */
   const jobGroup = job ? jobSpec(job)?.group : null
   const dot = jobGroup ? JOB_GROUP_META[jobGroup].dot : DESK.mint
+  /* story-shaped types are carousels: multiple pages, priced per slide */
+  const isCarousel = job !== null && jobSpec(job)?.format === 'carousel'
   /* the type's interview: angle types pick a story first, each with its own
    * questions; plain interview types go straight to theirs */
   const jobAngles = job ? jobSpec(job)?.voice?.angles ?? [] : []
@@ -578,7 +580,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
   const answers: DesignOrderAnswers = {
     jobType: { value: job ?? 'other', source: src('jobType'), citedWords: read?.cited.jobType },
-    ...(job === 'carousel' ? { slides } : {}),
+    ...(isCarousel ? { slides } : {}),
     destinations: { value: dests, source: src('destinations'), citedWords: read?.cited.destinations },
     ...(printPicked && allQtysIn ? { printQtys: { value: printQtys, source: 'asked' as const } } : {}),
     ...(printer != null ? { printer: { value: printer, source: 'asked' as const } } : {}),
@@ -698,7 +700,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     const days = due ? Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86400000) : null
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
     const noteBits = [
-      job === 'carousel' ? `CAROUSEL POST: ${slides} slides total. Slide 1 is the hook; keep one idea per slide and end on the offer or call to action` : '',
+      isCarousel ? `CAROUSEL POST: ${slides} slides total. Slide 1 is the hook; one beat per slide; end on the call to action or the today note` : '',
       seed?.draftId ? 'START FROM THE CLIENT\'S EXISTING DRAFT — polish it, do not start over' : '',
       printPicked && allQtysIn ? printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label}`).join(', ') : '',
       /* print runs are off: any picked print size is a print ready FILE handoff */
@@ -1178,6 +1180,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   </button>
                 ) : undefined}
               />
+              {job !== null && (
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '4px 10px', borderRadius: 99, background: isCarousel ? `${dot}16` : 'rgba(22,33,28,0.05)', border: `1px solid ${isCarousel ? `${dot}44` : DESK.line}`, fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: isCarousel ? dot : DESK.mute }}>
+                  {isCarousel ? fill(L['fmt.multi'], { n: String(slides) }) : L['fmt.single']}
+                </div>
+              )}
               {shelfOpen && job !== null && (
                 <div style={{ marginBottom: 12 }}>
                   {JOB_GROUPS.map((g) => (
@@ -1467,7 +1474,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 )
               })()}
 
-              {job === 'carousel' && (
+              {isCarousel && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
                   {L['job.slides.title']}
@@ -1717,7 +1724,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 <Ticket on={method === 'designer' && tier === 3} name={L['tier.works.label']} sub={`${L['tier.works.sub']} · ${specLine(3)}`} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => { setMethod('designer'); setTier(3) }} />
               </div>
               <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '4px 16px 2px', boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
-                {sumRow(L['sum.job'], [job === 'carousel' ? `${jobLabel} · ${slides} slides` : jobLabel ?? 'A design'])}
+                {sumRow(L['sum.job'], [isCarousel ? `${jobLabel} · ${slides} slides` : jobLabel ?? 'A design'])}
                 {sumRow(L['sum.featuring'], [promoteItems.length ? sayList(promoteItems) : null])}
                 {sumRow(L['sum.words'], [headline ? `“${headline}”` : null, details || null, offer ? `Deal: ${offer}` : null])}
                 {sumRow(L['sum.where'], whereLines)}
