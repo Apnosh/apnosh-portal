@@ -436,6 +436,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
     const places = job ? jobSpec(job)?.places : null
     setDests(places && places.length ? [...places] : [])
     setWritten([])
+    setChosenMaker(null)
   }, [job])
   /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
    * the same list (featureOtherText tracks which member is the typed one). */
@@ -482,6 +483,17 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
   const [placedRequestId, setPlacedRequestId] = useState<string | null>(null)
   const [followUpBusy, setFollowUpBusy] = useState(false)
   const [followUpSent, setFollowUpSent] = useState(false)
+  /* the creator marketplace as makers: live ratings, honest No-ratings-yet */
+  const [makers, setMakers] = useState<{ vendorId: string; name: string; ratingLabel: string; rating: { avg: number; count: number } | null }[]>([])
+  const [chosenMaker, setChosenMaker] = useState<{ vendorId: string; name: string } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/design/makers')
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled && Array.isArray(j.makers)) setMakers(j.makers) })
+      .catch(() => { /* the order offers the house tiers either way */ })
+    return () => { cancelled = true }
+  }, [])
   const [panelOpen, setPanelOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -781,6 +793,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         destinations: dests,
         ...(isCarousel ? { slides } : {}),
         ...(written.length ? { written } : {}),
+        ...(chosenMaker ? { makerVendorId: chosenMaker.vendorId, makerName: chosenMaker.name } : {}),
         photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
         dueDateISO: due ?? undefined,
         rushConfirmed,
@@ -1016,7 +1029,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
           {row(<Send size={14} />, L['xp.row.where'], dests.length ? `${dests.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${dests.length > 2 ? ` +${dests.length - 2}` : ''}` : L['xp.none'], 5)}
           {row(<ImageIcon size={14} />, L['xp.row.photos'], photoValue, 3)}
           {row(<CalendarDays size={14} />, L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
-          {row(<User size={14} />, L['xp.row.maker'], `${tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
+          {row(<User size={14} />, L['xp.row.maker'], `${chosenMaker ? chosenMaker.name : tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
         </div>
 
         <button
@@ -1998,6 +2011,32 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 <Ticket on={method === 'designer' && tier === 1} name={L['tier.basic.label']} sub={`${L['tier.basic.sub']} · ${specLine(1)}`} price={`$${RATE_CARD.tierBase[1]}`} onClick={() => { setMethod('designer'); setTier(1) }} />
                 <Ticket on={method === 'designer' && tier === 2} name={<span>{L['tier.custom.label']} <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>{L['tier.most']}</span></span>} sub={`${L['tier.custom.sub']} · ${specLine(2)}`} price={`$${RATE_CARD.tierBase[2]}`} onClick={() => { setMethod('designer'); setTier(2) }} />
                 <Ticket on={method === 'designer' && tier === 3} name={L['tier.works.label']} sub={`${L['tier.works.sub']} · ${specLine(3)}`} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => { setMethod('designer'); setTier(3) }} />
+                {makers.length > 0 && (
+                  <>
+                    <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '12px 0 2px' }}>
+                      {L['maker.market']}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 6, lineHeight: 1.45 }}>{L['maker.market.sub']}</div>
+                    {makers.map((m) => {
+                      const on = chosenMaker?.vendorId === m.vendorId
+                      return (
+                        <button
+                          key={m.vendorId} type="button" aria-pressed={on}
+                          onClick={() => { setMethod('designer'); setChosenMaker(on ? null : { vendorId: m.vendorId, name: m.name }) }}
+                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '12px 13px', borderRadius: 13, border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff', cursor: 'pointer', fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent', transition: 'border-color .15s ease, background .15s ease' }}
+                        >
+                          <span style={{ minWidth: 0 }}>
+                            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{m.name}</span>
+                            <span style={{ display: 'block', fontSize: 11.5, color: DESK.ink2, marginTop: 2 }}>
+                              {m.rating ? <><span style={{ color: '#D9A21B' }}>{'★'}</span> {m.ratingLabel}</> : m.ratingLabel}
+                            </span>
+                          </span>
+                          <span style={{ flexShrink: 0, fontFamily: DESK.mono, fontSize: 12, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute }}>{`$${RATE_CARD.tierBase[tier]}`}</span>
+                        </button>
+                      )
+                    })}
+                  </>
+                )}
               </div>
               <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '4px 16px 2px', boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
                 {sumRow(L['sum.job'], [isCarousel ? `${jobLabel} · ${slides} slides` : jobLabel ?? 'A design'])}

@@ -51,7 +51,7 @@ function briefText(row: RequestRowForMint): string {
  * house vendor can't be resolved or the insert fails (the accept still stands —
  * the admin queue shows the request either way).
  */
-export async function mintRequestWorkOrder(row: RequestRowForMint): Promise<string | null> {
+export async function mintRequestWorkOrder(row: RequestRowForMint, opts?: { vendorId?: string }): Promise<string | null> {
   try {
     const admin = createAdminClient()
     const key = `request:${row.id}`
@@ -64,13 +64,29 @@ export async function mintRequestWorkOrder(row: RequestRowForMint): Promise<stri
       .maybeSingle()
     if (existing?.id) return existing.id as string
 
-    // The house vendor fulfills accepted requests until an admin reassigns.
-    const { data: vendor } = await admin
-      .from('vendors')
-      .select('id')
-      .eq('vendor_type', 'apnosh')
-      .limit(1)
-      .maybeSingle()
+    // A chosen marketplace creator fulfills when the owner picked one (must be
+    // a real bookable non-house vendor); otherwise the house vendor does,
+    // until an admin reassigns.
+    let vendor: { id: string } | null = null
+    if (opts?.vendorId) {
+      const { data: chosen } = await admin
+        .from('vendors')
+        .select('id')
+        .eq('id', opts.vendorId)
+        .eq('bookable', true)
+        .neq('vendor_type', 'apnosh')
+        .maybeSingle()
+      if (chosen?.id) vendor = { id: chosen.id as string }
+    }
+    if (!vendor) {
+      const { data: house } = await admin
+        .from('vendors')
+        .select('id')
+        .eq('vendor_type', 'apnosh')
+        .limit(1)
+        .maybeSingle()
+      if (house?.id) vendor = { id: house.id as string }
+    }
     if (!vendor?.id) {
       console.error('[requests] no house vendor (vendor_type=apnosh); accept stands without a work order')
       return null

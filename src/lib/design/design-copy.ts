@@ -88,6 +88,8 @@ export const DESIGN_LINES: Record<string, string> = {
   'fu.sending': 'Sending',
   'fu.sent': 'Got them. Your designer sees these with the order.',
   'fu.notehead': 'More answers from the owner:',
+  'maker.market': 'Or pick your creator',
+  'maker.market.sub': 'Local creators from the marketplace, at the same listed price. Ratings come from real delivered work.',
   'fmt.chip.carousel': 'Carousel',
   'fmt.chip.either': 'Single or carousel',
   'fmt.chip.single': 'Single graphic',

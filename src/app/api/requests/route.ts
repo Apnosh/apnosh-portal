@@ -180,7 +180,11 @@ export async function POST(req: Request) {
       attachments,
       due_date: dueDate,
       quote_cents: orderCents,
-    })
+    }, (() => {
+      const dz = (body as { design?: Record<string, unknown> }).design
+      const mv = dz && typeof dz.makerVendorId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dz.makerVendorId) ? dz.makerVendorId : undefined
+      return mv ? { vendorId: mv } : undefined
+    })())
   }
 
   /* Staff hear about every request the moment it lands (law: no silent stalls).
@@ -203,7 +207,11 @@ export async function POST(req: Request) {
   return NextResponse.json({
     ok: true,
     request: row,
-    ...(isOrder ? { order: { amount_cents: orderCents, work_order_id: workOrderId, assigned: 'Your Apnosh creative team' } } : {}),
+    ...(isOrder ? { order: { amount_cents: orderCents, work_order_id: workOrderId, assigned: (() => {
+      const dz = (body as { design?: Record<string, unknown> }).design
+      const mn = dz && typeof dz.makerName === 'string' && dz.makerName.trim() ? String(dz.makerName).trim().slice(0, 60) : null
+      return mn ?? 'Your Apnosh creative team'
+    })() } } : {}),
   })
 }
 
