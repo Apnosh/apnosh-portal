@@ -129,6 +129,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'photos.source.sub': 'We find or license shots that fit your place',
   'photos.gate': 'Too small to look sharp',
   'photos.sharp': 'Sharp',
+  'photos.soft': 'OK for social, soft in print',
   'photos.menu': 'From your menu',
   'photos.empty': 'Nothing in your library is sharp enough to design with. Book a shoot, have us find photos, or go with custom artwork.',
   'when.rushnote': 'You mentioned needing this fast. The first day without a rush charge is {date}.',

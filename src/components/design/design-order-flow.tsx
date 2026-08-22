@@ -50,7 +50,14 @@ export interface DesignAsset {
 }
 
 /** The upload quality gate: honest and simple. Small images fail loudly, never silently. */
+/* Photo quality, three honest bands on the SHORTER side:
+ *   >= 1000px  Sharp - good anywhere, print included
+ *   640-999px  OK on screens - fine for social, soft in print (selectable, tagged)
+ *   < 640px    genuinely too small - blocked
+ * Unmeasured photos (width 0, dimensions still loading) are NOT judged. */
 export const passesQualityGate = (a: { width: number; height: number }) => Math.min(a.width, a.height) >= 1000
+export const usableOnScreens = (a: { width: number; height: number }) => Math.min(a.width, a.height) >= 640
+const measuredYet = (a: { width: number; height: number }) => a.width > 0 && a.height > 0
 
 const fmtDay = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
 const fmtLong = (s: string) => new Date(s + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
@@ -542,12 +549,12 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   )
   /* Best options first: everything that clears the gate, sharpest on top; too-small
    * photos sink to the end (visible but honestly disabled). */
+  const qualityRank = (a: { width: number; height: number }) =>
+    !measuredYet(a) ? 1 : passesQualityGate(a) ? 2 : usableOnScreens(a) ? 1 : 0
   const rankedAssets = [...allAssets].sort(
-    (a, b) =>
-      (passesQualityGate(b) ? 1 : 0) - (passesQualityGate(a) ? 1 : 0) ||
-      b.width * b.height - a.width * a.height,
+    (a, b) => qualityRank(b) - qualityRank(a) || b.width * b.height - a.width * a.height,
   )
-  const usable = allAssets.filter(passesQualityGate)
+  const usable = allAssets.filter((a) => !measuredYet(a) || usableOnScreens(a))
   const usingOwn = picked.length > 0 && photoMode == null
   const printDestSpecs = dests
     .map((d) => DESTINATIONS.find((x) => x.id === d))
@@ -738,6 +745,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         : 'WRITE THE COPY: their answers are raw material. Polish the wording, keep every fact') : '',
       action.trim() ? `How people respond: "${action.trim()}"` : '',
       !headline.trim() && (details.trim() || qaPairs.length > 0) ? 'No title given. Write one from their words' : '',
+      allAssets.some((a) => picked.includes(a.id) && measuredYet(a) && !passesQualityGate(a))
+        ? 'Some picked photos are below print sharpness. Use them at social sizes or small in layout, never full-bleed print'
+        : '',
       described.trim() ? `In their own words: "${described.trim()}"` : '',
       due ? `In hand by ${fmtDay(due)}` : '',
       rushConfirmed ? 'Rush agreed' : '',
@@ -1624,10 +1634,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 const top = rankedAssets.slice(0, 8)
                 return [...top, ...rankedAssets.filter((a) => picked.includes(a.id) && !top.some((t) => t.id === a.id))]
               })().map((a, i) => {
-                const ok = passesQualityGate(a)
+                const ok = !measuredYet(a) || usableOnScreens(a)
+                const soft = measuredYet(a) && usableOnScreens(a) && !passesQualityGate(a)
                 const on = picked.includes(a.id)
                 /* honest quality tags: the sharpest few say so; a dish photo names its dish */
-                const tag = !ok ? L['photos.gate'] : a.kind === 'menu' && a.label ? a.label : i === 0 && usable.length > 1 ? L['photos.sharp'] : null
+                const tag = !measuredYet(a) ? null
+                  : !ok ? L['photos.gate']
+                  : soft ? L['photos.soft']
+                  : a.kind === 'menu' && a.label ? a.label
+                  : i === 0 && usable.length > 1 ? L['photos.sharp'] : null
                 return (
                   <button
                     key={a.id} type="button" disabled={!ok}
