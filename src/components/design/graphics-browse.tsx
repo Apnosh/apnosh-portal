@@ -46,6 +46,12 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
           background: 'linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.55) 50%, transparent 58%)',
           pointerEvents: 'none',
         }} />
+        {job.format === 'carousel' && (
+          <span aria-hidden title="Carousel" style={{ position: 'absolute', top: 6, right: 6, width: 14, height: 14, zIndex: 2 }}>
+            <span style={{ position: 'absolute', top: 0, right: 0, width: 10, height: 12, borderRadius: 2, border: `1.5px solid ${dot}`, background: '#fff', opacity: 0.55 }} />
+            <span style={{ position: 'absolute', top: 2.5, right: 3, width: 10, height: 12, borderRadius: 2, border: `1.5px solid ${dot}`, background: '#fff' }} />
+          </span>
+        )}
         <span aria-hidden style={{ display: 'block', width: '78%', margin: '0 auto', flexShrink: 0, position: 'relative' }}>
           <BoardArt id={job.id} dot={dot} />
         </span>

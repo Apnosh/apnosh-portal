@@ -69,6 +69,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'fmt.single.sub': 'One page. Best for one clear message.',
   'fmt.multi.sub': 'Pages people swipe through. Best for stories and lists.',
   'fmt.rec': 'Recommended',
+  'fmt.usually': 'Usually a carousel',
   'dest.rec': 'We picked where this should live based on what it is. Add or remove anything below.',
   'written.title': 'Written versions',
   'written.sub': 'The same answers, written out as words you can paste. We write them, you approve.',

@@ -1301,12 +1301,19 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   : (isQuestion ? L['say.question.title'] : T.say)}
                 sub={jobAngles.length > 0 ? undefined : jv?.ask ?? S.say}
                 aside={job !== null && !activeAngle ? (
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  {recFormat === 'carousel' && (
+                    <span style={{ padding: '4px 9px', borderRadius: 99, background: `${dot}14`, border: `1px solid ${dot}44`, fontFamily: DESK.mono, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: dot }}>
+                      {L['fmt.usually']}
+                    </span>
+                  )}
                   <button
                     type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.9)', background: `linear-gradient(165deg, ${dot}18, rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.6)`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 3px 10px rgba(22,33,28,0.07)', fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}
                   >
                     {L['job.swap']} {shelfOpen ? '‹' : '›'}
                   </button>
+                  </span>
                 ) : undefined}
               />
 
