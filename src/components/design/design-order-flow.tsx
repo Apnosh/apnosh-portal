@@ -578,7 +578,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const dot = jobGroup ? JOB_GROUP_META[jobGroup].dot : DESK.mint
   /* the recommended format comes from the type; the owner can override on the
    * build step. Everything downstream follows the CHOSEN format. */
-  const recFormat: 'single' | 'carousel' = job !== null && jobSpec(job)?.format === 'carousel' ? 'carousel' : 'single'
+  const jobFormat = job !== null ? jobSpec(job)?.format ?? 'single' : 'single'
+  const recFormat: 'single' | 'carousel' = jobFormat === 'carousel' ? 'carousel' : 'single'
   const isCarousel = (pickedFormat ?? recFormat) === 'carousel'
   /* the type's interview: angle types pick a story first, each with its own
    * questions; plain interview types go straight to theirs */
@@ -1117,7 +1118,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                     <span style={{ display: 'block', fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.4 }}>
                       {f === 'single' ? L['fmt.single.sub'] : L['fmt.multi.sub']}
                     </span>
-                    {recFormat === f && (
+                    {recFormat === f && jobFormat !== 'either' && (
                       <span style={{ position: 'absolute', top: 8, right: 9, fontFamily: DESK.mono, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep }}>
                         {L['fmt.rec']}
                       </span>
@@ -1302,11 +1303,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 sub={jobAngles.length > 0 ? undefined : jv?.ask ?? S.say}
                 aside={job !== null && !activeAngle ? (
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  {recFormat === 'carousel' && (
-                    <span style={{ padding: '4px 9px', borderRadius: 99, background: `${dot}14`, border: `1px solid ${dot}44`, fontFamily: DESK.mono, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: dot }}>
-                      {L['fmt.usually']}
-                    </span>
-                  )}
+                  <span style={{ padding: '4px 9px', borderRadius: 99, background: `${dot}14`, border: `1px solid ${dot}44`, fontFamily: DESK.mono, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: dot, whiteSpace: 'nowrap' }}>
+                    {jobFormat === 'carousel' ? L['fmt.chip.carousel'] : jobFormat === 'either' ? L['fmt.chip.either'] : L['fmt.chip.single']}
+                  </span>
                   <button
                     type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.9)', background: `linear-gradient(165deg, ${dot}18, rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.6)`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 3px 10px rgba(22,33,28,0.07)', fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}

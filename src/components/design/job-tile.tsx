@@ -44,9 +44,9 @@ export function JobTile({ job, on, onClick }: {
         position: 'absolute', inset: 0, pointerEvents: 'none',
         background: 'linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.5) 50%, transparent 58%)',
       }} />
-      {job.format === 'carousel' && (
+      {(job.format === 'carousel' || job.format === 'either') && (
         <span aria-hidden style={{ position: 'absolute', top: 5, left: 5, width: 12, height: 12 }}>
-          <span style={{ position: 'absolute', top: 0, right: 0, width: 8, height: 10, borderRadius: 1.5, border: `1.2px solid ${dot}`, background: '#fff', opacity: 0.55 }} />
+          <span style={{ position: 'absolute', top: 0, right: 0, width: 8, height: 10, borderRadius: 1.5, border: `1.2px ${job.format === 'either' ? 'dashed' : 'solid'} ${dot}`, background: '#fff', opacity: 0.55 }} />
           <span style={{ position: 'absolute', top: 2, right: 2.5, width: 8, height: 10, borderRadius: 1.5, border: `1.2px solid ${dot}`, background: '#fff' }} />
         </span>
       )}

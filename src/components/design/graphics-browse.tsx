@@ -46,9 +46,9 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
           background: 'linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.55) 50%, transparent 58%)',
           pointerEvents: 'none',
         }} />
-        {job.format === 'carousel' && (
-          <span aria-hidden title="Carousel" style={{ position: 'absolute', top: 6, right: 6, width: 14, height: 14, zIndex: 2 }}>
-            <span style={{ position: 'absolute', top: 0, right: 0, width: 10, height: 12, borderRadius: 2, border: `1.5px solid ${dot}`, background: '#fff', opacity: 0.55 }} />
+        {(job.format === 'carousel' || job.format === 'either') && (
+          <span aria-hidden title={job.format === 'carousel' ? 'Carousel' : 'Single or carousel'} style={{ position: 'absolute', top: 6, right: 6, width: 14, height: 14, zIndex: 2 }}>
+            <span style={{ position: 'absolute', top: 0, right: 0, width: 10, height: 12, borderRadius: 2, border: `1.5px ${job.format === 'either' ? 'dashed' : 'solid'} ${dot}`, background: '#fff', opacity: 0.55 }} />
             <span style={{ position: 'absolute', top: 2.5, right: 3, width: 10, height: 12, borderRadius: 2, border: `1.5px solid ${dot}`, background: '#fff' }} />
           </span>
         )}
@@ -107,6 +107,25 @@ button:active .gb-board{transform:scale(.97)}
           aria-label="Search graphics"
           style={{ width: '100%', height: 44, borderRadius: 22, border: `1.5px solid ${DESK.line}`, background: DESK.card, padding: '0 16px 0 36px', fontSize: 14, fontFamily: DESK.body, color: DESK.ink, outline: 'none', boxSizing: 'border-box' }}
         />
+      </div>
+
+      {/* the format legend: readable at a glance, no tapping required */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, margin: '10px 2px 0', fontSize: 11, color: DESK.mute, flexWrap: 'wrap' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span aria-hidden style={{ position: 'relative', width: 13, height: 14, display: 'inline-block' }}>
+            <span style={{ position: 'absolute', top: 0, right: 0, width: 9, height: 11, borderRadius: 2, border: `1.5px solid ${DESK.ink2}`, opacity: 0.5 }} />
+            <span style={{ position: 'absolute', top: 2.5, right: 2.5, width: 9, height: 11, borderRadius: 2, border: `1.5px solid ${DESK.ink2}`, background: '#fff' }} />
+          </span>
+          Carousel
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <span aria-hidden style={{ position: 'relative', width: 13, height: 14, display: 'inline-block' }}>
+            <span style={{ position: 'absolute', top: 0, right: 0, width: 9, height: 11, borderRadius: 2, border: `1.5px dashed ${DESK.ink2}`, opacity: 0.5 }} />
+            <span style={{ position: 'absolute', top: 2.5, right: 2.5, width: 9, height: 11, borderRadius: 2, border: `1.5px solid ${DESK.ink2}`, background: '#fff' }} />
+          </span>
+          Single or carousel
+        </span>
+        <span>No mark: one page</span>
       </div>
 
       {shelf.length === 0 && (
