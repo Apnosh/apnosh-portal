@@ -86,7 +86,7 @@ export default async function DesignOrderPage({ searchParams }: { searchParams: 
   /* Inside the standard shell (owner ask 2026-08-18): the bottom nav must never
    * disappear on a creatives flow — it reads as leaving the app. */
   return (
-    <MvpShell active="campaigns" wide>
+    <MvpShell active="campaigns">
       <div style={{ minHeight: '100%' }}>
         <DesignOrderFlow menu={menu} assets={assets} businessName={library.businessName} seed={seed} />
       </div>

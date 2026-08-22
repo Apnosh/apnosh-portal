@@ -61,7 +61,7 @@ export interface JobSpec {
     /** Some types hold MORE THAN ONE story. When present, the words step
      *  starts by asking which story to tell; each angle has its own
      *  interview. Takes precedence over questions. */
-    angles?: readonly { id: string; label: string; questions: readonly { label: string; ph: string }[] }[]
+    angles?: readonly { id: string; label: string; sub: string; questions: readonly { label: string; ph: string }[] }[]
   }
   /** honest timing note, e.g. a countdown is pointless without lead time */
   timing?: 'needs-lead-time' | 'date-anchored' | 'evergreen'
@@ -84,26 +84,26 @@ const spec = (
 export const JOB_REGISTRY: readonly JobSpec[] = [
   // your story and brand
   spec('story-behind', 'brand', '👋', { headline: 'The Story Behind Us', asks: ['subject'], voice: { blurb: 'The post that tells people who you are and why you started.', ask: 'Pick the story you want to tell. Then answer a few easy questions.', angles: [
-      { id: 'origin', label: 'How we started', questions: [
+      { id: 'origin', label: 'How we started', sub: 'The first day, the hard parts, and how far you have come.', questions: [
         { label: 'How did it start?', ph: 'We started with one table and a big dream in 2019' },
         { label: 'What was the hardest early moment?', ph: 'We almost closed in the first winter' },
         { label: 'What is different today?', ph: 'Now we know half our customers by name' },
       ] },
-      { id: 'people', label: 'The people behind it', questions: [
+      { id: 'people', label: 'The people behind it', sub: 'The faces behind the counter and why they do it.', questions: [
         { label: 'Who is behind it?', ph: 'Two sisters, born and raised here' },
         { label: 'Why do you do this?', ph: 'We grew up cooking with our grandmother' },
         { label: 'A detail people would love?', ph: 'We still use her handwritten recipes' },
       ] },
-      { id: 'craft', label: 'Why we do it our way', questions: [
+      { id: 'craft', label: 'Why we do it our way', sub: 'What you do differently and why it matters.', questions: [
         { label: 'What do you do differently?', ph: 'Everything is made fresh, never frozen' },
         { label: 'Why does that matter to you?', ph: 'It is how our family always did it' },
       ] },
-      { id: 'overcome', label: 'A moment that tested us', questions: [
+      { id: 'overcome', label: 'A moment that tested us', sub: 'A hard moment, how you got through, and what it taught you.', questions: [
         { label: 'What happened?', ph: 'The flood shut us down for two months' },
         { label: 'How did you get through it?', ph: 'Neighbors showed up to help rebuild' },
         { label: 'What did it teach you?', ph: 'This town has our back' },
       ] },
-      { id: 'roots', label: 'Where we come from', questions: [
+      { id: 'roots', label: 'Where we come from', sub: 'Where it all comes from and how it shows up today.', questions: [
         { label: 'Where do your roots come from?', ph: 'Our recipes came here with our mom' },
         { label: 'How does it show up in the business?', ph: 'The mole takes three days, same as home' },
       ] },

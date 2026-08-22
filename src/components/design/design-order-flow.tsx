@@ -1180,8 +1180,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               )}
 
 
-              {/* the figure-it-out assist: for the owner who has not planned the post yet */}
-              {ideas === null ? (
+              {/* the figure-it-out assist: for the owner who has not planned the post
+               * yet. Angle types skip it: their story cards ARE the default options. */}
+              {jobAngles.length > 0 ? null : ideas === null ? (
                 <button
                   type="button" onClick={() => void getIdeas()} disabled={ideaBusy}
                   style={{ width: '100%', marginTop: 8, padding: '11px 14px', borderRadius: 13, cursor: 'pointer', border: `1.5px dashed ${DESK.mint}AA`, background: 'linear-gradient(165deg, rgba(46,154,120,0.10), rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.55)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9)', color: DESK.mintDeep, fontFamily: DESK.body, fontSize: 13, fontWeight: 700 }}
@@ -1275,7 +1276,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   return (
                     <>
                       {slotLabel(L['say.whichstory'])}
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 8 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         {jobAngles.map((a) => {
                           const on = angle === a.id
                           return (
@@ -1283,22 +1284,19 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                               key={a.id} type="button" aria-pressed={on} onClick={() => setAngle(a.id)}
                               style={{
                                 position: 'relative', overflow: 'hidden', cursor: 'pointer', textAlign: 'left',
-                                padding: '13px 14px', borderRadius: 14,
-                                background: `linear-gradient(165deg, ${dot}${on ? '22' : '10'}, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.55)`,
-                                backdropFilter: 'blur(8px) saturate(1.25)', WebkitBackdropFilter: 'blur(8px) saturate(1.25)',
-                                border: `1px solid ${on ? DESK.mint : 'rgba(255,255,255,0.85)'}`,
-                                boxShadow: on
-                                  ? 'inset 0 1px 0 rgba(255,255,255,0.95), 0 6px 16px rgba(46,154,120,0.2)'
-                                  : 'inset 0 1px 0 rgba(255,255,255,0.95), 0 4px 12px rgba(22,33,28,0.06)',
-                                transform: on ? 'translateY(-1px)' : undefined,
-                                transition: 'transform .15s ease, box-shadow .15s ease, border-color .15s ease',
-                                fontFamily: DESK.disp, fontSize: 13.5, fontWeight: 700,
-                                color: on ? DESK.mintDeep : DESK.ink, lineHeight: 1.25,
-                                WebkitTapHighlightColor: 'transparent',
+                                padding: '12px 14px', borderRadius: 13,
+                                background: on
+                                  ? DESK.mintWash
+                                  : `linear-gradient(165deg, ${dot}0E, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.6)`,
+                                backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                                border: `1.5px solid ${on ? DESK.mint : 'rgba(255,255,255,0.9)'}`,
+                                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(22,33,28,0.05)',
+                                fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
+                                transition: 'border-color .15s ease, background .15s ease',
                               }}
                             >
-                              <span aria-hidden style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(115deg, transparent 42%, rgba(255,255,255,0.45) 50%, transparent 58%)' }} />
-                              <span style={{ position: 'relative' }}>{a.label}</span>
+                              <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{a.label}</span>
+                              <span style={{ display: 'block', fontSize: 12, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{a.sub}</span>
                             </button>
                           )
                         })}
