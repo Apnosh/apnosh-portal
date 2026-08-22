@@ -410,6 +410,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* words mode: by default WE write the final copy from their answers; the
    * advanced lane lets them write the exact words themselves */
   const [wordsMode, setWordsMode] = useState<'draft' | 'exact'>('draft')
+  const [focusedQ, setFocusedQ] = useState<string | null>(null)
   const [exactCopy, setExactCopy] = useState('')
   /* which of the type's stories they chose to tell; a type swap forgets it */
   const [angle, setAngle] = useState<string | null>(null)
@@ -1294,29 +1295,49 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 ) : (
                   <>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      {jobQs.map((q, i) => (
-                        <div
-                          key={qaKey(i)}
-                          style={{
-                            borderRadius: 14, border: `1.5px solid ${DESK.line}`, overflow: 'hidden',
-                            background: `linear-gradient(165deg, ${dot}0A, rgba(255,255,255,0.02) 55%), #fff`,
-                            boxShadow: '0 2px 8px rgba(22,33,28,0.05)',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px 0' }}>
-                            <span aria-hidden style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 99, background: `${dot}22`, color: dot, fontFamily: DESK.mono, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span>
-                            <span style={{ fontFamily: DESK.body, fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>
-                              {q.label}{i > 0 ? <span style={{ fontWeight: 500, color: DESK.mute }}>{' · '}{L['say.optional']}</span> : null}
-                            </span>
+                      {jobQs.map((q, i) => {
+                        const k = qaKey(i)
+                        const answered = (qa[k] ?? '').trim().length > 0
+                        const focused = focusedQ === k
+                        return (
+                          <div
+                            key={k}
+                            onClick={(e) => (e.currentTarget.querySelector('textarea') as HTMLTextAreaElement | null)?.focus()}
+                            style={{
+                              borderRadius: 14, overflow: 'hidden', cursor: 'text',
+                              border: `1.5px solid ${focused ? DESK.mint : DESK.line}`,
+                              background: `linear-gradient(165deg, ${dot}0A, rgba(255,255,255,0.02) 55%), #fff`,
+                              boxShadow: focused ? '0 4px 14px rgba(46,154,120,0.14)' : '0 2px 8px rgba(22,33,28,0.05)',
+                              transition: 'border-color .15s ease, box-shadow .15s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px 0' }}>
+                              <span aria-hidden style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 99, background: answered ? DESK.mint : `${dot}22`, color: answered ? '#fff' : dot, fontFamily: DESK.mono, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .2s ease, color .2s ease' }}>
+                                {answered ? '✓' : i + 1}
+                              </span>
+                              <span style={{ fontFamily: DESK.body, fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>
+                                {q.label}{i > 0 ? <span style={{ fontWeight: 500, color: DESK.mute }}>{' · '}{L['say.optional']}</span> : null}
+                              </span>
+                            </div>
+                            {/* the example never disappears while they type */}
+                            <div style={{ padding: '3px 13px 0 41px', fontSize: 11.5, color: DESK.mute, fontStyle: 'italic', lineHeight: 1.4 }}>
+                              {L['say.like']}: {'\u201C'}{q.ph}{'\u201D'}
+                            </div>
+                            <textarea
+                              value={qa[k] ?? ''}
+                              onChange={(e) => {
+                                setQa((prev) => ({ ...prev, [k]: e.target.value }))
+                                e.target.style.height = 'auto'
+                                e.target.style.height = `${e.target.scrollHeight}px`
+                              }}
+                              onFocus={() => setFocusedQ(k)}
+                              onBlur={() => setFocusedQ((cur) => (cur === k ? null : cur))}
+                              placeholder={L['say.answer.ph']} rows={1} aria-label={q.label}
+                              style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '6px 13px 12px 41px', resize: 'none', overflow: 'hidden', minHeight: 40, fontFamily: DESK.body, fontSize: 14, color: DESK.ink, lineHeight: 1.5 }}
+                            />
                           </div>
-                          <textarea
-                            value={qa[qaKey(i)] ?? ''}
-                            onChange={(e) => setQa((prev) => ({ ...prev, [qaKey(i)]: e.target.value }))}
-                            placeholder={q.ph} rows={2} aria-label={q.label}
-                            style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '7px 13px 11px 41px', resize: 'none', fontFamily: DESK.body, fontSize: 14, color: DESK.ink, lineHeight: 1.5 }}
-                          />
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                     <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 10, lineHeight: 1.5 }}>{L['say.wewrite']}</div>
                     {modeLink}

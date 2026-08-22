@@ -59,6 +59,8 @@ export const DESIGN_LINES: Record<string, string> = {
   'say.mode.guided': 'Back to the guided questions',
   'say.exact': 'The exact copy',
   'say.exact.ph': 'Write it exactly as it should appear on the graphic',
+  'say.answer.ph': 'Type your answer',
+  'say.like': 'Like',
   'say.youanswer': 'You will answer',
   'say.title.blank': 'Leave it blank and your designer writes one from your story.',
   'say.question.title': 'What are we asking?',
