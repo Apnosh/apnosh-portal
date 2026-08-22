@@ -1292,7 +1292,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                               key={a.id} type="button" aria-pressed={on} onClick={() => setAngle(a.id)}
                               style={{
                                 position: 'relative', overflow: 'hidden', cursor: 'pointer', textAlign: 'left',
-                                padding: '13px 15px', borderRadius: 13, minHeight: 84,
+                                padding: '13px 15px', borderRadius: 13, minHeight: 92,
                                 display: 'flex', flexDirection: 'column', justifyContent: 'center',
                                 background: on
                                   ? DESK.mintWash
