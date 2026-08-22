@@ -62,7 +62,8 @@ export const RATE_CARD: RateCard = {
     'gift-card': 65,
     banner: 85,
   },
-  carouselPerSlide: 30,
+  /* owner call 2026-08-22: page count is a dimension, not a price lever */
+  carouselPerSlide: 0,
   writtenVersion: 25,
   photoSourcing: 60,
   printManagement: 50,

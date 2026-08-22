@@ -115,7 +115,7 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
   })
 
   /* Carousel: the first slide is the design; every extra slide is its own layout. */
-  if ((a.slides ?? 1) > 1) {
+  if ((a.slides ?? 1) > 1 && rates.carouselPerSlide > 0) {
     const extra = (a.slides as number) - 1
     lines.push({
       id: 'slides', label: `Carousel slides ×${a.slides}`, amount: extra * rates.carouselPerSlide,
