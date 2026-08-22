@@ -1461,6 +1461,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                             <div style={{ padding: '3px 13px 0 41px', fontSize: 11.5, color: DESK.mute, fontStyle: 'italic', lineHeight: 1.4 }}>
                               {L['say.like']}: {'\u201C'}{q.ph}{'\u201D'}
                             </div>
+                            {/* box size signals expected answer length: story
+                             * questions get room, factual ones stay one line */}
                             <textarea
                               value={qa[k] ?? ''}
                               onChange={(e) => {
@@ -1470,8 +1472,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                               }}
                               onFocus={() => setFocusedQ(k)}
                               onBlur={() => setFocusedQ((cur) => (cur === k ? null : cur))}
-                              placeholder={L['say.answer.ph']} rows={1} aria-label={q.label}
-                              style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '6px 13px 12px 41px', resize: 'none', overflow: 'hidden', minHeight: 40, fontFamily: DESK.body, fontSize: 14, color: DESK.ink, lineHeight: 1.5 }}
+                              placeholder={L['say.answer.ph']}
+                              rows={(q.long ?? jobAngles.length > 0) ? (i === 0 ? 4 : 2) : 1}
+                              aria-label={q.label}
+                              style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '6px 13px 12px 41px', resize: 'none', overflow: 'hidden', minHeight: (q.long ?? jobAngles.length > 0) ? (i === 0 ? 110 : 64) : 40, fontFamily: DESK.body, fontSize: 14, color: DESK.ink, lineHeight: 1.5 }}
                             />
                           </div>
                         )
