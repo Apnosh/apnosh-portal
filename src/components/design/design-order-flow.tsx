@@ -18,7 +18,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check } from 'lucide-react'
+import { CalendarDays, Check, Image as ImageIcon, Layers, Send, User } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
 import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, ConfirmButton } from '@/components/campaigns/desk/ui'
 import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, type DestinationSpec } from '@/lib/design/destinations'
@@ -477,6 +477,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
   const [holding, setHolding] = useState(false)
   /* the server's own total, echoed on the placed screen */
   const [orderAmount, setOrderAmount] = useState<number | null>(null)
+  /* the placed request's id, so the placed screen can collect the rest of the
+   * answers into the order's own thread (the we-need-from-you pattern) */
+  const [placedRequestId, setPlacedRequestId] = useState<string | null>(null)
+  const [followUpBusy, setFollowUpBusy] = useState(false)
+  const [followUpSent, setFollowUpSent] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -837,6 +842,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
           throw new Error(typeof j.error === 'string' ? j.error : L['send.error'])
         }
         placedCents += typeof j.order?.amount_cents === 'number' ? j.order.amount_cents : quote.total * 100
+        const reqId = (j as { request?: { id?: string } }).request?.id
+        if (i === queue.length - 1 && typeof reqId === 'string') setPlacedRequestId(reqId)
       }
       setHeldPieces([])
       setOrderAmount(Math.round(placedCents / 100))
@@ -864,6 +871,58 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         {orderAmount != null && (
           <div style={{ fontFamily: DESK.mono, fontSize: 14, fontWeight: 700, color: DESK.mintDeep, marginTop: 12 }}>{`$${orderAmount}`} · {L['sum.assigned.who']}</div>
         )}
+        {(() => {
+          /* the we-need-from-you moment: any question they skipped is worth a
+           * minute now, and the answers land in the order's own thread */
+          const missing = jobQs.map((q, i) => ({ q, i })).filter(({ i }) => !(qa[qaKey(i)] ?? '').trim())
+          if (!placedRequestId || missing.length === 0 || followUpSent) {
+            return followUpSent ? (
+              <div style={{ marginTop: 20, fontSize: 13, fontWeight: 600, color: DESK.mintDeep }}>{L['fu.sent']}</div>
+            ) : null
+          }
+          const sendFollowUp = async () => {
+            if (followUpBusy) return
+            setFollowUpBusy(true)
+            const lines = jobQs
+              .map((q, i) => ({ label: q.label, text: (qa[qaKey(i)] ?? '').trim() }))
+              .filter((x) => x.text)
+              .map((x) => `${x.label} ${x.text}`)
+            try {
+              const r = await fetch(`/api/requests/${placedRequestId}/notes`, {
+                method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ body: `${L['fu.notehead']}\n${lines.join('\n')}`.slice(0, 2000) }),
+              })
+              if (r.ok) setFollowUpSent(true)
+            } catch { /* the thread stays open in the order hub either way */ }
+            setFollowUpBusy(false)
+          }
+          const answeredAny = missing.some(({ i }) => (qa[qaKey(i)] ?? '').trim())
+          return (
+            <div style={{ marginTop: 24, textAlign: 'left', maxWidth: 440, marginLeft: 'auto', marginRight: 'auto' }}>
+              <div style={{ fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.ink }}>{L['fu.title']}</div>
+              <div style={{ fontSize: 12.5, color: DESK.ink2, marginTop: 3, lineHeight: 1.5 }}>{L['fu.sub']}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                {missing.map(({ q, i }) => (
+                  <div key={qaKey(i)} style={{ borderRadius: 12, border: `1.5px solid ${DESK.line}`, overflow: 'hidden', background: `linear-gradient(165deg, ${dot}0A, rgba(255,255,255,0.02) 55%), #fff` }}>
+                    <div style={{ padding: '9px 12px 0', fontFamily: DESK.body, fontSize: 12.5, fontWeight: 700, color: DESK.ink }}>{q.label}</div>
+                    <textarea
+                      value={qa[qaKey(i)] ?? ''}
+                      onChange={(e) => { setQa((prev) => ({ ...prev, [qaKey(i)]: e.target.value })); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px` }}
+                      placeholder={q.ph} rows={2} aria-label={q.label}
+                      style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '5px 12px 10px', resize: 'none', overflow: 'hidden', minHeight: 52, fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink, lineHeight: 1.5 }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button" disabled={followUpBusy || !answeredAny} onClick={() => void sendFollowUp()}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 10, padding: '10px 18px', borderRadius: 22, border: 'none', cursor: answeredAny ? 'pointer' : 'default', background: answeredAny ? DESK.grad : '#E7E4DB', color: answeredAny ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 13.5, fontWeight: 700 }}
+              >
+                <Send size={13} /> {followUpBusy ? L['fu.sending'] : L['fu.send']}
+              </button>
+            </div>
+          )
+        })()}
       </div>
     )
   }
@@ -876,12 +935,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       : headline.trim().length > 0 || details.trim().length > 0
     const openEditor = (n: number) => { setExpressHome(false); setStep(n) }
     const leadQ = jobQs[0]
-    const row = (label: string, value: string, n: number) => (
+    const row = (icon: React.ReactNode, label: string, value: string, n: number) => (
       <button
         key={label} type="button" onClick={() => openEditor(n)}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '12px 13px', background: '#fff', border: 'none', borderBottom: `1px solid ${DESK.line}`, cursor: 'pointer', fontFamily: DESK.body }}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '13px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${DESK.line}55`, cursor: 'pointer', fontFamily: DESK.body }}
       >
-        <span style={{ fontSize: 12, color: DESK.mute, flexShrink: 0 }}>{label}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: DESK.mute, flexShrink: 0 }}>
+          <span aria-hidden style={{ display: 'inline-flex', color: dot, opacity: 0.85 }}>{icon}</span>
+          {label}
+        </span>
         <span style={{ fontSize: 13, fontWeight: 600, color: DESK.ink, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value} <span style={{ color: DESK.mute }}>{'›'}</span></span>
       </button>
     )
@@ -901,11 +963,13 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         >
           {'‹'} Store
         </button>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {job !== null && (
+            <span aria-hidden style={{ flexShrink: 0, width: 58, borderRadius: 12, padding: '7px 5px', background: `linear-gradient(165deg, ${dot}14, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.6)`, border: '1px solid #EAE7DE', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 3px 10px rgba(22,33,28,0.06)' }}>
+              <BoardArt id={job} dot={dot} />
+            </span>
+          )}
           <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: 0, letterSpacing: '-0.02em' }}>{jobLabel ?? T.job}</h2>
-          <span style={{ padding: '4px 9px', borderRadius: 99, background: `${dot}14`, border: `1px solid ${dot}44`, fontFamily: DESK.mono, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: dot }}>
-            {jobFormat === 'carousel' ? L['fmt.chip.carousel'] : jobFormat === 'either' ? L['fmt.chip.either'] : L['fmt.chip.single']}
-          </span>
         </div>
 
         {/* say it: story chips inline, one required answer */}
@@ -947,12 +1011,12 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 6px' }}>
           {L['xp.order']}
         </div>
-        <div style={{ borderRadius: 14, border: `1.5px solid ${DESK.line}`, overflow: 'hidden', background: '#fff' }}>
-          {row(L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5)}
-          {row(L['xp.row.where'], dests.length ? `${dests.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${dests.length > 2 ? ` +${dests.length - 2}` : ''}` : L['xp.none'], 5)}
-          {row(L['xp.row.photos'], photoValue, 3)}
-          {row(L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
-          {row(L['xp.row.maker'], `${tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
+        <div style={{ borderRadius: 16, border: '1.5px solid #EAE7DE', overflow: 'hidden', background: `linear-gradient(165deg, ${dot}08, rgba(255,255,255,0.02) 60%), #fff`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 18px rgba(22,33,28,0.07)' }}>
+          {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5)}
+          {row(<Send size={14} />, L['xp.row.where'], dests.length ? `${dests.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${dests.length > 2 ? ` +${dests.length - 2}` : ''}` : L['xp.none'], 5)}
+          {row(<ImageIcon size={14} />, L['xp.row.photos'], photoValue, 3)}
+          {row(<CalendarDays size={14} />, L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
+          {row(<User size={14} />, L['xp.row.maker'], `${tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
         </div>
 
         <button
