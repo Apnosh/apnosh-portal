@@ -107,6 +107,10 @@ export const JOB_REGISTRY: readonly JobSpec[] = [
         { label: 'Where do your roots come from?', ph: 'Our recipes came here with our mom' },
         { label: 'How does it show up in the business?', ph: 'The mole takes three days, same as home' },
       ] },
+      { id: 'own', label: 'Something else', sub: 'A story not on this list. Tell it your way.', questions: [
+        { label: 'Tell us the story', ph: 'Whatever you want people to know. Rough is fine, we shape it.' },
+        { label: 'Anything else that helps?', ph: 'Names, dates, or details worth getting right' },
+      ] },
     ], subject: 'The story', subjectPh: 'Two sisters, one dream, opened in 2019', headlinePh: 'How It All Started', headlines: ['How It All Started', 'From Our Family To Yours'] } }),
   spec('team-spotlight', 'brand', '🧑‍🍳', { headline: 'Meet The Team', asks: ['subject'], voice: { questions: [{ label: 'Who are we introducing?', ph: 'Maria, our head baker' }, { label: 'What do they do here?', ph: 'She has run the kitchen for 6 years' }, { label: 'Something people would love to know about them?', ph: 'She names every sourdough starter' }], photoHint: 'A clear photo of them beats a perfect one.', blurb: 'Put a face to the business. People buy from people.', ask: 'Who are we introducing?', subject: 'About them', subjectPh: 'Maria has run our kitchen for 6 years', headlinePh: 'Meet Maria', headlines: ['The Face Behind The Counter'] } }),
   spec('behind-scenes', 'brand', '🎬', { headline: 'Behind The Scenes', voice: { questions: [{ label: 'What are we showing?', ph: 'How we make everything fresh each morning' }, { label: 'Why do you do it this way?', ph: 'Fresh just tastes different' }], blurb: 'Show how the work gets done. People love a peek inside.', ask: 'What are we letting people see?', subject: 'What we are showing', subjectPh: 'How we prep everything fresh each morning', headlinePh: 'A Look Inside', headlines: ['How We Make It', 'A Look Inside'] } }),
