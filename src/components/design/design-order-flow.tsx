@@ -1153,9 +1153,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
             <>
               <StepHead
                 n={stepNo(2)} total={stepTotal} accent={dot}
-                title={job !== null ? (jobLabel ?? T.say) : (isQuestion ? L['say.question.title'] : T.say)}
+                title={job !== null
+                  ? (activeAngle ? activeAngle.label : jobLabel ?? T.say)
+                  : (isQuestion ? L['say.question.title'] : T.say)}
                 sub={jobAngles.length > 0 ? undefined : jv?.ask ?? S.say}
-                aside={job !== null ? (
+                aside={job !== null && !activeAngle ? (
                   <button
                     type="button" onClick={() => setShelfOpen((o) => !o)} aria-expanded={shelfOpen}
                     style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, cursor: 'pointer', border: '1px solid rgba(255,255,255,0.9)', background: `linear-gradient(165deg, ${dot}18, rgba(255,255,255,0.05) 60%), rgba(255,255,255,0.6)`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 3px 10px rgba(22,33,28,0.07)', fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}
@@ -1278,6 +1280,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   </>
                 )
                 if (jobAngles.length > 0) {
+                  if (activeAngle) return interview
                   return (
                     <>
                       {slotLabel(L['say.whichstory'])}
@@ -1289,7 +1292,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                               key={a.id} type="button" aria-pressed={on} onClick={() => setAngle(a.id)}
                               style={{
                                 position: 'relative', overflow: 'hidden', cursor: 'pointer', textAlign: 'left',
-                                padding: '13px 15px', borderRadius: 13,
+                                padding: '13px 15px', borderRadius: 13, minHeight: 84,
+                                display: 'flex', flexDirection: 'column', justifyContent: 'center',
                                 background: on
                                   ? DESK.mintWash
                                   : `linear-gradient(165deg, ${dot}0E, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.6)`,
@@ -1306,7 +1310,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                           )
                         })}
                       </div>
-                      {activeAngle && interview}
                     </>
                   )
                 }
@@ -1426,9 +1429,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               </div>
             )}
 
-              <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
-                {L['say.note']}
-              </div>
+              {!(jobAngles.length > 0 && !activeAngle) && (
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
+                  {L['say.note']}
+                </div>
+              )}
             </>
           )
         })()}
@@ -1708,14 +1713,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {/* back / next (review keeps Back too, under the seal, so a typo is one tap away) */}
         {step > 1 && (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
-            {/* a seeded flow's first screen has nowhere back to go; Next stays */}
-            {step > (seededFlow ? 2 : 1) && (
-              <button type="button" onClick={() => setStep(step - 1)}
+            {/* a seeded flow's first screen has nowhere back to go; from the
+             * questions screen, Back returns to the story list first */}
+            {(step > (seededFlow ? 2 : 1) || (step === 2 && activeAngle !== null)) && (
+              <button type="button" onClick={() => { if (step === 2 && activeAngle) setAngle(null); else setStep(step - 1) }}
                 style={{ flexShrink: 0, flex: step === 6 ? 1 : undefined, height: 50, padding: '0 18px', borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
                 {L['nav.back']}
               </button>
             )}
-            {step < 6 && (
+            {step < 6 && !(step === 2 && jobAngles.length > 0 && !activeAngle) && (
               <button type="button" disabled={!canNext} onClick={() => setStep(step + 1)}
                 style={{ flex: 1, height: 50, borderRadius: 25, border: 'none', cursor: canNext ? 'pointer' : 'default', background: canNext ? DESK.grad : '#E7E4DB', color: canNext ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: canNext ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}>
                 {L['nav.next']}
