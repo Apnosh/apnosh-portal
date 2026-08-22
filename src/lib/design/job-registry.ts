@@ -85,27 +85,32 @@ export const JOB_REGISTRY: readonly JobSpec[] = [
   // your story and brand
   spec('story-behind', 'brand', '👋', { headline: 'The Story Behind Us', asks: ['subject'], voice: { blurb: 'The post that tells people who you are and why you started.', ask: 'Pick the story you want to tell. Then answer a few easy questions.', angles: [
       { id: 'origin', label: 'How we started', sub: 'Your opening chapter. Great for new followers who only know the sign out front.', questions: [
-        { label: 'How did it start?', ph: 'We started with one table and a big dream in 2019' },
-        { label: 'What was the hardest early moment?', ph: 'We almost closed in the first winter' },
+        { label: 'Take us back to day one. What do you remember most?', ph: 'We sold out by noon and cried in the kitchen' },
+        { label: 'What did you start with? Numbers and details help.', ph: 'Two pans, a borrowed fridge, and $800' },
+        { label: 'When did you first think, this might actually work?', ph: 'A stranger came back the next day with three friends' },
         { label: 'What is different today?', ph: 'Now we know half our customers by name' },
       ] },
       { id: 'people', label: 'The people behind it', sub: 'Put real faces to the name. People connect with people, not logos.', questions: [
-        { label: 'Who is behind it?', ph: 'Two sisters, born and raised here' },
-        { label: 'Why do you do this?', ph: 'We grew up cooking with our grandmother' },
-        { label: 'A detail people would love?', ph: 'We still use her handwritten recipes' },
+        { label: 'Who is behind it? Names first.', ph: 'Maria and her sister Ana' },
+        { label: 'What would we see them doing before the doors open?', ph: 'Maria tastes every batch before we unlock the door' },
+        { label: 'Why do they do this every day?', ph: 'Cooking was how our family showed love' },
+        { label: 'A small detail people would love?', ph: 'She still uses the wooden spoon her grandmother cooked with' },
       ] },
       { id: 'craft', label: 'Why we do it our way', sub: 'Your standards, your way of doing things, and the care nobody sees.', questions: [
-        { label: 'What do you do differently?', ph: 'Everything is made fresh, never frozen' },
-        { label: 'Why does that matter to you?', ph: 'It is how our family always did it' },
+        { label: 'What do you refuse to cut corners on?', ph: 'Everything is made fresh, never frozen' },
+        { label: 'What does that cost you?', ph: 'We are up at 4am and we throw out what does not sell' },
+        { label: 'Why is it worth it?', ph: 'You can taste the difference, and our regulars know it' },
       ] },
       { id: 'overcome', label: 'A moment that tested us', sub: 'The honest chapter. These posts get shared because they feel real.', questions: [
-        { label: 'What happened?', ph: 'The flood shut us down for two months' },
-        { label: 'How did you get through it?', ph: 'Neighbors showed up to help rebuild' },
+        { label: 'What happened? Take us to that day.', ph: 'We walked in and the flood had taken everything' },
+        { label: 'What was the lowest point?', ph: 'We did not know if we could reopen' },
+        { label: 'Who or what got you through?', ph: 'Neighbors showed up with buckets and paint' },
         { label: 'What did it teach you?', ph: 'This town has our back' },
       ] },
       { id: 'roots', label: 'Where we come from', sub: 'Family, heritage, hometown. The history that flavors everything you do.', questions: [
-        { label: 'Where do your roots come from?', ph: 'Our recipes came here with our mom' },
-        { label: 'How does it show up in the business?', ph: 'The mole takes three days, same as home' },
+        { label: 'Where does it all come from?', ph: 'Our recipes came here with our mom from Oaxaca' },
+        { label: 'What tradition do you keep exactly as it was?', ph: 'The mole takes three days, same as home' },
+        { label: 'What should people feel when they walk in?', ph: 'Like they are eating at our family table' },
       ] },
       { id: 'own', label: 'Something else', sub: 'A story not on this list. Tell it your way.', questions: [
         { label: 'Tell us the story', ph: 'Whatever you want people to know. Rough is fine, we shape it.' },
