@@ -88,7 +88,10 @@ export default async function DesignOrderPage({ searchParams }: { searchParams: 
   return (
     <MvpShell active="campaigns">
       <div style={{ minHeight: '100%' }}>
-        <DesignOrderFlow menu={menu} assets={assets} businessName={library.businessName} seed={seed} express={sp.express === '1'} />
+        {/* EXPRESS is the default for tile arrivals (owner verdict 2026-08-22);
+            the wizard remains as express's editors and as the flow for the
+            type-less describe path. ?express=0 forces the classic walk. */}
+        <DesignOrderFlow menu={menu} assets={assets} businessName={library.businessName} seed={seed} express={seed?.job != null && sp.express !== '0'} />
       </div>
     </MvpShell>
   )
