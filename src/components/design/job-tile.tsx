@@ -31,7 +31,7 @@ export function JobTile({ job, on, onClick }: {
         background: `linear-gradient(165deg, ${dot}12, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.55)`,
         backdropFilter: 'blur(8px) saturate(1.25)',
         WebkitBackdropFilter: 'blur(8px) saturate(1.25)',
-        border: `1px solid ${on ? DESK.mint : 'rgba(255,255,255,0.85)'}`,
+        border: `1px solid ${on ? DESK.mint : '#EAE7DE'}`,
         boxShadow: on
           ? `inset 0 1px 0 rgba(255,255,255,0.95), 0 6px 16px rgba(46,154,120,0.22)`
           : 'inset 0 1px 0 rgba(255,255,255,0.95), 0 4px 12px rgba(22,33,28,0.07)',

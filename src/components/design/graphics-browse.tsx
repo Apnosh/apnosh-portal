@@ -36,7 +36,7 @@ function BoardTile({ job, dot, index, onClick }: { job: JobSpec; dot: string; in
           background: `linear-gradient(165deg, ${dot}12, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.55)`,
           backdropFilter: 'blur(10px) saturate(1.3)',
           WebkitBackdropFilter: 'blur(10px) saturate(1.3)',
-          border: '1px solid rgba(255,255,255,0.85)',
+          border: `1px solid ${'#EAE7DE'}`,
           boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 0 rgba(22,33,28,0.04), 0 8px 22px rgba(22,33,28,0.09)',
           padding: '10px 10px 9px',
         }}
@@ -78,7 +78,7 @@ export default function GraphicsBrowse() {
 
   let i = 0
   return (
-    <div style={{ ...paperGround, minHeight: '100%', padding: '16px 16px 40px', fontFamily: DESK.body, color: DESK.ink }}>
+    <div style={{ ...paperGround, background: '#fff', backgroundImage: 'none', minHeight: '100%', padding: '16px 16px 40px', fontFamily: DESK.body, color: DESK.ink }}>
       <style>{`
 @keyframes gbRise{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
 .gb-rise{animation:gbRise .4s cubic-bezier(.2,.7,.3,1) both}

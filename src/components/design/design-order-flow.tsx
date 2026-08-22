@@ -325,7 +325,7 @@ function DestFrame({ d, on, amount, photoUrl, headline, onClick }: {
 /* ── small shared inputs, desk-inked ─────────────────────────────────────────────────────── */
 const inputStyle = {
   width: '100%', boxSizing: 'border-box' as const, height: 46, padding: '0 13px',
-  border: '1px solid rgba(255,255,255,0.9)', borderRadius: 13,
+  border: '1px solid #EAE7DE', borderRadius: 13,
   background: 'rgba(255,255,255,0.66)',
   backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.95), 0 2px 8px rgba(22,33,28,0.06)',
@@ -797,7 +797,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     setSending(false)
   }
 
-  const ground = { ...paperGround, minHeight: '100%', padding: '16px 16px 0', fontFamily: DESK.body, boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' as const }
+  const ground = { ...paperGround, background: '#fff', backgroundImage: 'none', minHeight: '100%', padding: '16px 16px 0', fontFamily: DESK.body, boxSizing: 'border-box' as const, display: 'flex', flexDirection: 'column' as const }
 
   if (submitted) {
     return (
@@ -1294,7 +1294,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                                   ? DESK.mintWash
                                   : `linear-gradient(165deg, ${dot}0E, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.6)`,
                                 backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-                                border: `1.5px solid ${on ? DESK.mint : 'rgba(255,255,255,0.9)'}`,
+                                border: `1.5px solid ${on ? DESK.mint : DESK.line}`,
                                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 8px rgba(22,33,28,0.05)',
                                 fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
                                 transition: 'border-color .15s ease, background .15s ease',
@@ -1302,9 +1302,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                             >
                               <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{a.label}</span>
                               <span style={{ display: 'block', fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.5 }}>{a.sub}</span>
-                              <span style={{ display: 'block', fontSize: 11, color: DESK.mute, marginTop: 6, lineHeight: 1.5 }}>
-                                {L['say.youanswer']}: {a.questions.map((q) => q.label).join(' ')}
-                              </span>
                             </button>
                           )
                         })}
