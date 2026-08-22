@@ -90,6 +90,8 @@ export const DESIGN_LINES: Record<string, string> = {
   'fu.notehead': 'More answers from the owner:',
   'maker.market': 'Or pick your creator',
   'maker.market.sub': 'Local creators from the marketplace, at the same listed price. Ratings come from real delivered work.',
+  'maker.view': 'View work',
+  'maker.browse': 'Browse all creators',
   'fmt.chip.carousel': 'Carousel',
   'fmt.chip.either': 'Single or carousel',
   'fmt.chip.single': 'Single graphic',

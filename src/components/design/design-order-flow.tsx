@@ -2055,12 +2055,27 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                             <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{m.name}</span>
                             <span style={{ display: 'block', fontSize: 11.5, color: DESK.ink2, marginTop: 2 }}>
                               {m.rating ? <><span style={{ color: '#D9A21B' }}>{'★'}</span> {m.ratingLabel}</> : m.ratingLabel}
+                              {' · '}
+                              <span
+                                role="link" tabIndex={0}
+                                onClick={(e) => { e.stopPropagation(); window.open(`/marketplace/${m.slug}`, '_blank') }}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); window.open(`/marketplace/${m.slug}`, '_blank') } }}
+                                style={{ color: DESK.mintDeep, fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 2, cursor: 'pointer' }}
+                              >
+                                {L['maker.view']}
+                              </span>
                             </span>
                           </span>
                           <span style={{ flexShrink: 0, fontFamily: DESK.mono, fontSize: 12, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute }}>{`$${RATE_CARD.tierBase[tier]}`}</span>
                         </button>
                       )
                     })}
+                    <button
+                      type="button" onClick={() => router.push('/dashboard/marketplace')}
+                      style={{ marginTop: 2, background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer', fontFamily: DESK.body, fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep, textAlign: 'left' }}
+                    >
+                      {L['maker.browse']} {'›'}
+                    </button>
                   </>
                 )}
               </div>
