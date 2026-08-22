@@ -2029,55 +2029,90 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 {L['tier.title']}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-                {job === 'carousel' ? (
-                  <div style={{ fontSize: 11.5, color: DESK.mute, lineHeight: 1.45, padding: '2px 2px 0' }}>{L['tier.ai.carousel']}</div>
-                ) : (
-                  <Ticket on={method === 'ai'} name={L['tier.ai.label']} sub={L['tier.ai.sub']} price="Free" onClick={() => setMethod('ai')} />
-                )}
-                <Ticket on={method === 'designer' && tier === 1} name={L['tier.basic.label']} sub={`${L['tier.basic.sub']} · ${specLine(1)}`} price={`$${RATE_CARD.tierBase[1]}`} onClick={() => { setMethod('designer'); setTier(1) }} />
-                <Ticket on={method === 'designer' && tier === 2} name={<span>{L['tier.custom.label']} <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>{L['tier.most']}</span></span>} sub={`${L['tier.custom.sub']} · ${specLine(2)}`} price={`$${RATE_CARD.tierBase[2]}`} onClick={() => { setMethod('designer'); setTier(2) }} />
-                <Ticket on={method === 'designer' && tier === 3} name={L['tier.works.label']} sub={`${L['tier.works.sub']} · ${specLine(3)}`} price={`$${RATE_CARD.tierBase[3]}`} onClick={() => { setMethod('designer'); setTier(3) }} />
-                {makers.length > 0 && (
-                  <>
-                    <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '12px 0 2px' }}>
-                      {L['maker.market']}
+                {/* three simple doors: AI, Apnosh, or a marketplace creator.
+                 * Each opens its own details only when picked. */}
+                {(() => {
+                  const makerDoor = chosenMaker ? 'creator' : method === 'ai' ? 'ai' : 'apnosh'
+                  const door = (on: boolean, title: React.ReactNode, sub: string, price: string, onClick: () => void, body?: React.ReactNode) => (
+                    <div key={String(title)} style={{ borderRadius: 14, border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff', overflow: 'hidden', transition: 'border-color .15s ease, background .15s ease' }}>
+                      <button
+                        type="button" aria-pressed={on} onClick={onClick}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '13px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent' }}
+                      >
+                        <span style={{ minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{title}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{sub}</span>
+                        </span>
+                        <span style={{ flexShrink: 0, fontFamily: DESK.mono, fontSize: 13, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink2 }}>{price}</span>
+                      </button>
+                      {on && body ? <div style={{ padding: '0 14px 13px' }}>{body}</div> : null}
                     </div>
-                    <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 6, lineHeight: 1.45 }}>{L['maker.market.sub']}</div>
-                    {makers.map((m) => {
-                      const on = chosenMaker?.vendorId === m.vendorId
-                      return (
-                        <button
-                          key={m.vendorId} type="button" aria-pressed={on}
-                          onClick={() => { setMethod('designer'); setChosenMaker(on ? null : { vendorId: m.vendorId, name: m.name }) }}
-                          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '12px 13px', borderRadius: 13, border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff', cursor: 'pointer', fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent', transition: 'border-color .15s ease, background .15s ease' }}
-                        >
-                          <span style={{ minWidth: 0 }}>
-                            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{m.name}</span>
-                            <span style={{ display: 'block', fontSize: 11.5, color: DESK.ink2, marginTop: 2 }}>
-                              {m.rating ? <><span style={{ color: '#D9A21B' }}>{'★'}</span> {m.ratingLabel}</> : m.ratingLabel}
-                              {' · '}
-                              <span
-                                role="link" tabIndex={0}
-                                onClick={(e) => { e.stopPropagation(); window.open(`/marketplace/${m.slug}`, '_blank') }}
-                                onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); window.open(`/marketplace/${m.slug}`, '_blank') } }}
-                                style={{ color: DESK.mintDeep, fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: 2, cursor: 'pointer' }}
+                  )
+                  return (
+                    <>
+                      {job !== 'carousel' && !isCarousel && door(
+                        makerDoor === 'ai',
+                        L['mk.ai'], L['mk.ai.sub'], 'Free',
+                        () => { setMethod('ai'); setChosenMaker(null) },
+                      )}
+                      {door(
+                        makerDoor === 'apnosh',
+                        L['mk.apnosh'], L['mk.apnosh.sub'], `$${RATE_CARD.tierBase[tier]}`,
+                        () => { setMethod('designer'); setChosenMaker(null) },
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {([1, 2, 3] as const).map((t) => (
+                            <button
+                              key={t} type="button" aria-pressed={tier === t}
+                              onClick={(e) => { e.stopPropagation(); setTier(t) }}
+                              style={{ flex: 1, padding: '8px 6px', borderRadius: 10, cursor: 'pointer', border: `1.5px solid ${tier === t ? DESK.mint : DESK.line}`, background: tier === t ? '#fff' : 'transparent', fontFamily: DESK.body, fontSize: 11.5, fontWeight: 700, color: tier === t ? DESK.mintDeep : DESK.ink2, WebkitTapHighlightColor: 'transparent' }}
+                            >
+                              {{ 1: L['tier.basic.label'], 2: L['tier.custom.label'], 3: L['tier.works.label'] }[t]}
+                              <span style={{ display: 'block', fontFamily: DESK.mono, fontSize: 10.5, fontWeight: 700, marginTop: 2 }}>{`$${RATE_CARD.tierBase[t]}`}</span>
+                            </button>
+                          ))}
+                        </div>,
+                      )}
+                      {makers.length > 0 && door(
+                        makerDoor === 'creator',
+                        L['mk.creator'], L['mk.creator.sub'], `$${RATE_CARD.tierBase[tier]}`,
+                        () => { setMethod('designer'); if (!chosenMaker) setChosenMaker({ vendorId: makers[0].vendorId, name: makers[0].name }) },
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {makers.map((m) => {
+                            const on = chosenMaker?.vendorId === m.vendorId
+                            return (
+                              <button
+                                key={m.vendorId} type="button" aria-pressed={on}
+                                onClick={(e) => { e.stopPropagation(); setChosenMaker({ vendorId: m.vendorId, name: m.name }) }}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '9px 11px', borderRadius: 11, border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? '#fff' : 'transparent', cursor: 'pointer', fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent' }}
                               >
-                                {L['maker.view']}
-                              </span>
-                            </span>
-                          </span>
-                          <span style={{ flexShrink: 0, fontFamily: DESK.mono, fontSize: 12, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute }}>{`$${RATE_CARD.tierBase[tier]}`}</span>
-                        </button>
-                      )
-                    })}
-                    <button
-                      type="button" onClick={() => router.push('/dashboard/marketplace')}
-                      style={{ marginTop: 2, background: 'none', border: 'none', padding: '4px 0', cursor: 'pointer', fontFamily: DESK.body, fontSize: 12.5, fontWeight: 600, color: DESK.mintDeep, textAlign: 'left' }}
-                    >
-                      {L['maker.browse']} {'›'}
-                    </button>
-                  </>
-                )}
+                                <span style={{ minWidth: 0 }}>
+                                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{m.name}</span>
+                                  <span style={{ display: 'block', fontSize: 11, color: DESK.ink2, marginTop: 1 }}>
+                                    {m.rating ? <><span style={{ color: '#D9A21B' }}>{'★'}</span> {m.ratingLabel}</> : m.ratingLabel}
+                                  </span>
+                                </span>
+                                <span
+                                  role="link" tabIndex={0}
+                                  onClick={(e) => { e.stopPropagation(); window.open(`/marketplace/${m.slug}`, '_blank') }}
+                                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); window.open(`/marketplace/${m.slug}`, '_blank') } }}
+                                  style={{ flexShrink: 0, fontSize: 11, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'underline', textUnderlineOffset: 2, cursor: 'pointer' }}
+                                >
+                                  {L['maker.view']}
+                                </span>
+                              </button>
+                            )
+                          })}
+                          <button
+                            type="button" onClick={(e) => { e.stopPropagation(); router.push('/dashboard/marketplace') }}
+                            style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontFamily: DESK.body, fontSize: 12, fontWeight: 600, color: DESK.mintDeep, textAlign: 'left' }}
+                          >
+                            {L['maker.browse']} {'›'}
+                          </button>
+                        </div>,
+                      )}
+                    </>
+                  )
+                })()}
               </div>
               <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '4px 16px 2px', boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
                 {sumRow(L['sum.job'], [isCarousel ? `${jobLabel} · ${slides} slides` : jobLabel ?? 'A design'])}
