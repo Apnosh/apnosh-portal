@@ -407,6 +407,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [action, setAction] = useState('')
   /* the interview's answers, keyed by job + angle + index so a swap starts clean */
   const [qa, setQa] = useState<Record<string, string>>({})
+  /* words mode: by default WE write the final copy from their answers; the
+   * advanced lane lets them write the exact words themselves */
+  const [wordsMode, setWordsMode] = useState<'draft' | 'exact'>('draft')
+  const [exactCopy, setExactCopy] = useState('')
   /* which of the type's stories they chose to tell; a type swap forgets it */
   const [angle, setAngle] = useState<string | null>(null)
   useEffect(() => { setAngle(null) }, [job])
@@ -592,14 +596,18 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
    * from the first screen a total appears on; listed total = charged total, always. */
   const svcFee = Math.round(quote.total * 0.1)
   const orderTotal = quote.total + svcFee
-  const saidText = [
-    headline.trim(),
-    ...qaPairs.map((p) => `${p.label} ${p.text}`),
-    details.trim(),
-    offer.trim(),
-  ].filter(Boolean).join('. ')
-  /* the live board previews the first real answer as its supporting line */
-  const boardDetails = details.trim() || qaPairs[0]?.text || ''
+  const saidText = wordsMode === 'exact' && exactCopy.trim()
+    ? exactCopy.trim()
+    : [
+        headline.trim(),
+        ...qaPairs.map((p) => `${p.label} ${p.text}`),
+        details.trim(),
+        offer.trim(),
+      ].filter(Boolean).join('. ')
+  /* the live board previews the first real line as its supporting text */
+  const boardDetails = wordsMode === 'exact' && exactCopy.trim()
+    ? exactCopy.trim().split('\n')[0]
+    : details.trim() || qaPairs[0]?.text || ''
   /* The rush question shows real dollars: the engine's own delta, before it is agreed to. */
   const rushDelta = Math.round(quote.total * (RATE_CARD.rushMultiplier - 1))
   /* The board's photo: the first picked asset paints the artwork everywhere it appears. */
@@ -641,7 +649,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
 
   const canNext =
     step === 1 ? job != null || described.trim().length >= 8
-    : step === 2 ? (jobAngles.length > 0 ? qaPairs.length > 0 : jobQs.length > 0 ? qaPairs.length > 0 || headline.trim().length > 0 : primaryAsk === 'subject' ? details.trim().length > 0 || headline.trim().length > 0 : headline.trim().length > 0)
+    : step === 2 ? (jobQs.length > 0 ? (wordsMode === 'exact' ? exactCopy.trim().length > 0 : qaPairs.length > 0 || (jobAngles.length === 0 && headline.trim().length > 0)) : primaryAsk === 'subject' ? details.trim().length > 0 || headline.trim().length > 0 : headline.trim().length > 0)
     : step === 3 ? usingOwn || (photoMode === 'other' ? photoOther.trim().length > 1 : photoMode != null)
     : step === 4 ? due != null && !afterEvent && (!rushEligible || rushConfirmed || false)
     : step === 5 ? (dests.length > 0 || destOtherFinal.length > 1) && (!printPicked || !PRINT_AVAILABLE || (allQtysIn && printer != null))
@@ -703,6 +711,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         : usingOwn ? 'Using their photos' : '',
       eventDate ? `Event on ${fmtDay(eventDate)}` : '',
       activeAngle ? `The story they chose: ${activeAngle.label}` : '',
+      jobQs.length > 0 ? (wordsMode === 'exact'
+        ? 'EXACT COPY: use their words verbatim'
+        : 'WRITE THE COPY: their answers are raw material. Polish the wording, keep every fact') : '',
       action.trim() ? `How people respond: "${action.trim()}"` : '',
       !headline.trim() && (details.trim() || qaPairs.length > 0) ? 'No title given. Write one from their words' : '',
       described.trim() ? `In their own words: "${described.trim()}"` : '',
@@ -737,7 +748,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(null); setPromoteItems([])
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([])
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
@@ -1261,22 +1272,54 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 )
                 /* an interview type asks ITS questions and nothing else; the
                  * title trails, optional. Other types keep their shapes. */
-                const interview = (
+                const modeLink = (
+                  <button
+                    type="button"
+                    onClick={() => setWordsMode(wordsMode === 'exact' ? 'draft' : 'exact')}
+                    style={{ marginTop: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: DESK.body, fontSize: 12, fontWeight: 600, color: DESK.ink2, textDecoration: 'underline', textUnderlineOffset: 3 }}
+                  >
+                    {wordsMode === 'exact' ? L['say.mode.guided'] : L['say.mode.advanced']}
+                  </button>
+                )
+                const interview = wordsMode === 'exact' ? (
                   <>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: '0 14px' }}>
+                    {slotLabel(L['say.exact'])}
+                    <textarea
+                      value={exactCopy} onChange={(e) => setExactCopy(e.target.value)}
+                      placeholder={L['say.exact.ph']} rows={7} aria-label={L['say.exact']}
+                      style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.55, borderRadius: 14 }}
+                    />
+                    {modeLink}
+                  </>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {jobQs.map((q, i) => (
-                        <div key={qaKey(i)} style={i === 0 ? { gridColumn: '1 / -1' } : undefined}>
-                          {slotLabel(q.label, i > 0)}
+                        <div
+                          key={qaKey(i)}
+                          style={{
+                            borderRadius: 14, border: `1.5px solid ${DESK.line}`, overflow: 'hidden',
+                            background: `linear-gradient(165deg, ${dot}0A, rgba(255,255,255,0.02) 55%), #fff`,
+                            boxShadow: '0 2px 8px rgba(22,33,28,0.05)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '11px 13px 0' }}>
+                            <span aria-hidden style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 99, background: `${dot}22`, color: dot, fontFamily: DESK.mono, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i + 1}</span>
+                            <span style={{ fontFamily: DESK.body, fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>
+                              {q.label}{i > 0 ? <span style={{ fontWeight: 500, color: DESK.mute }}>{' · '}{L['say.optional']}</span> : null}
+                            </span>
+                          </div>
                           <textarea
                             value={qa[qaKey(i)] ?? ''}
                             onChange={(e) => setQa((prev) => ({ ...prev, [qaKey(i)]: e.target.value }))}
-                            placeholder={q.ph} rows={i === 0 ? 3 : 2} aria-label={q.label}
-                            style={{ ...inputStyle, height: 'auto', padding: '11px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
+                            placeholder={q.ph} rows={2} aria-label={q.label}
+                            style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '7px 13px 11px 41px', resize: 'none', fontFamily: DESK.body, fontSize: 14, color: DESK.ink, lineHeight: 1.5 }}
                           />
                         </div>
                       ))}
                     </div>
-                    {titleSlot(true)}
+                    <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 10, lineHeight: 1.5 }}>{L['say.wewrite']}</div>
+                    {modeLink}
                   </>
                 )
                 if (jobAngles.length > 0) {
@@ -1429,7 +1472,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
               </div>
             )}
 
-              {!(jobAngles.length > 0 && !activeAngle) && (
+              {!(jobAngles.length > 0 && !activeAngle) && (jobQs.length === 0 || wordsMode === 'exact') && (
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
                   {L['say.note']}
                 </div>
