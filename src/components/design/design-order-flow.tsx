@@ -882,7 +882,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
           {L['done.sub.order']}
         </div>
         {orderAmount != null && (
-          <div style={{ fontFamily: DESK.mono, fontSize: 14, fontWeight: 700, color: DESK.mintDeep, marginTop: 12 }}>{`$${orderAmount}`} · {L['sum.assigned.who']}</div>
+          <div style={{ fontFamily: DESK.mono, fontSize: 14, fontWeight: 700, color: DESK.mintDeep, marginTop: 12 }}>{`$${orderAmount}`} · {chosenMaker ? chosenMaker.name : L['sum.assigned.who']}</div>
         )}
         {(() => {
           /* the we-need-from-you moment: any question they skipped is worth a
@@ -1091,7 +1091,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         </ReceiptFrame>
         <div style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '12px 14px', margin: '12px 0' }}>
           <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>{L['sum.assigned']}</div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: DESK.ink }}>{L['sum.assigned.who']}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: DESK.ink }}>{chosenMaker ? chosenMaker.name : L['sum.assigned.who']}</div>
           <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.45 }}>{L['sum.assigned.sub']}</div>
         </div>
         {sendError && (
