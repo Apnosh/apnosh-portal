@@ -138,7 +138,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'job.swap': 'Swap',
   'job.describe.opt': 'Anything else we should know? Optional.',
   'job.slides.title': 'How many slides?',
-  'job.slides.sub': 'Same price at any page count.',
+  'job.slides.sub': 'Your first slide is included. Each extra slide is priced on its own.',
   'tier.ai.carousel': 'AI drafts do not make carousels yet. A designer builds these today.',
   'dest.custom.w': 'Width',
   'dest.custom.h': 'Height',
