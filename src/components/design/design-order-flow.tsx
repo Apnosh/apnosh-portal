@@ -1258,17 +1258,19 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                  * title trails, optional. Other types keep their shapes. */
                 const interview = (
                   <>
-                    {jobQs.map((q, i) => (
-                      <div key={qaKey(i)}>
-                        {slotLabel(q.label, i > 0)}
-                        <textarea
-                          value={qa[qaKey(i)] ?? ''}
-                          onChange={(e) => setQa((prev) => ({ ...prev, [qaKey(i)]: e.target.value }))}
-                          placeholder={q.ph} rows={i === 0 ? 3 : 2} aria-label={q.label}
-                          style={{ ...inputStyle, height: 'auto', padding: '11px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
-                        />
-                      </div>
-                    ))}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(270px, 1fr))', gap: '0 14px' }}>
+                      {jobQs.map((q, i) => (
+                        <div key={qaKey(i)} style={i === 0 ? { gridColumn: '1 / -1' } : undefined}>
+                          {slotLabel(q.label, i > 0)}
+                          <textarea
+                            value={qa[qaKey(i)] ?? ''}
+                            onChange={(e) => setQa((prev) => ({ ...prev, [qaKey(i)]: e.target.value }))}
+                            placeholder={q.ph} rows={i === 0 ? 3 : 2} aria-label={q.label}
+                            style={{ ...inputStyle, height: 'auto', padding: '11px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
+                          />
+                        </div>
+                      ))}
+                    </div>
                     {titleSlot(true)}
                   </>
                 )
@@ -1276,7 +1278,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   return (
                     <>
                       {slotLabel(L['say.whichstory'])}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 8 }}>
                         {jobAngles.map((a) => {
                           const on = angle === a.id
                           return (
@@ -1284,7 +1286,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                               key={a.id} type="button" aria-pressed={on} onClick={() => setAngle(a.id)}
                               style={{
                                 position: 'relative', overflow: 'hidden', cursor: 'pointer', textAlign: 'left',
-                                padding: '12px 14px', borderRadius: 13,
+                                padding: '13px 15px', borderRadius: 13,
                                 background: on
                                   ? DESK.mintWash
                                   : `linear-gradient(165deg, ${dot}0E, rgba(255,255,255,0.04) 55%), rgba(255,255,255,0.6)`,
@@ -1296,7 +1298,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                               }}
                             >
                               <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{a.label}</span>
-                              <span style={{ display: 'block', fontSize: 12, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{a.sub}</span>
+                              <span style={{ display: 'block', fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.5 }}>{a.sub}</span>
+                              <span style={{ display: 'block', fontSize: 11, color: DESK.mute, marginTop: 6, lineHeight: 1.5 }}>
+                                {L['say.youanswer']}: {a.questions.map((q) => q.label).join(' ')}
+                              </span>
                             </button>
                           )
                         })}

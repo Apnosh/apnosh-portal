@@ -54,6 +54,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'say.question': 'The question',
   'say.title': 'The title',
   'say.whichstory': 'Which story are we telling?',
+  'say.youanswer': 'You will answer',
   'say.title.blank': 'Leave it blank and your designer writes one from your story.',
   'say.question.title': 'What are we asking?',
   'say.date': 'The big day',

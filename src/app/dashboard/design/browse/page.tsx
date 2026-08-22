@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 
 export default function DesignBrowsePage() {
   return (
-    <MvpShell active="campaigns">
+    <MvpShell active="campaigns" wide>
       <div style={{ minHeight: '100%' }}>
         <GraphicsBrowse />
       </div>
