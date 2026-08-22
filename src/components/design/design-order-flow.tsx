@@ -417,12 +417,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* the owner picks the format AFTER the content; the type's registry format
    * is only the recommended default */
   const [pickedFormat, setPickedFormat] = useState<'single' | 'carousel' | null>(null)
+  /* written renditions picked on the build step (About section, GBP description) */
+  const [written, setWritten] = useState<string[]>([])
   useEffect(() => {
     setAngle(null); setPickedFormat(null)
     /* the objective decides the distribution: preselect where this should
      * live; the owner prunes or adds on the build step */
     const places = job ? jobSpec(job)?.places : null
     setDests(places && places.length ? [...places] : [])
+    setWritten([])
   }, [job])
   /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
    * the same list (featureOtherText tracks which member is the typed one). */
@@ -592,6 +595,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const answers: DesignOrderAnswers = {
     jobType: { value: job ?? 'other', source: src('jobType'), citedWords: read?.cited.jobType },
     ...(isCarousel ? { slides } : {}),
+    ...(written.length ? { written } : {}),
     destinations: { value: dests, source: src('destinations'), citedWords: read?.cited.destinations },
     ...(printPicked && allQtysIn ? { printQtys: { value: printQtys, source: 'asked' as const } } : {}),
     ...(printer != null ? { printer: { value: printer, source: 'asked' as const } } : {}),
@@ -715,6 +719,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       isCarousel && dests.some((d) => d !== 'instagram-post')
         ? 'Instagram carries the carousel; every other placement gets a single adapted from the strongest slide'
         : '',
+      written.length ? `WRITTEN VERSIONS: also write ${written.join(' and ')} from the same answers` : '',
       seed?.draftId ? 'START FROM THE CLIENT\'S EXISTING DRAFT — polish it, do not start over' : '',
       printPicked && allQtysIn ? printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label}`).join(', ') : '',
       /* print runs are off: any picked print size is a print ready FILE handoff */
@@ -754,6 +759,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         ...(seed?.draftId ? { fromDraftId: seed.draftId } : {}),
         tier,
         destinations: dests,
+        ...(isCarousel ? { slides } : {}),
+        ...(written.length ? { written } : {}),
         photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
         dueDateISO: due ?? undefined,
         rushConfirmed,
@@ -1132,6 +1139,35 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   />
                 </div>
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
+              </div>
+            )}
+            {job !== null && ((jobSpec(job)?.written?.length ?? 0) > 0) && (
+              <div style={{ margin: '14px 0 4px' }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>
+                  {L['written.title']}
+                </div>
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['written.sub']}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {(jobSpec(job)?.written ?? []).map((w) => {
+                    const on = written.includes(w)
+                    return (
+                      <button
+                        key={w} type="button" aria-pressed={on}
+                        onClick={() => setWritten((prev) => (prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w]))}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                          textAlign: 'left', cursor: 'pointer', padding: '11px 13px', borderRadius: 12,
+                          border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
+                          fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
+                          transition: 'border-color .15s ease, background .15s ease',
+                        }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 600, color: on ? DESK.mintDeep : DESK.ink }}>{w}</span>
+                        <span style={{ flexShrink: 0, fontFamily: DESK.mono, fontSize: 12.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute }}>{`$${RATE_CARD.writtenVersion}`}</span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             )}
 

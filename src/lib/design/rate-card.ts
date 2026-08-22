@@ -26,6 +26,9 @@ export interface RateCard {
   /** Carousel posts: the first slide rides the tier base; each extra slide is its own
    *  layout on the same brand and bills this adder. */
   carouselPerSlide: number
+  /** Written versions: text renditions written from the same answers (website About
+   *  section, Google Business description, team bio). Per piece. */
+  writtenVersion: number
   /** We find or license usable photos when nothing in the client's library clears the gate. */
   photoSourcing: number
   /** We run the print job end to end. Printing cost itself passes through at cost. */
@@ -60,6 +63,7 @@ export const RATE_CARD: RateCard = {
     banner: 85,
   },
   carouselPerSlide: 30,
+  writtenVersion: 25,
   photoSourcing: 60,
   printManagement: 50,
   rushMultiplier: 1.5,

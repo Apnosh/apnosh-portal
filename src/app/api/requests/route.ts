@@ -42,9 +42,15 @@ function graphicOrderCents(design: unknown, card: RateCard): number | null {
   if (destIds.length === 0) return null
   const photosVal = ['own', 'source', 'none', 'shoot'].includes(String(d.photos)) ? (d.photos as 'own' | 'source' | 'none' | 'shoot') : undefined
   const due = typeof d.dueDateISO === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.dueDateISO) ? d.dueDateISO : undefined
+  const slidesVal = typeof d.slides === 'number' && Number.isInteger(d.slides) && d.slides >= 2 && d.slides <= 10 ? d.slides : undefined
+  const writtenVal = Array.isArray(d.written)
+    ? d.written.filter((x): x is string => typeof x === 'string' && x.length > 0 && x.length <= 80).slice(0, 5)
+    : []
   const answers: DesignOrderAnswers = {
     jobType: { value: 'other', source: 'asked' },
     destinations: { value: destIds, source: 'asked' },
+    ...(slidesVal ? { slides: slidesVal } : {}),
+    ...(writtenVal.length ? { written: writtenVal } : {}),
     ...(photosVal ? { photos: { value: photosVal, source: 'asked' as const } } : {}),
     /* print runs are off, so qty/printer cannot exist and no print-mgmt line can
      * price; revisit this sanitizer when PRINT_AVAILABLE flips back on */

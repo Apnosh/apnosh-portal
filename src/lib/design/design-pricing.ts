@@ -45,6 +45,9 @@ export interface DesignOrderAnswers {
   /** carousel posts only: total slide count. The first slide rides the tier base;
    *  extras bill rates.carouselPerSlide each. Absent for single graphics. */
   slides?: number
+  /** written renditions from the same answers (About section, GBP description);
+   *  each bills rates.writtenVersion. Absent when none picked. */
+  written?: string[]
   /** from design history (Phase C); the engine never asks for it */
   tier: 1 | 2 | 3
   /** true when history could support a higher tier: price the lower one, flag for review */
@@ -117,6 +120,16 @@ export function priceDesignOrder(a: DesignOrderAnswers, rates: RateCard): Design
     lines.push({
       id: 'slides', label: `Carousel slides ×${a.slides}`, amount: extra * rates.carouselPerSlide,
       why: `The first slide rides the design. ${extra} more slide${extra === 1 ? '' : 's'} at $${rates.carouselPerSlide} each.`,
+      source: 'known',
+    })
+  }
+
+  /* Written versions: text renditions from the same answers, priced per piece. */
+  if ((a.written?.length ?? 0) > 0) {
+    const n = (a.written as string[]).length
+    lines.push({
+      id: 'written', label: `Written versions ×${n}`, amount: n * rates.writtenVersion,
+      why: `${(a.written as string[]).join(', ')}. Written from your answers, $${rates.writtenVersion} each.`,
       source: 'known',
     })
   }
