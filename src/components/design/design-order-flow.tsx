@@ -363,12 +363,15 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
  * over, and the order records where it came from. */
 export interface DesignSeed { draftId?: string; described?: string; referenceUrl?: string | null; eventDateISO?: string; job?: DesignJobId }
 
-export default function DesignOrderFlow({ menu, assets, businessName, seed }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null; seed?: DesignSeed | null }) {
+export default function DesignOrderFlow({ menu, assets, businessName, seed, express }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null; seed?: DesignSeed | null; express?: boolean }) {
   /* Client-side back to the store keeps the app shell mounted (owner ask 2026-08-18). */
   const router = useRouter()
   const today = todayISO()
 
   const [step, setStep] = useState(seed?.job ? 2 : 1)
+  /* EXPRESS (?express=1, owner test): one screen, defaults visible, wizard
+   * steps become tap-to-change editors reached from the order rows */
+  const [expressHome, setExpressHome] = useState(!!express)
   /* arrived from a type tile: the intro screen is skipped, so the sheet is 5
    * screens and every number shifts down one */
   const [seededFlow, setSeededFlow] = useState(!!seed?.job)
@@ -734,6 +737,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
       printPicked && !PRINT_AVAILABLE ? 'Print ready files only; they handle the printing' :
       printer === 'us' ? 'We print and deliver' : printer === 'client' ? 'Their shop prints' : '',
       destOtherFinal ? `CUSTOM SPOT (not on our format list): "${destOtherFinal}". Size it with them and quote it on its own` : '',
+      express && picked.length === 0 && photoMode == null ? 'PHOTOS: designer picks the best from the client library' :
       photoMode === 'none' ? 'No photos: custom artwork on their brand'
         : photoMode === 'shoot' ? 'Wants a PHOTO SHOOT at their place. Set the shoot date with them before design starts'
         : photoMode === 'source' ? 'Find photos for them'
@@ -865,6 +869,105 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   }
 
   /* ── THE CART: one item, one honest total, one tap to confirm ─────────────────────── */
+  /* ── EXPRESS: say it, see the order, send it ─────────────────────────── */
+  if (express && expressHome && !submitted && !cart) {
+    const wordsReady = jobQs.length > 0
+      ? (wordsMode === 'exact' ? exactCopy.trim().length > 0 : qaPairs.length > 0)
+      : headline.trim().length > 0 || details.trim().length > 0
+    const openEditor = (n: number) => { setExpressHome(false); setStep(n) }
+    const leadQ = jobQs[0]
+    const row = (label: string, value: string, n: number) => (
+      <button
+        key={label} type="button" onClick={() => openEditor(n)}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '12px 13px', background: '#fff', border: 'none', borderBottom: `1px solid ${DESK.line}`, cursor: 'pointer', fontFamily: DESK.body }}
+      >
+        <span style={{ fontSize: 12, color: DESK.mute, flexShrink: 0 }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: DESK.ink, textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value} <span style={{ color: DESK.mute }}>{'›'}</span></span>
+      </button>
+    )
+    const tierName = { 1: L['tier.basic.label'], 2: L['tier.custom.label'], 3: L['tier.works.label'] }[tier]
+    const photoValue = picked.length > 0 ? `${picked.length} picked`
+      : photoMode === 'shoot' ? L['photos.shoot.label']
+      : photoMode === 'source' ? 'We find photos'
+      : photoMode === 'none' ? 'Custom artwork'
+      : 'Designer picks from your library'
+    return (
+      <div style={ground}>
+        <DeskKeyframes />
+        <BoardKeyframes />
+        <button
+          type="button" onClick={() => router.push('/dashboard/design/browse')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '2px 0', marginBottom: 8, cursor: 'pointer', fontFamily: DESK.body, fontSize: 14, fontWeight: 600, color: DESK.ink2 }}
+        >
+          {'‹'} Store
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: 0, letterSpacing: '-0.02em' }}>{jobLabel ?? T.job}</h2>
+          <span style={{ padding: '4px 9px', borderRadius: 99, background: `${dot}14`, border: `1px solid ${dot}44`, fontFamily: DESK.mono, fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: dot }}>
+            {jobFormat === 'carousel' ? L['fmt.chip.carousel'] : jobFormat === 'either' ? L['fmt.chip.either'] : L['fmt.chip.single']}
+          </span>
+        </div>
+
+        {/* say it: story chips inline, one required answer */}
+        {jobAngles.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
+            {jobAngles.map((a) => <Chip key={a.id} on={angle === a.id} label={a.label} onClick={() => setAngle(a.id)} />)}
+          </div>
+        )}
+        {(jobAngles.length === 0 || activeAngle) && leadQ && (
+          <div style={{ marginTop: 12, borderRadius: 14, border: `1.5px solid ${DESK.line}`, overflow: 'hidden', background: `linear-gradient(165deg, ${dot}0A, rgba(255,255,255,0.02) 55%), #fff` }}>
+            <div style={{ padding: '11px 13px 0', fontFamily: DESK.body, fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>{leadQ.label}</div>
+            <div style={{ padding: '3px 13px 0', fontSize: 11.5, color: DESK.mute, fontStyle: 'italic' }}>{L['say.like']}: {'\u201C'}{leadQ.ph}{'\u201D'}</div>
+            <textarea
+              value={qa[qaKey(0)] ?? ''}
+              onChange={(e) => { setQa((prev) => ({ ...prev, [qaKey(0)]: e.target.value })); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px` }}
+              placeholder={L['say.answer.ph']} rows={3} aria-label={leadQ.label}
+              style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '8px 13px 12px', resize: 'none', overflow: 'hidden', minHeight: 88, fontFamily: DESK.body, fontSize: 14, color: DESK.ink, lineHeight: 1.5 }}
+            />
+          </div>
+        )}
+        {jobAngles.length > 0 && !activeAngle && (
+          <div style={{ marginTop: 10, fontSize: 12, color: DESK.mute }}>{L['say.whichstory']}</div>
+        )}
+        {jobQs.length === 0 && (
+          <input
+            value={headline} onChange={(e) => setHeadline(e.target.value)}
+            placeholder={(job !== null ? jobSpec(job)?.voice?.headlinePh : undefined) ?? L['say.headline.ph']} aria-label={L['say.headline']}
+            style={{ ...inputStyle, marginTop: 12 }}
+          />
+        )}
+        {(jobAngles.length === 0 || activeAngle) && jobQs.length > 1 && (
+          <button type="button" onClick={() => openEditor(2)}
+            style={{ marginTop: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: DESK.body, fontSize: 12, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            {fill(L['xp.morequestions'], { n: String(jobQs.length - 1) })}
+          </button>
+        )}
+
+        {/* the order, pre-filled: every row is a tap away from changing */}
+        <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 6px' }}>
+          {L['xp.order']}
+        </div>
+        <div style={{ borderRadius: 14, border: `1.5px solid ${DESK.line}`, overflow: 'hidden', background: '#fff' }}>
+          {row(L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5)}
+          {row(L['xp.row.where'], dests.length ? `${dests.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${dests.length > 2 ? ` +${dests.length - 2}` : ''}` : L['xp.none'], 5)}
+          {row(L['xp.row.photos'], photoValue, 3)}
+          {row(L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
+          {row(L['xp.row.maker'], `${tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
+        </div>
+
+        <button
+          type="button" disabled={!wordsReady} onClick={() => openEditor(6)}
+          style={{ width: '100%', height: 52, marginTop: 16, marginBottom: 24, borderRadius: 26, border: 'none', cursor: wordsReady ? 'pointer' : 'default', background: wordsReady ? DESK.grad : '#E7E4DB', color: wordsReady ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: wordsReady ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}
+        >
+          {fill(L['xp.review'], { total: String(quote.total) })}
+        </button>
+        {!wordsReady && (
+          <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: -14, marginBottom: 24, textAlign: 'center' }}>{L['xp.needwords']}</div>
+        )}
+      </div>
+    )
+  }
+
   if (cart) {
     const grandTotal = heldPieces.reduce((n, h) => n + h.total, 0) + orderTotal
     return (
@@ -1891,7 +1994,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         })()}
 
         {/* back / next (review keeps Back too, under the seal, so a typo is one tap away) */}
-        {step > 1 && (
+        {express && step > 1 && (
+          <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
+            <button type="button" onClick={() => setExpressHome(true)}
+              style={{ flex: 1, height: 50, borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
+              {L['xp.done']}
+            </button>
+          </div>
+        )}
+        {!express && step > 1 && (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
             {/* a seeded flow's first screen has nowhere back to go; from the
              * questions screen, Back returns to the story list first */}

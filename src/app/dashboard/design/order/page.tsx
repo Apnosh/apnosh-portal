@@ -23,7 +23,7 @@ import { listMyMenuItems } from '@/lib/dashboard/menu-actions'
 export const metadata = { title: 'Get a graphic made' }
 export const dynamic = 'force-dynamic'
 
-export default async function DesignOrderPage({ searchParams }: { searchParams: Promise<{ draft?: string | string[]; occasion?: string | string[]; job?: string | string[] }> }) {
+export default async function DesignOrderPage({ searchParams }: { searchParams: Promise<{ draft?: string | string[]; occasion?: string | string[]; job?: string | string[]; express?: string | string[] }> }) {
   /* GD-2: opened from an existing draft ("Have a designer finish this").
    * The deliverable is read with the CALLER'S session, so row-level security
    * decides ownership — a foreign id simply loads nothing and the flow opens
@@ -88,7 +88,7 @@ export default async function DesignOrderPage({ searchParams }: { searchParams: 
   return (
     <MvpShell active="campaigns">
       <div style={{ minHeight: '100%' }}>
-        <DesignOrderFlow menu={menu} assets={assets} businessName={library.businessName} seed={seed} />
+        <DesignOrderFlow menu={menu} assets={assets} businessName={library.businessName} seed={seed} express={sp.express === '1'} />
       </div>
     </MvpShell>
   )
