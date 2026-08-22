@@ -49,6 +49,7 @@ export const RATE_CARD: RateCard = {
     'instagram-post': 35,
     'instagram-story': 35,
     'facebook-post': 35,
+    'linkedin-post': 35,
     'google-listing': 35,
     'email-header': 35,
     'printed-flyer': 45,

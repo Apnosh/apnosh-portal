@@ -417,7 +417,13 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* the owner picks the format AFTER the content; the type's registry format
    * is only the recommended default */
   const [pickedFormat, setPickedFormat] = useState<'single' | 'carousel' | null>(null)
-  useEffect(() => { setAngle(null); setPickedFormat(null) }, [job])
+  useEffect(() => {
+    setAngle(null); setPickedFormat(null)
+    /* the objective decides the distribution: preselect where this should
+     * live; the owner prunes or adds on the build step */
+    const places = job ? jobSpec(job)?.places : null
+    setDests(places && places.length ? [...places] : [])
+  }, [job])
   /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
    * the same list (featureOtherText tracks which member is the typed one). */
   const [promoteItems, setPromoteItems] = useState<string[]>([])
@@ -706,6 +712,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
     const noteBits = [
       isCarousel ? `CAROUSEL POST: ${slides} slides total. Slide 1 is the hook; one beat per slide; end on the call to action or the today note` : '',
+      isCarousel && dests.some((d) => d !== 'instagram-post')
+        ? 'Instagram carries the carousel; every other placement gets a single adapted from the strongest slide'
+        : '',
       seed?.draftId ? 'START FROM THE CLIENT\'S EXISTING DRAFT — polish it, do not start over' : '',
       printPicked && allQtysIn ? printDestSpecs.map((d) => `${printQtys[d.id]} x ${d.label}`).join(', ') : '',
       /* print runs are off: any picked print size is a print ready FILE handoff */
@@ -1063,6 +1072,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {step === 5 && (
           <>
             <StepHead n={stepNo(5)} total={stepTotal} accent={dot} title={T.where} sub={S.where} />
+            {job !== null && (jobSpec(job)?.places?.length ?? 0) > 0 && (
+              <div style={{ background: DESK.mintWash, border: `1px solid ${DESK.mint}44`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, color: DESK.mintDeep, marginBottom: 12, lineHeight: 1.45 }}>
+                {L['dest.rec']}
+              </div>
+            )}
             <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '0 0 8px' }}>
               {L['fmt.how']}
             </div>

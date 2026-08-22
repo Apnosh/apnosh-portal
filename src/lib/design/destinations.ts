@@ -11,6 +11,7 @@
  */
 
 export type DestinationId =
+  | 'linkedin-post'
   | 'instagram-post'
   | 'instagram-story'
   | 'facebook-post'
@@ -88,6 +89,11 @@ export const DESTINATIONS: readonly DestinationSpec[] = [
     id: 'banner', label: 'Banner', kind: 'print',
     dimensions: { w: 72, h: 24, unit: 'in' }, colorMode: 'CMYK', resolution: 150,
     bleed: 0.25, safeZone: { top: 2, bottom: 2, left: 3, right: 3 }, bufferDays: 5,
+  },
+  {
+    id: 'linkedin-post', label: 'LinkedIn post', kind: 'digital',
+    dimensions: { w: 1200, h: 627, unit: 'px' }, colorMode: 'RGB', resolution: 72,
+    safeZone: { top: 40, bottom: 40, left: 40, right: 40 }, bufferDays: 0,
   },
   {
     /* One graphic sized for email width; the send itself is the email rail's job, not design's. */

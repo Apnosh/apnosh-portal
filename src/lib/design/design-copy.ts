@@ -69,6 +69,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'fmt.single.sub': 'One page. Best for one clear message.',
   'fmt.multi.sub': 'Pages people swipe through. Best for stories and lists.',
   'fmt.rec': 'Recommended',
+  'dest.rec': 'We picked where this should live based on what it is. Add or remove anything below.',
   'say.youanswer': 'You will answer',
   'say.title.blank': 'Leave it blank and your designer writes one from your story.',
   'say.question.title': 'What are we asking?',
