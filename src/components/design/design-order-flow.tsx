@@ -484,7 +484,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
   const [followUpBusy, setFollowUpBusy] = useState(false)
   const [followUpSent, setFollowUpSent] = useState(false)
   /* the creator marketplace as makers: live ratings, honest No-ratings-yet */
-  const [makers, setMakers] = useState<{ vendorId: string; name: string; ratingLabel: string; rating: { avg: number; count: number } | null }[]>([])
+  const [makers, setMakers] = useState<{ vendorId: string; slug: string; name: string; ratingLabel: string; rating: { avg: number; count: number } | null }[]>([])
   const [chosenMaker, setChosenMaker] = useState<{ vendorId: string; name: string } | null>(null)
   useEffect(() => {
     let cancelled = false
