@@ -1026,7 +1026,17 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         </div>
         <div style={{ borderRadius: 16, border: '1.5px solid #EAE7DE', overflow: 'hidden', background: `linear-gradient(165deg, ${dot}08, rgba(255,255,255,0.02) 60%), #fff`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 18px rgba(22,33,28,0.07)' }}>
           {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5)}
-          {row(<Send size={14} />, L['xp.row.where'], dests.length ? `${dests.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${dests.length > 2 ? ` +${dests.length - 2}` : ''}` : L['xp.none'], 5)}
+          {(() => {
+            const digital = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'digital')
+            const print = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'print')
+            const names = (ids: DestinationId[]) => `${ids.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${ids.length > 2 ? ` +${ids.length - 2}` : ''}`
+            return (
+              <>
+                {row(<Send size={14} />, L['xp.row.where'], digital.length ? names(digital) : L['xp.none'], 5)}
+                {row(<Layers size={14} />, L['xp.row.print'], print.length ? names(print) : L['xp.print.none'], 5)}
+              </>
+            )
+          })()}
           {row(<ImageIcon size={14} />, L['xp.row.photos'], photoValue, 3)}
           {row(<CalendarDays size={14} />, L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
           {row(<User size={14} />, L['xp.row.maker'], `${chosenMaker ? chosenMaker.name : tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
@@ -1368,8 +1378,24 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 </div>
               )}
 
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '14px 0 8px' }}>
+              {L['dest.where']}
+            </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
-              {DESTINATIONS.map((d) => (
+              {DESTINATIONS.filter((d) => d.kind === 'digital').map((d) => (
+                <DestFrame
+                  key={d.id} d={d} on={dests.includes(d.id)}
+                  amount={requestMode ? null : destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
+                  onClick={() => setDests((prev) => (prev.includes(d.id) ? prev.filter((x) => x !== d.id) : [...prev, d.id]))}
+                />
+              ))}
+            </div>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '16px 0 2px' }}>
+              {L['dest.print']}
+            </div>
+            <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['dest.print.sub']}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
+              {DESTINATIONS.filter((d) => d.kind === 'print').map((d) => (
                 <DestFrame
                   key={d.id} d={d} on={dests.includes(d.id)}
                   amount={requestMode ? null : destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
