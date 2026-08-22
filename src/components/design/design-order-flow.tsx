@@ -414,7 +414,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   const [exactCopy, setExactCopy] = useState('')
   /* which of the type's stories they chose to tell; a type swap forgets it */
   const [angle, setAngle] = useState<string | null>(null)
-  useEffect(() => { setAngle(null) }, [job])
+  /* the owner picks the format AFTER the content; the type's registry format
+   * is only the recommended default */
+  const [pickedFormat, setPickedFormat] = useState<'single' | 'carousel' | null>(null)
+  useEffect(() => { setAngle(null); setPickedFormat(null) }, [job])
   /* Featuring is MULTI: a special can star several dishes. The own-words entry rides
    * the same list (featureOtherText tracks which member is the typed one). */
   const [promoteItems, setPromoteItems] = useState<string[]>([])
@@ -557,8 +560,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
   /* the picked type's group color threads the whole sheet */
   const jobGroup = job ? jobSpec(job)?.group : null
   const dot = jobGroup ? JOB_GROUP_META[jobGroup].dot : DESK.mint
-  /* story-shaped types are carousels: multiple pages, priced per slide */
-  const isCarousel = job !== null && jobSpec(job)?.format === 'carousel'
+  /* the recommended format comes from the type; the owner can override on the
+   * build step. Everything downstream follows the CHOSEN format. */
+  const recFormat: 'single' | 'carousel' = job !== null && jobSpec(job)?.format === 'carousel' ? 'carousel' : 'single'
+  const isCarousel = (pickedFormat ?? recFormat) === 'carousel'
   /* the type's interview: angle types pick a story first, each with its own
    * questions; plain interview types go straight to theirs */
   const jobAngles = job ? jobSpec(job)?.voice?.angles ?? [] : []
@@ -1058,6 +1063,70 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
         {step === 5 && (
           <>
             <StepHead n={stepNo(5)} total={stepTotal} accent={dot} title={T.where} sub={S.where} />
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '0 0 8px' }}>
+              {L['fmt.how']}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 6 }}>
+              {(['single', 'carousel'] as const).map((f) => {
+                const on = (pickedFormat ?? recFormat) === f
+                return (
+                  <button
+                    key={f} type="button" aria-pressed={on} onClick={() => setPickedFormat(f)}
+                    style={{
+                      position: 'relative', textAlign: 'left', cursor: 'pointer', padding: '11px 12px', borderRadius: 13,
+                      border: `1.5px solid ${on ? DESK.mint : DESK.line}`,
+                      background: on ? DESK.mintWash : '#fff',
+                      boxShadow: '0 2px 8px rgba(22,33,28,0.05)', fontFamily: DESK.body,
+                      WebkitTapHighlightColor: 'transparent', transition: 'border-color .15s ease, background .15s ease',
+                    }}
+                  >
+                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>
+                      {f === 'single' ? L['fmt.single.name'] : L['fmt.multi.name']}
+                    </span>
+                    <span style={{ display: 'block', fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.4 }}>
+                      {f === 'single' ? L['fmt.single.sub'] : L['fmt.multi.sub']}
+                    </span>
+                    {recFormat === f && (
+                      <span style={{ position: 'absolute', top: 8, right: 9, fontFamily: DESK.mono, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep }}>
+                        {L['fmt.rec']}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+              {isCarousel && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
+                  {L['job.slides.title']}
+                </div>
+                {/* one slider, one number — no preset-vs-other split (owner call 2026-08-20) */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <input
+                    type="range" min={2} max={10} step={1} value={slides} aria-label="Slide count"
+                    onChange={(e) => setSlides(Number(e.target.value))}
+                    style={{ flex: 1, accentColor: DESK.mint, height: 32, cursor: 'pointer' }}
+                  />
+                  <input
+                    inputMode="numeric" value={String(slides)} aria-label="Slide count number"
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
+                      const n = Number(v)
+                      if (n >= 2 && n <= 10) setSlides(n)
+                    }}
+                    style={{ ...inputStyle, width: 58, height: 40, textAlign: 'center', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep }}
+                  />
+                </div>
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
+              </div>
+            )}
+
+              {!(jobAngles.length > 0 && !activeAngle) && (jobQs.length === 0 || wordsMode === 'exact') && (
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
+                  {L['say.note']}
+                </div>
+              )}
+
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
               {DESTINATIONS.map((d) => (
                 <DestFrame
@@ -1180,11 +1249,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                   </button>
                 ) : undefined}
               />
-              {job !== null && (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '4px 10px', borderRadius: 99, background: isCarousel ? `${dot}16` : 'rgba(22,33,28,0.05)', border: `1px solid ${isCarousel ? `${dot}44` : DESK.line}`, fontFamily: DESK.mono, fontSize: 9.5, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: isCarousel ? dot : DESK.mute }}>
-                  {isCarousel ? fill(L['fmt.multi'], { n: String(slides) }) : L['fmt.single']}
-                </div>
-              )}
+
               {shelfOpen && job !== null && (
                 <div style={{ marginBottom: 12 }}>
                   {JOB_GROUPS.map((g) => (
@@ -1474,37 +1539,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed }: { 
                 )
               })()}
 
-              {isCarousel && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
-                  {L['job.slides.title']}
-                </div>
-                {/* one slider, one number — no preset-vs-other split (owner call 2026-08-20) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <input
-                    type="range" min={2} max={10} step={1} value={slides} aria-label="Slide count"
-                    onChange={(e) => setSlides(Number(e.target.value))}
-                    style={{ flex: 1, accentColor: DESK.mint, height: 32, cursor: 'pointer' }}
-                  />
-                  <input
-                    inputMode="numeric" value={String(slides)} aria-label="Slide count number"
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
-                      const n = Number(v)
-                      if (n >= 2 && n <= 10) setSlides(n)
-                    }}
-                    style={{ ...inputStyle, width: 58, height: 40, textAlign: 'center', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep }}
-                  />
-                </div>
-                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
-              </div>
-            )}
-
-              {!(jobAngles.length > 0 && !activeAngle) && (jobQs.length === 0 || wordsMode === 'exact') && (
-                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
-                  {L['say.note']}
-                </div>
-              )}
             </>
           )
         })()}
