@@ -20,7 +20,7 @@ export { fill }
 
 export const DESIGN_TITLES: Record<string, string> = {
   job: 'What are we making?',
-  where: 'What sizes do you need?',
+  where: 'Where will this go?',
   say: 'What should it say?',
   photos: 'Which photos should we use?',
   when: 'When do you need it?',
@@ -30,7 +30,7 @@ export const DESIGN_TITLES: Record<string, string> = {
 
 export const DESIGN_SUBS: Record<string, string> = {
   job: 'Say it in a sentence. We handle the rest.',
-  where: 'One design, cut to every size you pick. Your first size is included.',
+  where: 'Tap every spot you need. We cut the right size for each one. Your first spot is included.',
   say: 'Watch it take shape. Tap a suggestion or write your own.',
   /* The walk's assets line, verbatim: the promise is the same promise. */
   photos: WALK_SUBS.assets,
@@ -105,6 +105,11 @@ export const DESIGN_LINES: Record<string, string> = {
   'fmt.chip.either': 'Single or carousel',
   'fmt.chip.single': 'Single graphic',
   'dest.rec': 'We picked where this should live based on what it is. Add or remove anything below.',
+  'dest.suggested': 'Suggested',
+  'dest.more': 'More places, print and custom sizes',
+  'dest.printgroup': 'Print',
+  'dest.somewhere': 'Somewhere else',
+  'dest.somewhere.sub': 'stickers, billboards, anything',
   'dest.where': 'Where is it going?',
   'dest.print': 'Print sizes',
   'dest.print.sub': 'Physical pieces, sized and set up for real printing.',

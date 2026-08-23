@@ -268,62 +268,49 @@ function Artboard({ jobLabel, jobId, dot = DESK.mint, headline, details, offer, 
 }
 
 /* ── a destination as a real-ratio frame of YOUR artwork ─────────────────────────────────── */
-function DestFrame({ d, on, amount, photoUrl, headline, onClick }: {
+function DestRow({ d, on, amount, suggested, onClick }: {
   d: DestinationSpec
   on: boolean
-  /** the engine's own line amount for this tile when selected (null = unselected) */
+  /** the engine's own line amount when selected (null = request mode, no numbers) */
   amount: number | null
-  photoUrl?: string | null
-  headline: string
+  suggested?: boolean
   onClick: () => void
 }) {
-  const ratio = d.dimensions.w / d.dimensions.h
-  const w = ratio >= 2.2 ? 104 : ratio >= 1 ? 74 : 52
-  const h = Math.max(34, Math.min(86, Math.round(w / ratio)))
   return (
     <button
       type="button" onClick={onClick} aria-pressed={on}
-      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', padding: 4, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+        cursor: 'pointer', padding: '12px 13px', borderRadius: 12,
+        border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
+        fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
+        transition: 'border-color .15s ease, background .15s ease',
+      }}
     >
-      <span style={{
-        position: 'relative', width: w, height: h, borderRadius: 6, overflow: 'hidden',
-        background: photoUrl ? undefined : DESK.ink,
-        border: `2px solid ${on ? DESK.mint : DESK.line}`,
-        boxShadow: on ? '0 4px 12px rgba(46,154,120,0.3)' : '0 1px 4px rgba(22,33,28,0.1)',
-        transform: on ? 'translateY(-2px)' : undefined, transition: 'transform .18s ease, box-shadow .18s ease, border-color .18s ease',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        {photoUrl && (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photoUrl} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
-            <span aria-hidden style={{ position: 'absolute', inset: 0, background: 'rgba(22,33,28,0.42)' }} />
-          </>
-        )}
-        {/* your headline, scaled into the frame; bars when there are no words yet */}
-        <span style={{ position: 'relative', zIndex: 2, padding: '0 4px', width: '100%', textAlign: 'center' }}>
-          {headline ? (
-            <span style={{ fontFamily: DESK.disp, fontWeight: 700, fontSize: Math.max(6, Math.min(9, h / 6)), color: '#fff', lineHeight: 1.1, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{headline}</span>
-          ) : (
-            <span aria-hidden style={{ display: 'block', margin: '0 auto', width: '62%' }}>
-              <span style={{ display: 'block', height: 3.5, borderRadius: 2, background: 'rgba(255,255,255,0.75)' }} />
-              <span style={{ display: 'block', height: 2.5, borderRadius: 2, background: 'rgba(255,255,255,0.35)', marginTop: 3, width: '72%', marginLeft: 'auto', marginRight: 'auto' }} />
-            </span>
-          )}
-        </span>
-        {on && (
-          <span style={{ position: 'absolute', top: 3, right: 3, zIndex: 3, width: 15, height: 15, borderRadius: '50%', background: DESK.mint, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Check size={9} strokeWidth={3.6} />
+      <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 7 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink, whiteSpace: 'nowrap' }}>{d.label}</span>
+        {suggested && !on && (
+          <span style={{ fontFamily: DESK.mono, fontSize: 8, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep, background: DESK.mintWash, borderRadius: 5, padding: '2px 5px', flexShrink: 0 }}>
+            {L['dest.suggested']}
           </span>
         )}
+        {/* the spec stays visible but whispers: owners pick places, we own sizes */}
+        <span style={{ fontFamily: DESK.mono, fontSize: 9, fontWeight: 600, color: DESK.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {d.dimensions.w}×{d.dimensions.h}{d.dimensions.unit === 'px' ? '' : ` ${d.dimensions.unit}`}
+        </span>
       </span>
-      <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: on ? DESK.mintDeep : DESK.ink2, lineHeight: 1.2, textAlign: 'center' }}>{d.label}</span>
-      {/* the size itself, dimension-forward (owner call 2026-08-20): one design, many uses */}
-      <span style={{ fontFamily: DESK.mono, fontSize: 8.5, fontWeight: 600, color: DESK.mute, lineHeight: 1 }}>
-        {d.dimensions.w}×{d.dimensions.h}{d.dimensions.unit === 'px' ? '' : d.dimensions.unit}
-      </span>
-      <span style={{ fontFamily: DESK.mono, fontSize: 9.5, fontWeight: 700, color: DESK.mintDeep, minHeight: 12 }}>
-        {on && amount != null ? (amount === 0 ? L['dest.included'] : `+$${amount}`) : ''}
+      {on && amount != null && (
+        <span style={{ flexShrink: 0, fontFamily: DESK.mono, fontSize: 11.5, fontWeight: 700, color: amount === 0 ? DESK.mute : DESK.mintDeep }}>
+          {amount === 0 ? L['dest.included'] : `+$${amount}`}
+        </span>
+      )}
+      <span aria-hidden style={{
+        flexShrink: 0, width: 21, height: 21, borderRadius: '50%',
+        border: on ? 'none' : `1.5px solid ${DESK.line}`, background: on ? DESK.mint : '#fff',
+        color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background .15s ease',
+      }}>
+        {on && <Check size={12} strokeWidth={3.4} />}
       </span>
     </button>
   )
@@ -402,6 +389,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
   const [method, setMethod] = useState<'designer' | 'ai'>('designer')
   const [aiBusy, setAiBusy] = useState(false)
   const [dests, setDests] = useState<DestinationId[]>([])
+  const [moreDests, setMoreDests] = useState(false)
   /* The somewhere-else escape hatch: a place our 11 formats missed, in the owner's own
    * words. Never priced by the engine (it has no spec to cite) — it rides the request
    * and the team sizes and quotes it. */
@@ -437,6 +425,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
      * live; the owner prunes or adds on the build step */
     const places = job ? jobSpec(job)?.places : null
     setDests(places && places.length ? [...places] : [])
+    setMoreDests(false)
     setWritten([])
     setChosenMaker(null)
   }, [job])
@@ -1310,12 +1299,118 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         {step === 5 && (
           <>
             <StepHead n={stepNo(5)} total={stepTotal} accent={dot} title={T.where} sub={S.where} />
-            {job !== null && (jobSpec(job)?.places?.length ?? 0) > 0 && (
-              <div style={{ background: DESK.mintWash, border: `1px solid ${DESK.mint}44`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, color: DESK.mintDeep, marginBottom: 12, lineHeight: 1.45 }}>
-                {L['dest.rec']}
+            {(() => {
+              /* one checklist, owner language: the type's suggested spots up front and
+               * pre-checked, everything else (rest of digital, print, custom) behind one
+               * "More places" row. Sizes are ours to handle, so they only whisper. */
+              const sug = job ? (jobSpec(job)?.places ?? []) : []
+              const baseIds: DestinationId[] = sug.length ? [...sug] : DESTINATIONS.filter((d) => d.kind === 'digital').map((d) => d.id)
+              const extras = DESTINATIONS.filter((d) => !baseIds.includes(d.id))
+              const open = moreDests || destOtherOn || dests.some((x) => !baseIds.includes(x))
+              const toggle = (id: DestinationId) => setDests((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+              const findD = (id: DestinationId) => DESTINATIONS.find((d) => d.id === id)
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {baseIds.map((id) => {
+                    const d = findD(id)
+                    return d ? <DestRow key={id} d={d} on={dests.includes(id)} amount={requestMode ? null : destAmount(id)} suggested={sug.includes(id)} onClick={() => toggle(id)} /> : null
+                  })}
+                  {open && extras.filter((d) => d.kind === 'digital').map((d) => (
+                    <DestRow key={d.id} d={d} on={dests.includes(d.id)} amount={requestMode ? null : destAmount(d.id)} onClick={() => toggle(d.id)} />
+                  ))}
+                  {open && extras.some((d) => d.kind === 'print') && (
+                    <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '7px 0 0' }}>
+                      {L['dest.printgroup']}
+                    </div>
+                  )}
+                  {open && extras.filter((d) => d.kind === 'print').map((d) => (
+                    <DestRow key={d.id} d={d} on={dests.includes(d.id)} amount={requestMode ? null : destAmount(d.id)} onClick={() => toggle(d.id)} />
+                  ))}
+                  {open && (
+                    <button
+                      type="button" aria-pressed={destOtherOn}
+                      onClick={() => { if (destOtherOn) { setDestOther(''); setCustomW(''); setCustomH('') } setDestOtherOn(!destOtherOn) }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', cursor: 'pointer',
+                        padding: '12px 13px', borderRadius: 12,
+                        border: `1.5px dashed ${destOtherOn ? DESK.mint : DESK.line}`, background: destOtherOn ? DESK.mintWash : '#fff',
+                        fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: destOtherOn ? DESK.mintDeep : DESK.ink }}>{L['dest.somewhere']}</span>
+                      <span style={{ fontFamily: DESK.mono, fontSize: 9, fontWeight: 600, color: DESK.mute }}>{L['dest.somewhere.sub']}</span>
+                    </button>
+                  )}
+                  {!open && (
+                    <button
+                      type="button" onClick={() => setMoreDests(true)}
+                      style={{
+                        width: '100%', textAlign: 'center', cursor: 'pointer', padding: '11px 13px', borderRadius: 12,
+                        border: `1.5px dashed ${DESK.line}`, background: 'none', fontFamily: DESK.body,
+                        fontSize: 13, fontWeight: 700, color: DESK.ink2, WebkitTapHighlightColor: 'transparent',
+                      }}
+                    >
+                      {L['dest.more']}
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
+            {destOtherOn && (
+              <div style={{ marginTop: 10 }}>
+                <input
+                  value={destOther} onChange={(e) => setDestOther(e.target.value)}
+                  placeholder={L['dest.other.ph']} aria-label={L['dest.other.label']}
+                  style={inputStyle}
+                />
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                  <input
+                    inputMode="numeric" value={customW} aria-label={L['dest.custom.w']}
+                    onChange={(e) => setCustomW(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+                    placeholder={L['dest.custom.w']} style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <span style={{ color: DESK.mute, fontWeight: 700 }}>×</span>
+                  <input
+                    inputMode="numeric" value={customH} aria-label={L['dest.custom.h']}
+                    onChange={(e) => setCustomH(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+                    placeholder={L['dest.custom.h']} style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <span style={{ fontSize: 12, color: DESK.mute, fontWeight: 600 }}>px</span>
+                </div>
+                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['dest.other.note']}</div>
               </div>
             )}
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '0 0 8px' }}>
+            {/* print runs are off: a picked print size is DESIGNED (print ready file
+                handed over), but the copy-count and who-prints questions only exist for
+                a print job we cannot run, so they hide and one plain note says why */}
+            {printPicked && !PRINT_AVAILABLE && (
+              <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 14, lineHeight: 1.45 }}>
+                {PRINT_OFF_MESSAGE}
+              </div>
+            )}
+            {printPicked && PRINT_AVAILABLE && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 6 }}>{L['print.qty']}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: printDestSpecs.length > 1 ? '1fr 1fr' : '1fr', gap: 8 }}>
+                  {printDestSpecs.map((d) => (
+                    <div key={d.id}>
+                      <div style={{ fontSize: 11.5, color: DESK.mute, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
+                      <input
+                        inputMode="numeric" value={printQtys[d.id] ?? ''} aria-label={`${d.label} copies`}
+                        onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); setPrintQtys((prev) => { const next = { ...prev }; if (n) next[d.id] = Number(n); else delete next[d.id]; return next }) }}
+                        placeholder={QTY_HINT[d.id] ?? '100'}
+                        style={inputStyle}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+                  <Ticket on={printer === 'client'} name={L['print.client.label']} sub={L['print.client.sub']} price={requestMode ? undefined : 'Free'} onClick={() => setPrinter('client')} />
+                  <Ticket on={printer === 'us'} name={L['print.us.label']} sub={L['print.us.sub']} price={requestMode ? undefined : `$${RATE_CARD.printManagement}`} onClick={() => setPrinter('us')} />
+                </div>
+              </div>
+            )}
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 8px' }}>
               {L['fmt.how']}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 6 }}>
@@ -1408,100 +1503,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 </div>
               )}
 
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '14px 0 8px' }}>
-              {L['dest.where']}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
-              {DESTINATIONS.filter((d) => d.kind === 'digital').map((d) => (
-                <DestFrame
-                  key={d.id} d={d} on={dests.includes(d.id)}
-                  amount={requestMode ? null : destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
-                  onClick={() => setDests((prev) => (prev.includes(d.id) ? prev.filter((x) => x !== d.id) : [...prev, d.id]))}
-                />
-              ))}
-            </div>
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '16px 0 2px' }}>
-              {L['dest.print']}
-            </div>
-            <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['dest.print.sub']}</div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'flex-end' }}>
-              {DESTINATIONS.filter((d) => d.kind === 'print').map((d) => (
-                <DestFrame
-                  key={d.id} d={d} on={dests.includes(d.id)}
-                  amount={requestMode ? null : destAmount(d.id)} photoUrl={boardPhoto} headline={headline}
-                  onClick={() => setDests((prev) => (prev.includes(d.id) ? prev.filter((x) => x !== d.id) : [...prev, d.id]))}
-                />
-              ))}
-              {/* the escape hatch: a place the 11 frames missed, in the owner's words */}
-              <button
-                type="button" aria-pressed={destOtherOn}
-                onClick={() => { if (destOtherOn) { setDestOther(''); setCustomW(''); setCustomH('') } setDestOtherOn(!destOtherOn) }}
-                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, background: 'none', border: 'none', padding: 4, cursor: 'pointer', WebkitTapHighlightColor: 'transparent' }}
-              >
-                <span style={{
-                  width: 74, height: 50, borderRadius: 6, border: `2px dashed ${destOtherOn ? DESK.mint : DESK.mute}`,
-                  background: destOtherOn ? DESK.mintWash : DESK.card,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontFamily: DESK.disp, fontSize: 18, fontWeight: 700, color: destOtherOn ? DESK.mintDeep : DESK.mute,
-                }}>?</span>
-                <span style={{ fontFamily: DESK.body, fontSize: 10.5, fontWeight: 600, color: destOtherOn ? DESK.mintDeep : DESK.ink2, lineHeight: 1.2 }}>{L['dest.other.label']}</span>
-                <span style={{ minHeight: 12 }} />
-              </button>
-            </div>
-            {destOtherOn && (
-              <div style={{ marginTop: 10 }}>
-                <input
-                  value={destOther} onChange={(e) => setDestOther(e.target.value)}
-                  placeholder={L['dest.other.ph']} aria-label={L['dest.other.label']}
-                  style={inputStyle}
-                />
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-                  <input
-                    inputMode="numeric" value={customW} aria-label={L['dest.custom.w']}
-                    onChange={(e) => setCustomW(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
-                    placeholder={L['dest.custom.w']} style={{ ...inputStyle, flex: 1 }}
-                  />
-                  <span style={{ color: DESK.mute, fontWeight: 700 }}>×</span>
-                  <input
-                    inputMode="numeric" value={customH} aria-label={L['dest.custom.h']}
-                    onChange={(e) => setCustomH(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
-                    placeholder={L['dest.custom.h']} style={{ ...inputStyle, flex: 1 }}
-                  />
-                  <span style={{ fontSize: 12, color: DESK.mute, fontWeight: 600 }}>px</span>
-                </div>
-                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['dest.other.note']}</div>
-              </div>
-            )}
-            {/* print runs are off: a picked print size is DESIGNED (print ready file
-                handed over), but the copy-count and who-prints questions only exist for
-                a print job we cannot run, so they hide and one plain note says why */}
-            {printPicked && !PRINT_AVAILABLE && (
-              <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 14, lineHeight: 1.45 }}>
-                {PRINT_OFF_MESSAGE}
-              </div>
-            )}
-            {printPicked && PRINT_AVAILABLE && (
-              <div style={{ marginTop: 14 }}>
-                <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 6 }}>{L['print.qty']}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: printDestSpecs.length > 1 ? '1fr 1fr' : '1fr', gap: 8 }}>
-                  {printDestSpecs.map((d) => (
-                    <div key={d.id}>
-                      <div style={{ fontSize: 11.5, color: DESK.mute, fontWeight: 600, marginBottom: 4 }}>{d.label}</div>
-                      <input
-                        inputMode="numeric" value={printQtys[d.id] ?? ''} aria-label={`${d.label} copies`}
-                        onChange={(e) => { const n = e.target.value.replace(/[^0-9]/g, ''); setPrintQtys((prev) => { const next = { ...prev }; if (n) next[d.id] = Number(n); else delete next[d.id]; return next }) }}
-                        placeholder={QTY_HINT[d.id] ?? '100'}
-                        style={inputStyle}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                  <Ticket on={printer === 'client'} name={L['print.client.label']} sub={L['print.client.sub']} price={requestMode ? undefined : 'Free'} onClick={() => setPrinter('client')} />
-                  <Ticket on={printer === 'us'} name={L['print.us.label']} sub={L['print.us.sub']} price={requestMode ? undefined : `$${RATE_CARD.printManagement}`} onClick={() => setPrinter('us')} />
-                </div>
-              </div>
-            )}
           </>
         )}
 
