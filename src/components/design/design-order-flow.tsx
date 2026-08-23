@@ -372,6 +372,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
   /* EXPRESS (?express=1, owner test): one screen, defaults visible, wizard
    * steps become tap-to-change editors reached from the order rows */
   const [expressHome, setExpressHome] = useState(!!express)
+  /* express is two moments: tell the story, then see the order built from it */
+  const [xpPhase, setXpPhase] = useState<'say' | 'order'>('say')
   /* arrived from a type tile: the intro screen is skipped, so the sheet is 5
    * screens and every number shifts down one */
   const [seededFlow, setSeededFlow] = useState(!!seed?.job)
@@ -985,71 +987,99 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
           <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: 0, letterSpacing: '-0.02em' }}>{jobLabel ?? T.job}</h2>
         </div>
 
-        {/* say it: story chips inline, one required answer */}
-        {jobAngles.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
-            {jobAngles.map((a) => <Chip key={a.id} on={angle === a.id} label={a.label} onClick={() => setAngle(a.id)} />)}
-          </div>
-        )}
-        {(jobAngles.length === 0 || activeAngle) && leadQ && (
-          <div style={{ marginTop: 12, borderRadius: 14, border: `1.5px solid ${DESK.line}`, overflow: 'hidden', background: `linear-gradient(165deg, ${dot}0A, rgba(255,255,255,0.02) 55%), #fff` }}>
-            <div style={{ padding: '11px 13px 0', fontFamily: DESK.body, fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>{leadQ.label}</div>
-            <div style={{ padding: '3px 13px 0', fontSize: 11.5, color: DESK.mute, fontStyle: 'italic' }}>{L['say.like']}: {'\u201C'}{leadQ.ph}{'\u201D'}</div>
-            <textarea
-              value={qa[qaKey(0)] ?? ''}
-              onChange={(e) => { setQa((prev) => ({ ...prev, [qaKey(0)]: e.target.value })); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px` }}
-              placeholder={L['say.answer.ph']} rows={3} aria-label={leadQ.label}
-              style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '8px 13px 12px', resize: 'none', overflow: 'hidden', minHeight: 88, fontFamily: DESK.body, fontSize: 14, color: DESK.ink, lineHeight: 1.5 }}
-            />
-          </div>
-        )}
-        {jobAngles.length > 0 && !activeAngle && (
-          <div style={{ marginTop: 10, fontSize: 12, color: DESK.mute }}>{L['say.whichstory']}</div>
-        )}
-        {jobQs.length === 0 && (
-          <input
-            value={headline} onChange={(e) => setHeadline(e.target.value)}
-            placeholder={(job !== null ? jobSpec(job)?.voice?.headlinePh : undefined) ?? L['say.headline.ph']} aria-label={L['say.headline']}
-            style={{ ...inputStyle, marginTop: 12 }}
-          />
-        )}
-        {(jobAngles.length === 0 || activeAngle) && jobQs.length > 1 && (
-          <button type="button" onClick={() => openEditor(2)}
-            style={{ marginTop: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: DESK.body, fontSize: 12, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'underline', textUnderlineOffset: 3 }}>
-            {fill(L['xp.morequestions'], { n: String(jobQs.length - 1) })}
-          </button>
-        )}
-
-        {/* the order, pre-filled: every row is a tap away from changing */}
-        <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 6px' }}>
-          {L['xp.order']}
-        </div>
-        <div style={{ borderRadius: 16, border: '1.5px solid #EAE7DE', overflow: 'hidden', background: `linear-gradient(165deg, ${dot}08, rgba(255,255,255,0.02) 60%), #fff`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 18px rgba(22,33,28,0.07)' }}>
-          {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5)}
-          {(() => {
-            const digital = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'digital')
-            const print = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'print')
-            const names = (ids: DestinationId[]) => `${ids.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${ids.length > 2 ? ` +${ids.length - 2}` : ''}`
-            return (
-              <>
-                {row(<Send size={14} />, L['xp.row.where'], digital.length ? names(digital) : L['xp.none'], 5)}
-                {row(<Layers size={14} />, L['xp.row.print'], print.length ? names(print) : L['xp.print.none'], 5)}
-              </>
-            )
-          })()}
-          {row(<ImageIcon size={14} />, L['xp.row.photos'], photoValue, 3)}
-          {row(<CalendarDays size={14} />, L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
-          {row(<User size={14} />, L['xp.row.maker'], `${chosenMaker ? chosenMaker.name : tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
-        </div>
-
-        <button
-          type="button" disabled={!wordsReady} onClick={() => openEditor(6)}
-          style={{ width: '100%', height: 52, marginTop: 16, marginBottom: 24, borderRadius: 26, border: 'none', cursor: wordsReady ? 'pointer' : 'default', background: wordsReady ? DESK.grad : '#E7E4DB', color: wordsReady ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: wordsReady ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}
-        >
-          {fill(L['xp.review'], { total: String(quote.total) })}
-        </button>
-        {!wordsReady && (
-          <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: -14, marginBottom: 24, textAlign: 'center' }}>{L['xp.needwords']}</div>
+        {xpPhase === 'say' ? (
+          <>
+            {/* moment one: just the story. Nothing else on screen. */}
+            {jobAngles.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 12 }}>
+                {jobAngles.map((a) => <Chip key={a.id} on={angle === a.id} label={a.label} onClick={() => setAngle(a.id)} />)}
+              </div>
+            )}
+            {(jobAngles.length === 0 || activeAngle) && leadQ && (
+              <div style={{ marginTop: 12, borderRadius: 14, border: `1.5px solid ${DESK.line}`, overflow: 'hidden', background: `linear-gradient(165deg, ${dot}0A, rgba(255,255,255,0.02) 55%), #fff` }}>
+                <div style={{ padding: '11px 13px 0', fontFamily: DESK.body, fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>{leadQ.label}</div>
+                <div style={{ padding: '3px 13px 0', fontSize: 11.5, color: DESK.mute, fontStyle: 'italic' }}>{L['say.like']}: {'\u201C'}{leadQ.ph}{'\u201D'}</div>
+                <textarea
+                  value={qa[qaKey(0)] ?? ''}
+                  onChange={(e) => { setQa((prev) => ({ ...prev, [qaKey(0)]: e.target.value })); e.target.style.height = 'auto'; e.target.style.height = `${e.target.scrollHeight}px` }}
+                  placeholder={L['say.answer.ph']} rows={3} aria-label={leadQ.label}
+                  style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', background: 'transparent', padding: '8px 13px 12px', resize: 'none', overflow: 'hidden', minHeight: 88, fontFamily: DESK.body, fontSize: 14, color: DESK.ink, lineHeight: 1.5 }}
+                />
+              </div>
+            )}
+            {jobAngles.length > 0 && !activeAngle && (
+              <div style={{ marginTop: 10, fontSize: 12, color: DESK.mute }}>{L['say.whichstory']}</div>
+            )}
+            {jobQs.length === 0 && (
+              <input
+                value={headline} onChange={(e) => setHeadline(e.target.value)}
+                placeholder={(job !== null ? jobSpec(job)?.voice?.headlinePh : undefined) ?? L['say.headline.ph']} aria-label={L['say.headline']}
+                style={{ ...inputStyle, marginTop: 12 }}
+              />
+            )}
+            {(jobAngles.length === 0 || activeAngle) && jobQs.length > 1 && (
+              <button type="button" onClick={() => openEditor(2)}
+                style={{ marginTop: 8, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: DESK.body, fontSize: 12, fontWeight: 600, color: DESK.mintDeep, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+                {fill(L['xp.morequestions'], { n: String(jobQs.length - 1) })}
+              </button>
+            )}
+            <button
+              type="button" disabled={!wordsReady}
+              onClick={() => {
+                /* the order derives from the story: one page per answered beat,
+                 * plus a cover and a close */
+                if (isCarousel) setSlides(Math.min(10, Math.max(3, qaPairs.length + 2)))
+                setXpPhase('order')
+              }}
+              style={{ width: '100%', height: 52, marginTop: 16, marginBottom: 24, borderRadius: 26, border: 'none', cursor: wordsReady ? 'pointer' : 'default', background: wordsReady ? DESK.grad : '#E7E4DB', color: wordsReady ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: wordsReady ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}
+            >
+              {L['xp.tosorder']}
+            </button>
+            {!wordsReady && (
+              <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: -14, marginBottom: 24, textAlign: 'center' }}>{L['xp.needwords']}</div>
+            )}
+          </>
+        ) : (
+          <>
+            {/* moment two: the order, built from the story above it */}
+            <button type="button" onClick={() => setXpPhase('say')}
+              style={{ marginTop: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: DESK.body, fontSize: 12.5, fontWeight: 600, color: DESK.ink2 }}>
+              {'‹'} {L['xp.editstory']}
+            </button>
+            {qaPairs[0] && (
+              <div style={{ marginTop: 8, padding: '10px 13px', borderRadius: 12, background: `linear-gradient(165deg, ${dot}0C, rgba(255,255,255,0.02) 60%), #fff`, border: `1px solid ${DESK.line}` }}>
+                <div style={{ fontFamily: DESK.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: dot }}>{activeAngle?.label ?? jobLabel}</div>
+                <div style={{ fontSize: 12.5, color: DESK.ink2, fontStyle: 'italic', marginTop: 3, lineHeight: 1.5 }}>{'\u201C'}{qaPairs[0].text.slice(0, 120)}{qaPairs[0].text.length > 120 ? '…' : ''}{'\u201D'}</div>
+              </div>
+            )}
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 2px' }}>
+              {L['xp.order']}
+            </div>
+            <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 6, lineHeight: 1.45 }}>{L['xp.order.sub']}</div>
+            <div style={{ borderRadius: 16, border: '1.5px solid #EAE7DE', overflow: 'hidden', background: `linear-gradient(165deg, ${dot}08, rgba(255,255,255,0.02) 60%), #fff`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 18px rgba(22,33,28,0.07)' }}>
+              {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5)}
+              {(() => {
+                const digital = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'digital')
+                const print = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'print')
+                const names = (ids: DestinationId[]) => `${ids.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${ids.length > 2 ? ` +${ids.length - 2}` : ''}`
+                return (
+                  <>
+                    {row(<Send size={14} />, L['xp.row.where'], digital.length ? names(digital) : L['xp.none'], 5)}
+                    {row(<Layers size={14} />, L['xp.row.print'], print.length ? names(print) : L['xp.print.none'], 5)}
+                  </>
+                )
+              })()}
+              {row(<ImageIcon size={14} />, L['xp.row.photos'], photoValue, 3)}
+              {row(<CalendarDays size={14} />, L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
+              {row(<User size={14} />, L['xp.row.maker'], `${chosenMaker ? chosenMaker.name : tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
+            </div>
+            <button
+              type="button" disabled={!wordsReady} onClick={() => openEditor(6)}
+              style={{ width: '100%', height: 52, marginTop: 16, marginBottom: 24, borderRadius: 26, border: 'none', cursor: wordsReady ? 'pointer' : 'default', background: wordsReady ? DESK.grad : '#E7E4DB', color: wordsReady ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: wordsReady ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}
+            >
+              {fill(L['xp.review'], { total: String(quote.total) })}
+            </button>
+          </>
         )}
       </div>
     )
