@@ -18,7 +18,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, Check, Image as ImageIcon, Layers, Send, User } from 'lucide-react'
+import { CalendarDays, Check, Image as ImageIcon, Layers, Palette, Send, User } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
 import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, ConfirmButton } from '@/components/campaigns/desk/ui'
 import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, type DestinationSpec } from '@/lib/design/destinations'
@@ -486,6 +486,20 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       .catch(() => { /* the order offers the house tiers either way */ })
     return () => { cancelled = true }
   }, [])
+  /* the brand kit on file rides every order by default (owner call 2026-08-23):
+   * they gave it to us once, an order never asks for it again */
+  const [brandKit, setBrandKit] = useState<{ logoUrl: string | null; colors: string[]; fonts: string[]; visualStyle: string | null; photoStyle: string | null } | null>(null)
+  const [brandMode, setBrandMode] = useState<'file' | 'custom' | 'none'>('file')
+  const [brandNote, setBrandNote] = useState('')
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/design/brand')
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled && j.brand) setBrandKit(j.brand) })
+      .catch(() => { /* brief falls back to match-their-pages */ })
+    return () => { cancelled = true }
+  }, [])
+  const brandOnFile = !!(brandKit && (brandKit.logoUrl || brandKit.colors.length || brandKit.fonts.length))
   const [panelOpen, setPanelOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -708,7 +722,17 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
    * rail; library photos already have real URLs and pass straight through. Best-
    * effort per file: one bad photo must not sink the request. */
   const attachmentsForRequest = async (): Promise<{ url: string; name: string; path?: string }[]> => {
-    if (!usingOwn) return []
+    if (!usingOwn) {
+      /* express default hands photo choice to the designer; the library photos
+       * themselves must travel, since an outside maker cannot browse the account */
+      if (express && photoMode == null) {
+        return allAssets
+          .filter((a) => !a.url.startsWith('blob:'))
+          .slice(0, 10)
+          .map((a) => ({ url: a.url, name: a.label || 'photo' }))
+      }
+      return []
+    }
     const out: { url: string; name: string; path?: string }[] = []
     for (const a of allAssets.filter((x) => picked.includes(x.id)).slice(0, 10)) {
       const name = a.label || 'photo'
@@ -746,7 +770,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       printPicked && !PRINT_AVAILABLE ? 'Print ready files only; they handle the printing' :
       printer === 'us' ? 'We print and deliver' : printer === 'client' ? 'Their shop prints' : '',
       destOtherFinal ? `CUSTOM SPOT (not on our format list): "${destOtherFinal}". Size it with them and quote it on its own` : '',
-      express && picked.length === 0 && photoMode == null ? 'PHOTOS: designer picks the best from the client library' :
+      express && picked.length === 0 && photoMode == null ? 'PHOTOS: pick the best from the client library. Their library photos are attached' :
       photoMode === 'none' ? 'No photos: custom artwork on their brand'
         : photoMode === 'shoot' ? 'Wants a PHOTO SHOOT at their place. Set the shoot date with them before design starts'
         : photoMode === 'source' ? 'Find photos for them'
@@ -765,6 +789,25 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       described.trim() ? `In their own words: "${described.trim()}"` : '',
       due ? `In hand by ${fmtDay(due)}` : '',
       rushConfirmed ? 'Rush agreed' : '',
+      /* the brand block: the designer never has to come ask for the kit */
+      brandMode === 'none' ? 'BRAND: no brand kit on this one. The designer has free rein on the look'
+        : brandMode === 'custom' ? `BRAND: do not use the kit on file${brandNote.trim() ? `. Use instead: "${brandNote.trim()}"` : '. They will send the brand direction in the thread'}`
+        : brandOnFile && brandKit
+          ? `BRAND KIT ON FILE, use it: ${[
+              brandKit.logoUrl ? `logo ${brandKit.logoUrl}` : '',
+              brandKit.colors.length ? `colors ${brandKit.colors.join(' ')}` : '',
+              brandKit.fonts.length ? `fonts ${brandKit.fonts.join(' + ')}` : '',
+              brandKit.visualStyle ? `visual style ${brandKit.visualStyle}` : '',
+            ].filter(Boolean).join('; ')}`
+          : 'BRAND: nothing on file yet. Match the look of their existing pages and ask in the thread if unsure',
+      /* the spec block: exact sizes are ours to state, never the owner's to know */
+      dests.length ? `SIZES: ${dests.map((id) => {
+        const d = DESTINATIONS.find((x) => x.id === id)
+        if (!d) return null
+        return d.kind === 'print'
+          ? `${d.label} ${d.dimensions.w}x${d.dimensions.h}in${d.bleed ? ` plus ${d.bleed}in bleed` : ''}, CMYK ${d.resolution}ppi`
+          : `${d.label} ${d.dimensions.w}x${d.dimensions.h}px`
+      }).filter(Boolean).join('; ')}` : '',
     ].filter(Boolean).join('. ')
     return {
       type: 'graphic',
@@ -787,6 +830,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         ...(written.length ? { written } : {}),
         ...(chosenMaker ? { makerVendorId: chosenMaker.vendorId, makerName: chosenMaker.name } : {}),
         photos: photoMode === 'other' ? undefined : photoMode ?? (usingOwn ? 'own' : undefined),
+        brand: brandMode,
+        ...(brandMode === 'custom' && brandNote.trim() ? { brandNote: brandNote.trim().slice(0, 300) } : {}),
         dueDateISO: due ?? undefined,
         rushConfirmed,
       },
@@ -797,7 +842,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([])
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([]); setBrandMode('file'); setBrandNote('')
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
@@ -957,7 +1002,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       : photoMode === 'shoot' ? L['photos.shoot.label']
       : photoMode === 'source' ? 'We find photos'
       : photoMode === 'none' ? 'Custom artwork'
-      : 'Designer picks from your library'
+      : L['brand.photos.travel']
+    const brandValue = brandMode === 'none' ? L['brand.val.none']
+      : brandMode === 'custom' ? L['brand.val.custom']
+      : brandOnFile ? L['brand.val.file'] : L['brand.val.empty']
     return (
       <div style={ground}>
         <DeskKeyframes />
@@ -1060,6 +1108,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 )
               })()}
               {row(<ImageIcon size={14} />, L['xp.row.photos'], photoValue, 3)}
+              {row(<Palette size={14} />, L['xp.row.brand'], brandValue, 5)}
               {row(<CalendarDays size={14} />, L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
               {row(<User size={14} />, L['xp.row.maker'], `${chosenMaker ? chosenMaker.name : tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
             </div>
@@ -1498,6 +1547,22 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               </div>
             )}
 
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 4px' }}>
+              {L['brand.title']}
+            </div>
+            <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['brand.sub']}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Ticket on={brandMode === 'file'} name={L['brand.file.label']} sub={brandOnFile ? L['brand.file.sub'] : L['brand.file.empty']} onClick={() => setBrandMode('file')} />
+              <Ticket on={brandMode === 'custom'} name={L['brand.custom.label']} sub={L['brand.custom.sub']} onClick={() => setBrandMode('custom')} />
+              <Ticket on={brandMode === 'none'} name={L['brand.none.label']} sub={L['brand.none.sub']} onClick={() => setBrandMode('none')} />
+            </div>
+            {brandMode === 'custom' && (
+              <input
+                value={brandNote} onChange={(e) => setBrandNote(e.target.value)}
+                placeholder={L['brand.custom.ph']} aria-label={L['brand.custom.label']}
+                style={{ ...inputStyle, marginTop: 8 }}
+              />
+            )}
               {!(jobAngles.length > 0 && !activeAngle) && (jobQs.length === 0 || wordsMode === 'exact') && (
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
                   {L['say.note']}
