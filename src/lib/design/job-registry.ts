@@ -95,7 +95,11 @@ const spec = (
 
 export const JOB_REGISTRY: readonly JobSpec[] = [
   // your story and brand
-  spec('story-behind', 'brand', '👋', { written: ['Website About section', 'Google Business description'], places: ['instagram-post', 'facebook-post', 'linkedin-post'], format: 'carousel', headline: 'The Story Behind Us', asks: ['subject'], voice: { blurb: 'The post that tells people who you are and why you started.', ask: 'Pick the story you want to tell. Then answer a few easy questions.', angles: [
+  spec('story-behind', 'brand', '👋', { written: ['Website About section', 'Google Business description'], places: ['instagram-post', 'facebook-post', 'linkedin-post'], format: 'carousel', headline: 'The Story Behind Us', asks: ['subject'], voice: { blurb: 'The post that tells people who you are and why you started.', ask: 'Tell it your way, or pick a story direction below.', angles: [
+      { id: 'own', label: 'Tell us the story', sub: 'Just say it in your words. Rough is fine, we shape it into the post.', questions: [
+        { label: 'Tell us the story', ph: 'Whatever you want people to know. Rough is fine, we shape it.' },
+        { label: 'Anything else that helps?', ph: 'Names, dates, or details worth getting right' },
+      ] },
       { id: 'origin', label: 'How we started', sub: 'Your opening chapter. Great for new followers who only know the sign out front.', questions: [
         { label: 'Take us back to day one. What do you remember most?', ph: 'We sold out by noon and cried in the kitchen' },
         { label: 'What did you start with? Numbers and details help.', ph: 'Two pans, a borrowed fridge, and $800' },
@@ -124,10 +128,7 @@ export const JOB_REGISTRY: readonly JobSpec[] = [
         { label: 'What tradition do you keep exactly as it was?', ph: 'The mole takes three days, same as home' },
         { label: 'What should people feel when they walk in?', ph: 'Like they are eating at our family table' },
       ] },
-      { id: 'own', label: 'Something else', sub: 'A story not on this list. Tell it your way.', questions: [
-        { label: 'Tell us the story', ph: 'Whatever you want people to know. Rough is fine, we shape it.' },
-        { label: 'Anything else that helps?', ph: 'Names, dates, or details worth getting right' },
-      ] },
+
     ], subject: 'The story', subjectPh: 'Two sisters, one dream, opened in 2019', headlinePh: 'How It All Started', headlines: ['How It All Started', 'From Our Family To Yours'] } }),
   spec('team-spotlight', 'brand', '🧑‍🍳', { format: 'either', written: ['Website team bio'], places: ['instagram-post', 'facebook-post', 'linkedin-post'], headline: 'Meet The Team', asks: ['subject'], voice: { questions: [{ label: 'Who are we introducing?', ph: 'Maria, our head baker' }, { label: 'What do they do here?', ph: 'She has run the kitchen for 6 years' }, { label: 'Something people would love to know about them?', ph: 'She names every sourdough starter' }], photoHint: 'A clear photo of them beats a perfect one.', blurb: 'Put a face to the business. People buy from people.', ask: 'Who are we introducing?', subject: 'About them', subjectPh: 'Maria has run our kitchen for 6 years', headlinePh: 'Meet Maria', headlines: ['The Face Behind The Counter'] } }),
   spec('behind-scenes', 'brand', '🎬', { places: ['instagram-post', 'instagram-story'], format: 'either', headline: 'Behind The Scenes', voice: { questions: [{ label: 'What are we showing?', ph: 'How we make everything fresh each morning' }, { label: 'Why do you do it this way?', ph: 'Fresh just tastes different' }], blurb: 'Show how the work gets done. People love a peek inside.', ask: 'What are we letting people see?', subject: 'What we are showing', subjectPh: 'How we prep everything fresh each morning', headlinePh: 'A Look Inside', headlines: ['How We Make It', 'A Look Inside'] } }),

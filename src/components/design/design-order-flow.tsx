@@ -420,7 +420,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
   /* written renditions picked on the build step (About section, GBP description) */
   const [written, setWritten] = useState<string[]>([])
   useEffect(() => {
-    setAngle(null); setPickedFormat(null)
+    setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null)
+    setPickedFormat(null)
     /* the objective decides the distribution: preselect where this should
      * live; the owner prunes or adds on the build step */
     const places = job ? jobSpec(job)?.places : null
@@ -796,7 +797,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([])
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([])
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
