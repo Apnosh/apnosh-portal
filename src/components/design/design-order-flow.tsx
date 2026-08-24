@@ -359,6 +359,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
   /* EXPRESS (?express=1, owner test): one screen, defaults visible, wizard
    * steps become tap-to-change editors reached from the order rows */
   const [expressHome, setExpressHome] = useState(!!express)
+  /* DoorDash focus (owner call 2026-08-24): a tapped order row edits ONLY its own
+   * thing; the wizard shows the whole step only when walked classically */
+  const [xpFocus, setXpFocus] = useState<'where' | 'build' | 'brand' | 'extras' | null>(null)
   /* express is two moments: tell the story, then see the order built from it */
   const [xpPhase, setXpPhase] = useState<'say' | 'order'>('say')
   /* arrived from a type tile: the intro screen is skipped, so the sheet is 5
@@ -842,7 +845,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([]); setBrandMode('file'); setBrandNote('')
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([]); setBrandMode('file'); setBrandNote(''); setXpFocus(null)
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
@@ -983,11 +986,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
     const wordsReady = jobQs.length > 0
       ? (wordsMode === 'exact' ? exactCopy.trim().length > 0 : qaPairs.length > 0)
       : headline.trim().length > 0 || details.trim().length > 0
-    const openEditor = (n: number) => { setExpressHome(false); setStep(n) }
+    const openEditor = (n: number, focus: 'where' | 'build' | 'brand' | 'extras' | null = null) => { setXpFocus(focus); setExpressHome(false); setStep(n) }
     const leadQ = jobQs[0]
-    const row = (icon: React.ReactNode, label: string, value: string, n: number) => (
+    const row = (icon: React.ReactNode, label: string, value: string, n: number, focus: 'where' | 'build' | 'brand' | 'extras' | null = null) => (
       <button
-        key={label} type="button" onClick={() => openEditor(n)}
+        key={label} type="button" onClick={() => openEditor(n, focus)}
         style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, width: '100%', textAlign: 'left', padding: '13px 14px', background: 'transparent', border: 'none', borderBottom: `1px solid ${DESK.line}55`, cursor: 'pointer', fontFamily: DESK.body }}
       >
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 12, color: DESK.mute, flexShrink: 0 }}>
@@ -1095,20 +1098,22 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             </div>
             <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 6, lineHeight: 1.45 }}>{L['xp.order.sub']}</div>
             <div style={{ borderRadius: 16, border: '1.5px solid #EAE7DE', overflow: 'hidden', background: `linear-gradient(165deg, ${dot}08, rgba(255,255,255,0.02) 60%), #fff`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 18px rgba(22,33,28,0.07)' }}>
-              {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5)}
+              {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5, 'build')}
               {(() => {
                 const digital = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'digital')
                 const print = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'print')
                 const names = (ids: DestinationId[]) => `${ids.slice(0, 2).map((d) => DESTINATIONS.find((x) => x.id === d)?.label).filter(Boolean).join(', ')}${ids.length > 2 ? ` +${ids.length - 2}` : ''}`
                 return (
                   <>
-                    {row(<Send size={14} />, L['xp.row.where'], digital.length ? names(digital) : L['xp.none'], 5)}
-                    {row(<Layers size={14} />, L['xp.row.print'], print.length ? names(print) : L['xp.print.none'], 5)}
+                    {row(<Send size={14} />, L['xp.row.where'], digital.length ? names(digital) : L['xp.none'], 5, 'where')}
+                    {row(<Layers size={14} />, L['xp.row.print'], print.length ? names(print) : L['xp.print.none'], 5, 'where')}
                   </>
                 )
               })()}
               {row(<ImageIcon size={14} />, L['xp.row.photos'], photoValue, 3)}
-              {row(<Palette size={14} />, L['xp.row.brand'], brandValue, 5)}
+              {row(<Palette size={14} />, L['xp.row.brand'], brandValue, 5, 'brand')}
+              {job !== null && ((jobSpec(job)?.written?.length ?? 0) > 0) &&
+                row(<Layers size={14} />, L['xp.row.extras'], written.length ? `${written.length} ${L['xp.extras.picked']}` : L['xp.extras.none'], 5, 'extras')}
               {row(<CalendarDays size={14} />, L['xp.row.when'], due ? fmtDay(due) : `${fmtDay(standardDelivery)} · ${L['xp.standard']}`, 4)}
               {row(<User size={14} />, L['xp.row.maker'], `${chosenMaker ? chosenMaker.name : tierName} · $${RATE_CARD.tierBase[tier]}`, 6)}
             </div>
@@ -1348,8 +1353,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               owner call 2026-08-20: it is really "where is it posted") ── */}
         {step === 5 && (
           <>
-            <StepHead n={stepNo(5)} total={stepTotal} accent={dot} title={T.where} sub={S.where} />
-            {(() => {
+            {(xpFocus == null || xpFocus === 'where') && <StepHead n={stepNo(5)} total={stepTotal} accent={dot} title={T.where} sub={S.where} />}
+            {(xpFocus == null || xpFocus === 'where') && (() => {
               /* one checklist, owner language: the type's suggested spots up front and
                * pre-checked, everything else (rest of digital, print, custom) behind one
                * "More places" row. Sizes are ours to handle, so they only whisper. */
@@ -1406,7 +1411,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 </div>
               )
             })()}
-            {destOtherOn && (
+            {(xpFocus == null || xpFocus === 'where') && destOtherOn && (
               <div style={{ marginTop: 10 }}>
                 <input
                   value={destOther} onChange={(e) => setDestOther(e.target.value)}
@@ -1433,12 +1438,12 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             {/* print runs are off: a picked print size is DESIGNED (print ready file
                 handed over), but the copy-count and who-prints questions only exist for
                 a print job we cannot run, so they hide and one plain note says why */}
-            {printPicked && !PRINT_AVAILABLE && (
+            {(xpFocus == null || xpFocus === 'where') && printPicked && !PRINT_AVAILABLE && (
               <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12, fontWeight: 600, marginTop: 14, lineHeight: 1.45 }}>
                 {PRINT_OFF_MESSAGE}
               </div>
             )}
-            {printPicked && PRINT_AVAILABLE && (
+            {(xpFocus == null || xpFocus === 'where') && printPicked && PRINT_AVAILABLE && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 6 }}>{L['print.qty']}</div>
                 <div style={{ display: 'grid', gridTemplateColumns: printDestSpecs.length > 1 ? '1fr 1fr' : '1fr', gap: 8 }}>
@@ -1460,7 +1465,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 </div>
               </div>
             )}
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 8px' }}>
+            {(xpFocus == null || xpFocus === 'build') && (<>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: xpFocus === 'build' ? '0 0 8px' : '18px 0 8px' }}>
               {L['fmt.how']}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 6 }}>
@@ -1517,8 +1523,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
               </div>
             )}
-            {job !== null && ((jobSpec(job)?.written?.length ?? 0) > 0) && (
-              <div style={{ margin: '14px 0 4px' }}>
+            </>)}
+            {(xpFocus == null || xpFocus === 'extras') && job !== null && ((jobSpec(job)?.written?.length ?? 0) > 0) && (
+              <div style={{ margin: xpFocus === 'extras' ? '0 0 4px' : '14px 0 4px' }}>
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>
                   {L['written.title']}
                 </div>
@@ -1547,7 +1554,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               </div>
             )}
 
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 4px' }}>
+            {(xpFocus == null || xpFocus === 'brand') && (<>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: xpFocus === 'brand' ? '0 0 4px' : '18px 0 4px' }}>
               {L['brand.title']}
             </div>
             <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['brand.sub']}</div>
@@ -1563,7 +1571,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 style={{ ...inputStyle, marginTop: 8 }}
               />
             )}
-              {!(jobAngles.length > 0 && !activeAngle) && (jobQs.length === 0 || wordsMode === 'exact') && (
+            </>)}
+              {xpFocus == null && !(jobAngles.length > 0 && !activeAngle) && (jobQs.length === 0 || wordsMode === 'exact') && (
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 14, lineHeight: 1.45 }}>
                   {L['say.note']}
                 </div>
@@ -2272,7 +2281,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         {/* back / next (review keeps Back too, under the seal, so a typo is one tap away) */}
         {express && step > 1 && (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
-            <button type="button" onClick={() => setExpressHome(true)}
+            <button type="button" onClick={() => { setXpFocus(null); setExpressHome(true) }}
               style={{ flex: 1, height: 50, borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
               {L['xp.done']}
             </button>
