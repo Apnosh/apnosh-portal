@@ -381,7 +381,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
    * everything to a single pill. */
   const [shelfOpen, setShelfOpen] = useState(false)
   /* carousel only: total slide count (first included, extras priced per slide) */
-  const [slides, setSlides] = useState(5)
+  const [slides, setSlides] = useState(7)
+  /* carousel length is a BAND, not a number: the owner picks S/M/L (priced at the
+   * band's anchor), the designer picks the exact page count inside it */
+  const CAROUSEL_BANDS = [
+    { id: 'short' as const, anchor: 3, min: 3, max: 4 },
+    { id: 'standard' as const, anchor: 7, min: 5, max: 7 },
+    { id: 'long' as const, anchor: 10, min: 8, max: 10 },
+  ]
+  const bandForSlides = (n: number) => (n <= 4 ? CAROUSEL_BANDS[0] : n <= 7 ? CAROUSEL_BANDS[1] : CAROUSEL_BANDS[2])
   /* THE TIER (persona-tested): the engine's three tiers, now the owner's own pick.
    * Custom is the default so this is never a required decision; each ticket shows its
    * own price so picking visibly changes the number (never a picker that is theater). */
@@ -762,7 +770,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
     const days = due ? Math.round((new Date(due).getTime() - new Date(today).getTime()) / 86400000) : null
     const when = days == null ? 'No rush' : days <= 7 ? 'This week' : days <= 14 ? 'In 2 weeks' : days <= 31 ? 'This month' : 'No rush'
     const noteBits = [
-      isCarousel ? `CAROUSEL POST: ${slides} slides total. Slide 1 is the hook; one beat per slide; end on the call to action or the today note` : '',
+      isCarousel ? `CAROUSEL POST, ${bandForSlides(slides).min} to ${bandForSlides(slides).max} slides (priced for the band; pick the exact count that tells the story best). Slide 1 is the hook; one beat per slide; end on the call to action or the today note` : '',
       isCarousel && dests.some((d) => d !== 'instagram-post')
         ? 'Instagram carries the carousel; every other placement gets a single adapted from the strongest slide'
         : '',
@@ -1069,7 +1077,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               onClick={() => {
                 /* the order derives from the story: one page per answered beat,
                  * plus a cover and a close */
-                if (isCarousel) setSlides(Math.min(10, Math.max(3, qaPairs.length + 2)))
+                if (isCarousel) setSlides(bandForSlides(Math.min(10, Math.max(3, qaPairs.length + 2))).anchor)
                 setXpPhase('order')
               }}
               style={{ width: '100%', height: 52, marginTop: 16, marginBottom: 24, borderRadius: 26, border: 'none', cursor: wordsReady ? 'pointer' : 'default', background: wordsReady ? DESK.grad : '#E7E4DB', color: wordsReady ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: wordsReady ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}
@@ -1098,7 +1106,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             </div>
             <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 6, lineHeight: 1.45 }}>{L['xp.order.sub']}</div>
             <div style={{ borderRadius: 16, border: '1.5px solid #EAE7DE', overflow: 'hidden', background: `linear-gradient(165deg, ${dot}08, rgba(255,255,255,0.02) 60%), #fff`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 18px rgba(22,33,28,0.07)' }}>
-              {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${slides} ${L['xp.pages']}` : L['fmt.chip.single'], 5, 'build')}
+              {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${L[`band.${bandForSlides(slides).id}`]}, ${bandForSlides(slides).min} to ${bandForSlides(slides).max} ${L['xp.pages']}` : L['fmt.chip.single'], 5, 'build')}
               {(() => {
                 const digital = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'digital')
                 const print = dests.filter((d) => DESTINATIONS.find((x) => x.id === d)?.kind === 'print')
@@ -1503,22 +1511,29 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 7 }}>
                   {L['job.slides.title']}
                 </div>
-                {/* one slider, one number — no preset-vs-other split (owner call 2026-08-20) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <input
-                    type="range" min={2} max={10} step={1} value={slides} aria-label="Slide count"
-                    onChange={(e) => setSlides(Number(e.target.value))}
-                    style={{ flex: 1, accentColor: DESK.mint, height: 32, cursor: 'pointer' }}
-                  />
-                  <input
-                    inputMode="numeric" value={String(slides)} aria-label="Slide count number"
-                    onChange={(e) => {
-                      const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
-                      const n = Number(v)
-                      if (n >= 2 && n <= 10) setSlides(n)
-                    }}
-                    style={{ ...inputStyle, width: 58, height: 40, textAlign: 'center', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, color: DESK.mintDeep }}
-                  />
+                {/* S/M/L bands, not a number (owner call 2026-08-24): the price is the
+                    band's, the designer sets the exact page count inside it */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                  {CAROUSEL_BANDS.map((b) => {
+                    const on = bandForSlides(slides).id === b.id
+                    return (
+                      <button
+                        key={b.id} type="button" aria-pressed={on} onClick={() => setSlides(b.anchor)}
+                        style={{
+                          textAlign: 'center', cursor: 'pointer', padding: '11px 8px', borderRadius: 13,
+                          border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
+                          fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
+                          transition: 'border-color .15s ease, background .15s ease',
+                        }}
+                      >
+                        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{L[`band.${b.id}`]}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: DESK.ink2, marginTop: 2 }}>{b.min} to {b.max} {L['xp.pages']}</span>
+                        <span style={{ display: 'block', fontFamily: DESK.mono, fontSize: 11, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute, marginTop: 3 }}>
+                          {requestMode ? '' : `+$${(b.anchor - 1) * RATE_CARD.carouselPerSlide}`}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['job.slides.sub']}</div>
               </div>
@@ -2221,7 +2236,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 })()}
               </div>
               <div className="db-pop" style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '4px 16px 2px', boxShadow: '0 2px 8px rgba(22,33,28,0.05)' }}>
-                {sumRow(L['sum.job'], [isCarousel ? `${jobLabel} · ${slides} slides` : jobLabel ?? 'A design'])}
+                {sumRow(L['sum.job'], [isCarousel ? `${jobLabel} · ${L[`band.${bandForSlides(slides).id}`]} carousel, ${bandForSlides(slides).min} to ${bandForSlides(slides).max} pages` : jobLabel ?? 'A design'])}
                 {sumRow(L['sum.featuring'], [promoteItems.length ? sayList(promoteItems) : null])}
                 {sumRow(L['sum.words'], [headline ? `“${headline}”` : null, details || null, offer ? `Deal: ${offer}` : null])}
                 {sumRow(L['sum.where'], whereLines)}
