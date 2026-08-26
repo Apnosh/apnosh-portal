@@ -310,6 +310,22 @@ function DestRow({ d, on, amount, suggested, onClick }: {
         transition: 'border-color .15s ease, background .15s ease',
       }}
     >
+      {/* the placement's real proportions, at a glance */}
+      {(() => {
+        const ratio = d.dimensions.w / d.dimensions.h
+        const bw = ratio >= 1 ? 26 : Math.max(12, Math.round(26 * ratio))
+        const bh = ratio >= 1 ? Math.max(11, Math.round(26 / ratio)) : 26
+        return (
+          <span aria-hidden style={{ flexShrink: 0, width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{
+              width: bw, height: bh, borderRadius: 3, display: 'block',
+              border: `1.5px solid ${on ? DESK.mintDeep : DESK.mute}`,
+              background: on ? '#fff' : DESK.card,
+              boxShadow: d.kind === 'print' ? `2px 2px 0 ${on ? DESK.mint : DESK.line}` : undefined,
+            }} />
+          </span>
+        )
+      })()}
       <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 7 }}>
         <span style={{ fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink, whiteSpace: 'nowrap' }}>{d.label}</span>
         {suggested && !on && (
@@ -1516,6 +1532,17 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                       WebkitTapHighlightColor: 'transparent', transition: 'border-color .15s ease, background .15s ease',
                     }}
                   >
+                    <span aria-hidden style={{ display: 'block', height: 32, marginBottom: 7 }}>
+                      {f === 'single' ? (
+                        <span style={{ display: 'inline-block', width: 21, height: 28, borderRadius: 4, border: `1.5px solid ${on ? DESK.mintDeep : DESK.mute}`, background: '#fff' }} />
+                      ) : (
+                        <span style={{ position: 'relative', display: 'inline-block', width: 36, height: 30 }}>
+                          <span style={{ position: 'absolute', left: 13, top: 0, width: 21, height: 28, borderRadius: 4, border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: '#fff', opacity: 0.5 }} />
+                          <span style={{ position: 'absolute', left: 7, top: 1, width: 21, height: 28, borderRadius: 4, border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: '#fff', opacity: 0.75 }} />
+                          <span style={{ position: 'absolute', left: 0, top: 2, width: 21, height: 28, borderRadius: 4, border: `1.5px solid ${on ? DESK.mintDeep : DESK.mute}`, background: '#fff' }} />
+                        </span>
+                      )}
+                    </span>
                     <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>
                       {f === 'single' ? L['fmt.single.name'] : L['fmt.multi.name']}
                     </span>
@@ -1551,6 +1578,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                           transition: 'border-color .15s ease, background .15s ease',
                         }}
                       >
+                        <span aria-hidden style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
+                          {Array.from({ length: b.max }).map((_, i) => (
+                            <span key={i} style={{ width: 9, height: 13, borderRadius: 2, border: `1px solid ${on ? DESK.mintDeep : DESK.mute}`, background: '#fff', marginLeft: i === 0 ? 0 : -4, position: 'relative', zIndex: b.max - i }} />
+                          ))}
+                        </span>
                         <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{L[`band.${b.id}`]}</span>
                         <span style={{ display: 'block', fontSize: 11, color: DESK.ink2, marginTop: 2 }}>{b.min} to {b.max} {L['xp.pages']}</span>
                         <span style={{ display: 'block', fontFamily: DESK.mono, fontSize: 11, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute, marginTop: 3 }}>
@@ -1610,6 +1642,21 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               <Ticket on={brandMode === 'custom'} name={L['brand.custom.label']} sub={L['brand.custom.sub']} onClick={() => setBrandMode('custom')} />
               <Ticket on={brandMode === 'none'} name={L['brand.none.label']} sub={L['brand.none.sub']} onClick={() => setBrandMode('none')} />
             </div>
+            {brandMode === 'file' && brandOnFile && brandKit && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 13px', borderRadius: 12, background: '#fff', border: `1px solid ${DESK.line}`, marginTop: 8 }}>
+                {brandKit.logoUrl && (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={brandKit.logoUrl} alt="Your logo" style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover', border: `1px solid ${DESK.line}` }} />
+                )}
+                {brandKit.colors.map((c) => (
+                  <span key={c} aria-hidden style={{ width: 22, height: 22, borderRadius: '50%', background: c, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.1)' }} />
+                ))}
+                {brandKit.fonts.length > 0 && (
+                  <span style={{ fontSize: 12, fontWeight: 600, color: DESK.ink2 }}>{brandKit.fonts.join(' · ')}</span>
+                )}
+                <span style={{ marginLeft: 'auto', fontFamily: DESK.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute }}>{L['brand.strip']}</span>
+              </div>
+            )}
             {brandMode === 'custom' && (
               <input
                 value={brandNote} onChange={(e) => setBrandNote(e.target.value)}

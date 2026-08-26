@@ -116,6 +116,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'brand.custom.ph': 'What should we use, like a new logo or different colors',
   'brand.none.label': 'No brand kit',
   'brand.none.sub': 'The designer has free rein on the look.',
+  'brand.strip': 'On file',
   'brand.val.file': 'Your kit on file',
   'brand.val.empty': 'Nothing on file, we match your pages',
   'brand.val.custom': 'You are sending it',
