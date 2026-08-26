@@ -187,6 +187,23 @@ export async function POST(req: Request) {
     })())
   }
 
+  /* Remember the owner's usual (ask-once law): the maker, tier, and brand choice
+   * they just ordered with become the next order's defaults. Best-effort and
+   * 42703-tolerant until migration 244 runs; the order stands regardless. */
+  if (isOrder && v.type.id === 'graphic') {
+    try {
+      const dz = ((body as { design?: Record<string, unknown> }).design ?? {}) as Record<string, unknown>
+      const prefs: Record<string, unknown> = {}
+      if (typeof dz.makerVendorId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dz.makerVendorId)) {
+        prefs.makerVendorId = dz.makerVendorId
+        if (typeof dz.makerName === 'string') prefs.makerName = dz.makerName.slice(0, 80)
+      }
+      if (dz.tier === 1 || dz.tier === 2 || dz.tier === 3) prefs.tier = dz.tier
+      if (dz.brand === 'none' || dz.brand === 'file') prefs.brandMode = dz.brand
+      if (Object.keys(prefs).length) await admin.from('clients').update({ design_prefs: prefs }).eq('id', clientId)
+    } catch { /* prefs are a nicety */ }
+  }
+
   /* Staff hear about every request the moment it lands (law: no silent stalls).
    * Best-effort: a notification hiccup must not fail the owner's submit. */
   try {

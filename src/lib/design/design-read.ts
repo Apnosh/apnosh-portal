@@ -161,6 +161,15 @@ const DEST_CUES: readonly { id: DestinationId; re: RegExp }[] = [
   { id: 'banner', re: /\bbanners?\b/i },
   { id: 'email-header', re: /\bemail\b/i },
   { id: 'gift-card', re: /\bgift\s?cards?\b/i },
+  /* artifact words only: a story that merely MENTIONS a platform ("find us on
+   * google") must never add a paid size. Flyers, posters, LinkedIn, and IG
+   * stories are asked-for things, not mentions. */
+  { id: 'printed-flyer', re: /\bflyers?\b/i },
+  { id: 'poster', re: /\bposters?\b/i },
+  { id: 'linkedin-post', re: /\blinked\s?in\b/i },
+  { id: 'instagram-story', re: /\b(insta(gram)?|ig)\s+stor(y|ies)\b/i },
+  { id: 'menu-board', re: /\bmenu\s?boards?\b/i },
+  { id: 'table-tent', re: /\btable\s?tents?\b/i },
 ]
 
 const cuedDestinations = (text: string, have: DestinationId[]): { id: DestinationId; word: string }[] =>

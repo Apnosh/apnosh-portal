@@ -190,7 +190,11 @@ s.group('sanitizeDesignRead: the shared evidence gate, the design vocabulary')
 
   s.check('an invented quote kills the field', sanitizeDesignRead({ offer: q('50% off', 'we agreed to half price') }, TEXT, TODAY).offer === undefined)
   s.check('a vague offer read is dropped (no number, no shape)', sanitizeDesignRead({ offer: q('a great deal', '20% off pitchers') }, 'we want to run a great deal on drinks', TODAY).offer === undefined)
-  s.check('an off-vocabulary destination vanishes', sanitizeDesignRead({ destinations: q(['skywriting'], 'instagram post') }, TEXT, TODAY).destinations === undefined)
+  s.check('an off-vocabulary destination vanishes (a real cue word still lands)', (() => {
+    const r = sanitizeDesignRead({ destinations: q(['skywriting'], 'instagram post') }, TEXT, TODAY)
+    const ds = (r.destinations ?? []) as string[]
+    return !ds.includes('skywriting') && ds.includes('printed-flyer')
+  })())
   s.check('"in September" is a month hint, never a date', (() => { const r = sanitizeDesignRead({ eventDate: q('2026-09-01', 'in September') }, 'flyer for our event in September', TODAY); return r.eventDateISO === undefined && r.monthHint === '2026-09' })())
   s.check('a dead model still lands the local job', sanitizeDesignRead('not-an-object', 'poster for our weekly special', TODAY).jobType === 'weekly-special')
   /* The future rule: a past-year guess for "August 15" rolls to the upcoming August 15. */

@@ -24,7 +24,7 @@ import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptR
 import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, type DestinationSpec } from '@/lib/design/destinations'
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { priceDesignOrder, productionBufferDays, rushApplies, type DesignOrderAnswers, type DesignFact } from '@/lib/design/design-pricing'
-import { DESIGN_JOBS, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
+import { DESIGN_JOBS, sanitizeDesignRead, type DesignJobId, type DesignRead } from '@/lib/design/design-read'
 import { JOB_GROUP_META, JOB_SHELF, jobSpec } from '@/lib/design/job-registry'
 import { BoardArt } from './board-art'
 import { JobTile } from '@/components/design/job-tile'
@@ -528,8 +528,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       .then((r) => r.json())
       .then((j) => { if (!cancelled && Array.isArray(j.makers)) setMakers(j.makers) })
       .catch(() => { /* the order offers the house tiers either way */ })
+      .finally(() => { if (!cancelled) setMakersLoaded(true) })
     return () => { cancelled = true }
   }, [])
+  const [makersLoaded, setMakersLoaded] = useState(false)
   /* the brand kit on file rides every order by default (owner call 2026-08-23):
    * they gave it to us once, an order never asks for it again */
   const [brandKit, setBrandKit] = useState<{ logoUrl: string | null; colors: string[]; fonts: string[]; visualStyle: string | null; photoStyle: string | null } | null>(null)
@@ -557,6 +559,37 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       if (r.ok && j.brand) setBrandKit(j.brand)
     } finally { setBrandBusy(false) }
   }
+  /* YOUR USUAL (owner call 2026-08-27): the last placed order's maker, tier, and
+   * brand choice arrive as defaults. Remembered by the order rail itself, never
+   * locked: every row stays one tap to change. */
+  const [usual, setUsual] = useState<{ makerVendorId?: string; makerName?: string; tier?: 1 | 2 | 3; brandMode?: 'file' | 'none' } | null>(null)
+  const [usualApplied, setUsualApplied] = useState(false)
+  const [usualOn, setUsualOn] = useState(false)
+  const [storyAdds, setStoryAdds] = useState<DestinationId[]>([])
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/design/prefs')
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled && j.prefs && Object.keys(j.prefs).length) setUsual(j.prefs) })
+      .catch(() => { /* first order, or prefs not on yet */ })
+    return () => { cancelled = true }
+  }, [])
+  useEffect(() => {
+    if (!usual || usualApplied) return
+    if (usual.makerVendorId && !makersLoaded) return
+    /* never move a price under the owner: if they are already past the story
+     * screen (order card, a sheet, review), the usual stays unapplied */
+    if (express ? !(expressHome && xpPhase === 'say') : step > 1) { setUsualApplied(true); return }
+    let used = false
+    const m = usual.makerVendorId ? makers.find((x) => x.vendorId === usual.makerVendorId) : undefined
+    if (m && !chosenMaker) { setChosenMaker({ vendorId: m.vendorId, name: m.name }); used = true }
+    else if ((usual.tier === 1 || usual.tier === 3) && tier === 2 && !chosenMaker) { setTier(usual.tier); used = true }
+    if (usual.brandMode === 'none' && brandMode === 'file') { setBrandMode('none'); used = true }
+    setUsualApplied(true)
+    if (used) setUsualOn(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usual, makersLoaded, usualApplied])
+
   const uploadBrandFile = async (f: File): Promise<{ url: string; name: string } | null> => {
     try {
       const fd = new FormData(); fd.append('file', f)
@@ -945,7 +978,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([]); setBrandMode('file'); setBrandNote(''); setBrandFiles([]); setXpFocus(null)
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([]); setBrandMode('file'); setBrandNote(''); setBrandFiles([]); setXpFocus(null); setStoryAdds([])
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
@@ -1170,6 +1203,16 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 /* the order derives from the story: one page per answered beat,
                  * plus a cover and a close */
                 if (isCarousel) setSlides(bandForSlides(Math.min(10, Math.max(3, qaPairs.length + 2))).anchor)
+                {
+                  /* the story steers the order: the local read (free, instant) finds
+                   * artifact words and rush language. Anything with a PRICE is only
+                   * SUGGESTED (a tap adds it, visibly); a mention never charges. */
+                  const local = sanitizeDesignRead(null, qaPairs.map((pair) => pair.text).join('. '), today)
+                  setStoryAdds((local.destinations ?? []).filter((d) => !dests.includes(d)))
+                  if (local.rushLanguage || local.monthHint) {
+                    setRead((prev) => ({ ...(prev ?? { cited: {} }), rushLanguage: local.rushLanguage || prev?.rushLanguage, monthHint: prev?.monthHint ?? local.monthHint }))
+                  }
+                }
                 setXpPhase('order')
               }}
               style={{ width: '100%', height: 52, marginTop: 16, marginBottom: 24, borderRadius: 26, border: 'none', cursor: wordsReady ? 'pointer' : 'default', background: wordsReady ? DESK.grad : '#E7E4DB', color: wordsReady ? '#fff' : DESK.mute, fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: wordsReady ? '0 8px 20px rgba(46,154,120,0.3)' : 'none' }}
@@ -1196,7 +1239,26 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 2px' }}>
               {L['xp.order']}
             </div>
-            <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 6, lineHeight: 1.45 }}>{L['xp.order.sub']}</div>
+            <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 6, lineHeight: 1.45 }}>{usualOn ? L['xp.order.sub.usual'] : L['xp.order.sub']}</div>
+            {(() => {
+              const open = storyAdds.filter((d) => !dests.includes(d))
+              return open.length > 0 ? (
+                <div style={{ background: DESK.mintWash, border: `1px solid ${DESK.mint}44`, borderRadius: 10, padding: '8px 11px', marginBottom: 8 }}>
+                  <div style={{ fontSize: 11.5, color: DESK.mintDeep, lineHeight: 1.45, marginBottom: 6 }}>{L['xp.storyadd']}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {open.map((d) => {
+                      const spec = DESTINATIONS.find((x) => x.id === d)
+                      return spec ? (
+                        <button key={d} type="button" onClick={() => setDests((prev) => (prev.includes(d) ? prev : [...prev, d]))}
+                          style={{ cursor: 'pointer', border: `1.5px dashed ${DESK.mint}`, background: '#fff', borderRadius: 99, padding: '6px 11px', fontFamily: DESK.body, fontSize: 12, fontWeight: 700, color: DESK.mintDeep }}>
+                          {'+'} {spec.label}
+                        </button>
+                      ) : null
+                    })}
+                  </div>
+                </div>
+              ) : null
+            })()}
             <div style={{ borderRadius: 16, border: '1.5px solid #EAE7DE', overflow: 'hidden', background: `linear-gradient(165deg, ${dot}08, rgba(255,255,255,0.02) 60%), #fff`, boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 18px rgba(22,33,28,0.07)' }}>
               {row(<Layers size={14} />, L['xp.row.build'], isCarousel ? `${L['fmt.chip.carousel']} · ${L[`band.${bandForSlides(slides).id}`]}, ${bandForSlides(slides).min} to ${bandForSlides(slides).max} ${L['xp.pages']}` : L['fmt.chip.single'], 5, 'build')}
               {(() => {

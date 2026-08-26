@@ -141,6 +141,8 @@ export const DESIGN_LINES: Record<string, string> = {
   'brand.val.custom': 'You are sending it',
   'brand.val.none': 'Designer free rein',
   'brand.photos.travel': 'Your library, we pick the best',
+  'xp.order.sub.usual': 'Built from your story and your last order. Tap anything to change it.',
+  'xp.storyadd': 'Your story mentions these. Tap to add one to the order.',
   'xp.back': 'Back to the order',
   'xp.backshort': 'Back',
   'xp.save': 'Save changes',
