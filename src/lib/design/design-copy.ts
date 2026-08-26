@@ -174,6 +174,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'job.describe.opt': 'Anything else we should know? Optional.',
   'job.slides.title': 'How long should it run?',
   'job.slides.sub': 'We picked from your story. The designer sets the exact page count inside the band.',
+  'focus.build.sub': 'One page, or a story that runs pages.',
   'band.short': 'Short',
   'band.standard': 'Standard',
   'band.long': 'Long',

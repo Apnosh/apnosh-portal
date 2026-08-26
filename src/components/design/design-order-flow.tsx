@@ -97,6 +97,10 @@ function BoardKeyframes() {
         @keyframes dbPop { from { opacity: 0; transform: scale(.92) translateY(5px) } to { opacity: 1; transform: none } }
         .db-tape { animation: dbTape .4s cubic-bezier(.2,1.5,.4,1) both }
         @keyframes dbTape { from { opacity: 0; transform: rotate(3deg) translateY(-8px) } to { opacity: 1; transform: rotate(3deg) } }
+        .xp-sheet { animation: xpSheet .45s cubic-bezier(.32,.72,.35,1) both }
+        @keyframes xpSheet { from { opacity: 0; transform: translateY(14px) scale(.985) } to { opacity: 1; transform: none } }
+        .xp-rise { animation: xpRise .5s cubic-bezier(.32,.72,.35,1) .06s both }
+        @keyframes xpRise { from { opacity: 0; transform: translateY(18px) } to { opacity: 1; transform: none } }
       }
     `}</style>
   )
@@ -121,6 +125,25 @@ function StepHead({ n, title, sub, total = 6, accent = DESK.mint, aside }: { n: 
         {aside}
       </div>
       {sub ? <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, lineHeight: 1.5, margin: 0, maxWidth: '36ch' }}>{sub}</p> : null}
+    </div>
+  )
+}
+
+/* The tapped-in editor's head (owner call 2026-08-26, Apple clean): one soft
+ * tinted glyph, a large centered title, a short line, and air. No step counter,
+ * because a focused sheet is a place, not a step. */
+function FocusHead({ icon, title, sub, accent }: { icon: React.ReactNode; title: string; sub?: string; accent: string }) {
+  return (
+    <div className="xp-sheet" style={{ textAlign: 'center', padding: '20px 8px 4px', marginBottom: 16 }}>
+      <span aria-hidden style={{
+        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        width: 54, height: 54, borderRadius: 17, color: accent,
+        background: `linear-gradient(150deg, ${accent}1F, ${accent}0A)`,
+        boxShadow: `inset 0 1px 0 rgba(255,255,255,0.85), 0 6px 18px ${accent}26`,
+        marginBottom: 12,
+      }}>{icon}</span>
+      <h2 style={{ fontFamily: DESK.disp, fontSize: 26, fontWeight: 700, color: DESK.ink, lineHeight: 1.1, margin: sub ? '0 0 6px' : 0, letterSpacing: '-0.02em' }}>{title}</h2>
+      {sub ? <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, lineHeight: 1.5, margin: '0 auto', maxWidth: '32ch' }}>{sub}</p> : null}
     </div>
   )
 }
@@ -1361,7 +1384,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               owner call 2026-08-20: it is really "where is it posted") ── */}
         {step === 5 && (
           <>
-            {(xpFocus == null || xpFocus === 'where') && <StepHead n={stepNo(5)} total={stepTotal} accent={dot} title={T.where} sub={S.where} />}
+            {xpFocus == null && <StepHead n={stepNo(5)} total={stepTotal} accent={dot} title={T.where} sub={S.where} />}
+            {xpFocus === 'where' && <FocusHead icon={<Send size={25} />} title={T.where} sub={S.where} accent={dot} />}
             {(xpFocus == null || xpFocus === 'where') && (() => {
               /* one checklist, owner language: the type's suggested spots up front and
                * pre-checked, everything else (rest of digital, print, custom) behind one
@@ -1373,7 +1397,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               const toggle = (id: DestinationId) => setDests((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
               const findD = (id: DestinationId) => DESTINATIONS.find((d) => d.id === id)
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <div className={xpFocus === 'where' ? 'xp-rise' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {baseIds.map((id) => {
                     const d = findD(id)
                     return d ? <DestRow key={id} d={d} on={dests.includes(id)} amount={requestMode ? null : destAmount(id)} suggested={sug.includes(id)} onClick={() => toggle(id)} /> : null
@@ -1474,10 +1498,11 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               </div>
             )}
             {(xpFocus == null || xpFocus === 'build') && (<>
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: xpFocus === 'build' ? '0 0 8px' : '18px 0 8px' }}>
+            {xpFocus === 'build' && <FocusHead icon={<Layers size={25} />} title={L['xp.row.build']} sub={L['focus.build.sub']} accent={dot} />}
+            {xpFocus == null && <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 8px' }}>
               {L['fmt.how']}
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 6 }}>
+            </div>}
+            <div className={xpFocus === 'build' ? 'xp-rise' : undefined} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 6 }}>
               {(['single', 'carousel'] as const).map((f) => {
                 const on = (pickedFormat ?? recFormat) === f
                 return (
@@ -1541,10 +1566,13 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             </>)}
             {(xpFocus == null || xpFocus === 'extras') && job !== null && ((jobSpec(job)?.written?.length ?? 0) > 0) && (
               <div style={{ margin: xpFocus === 'extras' ? '0 0 4px' : '14px 0 4px' }}>
+                {xpFocus === 'extras' && <FocusHead icon={<Layers size={25} />} title={L['xp.row.extras']} sub={L['written.sub']} accent={dot} />}
+                {xpFocus == null && (<>
                 <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>
                   {L['written.title']}
                 </div>
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['written.sub']}</div>
+                </>)}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                   {(jobSpec(job)?.written ?? []).map((w) => {
                     const on = written.includes(w)
@@ -1570,11 +1598,14 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             )}
 
             {(xpFocus == null || xpFocus === 'brand') && (<>
-            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: xpFocus === 'brand' ? '0 0 4px' : '18px 0 4px' }}>
+            {xpFocus === 'brand' && <FocusHead icon={<Palette size={25} />} title={L['brand.title']} sub={L['brand.sub']} accent={dot} />}
+            {xpFocus == null && (<>
+            <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '18px 0 4px' }}>
               {L['brand.title']}
             </div>
             <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['brand.sub']}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            </>)}
+            <div className={xpFocus === 'brand' ? 'xp-rise' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Ticket on={brandMode === 'file'} name={L['brand.file.label']} sub={brandOnFile ? L['brand.file.sub'] : L['brand.file.empty']} onClick={() => setBrandMode('file')} />
               <Ticket on={brandMode === 'custom'} name={L['brand.custom.label']} sub={L['brand.custom.sub']} onClick={() => setBrandMode('custom')} />
               <Ticket on={brandMode === 'none'} name={L['brand.none.label']} sub={L['brand.none.sub']} onClick={() => setBrandMode('none')} />
@@ -1943,7 +1974,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         {/* ── 4. photos: real library ranked sharpest first, or hand it to us ── */}
         {step === 3 && (
           <>
-            <StepHead n={stepNo(3)} total={stepTotal} accent={dot} title={T.photos} sub={S.photos} />
+            {express
+              ? <FocusHead icon={<ImageIcon size={25} />} title={T.photos} sub={S.photos} accent={dot} />
+              : <StepHead n={stepNo(3)} total={stepTotal} accent={dot} title={T.photos} sub={S.photos} />}
             {job !== null && jobSpec(job)?.voice?.photoHint && (
               <div style={{ fontSize: 12, fontWeight: 600, color: DESK.mintDeep, background: DESK.mintWash, border: `1px solid ${DESK.mint}55`, borderRadius: 10, padding: '8px 12px', margin: '-4px 0 10px', lineHeight: 1.45 }}>
                 {jobSpec(job)?.voice?.photoHint}
@@ -2045,11 +2078,13 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         {/* ── 5. when: the date sticks onto the board as a tape tag ── */}
         {step === 4 && (
           <>
-            <StepHead
-              n={stepNo(4)} total={stepTotal} accent={dot}
-              title={eventDate ? T['when.event'] : T.when}
-              sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })}
-            />
+            {express
+              ? <FocusHead icon={<CalendarDays size={25} />} title={eventDate ? T['when.event'] : T.when} sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })} accent={dot} />
+              : <StepHead
+                  n={stepNo(4)} total={stepTotal} accent={dot}
+                  title={eventDate ? T['when.event'] : T.when}
+                  sub={eventDate ? fill(S['when.event'], { date: fmtDay(eventDate) }) : fill(S.when, { date: fmtDay(standardDelivery) })}
+                />}
             {read?.rushLanguage && !due && (
               <div style={{ fontSize: 12.5, color: DESK.amber, fontWeight: 600, marginBottom: 10 }}>
                 {fill(L['when.rushnote'], { date: fmtDay(standardDelivery) })}
@@ -2143,7 +2178,9 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             : usingOwn ? `Your own photos (${picked.length} picked)` : null
           return (
             <>
-              <StepHead n={stepNo(6)} total={stepTotal} accent={dot} title={T.review} sub={S.review} />
+              {express
+                ? <FocusHead icon={<User size={25} />} title={T.review} sub={S.review} accent={dot} />
+                : <StepHead n={stepNo(6)} total={stepTotal} accent={dot} title={T.review} sub={S.review} />}
               {/* HOW IT'S MADE — asked LAST (owner call 2026-08-20): the brief is written,
                   so the maker choice prices the whole thing right here, AI included. */}
               <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '4px 0 8px' }}>
@@ -2297,7 +2334,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         {express && step > 1 && (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
             <button type="button" onClick={() => { setXpFocus(null); setExpressHome(true) }}
-              style={{ flex: 1, height: 50, borderRadius: 25, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
+              style={{ flex: 1, height: 52, borderRadius: 26, cursor: 'pointer', border: 'none', background: DESK.grad, color: '#fff', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: '0 8px 20px rgba(46,154,120,0.3)' }}>
               {L['xp.done']}
             </button>
           </div>
