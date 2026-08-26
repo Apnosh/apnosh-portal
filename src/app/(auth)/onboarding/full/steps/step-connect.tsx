@@ -31,6 +31,88 @@ const OAUTH_PATHS: Record<string, string> = {
 }
 
 
+/* THE REAL MARKS. Emoji stood in for platform logos, which made the connect list read as a
+ * toy. These are minimal hand-drawn glyphs in each platform's brand color; no images, no new
+ * dependencies. Anything not listed falls back to the emoji from data.ts. */
+function PlatformLogo({ name, fallback }: { name: string; fallback: string }) {
+  const s = { width: 22, height: 22, display: 'block' } as const
+  switch (name) {
+    case 'Instagram':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="none" stroke="#e1306c" strokeWidth="2" />
+          <circle cx="12" cy="12" r="4.4" fill="none" stroke="#e1306c" strokeWidth="2" />
+          <circle cx="17.3" cy="6.7" r="1.4" fill="#e1306c" />
+        </svg>
+      )
+    case 'Facebook':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#1877f2" d="M13.4 21.5v-7.1h2.7l.5-3.2h-3.2V9.1c0-.93.36-1.6 1.7-1.6h1.6V4.6c-.5-.07-1.4-.15-2.3-.15-2.4 0-4 1.4-4 4.1v2.65H7.9v3.2h2.5v7.1h3z" />
+        </svg>
+      )
+    case 'TikTok':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#010101" d="M16.7 5.9A4.6 4.6 0 0 1 15.4 3h-3.2v12.6a2.66 2.66 0 1 1-2.66-2.66c.28 0 .55.04.8.12V9.8a6 6 0 1 0 5.16 5.94V9.6a7.6 7.6 0 0 0 4.16 1.24V7.6a4.5 4.5 0 0 1-3-1.7z" />
+        </svg>
+      )
+    case 'Google Business':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#4285f4" d="M23.5 12.27c0-.79-.07-1.55-.2-2.27H12v4.51h6.45a5.52 5.52 0 0 1-2.4 3.58v3h3.87c2.26-2.09 3.57-5.17 3.57-8.82z" />
+          <path fill="#34a853" d="M12 24c3.24 0 5.96-1.08 7.94-2.91l-3.87-3c-1.08.72-2.45 1.15-4.07 1.15-3.13 0-5.78-2.11-6.73-4.95H1.28v3.09A12 12 0 0 0 12 24z" />
+          <path fill="#fbbc05" d="M5.27 14.29A7.2 7.2 0 0 1 4.89 12c0-.8.13-1.57.38-2.29v-3.1H1.28a12 12 0 0 0 0 10.77l3.99-3.09z" />
+          <path fill="#ea4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.43-3.42A11.98 11.98 0 0 0 1.28 6.62l3.99 3.09C6.22 6.87 8.87 4.75 12 4.75z" />
+        </svg>
+      )
+    case 'YouTube':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="1.5" y="5" width="21" height="14" rx="4" fill="#ff0000" />
+          <path fill="#fff" d="M10 8.8v6.4l5.7-3.2L10 8.8z" />
+        </svg>
+      )
+    case 'LinkedIn':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="21" height="21" rx="4" fill="#0a66c2" />
+          <circle cx="6.9" cy="6.9" r="1.6" fill="#fff" />
+          <rect x="5.5" y="9.6" width="2.8" height="8.6" fill="#fff" />
+          <path fill="#fff" d="M10.6 9.6h2.7v1.2c.4-.7 1.3-1.4 2.7-1.4 2 0 3.4 1.3 3.4 4v4.8h-2.8v-4.4c0-1.2-.5-2-1.6-2-1 0-1.6.7-1.6 2v4.4h-2.8V9.6z" />
+        </svg>
+      )
+    case 'Square':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="2.5" y="2.5" width="19" height="19" rx="4.5" fill="#3e4348" />
+          <rect x="9" y="9" width="6" height="6" rx="1.2" fill="#fff" />
+        </svg>
+      )
+    case 'Clover':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="8.4" cy="8.4" r="4.6" fill="#00a862" />
+          <circle cx="15.6" cy="8.4" r="4.6" fill="#00a862" />
+          <circle cx="8.4" cy="15.6" r="4.6" fill="#00a862" />
+          <circle cx="15.6" cy="15.6" r="4.6" fill="#00a862" />
+        </svg>
+      )
+    case 'Yelp':
+      return (
+        <svg style={s} viewBox="0 0 24 24" aria-hidden="true">
+          <g fill="#d32323">
+            {[0, 72, 144, 216, 288].map((a) => (
+              <path key={a} d="M12 11 L10.3 4.6 A1.75 1.75 0 0 1 13.7 4.6 Z" transform={`rotate(${a} 12 12)`} />
+            ))}
+          </g>
+        </svg>
+      )
+    default:
+      return <span aria-hidden="true">{fallback}</span>
+  }
+}
+
 interface Props {
   data: OnboardingData
   update: <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => void
@@ -269,7 +351,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
                 className="w-[38px] h-[38px] rounded-[9px] flex items-center justify-center text-lg flex-shrink-0"
                 style={{ background: p.color + '1a' }}
               >
-                {p.emoji}
+                <PlatformLogo name={p.name} fallback={p.emoji} />
               </div>
               <div className="flex-1">
                 <div className="text-sm font-semibold" style={{ color: '#111' }}>{p.name}</div>
@@ -319,7 +401,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
           rather than as an error report about something the owner just did wrong. */}
       <div className="mt-4 text-[12px] leading-relaxed" style={{ color: '#9aa1ab' }}>
         Some phones open the Instagram or TikTok app instead of signing you in. If that happens,
-        skip it — you can connect from your dashboard on a computer in a few seconds.
+        skip it. You can connect from your dashboard on a computer in a few seconds.
         {connectUrl && (
           <>
             {' '}

@@ -147,6 +147,25 @@ export default function OnboardingPage() {
     setData((prev) => ({ ...prev, [field]: value }))
   }, [])
 
+  /* AUTO-ADVANCE, ONE BEAT AFTER A SINGLE-CHOICE ANSWER.
+   * A screen whose only question is a one-of-N choice (role today) should not
+   * make the owner scroll to find Continue: the step reports the tap through
+   * onAutoAdvance, we wait a short beat so the selected state is visible, then
+   * move on. Bumping a tick (instead of a boolean) restarts the timer on every
+   * tap, so a quick change of mind inside the beat wins: the timeout closure
+   * is rebuilt with the latest data and the LAST choice is what gets saved.
+   * Multi-select and typed steps never call this. */
+  const [advanceTick, setAdvanceTick] = useState(0)
+  const requestAutoAdvance = useCallback(() => setAdvanceTick((t) => t + 1), [])
+  useEffect(() => {
+    if (!advanceTick) return
+    const t = setTimeout(() => {
+      if (valid && !saving) goNext()
+    }, 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [advanceTick])
+
   // Save current data to Supabase. `nextScreen` is a 1-based screen index;
   // we persist it as a step index so older resume logic stays compatible.
   async function saveData(nextScreen: number) {
@@ -433,6 +452,7 @@ export default function OnboardingPage() {
                 step={screenNo}
                 totalSteps={totalScreens}
                 onNext={goNext}
+                onAutoAdvance={requestAutoAdvance}
                 onBack={goBack}
                 onGoToStep={goToStep}
                 onComplete={handleComplete}

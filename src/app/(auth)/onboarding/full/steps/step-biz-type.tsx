@@ -8,9 +8,11 @@ interface Props {
   data: OnboardingData
   update: <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => void
   nav: ReactNode
+  /** Reports the single-choice answer so the wizard can advance after a short beat. */
+  onAnswered?: () => void
 }
 
-export default function StepBizType({ data, update, nav }: Props) {
+export default function StepBizType({ data, update, nav, onAnswered }: Props) {
   return (
     <>
       <Question title="What kind of business is it?" subtitle="Pick the closest match" />
@@ -19,7 +21,11 @@ export default function StepBizType({ data, update, nav }: Props) {
           <OptionCard
             key={b}
             selected={data.biz_type === b}
-            onClick={() => update('biz_type', b)}
+            onClick={() => {
+              update('biz_type', b)
+              // 'Other' opens a text field below, so it must not advance.
+              if (b !== 'Other') onAnswered?.()
+            }}
           >
             <div
               className="text-[13px] font-medium"

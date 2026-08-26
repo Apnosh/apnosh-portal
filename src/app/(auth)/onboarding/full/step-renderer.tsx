@@ -48,10 +48,17 @@ interface Props {
   businessId: string | null
   /** Persist current progress before a full-page OAuth redirect leaves the wizard. */
   onSaveBeforeRedirect: () => Promise<void>
+  /** Called by a single-choice step that sits alone on its screen when its one
+   * answer lands, so the wizard can advance itself after a short beat. */
+  onAutoAdvance?: () => void
 }
 
 export default function StepRenderer(props: Props) {
   const { screen, data, update, valid, saving, step, onNext, onBack, onGoToStep, onComplete, onSkipForNow, canSkip, onLogoUpload, onPhotosUpload } = props
+
+  // Only a screen made of exactly ONE step may advance itself after a tap.
+  // Grouped screens have more questions below, so they never auto-advance.
+  const solo = Array.isArray(screen) && screen.length === 1
 
   const nav = (
     <Nav
@@ -70,10 +77,10 @@ export default function StepRenderer(props: Props) {
   // under a single Back/Continue bar.
   function renderStep(stepId: StepId, n: ReactNode) {
     switch (stepId) {
-      case 'role': return <StepRole data={data} update={update} nav={n} />
+      case 'role': return <StepRole data={data} update={update} nav={n} onAnswered={solo ? props.onAutoAdvance : undefined} />
       case 'biz_name': return <StepBizName data={data} update={update} nav={n} onJumpToReview={() => onGoToStep('review')} />
       case 'confirm': return <StepConfirm data={data} update={update} nav={n} />
-      case 'biz_type': return <StepBizType data={data} update={update} nav={n} />
+      case 'biz_type': return <StepBizType data={data} update={update} nav={n} onAnswered={solo ? props.onAutoAdvance : undefined} />
       case 'serve': return <StepServe data={data} update={update} nav={n} />
       case 'menu_details': return <StepMenuDetails data={data} update={update} nav={n} />
       case 'ordering': return <StepOrdering data={data} update={update} nav={n} />
@@ -127,7 +134,7 @@ function Nav({ step, valid, saving, canSkip, onNext, onBack, onSkipForNow }: {
 }) {
   return (
     <>
-      <div className="flex justify-between items-center mt-7 pt-4 border-t" style={{ borderColor: '#f0f0f0' }}>
+      <div data-onboarding-nav="" className="flex justify-between items-center mt-7 pt-4 border-t" style={{ borderColor: '#f0f0f0' }}>
         {step > 1 ? (
           <button
             onClick={onBack}

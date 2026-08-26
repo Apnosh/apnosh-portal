@@ -234,3 +234,18 @@ export function Badge({ children }: { children: ReactNode }) {
     </span>
   )
 }
+
+
+/* Bring the shared Back/Continue bar into view the moment a step becomes
+ * answerable, so an owner never has to hunt for the button. The nav bar in
+ * step-renderer.tsx carries data-onboarding-nav. Steps call this right after
+ * the answer that completes them; the frame delay lets the render that
+ * enabled the button paint first. */
+export function scrollNavIntoView() {
+  if (typeof document === 'undefined') return
+  requestAnimationFrame(() => {
+    document
+      .querySelector('[data-onboarding-nav]')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  })
+}

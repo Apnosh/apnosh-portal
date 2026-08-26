@@ -9,13 +9,19 @@ interface Props {
   data: OnboardingData
   update: <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => void
   nav: ReactNode
+  /** Reports the single-choice answer so the wizard can advance after a short beat. */
+  onAnswered?: () => void
 }
 
-export default function StepRole({ data, update, nav }: Props) {
+export default function StepRole({ data, update, nav, onAnswered }: Props) {
   const router = useRouter()
   // Freelancer is the fork: it leaves the restaurant flow for the creator setup right away, before
   // any business row is written. Every other role continues the business flow as before.
-  const pick = (id: string) => (id === 'freelancer' ? router.push('/onboarding/creator') : update('role', id))
+  const pick = (id: string) => {
+    if (id === 'freelancer') { router.push('/onboarding/creator'); return }
+    update('role', id)
+    onAnswered?.()
+  }
   return (
     <>
       <Question title="Who are you?" subtitle="This helps us tailor your experience" />

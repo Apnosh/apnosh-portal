@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react'
 import { useClient } from '@/lib/client-context'
 import MvpHome, { type MvpHomeData } from '@/components/mvp/mvp-home'
 import { transformHome } from '@/components/mvp/home-transform'
+import { HomeFunnelSkeleton } from '@/components/mvp/home-funnel'
 import MvpShell from '@/components/mvp/mvp-shell'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 
@@ -66,16 +67,24 @@ export default function DashboardHomePage() {
     return () => { live = false }
   }, [client?.id])
 
-  const view = data ? (aiSuggestions !== null ? { ...data, suggestions: aiSuggestions } : data) : null
+  // NEVER a blank first paint: as soon as the client resolves, Home mounts on a
+  // minimal placeholder view — the funnel (the whole home) starts ITS fetch
+  // immediately, in parallel with /api/dashboard/load, instead of waiting behind
+  // it. The load's extras (review banner, approvals badge, suggestions) fill in
+  // when it lands; only the parts that were pending ever swap.
+  const placeholder: MvpHomeData = { greeting: '', avatarText: '·', metrics: [], signal: { state: 'ontrack' }, approvals: [], review: null }
+  const view: MvpHomeData = data ? (aiSuggestions !== null ? { ...data, suggestions: aiSuggestions } : data) : placeholder
 
   return (
     <MvpShell active="home" unread={data?.approvals?.length ?? 0}>
-      {clientLoading || (!data && !error) ? (
-        <Centered>Loading your numbers…</Centered>
-      ) : error ? (
+      {clientLoading ? (
+        /* client context still resolving — show the funnel's shape, not a bare
+           line of text, so the seconds right after onboarding never look broken */
+        <HomeFunnelSkeleton message="Setting up your dashboard" />
+      ) : error && !data ? (
         <Centered>Couldn&apos;t load: {error}</Centered>
-      ) : view ? (
-        <MvpHome data={view} showHeader={false} clientId={client?.id} suggestionsReady={suggestionsReady} />
+      ) : client ? (
+        <MvpHome data={view} showHeader={false} clientId={client.id} suggestionsReady={suggestionsReady} />
       ) : (
         <Centered>No client found for this account.</Centered>
       )}

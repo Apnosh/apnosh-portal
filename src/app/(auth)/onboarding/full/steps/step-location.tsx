@@ -69,9 +69,23 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
   const [searchNote, setSearchNote] = useState('')
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // How many spots — chosen at the top of this step. 'Not open yet' is treated
-  // as a single planned location. Everything below the choice stays hidden
-  // until one is picked, so the search lands after the decision.
+  // Manual entry: revealed by the "Type it in yourself" button before the
+  // how-many-spots choice is made; always shown once a choice exists.
+  const [showManual, setShowManual] = useState(false)
+  const manualRef = useRef<HTMLDivElement>(null)
+
+  function revealManual() {
+    if (!showManual) setShowManual(true)
+    // Wait a beat so the fields exist before we scroll to them.
+    setTimeout(() => {
+      manualRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 60)
+  }
+
+  // How many spots. 'Not open yet' is treated as a single planned location.
+  // The Google search and the add paths sit ABOVE this choice now, so the
+  // first thing an owner can act on is finding their restaurant; the manual
+  // fields appear once a choice is made or via "Type it in yourself".
   const isMulti = data.location_count === 'Multiple'
   const isNotOpen = data.location_count === 'Not open yet'
   const hasChoice = !!data.location_count
@@ -148,6 +162,10 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           phone: p.phone || '', hours: hasHours ? p.hours : {},
         },
       ])
+      // Search sits above the how-many-spots choice now, so a second pick can
+      // land before the owner answered it. Adding another spot IS the answer:
+      // record it so the roster below becomes visible instead of silent.
+      if (!data.location_count) update('location_count', 'Multiple')
       const site = (p.website || data.website).trim()
       const drafted = await draftFromWebsite(site)
       setPulling(false)
@@ -317,17 +335,23 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
     const chosen = candidates.filter((_, i) => picked[i])
     if (!chosen.length) { setCandidates(null); return }
     const [primary, ...rest] = chosen
+    /* The connect sits above the how-many-spots choice now. If the owner
+     * checked more than one location, that IS the answer: treat the batch as
+     * multi so the extra spots land on the roster instead of being dropped,
+     * and record the choice for them. */
+    const multi = isMulti || chosen.length > 1
+    if (chosen.length > 1 && !isMulti) update('location_count', 'Multiple')
     update('full_address', primary.full_address)
     update('city', primary.city)
     update('state', primary.state)
     update('zip', primary.zip)
     if (primary.phone) update('phone', primary.phone)
     if (primary.hours) update('hours', primary.hours)
-    if (isMulti && primary.title) update('primary_location_name', primary.title)
+    if (multi && primary.title) update('primary_location_name', primary.title)
     if (!data.biz_name.trim() && primary.title) update('biz_name', primary.title)
     if (primary.website && !data.website.trim()) update('website', primary.website)
     if (!data.biz_type) update('biz_type', FOOD_BIZ_TYPES[0])
-    if (isMulti && rest.length) {
+    if (multi && rest.length) {
       // Dedupe by normalized address: against the primary, against spots already
       // on the roster, and within this batch itself (Google can list the same
       // location twice). Without this the review screen shows duplicate spots.
@@ -473,54 +497,27 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         title={isMulti ? 'Where are your spots?' : 'Where are you located?'}
         subtitle={isNotOpen
           ? 'Add your planned address. Search may not find you yet.'
-          : isMulti
-          ? 'Search each spot to fill it in, or type them by hand.'
-          : 'Search your spot to fill it in, or type it by hand.'}
+          : 'Find your restaurant on Google and we fill in the rest.'}
       />
 
-      {/* Choice first: how many spots (or not open yet). The search and the
-          rest of the section stay hidden until this is picked. */}
-      <div className="mt-4">
-        <FieldLabel>How many spots?</FieldLabel>
-        <div className="grid grid-cols-3 gap-2.5">
-          {[
-            { value: 'Just 1', label: 'One spot', sub: 'A single location' },
-            { value: 'Multiple', label: 'A few', sub: 'Two or more' },
-            { value: 'Not open yet', label: 'Not open yet', sub: 'Opening soon' },
-          ].map((opt) => {
-            const selected = data.location_count === opt.value
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => update('location_count', opt.value)}
-                className="text-left rounded-[12px] px-3 py-3 transition-all"
-                style={{
-                  border: selected ? '1.5px solid #4abd98' : '1.5px solid #e0e0e0',
-                  background: selected ? '#f0faf6' : '#fff',
-                }}
-              >
-                <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#111' }}>
-                  {opt.label}
-                </div>
-                <div className="text-[11px] mt-0.5" style={{ color: '#999' }}>{opt.sub}</div>
-              </button>
-            )
-          })}
-        </div>
-        <Hint>You can change this anytime and edit locations later from your dashboard.</Hint>
-      </div>
 
-      {/* Search-first: find a spot by name and we pull its address, hours,
-          and phone. The roster below stays editable for manual entry. */}
-      {hasChoice && lookupOn && (
-        <div className="mt-4">
-          <FieldLabel>{isMulti ? 'Search for a spot' : 'Search for your spot'}</FieldLabel>
+      {/* SEARCH AND ADD, FIRST. The fastest way to add a location is to find
+          it on Google: one tap fills the address, hours, and phone, and reads
+          the website to draft later steps. Typing it in yourself lives right
+          here too, so both add paths sit at the top of the step. */}
+      {lookupOn && (
+        <div className="mt-4 rounded-[12px] px-3.5 py-3.5" style={{ border: '1.5px solid #9fe1cb', background: '#f0faf6' }}>
+          <div className="text-sm font-semibold mb-0.5" style={{ color: '#0f6e56' }}>
+            Find your restaurant on Google
+          </div>
+          <div className="text-xs mb-2.5" style={{ color: '#2e9a78' }}>
+            One tap fills your address, hours, and phone.
+          </div>
           <div className="relative">
             <Input
               value={query}
               onChange={setQuery}
-              placeholder="Search by name, e.g. The Golden Spoon"
+              placeholder="Type your restaurant name, e.g. The Golden Spoon"
             />
             {(searching || results.length > 0) && (
               <div
@@ -550,21 +547,22 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           {(pulling || searchNote) && (
             <div
               className="mt-2 text-[13px] leading-relaxed rounded-[10px] px-3.5 py-2.5"
-              style={{ background: '#f0faf6', color: '#0f6e56', borderLeft: '3px solid #4abd98' }}
+              style={{ background: '#fff', color: '#0f6e56', borderLeft: '3px solid #4abd98' }}
             >
               {pulling ? 'Pulling the details...' : `✓ ${searchNote}`}
             </div>
           )}
-          <Hint>
-            {isMulti
-              ? 'Find each spot to fill it in. The first one fills your main details and reads your site too.'
-              : 'Find your spot to fill in your address, hours, and details from your site.'}
-          </Hint>
+          <button
+            type="button"
+            onClick={revealManual}
+            className="mt-1 text-[13px] font-semibold"
+            style={{ color: '#2e9a78', background: 'none', border: 'none', padding: '10px 2px', minHeight: 44 }}
+          >
+            Or type it in yourself
+          </button>
         </div>
       )}
 
-      {hasChoice && (
-      <>
       {/* Google Business import: connect once, pull every location's address,
           hours, and phone instead of typing them by hand. */}
       {candidates ? (
@@ -659,7 +657,44 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         </div>
       )}
 
-      <div className="mt-4 space-y-3">
+      {/* How many spots. Sits below the search now, so finding the restaurant
+          is the first thing an owner can act on. */}
+      <div className="mt-4">
+        <FieldLabel>How many spots?</FieldLabel>
+        <div className="grid grid-cols-3 gap-2.5">
+          {[
+            { value: 'Just 1', label: 'One spot', sub: 'A single location' },
+            { value: 'Multiple', label: 'A few', sub: 'Two or more' },
+            { value: 'Not open yet', label: 'Not open yet', sub: 'Opening soon' },
+          ].map((opt) => {
+            const selected = data.location_count === opt.value
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => update('location_count', opt.value)}
+                className="text-left rounded-[12px] px-3 py-3 transition-all"
+                style={{
+                  border: selected ? '1.5px solid #4abd98' : '1.5px solid #e0e0e0',
+                  background: selected ? '#f0faf6' : '#fff',
+                }}
+              >
+                <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#111' }}>
+                  {opt.label}
+                </div>
+                <div className="text-[11px] mt-0.5" style={{ color: '#999' }}>{opt.sub}</div>
+              </button>
+            )
+          })}
+        </div>
+        <Hint>You can change this anytime and edit locations later from your dashboard.</Hint>
+      </div>
+
+      {/* Manual entry: appears once a choice is made, or straight away via
+          "Type it in yourself". Same fields as before, just no longer the
+          first thing on the step. */}
+      {(hasChoice || showManual) && (
+      <div ref={manualRef} className="mt-4 space-y-3">
         {!isMulti ? (
           <>
             {primaryAddressInput}
@@ -730,8 +765,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           </div>
         )}
       </div>
-      </>
       )}
+
       {nav}
     </>
   )

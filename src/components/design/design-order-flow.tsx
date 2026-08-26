@@ -1297,6 +1297,12 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       <div style={{ ...ground, padding: '24px 18px 40px' }}>
         <DeskKeyframes />
         <BoardKeyframes />
+        <button
+          type="button" onClick={() => setCart(false)} disabled={sending || holding}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '2px 0', marginBottom: 8, cursor: 'pointer', fontFamily: DESK.body, fontSize: 14, fontWeight: 600, color: DESK.ink2 }}
+        >
+          {'‹'} {L['xp.backshort']}
+        </button>
         <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: DESK.mute, marginBottom: 10 }}>{L['cart.title']}</div>
         {heldPieces.length > 0 && (
           <div style={{ marginBottom: 12 }}>
@@ -1371,13 +1377,29 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
           </div>
         </div>
       )}
-      {(step === 1 || (seededFlow && step === 2)) && (
+      {(step === 1 || (seededFlow && step === 2 && !express)) && (
         <button
           type="button"
           onClick={() => router.push(seededFlow ? '/dashboard/design/browse' : '/dashboard/campaigns/new?lens=creatives')}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '2px 0', marginBottom: 8, cursor: 'pointer', fontFamily: DESK.body, fontSize: 14, fontWeight: 600, color: DESK.ink2 }}
         >
           {'‹'} Store
+        </button>
+      )}
+      {/* a back at the TOP of every screen (owner call 2026-08-27): long sheets
+          must never hide the way out below the fold. Same semantics as the
+          bottom bar: express discards unsaved sheet edits, wizard steps back. */}
+      {(express ? step > 1 : (step > (seededFlow ? 2 : 1) || (step === 2 && activeAngle !== null))) && (
+        <button
+          type="button"
+          onClick={() => {
+            if (express) { if (xpDirty) restoreSnap(); setXpSnap(null); setXpFocus(null); setExpressHome(true) }
+            else if (step === 2 && activeAngle) setAngle(null)
+            else setStep(step - 1)
+          }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', padding: '2px 0', marginBottom: 8, cursor: 'pointer', fontFamily: DESK.body, fontSize: 14, fontWeight: 600, color: DESK.ink2 }}
+        >
+          {'‹'} {express ? (xpDirty ? L['xp.backshort'] : L['xp.back']) : L['nav.back']}
         </button>
       )}
       {requestMode && (

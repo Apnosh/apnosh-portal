@@ -1203,6 +1203,37 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
   return { views, actions, counts }
 }
 
+/**
+ * HomeFunnelSkeleton — the funnel's SHAPE, painted instantly while the real
+ * numbers are still on their way: five glass orbs pinching down the same
+ * center spine, pulsing gently (CSS only, honors prefers-reduced-motion),
+ * under one plain line of owner copy. A brand-new account lands on this
+ * instead of a blank page, so the wait reads as "working on it", not broken.
+ * Also used by /dashboard while the client context itself resolves.
+ */
+export function HomeFunnelSkeleton({ height = 620, message = 'Importing your numbers' }: { height?: number; message?: string }) {
+  const { C } = useMvpTheme()
+  const orbs = [84, 66, 52, 42, 34]
+  return (
+    <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', boxSizing: 'border-box' }}>
+      <style>{`
+@keyframes hfSkelPulse{0%,100%{opacity:.9}50%{opacity:.35}}
+.hf-skel-orb{animation:hfSkelPulse 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.hf-skel-orb{animation:none;opacity:.6}}`}</style>
+      <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink, marginBottom: 4 }}>{message}</div>
+      <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 26 }}>Your funnel shows here in a moment</div>
+      <div aria-hidden style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {orbs.map((d, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && <div style={{ width: 2, height: 14, background: C.line }} />}
+            <div className="hf-skel-orb" style={{ width: d, height: d, borderRadius: '50%', background: C.greenSoft, border: `1.5px solid ${C.greenLine}`, animationDelay: `${i * 0.14}s` }} />
+          </React.Fragment>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void }) {
   const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
@@ -1213,7 +1244,9 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
    * with no data) must NOT unmount it — the tabs live inside it, and vanishing
    * would strand the owner with no way to pick a different range */
   const everShown = useRef(false)
-  const [loading, setLoading] = useState(false)
+  /* starts TRUE: the very first render (before the effect fires) must already
+   * paint the skeleton, never a frame of nothing */
+  const [loading, setLoading] = useState(true)
   useEffect(() => {
     // No client, or no Google data: tell the parent, so Home can render its
     // Day-0 body in place of the funnel — never a blank screen.
@@ -1262,7 +1295,13 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
     // onVisibility identity is caller-stable; depend on the data inputs only
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId, range, range === 'custom' ? cStart : '', range === 'custom' ? cEnd : ''])
-  if (!data?.views || !data?.actions) return null
+  if (!data?.views || !data?.actions) {
+    // First load still in flight: paint the funnel's shape right away so Home
+    // is never blank. Once the load settles empty, this yields to Home's
+    // connect card (onVisibility fired 'empty' above).
+    if (clientId && loading) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelSkeleton height={height} /></div>
+    return null
+  }
   // never shown anything yet AND this window is empty → let Home render its Day-0 body
   if (data.views.total <= 0 && !everShown.current) return null
   return (

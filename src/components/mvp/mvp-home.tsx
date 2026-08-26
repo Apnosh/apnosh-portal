@@ -258,12 +258,10 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
           <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} /></>
         </div>
 
-        {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
-            the owner. Flip the flag to bring back the connect prompt, suggestions,
-            orders, and quick links. */}
-        {SHOW_HOME_BODY && (<>
         {/* NO GOOGLE DATA — the funnel hid, so say so honestly and give the fix.
-            Never a blank screen, never invented numbers. */}
+            Never a blank screen, never invented numbers. Lives OUTSIDE the parked
+            home body: with the funnel as the whole home, a zero-data account
+            would otherwise land on an empty page right after onboarding. */}
         {funnelVis === 'empty' && (
           <Link href="/dashboard/connected-accounts" className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '16px 15px', marginTop: 16, marginBottom: 4, textDecoration: 'none', color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
             <div style={{ width: 42, height: 42, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plug size={20} color={C.greenDk} /></div>
@@ -275,9 +273,10 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
           </Link>
         )}
 
-        {/* THE HOME BODY — always rendered (funnel or not), so a paid order, the
-            tailored suggestions, and what just happened are never invisible. */}
-
+        {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
+            the owner. Flip the flag to bring back the suggestions, orders, and
+            quick links. */}
+        {SHOW_HOME_BODY && (<>
         {/* SUGGESTIONS — a small stack of tailored cards. One reads as "Do this
             next"; the rest are timely info or genuine recommendations drawn from
             this restaurant's own signals (the AI set merges in when ready). */}
