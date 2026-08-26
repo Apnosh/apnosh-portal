@@ -767,6 +767,40 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
     }
   }
 
+  /* Sheet edits are provisional (owner call 2026-08-26): opening a tapped-in
+   * editor snapshots everything it can touch; Back restores the snapshot, Save
+   * keeps the edits, and Save only exists once something actually changed. */
+  const takeSnap = () => ({
+    pickedFormat, slides,
+    dests: [...dests], destOtherOn, destOther, customW, customH,
+    printQtys: { ...printQtys }, printer,
+    brandMode, brandNote,
+    written: [...written],
+    picked: [...picked], photoMode, photoOther,
+    due, rushConfirmed, eventDate,
+    tier, method, chosenMaker,
+    qa: { ...qa }, headline, details, offer, action, exactCopy, wordsMode, angle,
+    promoteItems: [...promoteItems],
+  })
+  const [xpSnap, setXpSnap] = useState<ReturnType<typeof takeSnap> | null>(null)
+  const xpDirty = xpSnap != null && JSON.stringify(takeSnap()) !== JSON.stringify(xpSnap)
+  const restoreSnap = () => {
+    const sn = xpSnap
+    if (!sn) return
+    setPickedFormat(sn.pickedFormat); setSlides(sn.slides)
+    setDests(sn.dests); setDestOtherOn(sn.destOtherOn); setDestOther(sn.destOther)
+    setCustomW(sn.customW); setCustomH(sn.customH)
+    setPrintQtys(sn.printQtys); setPrinter(sn.printer)
+    setBrandMode(sn.brandMode); setBrandNote(sn.brandNote)
+    setWritten(sn.written)
+    setPicked(sn.picked); setPhotoMode(sn.photoMode); setPhotoOther(sn.photoOther)
+    setDue(sn.due); setRushConfirmed(sn.rushConfirmed); setEventDate(sn.eventDate)
+    setTier(sn.tier); setMethod(sn.method); setChosenMaker(sn.chosenMaker)
+    setQa(sn.qa); setHeadline(sn.headline); setDetails(sn.details); setOffer(sn.offer)
+    setAction(sn.action); setExactCopy(sn.exactCopy); setWordsMode(sn.wordsMode); setAngle(sn.angle)
+    setPromoteItems(sn.promoteItems)
+  }
+
   /* The owner's picked photos must actually travel with the request. Uploaded files
    * only exist as local blob: URLs until now — push those bytes through the asset
    * rail; library photos already have real URLs and pass straight through. Best-
@@ -1033,7 +1067,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
     const wordsReady = jobQs.length > 0
       ? (wordsMode === 'exact' ? exactCopy.trim().length > 0 : qaPairs.length > 0)
       : headline.trim().length > 0 || details.trim().length > 0
-    const openEditor = (n: number, focus: 'where' | 'build' | 'brand' | 'extras' | null = null) => { setXpFocus(focus); setExpressHome(false); setStep(n) }
+    const openEditor = (n: number, focus: 'where' | 'build' | 'brand' | 'extras' | null = null) => { setXpSnap(takeSnap()); setXpFocus(focus); setExpressHome(false); setStep(n) }
     const leadQ = jobQs[0]
     const row = (icon: React.ReactNode, label: string, value: string, n: number, focus: 'where' | 'build' | 'brand' | 'extras' | null = null) => (
       <button
@@ -2380,10 +2414,17 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         {/* back / next (review keeps Back too, under the seal, so a typo is one tap away) */}
         {express && step > 1 && (
           <div style={{ display: 'flex', gap: 10, marginTop: 16, marginBottom: 24 }}>
-            <button type="button" onClick={() => { setXpFocus(null); setExpressHome(true) }}
-              style={{ flex: 1, height: 52, borderRadius: 26, cursor: 'pointer', border: 'none', background: DESK.grad, color: '#fff', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: '0 8px 20px rgba(46,154,120,0.3)' }}>
-              {L['xp.done']}
+            <button type="button"
+              onClick={() => { if (xpDirty) restoreSnap(); setXpSnap(null); setXpFocus(null); setExpressHome(true) }}
+              style={{ flex: xpDirty ? undefined : 1, flexShrink: 0, height: 52, padding: '0 20px', borderRadius: 26, cursor: 'pointer', border: `1px solid ${DESK.line}`, background: DESK.card, color: DESK.ink, fontFamily: DESK.body, fontSize: 14.5, fontWeight: 600 }}>
+              {'‹'} {xpDirty ? L['xp.backshort'] : L['xp.back']}
             </button>
+            {xpDirty && (
+              <button type="button" onClick={() => { setXpSnap(null); setXpFocus(null); setExpressHome(true) }}
+                style={{ flex: 1, height: 52, borderRadius: 26, cursor: 'pointer', border: 'none', background: DESK.grad, color: '#fff', fontFamily: DESK.disp, fontSize: 16, fontWeight: 700, boxShadow: '0 8px 20px rgba(46,154,120,0.3)' }}>
+                {L['xp.save']}
+              </button>
+            )}
           </div>
         )}
         {!express && step > 1 && (
