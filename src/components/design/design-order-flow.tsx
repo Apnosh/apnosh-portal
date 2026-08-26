@@ -18,7 +18,7 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, Check, Image as ImageIcon, Layers, Palette, Send, User } from 'lucide-react'
+import { CalendarDays, Camera, Check, Image as ImageIcon, Layers, Palette, PenLine, Plus, Search, Send, Upload, User, X } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
 import { DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, ConfirmButton } from '@/components/campaigns/desk/ui'
 import { DESTINATIONS, PRINT_AVAILABLE, PRINT_OFF_MESSAGE, type DestinationId, type DestinationSpec } from '@/lib/design/destinations'
@@ -291,7 +291,7 @@ function Artboard({ jobLabel, jobId, dot = DESK.mint, headline, details, offer, 
 }
 
 /* ── a destination as a real-ratio frame of YOUR artwork ─────────────────────────────────── */
-function DestRow({ d, on, amount, suggested, onClick }: {
+function DestBox({ d, on, amount, suggested, onClick }: {
   d: DestinationSpec
   on: boolean
   /** the engine's own line amount when selected (null = request mode, no numbers) */
@@ -299,58 +299,50 @@ function DestRow({ d, on, amount, suggested, onClick }: {
   suggested?: boolean
   onClick: () => void
 }) {
+  /* the placement's true proportions are the hero of the box */
+  const CW = 46, CH = 38
+  const r = d.dimensions.w / d.dimensions.h
+  const w = r >= CW / CH ? CW : Math.max(14, Math.round(CH * r))
+  const h = r >= CW / CH ? Math.max(10, Math.round(CW / r)) : CH
   return (
     <button
       type="button" onClick={onClick} aria-pressed={on}
       style={{
-        display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
-        cursor: 'pointer', padding: '12px 13px', borderRadius: 12,
+        position: 'relative', minHeight: 118, borderRadius: 14, padding: '14px 10px 12px',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
+        textAlign: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
         border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
-        fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
-        transition: 'border-color .15s ease, background .15s ease',
+        fontFamily: DESK.body, transition: 'border-color .15s ease, background .15s ease',
       }}
     >
-      {/* the placement's real proportions, at a glance */}
-      {(() => {
-        const ratio = d.dimensions.w / d.dimensions.h
-        const bw = ratio >= 1 ? 26 : Math.max(12, Math.round(26 * ratio))
-        const bh = ratio >= 1 ? Math.max(11, Math.round(26 / ratio)) : 26
-        return (
-          <span aria-hidden style={{ flexShrink: 0, width: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{
-              width: bw, height: bh, borderRadius: 3, display: 'block',
-              border: `1.5px solid ${on ? DESK.mintDeep : DESK.mute}`,
-              background: on ? '#fff' : DESK.card,
-              boxShadow: d.kind === 'print' ? `2px 2px 0 ${on ? DESK.mint : DESK.line}` : undefined,
-            }} />
-          </span>
-        )
-      })()}
-      <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 7 }}>
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink, whiteSpace: 'nowrap' }}>{d.label}</span>
-        {suggested && !on && (
-          <span style={{ fontFamily: DESK.mono, fontSize: 8, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep, background: DESK.mintWash, borderRadius: 5, padding: '2px 5px', flexShrink: 0 }}>
-            {L['dest.suggested']}
-          </span>
-        )}
-        {/* the spec stays visible but whispers: owners pick places, we own sizes */}
-        <span style={{ fontFamily: DESK.mono, fontSize: 9, fontWeight: 600, color: DESK.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {d.dimensions.w}×{d.dimensions.h}{d.dimensions.unit === 'px' ? '' : ` ${d.dimensions.unit}`}
-        </span>
+      <span aria-hidden style={{ width: '100%', height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <span style={{
+          width: w, height: h, borderRadius: d.id === 'gift-card' ? 8 : 4, display: 'block',
+          border: `1.5px solid ${on ? DESK.mintDeep : DESK.mute}`,
+          background: on ? '#fff' : DESK.card,
+          boxShadow: d.kind === 'print' ? `2px 2px 0 ${on ? DESK.mint : DESK.line}` : undefined,
+        }} />
       </span>
-      {on && amount != null && (
-        <span style={{ flexShrink: 0, fontFamily: DESK.mono, fontSize: 11.5, fontWeight: 700, color: amount === 0 ? DESK.mute : DESK.mintDeep }}>
-          {amount === 0 ? L['dest.included'] : `+$${amount}`}
-        </span>
-      )}
+      <span style={{ marginTop: 9, fontSize: 13.5, fontWeight: 700, lineHeight: 1.15, color: on ? DESK.mintDeep : DESK.ink }}>{d.label}</span>
+      <span style={{ marginTop: 3, fontFamily: DESK.mono, fontSize: 9, fontWeight: 600, color: DESK.mute }}>
+        {d.dimensions.w}×{d.dimensions.h}{d.dimensions.unit === 'px' ? '' : ` ${d.dimensions.unit}`}
+      </span>
+      {/* fixed slot so paired cells never reflow when a price appears */}
+      <span style={{ height: 17, marginTop: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: DESK.mono, fontSize: 11.5, fontWeight: 700, color: amount === 0 ? DESK.mute : DESK.mintDeep }}>
+        {on && amount != null ? (amount === 0 ? L['dest.included'] : `+$${amount}`) : ''}
+      </span>
       <span aria-hidden style={{
-        flexShrink: 0, width: 21, height: 21, borderRadius: '50%',
+        position: 'absolute', top: 9, right: 9, width: 21, height: 21, borderRadius: '50%',
         border: on ? 'none' : `1.5px solid ${DESK.line}`, background: on ? DESK.mint : '#fff',
-        color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background .15s ease',
+        color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background .15s ease',
       }}>
         {on && <Check size={12} strokeWidth={3.4} />}
       </span>
+      {suggested && !on && (
+        <span style={{ position: 'absolute', top: 9, left: 9, fontFamily: DESK.mono, fontSize: 8, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep, background: DESK.mintWash, borderRadius: 5, padding: '2px 5px' }}>
+          {L['dest.suggested']}
+        </span>
+      )}
     </button>
   )
 }
@@ -501,6 +493,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
    * sharpest 8 (picked ones always stay visible), Show-all opens everything with a
    * search box past 12. */
   const [photosOpen, setPhotosOpen] = useState(false)
+  /* the calendar hides behind the quick picks; a custom day already chosen reopens it */
+  const [calOpen, setCalOpen] = useState(false)
   const [photoQ, setPhotoQ] = useState('')
   /* Sizes the server did not know (menu photos, older uploads): measured here, once,
    * before the quality gate judges them. null = the image would not load at all. */
@@ -550,6 +544,27 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
     return () => { cancelled = true }
   }, [])
   const brandOnFile = !!(brandKit && (brandKit.logoUrl || brandKit.colors.length || brandKit.fonts.length))
+  /* the kit is editable AT the point of need: logo and colors save to the ACCOUNT
+   * (client_brands) so every future order carries them; "Different" files ride
+   * this order only, as attachments */
+  const [brandFiles, setBrandFiles] = useState<{ url: string; name: string }[]>([])
+  const [brandBusy, setBrandBusy] = useState(false)
+  const saveBrand = async (patch: { logoUrl?: string; colors?: string[] }) => {
+    setBrandBusy(true)
+    try {
+      const r = await fetch('/api/design/brand', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) })
+      const j = (await r.json().catch(() => ({}))) as { brand?: typeof brandKit }
+      if (r.ok && j.brand) setBrandKit(j.brand)
+    } finally { setBrandBusy(false) }
+  }
+  const uploadBrandFile = async (f: File): Promise<{ url: string; name: string } | null> => {
+    try {
+      const fd = new FormData(); fd.append('file', f)
+      const r = await fetch('/api/dashboard/upload-asset', { method: 'POST', body: fd })
+      const j = (await r.json().catch(() => ({}))) as { url?: string }
+      return r.ok && j.url ? { url: j.url, name: f.name } : null
+    } catch { return null }
+  }
   const [panelOpen, setPanelOpen] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendError, setSendError] = useState<string | null>(null)
@@ -674,6 +689,10 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
 
   /* A sensible head start before a known event; offered as one tap, never silently applied. */
   const suggestedDue = eventDate ? addDays(eventDate, -3) : null
+  useEffect(() => {
+    if (step === 4) setCalOpen(due != null && due !== (eventDate ? addDays(eventDate, -3) : null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step])
   const afterEvent = due != null && eventDate != null && due > eventDate
 
   const answers: DesignOrderAnswers = {
@@ -774,7 +793,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
     pickedFormat, slides,
     dests: [...dests], destOtherOn, destOther, customW, customH,
     printQtys: { ...printQtys }, printer,
-    brandMode, brandNote,
+    brandMode, brandNote, brandFiles: [...brandFiles],
     written: [...written],
     picked: [...picked], photoMode, photoOther,
     due, rushConfirmed, eventDate,
@@ -791,7 +810,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
     setDests(sn.dests); setDestOtherOn(sn.destOtherOn); setDestOther(sn.destOther)
     setCustomW(sn.customW); setCustomH(sn.customH)
     setPrintQtys(sn.printQtys); setPrinter(sn.printer)
-    setBrandMode(sn.brandMode); setBrandNote(sn.brandNote)
+    setBrandMode(sn.brandMode); setBrandNote(sn.brandNote); setBrandFiles(sn.brandFiles)
     setWritten(sn.written)
     setPicked(sn.picked); setPhotoMode(sn.photoMode); setPhotoOther(sn.photoOther)
     setDue(sn.due); setRushConfirmed(sn.rushConfirmed); setEventDate(sn.eventDate)
@@ -875,7 +894,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       rushConfirmed ? 'Rush agreed' : '',
       /* the brand block: the designer never has to come ask for the kit */
       brandMode === 'none' ? 'BRAND: no brand kit on this one. The designer has free rein on the look'
-        : brandMode === 'custom' ? `BRAND: do not use the kit on file${brandNote.trim() ? `. Use instead: "${brandNote.trim()}"` : '. They will send the brand direction in the thread'}`
+        : brandMode === 'custom' ? `BRAND: do not use the kit on file${brandNote.trim() ? `. Use instead: "${brandNote.trim()}"` : ''}${brandFiles.length ? `. Their brand files are attached (named brand-*)` : ''}${!brandNote.trim() && !brandFiles.length ? '. They will send the brand direction in the thread' : ''}`
         : brandOnFile && brandKit
           ? `BRAND KIT ON FILE, use it: ${[
               brandKit.logoUrl ? `logo ${brandKit.logoUrl}` : '',
@@ -904,7 +923,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             notes: noteBits || undefined,
           },
           ...(due ? { due_date: due } : {}),
-          ...(attachments.length ? { attachments } : {}),
+          ...((attachments.length || (brandMode === 'custom' && brandFiles.length)) ? { attachments: [...attachments, ...(brandMode === 'custom' ? brandFiles.map((f) => ({ url: f.url, name: `brand-${f.name}` })) : [])] } : {}),
       order: true,
       design: {
         ...(seed?.draftId ? { fromDraftId: seed.draftId } : {}),
@@ -926,7 +945,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
    * the finished snapshots; a fresh piece starts clean at step 1. */
   const resetPiece = () => {
     setJob(null); setDescribed(''); setRead(null); setIdeas(null); setIdeaError(null)
-    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([]); setBrandMode('file'); setBrandNote(''); setXpFocus(null)
+    setHeadline(''); setDetails(''); setOffer(''); setAction(''); setQa({}); setAngle(job ? (jobSpec(job)?.voice?.angles?.some((a) => a.id === 'own') ? 'own' : null) : null); setWordsMode('draft'); setExactCopy(''); setPromoteItems([]); setBrandMode('file'); setBrandNote(''); setBrandFiles([]); setXpFocus(null)
     setMenuOpen(false); setFeatureOtherOn(false); setFeatureOtherText('')
     setDests([]); setDestOther(''); setDestOtherOn(false); setCustomW(''); setCustomH('')
     setPrintQtys({}); setPrinter(null)
@@ -1447,43 +1466,74 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               const toggle = (id: DestinationId) => setDests((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
               const findD = (id: DestinationId) => DESTINATIONS.find((d) => d.id === id)
               return (
-                <div className={xpFocus === 'where' ? 'xp-rise' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <div className={xpFocus === 'where' ? 'xp-rise' : undefined} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                   {baseIds.map((id) => {
                     const d = findD(id)
-                    return d ? <DestRow key={id} d={d} on={dests.includes(id)} amount={requestMode ? null : destAmount(id)} suggested={sug.includes(id)} onClick={() => toggle(id)} /> : null
+                    return d ? <DestBox key={id} d={d} on={dests.includes(id)} amount={requestMode ? null : destAmount(id)} suggested={sug.includes(id)} onClick={() => toggle(id)} /> : null
                   })}
                   {open && extras.filter((d) => d.kind === 'digital').map((d) => (
-                    <DestRow key={d.id} d={d} on={dests.includes(d.id)} amount={requestMode ? null : destAmount(d.id)} onClick={() => toggle(d.id)} />
+                    <DestBox key={d.id} d={d} on={dests.includes(d.id)} amount={requestMode ? null : destAmount(d.id)} onClick={() => toggle(d.id)} />
                   ))}
                   {open && extras.some((d) => d.kind === 'print') && (
-                    <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '7px 0 0' }}>
-                      {L['dest.printgroup']}
+                    <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 8, margin: '5px 0 0' }}>
+                      <span style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute }}>{L['dest.printgroup']}</span>
+                      <span aria-hidden style={{ flex: 1, height: 1, background: DESK.line }} />
                     </div>
                   )}
                   {open && extras.filter((d) => d.kind === 'print').map((d) => (
-                    <DestRow key={d.id} d={d} on={dests.includes(d.id)} amount={requestMode ? null : destAmount(d.id)} onClick={() => toggle(d.id)} />
+                    <DestBox key={d.id} d={d} on={dests.includes(d.id)} amount={requestMode ? null : destAmount(d.id)} onClick={() => toggle(d.id)} />
                   ))}
                   {open && (
                     <button
                       type="button" aria-pressed={destOtherOn}
                       onClick={() => { if (destOtherOn) { setDestOther(''); setCustomW(''); setCustomH('') } setDestOtherOn(!destOtherOn) }}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', cursor: 'pointer',
-                        padding: '12px 13px', borderRadius: 12,
+                        gridColumn: '1 / -1', minHeight: 56, display: 'flex', alignItems: 'center', gap: 11,
+                        textAlign: 'left', cursor: 'pointer', padding: '10px 13px', borderRadius: 14,
                         border: `1.5px dashed ${destOtherOn ? DESK.mint : DESK.line}`, background: destOtherOn ? DESK.mintWash : '#fff',
                         fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
                       }}
                     >
-                      <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: destOtherOn ? DESK.mintDeep : DESK.ink }}>{L['dest.somewhere']}</span>
-                      <span style={{ fontFamily: DESK.mono, fontSize: 9, fontWeight: 600, color: DESK.mute }}>{L['dest.somewhere.sub']}</span>
+                      <span aria-hidden style={{ flexShrink: 0, width: 30, height: 22, borderRadius: 4, border: `1.5px dashed ${destOtherOn ? DESK.mintDeep : DESK.mute}` }} />
+                      <span style={{ flex: 1 }}>
+                        <span style={{ display: 'block', fontSize: 13.5, fontWeight: 700, color: destOtherOn ? DESK.mintDeep : DESK.ink }}>{L['dest.somewhere']}</span>
+                        <span style={{ display: 'block', fontFamily: DESK.mono, fontSize: 9, fontWeight: 600, color: DESK.mute, marginTop: 2 }}>{destOtherOn ? L['dest.somewhere.pick'] : L['dest.somewhere.sub']}</span>
+                      </span>
+                      <span aria-hidden style={{ flexShrink: 0, width: 21, height: 21, borderRadius: '50%', border: destOtherOn ? 'none' : `1.5px solid ${DESK.line}`, background: destOtherOn ? DESK.mint : '#fff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {destOtherOn && <Check size={12} strokeWidth={3.4} />}
+                      </span>
                     </button>
+                  )}
+                  {open && destOtherOn && (
+                    <div style={{ gridColumn: '1 / -1', borderRadius: 14, border: `1.5px dashed ${DESK.mint}`, background: DESK.mintWash, padding: 11 }}>
+                      <input
+                        value={destOther} onChange={(e) => setDestOther(e.target.value)}
+                        placeholder={L['dest.other.ph']} aria-label={L['dest.other.label']}
+                        style={inputStyle}
+                      />
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                        <input
+                          inputMode="numeric" value={customW} aria-label={L['dest.custom.w']}
+                          onChange={(e) => setCustomW(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+                          placeholder={L['dest.custom.w']} style={{ ...inputStyle, flex: 1 }}
+                        />
+                        <span style={{ color: DESK.mute, fontWeight: 700 }}>×</span>
+                        <input
+                          inputMode="numeric" value={customH} aria-label={L['dest.custom.h']}
+                          onChange={(e) => setCustomH(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+                          placeholder={L['dest.custom.h']} style={{ ...inputStyle, flex: 1 }}
+                        />
+                        <span style={{ fontSize: 12, color: DESK.mute, fontWeight: 600 }}>px</span>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['dest.other.note']}</div>
+                    </div>
                   )}
                   {!open && (
                     <button
                       type="button" onClick={() => setMoreDests(true)}
                       style={{
-                        width: '100%', textAlign: 'center', cursor: 'pointer', padding: '11px 13px', borderRadius: 12,
-                        border: `1.5px dashed ${DESK.line}`, background: 'none', fontFamily: DESK.body,
+                        gridColumn: '1 / -1', minHeight: 46, textAlign: 'center', cursor: 'pointer', padding: '11px 13px',
+                        borderRadius: 14, border: `1.5px dashed ${DESK.line}`, background: 'none', fontFamily: DESK.body,
                         fontSize: 13, fontWeight: 700, color: DESK.ink2, WebkitTapHighlightColor: 'transparent',
                       }}
                     >
@@ -1493,30 +1543,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 </div>
               )
             })()}
-            {(xpFocus == null || xpFocus === 'where') && destOtherOn && (
-              <div style={{ marginTop: 10 }}>
-                <input
-                  value={destOther} onChange={(e) => setDestOther(e.target.value)}
-                  placeholder={L['dest.other.ph']} aria-label={L['dest.other.label']}
-                  style={inputStyle}
-                />
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}>
-                  <input
-                    inputMode="numeric" value={customW} aria-label={L['dest.custom.w']}
-                    onChange={(e) => setCustomW(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
-                    placeholder={L['dest.custom.w']} style={{ ...inputStyle, flex: 1 }}
-                  />
-                  <span style={{ color: DESK.mute, fontWeight: 700 }}>×</span>
-                  <input
-                    inputMode="numeric" value={customH} aria-label={L['dest.custom.h']}
-                    onChange={(e) => setCustomH(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
-                    placeholder={L['dest.custom.h']} style={{ ...inputStyle, flex: 1 }}
-                  />
-                  <span style={{ fontSize: 12, color: DESK.mute, fontWeight: 600 }}>px</span>
-                </div>
-                <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 6, lineHeight: 1.45 }}>{L['dest.other.note']}</div>
-              </div>
-            )}
             {/* print runs are off: a picked print size is DESIGNED (print ready file
                 handed over), but the copy-count and who-prints questions only exist for
                 a print job we cannot run, so they hide and one plain note says why */}
@@ -1559,7 +1585,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                   <button
                     key={f} type="button" aria-pressed={on} onClick={() => setPickedFormat(f)}
                     style={{
-                      position: 'relative', textAlign: 'left', cursor: 'pointer', padding: '11px 12px', borderRadius: 13,
+                      position: 'relative', minHeight: 112, textAlign: 'left', cursor: 'pointer', padding: '13px 12px', borderRadius: 14,
                       border: `1.5px solid ${on ? DESK.mint : DESK.line}`,
                       background: on ? DESK.mintWash : '#fff',
                       boxShadow: '0 2px 8px rgba(22,33,28,0.05)', fontFamily: DESK.body,
@@ -1584,7 +1610,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                       {f === 'single' ? L['fmt.single.sub'] : L['fmt.multi.sub']}
                     </span>
                     {recFormat === f && jobFormat !== 'either' && (
-                      <span style={{ position: 'absolute', top: 8, right: 9, fontFamily: DESK.mono, fontSize: 8.5, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep }}>
+                      <span style={{ position: 'absolute', top: 8, right: 9, fontFamily: DESK.mono, fontSize: 8, letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep, background: DESK.mintWash, border: `1px solid ${DESK.mint}55`, borderRadius: 6, padding: '2px 6px' }}>
                         {L['fmt.rec']}
                       </span>
                     )}
@@ -1602,16 +1628,23 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                   {CAROUSEL_BANDS.map((b) => {
                     const on = bandForSlides(slides).id === b.id
+                    const storyPages = Math.min(10, Math.max(3, qaPairs.length + 2))
+                    const fromStory = qaPairs.length > 0 && bandForSlides(storyPages).id === b.id
                     return (
                       <button
                         key={b.id} type="button" aria-pressed={on} onClick={() => setSlides(b.anchor)}
                         style={{
-                          textAlign: 'center', cursor: 'pointer', padding: '11px 8px', borderRadius: 13,
+                          position: 'relative', textAlign: 'center', cursor: 'pointer', padding: '18px 8px 11px', borderRadius: 14,
                           border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
                           fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
                           transition: 'border-color .15s ease, background .15s ease',
                         }}
                       >
+                        {fromStory && (
+                          <span style={{ position: 'absolute', top: -8, left: '50%', transform: 'translateX(-50%)', whiteSpace: 'nowrap', fontFamily: DESK.mono, fontSize: 8, letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mintDeep, background: '#fff', border: `1px solid ${DESK.mint}`, borderRadius: 7, padding: '2px 7px' }}>
+                            {L['band.fromstory']}
+                          </span>
+                        )}
                         <span aria-hidden style={{ display: 'flex', justifyContent: 'center', marginBottom: 6 }}>
                           {Array.from({ length: b.max }).map((_, i) => (
                             <span key={i} style={{ width: 9, height: 13, borderRadius: 2, border: `1px solid ${on ? DESK.mintDeep : DESK.mute}`, background: '#fff', marginLeft: i === 0 ? 0 : -4, position: 'relative', zIndex: b.max - i }} />
@@ -1639,27 +1672,41 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 </div>
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['written.sub']}</div>
                 </>)}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-                  {(jobSpec(job)?.written ?? []).map((w) => {
-                    const on = written.includes(w)
-                    return (
-                      <button
-                        key={w} type="button" aria-pressed={on}
-                        onClick={() => setWritten((prev) => (prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w]))}
-                        style={{
-                          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                          textAlign: 'left', cursor: 'pointer', padding: '11px 13px', borderRadius: 12,
-                          border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
-                          fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent',
-                          transition: 'border-color .15s ease, background .15s ease',
-                        }}
-                      >
-                        <span style={{ fontSize: 13, fontWeight: 600, color: on ? DESK.mintDeep : DESK.ink }}>{w}</span>
-                        <span style={{ flexShrink: 0, fontFamily: DESK.mono, fontSize: 12.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute }}>{`$${RATE_CARD.writtenVersion}`}</span>
-                      </button>
-                    )
-                  })}
-                </div>
+                {(() => {
+                  const ws = jobSpec(job)?.written ?? []
+                  return (
+                    <div style={{ display: 'grid', gridTemplateColumns: ws.length === 1 ? '1fr' : '1fr 1fr', gap: 8 }}>
+                      {ws.map((w) => {
+                        const on = written.includes(w)
+                        return (
+                          <button
+                            key={w} type="button" aria-pressed={on}
+                            onClick={() => setWritten((prev) => (prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w]))}
+                            style={{
+                              position: 'relative', minHeight: 116, borderRadius: 14, padding: '14px 10px 12px',
+                              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start',
+                              textAlign: 'center', cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+                              border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
+                              fontFamily: DESK.body, transition: 'border-color .15s ease, background .15s ease',
+                            }}
+                          >
+                            {/* a little written page: same story, another home */}
+                            <span aria-hidden style={{ width: 26, height: 32, borderRadius: 4, border: `1.5px solid ${on ? DESK.mintDeep : DESK.mute}`, background: on ? '#fff' : DESK.card, display: 'flex', flexDirection: 'column', gap: 3, padding: '6px 4px' }}>
+                              {[0.9, 0.7, 0.8].map((f, i) => (
+                                <span key={i} style={{ display: 'block', height: 2, borderRadius: 1, width: `${f * 100}%`, background: on ? DESK.mint : DESK.line }} />
+                              ))}
+                            </span>
+                            <span style={{ marginTop: 8, fontSize: 12.5, fontWeight: 700, lineHeight: 1.25, color: on ? DESK.mintDeep : DESK.ink }}>{w}</span>
+                            <span style={{ marginTop: 'auto', paddingTop: 5, fontFamily: DESK.mono, fontSize: 11.5, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute }}>{requestMode ? '' : `+$${RATE_CARD.writtenVersion}`}</span>
+                            <span aria-hidden style={{ position: 'absolute', top: 9, right: 9, width: 21, height: 21, borderRadius: '50%', border: on ? 'none' : `1.5px solid ${DESK.line}`, background: on ? DESK.mint : '#fff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {on && <Check size={12} strokeWidth={3.4} />}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })()}
               </div>
             )}
 
@@ -1671,32 +1718,131 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             </div>
             <div style={{ fontSize: 11.5, color: DESK.mute, marginBottom: 8, lineHeight: 1.45 }}>{L['brand.sub']}</div>
             </>)}
-            <div className={xpFocus === 'brand' ? 'xp-rise' : undefined} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Ticket on={brandMode === 'file'} name={L['brand.file.label']} sub={brandOnFile ? L['brand.file.sub'] : L['brand.file.empty']} onClick={() => setBrandMode('file')} />
-              <Ticket on={brandMode === 'custom'} name={L['brand.custom.label']} sub={L['brand.custom.sub']} onClick={() => setBrandMode('custom')} />
-              <Ticket on={brandMode === 'none'} name={L['brand.none.label']} sub={L['brand.none.sub']} onClick={() => setBrandMode('none')} />
+            <div className={xpFocus === 'brand' ? 'xp-rise' : undefined} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              {([
+                { id: 'file' as const, label: L['brand.mode.file'] },
+                { id: 'custom' as const, label: L['brand.mode.custom'] },
+                { id: 'none' as const, label: L['brand.mode.none'] },
+              ]).map((m) => {
+                const on = brandMode === m.id
+                return (
+                  <button
+                    key={m.id} type="button" aria-pressed={on} onClick={() => setBrandMode(m.id)}
+                    style={{
+                      minHeight: 78, borderRadius: 14, padding: '11px 6px', display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center', gap: 7, cursor: 'pointer', textAlign: 'center',
+                      border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
+                      fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent', transition: 'border-color .15s ease, background .15s ease',
+                    }}
+                  >
+                    <span aria-hidden style={{ width: 32, height: 32, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 2, background: on ? DESK.grad : DESK.card, color: on ? '#fff' : DESK.mute }}>
+                      {m.id === 'file' ? (
+                        brandKit?.logoUrl ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={brandKit.logoUrl} alt="" style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'cover' }} />
+                        ) : brandKit?.colors.length ? (
+                          brandKit.colors.slice(0, 3).map((c) => <span key={c} style={{ width: 8, height: 8, borderRadius: '50%', background: c, boxShadow: '0 0 0 1px rgba(255,255,255,0.7)' }} />)
+                        ) : <Palette size={16} />
+                      ) : m.id === 'custom' ? <Upload size={16} /> : <X size={16} />}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: on ? DESK.mintDeep : DESK.ink }}>{m.label}</span>
+                  </button>
+                )
+              })}
             </div>
-            {brandMode === 'file' && brandOnFile && brandKit && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 13px', borderRadius: 12, background: '#fff', border: `1px solid ${DESK.line}`, marginTop: 8 }}>
-                {brandKit.logoUrl && (
-                  /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={brandKit.logoUrl} alt="Your logo" style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover', border: `1px solid ${DESK.line}` }} />
-                )}
-                {brandKit.colors.map((c) => (
-                  <span key={c} aria-hidden style={{ width: 22, height: 22, borderRadius: '50%', background: c, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.1)' }} />
-                ))}
-                {brandKit.fonts.length > 0 && (
-                  <span style={{ fontSize: 12, fontWeight: 600, color: DESK.ink2 }}>{brandKit.fonts.join(' · ')}</span>
-                )}
-                <span style={{ marginLeft: 'auto', fontFamily: DESK.mono, fontSize: 9, letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute }}>{L['brand.strip']}</span>
+            <div style={{ minHeight: 18, fontSize: 11.5, color: DESK.mute, marginTop: 7, lineHeight: 1.45, textAlign: 'center' }}>
+              {brandMode === 'file' ? (brandOnFile ? L['brand.file.sub'] : L['brand.file.empty']) : brandMode === 'custom' ? L['brand.custom.sub'] : L['brand.none.sub']}
+            </div>
+            {brandMode === 'file' && (
+              <div style={{ borderRadius: 14, border: `1px solid ${DESK.line}`, background: '#fff', padding: 12, marginTop: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label aria-label={L['brand.addlogo']} style={{
+                    flexShrink: 0, width: 74, height: 74, borderRadius: 12, cursor: 'pointer', overflow: 'hidden',
+                    border: brandKit?.logoUrl ? `1px solid ${DESK.line}` : `1.5px dashed ${DESK.mute}`,
+                    background: DESK.card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
+                  }}>
+                    {brandKit?.logoUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={brandKit.logoUrl} alt="Your logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <>
+                        <Plus size={16} color={DESK.mute} />
+                        <span style={{ fontSize: 10, fontWeight: 700, color: DESK.ink2, fontFamily: DESK.body }}>{L['brand.addlogo']}</span>
+                      </>
+                    )}
+                    <input
+                      type="file" accept="image/*" style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        if (!f) return
+                        void uploadBrandFile(f).then((up) => { if (up) void saveBrand({ logoUrl: up.url }) })
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[0, 1, 2].map((i) => {
+                      const cols = brandKit?.colors ?? []
+                      const c = cols[i]
+                      /* fill in order, no holes: the first empty slot is the only add point */
+                      const addable = !c && i === cols.length
+                      if (!c && !addable) return <span key={i} aria-hidden style={{ width: 46, height: 46, borderRadius: '50%', border: `1.5px dashed ${DESK.line}`, opacity: 0.5 }} />
+                      return (
+                        <label key={i} aria-label={c ? L['brand.editcolor'] : L['brand.addcolor']} style={{
+                          position: 'relative', width: 46, height: 46, borderRadius: '50%', cursor: 'pointer',
+                          background: c ?? DESK.card, border: c ? '1px solid rgba(0,0,0,0.1)' : `1.5px dashed ${DESK.mute}`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {!c && <Plus size={15} color={DESK.mute} />}
+                          <input
+                            type="color" value={c ?? '#4abd98'}
+                            onChange={(e) => {
+                              const next = [...cols]; next[i] = e.target.value
+                              void saveBrand({ colors: next.slice(0, 3) })
+                            }}
+                            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'pointer' }}
+                          />
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: DESK.mute, marginTop: 9, lineHeight: 1.4 }}>
+                  {brandBusy ? L['brand.saving'] : L['brand.kit.note']}
+                </div>
               </div>
             )}
             {brandMode === 'custom' && (
-              <input
-                value={brandNote} onChange={(e) => setBrandNote(e.target.value)}
-                placeholder={L['brand.custom.ph']} aria-label={L['brand.custom.label']}
-                style={{ ...inputStyle, marginTop: 8 }}
-              />
+              <div style={{ marginTop: 8 }}>
+                <input
+                  value={brandNote} onChange={(e) => setBrandNote(e.target.value)}
+                  placeholder={L['brand.custom.ph']} aria-label={L['brand.custom.label']}
+                  style={inputStyle}
+                />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 8 }}>
+                  {brandFiles.map((f) => (
+                    <span key={f.url} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, maxWidth: '100%', padding: '7px 10px', borderRadius: 10, border: `1px solid ${DESK.line}`, background: '#fff', fontSize: 12, fontWeight: 600, color: DESK.ink }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{f.name}</span>
+                      <button type="button" aria-label={`Remove ${f.name}`} onClick={() => setBrandFiles((prev) => prev.filter((x) => x.url !== f.url))}
+                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, margin: -4, borderRadius: '50%', border: 'none', background: 'none', color: DESK.mute, cursor: 'pointer' }}>
+                        <X size={13} />
+                      </button>
+                    </span>
+                  ))}
+                  <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 10, border: `1.5px dashed ${DESK.mint}`, background: DESK.mintWash, fontSize: 12, fontWeight: 700, color: DESK.mintDeep, cursor: 'pointer' }}>
+                    <Upload size={13} /> {L['brand.files.add']}
+                    <input
+                      type="file" accept="image/*,.pdf" multiple style={{ display: 'none' }}
+                      onChange={(e) => {
+                        const files = [...(e.target.files ?? [])].slice(0, 6)
+                        for (const f of files) void uploadBrandFile(f).then((up) => { if (up) setBrandFiles((prev) => (prev.some((x) => x.url === up.url) ? prev : [...prev, up])) })
+                        e.target.value = ''
+                      }}
+                    />
+                  </label>
+                </div>
+                <div style={{ fontSize: 11, color: DESK.mute, marginTop: 6, lineHeight: 1.4 }}>{L['brand.files.note']}</div>
+              </div>
             )}
             </>)}
               {xpFocus == null && !(jobAngles.length > 0 && !activeAngle) && (jobQs.length === 0 || wordsMode === 'exact') && (
@@ -2068,6 +2214,13 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 {L['photos.best']}
               </div>
             )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 8px' }}>
+              <span style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute }}>{L['photos.yours']}</span>
+              {picked.length > 0 && (
+                <span style={{ fontFamily: DESK.mono, fontSize: 9.5, fontWeight: 700, color: DESK.mintDeep, background: DESK.mintWash, borderRadius: 7, padding: '2px 7px' }}>{fill(L['photos.pickedn'], { n: String(picked.length) })}</span>
+              )}
+              <span aria-hidden style={{ flex: 1, height: 1, background: DESK.line }} />
+            </div>
             {photosOpen && rankedAssets.length > 12 && (
               <input
                 value={photoQ} onChange={(e) => setPhotoQ(e.target.value)}
@@ -2075,14 +2228,20 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 style={{ ...inputStyle, marginBottom: 8 }}
               />
             )}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, opacity: photoMode != null ? 0.55 : 1, transition: 'opacity .2s ease' }}>
+              <label style={{ aspectRatio: '1', borderRadius: 12, border: `1.5px dashed ${DESK.mint}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: DESK.mintDeep, cursor: 'pointer', background: DESK.mintWash, textAlign: 'center', padding: 4, fontFamily: DESK.body }}>
+                <Upload size={16} />
+                {L['photos.upload']}
+                <input type="file" accept="image/*" multiple onChange={(e) => upload(e.target.files)} style={{ display: 'none' }} />
+              </label>
               {(() => {
                 if (photosOpen) {
                   const q = photoQ.trim().toLowerCase()
                   return q ? rankedAssets.filter((a) => (a.label ?? '').toLowerCase().includes(q)) : rankedAssets
                 }
                 /* collapsed: sharpest 8, but a picked photo never disappears from view */
-                const top = rankedAssets.slice(0, 8)
+                /* 7 + the upload tile + the expander = a clean 3x3 */
+                const top = rankedAssets.slice(0, 7)
                 return [...top, ...rankedAssets.filter((a) => picked.includes(a.id) && !top.some((t) => t.id === a.id))]
               })().map((a, i) => {
                 const ok = !measuredYet(a) || usableOnScreens(a)
@@ -2123,10 +2282,6 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                   {L['photos.less']}
                 </button>
               )}
-              <label style={{ aspectRatio: '1', borderRadius: 12, border: `1.5px dashed ${DESK.mute}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, color: DESK.ink2, cursor: 'pointer', background: DESK.card }}>
-                {L['photos.upload']}
-                <input type="file" accept="image/*" multiple onChange={(e) => upload(e.target.files)} style={{ display: 'none' }} />
-              </label>
             </div>
             {usable.length === 0 && allAssets.length > 0 && (
               <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '10px 13px', fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>
@@ -2136,15 +2291,32 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, margin: '16px 0 8px' }}>
               {L['photos.or']}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Ticket on={photoMode === 'shoot'} name={L['photos.shoot.label']} sub={L['photos.shoot.sub']}
-                onClick={() => { setPhotoMode(photoMode === 'shoot' ? null : 'shoot'); setPicked([]) }} />
-              <Ticket on={photoMode === 'source'} name={requestMode ? L['photos.source.label.request'] : fill(L['photos.source.label'], { price: String(RATE_CARD.photoSourcing) })} sub={L['photos.source.sub']} price={requestMode ? undefined : `$${RATE_CARD.photoSourcing}`}
-                onClick={() => { setPhotoMode(photoMode === 'source' ? null : 'source'); setPicked([]) }} />
-              <Ticket on={photoMode === 'none'} name={L['photos.none.label']} sub={L['photos.none.sub']} price={requestMode ? undefined : '$0'}
-                onClick={() => { setPhotoMode(photoMode === 'none' ? null : 'none'); setPicked([]) }} />
-              <Ticket on={photoMode === 'other'} name={L['photos.other.label']} sub={L['photos.other.sub']}
-                onClick={() => { if (photoMode === 'other') setPhotoOther(''); setPhotoMode(photoMode === 'other' ? null : 'other'); setPicked([]) }} />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, opacity: picked.length > 0 ? 0.55 : 1, transition: 'opacity .2s ease' }}>
+              {([
+                { id: 'shoot' as const, icon: <Camera size={16} />, name: L['photos.shoot.label'], sub: L['photos.shoot.sub'], chip: null as string | null },
+                { id: 'source' as const, icon: <Search size={16} />, name: requestMode ? L['photos.source.label.request'] : L['photos.source.short'], sub: L['photos.source.sub'], chip: requestMode ? null : `+$${RATE_CARD.photoSourcing}` },
+                { id: 'none' as const, icon: <Palette size={16} />, name: L['photos.none.label'], sub: L['photos.none.sub'], chip: null },
+                { id: 'other' as const, icon: <PenLine size={16} />, name: L['photos.other.label'], sub: L['photos.other.sub'], chip: null },
+              ]).map((pm) => {
+                const on = photoMode === pm.id
+                return (
+                  <button
+                    key={pm.id} type="button" aria-pressed={on}
+                    onClick={() => { if (pm.id === 'other' && photoMode === 'other') setPhotoOther(''); setPhotoMode(on ? null : pm.id); setPicked([]) }}
+                    style={{
+                      minHeight: 104, borderRadius: 14, padding: '12px 10px', display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'flex-start', gap: 5, textAlign: 'center', cursor: 'pointer',
+                      border: `1.5px solid ${on ? DESK.mint : DESK.line}`, background: on ? DESK.mintWash : '#fff',
+                      fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent', transition: 'border-color .15s ease, background .15s ease',
+                    }}
+                  >
+                    <span aria-hidden style={{ width: 32, height: 32, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', background: on ? DESK.grad : DESK.card, color: on ? '#fff' : DESK.mute }}>{pm.icon}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.2, color: on ? DESK.mintDeep : DESK.ink }}>{pm.name}</span>
+                    <span style={{ fontSize: 10.5, color: DESK.ink2, lineHeight: 1.35 }}>{pm.sub}</span>
+                    {pm.chip && <span style={{ fontFamily: DESK.mono, fontSize: 11, fontWeight: 700, color: on ? DESK.mintDeep : DESK.mute, marginTop: 'auto' }}>{pm.chip}</span>}
+                  </button>
+                )
+              })}
             </div>
             {photoMode === 'other' && (
               <input
@@ -2171,6 +2343,44 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 {fill(L['when.rushnote'], { date: fmtDay(standardDelivery) })}
               </div>
             )}
+            {(() => {
+              const quick = eventDate && suggestedDue && suggestedDue > today ? suggestedDue : null
+              const eventTooClose = !!eventDate && !quick
+              const quickOn = quick ? due === quick : due == null
+              const dayOn = calOpen || (due != null && due !== quick)
+              const box = (on: boolean, amber: boolean, title: string, sub: string, onClick: () => void) => (
+                <button
+                  type="button" aria-pressed={on} onClick={onClick}
+                  style={{
+                    minHeight: 84, borderRadius: 14, padding: '13px 10px', display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', gap: 4, textAlign: 'center', cursor: 'pointer',
+                    gridColumn: eventTooClose ? '1 / -1' : undefined,
+                    border: `1.5px solid ${on ? (amber ? DESK.amber : DESK.mint) : DESK.line}`,
+                    background: on ? (amber ? DESK.amberWash : DESK.mintWash) : '#fff',
+                    fontFamily: DESK.body, WebkitTapHighlightColor: 'transparent', transition: 'border-color .15s ease, background .15s ease',
+                  }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 700, color: on ? (amber ? DESK.amber : DESK.mintDeep) : DESK.ink }}>{title}</span>
+                  <span style={{ fontSize: 11.5, color: DESK.ink2, lineHeight: 1.35 }}>{sub}</span>
+                </button>
+              )
+              return (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: eventTooClose ? '1fr' : '1fr 1fr', gap: 8, marginBottom: calOpen ? 12 : 0 }}>
+                    {!eventTooClose && (quick
+                      ? box(quickOn, false, L['when.quick.event'], fmtDay(quick), () => { setDue(quick); setRushConfirmed(false); setCalOpen(false) })
+                      : box(quickOn, false, L['when.quick.standard'], fmtDay(standardDelivery), () => { setDue(null); setRushConfirmed(false); setCalOpen(false) }))}
+                    {box(dayOn, !!(due && rushEligible), L['when.quick.day'], due != null && due !== quick ? fmtDay(due) : L['when.quick.day.sub'], () => setCalOpen(true))}
+                  </div>
+                  {eventTooClose && (
+                    <div style={{ fontSize: 12.5, color: DESK.amber, fontWeight: 600, margin: '8px 0 10px', lineHeight: 1.45 }}>
+                      {fill(L['when.eventclose'], { date: fmtDay(eventDate!) })}
+                    </div>
+                  )}
+                </>
+              )
+            })()}
+            {(calOpen || (!!eventDate && !(suggestedDue && suggestedDue > today))) && (
             <WalkCalendar
               goal="more-new"
               value={due ?? undefined}
@@ -2181,6 +2391,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               tagLine={eventDate ? L['when.tag.event'] : L['when.tag']}
               onChange={(day) => { setDue(day); setRushConfirmed(false) }}
             />
+            )}
             {afterEvent && (
               <div style={{ background: DESK.amberWash, border: `1px solid ${DESK.amberLine}`, borderRadius: 14, padding: '12px 14px', marginTop: 12 }}>
                 <div style={{ fontSize: 13, color: DESK.amber, fontWeight: 600, lineHeight: 1.5 }}>
@@ -2188,15 +2399,8 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 </div>
               </div>
             )}
-            {suggestedDue && !due && suggestedDue > today && (
-              <button
-                type="button" onClick={() => { setDue(suggestedDue); setRushConfirmed(false) }}
-                style={{ width: '100%', marginTop: 12, height: 44, borderRadius: 22, border: `1.5px solid ${DESK.mint}`, background: DESK.mintWash, color: DESK.mintDeep, fontFamily: DESK.body, fontSize: 13.5, fontWeight: 600, cursor: 'pointer' }}
-              >
-                {fill(L['when.suggest'], { date: fmtDay(suggestedDue) })}
-              </button>
-            )}
-            {due && rushEligible && !rushConfirmed && (
+
+            {due && due !== standardDelivery && rushEligible && !rushConfirmed && (
               <div style={{ marginTop: 12 }}>
                 <div style={{ fontSize: 13, color: DESK.amber, fontWeight: 600, lineHeight: 1.5, marginBottom: 8 }}>
                   {fill(L['when.rush.q'], { date: fmtDay(due), days: String(Math.round(RATE_CARD.rushWindowHours / 24)) })}
@@ -2204,7 +2408,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <Ticket
                     name={requestMode ? fill(L['when.rush.label.request'], { date: fmtDay(due) }) : fill(L['when.rush.label'], { date: fmtDay(due), delta: String(rushDelta) })}
-                    sub={requestMode ? L['when.rush.sub.request'] : fill(L['when.rush.sub'], { total: String(quote.total + rushDelta + Math.round((quote.total + rushDelta) * 0.1)) })}
+                    sub={requestMode ? L['when.rush.sub.request'] : fill(L['when.rush.sub'], { total: String((quote.total + rushDelta) + Math.round((quote.total + rushDelta) * 0.1)) })}
                     price={requestMode ? undefined : `+$${rushDelta}`}
                     onClick={() => setRushConfirmed(true)}
                   />
@@ -2212,7 +2416,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                     name={L['when.norush.label']}
                     sub={requestMode ? fill(L['when.norush.sub.request'], { date: fmtDay(standardDelivery) }) : fill(L['when.norush.sub'], { date: fmtDay(standardDelivery), total: String(orderTotal) })}
                     price={requestMode ? undefined : '$0'}
-                    onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
+                    onClick={() => { setDue(null); setRushConfirmed(false); setCalOpen(false) }}
                   />
                 </div>
               </div>
@@ -2220,7 +2424,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
             {due && rushEligible && rushConfirmed && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: DESK.amberWash, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', marginTop: 12 }}>
                 <span style={{ fontSize: 12.5, color: DESK.amber, fontWeight: 600 }}>{fill(L['when.rushon'], { date: fmtDay(due) })}</span>
-                <button type="button" onClick={() => { setDue(standardDelivery); setRushConfirmed(false) }}
+                <button type="button" onClick={() => { setDue(null); setRushConfirmed(false); setCalOpen(false) }}
                   style={{ border: 'none', background: 'none', color: DESK.amber, fontFamily: DESK.body, fontSize: 12.5, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer', padding: 0 }}>
                   Undo
                 </button>
