@@ -1213,22 +1213,70 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
  */
 export function HomeFunnelSkeleton({ height = 620, message = 'Importing your numbers' }: { height?: number; message?: string }) {
   const { C } = useMvpTheme()
-  const orbs = [84, 66, 52, 42, 34]
+  /* Apple-clean loading (owner call 2026-08-27): one breathing hero orb with a
+   * slow halo sweep, light cascading down the funnel spine, and a status line
+   * that gently cycles. Pure CSS, honors prefers-reduced-motion, both themes
+   * (green is #4abd98 in each, so the fixed-alpha glows hold). */
+  const spine = [56, 44, 34, 26]
+  const cycle = [message, 'Reading your Google profile', 'Shaping your funnel']
   return (
-    <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', boxSizing: 'border-box' }}>
+    <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', boxSizing: 'border-box', overflow: 'hidden' }}>
       <style>{`
-@keyframes hfSkelPulse{0%,100%{opacity:.9}50%{opacity:.35}}
-.hf-skel-orb{animation:hfSkelPulse 1.6s ease-in-out infinite}
-@media (prefers-reduced-motion: reduce){.hf-skel-orb{animation:none;opacity:.6}}`}</style>
-      <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink, marginBottom: 4 }}>{message}</div>
-      <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 26 }}>Your funnel shows here in a moment</div>
-      <div aria-hidden style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {orbs.map((d, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <div style={{ width: 2, height: 14, background: C.line }} />}
-            <div className="hf-skel-orb" style={{ width: d, height: d, borderRadius: '50%', background: C.greenSoft, border: `1.5px solid ${C.greenLine}`, animationDelay: `${i * 0.14}s` }} />
-          </React.Fragment>
-        ))}
+@keyframes hfSkIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes hfSkBreathe{0%,100%{transform:scale(1);box-shadow:0 0 30px rgba(74,189,152,.30),0 0 80px rgba(74,189,152,.14),inset 0 1px 6px rgba(255,255,255,.45)}50%{transform:scale(1.05);box-shadow:0 0 44px rgba(74,189,152,.44),0 0 110px rgba(74,189,152,.20),inset 0 1px 6px rgba(255,255,255,.45)}}
+@keyframes hfSkRing{to{transform:rotate(360deg)}}
+@keyframes hfSkFlow{0%,100%{opacity:.35}50%{opacity:1}}
+@keyframes hfSkCycle{0%{opacity:0;transform:translateY(6px)}5%,28%{opacity:1;transform:none}33%,100%{opacity:0;transform:translateY(-6px)}}
+.hf-sk-in{animation:hfSkIn .6s cubic-bezier(.32,.72,.35,1) both}
+.hf-sk-hero{animation:hfSkBreathe 3.2s ease-in-out infinite}
+.hf-sk-ring{animation:hfSkRing 2.8s linear infinite}
+.hf-sk-flow{animation:hfSkFlow 2.2s ease-in-out infinite}
+.hf-sk-line{animation:hfSkCycle 9s ease-in-out infinite;position:absolute;left:0;right:0;top:0;text-align:center}
+@media (prefers-reduced-motion: reduce){
+  .hf-sk-in,.hf-sk-hero,.hf-sk-ring,.hf-sk-flow{animation:none}
+  .hf-sk-flow{opacity:.6}
+  .hf-sk-ring{display:none}
+  .hf-sk-line{animation:none;opacity:0}
+  .hf-sk-line:first-child{opacity:1}
+}`}</style>
+      <div className="hf-sk-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* the hero orb: the funnel's first light, breathing, with a halo sweep */}
+        <div aria-hidden style={{ position: 'relative', width: 116, height: 116, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+          <div className="hf-sk-ring" style={{
+            position: 'absolute', inset: 0, borderRadius: '50%',
+            background: 'conic-gradient(from 0deg, transparent 0 72%, rgba(74,189,152,.75) 92%, transparent 100%)',
+            WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px))',
+            mask: 'radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px))',
+          }} />
+          <div className="hf-sk-hero" style={{
+            width: 88, height: 88, borderRadius: '50%',
+            border: `1.5px solid ${C.greenLine}`,
+            background: 'radial-gradient(circle at 32% 26%, rgba(255,255,255,.6), rgba(74,189,152,.20) 58%, rgba(74,189,152,.10))',
+          }} />
+        </div>
+        {/* light cascades down the spine, one orb at a time */}
+        <div aria-hidden style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          {spine.map((d, i) => (
+            <React.Fragment key={i}>
+              <div style={{ width: 1.5, height: 13, background: `linear-gradient(${C.greenLine}, transparent)` }} />
+              <div className="hf-sk-flow" style={{
+                width: d, height: d, borderRadius: '50%',
+                background: `radial-gradient(circle at 34% 28%, rgba(255,255,255,.5), ${C.greenSoft} 62%)`,
+                border: `1.5px solid ${C.greenLine}`,
+                boxShadow: '0 0 18px rgba(74,189,152,.16)',
+                animationDelay: `${0.35 + i * 0.3}s`,
+              }} />
+            </React.Fragment>
+          ))}
+        </div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: C.ink, marginTop: 26 }}>
+          {message}
+        </div>
+        <div style={{ position: 'relative', height: 20, width: 280, marginTop: 6, fontSize: 13, color: C.mute }}>
+          {cycle.map((line, i) => (
+            <span key={i} className="hf-sk-line" style={{ animationDelay: `${i * 3}s` }}>{line}</span>
+          ))}
+        </div>
       </div>
     </div>
   )
