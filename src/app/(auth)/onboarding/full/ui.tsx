@@ -35,14 +35,16 @@ export function Question({ title, subtitle, icon, small }: {
       </div>
     )
   }
+  /* Hero rhythm (app-frame pass): glyph to title 14, title to sub 6, and 24
+   * below the header block before the first control. */
   return (
-    <div className="mb-2 text-center">
+    <div className="text-center" style={{ marginBottom: 24 }}>
       {icon && (
         <div
           aria-hidden
-          className="mx-auto mb-3 flex items-center justify-center"
+          className="mx-auto flex items-center justify-center"
           style={{
-            width: 54, height: 54, borderRadius: 16,
+            width: 54, height: 54, borderRadius: 16, marginBottom: 14,
             background: 'linear-gradient(150deg, rgba(74,189,152,0.16), rgba(74,189,152,0.06))',
             color: '#2e9a78',
           }}
@@ -57,7 +59,7 @@ export function Question({ title, subtitle, icon, small }: {
         {title}
       </h2>
       {subtitle && (
-        <p className="text-[13.5px] leading-relaxed mt-1.5" style={{ color: '#6e6e73' }}>
+        <p className="text-[13.5px] leading-relaxed" style={{ color: '#6e6e73', marginTop: 6 }}>
           {subtitle}
         </p>
       )}
@@ -329,18 +331,4 @@ export function PrimaryPill({
       {children}
     </button>
   )
-}
-
-/* Bring the shared Back/Continue bar into view the moment a step becomes
- * answerable, so an owner never has to hunt for the button. The nav bar in
- * step-renderer.tsx carries data-onboarding-nav. Steps call this right after
- * the answer that completes them; the frame delay lets the render that
- * enabled the button paint first. */
-export function scrollNavIntoView() {
-  if (typeof document === 'undefined') return
-  requestAnimationFrame(() => {
-    document
-      .querySelector('[data-onboarding-nav]')
-      ?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  })
 }

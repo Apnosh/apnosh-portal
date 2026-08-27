@@ -6,7 +6,7 @@ import {
   Star, Rocket, Lightbulb, Trophy, ShoppingBag, Repeat, Truck, Camera, Sparkles,
 } from 'lucide-react'
 import { type OnboardingData, GOAL_CHIPS } from '../data'
-import { Question, scrollNavIntoView } from '../ui'
+import { Question } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -64,8 +64,6 @@ export default function StepGoals({ data, update, nav }: Props) {
     /* Keep the old contract alive: first pick is THE goal, the rest are context. */
     update('primary_goal', next[0] ?? '')
     update('goal_detail', next.slice(1).join(', '))
-    /* All three picked: the step is done, so bring Continue into view. */
-    if (next.length === MAX) scrollNavIntoView()
   }
 
   return (

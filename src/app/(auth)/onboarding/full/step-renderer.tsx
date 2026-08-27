@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { ChevronLeft } from 'lucide-react'
 import { type OnboardingData, type StepId } from './data'
 import { PrimaryPill } from './ui'
 import StepRole from './steps/step-role'
@@ -27,23 +28,228 @@ import StepAssets from './steps/step-assets'
 import StepReview from './steps/step-review'
 import StepDone from './steps/step-done'
 
+/* ============================================================
+ * THE APP FRAME (iOS-setup grammar), shared by the real wizard
+ * and /preview/onboarding so both always look identical.
+ *
+ * Three fixed zones in a 100dvh column, nothing else scrolls:
+ *   1. Top bar: circular back + thin progress + quiet exit lane
+ *   2. Content: the ONLY scroll region. Short screens center
+ *      vertically; long screens start at the top and scroll
+ *      under the bars.
+ *   3. Bottom bar: the pinned Continue pill on frosted glass,
+ *      always visible, never scrolls away.
+ * ============================================================ */
+
+export interface OnboardingFrameProps {
+  /** 1-based current screen number (used for the progress aria label). */
+  step: number
+  totalSteps: number
+  /** 0-100 progress fill. */
+  pct: number
+  onBack: () => void
+  /** When false the back circle keeps its space but turns invisible,
+   * so the progress bar never jumps between screens. */
+  showBack: boolean
+  /** Real wizard only: shows the compact "Finish later" lane top-right. */
+  canSkip: boolean
+  onSkipForNow: () => void
+  /** Real wizard only: quiet Exit lane shown when canSkip is not yet true
+   * (leave setup, draft saved, no client records minted). */
+  onExit?: () => void
+  valid: boolean
+  saving: boolean
+  onNext: () => void
+  children: ReactNode
+  /** Success screen: progress full, back hidden, bottom bar hidden
+   * (the done screen's own centered CTA is the completion action). */
+  isSuccess?: boolean
+  continueLabel?: string
+  /** Hide the bottom bar without success semantics (loading state, and the
+   * review screen whose Complete-setup pill lives next to the terms box). */
+  hideAction?: boolean
+  /** Optional slim strip rendered ABOVE the top bar (preview chrome). */
+  topSlot?: ReactNode
+}
+
+const quietTextButton: React.CSSProperties = {
+  border: 'none',
+  background: 'none',
+  color: '#98989d',
+  fontSize: 13,
+  fontWeight: 500,
+  padding: '6px 2px',
+  cursor: 'pointer',
+  flexShrink: 0,
+  minHeight: 34,
+  fontFamily: "'Inter', system-ui, sans-serif",
+}
+
+export function OnboardingFrame({
+  step,
+  totalSteps,
+  pct,
+  onBack,
+  showBack,
+  canSkip,
+  onSkipForNow,
+  onExit,
+  valid,
+  saving,
+  onNext,
+  children,
+  isSuccess,
+  continueLabel,
+  hideAction,
+  topSlot,
+}: OnboardingFrameProps) {
+  const barHidden = !!isSuccess || !!hideAction
+
+  return (
+    <div
+      className="ob-frame"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 60,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        background: '#f5f5f7',
+        fontFamily: "'Inter', system-ui, sans-serif",
+        color: '#1d1d1f',
+      }}
+    >
+      {/* dvh with a vh fallback for older engines. */}
+      <style>{`.ob-frame{height:100vh;height:100dvh}`}</style>
+
+      {topSlot}
+
+      {/* Zone 1: top bar. */}
+      <div style={{ flexShrink: 0, height: 56, display: 'flex', alignItems: 'center', padding: '0 16px', gap: 12 }}>
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="Back"
+          aria-hidden={!showBack}
+          tabIndex={showBack ? 0 : -1}
+          disabled={saving}
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: '50%',
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0,
+            background: '#fff',
+            border: '1px solid #e6e6ea',
+            cursor: 'pointer',
+            visibility: showBack ? 'visible' : 'hidden',
+          }}
+        >
+          <ChevronLeft size={18} color="#1d1d1f" strokeWidth={2.25} />
+        </button>
+
+        <div
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={pct}
+          aria-label={`Setup progress: screen ${step} of ${totalSteps}`}
+          style={{ flex: 1, height: 3, borderRadius: 2, overflow: 'hidden', background: '#ececef' }}
+        >
+          <div
+            style={{
+              height: '100%',
+              borderRadius: 2,
+              width: `${pct}%`,
+              background: 'linear-gradient(90deg, #4abd98, #2e9a78)',
+              transition: 'width .5s cubic-bezier(.32,.72,.35,1)',
+            }}
+          />
+        </div>
+
+        {canSkip ? (
+          <button
+            type="button"
+            onClick={onSkipForNow}
+            disabled={saving}
+            style={quietTextButton}
+            title="Save your answers and finish setup later from the dashboard."
+          >
+            Finish later
+          </button>
+        ) : onExit ? (
+          <button
+            type="button"
+            onClick={onExit}
+            disabled={saving}
+            style={quietTextButton}
+            title="Leave setup. Your progress is saved."
+          >
+            Exit
+          </button>
+        ) : null}
+      </div>
+
+      {/* Zone 2: the one scroll region. The inner wrapper is min-height 100%
+          and centers its column, so short screens sit in the middle of the
+          viewport and long screens start at the top and scroll naturally. */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <div
+          style={{
+            minHeight: '100%',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            padding: '12px 20px 24px',
+            maxWidth: 520,
+            width: '100%',
+            margin: '0 auto',
+          }}
+        >
+          {children}
+        </div>
+      </div>
+
+      {/* Zone 3: pinned action bar. Only Continue lives here; the top circle
+          owns Back. Frosted so content is felt scrolling underneath. */}
+      {!barHidden && (
+        <div
+          style={{
+            flexShrink: 0,
+            padding: '12px 20px calc(16px + env(safe-area-inset-bottom))',
+            background: 'rgba(245,245,247,0.85)',
+            backdropFilter: 'blur(14px)',
+            WebkitBackdropFilter: 'blur(14px)',
+            borderTop: '1px solid rgba(0,0,0,0.05)',
+          }}
+        >
+          <div style={{ maxWidth: 520, margin: '0 auto' }}>
+            <PrimaryPill onClick={onNext} disabled={!valid || saving} grow>
+              {saving ? 'Saving...' : continueLabel || 'Continue'}
+            </PrimaryPill>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ============================================================ */
+
 interface Props {
   /** The steps that make up the current screen, rendered stacked. */
   screen: StepId[] | 'success' | undefined
   data: OnboardingData
   update: <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => void
-  valid: boolean
   saving: boolean
+  /** 1-based screen number; keys the entrance animation so it replays. */
   step: number
-  totalSteps: number
-  onNext: () => void
-  onBack: () => void
   onGoToStep: (stepId: StepId) => void
   onComplete: () => void
-  /** Save partial onboarding and jump straight into the portal. */
-  onSkipForNow: () => void
-  /** True once we have enough data to provision a clients row. */
-  canSkip: boolean
   onLogoUpload: (file: File) => void
   onPhotosUpload: (files: FileList) => void
   businessId: string | null
@@ -70,58 +276,46 @@ function ScreenKeyframes() {
 }
 
 export default function StepRenderer(props: Props) {
-  const { screen, data, update, valid, saving, step, onNext, onBack, onGoToStep, onComplete, onSkipForNow, canSkip, onLogoUpload, onPhotosUpload } = props
+  const { screen, data, update, saving, step, onGoToStep, onComplete, onLogoUpload, onPhotosUpload } = props
 
   // Only a screen made of exactly ONE step may advance itself after a tap.
   // Grouped screens have more questions below, so they never auto-advance.
   const solo = Array.isArray(screen) && screen.length === 1
 
-  const nav = (
-    <Nav
-      step={step}
-      valid={valid}
-      saving={saving}
-      canSkip={canSkip}
-      onNext={onNext}
-      onBack={onBack}
-      onSkipForNow={onSkipForNow}
-    />
-  )
-
-  // Render one step. The shared nav is attached only to the last step on a
-  // screen; earlier steps pass nav={null} so a phase reads as stacked sections
-  // under a single Back/Continue bar.
-  function renderStep(stepId: StepId, n: ReactNode) {
+  // Render one step. Back and Continue live in the frame's fixed bars now, so
+  // every step gets nav={null}; the prop stays so step internals are untouched.
+  function renderStep(stepId: StepId) {
     switch (stepId) {
-      case 'role': return <StepRole data={data} update={update} nav={n} onAnswered={solo ? props.onAutoAdvance : undefined} />
-      case 'biz_name': return <StepBizName data={data} update={update} nav={n} onJumpToReview={() => onGoToStep('review')} />
-      case 'confirm': return <StepConfirm data={data} update={update} nav={n} />
-      case 'biz_type': return <StepBizType data={data} update={update} nav={n} onAnswered={solo ? props.onAutoAdvance : undefined} />
-      case 'serve': return <StepServe data={data} update={update} nav={n} />
-      case 'menu_details': return <StepMenuDetails data={data} update={update} nav={n} />
-      case 'ordering': return <StepOrdering data={data} update={update} nav={n} />
-      case 'menu': return <StepMenu data={data} update={update} nav={n} />
-      case 'specials': return <StepSpecials data={data} update={update} nav={n} />
-      case 'location': return <StepLocation data={data} update={update} nav={n} businessId={props.businessId} onSaveBeforeRedirect={props.onSaveBeforeRedirect} />
-      case 'location_details': return <StepLocationDetails data={data} update={update} nav={n} />
-      case 'rhythm': return <StepRhythm data={data} update={update} nav={n} />
-      case 'story': return <StepStory data={data} update={update} nav={n} />
-      case 'audience': return <StepAudience data={data} update={update} nav={n} />
-      case 'goals': return <StepGoals data={data} update={update} nav={n} />
-      case 'promote': return <StepPromote data={data} update={update} nav={n} />
-      case 'brand_voice': return <StepBrandVoice data={data} update={update} nav={n} />
-      case 'discovery': return <StepDiscovery data={data} update={update} nav={n} />
-      case 'approval': return <StepApproval data={data} update={update} nav={n} />
-      case 'connect': return <StepConnect data={data} update={update} nav={n} businessId={props.businessId} />
-      case 'assets': return <StepAssets data={data} update={update} nav={n} onLogoUpload={onLogoUpload} onPhotosUpload={onPhotosUpload} />
-      // Review owns its own finish button, so it never renders the shared nav.
+      case 'role': return <StepRole data={data} update={update} nav={null} onAnswered={solo ? props.onAutoAdvance : undefined} />
+      case 'biz_name': return <StepBizName data={data} update={update} nav={null} onJumpToReview={() => onGoToStep('review')} />
+      case 'confirm': return <StepConfirm data={data} update={update} nav={null} />
+      case 'biz_type': return <StepBizType data={data} update={update} nav={null} onAnswered={solo ? props.onAutoAdvance : undefined} />
+      case 'serve': return <StepServe data={data} update={update} nav={null} />
+      case 'menu_details': return <StepMenuDetails data={data} update={update} nav={null} />
+      case 'ordering': return <StepOrdering data={data} update={update} nav={null} />
+      case 'menu': return <StepMenu data={data} update={update} nav={null} />
+      case 'specials': return <StepSpecials data={data} update={update} nav={null} />
+      case 'location': return <StepLocation data={data} update={update} nav={null} businessId={props.businessId} onSaveBeforeRedirect={props.onSaveBeforeRedirect} />
+      case 'location_details': return <StepLocationDetails data={data} update={update} nav={null} />
+      case 'rhythm': return <StepRhythm data={data} update={update} nav={null} />
+      case 'story': return <StepStory data={data} update={update} nav={null} />
+      case 'audience': return <StepAudience data={data} update={update} nav={null} />
+      case 'goals': return <StepGoals data={data} update={update} nav={null} />
+      case 'promote': return <StepPromote data={data} update={update} nav={null} />
+      case 'brand_voice': return <StepBrandVoice data={data} update={update} nav={null} />
+      case 'discovery': return <StepDiscovery data={data} update={update} nav={null} />
+      case 'approval': return <StepApproval data={data} update={update} nav={null} />
+      case 'connect': return <StepConnect data={data} update={update} nav={null} businessId={props.businessId} />
+      case 'assets': return <StepAssets data={data} update={update} nav={null} onLogoUpload={onLogoUpload} onPhotosUpload={onPhotosUpload} />
+      // Review owns its own finish button (next to the terms box it depends
+      // on), so its screen hides the frame's bottom bar instead.
       case 'review': return <StepReview data={data} update={update} onGoToStep={onGoToStep} onComplete={onComplete} saving={saving} />
       default: return null
     }
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-9 pb-2 max-sm:px-5 min-h-0 custom-scroll">
+    <>
       <ScreenKeyframes />
       {screen === 'success' || !screen ? (
         <div key="success" className="ob-screen">
@@ -129,74 +323,16 @@ export default function StepRenderer(props: Props) {
         </div>
       ) : (
         /* Keyed to the screen number so every advance replays the entrance. */
-        <div key={step} className="ob-screen pt-3">
-          {/* a back at the TOP of every screen (owner call 2026-08-27): long
-              screens must never hide the way back below the fold */}
-          {step > 0 && (
-            <button
-              type="button"
-              onClick={onBack}
-              className="inline-flex items-center gap-1 mb-3"
-              style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontFamily: "'Inter', system-ui, sans-serif", fontSize: 14, fontWeight: 600, color: '#6e6e73' }}
+        <div key={step} className="ob-screen">
+          {screen.map((stepId, i) => (
+            <div
+              key={stepId}
+              className={i > 0 ? 'mt-5 pt-5 border-t' : ''}
+              style={i > 0 ? { borderColor: '#f0f0f2' } : undefined}
             >
-              {'\u2039'} Back
-            </button>
-          )}
-          {screen.map((stepId, i) => {
-            const isLast = i === screen.length - 1
-            const withNav = isLast && stepId !== 'review'
-            return (
-              <div
-                key={stepId}
-                className={i > 0 ? 'mt-9 pt-9 border-t' : ''}
-                style={i > 0 ? { borderColor: '#f0f0f2' } : undefined}
-              >
-                {renderStep(stepId, withNav ? nav : null)}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Navigation bar
-function Nav({ step, valid, saving, canSkip, onNext, onBack, onSkipForNow }: {
-  step: number; valid: boolean; saving: boolean; canSkip: boolean
-  onNext: () => void; onBack: () => void; onSkipForNow: () => void
-}) {
-  return (
-    <>
-      <div data-onboarding-nav="" className="flex items-center gap-3 mt-8">
-        {step > 1 && (
-          <button
-            onClick={onBack}
-            className="text-[15px] font-medium px-4 rounded-[12px] transition-colors flex-shrink-0"
-            style={{ color: '#6e6e73', background: 'none', height: 52 }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#1d1d1f' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#6e6e73' }}
-          >
-            Back
-          </button>
-        )}
-        <PrimaryPill onClick={onNext} disabled={!valid || saving} grow>
-          {saving ? 'Saving...' : 'Continue'}
-        </PrimaryPill>
-      </div>
-
-      {canSkip && (
-        <div className="text-center mt-5">
-          <button
-            onClick={onSkipForNow}
-            disabled={saving}
-            className="text-[13px] font-medium transition-colors disabled:opacity-40"
-            style={{ color: '#2e9a78', background: 'none' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#0f6e56' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#2e9a78' }}
-          >
-            Save and finish later →
-          </button>
+              {renderStep(stepId)}
+            </div>
+          ))}
         </div>
       )}
     </>
