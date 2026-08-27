@@ -4,11 +4,33 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Store, Eye, EyeOff } from 'lucide-react'
+import { Store, Eye, EyeOff, Mail } from 'lucide-react'
 
 /* Sign-up in the onboarding design language: light ground, soft depth,
  * filled inputs, one gradient pill. Collects the owner's name and phone up
- * front (both land on profiles via the auth trigger + migration 246). */
+ * front (both land on profiles via the auth trigger + migrations 246/247),
+ * records terms consent with a timestamp, enforces a password floor, and
+ * handles confirm-email mode (no session after signUp -> check your email). */
+
+const TERMS_VERSION = '2026-08-27'
+
+/* Password floor: 8+ with at least one letter and one number. The meter
+ * grades what is typed; the floor is what blocks the submit. */
+function pwStrength(pw: string): { score: 0 | 1 | 2 | 3; label: string; ok: boolean; need: string } {
+  const hasLetter = /[a-zA-Z]/.test(pw)
+  const hasNumber = /\d/.test(pw)
+  const hasSymbol = /[^a-zA-Z0-9]/.test(pw)
+  const ok = pw.length >= 8 && hasLetter && hasNumber
+  const need = pw.length < 8 ? 'Use 8 characters or more'
+    : !hasLetter ? 'Add a letter'
+    : !hasNumber ? 'Add a number'
+    : ''
+  let score: 0 | 1 | 2 | 3 = 0
+  if (ok) score = 1
+  if (ok && pw.length >= 12) score = 2
+  if (ok && pw.length >= 12 && hasSymbol) score = 3
+  return { score, label: !pw ? '' : !ok ? 'Too weak' : score >= 3 ? 'Strong' : score >= 2 ? 'Good' : 'Okay', ok, need }
+}
 
 const FIELD_BG = '#f1f1f4'
 const FOCUS_SHADOW = '0 0 0 3px rgba(74,189,152,0.15), 0 8px 20px rgba(0,0,0,0.05)'
@@ -57,26 +79,43 @@ export default function SignupPage() {
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
+  const [agreed, setAgreed] = useState(false)
+  const [checkEmail, setCheckEmail] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const strength = pwStrength(password)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     if (fullName.trim().length < 2) { setError('Tell us your name'); return }
     if (phone.replace(/\D/g, '').length < 10) { setError('That phone number looks short'); return }
-    if (password.length < 8) { setError('Password needs 8 characters or more'); return }
+    if (!strength.ok) { setError(strength.need || 'Password needs 8 characters or more'); return }
+    if (!agreed) { setError('Please agree to the terms first'); return }
 
     setLoading(true)
     const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
+    const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName.trim(), phone: phone.trim() } },
+      options: {
+        data: {
+          full_name: fullName.trim(),
+          phone: phone.trim(),
+          terms_accepted_at: new Date().toISOString(),
+          terms_version: TERMS_VERSION,
+        },
+      },
     })
     if (error) {
       setError(error.message)
+      setLoading(false)
+      return
+    }
+    if (!signUpData.session) {
+      /* Confirm-email is on in Supabase: no session until they tap the link. */
+      setCheckEmail(true)
       setLoading(false)
       return
     }
@@ -90,6 +129,36 @@ export default function SignupPage() {
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     })
+  }
+
+  if (checkEmail) {
+    return (
+      <div className="w-full" style={{ maxWidth: 420 }}>
+        <div
+          className="rounded-[24px] px-6 py-10 sm:px-8 flex flex-col items-center text-center"
+          style={{
+            background: 'radial-gradient(120% 30% at 50% 0%, rgba(74,189,152,0.08), rgba(255,255,255,0) 60%), #fff',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 24px 60px rgba(0,0,0,0.10)',
+          }}
+        >
+          <div
+            className="flex items-center justify-center mb-4"
+            style={{
+              width: 64, height: 64, borderRadius: 20,
+              background: 'linear-gradient(180deg, #eafaf3, #dff5ec)',
+              boxShadow: '0 10px 30px rgba(74,189,152,0.22), inset 0 1px 0 rgba(255,255,255,0.9)',
+            }}
+          >
+            <Mail size={28} color="#2e9a78" />
+          </div>
+          <h1 className="text-[26px] font-bold" style={{ color: '#1d1d1f', letterSpacing: '-0.04em' }}>Check your email</h1>
+          <p className="text-[14px] mt-2 leading-relaxed" style={{ color: '#6e6e73' }}>
+            We sent a link to <span className="font-semibold" style={{ color: '#1d1d1f' }}>{email}</span>.<br />
+            Tap it to finish creating your account.
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -167,6 +236,34 @@ export default function SignupPage() {
               </button>
             }
           />
+          {password.length > 0 && (
+            <div className="flex items-center gap-2" style={{ marginTop: -8 }}>
+              <div className="flex gap-1 flex-1">
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="h-[4px] flex-1 rounded-full transition-all" style={{
+                    background: strength.score >= n
+                      ? strength.score >= 3 ? '#2e9a78' : strength.score >= 2 ? '#7ccfae' : '#e8a13d'
+                      : '#ececef',
+                  }} />
+                ))}
+              </div>
+              <span className="text-[12px] font-medium" style={{ color: strength.ok ? '#2e9a78' : '#b3261e' }}>
+                {strength.label}
+              </span>
+            </div>
+          )}
+          <label className="flex items-start gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-[2px] accent-[#2e9a78]" style={{ width: 16, height: 16 }}
+            />
+            <span className="text-[13px] leading-relaxed" style={{ color: '#6e6e73' }}>
+              I agree to the{' '}
+              <Link href="/terms" target="_blank" className="font-semibold" style={{ color: '#0f6e56' }}>Terms of Service</Link>
+              {' '}and{' '}
+              <Link href="/privacy" target="_blank" className="font-semibold" style={{ color: '#0f6e56' }}>Privacy Policy</Link>.
+            </span>
+          </label>
           <button
             type="submit" disabled={loading}
             className="w-full text-[15px] font-bold text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-1"
