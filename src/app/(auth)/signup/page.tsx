@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Store, Eye, EyeOff, Mail } from 'lucide-react'
+import { Field, StrengthMeter, pwStrength } from '../auth-ui'
 
 /* Sign-up in the onboarding design language: light ground, soft depth,
  * filled inputs, one gradient pill. Collects the owner's name and phone up
@@ -13,65 +14,6 @@ import { Store, Eye, EyeOff, Mail } from 'lucide-react'
  * handles confirm-email mode (no session after signUp -> check your email). */
 
 const TERMS_VERSION = '2026-08-27'
-
-/* Password floor: 8+ with at least one letter and one number. The meter
- * grades what is typed; the floor is what blocks the submit. */
-function pwStrength(pw: string): { score: 0 | 1 | 2 | 3; label: string; ok: boolean; need: string } {
-  const hasLetter = /[a-zA-Z]/.test(pw)
-  const hasNumber = /\d/.test(pw)
-  const hasSymbol = /[^a-zA-Z0-9]/.test(pw)
-  const ok = pw.length >= 8 && hasLetter && hasNumber
-  const need = pw.length < 8 ? 'Use 8 characters or more'
-    : !hasLetter ? 'Add a letter'
-    : !hasNumber ? 'Add a number'
-    : ''
-  let score: 0 | 1 | 2 | 3 = 0
-  if (ok) score = 1
-  if (ok && pw.length >= 12) score = 2
-  if (ok && pw.length >= 12 && hasSymbol) score = 3
-  return { score, label: !pw ? '' : !ok ? 'Too weak' : score >= 3 ? 'Strong' : score >= 2 ? 'Good' : 'Okay', ok, need }
-}
-
-const FIELD_BG = '#f1f1f4'
-const FOCUS_SHADOW = '0 0 0 3px rgba(74,189,152,0.15), 0 8px 20px rgba(0,0,0,0.05)'
-
-function Field({
-  label, value, onChange, placeholder, type = 'text', autoComplete, hint, trailing,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  placeholder: string
-  type?: string
-  autoComplete?: string
-  hint?: string
-  trailing?: React.ReactNode
-}) {
-  const [focus, setFocus] = useState(false)
-  return (
-    <div>
-      <div className="text-[13px] font-semibold mb-1.5" style={{ color: '#48484a' }}>{label}</div>
-      <div className="relative">
-        <input
-          type={type} value={value} required autoComplete={autoComplete}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-          placeholder={placeholder}
-          className="w-full text-[15px] outline-none transition-all"
-          style={{
-            padding: trailing ? '13px 44px 13px 14px' : '13px 14px',
-            borderRadius: 12, border: '1px solid transparent',
-            background: focus ? '#fff' : FIELD_BG,
-            boxShadow: focus ? FOCUS_SHADOW : 'none',
-            color: '#1d1d1f',
-          }}
-        />
-        {trailing}
-      </div>
-      {hint ? <div className="text-[12px] mt-1" style={{ color: '#8e8e93' }}>{hint}</div> : null}
-    </div>
-  )
-}
 
 export default function SignupPage() {
   const [fullName, setFullName] = useState('')
@@ -236,22 +178,7 @@ export default function SignupPage() {
               </button>
             }
           />
-          {password.length > 0 && (
-            <div className="flex items-center gap-2" style={{ marginTop: -8 }}>
-              <div className="flex gap-1 flex-1">
-                {[1, 2, 3].map((n) => (
-                  <div key={n} className="h-[4px] flex-1 rounded-full transition-all" style={{
-                    background: strength.score >= n
-                      ? strength.score >= 3 ? '#2e9a78' : strength.score >= 2 ? '#7ccfae' : '#e8a13d'
-                      : '#ececef',
-                  }} />
-                ))}
-              </div>
-              <span className="text-[12px] font-medium" style={{ color: strength.ok ? '#2e9a78' : '#b3261e' }}>
-                {strength.label}
-              </span>
-            </div>
-          )}
+          <StrengthMeter strength={strength} password={password} />
           <label className="flex items-start gap-2.5 cursor-pointer select-none">
             <input
               type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
