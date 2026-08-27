@@ -230,56 +230,20 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           )}
         </div>
 
-        {/* Website + optional scan — paste a site and we draft the story,
-            menu, and specials so the owner is not typing it from scratch. */}
-        <div>
-          <FieldLabel>Website <span style={{ color: '#98989d', fontWeight: 400 }}>(optional)</span></FieldLabel>
-          <div className="flex gap-2">
-            <Input
-              value={data.website}
-              onChange={(v) => update('website', v)}
-              placeholder="https://yourbusiness.com"
-              type="url"
-            />
-            <button
-              type="button"
-              onClick={() => runScan(data.website)}
-              disabled={!data.website.trim() || scanning}
-              className="flex-shrink-0 px-4 rounded-[12px] text-[13px] font-semibold text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)', boxShadow: '0 4px 14px rgba(74,189,152,0.30)' }}
-              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = 'linear-gradient(135deg, #3fae8b, #23815f)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #4abd98, #2e9a78)' }}
-            >
-              {scanning ? 'Reading...' : 'Scan site'}
-            </button>
-          </div>
-        </div>
-
-        {/* Scan recap */}
-        {scanNote && (
-          <div
-            className="text-[13px] leading-relaxed rounded-[12px] px-3.5 py-2.5"
-            style={{ background: '#f5f5f7', color: '#48484a', borderLeft: '3px solid #4abd98' }}
-          >
-            {scanNote}
-          </div>
-        )}
-
-        <div>
-          <FieldLabel>Phone number</FieldLabel>
-          <Input
-            value={data.phone}
-            onChange={(v) => update('phone', v)}
-            placeholder="(555) 123-4567"
-            type="tel"
-          />
-        </div>
-
-        {/* the location roster: main spot + every extra, all on this screen */}
-        {(data.full_address.trim() || data.locations.length > 0) && (
+        {/* the location roster lives at the TOP (owner call 2026-08-27): the main
+            spot fills from the Google pick above, or gets typed right here when
+            Google cannot find the place. Extra spots stack below it. */}
+        {(
           <div>
             <FieldLabel>Locations</FieldLabel>
             <div className="flex flex-col gap-2">
+              {!data.full_address.trim() && (
+                <Input
+                  value={data.full_address}
+                  onChange={(v) => update('full_address', v)}
+                  placeholder="Your address, if Google cannot find you"
+                />
+              )}
               {data.full_address.trim() && (
                 <div className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
                   <MapPin size={16} color="#2e9a78" />
@@ -347,6 +311,51 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             + Add another location
           </button>
         ))}
+
+        {/* Website + optional scan — paste a site and we draft the story,
+            menu, and specials so the owner is not typing it from scratch. */}
+        <div>
+          <FieldLabel>Website <span style={{ color: '#98989d', fontWeight: 400 }}>(optional)</span></FieldLabel>
+          <div className="flex gap-2">
+            <Input
+              value={data.website}
+              onChange={(v) => update('website', v)}
+              placeholder="https://yourbusiness.com"
+              type="url"
+            />
+            <button
+              type="button"
+              onClick={() => runScan(data.website)}
+              disabled={!data.website.trim() || scanning}
+              className="flex-shrink-0 px-4 rounded-[12px] text-[13px] font-semibold text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)', boxShadow: '0 4px 14px rgba(74,189,152,0.30)' }}
+              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = 'linear-gradient(135deg, #3fae8b, #23815f)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #4abd98, #2e9a78)' }}
+            >
+              {scanning ? 'Reading...' : 'Scan site'}
+            </button>
+          </div>
+        </div>
+
+        {/* Scan recap */}
+        {scanNote && (
+          <div
+            className="text-[13px] leading-relaxed rounded-[12px] px-3.5 py-2.5"
+            style={{ background: '#f5f5f7', color: '#48484a', borderLeft: '3px solid #4abd98' }}
+          >
+            {scanNote}
+          </div>
+        )}
+
+        <div>
+          <FieldLabel>Phone number</FieldLabel>
+          <Input
+            value={data.phone}
+            onChange={(v) => update('phone', v)}
+            placeholder="(555) 123-4567"
+            type="tel"
+          />
+        </div>
 
         {/* Fast-forward: once the AI has filled fields, let the owner jump
             straight to the review screen instead of tapping every step. */}
