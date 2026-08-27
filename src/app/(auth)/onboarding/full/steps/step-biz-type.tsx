@@ -29,7 +29,7 @@ export default function StepBizType({ data, update, nav, onAnswered }: Props) {
           >
             <div
               className="text-[13px] font-medium"
-              style={{ color: data.biz_type === b ? '#0f6e56' : '#111' }}
+              style={{ color: data.biz_type === b ? '#0f6e56' : '#1d1d1f' }}
             >
               {b}
             </div>

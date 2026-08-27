@@ -2,6 +2,7 @@
 
 import { type ReactNode } from 'react'
 import { type OnboardingData, type StepId } from './data'
+import { PrimaryPill } from './ui'
 import StepRole from './steps/step-role'
 import StepBizName from './steps/step-biz-name'
 import StepConfirm from './steps/step-confirm'
@@ -51,6 +52,21 @@ interface Props {
   /** Called by a single-choice step that sits alone on its screen when its one
    * answer lands, so the wizard can advance itself after a short beat. */
   onAutoAdvance?: () => void
+}
+
+/* The one entrance every screen shares: a gentle rise-and-fade in the sheet
+ * grammar (same curve as .xp-sheet in the order flow). The wrapper below is
+ * keyed to the screen number, so advancing replays it. CSS only, and quiet
+ * for anyone who asked for reduced motion. */
+function ScreenKeyframes() {
+  return (
+    <style>{`
+      @media (prefers-reduced-motion: no-preference) {
+        .ob-screen { animation: obScreenIn .5s cubic-bezier(.32,.72,.35,1) both }
+        @keyframes obScreenIn { from { opacity: 0; transform: translateY(14px) scale(.99) } to { opacity: 1; transform: none } }
+      }
+    `}</style>
+  )
 }
 
 export default function StepRenderer(props: Props) {
@@ -106,22 +122,28 @@ export default function StepRenderer(props: Props) {
 
   return (
     <div className="flex-1 overflow-y-auto px-9 pb-2 max-sm:px-5 min-h-0 custom-scroll">
+      <ScreenKeyframes />
       {screen === 'success' || !screen ? (
-        <StepDone bizName={data.biz_name} />
+        <div key="success" className="ob-screen">
+          <StepDone bizName={data.biz_name} />
+        </div>
       ) : (
-        screen.map((stepId, i) => {
-          const isLast = i === screen.length - 1
-          const withNav = isLast && stepId !== 'review'
-          return (
-            <div
-              key={stepId}
-              className={i > 0 ? 'mt-9 pt-9 border-t' : ''}
-              style={i > 0 ? { borderColor: '#f0f0f0' } : undefined}
-            >
-              {renderStep(stepId, withNav ? nav : null)}
-            </div>
-          )
-        })
+        /* Keyed to the screen number so every advance replays the entrance. */
+        <div key={step} className="ob-screen pt-3">
+          {screen.map((stepId, i) => {
+            const isLast = i === screen.length - 1
+            const withNav = isLast && stepId !== 'review'
+            return (
+              <div
+                key={stepId}
+                className={i > 0 ? 'mt-9 pt-9 border-t' : ''}
+                style={i > 0 ? { borderColor: '#f0f0f2' } : undefined}
+              >
+                {renderStep(stepId, withNav ? nav : null)}
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
@@ -134,45 +156,36 @@ function Nav({ step, valid, saving, canSkip, onNext, onBack, onSkipForNow }: {
 }) {
   return (
     <>
-      <div data-onboarding-nav="" className="flex justify-between items-center mt-7 pt-4 border-t" style={{ borderColor: '#f0f0f0' }}>
-        {step > 1 ? (
+      <div data-onboarding-nav="" className="flex items-center gap-3 mt-8">
+        {step > 1 && (
           <button
             onClick={onBack}
-            className="text-sm font-semibold px-4 py-2.5 rounded-[10px] transition-colors"
-            style={{ color: '#999', background: 'none' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#555' }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = '#999' }}
+            className="text-[15px] font-medium px-4 rounded-[12px] transition-colors flex-shrink-0"
+            style={{ color: '#6e6e73', background: 'none', height: 52 }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#1d1d1f' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#6e6e73' }}
           >
             Back
           </button>
-        ) : (
-          <div />
         )}
-        <button
-          onClick={onNext}
-          disabled={!valid || saving}
-          className="text-sm font-semibold px-7 py-2.5 rounded-[10px] text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{ background: '#4abd98' }}
-          onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#2e9a78' }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = '#4abd98' }}
-        >
+        <PrimaryPill onClick={onNext} disabled={!valid || saving} grow>
           {saving ? 'Saving...' : 'Continue'}
-        </button>
+        </PrimaryPill>
       </div>
 
       {canSkip && (
-        <div className="text-center mt-4">
+        <div className="text-center mt-5">
           <button
             onClick={onSkipForNow}
             disabled={saving}
             className="text-[13px] font-medium transition-colors disabled:opacity-40"
             style={{ color: '#2e9a78', background: 'none' }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = '#1f7d61' }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#0f6e56' }}
             onMouseLeave={(e) => { e.currentTarget.style.color = '#2e9a78' }}
           >
             Short on time? Save and finish later →
           </button>
-          <p className="text-[11px] mt-1" style={{ color: '#aaa' }}>
+          <p className="text-[11px] mt-1" style={{ color: '#98989d' }}>
             Your progress is saved. Pick up from your dashboard anytime.
           </p>
         </div>

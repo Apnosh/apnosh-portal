@@ -341,9 +341,9 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
           return (
             <div
               key={p.name}
-              className="flex items-center gap-3.5 px-4 py-3 rounded-[10px]"
+              className="flex items-center gap-3.5 px-4 py-3 rounded-[14px]"
               style={{
-                border: isConn ? '1.5px solid #9fe1cb' : '1.5px solid #e0e0e0',
+                border: isConn ? '1.5px solid #9fe1cb' : '1.5px solid #e6e6ea',
                 background: isConn ? '#f0faf6' : 'white',
               }}
             >
@@ -354,8 +354,8 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
                 <PlatformLogo name={p.name} fallback={p.emoji} />
               </div>
               <div className="flex-1">
-                <div className="text-sm font-semibold" style={{ color: '#111' }}>{p.name}</div>
-                <div className="text-xs" style={{ color: '#999' }}>{p.desc}</div>
+                <div className="text-sm font-semibold" style={{ color: '#1d1d1f' }}>{p.name}</div>
+                <div className="text-xs" style={{ color: '#6e6e73' }}>{p.desc}</div>
               </div>
               {isConn ? (
                 <span
@@ -381,7 +381,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
               ) : (
                 <span
                   className="text-xs font-medium rounded-[20px] px-3 py-1 whitespace-nowrap"
-                  style={{ color: '#999', border: '1px solid #e0e0e0' }}
+                  style={{ color: '#6e6e73', border: '1px solid #e6e6ea' }}
                 >
                   Coming soon
                 </span>
@@ -392,14 +392,14 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
         <Hint>You can always connect more accounts from your dashboard later.</Hint>
       </div>
       {gbpNote && (
-        <div className="mt-4 rounded-[12px] px-3.5 py-3 text-[13px] leading-relaxed" style={{ background: '#f2faf7', border: '1px solid #d8ece4', color: '#2f8f70' }}>
+        <div className="mt-4 rounded-[12px] px-3.5 py-3 text-[13px] leading-relaxed" style={{ background: '#f0faf6', border: '1px solid #d8ece4', color: '#2e9a78' }}>
           {gbpNote}
         </div>
       )}
 
       {/* ONE LINE, NOT A LECTURE. Shown always, so it reads as a note about how phones behave
           rather than as an error report about something the owner just did wrong. */}
-      <div className="mt-4 text-[12px] leading-relaxed" style={{ color: '#9aa1ab' }}>
+      <div className="mt-4 text-[12px] leading-relaxed" style={{ color: '#98989d' }}>
         Some phones open the Instagram or TikTok app instead of signing you in. If that happens,
         skip it. You can connect from your dashboard on a computer in a few seconds.
         {connectUrl && (
@@ -408,7 +408,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
             <button
               type="button"
               onClick={copyConnectLink}
-              style={{ border: 'none', background: 'none', padding: 0, color: '#2f8f70', fontWeight: 600, fontSize: 12 }}
+              style={{ border: 'none', background: 'none', padding: 0, color: '#2e9a78', fontWeight: 600, fontSize: 12 }}
             >
               {copied ? 'Link copied' : 'Or copy the link'}
             </button>

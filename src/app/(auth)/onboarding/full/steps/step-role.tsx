@@ -34,14 +34,25 @@ export default function StepRole({ data, update, nav, onAnswered }: Props) {
             disabled={!!r.disabled}
           >
             {!!r.disabled && <Badge>Soon</Badge>}
-            <div className="text-xl mb-1.5">{r.emoji}</div>
+            {/* Soft tinted glyph, echoing the order sheet's head. */}
+            <div
+              aria-hidden
+              className="flex items-center justify-center text-lg mb-2"
+              style={{
+                width: 40, height: 40, borderRadius: 12,
+                background: 'linear-gradient(150deg, rgba(74,189,152,0.14), rgba(74,189,152,0.05))',
+                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
+              }}
+            >
+              {r.emoji}
+            </div>
             <div
               className="text-sm font-semibold mb-0.5"
-              style={{ color: data.role === r.id ? '#0f6e56' : '#111' }}
+              style={{ color: data.role === r.id ? '#0f6e56' : '#1d1d1f' }}
             >
               {r.title}
             </div>
-            <div className="text-xs leading-snug" style={{ color: '#999' }}>
+            <div className="text-xs leading-snug" style={{ color: '#6e6e73' }}>
               {r.desc}
             </div>
           </OptionCard>

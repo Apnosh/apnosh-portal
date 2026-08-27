@@ -14,17 +14,17 @@ const MAX = 12
 const EMPTY: SpecialDraft = { title: '', time_window: '', details: '' }
 
 const fieldStyle: React.CSSProperties = {
-  border: '1.5px solid #e0e0e0',
-  color: '#111',
+  border: '1.5px solid #e6e6ea',
+  color: '#1d1d1f',
   fontFamily: 'DM Sans, sans-serif',
 }
 
 function focusOn(e: React.FocusEvent<HTMLInputElement>) {
   e.currentTarget.style.borderColor = '#4abd98'
-  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.1)'
+  e.currentTarget.style.boxShadow = '0 0 0 2px rgba(74,189,152,0.18)'
 }
 function focusOff(e: React.FocusEvent<HTMLInputElement>) {
-  e.currentTarget.style.borderColor = '#e0e0e0'
+  e.currentTarget.style.borderColor = '#e6e6ea'
   e.currentTarget.style.boxShadow = 'none'
 }
 
@@ -69,7 +69,7 @@ export default function StepSpecials({ data, update, nav }: Props) {
                   value={row.title}
                   onChange={(e) => setField(idx, 'title', e.target.value)}
                   placeholder={idx === 0 ? 'e.g. Happy Hour' : 'Add a special'}
-                  className="flex-1 text-[15px] font-medium rounded-[10px] px-3.5 py-2.5 outline-none transition-all"
+                  className="flex-1 text-[15px] font-medium rounded-[12px] px-3.5 py-2.5 outline-none transition-all"
                   style={fieldStyle}
                   onFocus={focusOn}
                   onBlur={focusOff}
@@ -77,8 +77,8 @@ export default function StepSpecials({ data, update, nav }: Props) {
                 <input
                   value={row.time_window}
                   onChange={(e) => setField(idx, 'time_window', e.target.value)}
-                  placeholder="3–5pm daily"
-                  className="w-32 text-[14px] rounded-[10px] px-3 py-2.5 outline-none transition-all"
+                  placeholder="3 to 5pm daily"
+                  className="w-32 text-[14px] rounded-[12px] px-3 py-2.5 outline-none transition-all"
                   style={fieldStyle}
                   onFocus={focusOn}
                   onBlur={focusOff}
@@ -87,7 +87,7 @@ export default function StepSpecials({ data, update, nav }: Props) {
                   type="button"
                   onClick={() => real && removeRow(idx)}
                   className="w-6 text-lg leading-none transition-opacity"
-                  style={{ color: '#ccc', opacity: real ? 1 : 0, cursor: real ? 'pointer' : 'default' }}
+                  style={{ color: '#c7c7cc', opacity: real ? 1 : 0, cursor: real ? 'pointer' : 'default' }}
                   aria-label="Remove special"
                   tabIndex={real ? 0 : -1}
                 >
@@ -99,7 +99,7 @@ export default function StepSpecials({ data, update, nav }: Props) {
                   value={row.details}
                   onChange={(e) => setField(idx, 'details', e.target.value)}
                   placeholder="What's included or the hook (e.g. $2 off all tacos + $5 margaritas)"
-                  className="w-full text-[14px] rounded-[10px] px-3.5 py-2.5 outline-none transition-all"
+                  className="w-full text-[14px] rounded-[12px] px-3.5 py-2.5 outline-none transition-all"
                   style={fieldStyle}
                   onFocus={focusOn}
                   onBlur={focusOff}

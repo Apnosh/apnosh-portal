@@ -14,17 +14,17 @@ const MAX = 40
 const EMPTY: MenuDraftItem = { name: '', price: '', category: '' }
 
 const fieldStyle: React.CSSProperties = {
-  border: '1.5px solid #e0e0e0',
-  color: '#111',
+  border: '1.5px solid #e6e6ea',
+  color: '#1d1d1f',
   fontFamily: 'DM Sans, sans-serif',
 }
 
 function focusOn(e: React.FocusEvent<HTMLInputElement>) {
   e.currentTarget.style.borderColor = '#4abd98'
-  e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.1)'
+  e.currentTarget.style.boxShadow = '0 0 0 2px rgba(74,189,152,0.18)'
 }
 function focusOff(e: React.FocusEvent<HTMLInputElement>) {
-  e.currentTarget.style.borderColor = '#e0e0e0'
+  e.currentTarget.style.borderColor = '#e6e6ea'
   e.currentTarget.style.boxShadow = 'none'
 }
 
@@ -58,9 +58,9 @@ export default function StepMenu({ data, update, nav }: Props) {
       />
       <div className="flex flex-col gap-2 mt-4 mb-1">
         <div className="flex gap-2 px-1">
-          <span className="flex-1 text-[11px] font-medium" style={{ color: '#aaa' }}>Item</span>
-          <span className="w-20 text-[11px] font-medium" style={{ color: '#aaa' }}>Price</span>
-          <span className="w-28 text-[11px] font-medium" style={{ color: '#aaa' }}>Section</span>
+          <span className="flex-1 text-[11px] font-medium" style={{ color: '#98989d' }}>Item</span>
+          <span className="w-20 text-[11px] font-medium" style={{ color: '#98989d' }}>Price</span>
+          <span className="w-28 text-[11px] font-medium" style={{ color: '#98989d' }}>Section</span>
           <span className="w-6" />
         </div>
         {rows.slice(0, MAX).map((row, idx) => {
@@ -71,7 +71,7 @@ export default function StepMenu({ data, update, nav }: Props) {
                 value={row.name}
                 onChange={(e) => setField(idx, 'name', e.target.value)}
                 placeholder={idx === 0 ? 'e.g. Birria tacos' : 'Add item'}
-                className="flex-1 text-[15px] rounded-[10px] px-3.5 py-2.5 outline-none transition-all"
+                className="flex-1 text-[15px] rounded-[12px] px-3.5 py-2.5 outline-none transition-all"
                 style={fieldStyle}
                 onFocus={focusOn}
                 onBlur={focusOff}
@@ -80,7 +80,7 @@ export default function StepMenu({ data, update, nav }: Props) {
                 value={row.price}
                 onChange={(e) => setField(idx, 'price', e.target.value)}
                 placeholder="$12"
-                className="w-20 text-[15px] rounded-[10px] px-3 py-2.5 outline-none transition-all"
+                className="w-20 text-[15px] rounded-[12px] px-3 py-2.5 outline-none transition-all"
                 style={fieldStyle}
                 onFocus={focusOn}
                 onBlur={focusOff}
@@ -89,7 +89,7 @@ export default function StepMenu({ data, update, nav }: Props) {
                 value={row.category}
                 onChange={(e) => setField(idx, 'category', e.target.value)}
                 placeholder="Tacos"
-                className="w-28 text-[15px] rounded-[10px] px-3 py-2.5 outline-none transition-all"
+                className="w-28 text-[15px] rounded-[12px] px-3 py-2.5 outline-none transition-all"
                 style={fieldStyle}
                 onFocus={focusOn}
                 onBlur={focusOff}
@@ -98,7 +98,7 @@ export default function StepMenu({ data, update, nav }: Props) {
                 type="button"
                 onClick={() => isReal && removeRow(idx)}
                 className="w-6 text-lg leading-none transition-opacity"
-                style={{ color: '#ccc', opacity: isReal ? 1 : 0, cursor: isReal ? 'pointer' : 'default' }}
+                style={{ color: '#c7c7cc', opacity: isReal ? 1 : 0, cursor: isReal ? 'pointer' : 'default' }}
                 aria-label="Remove item"
                 tabIndex={isReal ? 0 : -1}
               >
@@ -108,7 +108,7 @@ export default function StepMenu({ data, update, nav }: Props) {
           )
         })}
       </div>
-      <Hint>Even 5–10 items helps. The AI names real dishes instead of guessing &quot;your food.&quot;</Hint>
+      <Hint>Even 5 to 10 items helps. The AI names real dishes instead of guessing &quot;your food.&quot;</Hint>
       {nav}
     </>
   )

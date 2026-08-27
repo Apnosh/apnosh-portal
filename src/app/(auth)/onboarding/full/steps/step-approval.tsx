@@ -30,16 +30,17 @@ export default function StepApproval({ data, update, nav }: Props) {
               key={a.id}
               type="button"
               onClick={() => update('approval_type', a.id)}
-              className="w-full text-left rounded-[10px] px-4 py-4 transition-all select-none"
+              className="w-full text-left rounded-[14px] px-4 py-4 select-none"
               style={{
-                border: sel ? '2px solid #4abd98' : '1.5px solid #e0e0e0',
+                border: sel ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
                 background: sel ? '#f0faf6' : 'white',
+                transition: 'all .15s ease',
               }}
             >
-              <div className="text-sm font-semibold mb-0.5" style={{ color: sel ? '#0f6e56' : '#111' }}>
+              <div className="text-sm font-semibold mb-0.5" style={{ color: sel ? '#0f6e56' : '#1d1d1f' }}>
                 {a.title}
               </div>
-              <div className="text-xs leading-snug" style={{ color: '#999' }}>
+              <div className="text-xs leading-snug" style={{ color: '#6e6e73' }}>
                 {a.desc}
               </div>
             </button>
@@ -53,7 +54,7 @@ export default function StepApproval({ data, update, nav }: Props) {
       </div>
 
       <div className="flex items-center gap-3 mt-3 mb-2">
-        <span className="text-sm" style={{ color: '#111' }}>Can we tag @apnosh?</span>
+        <span className="text-sm" style={{ color: '#1d1d1f' }}>Can we tag @apnosh?</span>
         <Chip label="Yes" selected={data.can_tag === 'yes'} onClick={() => update('can_tag', 'yes')} />
         <Chip label="No" selected={data.can_tag === 'no'} onClick={() => update('can_tag', 'no')} />
       </div>

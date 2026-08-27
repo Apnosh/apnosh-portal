@@ -48,7 +48,7 @@ export default function StepGoals({ data, update, nav }: Props) {
 
   return (
     <>
-      <style>{'@keyframes goalCounterPulse { 0% { transform: scale(1) } 40% { transform: scale(1.14) } 100% { transform: scale(1) } }'}</style>
+      <style>{'@media (prefers-reduced-motion: no-preference) { @keyframes goalCounterPulse { 0% { transform: scale(1) } 40% { transform: scale(1.14) } 100% { transform: scale(1) } } }'}</style>
       <Question
         title="What matters most right now?"
         subtitle="Pick up to 3. We build your plan around them."
@@ -68,7 +68,7 @@ export default function StepGoals({ data, update, nav }: Props) {
           {picked.length} of {MAX} picked
         </span>
         {full && (
-          <span className="text-[12px]" style={{ color: '#9aa1ab' }}>Tap a card to un-pick it.</span>
+          <span className="text-[12px]" style={{ color: '#98989d' }}>Tap a card to un-pick it.</span>
         )}
       </div>
 
@@ -81,12 +81,13 @@ export default function StepGoals({ data, update, nav }: Props) {
               key={g}
               type="button"
               onClick={() => toggle(g)}
-              className="relative text-left rounded-[12px] px-3.5 py-3 transition-all select-none"
+              className="relative text-left rounded-[14px] px-3.5 py-3 select-none"
               style={{
-                border: isSel ? '2px solid #4abd98' : '1.5px solid #e0e0e0',
+                border: isSel ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
                 background: isSel ? '#f0faf6' : '#fff',
                 opacity: dimmed ? 0.5 : 1,
                 minHeight: 44,
+                transition: 'all .15s ease',
               }}
             >
               <span
@@ -110,7 +111,7 @@ export default function StepGoals({ data, update, nav }: Props) {
         })}
       </div>
 
-      <div className="mt-3 text-[12px]" style={{ color: '#9aa1ab' }}>
+      <div className="mt-3 text-[12px]" style={{ color: '#98989d' }}>
         {picked.length === 0
           ? 'Not sure? Skip it. We will suggest a starting point.'
           : full

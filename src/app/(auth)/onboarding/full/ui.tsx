@@ -2,20 +2,25 @@
 
 import { type ReactNode } from 'react'
 
+/* Shared visual grammar for the setup wizard (Apple-clean pass, 2026-08):
+ * ink #1d1d1f, mute #6e6e73, hairline #e6e6ea, mint #4abd98 / deep #0f6e56,
+ * wash #f0faf6. Boxes are 14px radius with constant 1.5px borders (no size
+ * jump on select), inputs are 52px tall with a soft mint focus ring, and the
+ * title is a display-weight line with tight tracking. */
+
 // Question header
 export function Question({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div className="mb-1">
+    <div className="mb-2">
       <h2
-        className="text-2xl font-semibold leading-tight mb-1.5 max-sm:text-[21px]"
-        style={{ fontFamily: 'Playfair Display, serif', color: '#111', letterSpacing: '-0.3px' }}
+        className="text-[23px] font-bold mb-1.5"
+        style={{ fontFamily: 'Playfair Display, serif', color: '#1d1d1f', letterSpacing: '-0.02em', lineHeight: 1.15 }}
       >
         {title}
       </h2>
-      <p className="text-sm font-light leading-relaxed" style={{ color: '#999' }}>
+      <p className="text-[13.5px] leading-relaxed" style={{ color: '#6e6e73' }}>
         {subtitle}
       </p>
-      <div className="h-px mt-4" style={{ background: '#f0f0f0' }} />
     </div>
   )
 }
@@ -34,13 +39,15 @@ export function Chip({
     <button
       type="button"
       onClick={onClick}
-      className="px-4 py-2 rounded-[20px] text-[13px] transition-all select-none"
+      className="px-4 rounded-[20px] text-[13px] select-none"
       style={{
-        border: selected ? '2px solid #4abd98' : '1.5px solid #e0e0e0',
+        border: selected ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
         background: selected ? '#f0faf6' : 'white',
-        color: selected ? '#0f6e56' : '#555',
-        fontWeight: selected ? 500 : 400,
+        color: selected ? '#0f6e56' : '#48484a',
+        fontWeight: selected ? 600 : 400,
         fontFamily: 'DM Sans, sans-serif',
+        minHeight: 40,
+        transition: 'all .15s ease',
       }}
     >
       {label}
@@ -118,13 +125,15 @@ export function OptionCard({
     <button
       type="button"
       onClick={disabled ? undefined : onClick}
-      className={`text-left rounded-[10px] p-3.5 transition-all select-none relative
+      className={`text-left rounded-[14px] p-3.5 select-none relative
         ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
         ${!disabled && !selected ? 'hover:translate-y-[-1px] hover:shadow-sm' : ''}
       `}
       style={{
-        border: selected ? '2px solid #4abd98' : '1.5px solid #e0e0e0',
+        border: selected ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
         background: selected ? '#f0faf6' : 'white',
+        minHeight: 44,
+        transition: 'all .15s ease',
       }}
     >
       {children}
@@ -153,18 +162,20 @@ export function Input({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       autoFocus={autoFocus}
-      className="w-full text-[15px] rounded-[10px] px-3.5 py-3 outline-none transition-all"
+      className="w-full text-[15px] rounded-[12px] px-4 outline-none transition-all"
       style={{
-        border: '1.5px solid #e0e0e0',
-        color: '#111',
+        border: '1.5px solid #e6e6ea',
+        color: '#1d1d1f',
+        background: '#fff',
         fontFamily: 'DM Sans, sans-serif',
+        height: 52,
       }}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = '#4abd98'
-        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.1)'
+        e.currentTarget.style.boxShadow = '0 0 0 2px rgba(74,189,152,0.18)'
       }}
       onBlur={(e) => {
-        e.currentTarget.style.borderColor = '#e0e0e0'
+        e.currentTarget.style.borderColor = '#e6e6ea'
         e.currentTarget.style.boxShadow = 'none'
       }}
     />
@@ -189,19 +200,20 @@ export function TextArea({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="w-full text-[15px] rounded-[10px] px-3.5 py-3 outline-none resize-none transition-all leading-relaxed"
+      className="w-full text-[15px] rounded-[12px] px-4 py-3.5 outline-none resize-none transition-all leading-relaxed"
       style={{
-        border: '1.5px solid #e0e0e0',
-        color: '#111',
+        border: '1.5px solid #e6e6ea',
+        color: '#1d1d1f',
+        background: '#fff',
         fontFamily: 'DM Sans, sans-serif',
-        minHeight: '90px',
+        minHeight: 96,
       }}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = '#4abd98'
-        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.1)'
+        e.currentTarget.style.boxShadow = '0 0 0 2px rgba(74,189,152,0.18)'
       }}
       onBlur={(e) => {
-        e.currentTarget.style.borderColor = '#e0e0e0'
+        e.currentTarget.style.borderColor = '#e6e6ea'
         e.currentTarget.style.boxShadow = 'none'
       }}
     />
@@ -211,7 +223,7 @@ export function TextArea({
 // Field label
 export function FieldLabel({ children }: { children: ReactNode }) {
   return (
-    <label className="block text-[13px] font-medium mb-1.5" style={{ color: '#555' }}>
+    <label className="block text-[13px] font-medium mb-2" style={{ color: '#6e6e73' }}>
       {children}
     </label>
   )
@@ -220,7 +232,7 @@ export function FieldLabel({ children }: { children: ReactNode }) {
 // Hint text
 export function Hint({ children }: { children: ReactNode }) {
   return (
-    <p className="text-xs leading-relaxed mt-1.5" style={{ color: '#999' }}>
+    <p className="text-xs leading-relaxed mt-2" style={{ color: '#98989d' }}>
       {children}
     </p>
   )
@@ -229,12 +241,52 @@ export function Hint({ children }: { children: ReactNode }) {
 // Badge
 export function Badge({ children }: { children: ReactNode }) {
   return (
-    <span className="absolute top-2 right-2 text-[10px] font-semibold rounded-[20px] px-2 py-0.5" style={{ background: '#eee', color: '#999' }}>
+    <span className="absolute top-2 right-2 text-[10px] font-semibold rounded-[20px] px-2 py-0.5" style={{ background: '#f5f5f7', color: '#98989d' }}>
       {children}
     </span>
   )
 }
 
+/* The 52px mint-gradient pill used for every primary action in setup
+ * (Continue, Complete setup, Go to my dashboard). Disabled goes flat gray
+ * with no shadow so a not-ready button reads as quiet, not broken. */
+export function PrimaryPill({
+  onClick,
+  disabled,
+  children,
+  grow,
+}: {
+  onClick: () => void
+  disabled?: boolean
+  children: ReactNode
+  grow?: boolean
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="text-[16px] font-semibold text-white select-none"
+      style={{
+        height: 52,
+        borderRadius: 26,
+        padding: '0 30px',
+        width: grow ? '100%' : undefined,
+        flex: grow ? 1 : undefined,
+        border: 'none',
+        fontFamily: 'DM Sans, sans-serif',
+        letterSpacing: '-0.01em',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        background: disabled ? '#e5e5ea' : 'linear-gradient(135deg, #4abd98, #2e9a78)',
+        color: disabled ? '#aeaeb2' : '#fff',
+        boxShadow: disabled ? 'none' : '0 8px 22px rgba(74,189,152,0.32)',
+        transition: 'all .15s ease',
+      }}
+    >
+      {children}
+    </button>
+  )
+}
 
 /* Bring the shared Back/Continue bar into view the moment a step becomes
  * answerable, so an owner never has to hunt for the button. The nav bar in

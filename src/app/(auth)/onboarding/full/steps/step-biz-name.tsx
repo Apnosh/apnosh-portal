@@ -78,7 +78,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     if (p.website) await runScan(p.website)
 
     setPickedNote(got.length
-      ? `Got your ${summarize(got)} from Google. Everything below is already filled in — change anything that looks off.`
+      ? `Got your ${summarize(got)} from Google. Everything below is already filled in. Change anything that looks off.`
       : 'Found your listing. We will fill the rest in as we go.')
     setMatches(null)
   }
@@ -161,31 +161,31 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                 onClick={findOnGoogle}
                 disabled={finding || scanning}
                 className="w-full rounded-[12px] border text-[13px] font-semibold disabled:opacity-50"
-                style={{ borderColor: '#d8ece4', background: '#f2faf7', color: '#2f8f70', minHeight: 46 }}
+                style={{ borderColor: '#d8ece4', background: '#f0faf6', color: '#2e9a78', minHeight: 50 }}
               >
                 {finding || scanning ? 'Looking you up…' : 'Find us on Google and fill this in'}
               </button>
 
               {matches && matches.length > 0 && (
                 <div className="mt-2 space-y-1.5">
-                  <div className="text-[12px]" style={{ color: '#9aa1ab' }}>Which one is you?</div>
+                  <div className="text-[12px]" style={{ color: '#98989d' }}>Which one is you?</div>
                   {matches.map((m) => (
                     <button
                       key={m.placeId}
                       type="button"
                       onClick={() => usePlace(m)}
                       className="w-full text-left rounded-[12px] border bg-white px-3 py-2.5"
-                      style={{ borderColor: '#e8e9ec', minHeight: 52 }}
+                      style={{ borderColor: '#e6e6ea', minHeight: 52 }}
                     >
-                      <div className="text-[14px] font-semibold" style={{ color: '#16181d' }}>{m.name}</div>
-                      <div className="text-[12px]" style={{ color: '#9aa1ab' }}>{m.address}</div>
+                      <div className="text-[14px] font-semibold" style={{ color: '#1d1d1f' }}>{m.name}</div>
+                      <div className="text-[12px]" style={{ color: '#98989d' }}>{m.address}</div>
                     </button>
                   ))}
                 </div>
               )}
 
               {pickedNote && (
-                <div className="mt-2 text-[12px] leading-relaxed" style={{ color: '#6b7280' }}>{pickedNote}</div>
+                <div className="mt-2 text-[12px] leading-relaxed" style={{ color: '#6e6e73' }}>{pickedNote}</div>
               )}
             </div>
           )}
@@ -194,7 +194,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
         {/* Website + optional scan — paste a site and we draft the story,
             menu, and specials so the owner is not typing it from scratch. */}
         <div>
-          <FieldLabel>Website <span style={{ color: '#aaa', fontWeight: 400 }}>(optional)</span></FieldLabel>
+          <FieldLabel>Website <span style={{ color: '#98989d', fontWeight: 400 }}>(optional)</span></FieldLabel>
           <div className="flex gap-2">
             <Input
               value={data.website}
@@ -206,10 +206,10 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
               type="button"
               onClick={() => runScan(data.website)}
               disabled={!data.website.trim() || scanning}
-              className="flex-shrink-0 px-4 rounded-[10px] text-[13px] font-semibold text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ background: '#4abd98' }}
-              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#2e9a78' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = '#4abd98' }}
+              className="flex-shrink-0 px-4 rounded-[12px] text-[13px] font-semibold text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+              style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)', boxShadow: '0 4px 14px rgba(74,189,152,0.30)' }}
+              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = 'linear-gradient(135deg, #3fae8b, #23815f)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #4abd98, #2e9a78)' }}
             >
               {scanning ? 'Reading...' : 'Scan site'}
             </button>
@@ -224,8 +224,8 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
         {/* Scan recap */}
         {scanNote && (
           <div
-            className="text-[13px] leading-relaxed rounded-[10px] px-3.5 py-2.5"
-            style={{ background: '#f5f5f2', color: '#555', borderLeft: '3px solid #4abd98' }}
+            className="text-[13px] leading-relaxed rounded-[12px] px-3.5 py-2.5"
+            style={{ background: '#f5f5f7', color: '#48484a', borderLeft: '3px solid #4abd98' }}
           >
             {scanNote}
           </div>
@@ -247,10 +247,10 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           <button
             type="button"
             onClick={onJumpToReview}
-            className="w-full py-3 rounded-[10px] text-[13px] font-semibold text-white transition-all"
-            style={{ background: '#2e9a78' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = '#1f7d61' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = '#2e9a78' }}
+            className="w-full py-3 rounded-[12px] text-[13px] font-semibold text-white transition-all"
+            style={{ background: 'linear-gradient(135deg, #2e9a78, #0f6e56)', boxShadow: '0 6px 18px rgba(46,154,120,0.30)', minHeight: 52, borderRadius: 26 }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #23815f, #0a5a45)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #2e9a78, #0f6e56)' }}
           >
             See everything we filled and finish faster →
           </button>

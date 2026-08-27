@@ -18,19 +18,19 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
 
   return (
     <>
-      <Question title="Got any brand materials?" subtitle="Logo, photos, colors, whatever you have. All optional — just continue if nothing is handy, and add it anytime later. With these, the graphics we make match your brand from day one." />
+      <Question title="Got any brand materials?" subtitle="Logo, photos, colors, whatever you have. All optional. Just continue if nothing is handy, and add it anytime later. With these, the graphics we make match your brand from day one." />
       <div className="mt-4 space-y-4">
         {/* Logo upload */}
         <button
           type="button"
           onClick={() => logoRef.current?.click()}
-          className="w-full rounded-[10px] px-6 py-5 text-center transition-all cursor-pointer"
-          style={{ border: '2px dashed #e0e0e0', background: '#f5f5f2' }}
+          className="w-full rounded-[14px] px-6 py-5 text-center transition-all cursor-pointer"
+          style={{ border: '2px dashed #e6e6ea', background: '#f5f5f7' }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#4abd98'; e.currentTarget.style.background = '#f0faf6' }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e0e0e0'; e.currentTarget.style.background = '#f5f5f2' }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e6e6ea'; e.currentTarget.style.background = '#f5f5f7' }}
         >
-          <div className="text-sm font-medium" style={{ color: '#555' }}>Upload your logo</div>
-          <div className="text-xs mt-0.5" style={{ color: '#999' }}>PNG or SVG works best</div>
+          <div className="text-sm font-medium" style={{ color: '#48484a' }}>Upload your logo</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>PNG or SVG works best</div>
           <input
             ref={logoRef}
             type="file"
@@ -52,13 +52,13 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
         <button
           type="button"
           onClick={() => photosRef.current?.click()}
-          className="w-full rounded-[10px] px-6 py-5 text-center transition-all cursor-pointer"
-          style={{ border: '2px dashed #e0e0e0', background: '#f5f5f2' }}
+          className="w-full rounded-[14px] px-6 py-5 text-center transition-all cursor-pointer"
+          style={{ border: '2px dashed #e6e6ea', background: '#f5f5f7' }}
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#4abd98'; e.currentTarget.style.background = '#f0faf6' }}
-          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e0e0e0'; e.currentTarget.style.background = '#f5f5f2' }}
+          onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e6e6ea'; e.currentTarget.style.background = '#f5f5f7' }}
         >
-          <div className="text-sm font-medium" style={{ color: '#555' }}>Upload brand photos</div>
-          <div className="text-xs mt-0.5" style={{ color: '#999' }}>Your space, products, team, up to 20</div>
+          <div className="text-sm font-medium" style={{ color: '#48484a' }}>Upload brand photos</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>Your space, products, team, up to 20</div>
           <input
             ref={photosRef}
             type="file"
@@ -85,7 +85,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
               value={data.color1 || '#ffffff'}
               onChange={(e) => update('color1', e.target.value)}
               className="w-10 h-10 rounded-lg cursor-pointer flex-shrink-0 p-0"
-              style={{ border: '1.5px solid #e0e0e0' }}
+              style={{ border: '1.5px solid #e6e6ea' }}
             />
             <Input
               value={data.color1}
@@ -99,7 +99,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
               value={data.color2 || '#ffffff'}
               onChange={(e) => update('color2', e.target.value)}
               className="w-10 h-10 rounded-lg cursor-pointer flex-shrink-0 p-0"
-              style={{ border: '1.5px solid #e0e0e0' }}
+              style={{ border: '1.5px solid #e6e6ea' }}
             />
             <Input
               value={data.color2}

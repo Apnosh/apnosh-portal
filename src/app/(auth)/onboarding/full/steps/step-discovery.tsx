@@ -45,8 +45,8 @@ function TagInput({
 
   return (
     <div
-      className="flex flex-wrap gap-2 items-center rounded-[10px] px-2.5 py-2 transition-all"
-      style={{ border: '1.5px solid #e0e0e0', background: 'white' }}
+      className="flex flex-wrap gap-2 items-center rounded-[12px] px-2.5 py-2 transition-all"
+      style={{ border: '1.5px solid #e6e6ea', background: 'white' }}
     >
       {tags.map((t) => (
         <span
@@ -73,7 +73,7 @@ function TagInput({
         onBlur={commit}
         placeholder={tags.length ? '' : placeholder}
         className="flex-1 min-w-[120px] text-[15px] px-1.5 py-1 outline-none"
-        style={{ color: '#111', fontFamily: 'DM Sans, sans-serif' }}
+        style={{ color: '#1d1d1f', fontFamily: 'DM Sans, sans-serif' }}
       />
     </div>
   )

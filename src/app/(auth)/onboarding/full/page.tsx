@@ -394,26 +394,42 @@ export default function OnboardingPage() {
        degrades to a phone; it was never designed for one, and it looked nothing like the
        portal a client lands in ten seconds later. This is the same frame the dashboard and
        insights use — one column, thumb-reachable, 480 wide on anything bigger. */
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: '#16181d' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f5f5f7', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: '#1d1d1f' }}>
         {loading ? (
-          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9aa1ab', fontSize: 13 }}>
-            Loading…
+          /* A small breathing mint orb while the saved draft loads, echoing the
+             portal's loading screen. CSS only; still for reduced motion. */
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+            <style>{`
+              @media (prefers-reduced-motion: no-preference) {
+                .ob-load-orb { animation: obLoadBreathe 3.2s ease-in-out infinite }
+                @keyframes obLoadBreathe {
+                  0%,100% { transform: scale(1); box-shadow: 0 0 26px rgba(74,189,152,.28), 0 0 70px rgba(74,189,152,.12) }
+                  50% { transform: scale(1.06); box-shadow: 0 0 38px rgba(74,189,152,.42), 0 0 95px rgba(74,189,152,.18) }
+                }
+              }
+            `}</style>
+            <div aria-hidden className="ob-load-orb" style={{
+              width: 64, height: 64, borderRadius: '50%',
+              border: '1.5px solid rgba(74,189,152,.45)',
+              background: 'radial-gradient(circle at 32% 26%, rgba(255,255,255,.6), rgba(74,189,152,.20) 58%, rgba(74,189,152,.10))',
+            }} />
+            <span style={{ color: '#6e6e73', fontSize: 13 }}>Getting your setup ready</span>
           </div>
         ) : (
           <>
             {/* Sticky head: who we are, the way out, and where they are. Never scrolls away —
                 on a phone the progress is the only thing telling them this has an end. */}
-            <div style={{ flexShrink: 0, padding: '14px 18px 0', background: '#fff' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showSuccess ? 4 : 14 }}>
-                <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, fontWeight: 600, color: '#2e9a78', letterSpacing: '-0.3px' }}>
+            <div style={{ flexShrink: 0, padding: '16px 20px 0', background: '#fff' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: showSuccess ? 4 : 16 }}>
+                <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 19, fontWeight: 600, color: '#2e9a78', letterSpacing: '-0.02em' }}>
                   Apnosh
                 </span>
                 {!showSuccess && (
                   <button
                     onClick={handleExit}
                     disabled={saving}
-                    style={{ border: 'none', background: 'none', color: '#9aa1ab', fontSize: 13, fontWeight: 500, padding: '6px 2px', cursor: 'pointer', minHeight: 34 }}
+                    style={{ border: 'none', background: 'none', color: '#98989d', fontSize: 13, fontWeight: 500, padding: '6px 2px', cursor: 'pointer', minHeight: 34 }}
                     title="Leave setup. Your progress is saved."
                   >
                     Exit
@@ -423,26 +439,33 @@ export default function OnboardingPage() {
 
               {!showSuccess && (
                 <div style={{ paddingBottom: 14 }}>
-                  <div style={{ display: 'flex', gap: 4, marginBottom: 9 }}>
-                    {Array.from({ length: totalScreens }).map((_, i) => (
-                      <div key={i} style={{ height: 3, flex: 1, borderRadius: 2, overflow: 'hidden', background: '#ececef' }}>
-                        <div style={{ height: '100%', borderRadius: 2, background: '#4abd98', width: i + 1 <= screenNo ? '100%' : '0%', transition: 'width .4s ease' }} />
-                      </div>
-                    ))}
+                  {/* One quiet 3px line of progress. The count stays, small and
+                      mute, for anyone who wants the number. */}
+                  <div
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={pct}
+                    style={{ height: 3, borderRadius: 2, overflow: 'hidden', background: '#ececef', marginBottom: 9 }}
+                  >
+                    <div style={{
+                      height: '100%', borderRadius: 2, width: `${pct}%`,
+                      background: 'linear-gradient(90deg, #4abd98, #2e9a78)',
+                      transition: 'width .5s cubic-bezier(.32,.72,.35,1)',
+                    }} />
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#16181d' }}>
+                    <span style={{ fontSize: 12, fontWeight: 500, color: '#6e6e73' }}>
                       {phaseLabel || ''}
-                      <span style={{ fontWeight: 400, color: '#9aa1ab' }}>{' · '}Step {screenNo} of {totalScreens}</span>
                     </span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#2e9a78' }}>{pct}%</span>
+                    <span style={{ fontSize: 11, fontWeight: 500, color: '#aeaeb2' }}>{screenNo} of {totalScreens}</span>
                   </div>
                 </div>
               )}
             </div>
 
             {/* The one scrolling region. Each step owns its own sticky Continue. */}
-            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '4px 18px 24px' }}>
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '6px 20px 28px' }}>
               <StepRenderer
                 screen={showSuccess ? 'success' : currentScreen}
                 data={data}

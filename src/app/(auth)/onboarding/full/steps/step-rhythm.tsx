@@ -32,7 +32,7 @@ export default function StepRhythm({ data, update, nav }: Props) {
       <div className="flex flex-col gap-1.5 mt-4 mb-1">
         {DAYS.map((day) => (
           <div key={day} className="flex items-center gap-2">
-            <span className="text-[13px] w-[68px] shrink-0" style={{ color: '#555' }}>
+            <span className="text-[13px] w-[68px] shrink-0" style={{ color: '#48484a' }}>
               {FULL_DAY[day]}
             </span>
             <div className="flex gap-1.5 flex-1">
@@ -43,11 +43,12 @@ export default function StepRhythm({ data, update, nav }: Props) {
                     key={lvl.id}
                     type="button"
                     onClick={() => setDay(day, lvl.id)}
-                    className="flex-1 py-2 rounded-[8px] text-[12px] font-medium transition-all select-none"
+                    className="flex-1 py-2 rounded-[10px] text-[12px] font-medium select-none"
                     style={{
-                      border: selected ? `2px solid ${lvl.color}` : '1.5px solid #e8e8e8',
+                      border: selected ? `1.5px solid ${lvl.color}` : '1.5px solid #e6e6ea',
                       background: selected ? `${lvl.color}1a` : 'white',
-                      color: selected ? lvl.color : '#999',
+                      color: selected ? lvl.color : '#6e6e73',
+                      transition: 'all .15s ease',
                     }}
                   >
                     {lvl.label}

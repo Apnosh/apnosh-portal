@@ -1,7 +1,7 @@
 'use client'
 
 import { type OnboardingData, type StepId, ROLES, APPROVAL_TYPES, FOOD_BIZ_TYPES } from '../data'
-import { Question } from '../ui'
+import { Question, PrimaryPill } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -124,7 +124,7 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
       </div>
 
       {/* Terms */}
-      <div className="my-5 text-sm" style={{ color: '#555' }}>
+      <div className="my-5 text-sm" style={{ color: '#48484a' }}>
         <label className="flex items-start gap-2 cursor-pointer leading-relaxed">
           <input
             type="checkbox"
@@ -142,17 +142,9 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
       </div>
 
       {/* Complete button */}
-      <button
-        type="button"
-        onClick={onComplete}
-        disabled={!data.agreed_terms || saving}
-        className="w-full py-3.5 rounded-[10px] text-white text-base font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ background: '#4abd98', fontFamily: 'DM Sans, sans-serif' }}
-        onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = '#2e9a78' }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = '#4abd98' }}
-      >
+      <PrimaryPill onClick={onComplete} disabled={!data.agreed_terms || saving} grow>
         {saving ? 'Saving...' : 'Complete setup'}
-      </button>
+      </PrimaryPill>
     </>
   )
 }
@@ -161,9 +153,9 @@ function ReviewCard({ title, stepId, onEdit, children }: {
   title: string; stepId: StepId; onEdit: (stepId: StepId) => void; children: React.ReactNode
 }) {
   return (
-    <div className="rounded-[10px] px-3.5 py-3" style={{ background: '#f5f5f2' }}>
+    <div className="rounded-[14px] px-4 py-3.5" style={{ background: '#f5f5f7' }}>
       <div className="flex justify-between items-center mb-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#999' }}>
+        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6e6e73' }}>
           {title}
         </span>
         <button
@@ -182,12 +174,12 @@ function ReviewCard({ title, stepId, onEdit, children }: {
 
 function Row({ label, value }: { label: string; value: string | null }) {
   return (
-    <div className="text-[13px] leading-relaxed" style={{ color: '#555' }}>
+    <div className="text-[13px] leading-relaxed" style={{ color: '#48484a' }}>
       {label}:{' '}
       {value ? (
-        <span className="font-medium" style={{ color: '#111' }}>{value}</span>
+        <span className="font-medium" style={{ color: '#1d1d1f' }}>{value}</span>
       ) : (
-        <span className="italic" style={{ color: '#999' }}>&mdash;</span>
+        <span className="italic" style={{ color: '#98989d' }}>Not set</span>
       )}
     </div>
   )

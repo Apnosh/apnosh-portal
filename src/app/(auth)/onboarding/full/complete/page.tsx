@@ -11,8 +11,18 @@ export default function OnboardingCompletePage() {
       style={{ background: 'linear-gradient(180deg, #f8fafb 0%, #eaf7f3 100%)' }}
     >
       <div className="max-w-md w-full text-center">
-        {/* Celebration icon */}
-        <div className="mb-6 inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#eaf7f3]">
+        {/* Celebration icon on a soft breathing mint orb, echoing the portal's
+            loading screen. CSS only; still under reduced motion. */}
+        <style>{`
+          @media (prefers-reduced-motion: no-preference) {
+            .ob-complete-orb { animation: obCompleteBreathe 3.2s ease-in-out infinite }
+            @keyframes obCompleteBreathe {
+              0%,100% { transform: scale(1); box-shadow: 0 0 30px rgba(74,189,152,.30), 0 0 80px rgba(74,189,152,.14) }
+              50% { transform: scale(1.05); box-shadow: 0 0 44px rgba(74,189,152,.44), 0 0 110px rgba(74,189,152,.20) }
+            }
+          }
+        `}</style>
+        <div className="ob-complete-orb mb-6 inline-flex items-center justify-center w-20 h-20 rounded-full bg-[#eaf7f3]">
           <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
             <path
               d="M20 4L23.09 13.26L33 14.27L25.89 20.14L28.18 30L20 25.27L11.82 30L14.11 20.14L7 14.27L16.91 13.26L20 4Z"

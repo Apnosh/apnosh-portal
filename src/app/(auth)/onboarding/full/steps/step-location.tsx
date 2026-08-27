@@ -461,14 +461,14 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
       onChange={(e) => update('full_address', e.target.value)}
       placeholder="Start typing your address..."
       autoComplete="off"
-      className="w-full text-[15px] rounded-[10px] px-3.5 py-3 outline-none transition-all"
-      style={{ border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' }}
+      className="w-full text-[15px] rounded-[12px] px-4 outline-none transition-all"
+      style={{ border: '1.5px solid #e6e6ea', fontFamily: 'DM Sans, sans-serif', color: '#1d1d1f', background: '#fff', height: 52 }}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = '#4abd98'
-        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.1)'
+        e.currentTarget.style.boxShadow = '0 0 0 2px rgba(74,189,152,0.18)'
       }}
       onBlur={(e) => {
-        e.currentTarget.style.borderColor = '#e0e0e0'
+        e.currentTarget.style.borderColor = '#e6e6ea'
         e.currentTarget.style.boxShadow = 'none'
       }}
     />
@@ -506,7 +506,7 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           the website to draft later steps. Typing it in yourself lives right
           here too, so both add paths sit at the top of the step. */}
       {lookupOn && (
-        <div className="mt-4 rounded-[12px] px-3.5 py-3.5" style={{ border: '1.5px solid #9fe1cb', background: '#f0faf6' }}>
+        <div className="mt-4 rounded-[14px] px-3.5 py-3.5" style={{ border: '1.5px solid #9fe1cb', background: '#f0faf6' }}>
           <div className="text-sm font-semibold mb-0.5" style={{ color: '#0f6e56' }}>
             Find your restaurant on Google
           </div>
@@ -521,11 +521,11 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
             />
             {(searching || results.length > 0) && (
               <div
-                className="absolute left-0 right-0 top-full mt-1 z-10 rounded-[10px] overflow-hidden bg-white"
-                style={{ border: '1.5px solid #e0e0e0', boxShadow: '0 6px 20px rgba(0,0,0,0.1)' }}
+                className="absolute left-0 right-0 top-full mt-1 z-10 rounded-[12px] overflow-hidden bg-white"
+                style={{ border: '1.5px solid #e6e6ea', boxShadow: '0 6px 20px rgba(0,0,0,0.1)' }}
               >
                 {searching && (
-                  <div className="px-3.5 py-2.5 text-[13px]" style={{ color: '#999' }}>Searching...</div>
+                  <div className="px-3.5 py-2.5 text-[13px]" style={{ color: '#6e6e73' }}>Searching...</div>
                 )}
                 {results.map((c) => (
                   <button
@@ -537,8 +537,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
                     onMouseEnter={(e) => { e.currentTarget.style.background = '#f0faf6' }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = 'white' }}
                   >
-                    <div className="text-sm font-medium" style={{ color: '#111' }}>{c.name}</div>
-                    <div className="text-xs mt-0.5" style={{ color: '#999' }}>{c.address}</div>
+                    <div className="text-sm font-medium" style={{ color: '#1d1d1f' }}>{c.name}</div>
+                    <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>{c.address}</div>
                   </button>
                 ))}
               </div>
@@ -546,7 +546,7 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           </div>
           {(pulling || searchNote) && (
             <div
-              className="mt-2 text-[13px] leading-relaxed rounded-[10px] px-3.5 py-2.5"
+              className="mt-2 text-[13px] leading-relaxed rounded-[12px] px-3.5 py-2.5"
               style={{ background: '#fff', color: '#0f6e56', borderLeft: '3px solid #4abd98' }}
             >
               {pulling ? 'Pulling the details...' : `✓ ${searchNote}`}
@@ -566,7 +566,7 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
       {/* Google Business import: connect once, pull every location's address,
           hours, and phone instead of typing them by hand. */}
       {candidates ? (
-        <div className="mt-4 rounded-[10px] px-3.5 py-3.5" style={{ border: '1.5px solid #9fe1cb', background: '#f0faf6' }}>
+        <div className="mt-4 rounded-[12px] px-3.5 py-3.5" style={{ border: '1.5px solid #9fe1cb', background: '#f0faf6' }}>
           <div className="text-sm font-semibold mb-0.5" style={{ color: '#0f6e56' }}>
             We found {candidates.length} location{candidates.length > 1 ? 's' : ''} on Google
           </div>
@@ -587,11 +587,11 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
                   className="mt-0.5 accent-[#4abd98] flex-shrink-0"
                 />
                 <div className="min-w-0">
-                  <div className="text-[13px] font-medium truncate" style={{ color: '#111' }}>
+                  <div className="text-[13px] font-medium truncate" style={{ color: '#1d1d1f' }}>
                     {c.title || c.full_address || 'Location'}
                   </div>
                   {c.full_address && (
-                    <div className="text-[11px] truncate" style={{ color: '#999' }}>{c.full_address}</div>
+                    <div className="text-[11px] truncate" style={{ color: '#6e6e73' }}>{c.full_address}</div>
                   )}
                 </div>
               </label>
@@ -602,16 +602,16 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
               type="button"
               onClick={applyImport}
               disabled={Object.values(picked).filter(Boolean).length === 0}
-              className="flex-1 py-2.5 rounded-[10px] text-[13px] font-semibold text-white transition-colors disabled:opacity-50"
-              style={{ background: '#4abd98' }}
+              className="flex-1 py-2.5 rounded-[12px] text-[13px] font-semibold text-white transition-colors disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)', boxShadow: '0 4px 14px rgba(74,189,152,0.30)' }}
             >
               Add {Object.values(picked).filter(Boolean).length || ''} location{Object.values(picked).filter(Boolean).length === 1 ? '' : 's'}
             </button>
             <button
               type="button"
               onClick={() => setCandidates(null)}
-              className="px-4 py-2.5 rounded-[10px] text-[13px] font-semibold transition-colors"
-              style={{ color: '#999', border: '1.5px solid #e0e0e0' }}
+              className="px-4 py-2.5 rounded-[12px] text-[13px] font-semibold transition-colors"
+              style={{ color: '#6e6e73', border: '1.5px solid #e6e6ea' }}
             >
               Skip
             </button>
@@ -619,8 +619,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         </div>
       ) : (
         <div
-          className="mt-4 rounded-[10px] px-3.5 py-3 flex items-center gap-3"
-          style={{ border: '1.5px solid #e0e0e0', background: '#fafafa' }}
+          className="mt-4 rounded-[12px] px-3.5 py-3 flex items-center gap-3"
+          style={{ border: '1.5px solid #e6e6ea', background: '#fafafa' }}
         >
           <div
             className="w-[38px] h-[38px] rounded-[9px] flex items-center justify-center text-lg flex-shrink-0"
@@ -629,8 +629,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
             🔍
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold" style={{ color: '#111' }}>Connect Google Business</div>
-            <div className="text-xs" style={{ color: '#999' }}>
+            <div className="text-sm font-semibold" style={{ color: '#1d1d1f' }}>Connect Google Business</div>
+            <div className="text-xs" style={{ color: '#6e6e73' }}>
               {isMulti
                 ? 'Pull all your spots, hours, and phone in one tap.'
                 : 'Pull your address, hours, and phone automatically.'}
@@ -641,7 +641,7 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
             onClick={connectGoogleBusiness}
             disabled={!businessId || gbpBusy}
             className="text-xs font-semibold rounded-[20px] px-3.5 py-1.5 whitespace-nowrap text-white transition-colors disabled:opacity-50"
-            style={{ background: '#4abd98' }}
+            style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)', boxShadow: '0 4px 14px rgba(74,189,152,0.30)' }}
           >
             {gbpBusy ? 'Connecting...' : 'Connect'}
           </button>
@@ -650,8 +650,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
 
       {gbpNote && (
         <div
-          className="mt-2 text-[13px] leading-relaxed rounded-[10px] px-3.5 py-2.5"
-          style={{ background: '#f5f5f2', color: '#555', borderLeft: '3px solid #4abd98' }}
+          className="mt-2 text-[13px] leading-relaxed rounded-[12px] px-3.5 py-2.5"
+          style={{ background: '#f5f5f7', color: '#48484a', borderLeft: '3px solid #4abd98' }}
         >
           {gbpNote}
         </div>
@@ -673,16 +673,17 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
                 key={opt.value}
                 type="button"
                 onClick={() => update('location_count', opt.value)}
-                className="text-left rounded-[12px] px-3 py-3 transition-all"
+                className="text-left rounded-[14px] px-3 py-3"
                 style={{
-                  border: selected ? '1.5px solid #4abd98' : '1.5px solid #e0e0e0',
+                  border: selected ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
                   background: selected ? '#f0faf6' : '#fff',
+                  transition: 'all .15s ease',
                 }}
               >
-                <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#111' }}>
+                <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#1d1d1f' }}>
                   {opt.label}
                 </div>
-                <div className="text-[11px] mt-0.5" style={{ color: '#999' }}>{opt.sub}</div>
+                <div className="text-[11px] mt-0.5" style={{ color: '#6e6e73' }}>{opt.sub}</div>
               </button>
             )
           })}
@@ -703,9 +704,9 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         ) : (
           <div className="space-y-2">
             {/* Location 1 — the primary, anchored to the main business record */}
-            <div className="rounded-[10px] px-3 py-3 space-y-2" style={{ background: '#f5f5f2' }}>
+            <div className="rounded-[12px] px-3 py-3 space-y-2" style={{ background: '#f5f5f7' }}>
               <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#999' }}>
+                <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6e6e73' }}>
                   Location 1
                 </span>
               </div>
@@ -722,11 +723,11 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
             {data.locations.map((loc, i) => (
               <div
                 key={i}
-                className="rounded-[10px] px-3 py-3 space-y-2"
-                style={{ background: '#f5f5f2' }}
+                className="rounded-[12px] px-3 py-3 space-y-2"
+                style={{ background: '#f5f5f7' }}
               >
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#999' }}>
+                  <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6e6e73' }}>
                     Location {i + 2}
                   </span>
                   <button
@@ -754,12 +755,12 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
             <button
               type="button"
               onClick={addLocation}
-              className="w-full py-2.5 rounded-[10px] text-[13px] font-semibold transition-colors"
+              className="w-full py-2.5 rounded-[12px] text-[13px] font-semibold transition-colors"
               style={{ background: '#f0faf6', color: '#2e9a78', border: '1.5px dashed #4abd98' }}
             >
               + Add {data.locations.length ? 'another' : 'a'} location
             </button>
-            <p className="text-[11px]" style={{ color: '#aaa' }}>
+            <p className="text-[11px]" style={{ color: '#98989d' }}>
               You can always add or edit locations later from your dashboard.
             </p>
           </div>

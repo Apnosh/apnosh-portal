@@ -21,8 +21,8 @@ const DEFAULT_RANGE: HourRange = { open: '09:00', close: '17:00' }
 const DEFAULT_SECOND_RANGE: HourRange = { open: '17:00', close: '21:00' }
 
 const inputCls =
-  'w-[104px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[10px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35'
-const inputStyle = { border: '1.5px solid #e0e0e0', fontFamily: 'DM Sans, sans-serif' } as const
+  'w-[104px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[12px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35'
+const inputStyle = { border: '1.5px solid #e6e6ea', fontFamily: 'DM Sans, sans-serif' } as const
 
 /**
  * A compact week editor reused for each location's hours. Each day can hold
@@ -77,12 +77,12 @@ function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: Hours) =
         const shown = closed || !ranges.length ? [] : ranges
         return (
           <div key={day} className="flex items-start gap-2 max-sm:gap-1.5">
-            <span className="w-9 text-sm font-medium flex-shrink-0 pt-2" style={{ color: '#111' }}>
+            <span className="w-9 text-sm font-medium flex-shrink-0 pt-2" style={{ color: '#1d1d1f' }}>
               {day}
             </span>
             <div className="flex-1 min-w-0 flex flex-col gap-1.5">
               {closed ? (
-                <div className="flex items-center h-[38px] text-[13px]" style={{ color: '#bbb' }}>
+                <div className="flex items-center h-[38px] text-[13px]" style={{ color: '#aeaeb2' }}>
                   Closed
                 </div>
               ) : (
@@ -93,7 +93,7 @@ function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: Hours) =
                       onChange={(e) => setRange(day, idx, 'open', e.target.value)}
                       className={inputCls} style={inputStyle}
                     />
-                    <span className="text-[13px] flex-shrink-0" style={{ color: '#999' }}>to</span>
+                    <span className="text-[13px] flex-shrink-0" style={{ color: '#6e6e73' }}>to</span>
                     <input
                       type="time" value={r.close}
                       onChange={(e) => setRange(day, idx, 'close', e.target.value)}
@@ -104,7 +104,7 @@ function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: Hours) =
                         type="button" onClick={() => removeRange(day, idx)}
                         aria-label="Remove hours"
                         className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[15px] leading-none"
-                        style={{ color: '#999', background: '#efefec' }}
+                        style={{ color: '#6e6e73', background: '#efefec' }}
                       >×</button>
                     ) : (
                       <span className="flex-shrink-0 w-6" />
@@ -122,7 +122,7 @@ function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: Hours) =
             </div>
             <label
               className="text-[13px] flex items-center gap-1 cursor-pointer whitespace-nowrap flex-shrink-0 pt-2"
-              style={{ color: '#555' }}
+              style={{ color: '#48484a' }}
             >
               <input
                 type="checkbox" checked={closed}
@@ -217,7 +217,7 @@ export default function StepLocationDetails({ data, update, nav }: Props) {
 
       {(pulling || pullNote) && (
         <div
-          className="mt-4 text-[13px] leading-relaxed rounded-[10px] px-3.5 py-2.5"
+          className="mt-4 text-[13px] leading-relaxed rounded-[12px] px-3.5 py-2.5"
           style={{ background: '#f0faf6', color: '#0f6e56', borderLeft: '3px solid #4abd98' }}
         >
           {pulling ? 'Pulling hours and phone from Google...' : `✓ ${pullNote}`}
@@ -226,10 +226,10 @@ export default function StepLocationDetails({ data, update, nav }: Props) {
 
       <div className="mt-4 space-y-4">
         {/* Primary location card */}
-        <div className="rounded-[10px] px-3.5 py-3.5" style={{ background: '#f5f5f2' }}>
-          <div className="text-sm font-semibold" style={{ color: '#111' }}>{primaryName}</div>
+        <div className="rounded-[12px] px-3.5 py-3.5" style={{ background: '#f5f5f7' }}>
+          <div className="text-sm font-semibold" style={{ color: '#1d1d1f' }}>{primaryName}</div>
           {data.full_address && (
-            <div className="text-[12px] mt-0.5" style={{ color: '#999' }}>{data.full_address}</div>
+            <div className="text-[12px] mt-0.5" style={{ color: '#6e6e73' }}>{data.full_address}</div>
           )}
           <div className="mt-3">
             <FieldLabel>Phone number</FieldLabel>
@@ -248,12 +248,12 @@ export default function StepLocationDetails({ data, update, nav }: Props) {
 
         {/* Additional location cards */}
         {isMulti && data.locations.map((loc, i) => (
-          <div key={i} className="rounded-[10px] px-3.5 py-3.5" style={{ background: '#f5f5f2' }}>
-            <div className="text-sm font-semibold" style={{ color: '#111' }}>
+          <div key={i} className="rounded-[12px] px-3.5 py-3.5" style={{ background: '#f5f5f7' }}>
+            <div className="text-sm font-semibold" style={{ color: '#1d1d1f' }}>
               {loc.name.trim() || `Location ${i + 2}`}
             </div>
             {loc.full_address && (
-              <div className="text-[12px] mt-0.5" style={{ color: '#999' }}>{loc.full_address}</div>
+              <div className="text-[12px] mt-0.5" style={{ color: '#6e6e73' }}>{loc.full_address}</div>
             )}
             <div className="mt-3">
               <FieldLabel>Phone number</FieldLabel>
