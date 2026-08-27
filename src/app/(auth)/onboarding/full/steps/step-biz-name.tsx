@@ -87,28 +87,24 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   // a shortcut straight to the review screen instead of every step.
   const [filledSomething, setFilledSomething] = useState(false)
 
-  /* MULTIPLE LOCATIONS (owner call 2026-08-27): the business screen owns the
-   * roster. The Google pick above fills the MAIN spot; every extra spot is
-   * added right here, searched the same way, and lands in data.locations
-   * (the same field the confirm screen and completion save already persist). */
+  /* ONE LOCATION FLOW (owner call 2026-08-27, v3): a single "+ Add location"
+   * opens ONE field that is both search and manual entry. Google results appear
+   * as they type; the last row always offers the typed text as the address.
+   * The FIRST location becomes the main spot (primary fields); every one after
+   * lands in data.locations. No modes, no forms, no second way to do it. */
   const [addingSpot, setAddingSpot] = useState(false)
   const [spotQ, setSpotQ] = useState('')
   const [spotHits, setSpotHits] = useState<PlaceCandidate[]>([])
   const [spotBusy, setSpotBusy] = useState(false)
+  const [spotSearched, setSpotSearched] = useState(false)
   const normAddr = (a: string) => a.trim().toLowerCase()
   const isDupSpot = (placeId: string, addr: string) =>
     (!!placeId && (placeId === data.primary_place_id || data.locations.some((l) => l.place_id === placeId))) ||
     (!!addr.trim() && (normAddr(addr) === normAddr(data.full_address) || data.locations.some((l) => normAddr(l.full_address) === normAddr(addr))))
   const syncSpotCount = (extras: number) => {
-    const total = 1 + extras
+    const total = (data.full_address.trim() ? 1 : 0) + extras || 1
     update('location_count', total <= 1 ? 'Just 1' : total <= 3 ? '2\u20133' : total <= 6 ? '4\u20136' : '7+')
   }
-  const [spotSearched, setSpotSearched] = useState(false)
-  const [spotManual, setSpotManual] = useState(false)
-  const [spotName, setSpotName] = useState('')
-  const [spotAddr, setSpotAddr] = useState('')
-  /* search AS THEY TYPE, and say so out loud when Google has nothing: a silent
-   * empty result list reads as broken */
   useEffect(() => {
     if (!addingSpot || !lookupOn) return
     const q = spotQ.trim()
@@ -126,30 +122,47 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spotQ, addingSpot, lookupOn])
   function closeSpotLane() {
-    setAddingSpot(false); setSpotManual(false)
-    setSpotQ(''); setSpotHits([]); setSpotSearched(false); setSpotName(''); setSpotAddr('')
+    setAddingSpot(false); setSpotQ(''); setSpotHits([]); setSpotSearched(false)
   }
-  function addSpotManual() {
-    const a = spotAddr.trim()
-    if (!a || isDupSpot('', a)) return
-    const next = [...data.locations, { name: spotName.trim(), full_address: a, city: '', state: '', zip: '', place_id: '', phone: '', hours: {} }]
-    update('locations', next); syncSpotCount(next.length)
-    closeSpotLane()
-  }
-  async function addSpot(c: PlaceCandidate) {
+  async function addFromLane(c: PlaceCandidate) {
     setSpotBusy(true)
     const p = await getBusinessPrefill(c.placeId).catch(() => null)
     setSpotBusy(false)
     const addr = p?.full_address || c.address
-    if (isDupSpot(c.placeId, addr)) { setSpotQ(''); setSpotHits([]); return }
-    const next = [...data.locations, { name: c.name, full_address: addr, city: p?.city ?? '', state: p?.state ?? '', zip: p?.zip ?? '', place_id: c.placeId, phone: p?.phone ?? '', hours: p?.hours ?? {} }]
-    update('locations', next); syncSpotCount(next.length)
+    if (isDupSpot(c.placeId, addr)) { closeSpotLane(); return }
+    if (!data.full_address.trim()) {
+      /* first location = the main spot */
+      update('primary_place_id', c.placeId)
+      update('full_address', addr)
+      if (p?.city) update('city', p.city)
+      if (p?.state) update('state', p.state)
+      if (p?.zip) update('zip', p.zip)
+      if (p?.phone && !data.phone) update('phone', p.phone)
+      if (p?.hours && Object.keys(p.hours).length && !Object.keys(data.hours || {}).length) update('hours', p.hours)
+      syncSpotCount(data.locations.length)
+    } else {
+      const next = [...data.locations, { name: c.name, full_address: addr, city: p?.city ?? '', state: p?.state ?? '', zip: p?.zip ?? '', place_id: c.placeId, phone: p?.phone ?? '', hours: p?.hours ?? {} }]
+      update('locations', next); syncSpotCount(next.length)
+    }
+    closeSpotLane()
+  }
+  function addTypedFromLane() {
+    const a = spotQ.trim()
+    if (!a || isDupSpot('', a)) return
+    if (!data.full_address.trim()) {
+      update('full_address', a)
+      syncSpotCount(data.locations.length)
+    } else {
+      const next = [...data.locations, { name: '', full_address: a, city: '', state: '', zip: '', place_id: '', phone: '', hours: {} }]
+      update('locations', next); syncSpotCount(next.length)
+    }
     closeSpotLane()
   }
   function removeSpot(i: number) {
     const next = data.locations.filter((_, x) => x !== i)
     update('locations', next); syncSpotCount(next.length)
   }
+
 
   async function runScan(url: string) {
     const target = (url || data.website).trim()
@@ -250,57 +263,41 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           )}
         </div>
 
-        {/* the location roster lives at the TOP (owner call 2026-08-27): the main
-            spot fills from the Google pick above, or gets typed right here when
-            Google cannot find the place. Extra spots stack below it. */}
-        {(
-          <div>
-            <FieldLabel>Locations</FieldLabel>
-            <div className="flex flex-col gap-2">
-              {!data.full_address.trim() && (
-                <Input
-                  value={data.full_address}
-                  onChange={(v) => update('full_address', v)}
-                  placeholder="Your address, if Google cannot find you"
-                />
-              )}
-              {data.full_address.trim() && (
-                <div className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
-                  <MapPin size={16} color="#2e9a78" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{data.biz_name.trim() || 'Main spot'}</div>
-                    <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{data.full_address}</div>
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
+        {/* Locations, one flow: cards for what exists, one button to add the
+            next, one field that is both Google search and manual address */}
+        <div>
+          <FieldLabel>Locations</FieldLabel>
+          <div className="flex flex-col gap-2">
+            {data.full_address.trim() && (
+              <div className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
+                <MapPin size={16} color="#2e9a78" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{data.biz_name.trim() || 'Main spot'}</div>
+                  <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{data.full_address}</div>
                 </div>
-              )}
-              {data.locations.map((l, i) => (
-                <div key={`${l.place_id || l.full_address}-${i}`} className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
-                  <MapPin size={16} color="#6e6e73" />
-                  <div className="min-w-0 flex-1">
-                    {l.name.trim() ? <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{l.name}</div> : null}
-                    <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{l.full_address}</div>
-                  </div>
-                  <button type="button" aria-label={`Remove ${l.name || l.full_address}`} onClick={() => removeSpot(i)} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
-                    <X size={15} />
-                  </button>
+                <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
+              </div>
+            )}
+            {data.locations.map((l, i) => (
+              <div key={`${l.place_id || l.full_address}-${i}`} className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
+                <MapPin size={16} color="#6e6e73" />
+                <div className="min-w-0 flex-1">
+                  {l.name.trim() ? <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{l.name}</div> : null}
+                  <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{l.full_address}</div>
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {data.full_address.trim() && (addingSpot ? (
-          <div className="rounded-[14px] p-3" style={{ background: '#f0faf6', boxShadow: 'inset 0 0 0 1.5px rgba(74,189,152,0.4)' }}>
-            {!spotManual ? (
-              <>
-                <Input value={spotQ} onChange={setSpotQ} placeholder="Search the next spot on Google" autoFocus />
-                {spotBusy && (
-                  <div className="mt-2 text-[12.5px]" style={{ color: '#6e6e73' }}>Searching...</div>
-                )}
+                <button type="button" aria-label={`Remove ${l.name || l.full_address}`} onClick={() => removeSpot(i)} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
+                  <X size={15} />
+                </button>
+              </div>
+            ))}
+            {addingSpot ? (
+              <div className="rounded-[14px] p-3 bg-white" style={{ boxShadow: 'inset 0 0 0 1.5px #4abd98, 0 8px 24px rgba(74,189,152,0.15)' }}>
+                <Input value={spotQ} onChange={setSpotQ} placeholder="Search Google, or type the address" autoFocus />
+                {spotBusy && <div className="mt-2 text-[12.5px]" style={{ color: '#6e6e73' }}>Searching...</div>}
                 {spotHits.length > 0 && (
                   <div className="flex flex-col gap-1.5 mt-2">
                     {spotHits.map((c) => (
-                      <button key={c.placeId} type="button" onClick={() => addSpot(c)} className="text-left rounded-[10px] px-3 py-2.5 bg-white" style={{ border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: 'pointer' }}>
+                      <button key={c.placeId} type="button" onClick={() => addFromLane(c)} className="text-left rounded-[10px] px-3 py-2.5" style={{ border: 'none', background: '#f5f5f7', cursor: 'pointer' }}>
                         <div className="text-[13px] font-medium" style={{ color: '#1d1d1f' }}>{c.name}</div>
                         <div className="text-[11.5px]" style={{ color: '#6e6e73' }}>{c.address}</div>
                       </button>
@@ -308,40 +305,29 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                   </div>
                 )}
                 {spotSearched && !spotBusy && spotHits.length === 0 && (
-                  <div className="mt-2 text-[12.5px]" style={{ color: '#6e6e73' }}>No match on Google. Type it in below.</div>
+                  <div className="mt-2 text-[12.5px]" style={{ color: '#6e6e73' }}>No Google match. Use your typed address below.</div>
                 )}
-              </>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <Input value={spotName} onChange={setSpotName} placeholder="Location name, like Downtown" />
-                <Input value={spotAddr} onChange={setSpotAddr} placeholder="Address" />
-                <button
-                  type="button" onClick={addSpotManual} disabled={!spotAddr.trim()}
-                  className="w-full text-[13px] font-semibold text-white disabled:opacity-30"
-                  style={{ minHeight: 44, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #4abd98, #2e9a78)', cursor: 'pointer' }}
-                >
-                  Add this location
+                {spotQ.trim().length >= 3 && (
+                  <button type="button" onClick={addTypedFromLane} className="w-full text-left rounded-[10px] px-3 py-2.5 mt-2 flex items-center gap-2" style={{ border: '1.5px dashed rgba(74,189,152,0.5)', background: '#f0faf6', cursor: 'pointer' }}>
+                    <MapPin size={14} color="#0f6e56" />
+                    <span className="text-[12.5px] font-semibold" style={{ color: '#0f6e56' }}>Use {'\u201C'}{spotQ.trim()}{'\u201D'} as the address</span>
+                  </button>
+                )}
+                <button type="button" onClick={closeSpotLane} className="mt-2.5 text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#6e6e73', cursor: 'pointer', padding: 0 }}>
+                  Cancel
                 </button>
               </div>
+            ) : (
+              <button
+                type="button" onClick={() => setAddingSpot(true)}
+                className="w-full text-[13px] font-bold"
+                style={{ minHeight: 48, borderRadius: 14, border: '1.5px dashed rgba(74,189,152,0.6)', background: '#fff', color: '#0f6e56', cursor: 'pointer' }}
+              >
+                {data.full_address.trim() ? '+ Add another location' : '+ Add your location'}
+              </button>
             )}
-            <div className="flex items-center gap-4 mt-2.5">
-              <button type="button" onClick={() => setSpotManual(!spotManual)} className="text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}>
-                {spotManual ? 'Back to search' : 'Type it in myself'}
-              </button>
-              <button type="button" onClick={closeSpotLane} className="text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#6e6e73', cursor: 'pointer', padding: 0 }}>
-                Cancel
-              </button>
-            </div>
           </div>
-        ) : (
-          <button
-            type="button" onClick={() => setAddingSpot(true)}
-            className="w-full text-[13px] font-bold"
-            style={{ minHeight: 48, borderRadius: 14, border: '1.5px dashed rgba(74,189,152,0.6)', background: '#fff', color: '#0f6e56', cursor: 'pointer' }}
-          >
-            + Add another location
-          </button>
-        ))}
+        </div>
 
         {/* Website + optional scan — paste a site and we draft the story,
             menu, and specials so the owner is not typing it from scratch. */}
