@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from 'react'
 import { type OnboardingData, FOOD_BIZ_TYPES } from '../data'
-import { Store } from 'lucide-react'
+import { Store, MapPin, X } from 'lucide-react'
 import { Question, Input, FieldLabel } from '../ui'
 import { matchCuisine } from '../cuisine'
 import { extractFromWebsite, isLookupEnabled, searchBusinesses, getBusinessPrefill, type PlaceCandidate } from '@/lib/onboarding-lookup'
@@ -86,6 +86,50 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   // True once a website scan has actually populated fields, so we can offer
   // a shortcut straight to the review screen instead of every step.
   const [filledSomething, setFilledSomething] = useState(false)
+
+  /* MULTIPLE LOCATIONS (owner call 2026-08-27): the business screen owns the
+   * roster. The Google pick above fills the MAIN spot; every extra spot is
+   * added right here, searched the same way, and lands in data.locations
+   * (the same field the confirm screen and completion save already persist). */
+  const [addingSpot, setAddingSpot] = useState(false)
+  const [spotQ, setSpotQ] = useState('')
+  const [spotHits, setSpotHits] = useState<PlaceCandidate[]>([])
+  const [spotBusy, setSpotBusy] = useState(false)
+  const normAddr = (a: string) => a.trim().toLowerCase()
+  const isDupSpot = (placeId: string, addr: string) =>
+    (!!placeId && (placeId === data.primary_place_id || data.locations.some((l) => l.place_id === placeId))) ||
+    (!!addr.trim() && (normAddr(addr) === normAddr(data.full_address) || data.locations.some((l) => normAddr(l.full_address) === normAddr(addr))))
+  const syncSpotCount = (extras: number) => {
+    const total = 1 + extras
+    update('location_count', total <= 1 ? 'Just 1' : total <= 3 ? '2\u20133' : total <= 6 ? '4\u20136' : '7+')
+  }
+  async function findSpot() {
+    if (!spotQ.trim() || !lookupOn) return
+    setSpotBusy(true)
+    try { setSpotHits((await searchBusinesses(spotQ)).slice(0, 4)) } catch { setSpotHits([]) }
+    setSpotBusy(false)
+  }
+  async function addSpot(c: PlaceCandidate) {
+    setSpotBusy(true)
+    const p = await getBusinessPrefill(c.placeId).catch(() => null)
+    setSpotBusy(false)
+    const addr = p?.full_address || c.address
+    if (isDupSpot(c.placeId, addr)) { setSpotQ(''); setSpotHits([]); return }
+    const next = [...data.locations, { name: c.name, full_address: addr, city: p?.city ?? '', state: p?.state ?? '', zip: p?.zip ?? '', place_id: c.placeId, phone: p?.phone ?? '', hours: p?.hours ?? {} }]
+    update('locations', next); syncSpotCount(next.length)
+    setSpotQ(''); setSpotHits([]); setAddingSpot(false)
+  }
+  function addSpotTyped() {
+    const a = spotQ.trim()
+    if (!a || isDupSpot('', a)) return
+    const next = [...data.locations, { name: '', full_address: a, city: '', state: '', zip: '', place_id: '', phone: '', hours: {} }]
+    update('locations', next); syncSpotCount(next.length)
+    setSpotQ(''); setSpotHits([]); setAddingSpot(false)
+  }
+  function removeSpot(i: number) {
+    const next = data.locations.filter((_, x) => x !== i)
+    update('locations', next); syncSpotCount(next.length)
+  }
 
   async function runScan(url: string) {
     const target = (url || data.website).trim()
@@ -230,6 +274,79 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             type="tel"
           />
         </div>
+
+        {/* the location roster: main spot + every extra, all on this screen */}
+        {(data.full_address.trim() || data.locations.length > 0) && (
+          <div>
+            <FieldLabel>Locations</FieldLabel>
+            <div className="flex flex-col gap-2">
+              {data.full_address.trim() && (
+                <div className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
+                  <MapPin size={16} color="#2e9a78" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{data.biz_name.trim() || 'Main spot'}</div>
+                    <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{data.full_address}</div>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
+                </div>
+              )}
+              {data.locations.map((l, i) => (
+                <div key={`${l.place_id || l.full_address}-${i}`} className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
+                  <MapPin size={16} color="#6e6e73" />
+                  <div className="min-w-0 flex-1">
+                    {l.name.trim() ? <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{l.name}</div> : null}
+                    <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{l.full_address}</div>
+                  </div>
+                  <button type="button" aria-label={`Remove ${l.name || l.full_address}`} onClick={() => removeSpot(i)} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
+                    <X size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {data.full_address.trim() && (addingSpot ? (
+          <div className="rounded-[14px] p-3" style={{ background: '#f0faf6', boxShadow: 'inset 0 0 0 1.5px rgba(74,189,152,0.4)' }}>
+            <div className="flex gap-2">
+              <Input value={spotQ} onChange={setSpotQ} placeholder="Search the next spot" />
+              <button
+                type="button" onClick={findSpot} disabled={!spotQ.trim() || spotBusy || !lookupOn}
+                className="flex-shrink-0 px-4 rounded-[12px] text-[13px] font-semibold text-white disabled:opacity-30"
+                style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)', cursor: 'pointer' }}
+              >
+                {spotBusy ? 'Finding...' : 'Find'}
+              </button>
+            </div>
+            {spotHits.length > 0 && (
+              <div className="flex flex-col gap-1.5 mt-2">
+                {spotHits.map((c) => (
+                  <button key={c.placeId} type="button" onClick={() => addSpot(c)} className="text-left rounded-[10px] px-3 py-2.5 bg-white" style={{ border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: 'pointer' }}>
+                    <div className="text-[13px] font-medium" style={{ color: '#1d1d1f' }}>{c.name}</div>
+                    <div className="text-[11.5px]" style={{ color: '#6e6e73' }}>{c.address}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+            {spotQ.trim() && !spotBusy && (
+              <button type="button" onClick={addSpotTyped} className="mt-2 text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}>
+                Add {'\u201C'}{spotQ.trim()}{'\u201D'} as written
+              </button>
+            )}
+            <div>
+              <button type="button" onClick={() => { setAddingSpot(false); setSpotQ(''); setSpotHits([]) }} className="mt-2 text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#6e6e73', cursor: 'pointer', padding: 0 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button" onClick={() => setAddingSpot(true)}
+            className="w-full text-[13px] font-bold"
+            style={{ minHeight: 48, borderRadius: 14, border: '1.5px dashed rgba(74,189,152,0.6)', background: '#fff', color: '#0f6e56', cursor: 'pointer' }}
+          >
+            + Add another location
+          </button>
+        ))}
 
         {/* Fast-forward: once the AI has filled fields, let the owner jump
             straight to the review screen instead of tapping every step. */}
