@@ -31,7 +31,7 @@ const inputStyle = { border: '1.5px solid #e6e6ea', fontFamily: 'DM Sans, sans-s
  * closure is captured, not flattened. We always write back a synced overall
  * open/close span alongside `ranges` so downstream readers keep working.
  */
-function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: Hours) => void }) {
+export function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: Hours) => void }) {
   // Replace one day's ranges, keeping the flat span + closed flag in sync.
   function writeDay(day: string, ranges: HourRange[]) {
     const next: Hours = { ...hours }
@@ -139,7 +139,7 @@ function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: Hours) =
   )
 }
 
-function hasOpenHours(h: Hours | undefined): boolean {
+export function hasOpenHours(h: Hours | undefined): boolean {
   return !!h && Object.values(h).some((d) => !d.closed)
 }
 

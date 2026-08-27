@@ -1,8 +1,9 @@
 'use client'
 
 import { type ReactNode, useEffect, useState } from 'react'
-import { type OnboardingData, FOOD_BIZ_TYPES } from '../data'
-import { Store, MapPin, X } from 'lucide-react'
+import { type OnboardingData, type LocationDraft, type WeekHours, FOOD_BIZ_TYPES } from '../data'
+import { Store, MapPin, X, ChevronDown } from 'lucide-react'
+import { HoursEditor, hasOpenHours } from './step-location-details'
 import { Question, Input, FieldLabel } from '../ui'
 import { matchCuisine } from '../cuisine'
 import { extractFromWebsite, isLookupEnabled, searchBusinesses, getBusinessPrefill, type PlaceCandidate } from '@/lib/onboarding-lookup'
@@ -97,6 +98,19 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   const [spotHits, setSpotHits] = useState<PlaceCandidate[]>([])
   const [spotBusy, setSpotBusy] = useState(false)
   const [spotSearched, setSpotSearched] = useState(false)
+  /* Which location card is open to show its phone + hours. 'main' is the
+   * primary spot; a number indexes data.locations. Each spot keeps its own
+   * phone and hours, so the card is where you check and fix them. */
+  const [openCard, setOpenCard] = useState<'main' | number | null>(null)
+  function updateSpot(i: number, patch: Partial<LocationDraft>) {
+    update('locations', data.locations.map((l, x) => (x === i ? { ...l, ...patch } : l)))
+  }
+  const spotPeek = (phone: string, hours: WeekHours) => {
+    const bits: string[] = []
+    if (phone.trim()) bits.push(phone.trim())
+    if (hasOpenHours(hours)) bits.push('Hours saved')
+    return bits.length ? bits.join(' \u00B7 ') : 'Add phone and hours'
+  }
   const normAddr = (a: string) => a.trim().toLowerCase()
   const isDupSpot = (placeId: string, addr: string) =>
     (!!placeId && (placeId === data.primary_place_id || data.locations.some((l) => l.place_id === placeId))) ||
@@ -161,6 +175,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   function removeSpot(i: number) {
     const next = data.locations.filter((_, x) => x !== i)
     update('locations', next); syncSpotCount(next.length)
+    setOpenCard((c) => (typeof c === 'number' ? (c === i ? null : c > i ? c - 1 : c) : c))
   }
 
 
@@ -269,25 +284,75 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           <FieldLabel>Locations</FieldLabel>
           <div className="flex flex-col gap-2">
             {data.full_address.trim() && (
-              <div className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
-                <MapPin size={16} color="#2e9a78" />
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{data.biz_name.trim() || 'Main spot'}</div>
-                  <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{data.full_address}</div>
+              <div className="rounded-[14px] bg-white" style={{ boxShadow: openCard === 'main' ? 'inset 0 0 0 1.5px #4abd98, 0 8px 24px rgba(74,189,152,0.15)' : '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
+                <div
+                  role="button" tabIndex={0}
+                  onClick={() => setOpenCard(openCard === 'main' ? null : 'main')}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setOpenCard(openCard === 'main' ? null : 'main') }}
+                  className="flex items-center gap-2.5 px-3.5 py-3" style={{ cursor: 'pointer' }}
+                >
+                  <MapPin size={16} color="#2e9a78" className="flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{data.biz_name.trim() || 'Main spot'}</div>
+                    <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{data.full_address}</div>
+                    <div className="text-[11.5px] mt-0.5 truncate" style={{ color: data.phone.trim() || hasOpenHours(data.hours) ? '#8e8e93' : '#0f6e56' }}>{spotPeek(data.phone, data.hours)}</div>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
+                  <ChevronDown size={15} color="#aeaeb2" className="flex-shrink-0" style={{ transform: openCard === 'main' ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }} />
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
+                {openCard === 'main' && (
+                  <div className="px-3.5 pb-3.5 flex flex-col gap-3">
+                    {data.primary_place_id ? (
+                      <div className="text-[12px]" style={{ color: '#6e6e73' }}>From your Google listing. Fix anything that looks off.</div>
+                    ) : null}
+                    <div>
+                      <FieldLabel>Phone</FieldLabel>
+                      <Input value={data.phone} onChange={(v) => update('phone', v)} placeholder="(555) 123-4567" type="tel" />
+                    </div>
+                    <div>
+                      <FieldLabel>Hours</FieldLabel>
+                      <HoursEditor hours={data.hours} onChange={(h) => update('hours', h)} />
+                    </div>
+                    <button type="button" onClick={() => setOpenCard(null)} className="self-start text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}>Done</button>
+                  </div>
+                )}
               </div>
             )}
             {data.locations.map((l, i) => (
-              <div key={`${l.place_id || l.full_address}-${i}`} className="flex items-center gap-2.5 rounded-[14px] px-3.5 py-3 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
-                <MapPin size={16} color="#6e6e73" />
-                <div className="min-w-0 flex-1">
-                  {l.name.trim() ? <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{l.name}</div> : null}
-                  <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{l.full_address}</div>
+              <div key={`${l.place_id || l.full_address}-${i}`} className="rounded-[14px] bg-white" style={{ boxShadow: openCard === i ? 'inset 0 0 0 1.5px #4abd98, 0 8px 24px rgba(74,189,152,0.15)' : '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
+                <div
+                  role="button" tabIndex={0}
+                  onClick={() => setOpenCard(openCard === i ? null : i)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setOpenCard(openCard === i ? null : i) }}
+                  className="flex items-center gap-2.5 px-3.5 py-3" style={{ cursor: 'pointer' }}
+                >
+                  <MapPin size={16} color="#6e6e73" className="flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    {l.name.trim() ? <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{l.name}</div> : null}
+                    <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{l.full_address}</div>
+                    <div className="text-[11.5px] mt-0.5 truncate" style={{ color: (l.phone || '').trim() || hasOpenHours(l.hours) ? '#8e8e93' : '#0f6e56' }}>{spotPeek(l.phone || '', l.hours || {})}</div>
+                  </div>
+                  <ChevronDown size={15} color="#aeaeb2" className="flex-shrink-0" style={{ transform: openCard === i ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }} />
+                  <button type="button" aria-label={`Remove ${l.name || l.full_address}`} onClick={(e) => { e.stopPropagation(); removeSpot(i) }} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
+                    <X size={15} />
+                  </button>
                 </div>
-                <button type="button" aria-label={`Remove ${l.name || l.full_address}`} onClick={() => removeSpot(i)} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
-                  <X size={15} />
-                </button>
+                {openCard === i && (
+                  <div className="px-3.5 pb-3.5 flex flex-col gap-3">
+                    {l.place_id ? (
+                      <div className="text-[12px]" style={{ color: '#6e6e73' }}>From this spot{'\u2019'}s Google listing. Fix anything that looks off.</div>
+                    ) : null}
+                    <div>
+                      <FieldLabel>Phone</FieldLabel>
+                      <Input value={l.phone || ''} onChange={(v) => updateSpot(i, { phone: v })} placeholder="(555) 123-4567" type="tel" />
+                    </div>
+                    <div>
+                      <FieldLabel>Hours</FieldLabel>
+                      <HoursEditor hours={l.hours || {}} onChange={(h) => updateSpot(i, { hours: h })} />
+                    </div>
+                    <button type="button" onClick={() => setOpenCard(null)} className="self-start text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}>Done</button>
+                  </div>
+                )}
               </div>
             ))}
             {addingSpot ? (
@@ -364,15 +429,6 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           </div>
         )}
 
-        <div>
-          <FieldLabel>Phone number</FieldLabel>
-          <Input
-            value={data.phone}
-            onChange={(v) => update('phone', v)}
-            placeholder="(555) 123-4567"
-            type="tel"
-          />
-        </div>
 
         {/* Fast-forward: once the AI has filled fields, let the owner jump
             straight to the review screen instead of tapping every step. */}

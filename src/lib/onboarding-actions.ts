@@ -357,7 +357,7 @@ export async function completeOnboardingCRM(
       ? (data.locations as Array<{
           name?: unknown; full_address?: unknown
           city?: unknown; state?: unknown; zip?: unknown; place_id?: unknown
-          hours?: unknown
+          hours?: unknown; phone?: unknown
         }>)
       : []
     const cleanLocs = locDraft.filter(
@@ -381,6 +381,7 @@ export async function completeOnboardingCRM(
             zip: str(data.zip),
             gbp_place_id: str(data.primary_place_id),
             hours: (data.hours as Record<string, unknown>) || null,
+            phone: str(data.phone),
             is_primary: true,
           })
         }
@@ -394,11 +395,17 @@ export async function completeOnboardingCRM(
             zip: str(l.zip),
             gbp_place_id: str(l.place_id),
             hours: (l.hours as Record<string, unknown>) || null,
+            phone: str(l.phone),
             is_primary: false,
           })
         }
         if (rows.length) {
-          const { error: locErr } = await supabase.from('client_locations').insert(rows)
+          let { error: locErr } = await supabase.from('client_locations').insert(rows)
+          if (locErr && locErr.code === '42703') {
+            // phone column not migrated yet (245): save everything else
+            const bare = rows.map(({ phone: _phone, ...rest }) => rest)
+            ;({ error: locErr } = await supabase.from('client_locations').insert(bare))
+          }
           if (locErr) console.error('[completeOnboardingCRM] locations seed error:', locErr.message)
           else console.log(`[completeOnboardingCRM] Seeded ${rows.length} client_locations`)
         }
