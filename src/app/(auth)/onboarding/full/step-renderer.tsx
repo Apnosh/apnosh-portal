@@ -113,15 +113,21 @@ export function OnboardingFrame({
         inset: 0,
         zIndex: 60,
         display: 'flex',
-        flexDirection: 'column',
+        justifyContent: 'center',
         overflow: 'hidden',
-        background: '#f5f5f7',
+        background: '#ececef',
         fontFamily: "'Inter', system-ui, sans-serif",
         color: '#1d1d1f',
       }}
     >
-      {/* dvh with a vh fallback for older engines. */}
-      <style>{`.ob-frame{height:100vh;height:100dvh}`}</style>
+      {/* dvh with a vh fallback for older engines; on anything wider than a
+          phone, the whole frame (bars included) presents as the portal's
+          standard 480px app column, never a stretched web page */}
+      <style>{`
+.ob-frame{height:100vh;height:100dvh}
+.ob-phone{width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;background:#f5f5f7}
+@media (min-width: 521px){.ob-phone{border-left:1px solid rgba(0,0,0,0.06);border-right:1px solid rgba(0,0,0,0.06);box-shadow:0 0 60px rgba(0,0,0,0.08)}}`}</style>
+      <div className="ob-phone">
 
       {topSlot}
 
@@ -234,6 +240,7 @@ export function OnboardingFrame({
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
