@@ -44,8 +44,9 @@ export function Question({ title, subtitle, icon, small }: {
           aria-hidden
           className="mx-auto flex items-center justify-center"
           style={{
-            width: 54, height: 54, borderRadius: 16, marginBottom: 14,
-            background: 'linear-gradient(150deg, rgba(74,189,152,0.16), rgba(74,189,152,0.06))',
+            width: 64, height: 64, borderRadius: 19, marginBottom: 14,
+            background: 'linear-gradient(150deg, rgba(74,189,152,0.18), rgba(74,189,152,0.06))',
+            boxShadow: '0 10px 30px rgba(74,189,152,0.22), inset 0 1px 0 rgba(255,255,255,0.9)',
             color: '#2e9a78',
           }}
         >
@@ -53,8 +54,8 @@ export function Question({ title, subtitle, icon, small }: {
         </div>
       )}
       <h2
-        className="text-[24px] font-bold"
-        style={{ fontFamily: "'Inter', -apple-system, system-ui, sans-serif", color: '#1d1d1f', letterSpacing: '-0.03em', lineHeight: 1.15 }}
+        className="text-[30px] font-bold"
+        style={{ fontFamily: "'Inter', -apple-system, system-ui, sans-serif", color: '#1d1d1f', letterSpacing: '-0.04em', lineHeight: 1.1 }}
       >
         {title}
       </h2>
@@ -169,16 +170,19 @@ export function OptionCard({
     <button
       type="button"
       onClick={disabled ? undefined : onClick}
-      className={`text-left rounded-[14px] p-3.5 select-none relative
+      className={`ob-card text-left rounded-[18px] p-3.5 select-none relative
         ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
-        ${!disabled && !selected ? 'hover:translate-y-[-1px] hover:shadow-sm' : ''}
+        ${!disabled && !selected ? 'hover:translate-y-[-1px]' : ''}
         ${className}
       `}
       style={{
-        border: selected ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
+        border: 'none',
         background: selected ? '#f0faf6' : 'white',
+        boxShadow: selected
+          ? 'inset 0 0 0 1.5px #4abd98, 0 2px 4px rgba(46,154,120,0.10), 0 12px 30px rgba(74,189,152,0.22)'
+          : '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)',
         minHeight: 44,
-        transition: 'all .15s ease',
+        transition: 'all .18s ease',
       }}
     >
       {children}
@@ -209,18 +213,20 @@ export function Input({
       autoFocus={autoFocus}
       className="w-full text-[15px] rounded-[12px] px-4 outline-none transition-all"
       style={{
-        border: '1.5px solid #e6e6ea',
+        border: '1.5px solid transparent',
         color: '#1d1d1f',
-        background: '#fff',
+        background: '#f1f1f4',
         fontFamily: 'DM Sans, sans-serif',
         height: 52,
       }}
       onFocus={(e) => {
+        e.currentTarget.style.background = '#fff'
         e.currentTarget.style.borderColor = '#4abd98'
-        e.currentTarget.style.boxShadow = '0 0 0 2px rgba(74,189,152,0.18)'
+        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.15), 0 8px 20px rgba(0,0,0,0.05)'
       }}
       onBlur={(e) => {
-        e.currentTarget.style.borderColor = '#e6e6ea'
+        e.currentTarget.style.background = '#f1f1f4'
+        e.currentTarget.style.borderColor = 'transparent'
         e.currentTarget.style.boxShadow = 'none'
       }}
     />
@@ -247,18 +253,20 @@ export function TextArea({
       rows={rows}
       className="w-full text-[15px] rounded-[12px] px-4 py-3.5 outline-none resize-none transition-all leading-relaxed"
       style={{
-        border: '1.5px solid #e6e6ea',
+        border: '1.5px solid transparent',
         color: '#1d1d1f',
-        background: '#fff',
+        background: '#f1f1f4',
         fontFamily: 'DM Sans, sans-serif',
         minHeight: 96,
       }}
       onFocus={(e) => {
+        e.currentTarget.style.background = '#fff'
         e.currentTarget.style.borderColor = '#4abd98'
-        e.currentTarget.style.boxShadow = '0 0 0 2px rgba(74,189,152,0.18)'
+        e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.15), 0 8px 20px rgba(0,0,0,0.05)'
       }}
       onBlur={(e) => {
-        e.currentTarget.style.borderColor = '#e6e6ea'
+        e.currentTarget.style.background = '#f1f1f4'
+        e.currentTarget.style.borderColor = 'transparent'
         e.currentTarget.style.boxShadow = 'none'
       }}
     />
@@ -324,7 +332,7 @@ export function PrimaryPill({
         cursor: disabled ? 'not-allowed' : 'pointer',
         background: disabled ? '#e5e5ea' : 'linear-gradient(135deg, #4abd98, #2e9a78)',
         color: disabled ? '#aeaeb2' : '#fff',
-        boxShadow: disabled ? 'none' : '0 8px 22px rgba(74,189,152,0.32)',
+        boxShadow: disabled ? 'none' : '0 10px 30px rgba(74,189,152,0.38)',
         transition: 'all .15s ease',
       }}
     >

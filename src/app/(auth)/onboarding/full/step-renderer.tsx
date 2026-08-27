@@ -125,7 +125,7 @@ export function OnboardingFrame({
           standard 480px app column, never a stretched web page */}
       <style>{`
 .ob-frame{height:100vh;height:100dvh}
-.ob-phone{width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;background:#f5f5f7}
+.ob-phone{width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;background:radial-gradient(120% 34% at 50% 0%, rgba(74,189,152,0.10), rgba(255,255,255,0) 62%), #fbfbfd}
 @media (min-width: 521px){.ob-phone{border-left:1px solid rgba(0,0,0,0.06);border-right:1px solid rgba(0,0,0,0.06);box-shadow:0 0 60px rgba(0,0,0,0.08)}}`}</style>
       <div className="ob-phone">
 
@@ -227,7 +227,7 @@ export function OnboardingFrame({
           style={{
             flexShrink: 0,
             padding: '12px 20px calc(16px + env(safe-area-inset-bottom))',
-            background: 'rgba(245,245,247,0.85)',
+            background: 'rgba(251,251,253,0.85)',
             backdropFilter: 'blur(14px)',
             WebkitBackdropFilter: 'blur(14px)',
             borderTop: '1px solid rgba(0,0,0,0.05)',
@@ -277,6 +277,16 @@ function ScreenKeyframes() {
       @media (prefers-reduced-motion: no-preference) {
         .ob-screen { animation: obScreenIn .5s cubic-bezier(.32,.72,.35,1) both }
         @keyframes obScreenIn { from { opacity: 0; transform: translateY(14px) scale(.99) } to { opacity: 1; transform: none } }
+        .ob-screen > * { animation: obItemIn .55s cubic-bezier(.32,.72,.35,1) both }
+        .ob-screen > *:nth-child(1) { animation-delay: .03s }
+        .ob-screen > *:nth-child(2) { animation-delay: .08s }
+        .ob-screen > *:nth-child(3) { animation-delay: .13s }
+        .ob-screen > *:nth-child(4) { animation-delay: .18s }
+        .ob-screen > *:nth-child(5) { animation-delay: .23s }
+        .ob-screen > *:nth-child(n+6) { animation-delay: .28s }
+        @keyframes obItemIn { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+        .ob-card { transition: transform .12s ease }
+        .ob-card:active { transform: scale(.97) }
       }
     `}</style>
   )
