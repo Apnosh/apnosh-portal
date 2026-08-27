@@ -130,6 +130,18 @@ export default function StepRenderer(props: Props) {
       ) : (
         /* Keyed to the screen number so every advance replays the entrance. */
         <div key={step} className="ob-screen pt-3">
+          {/* a back at the TOP of every screen (owner call 2026-08-27): long
+              screens must never hide the way back below the fold */}
+          {step > 0 && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-1 mb-3"
+              style={{ background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer', fontFamily: "'Inter', system-ui, sans-serif", fontSize: 14, fontWeight: 600, color: '#6e6e73' }}
+            >
+              {'\u2039'} Back
+            </button>
+          )}
           {screen.map((stepId, i) => {
             const isLast = i === screen.length - 1
             const withNav = isLast && stepId !== 'review'
