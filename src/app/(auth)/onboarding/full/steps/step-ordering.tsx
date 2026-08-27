@@ -1,8 +1,9 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { ShoppingBag } from 'lucide-react'
 import { type OnboardingData, RESERVATIONS, DELIVERY } from '../data'
-import { Question, SingleChipGroup, ChipGroup, FieldLabel, Hint } from '../ui'
+import { Question, SingleChipGroup, ChipGroup, FieldLabel } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -23,9 +24,10 @@ export default function StepOrdering({ data, update, nav }: Props) {
     <>
       <Question
         title="How do people book and order?"
-        subtitle="Optional. Helps us point diners the right way."
+        subtitle="Optional."
+        icon={<ShoppingBag size={26} strokeWidth={2} />}
       />
-      <div className="mt-4">
+      <div className="mt-5">
         <FieldLabel>Reservations</FieldLabel>
         <SingleChipGroup
           options={RESERVATIONS}
@@ -41,7 +43,6 @@ export default function StepOrdering({ data, update, nav }: Props) {
           onToggle={toggleDelivery}
         />
       </div>
-      <Hint>We&apos;ll add the right links to posts so orders and bookings are one tap away.</Hint>
       {nav}
     </>
   )

@@ -1,8 +1,9 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { CalendarDays } from 'lucide-react'
 import { type OnboardingData, DAYS, RHYTHM_LEVELS } from '../data'
-import { Question, Hint } from '../ui'
+import { Question } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -27,9 +28,10 @@ export default function StepRhythm({ data, update, nav }: Props) {
     <>
       <Question
         title="When are you busy vs. slow?"
-        subtitle="Optional. So we push promos exactly when you need them."
+        subtitle="Optional."
+        icon={<CalendarDays size={26} strokeWidth={2} />}
       />
-      <div className="flex flex-col gap-1.5 mt-4 mb-1">
+      <div className="flex flex-col gap-1.5 mt-5 mb-1">
         {DAYS.map((day) => (
           <div key={day} className="flex items-center gap-2">
             <span className="text-[13px] w-[68px] shrink-0" style={{ color: '#48484a' }}>
@@ -59,7 +61,6 @@ export default function StepRhythm({ data, update, nav }: Props) {
           </div>
         ))}
       </div>
-      <Hint>Leave a day blank if it&apos;s about average. Slow days are where we focus first.</Hint>
       {nav}
     </>
   )

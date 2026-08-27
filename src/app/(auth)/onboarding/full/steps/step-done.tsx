@@ -109,7 +109,7 @@ export default function StepDone({ bizName }: Props) {
           Welcome to Apnosh{bizName ? `, ${bizName}` : ''}!
         </h2>
         <p className="text-[15px] leading-relaxed mb-7" style={{ color: '#6e6e73' }}>
-          Your account is all set. We're reviewing your info and building your content strategy now.
+          You're all set. We're building your plan now.
         </p>
 
         <div className="text-left rounded-[16px] px-4 py-4 mb-6" style={{ background: '#fff', border: '1.5px solid #e6e6ea' }}>
@@ -119,7 +119,7 @@ export default function StepDone({ bizName }: Props) {
             >
               1
             </span>
-            <span>We'll put together a custom content strategy based on everything you shared</span>
+            <span>We build your content plan from what you shared</span>
           </div>
           <div className="flex gap-3 text-[13px] py-1.5 leading-relaxed" style={{ color: '#48484a' }}>
             <span
@@ -127,7 +127,7 @@ export default function StepDone({ bizName }: Props) {
             >
               2
             </span>
-            <span>Your account manager will reach out to connect your social accounts</span>
+            <span>Your account manager reaches out</span>
           </div>
           <div className="flex gap-3 text-[13px] py-1.5 leading-relaxed" style={{ color: '#48484a' }}>
             <span
@@ -135,7 +135,7 @@ export default function StepDone({ bizName }: Props) {
             >
               3
             </span>
-            <span>Your first content will be ready within a week</span>
+            <span>First content within a week</span>
           </div>
         </div>
 

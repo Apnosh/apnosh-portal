@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { Eye } from 'lucide-react'
 import { type OnboardingData, APPROVAL_TYPES, FILM_CHIPS } from '../data'
 import { Question, ChipGroup, FieldLabel, Chip } from '../ui'
 
@@ -21,8 +22,8 @@ export default function StepApproval({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question title="How hands-on do you want to be?" subtitle="You can always change this later" />
-      <div className="mt-4 space-y-2 mb-4">
+      <Question title="How hands-on do you want to be?" icon={<Eye size={26} strokeWidth={2} />} />
+      <div className="mt-5 space-y-2 mb-4">
         {APPROVAL_TYPES.map((a) => {
           const sel = data.approval_type === a.id
           return (

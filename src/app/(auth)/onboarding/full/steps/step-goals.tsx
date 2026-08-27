@@ -1,6 +1,10 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
+import {
+  type LucideIcon, Target, CalendarClock, Footprints, MapPin, Megaphone, Heart,
+  Star, Rocket, Lightbulb, Trophy, ShoppingBag, Repeat, Truck, Camera, Sparkles,
+} from 'lucide-react'
 import { type OnboardingData, GOAL_CHIPS } from '../data'
 import { Question, scrollNavIntoView } from '../ui'
 
@@ -12,6 +16,25 @@ interface Props {
 
 const MAX = 3
 
+/* One stroke glyph per goal so the grid reads at a glance. Keys are the exact
+ * GOAL_CHIPS strings (they are stored values and must never change). */
+const GOAL_ICONS: Record<string, LucideIcon> = {
+  'More customers on slow days': CalendarClock,
+  'More foot traffic overall': Footprints,
+  'Build local awareness': MapPin,
+  'Promote a specific offering': Megaphone,
+  'Grow social following': Heart,
+  'Improve online reputation': Star,
+  'Launch something new': Rocket,
+  'Stay top of mind': Lightbulb,
+  'Compete with nearby businesses': Trophy,
+  'More bookings or orders': ShoppingBag,
+  'Turn first-timers into regulars': Repeat,
+  'Grow catering orders': Truck,
+  'Better photos of my food': Camera,
+  'Reach a younger crowd': Sparkles,
+}
+
 /**
  * ONE question: pick your top three, as tappable cards.
  *
@@ -20,8 +43,7 @@ const MAX = 3
  * prompt as free text. No migration, nothing to re-map.
  *
  * At three picks the unpicked cards dim and a fourth tap does nothing except pulse the
- * counter chip. No alert, no silent swap: changing your mind means un-picking a card first,
- * which the helper line says in plain words.
+ * counter chip. No alert, no silent swap: changing your mind means un-picking a card first.
  */
 export default function StepGoals({ data, update, nav }: Props) {
   const picked = data.top_goals.length ? data.top_goals : (data.primary_goal ? [data.primary_goal] : [])
@@ -51,10 +73,11 @@ export default function StepGoals({ data, update, nav }: Props) {
       <style>{'@media (prefers-reduced-motion: no-preference) { @keyframes goalCounterPulse { 0% { transform: scale(1) } 40% { transform: scale(1.14) } 100% { transform: scale(1) } } }'}</style>
       <Question
         title="What matters most right now?"
-        subtitle="Pick up to 3. We build your plan around them."
+        subtitle="Pick up to 3."
+        icon={<Target size={26} strokeWidth={2} />}
       />
 
-      <div className="mt-4 flex items-center justify-between">
+      <div className="mt-4 flex justify-center">
         <span
           key={bump}
           className="inline-flex items-center text-[12px] font-semibold rounded-[20px] px-3 py-1"
@@ -67,31 +90,32 @@ export default function StepGoals({ data, update, nav }: Props) {
         >
           {picked.length} of {MAX} picked
         </span>
-        {full && (
-          <span className="text-[12px]" style={{ color: '#98989d' }}>Tap a card to un-pick it.</span>
-        )}
       </div>
 
       <div className="grid grid-cols-2 gap-2.5 mt-3 [grid-auto-rows:1fr]">
         {GOAL_CHIPS.map((g) => {
           const isSel = picked.includes(g)
           const dimmed = full && !isSel
+          const Icon = GOAL_ICONS[g]
           return (
             <button
               key={g}
               type="button"
               onClick={() => toggle(g)}
-              className="relative text-left rounded-[14px] px-3.5 py-3 select-none"
+              className="relative rounded-[14px] px-3 py-3.5 select-none flex flex-col items-center justify-center gap-2"
               style={{
                 border: isSel ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
                 background: isSel ? '#f0faf6' : '#fff',
                 opacity: dimmed ? 0.5 : 1,
-                minHeight: 44,
+                minHeight: 84,
                 transition: 'all .15s ease',
               }}
             >
+              {Icon && (
+                <Icon aria-hidden size={20} strokeWidth={2} color={isSel ? '#0f6e56' : '#2e9a78'} />
+              )}
               <span
-                className="block text-[13px] font-medium leading-snug pr-5"
+                className="block text-[13px] font-medium leading-snug text-center"
                 style={{ color: isSel ? '#0f6e56' : '#333' }}
               >
                 {g}
@@ -109,14 +133,6 @@ export default function StepGoals({ data, update, nav }: Props) {
             </button>
           )
         })}
-      </div>
-
-      <div className="mt-3 text-[12px]" style={{ color: '#98989d' }}>
-        {picked.length === 0
-          ? 'Not sure? Skip it. We will suggest a starting point.'
-          : full
-            ? 'That is your top 3. Tap a card to change it.'
-            : 'Add another, or keep going.'}
       </div>
 
       {nav}

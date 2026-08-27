@@ -8,19 +8,59 @@ import { type ReactNode } from 'react'
  * jump on select), inputs are 52px tall with a soft mint focus ring, and the
  * title is a display-weight line with tight tracking. */
 
-// Question header
-export function Question({ title, subtitle }: { title: string; subtitle: string }) {
+// Question header. The default is a hero: centered, with an optional soft-mint
+// glyph tile above the title. Only the FIRST question on a screen gets the
+// hero + icon; follow-up questions further down a grouped screen pass `small`
+// and render as a quiet left-aligned line, so each screen keeps one hero.
+export function Question({ title, subtitle, icon, small }: {
+  title: string
+  subtitle?: string
+  icon?: ReactNode
+  small?: boolean
+}) {
+  if (small) {
+    return (
+      <div className="mb-2">
+        <h2
+          className="text-[15px] font-semibold"
+          style={{ fontFamily: "'Inter', -apple-system, system-ui, sans-serif", color: '#1d1d1f', letterSpacing: '-0.02em', lineHeight: 1.2 }}
+        >
+          {title}
+        </h2>
+        {subtitle && (
+          <p className="text-[13px] leading-relaxed mt-1" style={{ color: '#6e6e73' }}>
+            {subtitle}
+          </p>
+        )}
+      </div>
+    )
+  }
   return (
-    <div className="mb-2">
+    <div className="mb-2 text-center">
+      {icon && (
+        <div
+          aria-hidden
+          className="mx-auto mb-3 flex items-center justify-center"
+          style={{
+            width: 54, height: 54, borderRadius: 16,
+            background: 'linear-gradient(150deg, rgba(74,189,152,0.16), rgba(74,189,152,0.06))',
+            color: '#2e9a78',
+          }}
+        >
+          {icon}
+        </div>
+      )}
       <h2
-        className="text-[24px] font-bold mb-1.5"
+        className="text-[24px] font-bold"
         style={{ fontFamily: "'Inter', -apple-system, system-ui, sans-serif", color: '#1d1d1f', letterSpacing: '-0.03em', lineHeight: 1.15 }}
       >
         {title}
       </h2>
-      <p className="text-[13.5px] leading-relaxed" style={{ color: '#6e6e73' }}>
-        {subtitle}
-      </p>
+      {subtitle && (
+        <p className="text-[13.5px] leading-relaxed mt-1.5" style={{ color: '#6e6e73' }}>
+          {subtitle}
+        </p>
+      )}
     </div>
   )
 }

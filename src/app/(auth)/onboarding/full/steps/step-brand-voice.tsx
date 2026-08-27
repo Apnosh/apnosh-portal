@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
+import { MessageCircle } from 'lucide-react'
 import { type OnboardingData, TONE_CHIPS, EMOJI_LEVELS, CONTENT_CHIPS, AVOID_CHIPS } from '../data'
 import { Question, ChipGroup, FieldLabel, Input, OptionCard } from '../ui'
 
@@ -25,10 +26,10 @@ export default function StepBrandVoice({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question title="How should your brand sound?" subtitle="Your voice, the content you like, and what to avoid" />
+      <Question title="How should your brand sound?" icon={<MessageCircle size={26} strokeWidth={2} />} />
 
       {/* Tone */}
-      <div className="mt-4">
+      <div className="mt-5">
         <FieldLabel>Pick up to 3 tones, or describe your own</FieldLabel>
         <ChipGroup options={TONE_CHIPS} selected={data.tones} onToggle={(v) => toggle('tones', v)} max={3} />
         <div className="mt-3">
@@ -57,7 +58,6 @@ export default function StepBrandVoice({ data, update, nav }: Props) {
                 <div className="text-[13px] font-medium" style={{ color: selected ? '#0f6e56' : '#1d1d1f' }}>
                   {e.title}
                 </div>
-                <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>{e.desc}</div>
               </OptionCard>
             )
           })}

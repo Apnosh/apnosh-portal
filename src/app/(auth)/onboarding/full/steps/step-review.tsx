@@ -1,5 +1,6 @@
 'use client'
 
+import { CheckCircle2 } from 'lucide-react'
 import { type OnboardingData, type StepId, ROLES, APPROVAL_TYPES, FOOD_BIZ_TYPES } from '../data'
 import { Question, PrimaryPill } from '../ui'
 
@@ -43,8 +44,8 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
 
   return (
     <>
-      <Question title="Looking good, one last look" subtitle="Make sure everything's right, then let's go" />
-      <div className="mt-4 space-y-2">
+      <Question title="One last look" icon={<CheckCircle2 size={26} strokeWidth={2} />} />
+      <div className="mt-5 space-y-2">
         <ReviewCard title="You" stepId="role" onEdit={onGoToStep}>
           <Row label="Role" value={roleName} />
         </ReviewCard>

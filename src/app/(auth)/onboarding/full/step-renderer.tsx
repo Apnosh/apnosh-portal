@@ -183,11 +183,8 @@ function Nav({ step, valid, saving, canSkip, onNext, onBack, onSkipForNow }: {
             onMouseEnter={(e) => { e.currentTarget.style.color = '#0f6e56' }}
             onMouseLeave={(e) => { e.currentTarget.style.color = '#2e9a78' }}
           >
-            Short on time? Save and finish later →
+            Save and finish later →
           </button>
-          <p className="text-[11px] mt-1" style={{ color: '#98989d' }}>
-            Your progress is saved. Pick up from your dashboard anytime.
-          </p>
         </div>
       )}
     </>

@@ -5,7 +5,8 @@ import {
   type OnboardingData, type LocationDraft, type WeekHours, type HourRange,
   DAYS, spanFromRanges, rangesForDay,
 } from '../data'
-import { Question, Input, FieldLabel, Hint } from '../ui'
+import { Clock } from 'lucide-react'
+import { Question, Input, FieldLabel } from '../ui'
 import { getBusinessPrefill } from '@/lib/onboarding-lookup'
 
 interface Props {
@@ -208,12 +209,7 @@ export default function StepLocationDetails({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question
-        title="Hours and phone"
-        subtitle={isMulti
-          ? 'We pulled what we could. Check each spot and fix anything.'
-          : 'We pulled what we could. Check it over and fix anything.'}
-      />
+      <Question title="Hours and phone" icon={<Clock size={26} strokeWidth={2} />} />
 
       {(pulling || pullNote) && (
         <div
@@ -271,7 +267,6 @@ export default function StepLocationDetails({ data, update, nav }: Props) {
           </div>
         ))}
 
-        <Hint>You can edit hours and phone for any location later from your dashboard.</Hint>
       </div>
       {nav}
     </>

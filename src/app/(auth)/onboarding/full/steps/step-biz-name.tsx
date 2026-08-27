@@ -2,7 +2,8 @@
 
 import { type ReactNode, useEffect, useState } from 'react'
 import { type OnboardingData, FOOD_BIZ_TYPES } from '../data'
-import { Question, Input, FieldLabel, Hint } from '../ui'
+import { Store } from 'lucide-react'
+import { Question, Input, FieldLabel } from '../ui'
 import { matchCuisine } from '../cuisine'
 import { extractFromWebsite, isLookupEnabled, searchBusinesses, getBusinessPrefill, type PlaceCandidate } from '@/lib/onboarding-lookup'
 
@@ -132,15 +133,10 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
       : 'Read your site. Nothing new to pull, so we will fill this in together.')
   }
 
-  const isFood = FOOD_BIZ_TYPES.includes(data.biz_type as typeof FOOD_BIZ_TYPES[number])
-
   return (
     <>
-      <Question
-        title="Tell us about your business"
-        subtitle="Start with the basics. You will find and add your locations next."
-      />
-      <div className="mt-4 space-y-4">
+      <Question title="Your business" icon={<Store size={26} strokeWidth={2} />} />
+      <div className="mt-5 space-y-4">
         {/* Business name — the brand, kept separate from any one location's
             Google listing (those get searched on the next step). */}
         <div>
@@ -148,10 +144,9 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           <Input
             value={data.biz_name}
             onChange={(v) => update('biz_name', v)}
-            placeholder="e.g. The Golden Spoon"
+            placeholder="The Golden Spoon"
             autoFocus
           />
-          <Hint>Your brand name. You will add each location on the next step.</Hint>
 
           {/* One tap, and most of what follows is already answered. */}
           {lookupOn && data.biz_name.trim().length > 1 && (
@@ -163,7 +158,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                 className="w-full rounded-[12px] border text-[13px] font-semibold disabled:opacity-50"
                 style={{ borderColor: '#d8ece4', background: '#f0faf6', color: '#2e9a78', minHeight: 50 }}
               >
-                {finding || scanning ? 'Looking you up…' : 'Find us on Google and fill this in'}
+                {finding || scanning ? 'Looking you up...' : 'Find us on Google'}
               </button>
 
               {matches && matches.length > 0 && (
@@ -214,11 +209,6 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
               {scanning ? 'Reading...' : 'Scan site'}
             </button>
           </div>
-          <Hint>
-            {isFood
-              ? 'Drop your site link and we will pull your menu, dishes, and story so you are not typing it all.'
-              : 'Drop your site link and we will pull your story so you are not typing it from scratch.'}
-          </Hint>
         </div>
 
         {/* Scan recap */}
@@ -252,7 +242,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             onMouseEnter={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #23815f, #0a5a45)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #2e9a78, #0f6e56)' }}
           >
-            See everything we filled and finish faster →
+            See what we filled →
           </button>
         )}
       </div>

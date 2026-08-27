@@ -1,8 +1,9 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { Star } from 'lucide-react'
 import { type OnboardingData, DIETARY_CHIPS } from '../data'
-import { Question, Input, ChipGroup, FieldLabel, Hint } from '../ui'
+import { Question, Input, ChipGroup, FieldLabel } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -35,28 +36,26 @@ export default function StepMenuDetails({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question title="What are you known for?" subtitle="Signature dishes and what you can accommodate" />
+      <Question title="What are you known for?" icon={<Star size={26} strokeWidth={2} />} />
 
-      <div className="mt-4">
-        <FieldLabel>Signature dishes</FieldLabel>
+      <div className="mt-5">
+        <FieldLabel>Signature dishes (3 to 5)</FieldLabel>
         <div className="flex flex-col gap-2">
           {rows.slice(0, MAX).map((val, idx) => (
             <Input
               key={idx}
               value={val}
               onChange={(v) => setItem(idx, v)}
-              placeholder={idx === 0 ? 'e.g. Birria tacos' : 'Add another'}
+              placeholder={idx === 0 ? 'Birria tacos' : 'Add another'}
               autoFocus={idx === 0 && !val}
             />
           ))}
         </div>
-        <Hint>Name 3 to 5. These shape every post we write, so the AI sounds like your kitchen.</Hint>
       </div>
 
       <div className="mt-6">
         <FieldLabel>Dietary options you offer (optional)</FieldLabel>
         <ChipGroup options={DIETARY_CHIPS} selected={data.dietary_options} onToggle={toggleDietary} />
-        <Hint>We&apos;ll call these out when they fit, so the right diners notice you.</Hint>
       </div>
       {nav}
     </>

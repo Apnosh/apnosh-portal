@@ -123,7 +123,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
     <>
       <div className="mt-1">
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6e6e73' }}>What we found</div>
-        <p className="text-[13px] mt-1" style={{ color: '#6e6e73' }}>Tap anything that looks wrong. Nothing here is required.</p>
+        <p className="text-[13px] mt-1" style={{ color: '#6e6e73' }}>Tap anything that looks wrong.</p>
       </div>
 
       <div className="mt-5">
@@ -269,10 +269,6 @@ export default function StepConfirm({ data, update, nav }: Props) {
                 Add another location
               </button>
             )}
-            <span style={{ fontSize: 11.5, color: '#98989d', lineHeight: 1.5 }}>
-              Just a name and address here. Hours, phone and their Google listings are easier to
-              set per location from your dashboard.
-            </span>
           </div>
         </Row>
 
@@ -290,9 +286,6 @@ export default function StepConfirm({ data, update, nav }: Props) {
               <b style={{ color: x.n > 0 ? '#1d1d1f' : '#c7c7cc', fontWeight: 600 }}>{x.n}</b> {x.label}
             </span>
           ))}
-        </div>
-        <div style={{ fontSize: 12, color: '#98989d', marginTop: 10, lineHeight: 1.5 }}>
-          Menu, hours and photos are easier to fix from your dashboard later. Nothing is lost by moving on.
         </div>
       </div>
 

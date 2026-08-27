@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { Megaphone } from 'lucide-react'
 import { type OnboardingData } from '../data'
 import { Question, TextArea, FieldLabel, Input } from '../ui'
 
@@ -13,12 +14,12 @@ interface Props {
 export default function StepPromote({ data, update, nav }: Props) {
   return (
     <>
-      <Question title="What should we highlight most?" subtitle="The stuff you want people to know about or order" />
-      <div className="mt-4 space-y-4">
+      <Question title="What should we highlight?" icon={<Megaphone size={26} strokeWidth={2} />} />
+      <div className="mt-5 space-y-4">
         <TextArea
           value={data.main_offerings}
           onChange={(v) => update('main_offerings', v)}
-          placeholder="e.g. Our AYCE experience, signature cocktails, weekend brunch special, group dining packages..."
+          placeholder="e.g. Our AYCE experience, signature cocktails, weekend brunch special..."
         />
         <div>
           <FieldLabel>Anything coming up soon?</FieldLabel>

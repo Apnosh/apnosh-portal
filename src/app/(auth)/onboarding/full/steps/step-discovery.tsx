@@ -1,8 +1,9 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
+import { Search } from 'lucide-react'
 import { type OnboardingData } from '../data'
-import { Question, FieldLabel, Hint } from '../ui'
+import { Question, FieldLabel } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -87,28 +88,27 @@ export default function StepDiscovery({ data, update, nav }: Props) {
     <>
       <Question
         title="How should people find you?"
-        subtitle="Optional. Helps us get you discovered, not just seen."
+        subtitle="Optional."
+        icon={<Search size={26} strokeWidth={2} />}
       />
-      <div className="mt-4">
+      <div className="mt-5">
         <FieldLabel>Your hashtags</FieldLabel>
         <TagInput
           tags={data.brand_hashtags}
           onChange={(next) => update('brand_hashtags', next)}
-          placeholder="Type a hashtag and press Enter"
+          placeholder="#austineats, then Enter"
           prefix="#"
           clean={cleanHashtag}
         />
-        <Hint>Branded or local tags you want on posts, like #austineats or your restaurant name.</Hint>
       </div>
       <div className="mt-5">
         <FieldLabel>Search terms you want to rank for</FieldLabel>
         <TagInput
           tags={data.target_keywords}
           onChange={(next) => update('target_keywords', next)}
-          placeholder="Type a phrase and press Enter"
+          placeholder="best tacos near me, then Enter"
           clean={cleanKeyword}
         />
-        <Hint>What people Google to find a place like yours, e.g. &quot;best tacos near me.&quot;</Hint>
       </div>
       {nav}
     </>

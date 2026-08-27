@@ -1,8 +1,9 @@
 'use client'
 
 import { type ReactNode, useEffect, useCallback, useState } from 'react'
+import { Plug } from 'lucide-react'
 import { type OnboardingData, PLATFORMS } from '../data'
-import { Question, Hint } from '../ui'
+import { Question } from '../ui'
 import { ensureClientForBusiness, getConnectedPlatforms } from '@/lib/onboarding-actions'
 
 // Every social connect goes through the vendor lane (the same per-platform hosted
@@ -328,8 +329,8 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
 
   return (
     <>
-      <Question title="Connect your accounts" subtitle="Link the platforms you want us to manage" />
-      <div className="mt-4 space-y-2">
+      <Question title="Connect your accounts" icon={<Plug size={26} strokeWidth={2} />} />
+      <div className="mt-5 space-y-2">
         {PLATFORMS.map((p) => {
           /* A route must exist AND its keys must be set. Either missing means no button. */
           const hasOAuth = !!OAUTH_PATHS[p.name] && (available === null || available[p.name] !== false)
@@ -355,7 +356,6 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
               </div>
               <div className="flex-1">
                 <div className="text-sm font-semibold" style={{ color: '#1d1d1f' }}>{p.name}</div>
-                <div className="text-xs" style={{ color: '#6e6e73' }}>{p.desc}</div>
               </div>
               {isConn ? (
                 <span
@@ -389,7 +389,6 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
             </div>
           )
         })}
-        <Hint>You can always connect more accounts from your dashboard later.</Hint>
       </div>
       {gbpNote && (
         <div className="mt-4 rounded-[12px] px-3.5 py-3 text-[13px] leading-relaxed" style={{ background: '#f0faf6', border: '1px solid #d8ece4', color: '#2e9a78' }}>
@@ -400,8 +399,8 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
       {/* ONE LINE, NOT A LECTURE. Shown always, so it reads as a note about how phones behave
           rather than as an error report about something the owner just did wrong. */}
       <div className="mt-4 text-[12px] leading-relaxed" style={{ color: '#98989d' }}>
-        Some phones open the Instagram or TikTok app instead of signing you in. If that happens,
-        skip it. You can connect from your dashboard on a computer in a few seconds.
+        Some phones open the app instead of signing you in. If that happens, skip it and
+        connect from a computer later.
         {connectUrl && (
           <>
             {' '}

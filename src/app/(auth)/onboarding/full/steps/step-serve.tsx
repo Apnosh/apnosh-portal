@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { UtensilsCrossed } from 'lucide-react'
 import { type OnboardingData, CUISINES, SERVICE_STYLES, PRICE_TIERS } from '../data'
 import { Question, OptionCard, Input, ChipGroup, FieldLabel } from '../ui'
 
@@ -24,10 +25,10 @@ export default function StepServe({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question title="What you serve" subtitle="Cuisine, style, and price point" />
+      <Question title="What you serve" icon={<UtensilsCrossed size={26} strokeWidth={2} />} />
 
       {/* Cuisine */}
-      <div className="mt-4">
+      <div className="mt-5">
         <FieldLabel>Primary cuisine</FieldLabel>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
           {CUISINES.map((c) => (
@@ -43,7 +44,7 @@ export default function StepServe({ data, update, nav }: Props) {
             <Input
               value={data.cuisine_other}
               onChange={(v) => update('cuisine_other', v)}
-              placeholder="e.g. Hawaiian poke, Ethiopian"
+              placeholder="Hawaiian poke, Ethiopian..."
             />
           </div>
         )}

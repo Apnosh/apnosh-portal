@@ -2,7 +2,8 @@
 
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { type OnboardingData, FOOD_BIZ_TYPES } from '../data'
-import { Question, Input, FieldLabel, Hint } from '../ui'
+import { MapPin } from 'lucide-react'
+import { Question, Input, FieldLabel } from '../ui'
 import { matchCuisine } from '../cuisine'
 import { ensureClientForBusiness } from '@/lib/onboarding-actions'
 import { getGBPLocationsForOnboarding, type OnboardingGBPLocation } from '@/lib/gbp-actions'
@@ -495,9 +496,8 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
     <>
       <Question
         title={isMulti ? 'Where are your spots?' : 'Where are you located?'}
-        subtitle={isNotOpen
-          ? 'Add your planned address. Search may not find you yet.'
-          : 'Find your restaurant on Google and we fill in the rest.'}
+        subtitle={isNotOpen ? 'Search may not find you yet.' : undefined}
+        icon={<MapPin size={26} strokeWidth={2} />}
       />
 
 
@@ -631,9 +631,7 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
           <div className="flex-1 min-w-0">
             <div className="text-sm font-semibold" style={{ color: '#1d1d1f' }}>Connect Google Business</div>
             <div className="text-xs" style={{ color: '#6e6e73' }}>
-              {isMulti
-                ? 'Pull all your spots, hours, and phone in one tap.'
-                : 'Pull your address, hours, and phone automatically.'}
+              Pulls your spots, hours, and phone.
             </div>
           </div>
           <button
@@ -663,9 +661,9 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
         <FieldLabel>How many spots?</FieldLabel>
         <div className="grid grid-cols-3 gap-2.5">
           {[
-            { value: 'Just 1', label: 'One spot', sub: 'A single location' },
-            { value: 'Multiple', label: 'A few', sub: 'Two or more' },
-            { value: 'Not open yet', label: 'Not open yet', sub: 'Opening soon' },
+            { value: 'Just 1', label: 'One spot' },
+            { value: 'Multiple', label: 'A few' },
+            { value: 'Not open yet', label: 'Not open yet' },
           ].map((opt) => {
             const selected = data.location_count === opt.value
             return (
@@ -683,12 +681,10 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
                 <div className="text-sm font-semibold" style={{ color: selected ? '#0f6e56' : '#1d1d1f' }}>
                   {opt.label}
                 </div>
-                <div className="text-[11px] mt-0.5" style={{ color: '#6e6e73' }}>{opt.sub}</div>
               </button>
             )
           })}
         </div>
-        <Hint>You can change this anytime and edit locations later from your dashboard.</Hint>
       </div>
 
       {/* Manual entry: appears once a choice is made, or straight away via
@@ -760,9 +756,6 @@ export default function StepLocation({ data, update, nav, businessId, onSaveBefo
             >
               + Add {data.locations.length ? 'another' : 'a'} location
             </button>
-            <p className="text-[11px]" style={{ color: '#98989d' }}>
-              You can always add or edit locations later from your dashboard.
-            </p>
           </div>
         )}
       </div>

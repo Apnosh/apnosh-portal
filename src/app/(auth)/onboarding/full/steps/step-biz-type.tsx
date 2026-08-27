@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { Store } from 'lucide-react'
 import { type OnboardingData, BIZ_TYPES } from '../data'
 import { Question, OptionCard, Input } from '../ui'
 
@@ -15,8 +16,8 @@ interface Props {
 export default function StepBizType({ data, update, nav, onAnswered }: Props) {
   return (
     <>
-      <Question title="What kind of business is it?" subtitle="Pick the closest match" />
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 mt-4 mb-2">
+      <Question title="What kind of business?" icon={<Store size={26} strokeWidth={2} />} />
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 mt-5 mb-2">
         {BIZ_TYPES.map((b) => (
           <OptionCard
             key={b}

@@ -40,10 +40,10 @@ export const SERVICE_STYLES = [
 
 // Price point — matches client_profiles.price_range CHECK ('$'..'$$$$')
 export const PRICE_TIERS = [
-  { id: '$', title: '$', desc: 'Budget-friendly · under $15 a head' },
-  { id: '$$', title: '$$', desc: 'Casual · $15–30 a head' },
-  { id: '$$$', title: '$$$', desc: 'Upscale · $30–60 a head' },
-  { id: '$$$$', title: '$$$$', desc: 'Fine dining · $60+ a head' },
+  { id: '$', title: '$', desc: 'Under $15 a head' },
+  { id: '$$', title: '$$', desc: '$15 to $30 a head' },
+  { id: '$$$', title: '$$$', desc: '$30 to $60 a head' },
+  { id: '$$$$', title: '$$$$', desc: '$60+ a head' },
 ] as const
 
 // Dietary accommodations the kitchen can offer

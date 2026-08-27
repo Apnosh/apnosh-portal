@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { Users2 } from 'lucide-react'
 import { type OnboardingData, CUSTOMER_TYPES, AGE_RANGES, WHY_CHIPS } from '../data'
 import { Question, ChipGroup, SingleChipGroup, FieldLabel } from '../ui'
 
@@ -30,9 +31,9 @@ export default function StepAudience({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question title="Who are you for?" subtitle="The customers you want and why they pick you" />
+      <Question title="Who are you for?" icon={<Users2 size={26} strokeWidth={2} />} />
 
-      <div className="mt-4">
+      <div className="mt-5">
         <FieldLabel>Ideal customers</FieldLabel>
         <ChipGroup options={CUSTOMER_TYPES} selected={data.customer_types} onToggle={toggleType} />
       </div>

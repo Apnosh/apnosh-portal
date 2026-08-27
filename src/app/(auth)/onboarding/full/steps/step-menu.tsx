@@ -1,8 +1,9 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { UtensilsCrossed } from 'lucide-react'
 import { type OnboardingData, type MenuDraftItem } from '../data'
-import { Question, Hint } from '../ui'
+import { Question } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -54,9 +55,10 @@ export default function StepMenu({ data, update, nav }: Props) {
     <>
       <Question
         title="What's on your menu?"
-        subtitle="Optional, but powerful. Real dishes make every post specific."
+        subtitle="Optional."
+        icon={<UtensilsCrossed size={26} strokeWidth={2} />}
       />
-      <div className="flex flex-col gap-2 mt-4 mb-1">
+      <div className="flex flex-col gap-2 mt-5 mb-1">
         <div className="flex gap-2 px-1">
           <span className="flex-1 text-[11px] font-medium" style={{ color: '#98989d' }}>Item</span>
           <span className="w-20 text-[11px] font-medium" style={{ color: '#98989d' }}>Price</span>
@@ -108,7 +110,6 @@ export default function StepMenu({ data, update, nav }: Props) {
           )
         })}
       </div>
-      <Hint>Even 5 to 10 items helps. The AI names real dishes instead of guessing &quot;your food.&quot;</Hint>
       {nav}
     </>
   )

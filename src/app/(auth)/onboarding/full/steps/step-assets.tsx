@@ -2,7 +2,7 @@
 
 import { type ReactNode, useRef } from 'react'
 import { type OnboardingData } from '../data'
-import { Question, FieldLabel, Input, Hint } from '../ui'
+import { Question, FieldLabel, Input } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -12,13 +12,15 @@ interface Props {
   onPhotosUpload: (files: FileList) => void
 }
 
+// Renders below Connect on the Launch screen, so this Question stays small:
+// one hero per screen.
 export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUpload }: Props) {
   const logoRef = useRef<HTMLInputElement>(null)
   const photosRef = useRef<HTMLInputElement>(null)
 
   return (
     <>
-      <Question title="Got any brand materials?" subtitle="Logo, photos, colors, whatever you have. All optional. Just continue if nothing is handy, and add it anytime later. With these, the graphics we make match your brand from day one." />
+      <Question small title="Brand materials" subtitle="All optional." />
       <div className="mt-4 space-y-4">
         {/* Logo upload */}
         <button
@@ -30,7 +32,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e6e6ea'; e.currentTarget.style.background = '#f5f5f7' }}
         >
           <div className="text-sm font-medium" style={{ color: '#48484a' }}>Upload your logo</div>
-          <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>PNG or SVG works best</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>PNG or SVG</div>
           <input
             ref={logoRef}
             type="file"
@@ -58,7 +60,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e6e6ea'; e.currentTarget.style.background = '#f5f5f7' }}
         >
           <div className="text-sm font-medium" style={{ color: '#48484a' }}>Upload brand photos</div>
-          <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>Your space, products, team, up to 20</div>
+          <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>Up to 20</div>
           <input
             ref={photosRef}
             type="file"
@@ -78,7 +80,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
 
         {/* Brand colors */}
         <div>
-          <FieldLabel>Brand colors (optional)</FieldLabel>
+          <FieldLabel>Brand colors</FieldLabel>
           <div className="flex items-center gap-2.5 mb-3">
             <input
               type="color"
@@ -107,7 +109,6 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
               placeholder="Secondary color hex"
             />
           </div>
-          <Hint>Don't know your colors? No worries, we'll figure it out.</Hint>
           <div className="text-[13px] mt-2" style={{ color: '#777' }}>
             No logo yet?{' '}
             <a href="/dashboard/requests?type=logo" target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: '#0f6e56' }}>
@@ -118,13 +119,12 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
 
         {/* Brand drive */}
         <div>
-          <FieldLabel>Have a shared drive or folder with brand materials?</FieldLabel>
+          <FieldLabel>Brand folder link</FieldLabel>
           <Input
             value={data.brand_drive}
             onChange={(v) => update('brand_drive', v)}
-            placeholder="Paste a Google Drive, Dropbox, or any link"
+            placeholder="Google Drive or Dropbox link"
           />
-          <Hint>If you have logos, photos, guidelines, or fonts stored somewhere, drop the link here and we'll grab what we need.</Hint>
         </div>
       </div>
       {nav}

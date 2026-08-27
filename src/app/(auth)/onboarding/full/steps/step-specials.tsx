@@ -1,8 +1,9 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { Tag } from 'lucide-react'
 import { type OnboardingData, type SpecialDraft } from '../data'
-import { Question, Hint } from '../ui'
+import { Question } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -52,10 +53,11 @@ export default function StepSpecials({ data, update, nav }: Props) {
   return (
     <>
       <Question
-        title="Any recurring specials or deals?"
-        subtitle="Optional: happy hours, taco Tuesdays, brunch combos"
+        title="Any recurring specials?"
+        subtitle="Optional."
+        icon={<Tag size={26} strokeWidth={2} />}
       />
-      <div className="flex flex-col gap-3 mt-4 mb-1">
+      <div className="flex flex-col gap-3 mt-5 mb-1">
         {rows.slice(0, MAX).map((row, idx) => {
           const real = !isEmpty(row)
           return (
@@ -109,7 +111,6 @@ export default function StepSpecials({ data, update, nav }: Props) {
           )
         })}
       </div>
-      <Hint>We&apos;ll turn these into recurring promo posts so your deals never get forgotten.</Hint>
       {nav}
     </>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { Store, ClipboardList, Laptop, Handshake, Zap } from 'lucide-react'
+import { Users, Store, ClipboardList, Laptop, Handshake, Zap } from 'lucide-react'
 
 import { type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
@@ -26,45 +26,44 @@ export default function StepRole({ data, update, nav, onAnswered }: Props) {
   }
   return (
     <>
-      <Question title="Who are you?" subtitle="This helps us tailor your experience" />
-      <div className="grid grid-cols-2 gap-2.5 mt-4 mb-2">
-        {/* one crisp mark per role; emoji reads like a sticker next to the
-            platform logos, a stroke icon reads like the system */}
+      <Question title="Who are you?" icon={<Users size={26} strokeWidth={2} />} />
+      <div className="grid grid-cols-2 gap-2.5 mt-5 mb-2">
+        {/* Icon-forward cards: one big glyph and a title. The titles say it all,
+            so no card carries a description line. */}
         {ROLES.map((r) => (
           <OptionCard
             key={r.id}
             selected={data.role === r.id}
             onClick={() => pick(r.id)}
             disabled={!!r.disabled}
-            className={ROLES.length % 2 === 1 && r.id === ROLES[ROLES.length - 1].id ? 'col-span-2 min-h-[104px]' : 'min-h-[148px]'}
+            className={`min-h-[116px] ${ROLES.length % 2 === 1 && r.id === ROLES[ROLES.length - 1].id ? 'col-span-2' : ''}`}
           >
             {!!r.disabled && <Badge>Soon</Badge>}
-            {/* Soft tinted glyph, echoing the order sheet's head. */}
-            <div
-              aria-hidden
-              className="flex items-center justify-center text-lg mb-2"
-              style={{
-                width: 40, height: 40, borderRadius: 12,
-                background: 'linear-gradient(150deg, rgba(74,189,152,0.14), rgba(74,189,152,0.05))',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
-              }}
-            >
-              {{
-                owner: <Store size={19} color="#2e9a78" />,
-                manager: <ClipboardList size={19} color="#2e9a78" />,
-                employee: <Laptop size={19} color="#2e9a78" />,
-                agency: <Handshake size={19} color="#2e9a78" />,
-                freelancer: <Zap size={19} color="#2e9a78" />,
-              }[r.id] ?? r.emoji}
-            </div>
-            <div
-              className="text-sm font-semibold mb-0.5"
-              style={{ color: data.role === r.id ? '#0f6e56' : '#1d1d1f' }}
-            >
-              {r.title}
-            </div>
-            <div className="text-xs leading-snug" style={{ color: '#6e6e73' }}>
-              {r.desc}
+            <div className="flex flex-col items-center justify-center gap-2.5 py-1">
+              {/* Soft tinted glyph tile, echoing the order sheet's head. */}
+              <div
+                aria-hidden
+                className="flex items-center justify-center"
+                style={{
+                  width: 48, height: 48, borderRadius: 14,
+                  background: 'linear-gradient(150deg, rgba(74,189,152,0.14), rgba(74,189,152,0.05))',
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
+                }}
+              >
+                {{
+                  owner: <Store size={24} color="#2e9a78" />,
+                  manager: <ClipboardList size={24} color="#2e9a78" />,
+                  employee: <Laptop size={24} color="#2e9a78" />,
+                  agency: <Handshake size={24} color="#2e9a78" />,
+                  freelancer: <Zap size={24} color="#2e9a78" />,
+                }[r.id] ?? r.emoji}
+              </div>
+              <div
+                className="text-sm font-semibold text-center"
+                style={{ color: data.role === r.id ? '#0f6e56' : '#1d1d1f' }}
+              >
+                {r.title}
+              </div>
             </div>
           </OptionCard>
         ))}

@@ -1,6 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { BookOpen } from 'lucide-react'
 import { type OnboardingData } from '../data'
 import { Question, TextArea, FieldLabel, Input } from '../ui'
 
@@ -13,8 +14,8 @@ interface Props {
 export default function StepStory({ data, update, nav }: Props) {
   return (
     <>
-      <Question title="Tell us about your business" subtitle="A couple sentences, like you'd explain it to a friend" />
-      <div className="mt-4 space-y-5">
+      <Question title="Your story" icon={<BookOpen size={26} strokeWidth={2} />} />
+      <div className="mt-5 space-y-5">
         <TextArea
           value={data.biz_desc}
           onChange={(v) => update('biz_desc', v)}
@@ -25,7 +26,7 @@ export default function StepStory({ data, update, nav }: Props) {
           <TextArea
             value={data.unique}
             onChange={(v) => update('unique', v)}
-            placeholder="Your secret sauce: quality, story, approach... The more we know, the better your content will be."
+            placeholder="Your secret sauce: quality, story, approach..."
             rows={3}
           />
         </div>
@@ -34,7 +35,7 @@ export default function StepStory({ data, update, nav }: Props) {
           <Input
             value={data.competitors}
             onChange={(v) => update('competitors', v)}
-            placeholder="Names of businesses you compete with locally"
+            placeholder="Businesses you compete with locally"
           />
         </div>
       </div>
