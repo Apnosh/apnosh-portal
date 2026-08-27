@@ -103,11 +103,38 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     const total = 1 + extras
     update('location_count', total <= 1 ? 'Just 1' : total <= 3 ? '2\u20133' : total <= 6 ? '4\u20136' : '7+')
   }
-  async function findSpot() {
-    if (!spotQ.trim() || !lookupOn) return
+  const [spotSearched, setSpotSearched] = useState(false)
+  const [spotManual, setSpotManual] = useState(false)
+  const [spotName, setSpotName] = useState('')
+  const [spotAddr, setSpotAddr] = useState('')
+  /* search AS THEY TYPE, and say so out loud when Google has nothing: a silent
+   * empty result list reads as broken */
+  useEffect(() => {
+    if (!addingSpot || !lookupOn) return
+    const q = spotQ.trim()
+    if (q.length < 3) { setSpotHits([]); setSpotSearched(false); return }
+    let alive = true
     setSpotBusy(true)
-    try { setSpotHits((await searchBusinesses(spotQ)).slice(0, 4)) } catch { setSpotHits([]) }
-    setSpotBusy(false)
+    const t = setTimeout(async () => {
+      try {
+        const found = await searchBusinesses(q)
+        if (alive) { setSpotHits(found.slice(0, 4)); setSpotSearched(true) }
+      } catch { if (alive) { setSpotHits([]); setSpotSearched(true) } }
+      if (alive) setSpotBusy(false)
+    }, 350)
+    return () => { alive = false; clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spotQ, addingSpot, lookupOn])
+  function closeSpotLane() {
+    setAddingSpot(false); setSpotManual(false)
+    setSpotQ(''); setSpotHits([]); setSpotSearched(false); setSpotName(''); setSpotAddr('')
+  }
+  function addSpotManual() {
+    const a = spotAddr.trim()
+    if (!a || isDupSpot('', a)) return
+    const next = [...data.locations, { name: spotName.trim(), full_address: a, city: '', state: '', zip: '', place_id: '', phone: '', hours: {} }]
+    update('locations', next); syncSpotCount(next.length)
+    closeSpotLane()
   }
   async function addSpot(c: PlaceCandidate) {
     setSpotBusy(true)
@@ -117,14 +144,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     if (isDupSpot(c.placeId, addr)) { setSpotQ(''); setSpotHits([]); return }
     const next = [...data.locations, { name: c.name, full_address: addr, city: p?.city ?? '', state: p?.state ?? '', zip: p?.zip ?? '', place_id: c.placeId, phone: p?.phone ?? '', hours: p?.hours ?? {} }]
     update('locations', next); syncSpotCount(next.length)
-    setSpotQ(''); setSpotHits([]); setAddingSpot(false)
-  }
-  function addSpotTyped() {
-    const a = spotQ.trim()
-    if (!a || isDupSpot('', a)) return
-    const next = [...data.locations, { name: '', full_address: a, city: '', state: '', zip: '', place_id: '', phone: '', hours: {} }]
-    update('locations', next); syncSpotCount(next.length)
-    setSpotQ(''); setSpotHits([]); setAddingSpot(false)
+    closeSpotLane()
   }
   function removeSpot(i: number) {
     const next = data.locations.filter((_, x) => x !== i)
@@ -271,33 +291,44 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
         )}
         {data.full_address.trim() && (addingSpot ? (
           <div className="rounded-[14px] p-3" style={{ background: '#f0faf6', boxShadow: 'inset 0 0 0 1.5px rgba(74,189,152,0.4)' }}>
-            <div className="flex gap-2">
-              <Input value={spotQ} onChange={setSpotQ} placeholder="Search the next spot" />
-              <button
-                type="button" onClick={findSpot} disabled={!spotQ.trim() || spotBusy || !lookupOn}
-                className="flex-shrink-0 px-4 rounded-[12px] text-[13px] font-semibold text-white disabled:opacity-30"
-                style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)', cursor: 'pointer' }}
-              >
-                {spotBusy ? 'Finding...' : 'Find'}
-              </button>
-            </div>
-            {spotHits.length > 0 && (
-              <div className="flex flex-col gap-1.5 mt-2">
-                {spotHits.map((c) => (
-                  <button key={c.placeId} type="button" onClick={() => addSpot(c)} className="text-left rounded-[10px] px-3 py-2.5 bg-white" style={{ border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: 'pointer' }}>
-                    <div className="text-[13px] font-medium" style={{ color: '#1d1d1f' }}>{c.name}</div>
-                    <div className="text-[11.5px]" style={{ color: '#6e6e73' }}>{c.address}</div>
-                  </button>
-                ))}
+            {!spotManual ? (
+              <>
+                <Input value={spotQ} onChange={setSpotQ} placeholder="Search the next spot on Google" autoFocus />
+                {spotBusy && (
+                  <div className="mt-2 text-[12.5px]" style={{ color: '#6e6e73' }}>Searching...</div>
+                )}
+                {spotHits.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mt-2">
+                    {spotHits.map((c) => (
+                      <button key={c.placeId} type="button" onClick={() => addSpot(c)} className="text-left rounded-[10px] px-3 py-2.5 bg-white" style={{ border: 'none', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', cursor: 'pointer' }}>
+                        <div className="text-[13px] font-medium" style={{ color: '#1d1d1f' }}>{c.name}</div>
+                        <div className="text-[11.5px]" style={{ color: '#6e6e73' }}>{c.address}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {spotSearched && !spotBusy && spotHits.length === 0 && (
+                  <div className="mt-2 text-[12.5px]" style={{ color: '#6e6e73' }}>No match on Google. Type it in below.</div>
+                )}
+              </>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <Input value={spotName} onChange={setSpotName} placeholder="Location name, like Downtown" />
+                <Input value={spotAddr} onChange={setSpotAddr} placeholder="Address" />
+                <button
+                  type="button" onClick={addSpotManual} disabled={!spotAddr.trim()}
+                  className="w-full text-[13px] font-semibold text-white disabled:opacity-30"
+                  style={{ minHeight: 44, borderRadius: 12, border: 'none', background: 'linear-gradient(135deg, #4abd98, #2e9a78)', cursor: 'pointer' }}
+                >
+                  Add this location
+                </button>
               </div>
             )}
-            {spotQ.trim() && !spotBusy && (
-              <button type="button" onClick={addSpotTyped} className="mt-2 text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}>
-                Add {'\u201C'}{spotQ.trim()}{'\u201D'} as written
+            <div className="flex items-center gap-4 mt-2.5">
+              <button type="button" onClick={() => setSpotManual(!spotManual)} className="text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}>
+                {spotManual ? 'Back to search' : 'Type it in myself'}
               </button>
-            )}
-            <div>
-              <button type="button" onClick={() => { setAddingSpot(false); setSpotQ(''); setSpotHits([]) }} className="mt-2 text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#6e6e73', cursor: 'pointer', padding: 0 }}>
+              <button type="button" onClick={closeSpotLane} className="text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#6e6e73', cursor: 'pointer', padding: 0 }}>
                 Cancel
               </button>
             </div>
