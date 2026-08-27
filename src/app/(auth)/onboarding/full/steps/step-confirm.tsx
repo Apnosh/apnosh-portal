@@ -114,12 +114,17 @@ export default function StepConfirm({ data, update, nav }: Props) {
   const hoursCount = Object.values(data.hours || {}).filter((h) => h && !h.closed).length
   const dishes = data.signature_items.filter((s) => s.trim()).length
 
+  /* Only worth showing once a scan or search actually FOUND things: a fresh
+   * manual signup seeing a wall of "Not set" reads as broken, not helpful. */
+  const foundAny = !!(data.biz_type || data.cuisine || hoursCount > 0 || dishes > 0)
+  if (!foundAny) return null
+
   return (
     <>
-      <Question
-        title="Here's what we found"
-        subtitle="Tap anything that looks wrong. Nothing here is required."
-      />
+      <div className="mt-1">
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#6e6e73' }}>What we found</div>
+        <p className="text-[13px] mt-1" style={{ color: '#6e6e73' }}>Tap anything that looks wrong. Nothing here is required.</p>
+      </div>
 
       <div className="mt-5">
         <Row openRow={openRow} setOpenRow={setOpenRow} id="name" label="BUSINESS" value={data.biz_name}>

@@ -1,5 +1,7 @@
 'use client'
 
+import { Store, ClipboardList, Laptop, Handshake, Zap } from 'lucide-react'
+
 import { type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { type OnboardingData, ROLES } from '../data'
@@ -26,12 +28,15 @@ export default function StepRole({ data, update, nav, onAnswered }: Props) {
     <>
       <Question title="Who are you?" subtitle="This helps us tailor your experience" />
       <div className="grid grid-cols-2 gap-2.5 mt-4 mb-2">
+        {/* one crisp mark per role; emoji reads like a sticker next to the
+            platform logos, a stroke icon reads like the system */}
         {ROLES.map((r) => (
           <OptionCard
             key={r.id}
             selected={data.role === r.id}
             onClick={() => pick(r.id)}
             disabled={!!r.disabled}
+            className={ROLES.length % 2 === 1 && r.id === ROLES[ROLES.length - 1].id ? 'col-span-2 min-h-[104px]' : 'min-h-[148px]'}
           >
             {!!r.disabled && <Badge>Soon</Badge>}
             {/* Soft tinted glyph, echoing the order sheet's head. */}
@@ -44,7 +49,13 @@ export default function StepRole({ data, update, nav, onAnswered }: Props) {
                 boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
               }}
             >
-              {r.emoji}
+              {{
+                owner: <Store size={19} color="#2e9a78" />,
+                manager: <ClipboardList size={19} color="#2e9a78" />,
+                employee: <Laptop size={19} color="#2e9a78" />,
+                agency: <Handshake size={19} color="#2e9a78" />,
+                freelancer: <Zap size={19} color="#2e9a78" />,
+              }[r.id] ?? r.emoji}
             </div>
             <div
               className="text-sm font-semibold mb-0.5"

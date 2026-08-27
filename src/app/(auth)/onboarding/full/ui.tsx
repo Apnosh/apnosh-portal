@@ -13,8 +13,8 @@ export function Question({ title, subtitle }: { title: string; subtitle: string 
   return (
     <div className="mb-2">
       <h2
-        className="text-[23px] font-bold mb-1.5"
-        style={{ fontFamily: 'Playfair Display, serif', color: '#1d1d1f', letterSpacing: '-0.02em', lineHeight: 1.15 }}
+        className="text-[24px] font-bold mb-1.5"
+        style={{ fontFamily: "'Inter', -apple-system, system-ui, sans-serif", color: '#1d1d1f', letterSpacing: '-0.03em', lineHeight: 1.15 }}
       >
         {title}
       </h2>
@@ -115,11 +115,13 @@ export function OptionCard({
   onClick,
   disabled,
   children,
+  className = '',
 }: {
   selected: boolean
   onClick: () => void
   disabled?: boolean
   children: ReactNode
+  className?: string
 }) {
   return (
     <button
@@ -128,6 +130,7 @@ export function OptionCard({
       className={`text-left rounded-[14px] p-3.5 select-none relative
         ${disabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}
         ${!disabled && !selected ? 'hover:translate-y-[-1px] hover:shadow-sm' : ''}
+        ${className}
       `}
       style={{
         border: selected ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',

@@ -72,7 +72,7 @@ export default function StepGoals({ data, update, nav }: Props) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 mt-3">
+      <div className="grid grid-cols-2 gap-2.5 mt-3 [grid-auto-rows:1fr]">
         {GOAL_CHIPS.map((g) => {
           const isSel = picked.includes(g)
           const dimmed = full && !isSel
