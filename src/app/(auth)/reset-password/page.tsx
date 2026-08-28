@@ -8,6 +8,7 @@ import { AuthCard, AuthHero, Field, ErrorNote, PillButton, StrengthMeter, pwStre
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -19,6 +20,7 @@ export default function ResetPasswordPage() {
     e.preventDefault()
     setError('')
     if (!strength.ok) { setError(strength.need || 'Use 8 characters or more'); return }
+    if (password !== confirmPw) { setError('Passwords do not match'); return }
 
     setLoading(true)
     const supabase = createClient()
@@ -65,6 +67,11 @@ export default function ResetPasswordPage() {
           }
         />
         <StrengthMeter strength={strength} password={password} />
+        <Field
+          label="Repeat password" value={confirmPw} onChange={setConfirmPw} placeholder="Type it again"
+          type={showPw ? 'text' : 'password'} autoComplete="new-password"
+          hint={confirmPw.length > 0 && confirmPw !== password ? 'These do not match yet' : undefined}
+        />
         <PillButton loading={loading}>{loading ? 'Saving...' : 'Save new password'}</PillButton>
       </form>
     </AuthCard>

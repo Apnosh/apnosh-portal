@@ -20,6 +20,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
   const [showPw, setShowPw] = useState(false)
   const [agreed, setAgreed] = useState(false)
   const [checkEmail, setCheckEmail] = useState(false)
@@ -34,6 +35,7 @@ export default function SignupPage() {
     if (fullName.trim().length < 2) { setError('Tell us your name'); return }
     if (phone.replace(/\D/g, '').length < 10) { setError('That phone number looks short'); return }
     if (!strength.ok) { setError(strength.need || 'Password needs 8 characters or more'); return }
+    if (password !== confirmPw) { setError('Passwords do not match'); return }
     if (!agreed) { setError('Please agree to the terms first'); return }
 
     setLoading(true)
@@ -179,6 +181,11 @@ export default function SignupPage() {
             }
           />
           <StrengthMeter strength={strength} password={password} />
+          <Field
+            label="Repeat password" value={confirmPw} onChange={setConfirmPw} placeholder="Type it again"
+            type={showPw ? 'text' : 'password'} autoComplete="new-password"
+            hint={confirmPw.length > 0 && confirmPw !== password ? 'These do not match yet' : undefined}
+          />
           <label className="flex items-start gap-2.5 cursor-pointer select-none">
             <input
               type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
