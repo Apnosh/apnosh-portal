@@ -83,7 +83,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     if (p.website) await runScan(p.website)
 
     setPickedNote(got.length
-      ? `Got your ${summarize(got)} from Google. Everything below is already filled in. Change anything that looks off.`
+      ? 'All set. Your location is below with its phone and hours from Google. Change anything that looks off.'
       : 'Found your listing. We will fill the rest in as we go.')
     setMatches(null)
   }
@@ -381,6 +381,10 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                       <div className="text-[12px]" style={{ color: '#6e6e73' }}>From your Google listing. Fix anything that looks off.</div>
                     ) : null}
                     <div>
+                      <FieldLabel>Address</FieldLabel>
+                      <Input value={data.full_address} onChange={(v) => update('full_address', v)} placeholder="Street, city, state" />
+                    </div>
+                    <div>
                       <FieldLabel>Phone</FieldLabel>
                       <Input value={data.phone} onChange={(v) => update('phone', v)} placeholder="(555) 123-4567" type="tel" />
                     </div>
@@ -417,6 +421,14 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                     {l.place_id ? (
                       <div className="text-[12px]" style={{ color: '#6e6e73' }}>From this spot{'\u2019'}s Google listing. Fix anything that looks off.</div>
                     ) : null}
+                    <div>
+                      <FieldLabel>Location name</FieldLabel>
+                      <Input value={l.name} onChange={(v) => updateSpot(i, { name: v })} placeholder="Like Downtown or Kent" />
+                    </div>
+                    <div>
+                      <FieldLabel>Address</FieldLabel>
+                      <Input value={l.full_address} onChange={(v) => updateSpot(i, { full_address: v })} placeholder="Street, city, state" />
+                    </div>
                     <div>
                       <FieldLabel>Phone</FieldLabel>
                       <Input value={l.phone || ''} onChange={(v) => updateSpot(i, { phone: v })} placeholder="(555) 123-4567" type="tel" />
