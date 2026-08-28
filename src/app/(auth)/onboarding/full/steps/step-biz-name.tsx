@@ -129,16 +129,13 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   // a shortcut straight to the review screen instead of every step.
   const [filledSomething, setFilledSomething] = useState(false)
 
-  /* ONE LOCATION FLOW (owner call 2026-08-27, v3): a single "+ Add location"
-   * opens ONE field that is both search and manual entry. Google results appear
-   * as they type; the last row always offers the typed text as the address.
-   * The FIRST location becomes the main spot (primary fields); every one after
-   * lands in data.locations. No modes, no forms, no second way to do it. */
+  /* MANUAL LANE (owner call 2026-08-27, v4): Google is handled by the
+   * multi-select above, so adding a location by hand is just a small form:
+   * name (for extra spots) + address. Phone and hours are added by tapping
+   * the card after. The FIRST location still becomes the main spot. */
   const [addingSpot, setAddingSpot] = useState(false)
-  const [spotQ, setSpotQ] = useState('')
-  const [spotHits, setSpotHits] = useState<PlaceCandidate[]>([])
-  const [spotBusy, setSpotBusy] = useState(false)
-  const [spotSearched, setSpotSearched] = useState(false)
+  const [spotName, setSpotName] = useState('')
+  const [spotAddr, setSpotAddr] = useState('')
   /* Which location card is open to show its phone + hours. 'main' is the
    * primary spot; a number indexes data.locations. Each spot keeps its own
    * phone and hours, so the card is where you check and fix them. */
@@ -160,55 +157,18 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     const total = (data.full_address.trim() ? 1 : 0) + extras || 1
     update('location_count', total <= 1 ? 'Just 1' : total <= 3 ? '2\u20133' : total <= 6 ? '4\u20136' : '7+')
   }
-  useEffect(() => {
-    if (!addingSpot || !lookupOn) return
-    const q = spotQ.trim()
-    if (q.length < 3) { setSpotHits([]); setSpotSearched(false); return }
-    let alive = true
-    setSpotBusy(true)
-    const t = setTimeout(async () => {
-      try {
-        const found = await searchBusinesses(q)
-        if (alive) { setSpotHits(found.slice(0, 4)); setSpotSearched(true) }
-      } catch { if (alive) { setSpotHits([]); setSpotSearched(true) } }
-      if (alive) setSpotBusy(false)
-    }, 350)
-    return () => { alive = false; clearTimeout(t) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spotQ, addingSpot, lookupOn])
   function closeSpotLane() {
-    setAddingSpot(false); setSpotQ(''); setSpotHits([]); setSpotSearched(false)
+    setAddingSpot(false); setSpotName(''); setSpotAddr('')
   }
-  async function addFromLane(c: PlaceCandidate) {
-    setSpotBusy(true)
-    const p = await getBusinessPrefill(c.placeId).catch(() => null)
-    setSpotBusy(false)
-    const addr = p?.full_address || c.address
-    if (isDupSpot(c.placeId, addr)) { closeSpotLane(); return }
-    if (!data.full_address.trim()) {
-      /* first location = the main spot */
-      update('primary_place_id', c.placeId)
-      update('full_address', addr)
-      if (p?.city) update('city', p.city)
-      if (p?.state) update('state', p.state)
-      if (p?.zip) update('zip', p.zip)
-      if (p?.phone && !data.phone) update('phone', p.phone)
-      if (p?.hours && Object.keys(p.hours).length && !Object.keys(data.hours || {}).length) update('hours', p.hours)
-      syncSpotCount(data.locations.length)
-    } else {
-      const next = [...data.locations, { name: c.name, full_address: addr, city: p?.city ?? '', state: p?.state ?? '', zip: p?.zip ?? '', place_id: c.placeId, phone: p?.phone ?? '', hours: p?.hours ?? {} }]
-      update('locations', next); syncSpotCount(next.length)
-    }
-    closeSpotLane()
-  }
-  function addTypedFromLane() {
-    const a = spotQ.trim()
+  function addSpotManual() {
+    const a = spotAddr.trim()
     if (!a || isDupSpot('', a)) return
     if (!data.full_address.trim()) {
+      /* first location = the main spot */
       update('full_address', a)
       syncSpotCount(data.locations.length)
     } else {
-      const next = [...data.locations, { name: '', full_address: a, city: '', state: '', zip: '', place_id: '', phone: '', hours: {} }]
+      const next = [...data.locations, { name: spotName.trim(), full_address: a, city: '', state: '', zip: '', place_id: '', phone: '', hours: {} }]
       update('locations', next); syncSpotCount(next.length)
     }
     closeSpotLane()
@@ -443,29 +403,19 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
               </div>
             ))}
             {addingSpot ? (
-              <div className="rounded-[14px] p-3 bg-white" style={{ boxShadow: 'inset 0 0 0 1.5px #4abd98, 0 8px 24px rgba(74,189,152,0.15)' }}>
-                <Input value={spotQ} onChange={setSpotQ} placeholder="Search Google, or type the address" autoFocus />
-                {spotBusy && <div className="mt-2 text-[12.5px]" style={{ color: '#6e6e73' }}>Searching...</div>}
-                {spotHits.length > 0 && (
-                  <div className="flex flex-col gap-1.5 mt-2">
-                    {spotHits.map((c) => (
-                      <button key={c.placeId} type="button" onClick={() => addFromLane(c)} className="text-left rounded-[10px] px-3 py-2.5" style={{ border: 'none', background: '#f5f5f7', cursor: 'pointer' }}>
-                        <div className="text-[13px] font-medium" style={{ color: '#1d1d1f' }}>{c.name}</div>
-                        <div className="text-[11.5px]" style={{ color: '#6e6e73' }}>{c.address}</div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {spotSearched && !spotBusy && spotHits.length === 0 && (
-                  <div className="mt-2 text-[12.5px]" style={{ color: '#6e6e73' }}>No Google match. Use your typed address below.</div>
-                )}
-                {spotQ.trim().length >= 3 && (
-                  <button type="button" onClick={addTypedFromLane} className="w-full text-left rounded-[10px] px-3 py-2.5 mt-2 flex items-center gap-2" style={{ border: '1.5px dashed rgba(74,189,152,0.5)', background: '#f0faf6', cursor: 'pointer' }}>
-                    <MapPin size={14} color="#0f6e56" />
-                    <span className="text-[12.5px] font-semibold" style={{ color: '#0f6e56' }}>Use {'\u201C'}{spotQ.trim()}{'\u201D'} as the address</span>
-                  </button>
-                )}
-                <button type="button" onClick={closeSpotLane} className="mt-2.5 text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#6e6e73', cursor: 'pointer', padding: 0 }}>
+              <div className="rounded-[14px] p-3 bg-white flex flex-col gap-2.5" style={{ boxShadow: 'inset 0 0 0 1.5px #4abd98, 0 8px 24px rgba(74,189,152,0.15)' }}>
+                {data.full_address.trim() ? (
+                  <Input value={spotName} onChange={setSpotName} placeholder="Location name, like Downtown" autoFocus />
+                ) : null}
+                <Input value={spotAddr} onChange={setSpotAddr} placeholder="Street, city, state" autoFocus={!data.full_address.trim()} />
+                <button
+                  type="button" onClick={addSpotManual} disabled={!spotAddr.trim()}
+                  className="w-full text-[13px] font-bold text-white transition-all disabled:opacity-40"
+                  style={{ minHeight: 44, borderRadius: 22, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #4abd98, #2e9a78)', boxShadow: '0 6px 18px rgba(74,189,152,0.30)' }}
+                >
+                  Add this location
+                </button>
+                <button type="button" onClick={closeSpotLane} className="self-start text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#6e6e73', cursor: 'pointer', padding: 0 }}>
                   Cancel
                 </button>
               </div>
@@ -475,7 +425,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                 className="w-full text-[13px] font-bold"
                 style={{ minHeight: 48, borderRadius: 14, border: '1.5px dashed rgba(74,189,152,0.6)', background: '#fff', color: '#0f6e56', cursor: 'pointer' }}
               >
-                {data.full_address.trim() ? '+ Add another location' : '+ Add your location'}
+                + Enter a location manually
               </button>
             )}
           </div>
