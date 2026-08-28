@@ -2,7 +2,7 @@
 
 import { type ReactNode, useEffect, useState } from 'react'
 import { type OnboardingData, type LocationDraft, type WeekHours, FOOD_BIZ_TYPES } from '../data'
-import { Store, MapPin, X, ChevronDown } from 'lucide-react'
+import { Store, MapPin, X, ChevronDown, Check } from 'lucide-react'
 import { HoursEditor, hasOpenHours } from './step-location-details'
 import { Question, Input, FieldLabel } from '../ui'
 import { matchCuisine } from '../cuisine'
@@ -35,16 +35,19 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   const [lookupOn, setLookupOn] = useState(false)
   useEffect(() => { isLookupEnabled().then(setLookupOn) }, [])
   const [matches, setMatches] = useState<PlaceCandidate[] | null>(null)
+  /* Multi-select over the Google results: a business with several spots picks
+   * them all in one pass. Tap order matters: the first pick becomes Main. */
+  const [picked, setPicked] = useState<string[]>([])
   const [finding, setFinding] = useState(false)
   const [pickedNote, setPickedNote] = useState('')
 
   async function findOnGoogle() {
     const q = data.biz_name.trim()
     if (!q || !lookupOn) return
-    setFinding(true); setMatches(null); setPickedNote('')
+    setFinding(true); setMatches(null); setPicked([]); setPickedNote('')
     try {
       const found = await searchBusinesses(q)
-      setMatches(found.slice(0, 4))
+      setMatches(found.slice(0, 8))
       if (!found.length) setPickedNote('No Google match yet. Keep going and we will fill this in as we go.')
     } catch {
       setPickedNote('Could not reach Google just now. Keep going, nothing is lost.')
@@ -84,6 +87,44 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
       : 'Found your listing. We will fill the rest in as we go.')
     setMatches(null)
   }
+  /* Apply every picked result in one go. First pick (or the existing main)
+   * anchors the business; every other pick becomes a location card with its
+   * own phone + hours pulled from Google. */
+  async function confirmPicks() {
+    if (!matches || !picked.length || finding) return
+    const chosen = picked
+      .map((id) => matches.find((m) => m.placeId === id))
+      .filter((m): m is PlaceCandidate => !!m)
+    const hasMain = !!data.full_address.trim()
+    const [head, ...rest] = chosen
+    const extrasSrc = hasMain ? chosen : rest
+    const mainId = hasMain ? data.primary_place_id : head.placeId
+    setFinding(true)
+    if (!hasMain) await usePlace(head)
+    const extras: LocationDraft[] = []
+    for (const c of extrasSrc) {
+      if (c.placeId === mainId) continue
+      if (extras.some((e) => e.place_id === c.placeId)) continue
+      if (isDupSpot(c.placeId, c.address)) continue
+      const p = await getBusinessPrefill(c.placeId).catch(() => null)
+      extras.push({
+        name: c.name, full_address: p?.full_address || c.address,
+        city: p?.city ?? '', state: p?.state ?? '', zip: p?.zip ?? '',
+        place_id: c.placeId, phone: p?.phone ?? '', hours: p?.hours ?? {},
+      })
+    }
+    if (extras.length) {
+      const next = [...data.locations, ...extras]
+      update('locations', next)
+      const total = 1 + next.length
+      update('location_count', total <= 1 ? 'Just 1' : total <= 3 ? '2\u20133' : total <= 6 ? '4\u20136' : '7+')
+      setPickedNote((prev) => (prev ? prev + ' ' : '') + `Added ${extras.length} more location${extras.length > 1 ? 's' : ''} below.`)
+    }
+    setFinding(false)
+    setMatches(null)
+    setPicked([])
+  }
+
   // True once a website scan has actually populated fields, so we can offer
   // a shortcut straight to the review screen instead of every step.
   const [filledSomething, setFilledSomething] = useState(false)
@@ -255,19 +296,53 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
 
               {matches && matches.length > 0 && (
                 <div className="mt-2 space-y-1.5">
-                  <div className="text-[12px]" style={{ color: '#98989d' }}>Which one is you?</div>
-                  {matches.map((m) => (
+                  <div className="text-[12px]" style={{ color: '#98989d' }}>
+                    Tap every location that is yours. Your first pick becomes the main spot.
+                  </div>
+                  {matches.map((m) => {
+                    const on = picked.includes(m.placeId)
+                    const isFirstPick = picked[0] === m.placeId && !data.full_address.trim()
+                    return (
+                      <button
+                        key={m.placeId} type="button"
+                        onClick={() => setPicked(on ? picked.filter((x) => x !== m.placeId) : [...picked, m.placeId])}
+                        className="w-full text-left rounded-[12px] bg-white px-3 py-2.5 flex items-center gap-2.5 transition-all"
+                        style={{
+                          border: 'none', minHeight: 52, cursor: 'pointer',
+                          boxShadow: on
+                            ? 'inset 0 0 0 1.5px #4abd98, 0 6px 18px rgba(74,189,152,0.15)'
+                            : '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.05)',
+                        }}
+                      >
+                        <div
+                          className="flex items-center justify-center flex-shrink-0 transition-all"
+                          style={{ width: 20, height: 20, borderRadius: 10, background: on ? '#2e9a78' : '#ececef' }}
+                        >
+                          {on ? <Check size={12} color="#fff" strokeWidth={3} /> : null}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[14px] font-semibold" style={{ color: '#1d1d1f' }}>{m.name}</div>
+                          <div className="text-[12px]" style={{ color: '#98989d' }}>{m.address}</div>
+                        </div>
+                        {isFirstPick && (
+                          <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
+                        )}
+                      </button>
+                    )
+                  })}
+                  {picked.length > 0 && (
                     <button
-                      key={m.placeId}
-                      type="button"
-                      onClick={() => usePlace(m)}
-                      className="w-full text-left rounded-[12px] border bg-white px-3 py-2.5"
-                      style={{ borderColor: '#e6e6ea', minHeight: 52 }}
+                      type="button" onClick={confirmPicks} disabled={finding}
+                      className="w-full text-[14px] font-bold text-white transition-all disabled:opacity-50"
+                      style={{
+                        minHeight: 46, borderRadius: 23, border: 'none', cursor: 'pointer',
+                        background: 'linear-gradient(135deg, #4abd98, #2e9a78)',
+                        boxShadow: '0 8px 24px rgba(74,189,152,0.32)',
+                      }}
                     >
-                      <div className="text-[14px] font-semibold" style={{ color: '#1d1d1f' }}>{m.name}</div>
-                      <div className="text-[12px]" style={{ color: '#98989d' }}>{m.address}</div>
+                      {finding ? 'Reading your listings...' : picked.length === 1 ? 'Use this location' : `Use these ${picked.length} locations`}
                     </button>
-                  ))}
+                  )}
                 </div>
               )}
 
