@@ -38,6 +38,9 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   /* Multi-select over the Google results: a business with several spots picks
    * them all in one pass. Tap order matters: the first pick becomes Main. */
   const [picked, setPicked] = useState<string[]>([])
+  /* The panel opens with 5 suggestions; Show more reveals the rest (Google
+   * returns up to 20). Reset per search so every query starts compact. */
+  const [showAllHits, setShowAllHits] = useState(false)
   const [finding, setFinding] = useState(false)
   const [pickedNote, setPickedNote] = useState('')
 
@@ -46,14 +49,15 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   useEffect(() => {
     if (!lookupOn || data.full_address.trim()) return
     const q = data.biz_name.trim()
-    if (q.length < 3) { setMatches(null); setPicked([]); return }
+    if (q.length < 3) { setMatches(null); setPicked([]); setShowAllHits(false); return }
     let alive = true
     setFinding(true)
     const t = setTimeout(async () => {
       try {
         const found = await searchBusinesses(q)
         if (alive) {
-          setMatches(found.slice(0, 8))
+          setMatches(found)
+          setShowAllHits(false)
           setPicked((prev) => prev.filter((id) => found.some((f) => f.placeId === id)))
         }
       } catch { if (alive) setMatches([]) }
@@ -266,7 +270,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                       <span className="text-[13px]" style={{ color: '#8e8e93' }}>Searching Google...</span>
                     </div>
                   )}
-                  {(matches ?? []).map((m, i) => {
+                  {((showAllHits ? matches : matches?.slice(0, 5)) ?? []).map((m, i) => {
                     const on = picked.includes(m.placeId)
                     const isFirstPick = picked[0] === m.placeId && !data.full_address.trim()
                     return (
@@ -296,6 +300,15 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                       </button>
                     )
                   })}
+                  {matches && matches.length > 5 && !showAllHits && (
+                    <button
+                      type="button" onClick={() => setShowAllHits(true)}
+                      className="w-full text-[12.5px] font-semibold"
+                      style={{ minHeight: 44, border: 'none', borderTop: '1px solid #f2f2f4', background: '#fff', color: '#0f6e56', cursor: 'pointer' }}
+                    >
+                      Show {matches.length - 5} more
+                    </button>
+                  )}
                   {matches && matches.length > 0 && (
                     <div
                       className="flex items-center justify-between gap-3 px-3.5 py-2.5"

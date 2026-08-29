@@ -128,7 +128,8 @@ export async function searchBusinesses(query: string): Promise<PlaceCandidate[]>
         'X-Goog-Api-Key': PLACES_KEY,
         'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress',
       },
-      body: JSON.stringify({ textQuery: q, maxResultCount: 5 }),
+      // 20 is the searchText ceiling: a chain's whole region fits one query.
+      body: JSON.stringify({ textQuery: q, maxResultCount: 20 }),
       // Places data changes rarely; let the platform cache identical typeaheads.
       cache: 'no-store',
     })
