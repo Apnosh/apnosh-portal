@@ -20,9 +20,12 @@ export default function OnboardingPreviewPage() {
   /* Hidden dev aid: ?screen=N (1-based) or ?screen=done jumps the preview
    * straight to a screen. No visible UI; used for design screenshots. */
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get('screen')
+    const sp = new URLSearchParams(window.location.search)
+    const q = sp.get('screen')
     if (q === 'done') setSuccess(true)
     else if (q && /^\d+$/.test(q)) setIdx(Math.max(0, Number(q) - 1))
+    const biz = sp.get('biz')
+    if (biz) setData((prev) => ({ ...prev, biz_name: biz }))
   }, [])
 
   const screens = useMemo(
