@@ -50,10 +50,15 @@ export async function GET(req: NextRequest) {
   const admin = adminDb()
   const { data: rows } = await admin
     .from('gbp_metrics')
-    .select('date, directions, calls')
+    .select('date, directions, calls, location_id')
     .eq('client_id', clientId)
     .gte('date', iso(priorStart))
     .lt('date', iso(end))
+
+  /* Law L3 guard: seeded demo rows (location_id 'demo-proof') may power the
+   * card on a sandbox, but the card must SAY so. If any demo row contributes,
+   * the whole card is labeled a sample. */
+  const hasDemo = (rows ?? []).some((r) => r.location_id === 'demo-proof')
 
   const cur = { directions: 0, calls: 0 }
   const prior = { directions: 0, calls: 0 }
@@ -109,12 +114,14 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     card: {
       id: `gbp-${iso(curStart)}`,
-      label: 'This week on Google',
+      label: hasDemo ? 'Sample · a week on Google' : 'This week on Google',
       big: parts.join(' · '),
       context: priorTotal > 0
         ? `Up from ${prior.calls} call${prior.calls === 1 ? '' : 's'} and ${prior.directions} tap${prior.directions === 1 ? '' : 's'} the week before.`
         : 'Your first tracked week.',
-      attribution,
+      attribution: hasDemo
+        ? 'Demo numbers so you can see the card. Real weeks replace this.'
+        : attribution,
       spark,
     },
   }, { headers: { 'Cache-Control': 'no-store' } })
