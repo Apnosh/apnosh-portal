@@ -185,6 +185,28 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     }
     closeSpotLane()
   }
+  /* All cards are equal: removing the first location promotes the next one
+   * into the primary fields (the system still keeps A primary internally,
+   * the owner never manages it). */
+  function removePrimary() {
+    const [next, ...rest] = data.locations
+    if (next) {
+      update('primary_location_name', next.name || '')
+      update('full_address', next.full_address)
+      update('city', next.city); update('state', next.state); update('zip', next.zip)
+      update('primary_place_id', next.place_id || '')
+      update('phone', next.phone || ''); update('hours', next.hours || {})
+      update('locations', rest)
+      const total = 1 + rest.length
+      update('location_count', total <= 1 ? 'Just 1' : total <= 3 ? '2\u20133' : total <= 6 ? '4\u20136' : '7+')
+    } else {
+      update('primary_location_name', '')
+      update('full_address', ''); update('city', ''); update('state', ''); update('zip', '')
+      update('primary_place_id', ''); update('phone', ''); update('hours', {})
+      update('location_count', 'Just 1')
+    }
+    setOpenCard(null)
+  }
   function removeSpot(i: number) {
     const next = data.locations.filter((_, x) => x !== i)
     update('locations', next); syncSpotCount(next.length)
@@ -272,7 +294,6 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                   )}
                   {((showAllHits ? matches : matches?.slice(0, 5)) ?? []).map((m, i) => {
                     const on = picked.includes(m.placeId)
-                    const isFirstPick = picked[0] === m.placeId && !data.full_address.trim()
                     return (
                       <button
                         key={m.placeId} type="button"
@@ -289,9 +310,6 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                           <div className="text-[14px] font-medium truncate" style={{ color: '#1d1d1f' }}>{m.name}</div>
                           <div className="text-[12px] truncate" style={{ color: '#8e8e93' }}>{m.address}</div>
                         </div>
-                        {isFirstPick && (
-                          <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
-                        )}
                         {on && (
                           <span className="flex items-center justify-center flex-shrink-0" style={{ width: 18, height: 18, borderRadius: 9, background: '#2e9a78' }}>
                             <Check size={11} color="#fff" strokeWidth={3} />
@@ -356,20 +374,26 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                   onKeyDown={(e) => { if (e.key === 'Enter') setOpenCard(openCard === 'main' ? null : 'main') }}
                   className="flex items-center gap-2.5 px-3.5 py-3" style={{ cursor: 'pointer' }}
                 >
-                  <MapPin size={16} color="#2e9a78" className="flex-shrink-0" />
+                  <MapPin size={16} color="#6e6e73" className="flex-shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{data.biz_name.trim() || 'Main spot'}</div>
+                    {data.primary_location_name.trim() ? <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{data.primary_location_name}</div> : null}
                     <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{data.full_address}</div>
                     <div className="text-[11.5px] mt-0.5 truncate" style={{ color: data.phone.trim() || hasOpenHours(data.hours) ? '#8e8e93' : '#0f6e56' }}>{spotPeek(data.phone, data.hours)}</div>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
                   <ChevronDown size={15} color="#aeaeb2" className="flex-shrink-0" style={{ transform: openCard === 'main' ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }} />
+                  <button type="button" aria-label="Remove this location" onClick={(e) => { e.stopPropagation(); removePrimary() }} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
+                    <X size={15} />
+                  </button>
                 </div>
                 {openCard === 'main' && (
                   <div className="px-3.5 pb-3.5 flex flex-col gap-3">
                     {data.primary_place_id ? (
                       <div className="text-[12px]" style={{ color: '#6e6e73' }}>From your Google listing. Fix anything that looks off.</div>
                     ) : null}
+                    <div>
+                      <FieldLabel>Location name</FieldLabel>
+                      <Input value={data.primary_location_name} onChange={(v) => update('primary_location_name', v)} placeholder="Like Downtown or Kent" />
+                    </div>
                     <div>
                       <FieldLabel>Address</FieldLabel>
                       <Input value={data.full_address} onChange={(v) => update('full_address', v)} placeholder="Street, city, state" />

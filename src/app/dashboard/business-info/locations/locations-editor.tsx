@@ -138,16 +138,15 @@ export default function LocationsEditor({
                 onKeyDown={(e) => { if (e.key === 'Enter') (open === l.id ? setOpen(null) : openCard(l)) }}
                 className="flex items-center gap-2.5 px-3.5 py-3 cursor-pointer"
               >
-                <MapPin size={16} color={l.is_primary ? T.green : T.mute} className="flex-shrink-0" />
+                <MapPin size={16} color={T.mute} className="flex-shrink-0" />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-semibold truncate" style={{ color: T.ink }}>
-                    {l.location_name || 'Main spot'}
-                  </div>
+                  {l.location_name ? (
+                    <div className="text-[13.5px] font-semibold truncate" style={{ color: T.ink }}>
+                      {l.location_name}
+                    </div>
+                  ) : null}
                   <div className="text-[12px] truncate" style={{ color: T.mute }}>{l.full_address}</div>
                 </div>
-                {l.is_primary && (
-                  <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: T.green }}>Main</span>
-                )}
               </div>
               {open === l.id && draft && (
                 <div className="px-3.5 pb-4 flex flex-col gap-3">
