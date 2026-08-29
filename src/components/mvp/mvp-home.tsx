@@ -26,6 +26,7 @@ import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgres
 import { selectHomeOrders } from '@/lib/campaigns/home-cards'
 import { HomeFunnelLive } from './home-funnel'
 import { usePullToRefresh, PullIndicator } from './pull-to-refresh'
+import ProofCard, { type ProofCardData } from './proof-card'
 import { useMvpTheme } from './mvp-theme'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
@@ -174,6 +175,27 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
   const { C } = useMvpTheme()
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
+  /* PROOF CARD (spec R-01): one real number from this week, in the banner
+   * slot. Computed on read; silence when the week did not beat the last one.
+   * Dismissal is per-device until the archive table ships. */
+  const [proofCard, setProofCard] = useState<ProofCardData | null>(null)
+  useEffect(() => {
+    if (!clientId) return
+    let alive = true
+    fetch(`/api/dashboard/proof?clientId=${clientId}`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!alive || !j?.card) return
+        try { if (localStorage.getItem(`proof-hide-${j.card.id}`)) return } catch { /* storage off */ }
+        setProofCard(j.card as ProofCardData)
+      })
+      .catch(() => { /* silence is the failure mode */ })
+    return () => { alive = false }
+  }, [clientId])
+  const dismissProof = () => {
+    if (proofCard) { try { localStorage.setItem(`proof-hide-${proofCard.id}`, '1') } catch { /* storage off */ } }
+    setProofCard(null)
+  }
   // Whether the funnel hero actually rendered. Without Google data it hides, and Home
   // shows an honest connect card in its place — never a blank screen (the sim's most-hit
   // defect: 6 of 20 owners finished onboarding onto an empty white page).
@@ -249,12 +271,22 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
           </div>
         )}
 
+        {/* The proof card shares the banner slot with the review nudge and
+            never stacks under it: review wins while visible. */}
+        {proofCard && !(data.review && !reviewHidden) && (
+          <ProofCard
+            card={proofCard}
+            onDismiss={dismissProof}
+            onSee={() => { try { document.getElementById('home-funnel-hero')?.scrollIntoView({ behavior: 'smooth' }) } catch { /* noop */ } }}
+          />
+        )}
+
         {/* Everything below the banner cascades in on load (staggered rise). */}
         <div className="mvp-stagger">
         {/* THE MARKETING FUNNEL — the whole-business hero: your real Google
             funnel (Awareness → Interest → Customer actions → Orders → Retention)
             in the glass-vessel view. Renders only when the business has Google data. */}
-        <div style={{ margin: '-16px -18px 0' }}>
+        <div id="home-funnel-hero" style={{ margin: '-16px -18px 0' }}>
           <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} /></>
         </div>
 
