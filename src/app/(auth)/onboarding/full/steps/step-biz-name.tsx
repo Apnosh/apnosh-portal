@@ -41,19 +41,27 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   const [finding, setFinding] = useState(false)
   const [pickedNote, setPickedNote] = useState('')
 
-  async function findOnGoogle() {
+  /* The name field IS the Google search: results appear as you type. Active
+   * only until a main spot exists, so a finished roster is not re-searched. */
+  useEffect(() => {
+    if (!lookupOn || data.full_address.trim()) return
     const q = data.biz_name.trim()
-    if (!q || !lookupOn) return
-    setFinding(true); setMatches(null); setPicked([]); setPickedNote('')
-    try {
-      const found = await searchBusinesses(q)
-      setMatches(found.slice(0, 8))
-      if (!found.length) setPickedNote('No Google match yet. Keep going and we will fill this in as we go.')
-    } catch {
-      setPickedNote('Could not reach Google just now. Keep going, nothing is lost.')
-    }
-    setFinding(false)
-  }
+    if (q.length < 3) { setMatches(null); setPicked([]); return }
+    let alive = true
+    setFinding(true)
+    const t = setTimeout(async () => {
+      try {
+        const found = await searchBusinesses(q)
+        if (alive) {
+          setMatches(found.slice(0, 8))
+          setPicked((prev) => prev.filter((id) => found.some((f) => f.placeId === id)))
+        }
+      } catch { if (alive) setMatches([]) }
+      if (alive) setFinding(false)
+    }, 400)
+    return () => { alive = false; clearTimeout(t) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.biz_name, data.full_address, lookupOn])
 
   async function usePlace(c: PlaceCandidate) {
     setFinding(true)
@@ -241,18 +249,15 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             autoFocus
           />
 
-          {/* One tap, and most of what follows is already answered. */}
+          {/* Typing the name searches Google on its own; no button to find. */}
           {lookupOn && data.biz_name.trim().length > 1 && (
             <div className="mt-2.5">
-              <button
-                type="button"
-                onClick={findOnGoogle}
-                disabled={finding || scanning}
-                className="w-full rounded-[12px] border text-[13px] font-semibold disabled:opacity-50"
-                style={{ borderColor: '#d8ece4', background: '#f0faf6', color: '#2e9a78', minHeight: 50 }}
-              >
-                {finding || scanning ? 'Looking you up...' : 'Find us on Google'}
-              </button>
+              {finding && !data.full_address.trim() && (
+                <div className="text-[12.5px]" style={{ color: '#6e6e73' }}>Searching Google...</div>
+              )}
+              {matches && matches.length === 0 && !finding && !data.full_address.trim() && (
+                <div className="text-[12.5px]" style={{ color: '#6e6e73' }}>No Google match. Enter your location below.</div>
+              )}
 
               {matches && matches.length > 0 && (
                 <div className="mt-2 space-y-1.5">
@@ -402,6 +407,15 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                 )}
               </div>
             ))}
+            {!data.full_address.trim() && data.locations.length === 0 && !addingSpot && (
+              <div
+                className="flex flex-col items-center justify-center gap-1.5 rounded-[14px] px-4 py-6"
+                style={{ border: '1.5px dashed #d8d8dc', background: 'rgba(255,255,255,0.5)' }}
+              >
+                <MapPin size={18} color="#aeaeb2" />
+                <div className="text-[13px]" style={{ color: '#8e8e93' }}>Your locations will show up here.</div>
+              </div>
+            )}
             {addingSpot ? (
               <div className="rounded-[14px] p-3 bg-white flex flex-col gap-2.5" style={{ boxShadow: 'inset 0 0 0 1.5px #4abd98, 0 8px 24px rgba(74,189,152,0.15)' }}>
                 {data.full_address.trim() ? (
@@ -422,10 +436,10 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             ) : (
               <button
                 type="button" onClick={() => setAddingSpot(true)}
-                className="w-full text-[13px] font-bold"
-                style={{ minHeight: 48, borderRadius: 14, border: '1.5px dashed rgba(74,189,152,0.6)', background: '#fff', color: '#0f6e56', cursor: 'pointer' }}
+                className="self-center text-[12.5px] font-semibold"
+                style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: '4px 0' }}
               >
-                + Enter a location manually
+                + Enter manually
               </button>
             )}
           </div>
