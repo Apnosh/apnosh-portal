@@ -83,6 +83,7 @@ export default async function BusinessInfoPage() {
           <MvpRow icon={<CalendarDays size={18} />} label="Special hours" sub={specialCount > 0 ? `${specialCount} date${specialCount > 1 ? 's' : ''} set` : 'Holidays and closures'} href="/dashboard/business-info/special-hours" />
           <MvpRow icon={<Phone size={18} />} label="Contact details" sub={info?.phone || 'Name, phone, website'} href="/dashboard/business-info/contact" />
           <MvpRow icon={<MapPin size={18} />} label="Address" sub={info?.address?.line1 ? [info.address.line1, info.address.city].filter(Boolean).join(', ') : 'Add your address'} href="/dashboard/business-info/address" />
+          <MvpRow icon={<MapPin size={18} />} label="Locations" sub="Each spot, with its own info" href="/dashboard/business-info/locations" />
         </MvpGroup>
 
         <MvpGroup title="Menu & photos">
