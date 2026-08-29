@@ -360,7 +360,10 @@ export function getSteps(): StepId[] {
    * compose from the client's logo/colors/photos, so a clear place to hand
    * them over pays off immediately. Every field on it is optional and the
    * step says so — skipping costs nothing and it can all be added later. */
-  return ['role', 'biz_name', 'confirm', 'goals', 'connect', 'assets', 'review']
+  /* 'confirm' (the What-we-found recap) retired 2026-08-29: the location
+   * cards + name/website fields on biz_name now carry everything it showed;
+   * type/cuisine/price still fill silently and stay fixable at review. */
+  return ['role', 'biz_name', 'goals', 'connect', 'assets', 'review']
 }
 
 // A single menu row captured during onboarding. Promoted to a
