@@ -125,7 +125,7 @@ export function OnboardingFrame({
           standard 480px app column, never a stretched web page */}
       <style>{`
 .ob-frame{height:100vh;height:100dvh}
-.ob-phone{width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;background:radial-gradient(120% 34% at 50% 0%, rgba(74,189,152,0.10), rgba(255,255,255,0) 62%), #fbfbfd}
+.ob-phone{width:100%;max-width:480px;min-width:0;overflow-x:hidden;height:100%;display:flex;flex-direction:column;background:radial-gradient(120% 34% at 50% 0%, rgba(74,189,152,0.10), rgba(255,255,255,0) 62%), #fbfbfd}
 @media (min-width: 521px){.ob-phone{border-left:1px solid rgba(0,0,0,0.06);border-right:1px solid rgba(0,0,0,0.06);box-shadow:0 0 60px rgba(0,0,0,0.08)}}`}</style>
       <div className="ob-phone">
 
@@ -211,7 +211,7 @@ export function OnboardingFrame({
             flexDirection: 'column',
             justifyContent: 'center',
             padding: '12px 20px 24px',
-            maxWidth: 520,
+            maxWidth: 480,
             width: '100%',
             margin: '0 auto',
           }}

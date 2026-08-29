@@ -71,7 +71,6 @@ export default function StepGoals({ data, update, nav }: Props) {
       <style>{'@media (prefers-reduced-motion: no-preference) { @keyframes goalCounterPulse { 0% { transform: scale(1) } 40% { transform: scale(1.14) } 100% { transform: scale(1) } } }'}</style>
       <Question
         title="What matters most right now?"
-        subtitle="Pick up to 3."
         icon={<Target size={26} strokeWidth={2} />}
       />
 
@@ -90,7 +89,7 @@ export default function StepGoals({ data, update, nav }: Props) {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 mt-3 [grid-auto-rows:1fr]">
+      <div className="flex flex-col gap-2 mt-4">
         {GOAL_CHIPS.map((g) => {
           const isSel = picked.includes(g)
           const dimmed = full && !isSel
@@ -100,12 +99,15 @@ export default function StepGoals({ data, update, nav }: Props) {
               key={g}
               type="button"
               onClick={() => toggle(g)}
-              className="relative rounded-[14px] px-3 py-3.5 select-none flex flex-col items-center justify-center gap-2"
+              className="relative rounded-[14px] px-3.5 select-none flex items-center gap-3 text-left"
               style={{
-                border: isSel ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
+                border: 'none',
                 background: isSel ? '#f0faf6' : '#fff',
+                boxShadow: isSel
+                  ? 'inset 0 0 0 1.5px #4abd98, 0 2px 4px rgba(46,154,120,0.10), 0 12px 30px rgba(74,189,152,0.22)'
+                  : '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)',
                 opacity: dimmed ? 0.5 : 1,
-                minHeight: 84,
+                minHeight: 52,
                 transition: 'all .15s ease',
               }}
             >
@@ -113,14 +115,14 @@ export default function StepGoals({ data, update, nav }: Props) {
                 <Icon aria-hidden size={20} strokeWidth={2} color={isSel ? '#0f6e56' : '#2e9a78'} />
               )}
               <span
-                className="block text-[13px] font-medium leading-snug text-center"
+                className="block text-[14px] font-medium leading-snug flex-1"
                 style={{ color: isSel ? '#0f6e56' : '#333' }}
               >
                 {g}
               </span>
               {isSel && (
                 <span
-                  className="absolute top-2 right-2 w-[18px] h-[18px] rounded-full flex items-center justify-center"
+                  className="w-[18px] h-[18px] rounded-full flex items-center justify-center flex-shrink-0"
                   style={{ background: '#4abd98' }}
                 >
                   <svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">

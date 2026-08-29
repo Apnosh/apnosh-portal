@@ -104,7 +104,7 @@ export default function StepDone({ bizName }: Props) {
         </div>
         <h2
           className="text-[28px] font-bold mb-2.5"
-          style={{ fontFamily: 'Playfair Display, serif', color: '#1d1d1f', letterSpacing: '-0.02em', lineHeight: 1.15 }}
+          style={{ color: '#1d1d1f', letterSpacing: '-0.04em', lineHeight: 1.1 }}
         >
           Welcome to Apnosh{bizName ? `, ${bizName}` : ''}!
         </h2>

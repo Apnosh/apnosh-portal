@@ -46,82 +46,70 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
     <>
       <Question title="One last look" icon={<CheckCircle2 size={26} strokeWidth={2} />} />
       <div className="mt-5 space-y-2">
-        <ReviewCard title="You" stepId="role" onEdit={onGoToStep}>
-          <Row label="Role" value={roleName} />
-        </ReviewCard>
-
-        <ReviewCard title="Business" stepId="biz_name" onEdit={onGoToStep}>
-          <Row label="Name" value={data.biz_name} />
-          <Row label="Website" value={data.website || null} />
-          <Row label="Phone" value={data.phone || null} />
-          <Row label="Type" value={data.biz_type === 'Other' ? data.biz_other : data.biz_type} />
-          {isFood && <Row label="Cuisine" value={data.cuisine === 'Other' ? data.cuisine_other : data.cuisine} />}
-          {isFood && <Row label="Style" value={data.service_styles.length ? data.service_styles.join(', ') : null} />}
-          <Row label="Location" value={mainLoc} />
-          <Row label="Locations" value={locationsValue} />
-          {extraLocList && <Row label="Other spots" value={extraLocList} />}
-        </ReviewCard>
-
+        <ReviewCard title="You" stepId="role" onEdit={onGoToStep} rows={[
+          { label: 'Role', value: roleName },
+        ]} />
+        <ReviewCard title="Business" stepId="biz_name" onEdit={onGoToStep} rows={[
+          { label: 'Name', value: data.biz_name || null },
+          { label: 'Website', value: data.website || null },
+          { label: 'Phone', value: data.phone || null },
+          { label: 'Type', value: (data.biz_type === 'Other' ? data.biz_other : data.biz_type) || null },
+          { label: 'Cuisine', value: isFood ? ((data.cuisine === 'Other' ? data.cuisine_other : data.cuisine) || null) : null },
+          { label: 'Style', value: isFood && data.service_styles.length ? data.service_styles.join(', ') : null },
+          { label: 'Location', value: mainLoc },
+          { label: 'Locations', value: locationsValue },
+          { label: 'Other spots', value: extraLocList },
+        ]} />
         {isFood && (
-          <ReviewCard title="Menu" stepId="menu" onEdit={onGoToStep}>
-            <Row label="Dishes" value={menuList} />
-          </ReviewCard>
+          <ReviewCard title="Menu" stepId="menu" onEdit={onGoToStep} rows={[
+            { label: 'Dishes', value: menuList },
+          ]} />
         )}
-
         {isFood && (
-          <ReviewCard title="Specials" stepId="specials" onEdit={onGoToStep}>
-            <Row label="Recurring" value={specialsList} />
-          </ReviewCard>
+          <ReviewCard title="Specials" stepId="specials" onEdit={onGoToStep} rows={[
+            { label: 'Recurring', value: specialsList },
+          ]} />
         )}
-
-        <ReviewCard title="Story" stepId="story" onEdit={onGoToStep}>
-          <Row label="About" value={data.biz_desc || null} />
-          <Row label="Stand out" value={data.unique || null} />
-          <Row label="Competitors" value={data.competitors || null} />
-        </ReviewCard>
-
-        <ReviewCard title="Customers" stepId="audience" onEdit={onGoToStep}>
-          <Row label="Types" value={data.customer_types.length ? data.customer_types.join(', ') : null} />
-          <Row label="Why you" value={data.why_choose.length ? data.why_choose.join(', ') : null} />
-        </ReviewCard>
-
-        <ReviewCard title="Goals" stepId="goals" onEdit={onGoToStep}>
-          <Row label="Priority" value={data.primary_goal || null} />
-          <Row label="Success" value={data.success_signs.length ? data.success_signs.join(', ') : null} />
-          <Row label="Timeline" value={data.timeline || null} />
-        </ReviewCard>
-
-        <ReviewCard title="Promote" stepId="promote" onEdit={onGoToStep}>
-          <Row label="Highlights" value={data.main_offerings || null} />
-          <Row label="Coming up" value={data.upcoming || null} />
-        </ReviewCard>
-
-        <ReviewCard title="Brand" stepId="brand_voice" onEdit={onGoToStep}>
-          <Row label="Tone" value={data.tones.length ? data.tones.join(', ') : null} />
-          <Row label="Custom tone" value={data.custom_tone || null} />
-          <Row label="Content" value={data.content_likes.length ? data.content_likes.join(', ') : null} />
-          <Row label="Avoid" value={data.avoid_list.length ? data.avoid_list.join(', ') : null} />
-        </ReviewCard>
-
-        <ReviewCard title="Discovery" stepId="discovery" onEdit={onGoToStep}>
-          <Row label="Hashtags" value={hashtagList} />
-          <Row label="Keywords" value={keywordList} />
-        </ReviewCard>
-
-        <ReviewCard title="Workflow" stepId="approval" onEdit={onGoToStep}>
-          <Row label="Style" value={approvalName} />
-          <Row label="On camera" value={data.can_film.length ? data.can_film.join(', ') : null} />
-        </ReviewCard>
-
-        <ReviewCard title="Connected" stepId="connect" onEdit={onGoToStep}>
-          <Row label="Platforms" value={connectedList.length ? connectedList.join(', ') : null} />
-        </ReviewCard>
-
-        <ReviewCard title="Assets" stepId="assets" onEdit={onGoToStep}>
-          <Row label="Logo" value={data.logo_name || null} />
-          <Row label="Photos" value={data.photo_count ? `${data.photo_count} uploaded` : null} />
-          <Row label="Brand folder" value={data.brand_drive || null} />
-        </ReviewCard>
+        <ReviewCard title="Story" stepId="story" onEdit={onGoToStep} rows={[
+          { label: 'About', value: data.biz_desc || null },
+          { label: 'Stand out', value: data.unique || null },
+          { label: 'Competitors', value: data.competitors || null },
+        ]} />
+        <ReviewCard title="Customers" stepId="audience" onEdit={onGoToStep} rows={[
+          { label: 'Types', value: data.customer_types.length ? data.customer_types.join(', ') : null },
+          { label: 'Why you', value: data.why_choose.length ? data.why_choose.join(', ') : null },
+        ]} />
+        <ReviewCard title="Goals" stepId="goals" onEdit={onGoToStep} rows={[
+          { label: 'Priority', value: data.primary_goal || null },
+          { label: 'Success', value: data.success_signs.length ? data.success_signs.join(', ') : null },
+          { label: 'Timeline', value: data.timeline || null },
+        ]} />
+        <ReviewCard title="Promote" stepId="promote" onEdit={onGoToStep} rows={[
+          { label: 'Highlights', value: data.main_offerings || null },
+          { label: 'Coming up', value: data.upcoming || null },
+        ]} />
+        <ReviewCard title="Brand" stepId="brand_voice" onEdit={onGoToStep} rows={[
+          { label: 'Tone', value: data.tones.length ? data.tones.join(', ') : null },
+          { label: 'Custom tone', value: data.custom_tone || null },
+          { label: 'Content', value: data.content_likes.length ? data.content_likes.join(', ') : null },
+          { label: 'Avoid', value: data.avoid_list.length ? data.avoid_list.join(', ') : null },
+        ]} />
+        <ReviewCard title="Discovery" stepId="discovery" onEdit={onGoToStep} rows={[
+          { label: 'Hashtags', value: hashtagList },
+          { label: 'Keywords', value: keywordList },
+        ]} />
+        <ReviewCard title="Workflow" stepId="approval" onEdit={onGoToStep} rows={[
+          { label: 'Style', value: approvalName },
+          { label: 'On camera', value: data.can_film.length ? data.can_film.join(', ') : null },
+        ]} />
+        <ReviewCard title="Connected" stepId="connect" onEdit={onGoToStep} rows={[
+          { label: 'Platforms', value: connectedList.length ? connectedList.join(', ') : null },
+        ]} />
+        <ReviewCard title="Assets" stepId="assets" onEdit={onGoToStep} rows={[
+          { label: 'Logo', value: data.logo_name || null },
+          { label: 'Photos', value: data.photo_count ? `${data.photo_count} uploaded` : null },
+          { label: 'Brand folder', value: data.brand_drive || null },
+        ]} />
       </div>
 
       {/* Terms */}
@@ -150,13 +138,25 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
   )
 }
 
-function ReviewCard({ title, stepId, onEdit, children }: {
-  title: string; stepId: StepId; onEdit: (stepId: StepId) => void; children: React.ReactNode
+function ReviewCard({
+  title,
+  stepId,
+  onEdit,
+  rows,
+}: {
+  title: string
+  stepId: StepId
+  onEdit: (stepId: StepId) => void
+  rows: Array<{ label: string; value: string | null }>
 }) {
+  /* Only what the owner actually answered. Empty rows do not render, and a
+   * section with nothing set does not render at all. */
+  const setRows = rows.filter((r) => r.value)
+  if (!setRows.length) return null
   return (
-    <div className="rounded-[14px] px-4 py-3.5" style={{ background: '#f5f5f7' }}>
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: '#6e6e73' }}>
+    <div className="rounded-[14px] px-4 py-3.5 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#8e8e93' }}>
           {title}
         </span>
         <button
@@ -168,20 +168,12 @@ function ReviewCard({ title, stepId, onEdit, children }: {
           Edit
         </button>
       </div>
-      {children}
-    </div>
-  )
-}
-
-function Row({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="text-[13px] leading-relaxed" style={{ color: '#48484a' }}>
-      {label}:{' '}
-      {value ? (
-        <span className="font-medium" style={{ color: '#1d1d1f' }}>{value}</span>
-      ) : (
-        <span className="italic" style={{ color: '#98989d' }}>Not set</span>
-      )}
+      {setRows.map((r) => (
+        <div key={r.label} className="text-[13px] leading-relaxed" style={{ color: '#48484a' }}>
+          {r.label}:{' '}
+          <span className="font-medium" style={{ color: '#1d1d1f' }}>{r.value}</span>
+        </div>
+      ))}
     </div>
   )
 }

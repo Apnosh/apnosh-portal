@@ -27,7 +27,7 @@ export default function StepRole({ data, update, nav, onAnswered }: Props) {
   return (
     <>
       <Question title="Who are you?" icon={<Users size={26} strokeWidth={2} />} />
-      <div className="grid grid-cols-2 gap-2.5 mt-5 mb-2">
+      <div className="flex flex-col gap-2.5 mt-6 mb-2">
         {/* Icon-forward cards: one big glyph and a title. The titles say it all,
             so no card carries a description line. */}
         {ROLES.map((r) => (
@@ -36,16 +36,16 @@ export default function StepRole({ data, update, nav, onAnswered }: Props) {
             selected={data.role === r.id}
             onClick={() => pick(r.id)}
             disabled={!!r.disabled}
-            className={`min-h-[116px] ${ROLES.length % 2 === 1 && r.id === ROLES[ROLES.length - 1].id ? 'col-span-2' : ''}`}
+            className="min-h-[60px]"
           >
             {!!r.disabled && <Badge>Soon</Badge>}
-            <div className="flex flex-col items-center justify-center gap-2.5 py-1">
+            <div className="flex items-center gap-3.5">
               {/* Soft tinted glyph tile, echoing the order sheet's head. */}
               <div
                 aria-hidden
-                className="flex items-center justify-center"
+                className="flex items-center justify-center flex-shrink-0"
                 style={{
-                  width: 48, height: 48, borderRadius: 14,
+                  width: 40, height: 40, borderRadius: 12,
                   background: 'linear-gradient(150deg, rgba(74,189,152,0.14), rgba(74,189,152,0.05))',
                   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
                 }}
@@ -59,7 +59,7 @@ export default function StepRole({ data, update, nav, onAnswered }: Props) {
                 }[r.id] ?? r.emoji}
               </div>
               <div
-                className="text-sm font-semibold text-center"
+                className="text-[15px] font-semibold"
                 style={{ color: data.role === r.id ? '#0f6e56' : '#1d1d1f' }}
               >
                 {r.title}
