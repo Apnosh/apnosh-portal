@@ -252,63 +252,75 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           {/* Typing the name searches Google on its own; no button to find. */}
           {lookupOn && data.biz_name.trim().length > 1 && (
             <div className="mt-2.5">
-              {finding && !data.full_address.trim() && (
-                <div className="text-[12.5px]" style={{ color: '#6e6e73' }}>Searching Google...</div>
-              )}
-              {matches && matches.length === 0 && !finding && !data.full_address.trim() && (
-                <div className="text-[12.5px]" style={{ color: '#6e6e73' }}>No Google match. Enter your location below.</div>
-              )}
-
-              {matches && matches.length > 0 && (
-                <div className="mt-2 space-y-1.5">
-                  <div className="text-[12px]" style={{ color: '#98989d' }}>
-                    Tap every location that is yours. Your first pick becomes the main spot.
-                  </div>
-                  {matches.map((m) => {
+              {/* The suggestions panel: one white sheet under the field,
+                  Google-autocomplete style. Tapped rows keep a check so a
+                  multi-spot business picks everything in one pass. */}
+              {((finding && !data.full_address.trim()) || (matches && matches.length > 0)) && (
+                <div
+                  className="rounded-[12px] bg-white overflow-hidden"
+                  style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.05), 0 14px 40px rgba(0,0,0,0.13)' }}
+                >
+                  {finding && (
+                    <div className="flex items-center gap-3 px-3.5 py-3">
+                      <MapPin size={15} color="#d1d1d6" className="flex-shrink-0" />
+                      <span className="text-[13px]" style={{ color: '#8e8e93' }}>Searching Google...</span>
+                    </div>
+                  )}
+                  {(matches ?? []).map((m, i) => {
                     const on = picked.includes(m.placeId)
                     const isFirstPick = picked[0] === m.placeId && !data.full_address.trim()
                     return (
                       <button
                         key={m.placeId} type="button"
                         onClick={() => setPicked(on ? picked.filter((x) => x !== m.placeId) : [...picked, m.placeId])}
-                        className="w-full text-left rounded-[12px] bg-white px-3 py-2.5 flex items-center gap-2.5 transition-all"
+                        className="w-full text-left flex items-center gap-3 px-3.5 transition-all"
                         style={{
-                          border: 'none', minHeight: 52, cursor: 'pointer',
-                          boxShadow: on
-                            ? 'inset 0 0 0 1.5px #4abd98, 0 6px 18px rgba(74,189,152,0.15)'
-                            : '0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(0,0,0,0.05)',
+                          border: 'none', minHeight: 54, cursor: 'pointer',
+                          background: on ? '#f0faf6' : '#fff',
+                          borderTop: i > 0 || finding ? '1px solid #f2f2f4' : 'none',
                         }}
                       >
-                        <div
-                          className="flex items-center justify-center flex-shrink-0 transition-all"
-                          style={{ width: 20, height: 20, borderRadius: 10, background: on ? '#2e9a78' : '#ececef' }}
-                        >
-                          {on ? <Check size={12} color="#fff" strokeWidth={3} /> : null}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-[14px] font-semibold" style={{ color: '#1d1d1f' }}>{m.name}</div>
-                          <div className="text-[12px]" style={{ color: '#98989d' }}>{m.address}</div>
+                        <MapPin size={15} color={on ? '#2e9a78' : '#aeaeb2'} className="flex-shrink-0" />
+                        <div className="min-w-0 flex-1 py-2">
+                          <div className="text-[14px] font-medium truncate" style={{ color: '#1d1d1f' }}>{m.name}</div>
+                          <div className="text-[12px] truncate" style={{ color: '#8e8e93' }}>{m.address}</div>
                         </div>
                         {isFirstPick && (
                           <span className="text-[10px] font-bold uppercase tracking-wide flex-shrink-0" style={{ color: '#2e9a78' }}>Main</span>
                         )}
+                        {on && (
+                          <span className="flex items-center justify-center flex-shrink-0" style={{ width: 18, height: 18, borderRadius: 9, background: '#2e9a78' }}>
+                            <Check size={11} color="#fff" strokeWidth={3} />
+                          </span>
+                        )}
                       </button>
                     )
                   })}
-                  {picked.length > 0 && (
-                    <button
-                      type="button" onClick={confirmPicks} disabled={finding}
-                      className="w-full text-[14px] font-bold text-white transition-all disabled:opacity-50"
-                      style={{
-                        minHeight: 46, borderRadius: 23, border: 'none', cursor: 'pointer',
-                        background: 'linear-gradient(135deg, #4abd98, #2e9a78)',
-                        boxShadow: '0 8px 24px rgba(74,189,152,0.32)',
-                      }}
+                  {matches && matches.length > 0 && (
+                    <div
+                      className="flex items-center justify-between gap-3 px-3.5 py-2.5"
+                      style={{ borderTop: '1px solid #f2f2f4', background: '#fbfbfd' }}
                     >
-                      {finding ? 'Reading your listings...' : picked.length === 1 ? 'Use this location' : `Use these ${picked.length} locations`}
-                    </button>
+                      <span className="text-[11.5px]" style={{ color: '#8e8e93' }}>Tap all of your locations.</span>
+                      {picked.length > 0 && (
+                        <button
+                          type="button" onClick={confirmPicks} disabled={finding}
+                          className="text-[13px] font-bold text-white flex-shrink-0 transition-all disabled:opacity-50"
+                          style={{
+                            minHeight: 36, padding: '0 16px', borderRadius: 18, border: 'none', cursor: 'pointer',
+                            background: 'linear-gradient(135deg, #4abd98, #2e9a78)',
+                            boxShadow: '0 6px 16px rgba(74,189,152,0.30)',
+                          }}
+                        >
+                          {picked.length === 1 ? 'Use this location' : `Use these ${picked.length} locations`}
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
+              )}
+              {matches && matches.length === 0 && !finding && !data.full_address.trim() && (
+                <div className="text-[12.5px]" style={{ color: '#6e6e73' }}>No Google match. Enter your location below.</div>
               )}
 
               {pickedNote && (
