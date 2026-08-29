@@ -8,7 +8,7 @@
  * inside the REAL OnboardingFrame, so what you see here is exactly what a
  * new owner sees. The only extra is the preview strip above the top bar.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import StepRenderer, { OnboardingFrame } from '../../(auth)/onboarding/full/step-renderer'
 import { INITIAL_DATA, getScreens, canContinueScreen, type OnboardingData, type StepId } from '../../(auth)/onboarding/full/data'
 
@@ -16,6 +16,14 @@ export default function OnboardingPreviewPage() {
   const [data, setData] = useState<OnboardingData>(INITIAL_DATA)
   const [idx, setIdx] = useState(0)
   const [success, setSuccess] = useState(false)
+
+  /* Hidden dev aid: ?screen=N (1-based) or ?screen=done jumps the preview
+   * straight to a screen. No visible UI; used for design screenshots. */
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('screen')
+    if (q === 'done') setSuccess(true)
+    else if (q && /^\d+$/.test(q)) setIdx(Math.max(0, Number(q) - 1))
+  }, [])
 
   const screens = useMemo(
     () => getScreens(data.biz_type || 'Restaurant / café / bar', data),
