@@ -193,9 +193,28 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
     return () => { alive = false }
   }, [clientId])
   const dismissProof = () => {
-    if (proofCard) { try { localStorage.setItem(`proof-hide-${proofCard.id}`, '1') } catch { /* storage off */ } }
+    if (proofCard) {
+      try { localStorage.setItem(`proof-hide-${proofCard.id}`, '1') } catch { /* storage off */ }
+      if (clientId) {
+        void fetch('/api/dashboard/proof', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientId, id: proofCard.id, action: 'dismiss' }),
+        }).catch(() => { /* localStorage already covers this device */ })
+      }
+    }
     setProofCard(null)
   }
+  const readProof = () => {
+    if (proofCard && clientId) {
+      void fetch('/api/dashboard/proof', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, id: proofCard.id, action: 'read' }),
+      }).catch(() => { /* best effort */ })
+    }
+  }
+  /* Newest wins the banner slot: a proof card fired in the last 48h outranks
+   * the monthly review nudge; otherwise the nudge shows and the card waits. */
+  const proofFresh = !!proofCard && (!proofCard.firedAt || (Date.now() - new Date(proofCard.firedAt).getTime()) < 48 * 3600 * 1000)
   // Whether the funnel hero actually rendered. Without Google data it hides, and Home
   // shows an honest connect card in its place — never a blank screen (the sim's most-hit
   // defect: 6 of 20 owners finished onboarding onto an empty white page).
@@ -251,7 +270,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
 
       <div style={{ padding: '16px 18px 0' }}>
         {/* monthly review nudge */}
-        {data.review && !reviewHidden && (
+        {data.review && !reviewHidden && !(proofCard && proofFresh) && (
           <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff' }}>
             {/* drifting / spinning shapes, ported from the design */}
             <i aria-hidden className="mvp-driftB" style={{ position: 'absolute', width: 118, height: 118, top: -44, right: -28, borderRadius: '50%', background: 'rgba(255,255,255,.10)' }} />
@@ -273,9 +292,10 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
 
         {/* The proof card shares the banner slot with the review nudge and
             never stacks under it: review wins while visible. */}
-        {proofCard && !(data.review && !reviewHidden) && (
+        {proofCard && (proofFresh || !data.review || reviewHidden) && (
           <ProofCard
             card={proofCard}
+            onOpen={readProof}
             onDismiss={dismissProof}
             onSee={() => { try { document.getElementById('home-funnel-hero')?.scrollIntoView({ behavior: 'smooth' }) } catch { /* noop */ } }}
           />

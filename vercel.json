@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["pdx1"],
+  "regions": [
+    "pdx1"
+  ],
   "crons": [
     {
       "path": "/api/cron/gbp-ingest",
@@ -117,6 +119,10 @@
     {
       "path": "/api/cron/sync-channels",
       "schedule": "30 * * * *"
+    },
+    {
+      "path": "/api/cron/compose-proof",
+      "schedule": "15 16 * * *"
     }
   ]
 }

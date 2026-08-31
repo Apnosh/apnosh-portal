@@ -24,12 +24,16 @@ export interface ProofCardData {
   attribution?: string
   /** Seven daily values for the quiet bars. Optional. */
   spark?: number[]
+  /** From proof_cards.fired_at once migrated; drives newest-wins on Home. */
+  firedAt?: string
 }
 
-export default function ProofCard({ card, onDismiss, onSee, defaultOpen = false }: {
+export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen = false }: {
   card: ProofCardData
   onDismiss: () => void
   onSee?: () => void
+  /** Fired once when the strip expands — Home marks the card read. */
+  onOpen?: () => void
   /** Home renders the slim strip first so the funnel hero keeps its height. */
   defaultOpen?: boolean
 }) {
@@ -38,7 +42,7 @@ export default function ProofCard({ card, onDismiss, onSee, defaultOpen = false 
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { setOpen(true); onOpen?.() }}
         className="mvp-rise"
         style={{
           display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',

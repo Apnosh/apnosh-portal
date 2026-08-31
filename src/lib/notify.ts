@@ -6,6 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 // ---------------------------------------------------------------------------
 
 type NotificationType =
+  | 'proof'
   | 'approval_needed'
   | 'deliverable_ready'
   | 'order_confirmed'

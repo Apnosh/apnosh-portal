@@ -12,7 +12,7 @@
  */
 
 import Link from 'next/link'
-import { ChevronRight, CreditCard, FileText, Headset, HelpCircle, Image as ImageIcon, LineChart, LogOut, MapPin, Palette, Plug, Settings, ShoppingBag, Star, Store, Target, Users, Share2 } from 'lucide-react'
+import { TrendingUp, ChevronRight, CreditCard, FileText, Headset, HelpCircle, Image as ImageIcon, LineChart, LogOut, MapPin, Palette, Plug, Settings, ShoppingBag, Star, Store, Target, Users, Share2 } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 
 const C = {
@@ -34,6 +34,7 @@ const GROUPS: { title: string; rows: Row[] }[] = [
   {
     title: 'Your business',
     rows: [
+      { label: 'Results', sub: 'Proof from your weeks', href: '/dashboard/results', Icon: TrendingUp },
       { label: 'Business info & hours', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store },
       { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette },
       { label: 'Connected accounts', sub: 'Instagram, Google, Yelp', href: '/dashboard/connected-accounts', Icon: Plug },
