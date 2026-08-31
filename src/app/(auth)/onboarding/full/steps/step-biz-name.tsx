@@ -94,7 +94,8 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     if (p.hours && Object.keys(p.hours).length && !Object.keys(data.hours || {}).length) {
       update('hours', p.hours); got.push('opening hours')
     }
-    if (!data.biz_type && p.is_food) update('biz_type', FOOD_BIZ_TYPES[0])
+    if (!data.biz_type && p.place_type) update('biz_type', p.place_type)
+    else if (!data.biz_type && p.is_food) update('biz_type', FOOD_BIZ_TYPES[0])
     if (got.length) setFilledSomething(true)
 
     /* Their own site answers the things Google cannot: cuisine, signature dishes, the menu.

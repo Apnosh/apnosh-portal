@@ -20,11 +20,14 @@ interface Props {
 
 export default function StepAbout({ data, update, nav }: Props) {
   const isFood = FOOD_BIZ_TYPES.includes(data.biz_type as typeof FOOD_BIZ_TYPES[number])
+  /* When the listing or site already answered, say so: the screen becomes a
+   * check, not a quiz. */
+  const prefilled = !!(data.biz_type || data.cuisine || data.service_styles.length || data.biz_desc.trim())
   return (
     <>
       <Question
         title="About your business"
-        subtitle="Tap what fits. Skip anything."
+        subtitle={prefilled ? 'We picked what your listing and site told us. Fix anything that is off.' : 'Tap what fits. Skip anything.'}
         icon={<Sparkles size={26} strokeWidth={2} />}
       />
       <div className="mt-5 space-y-5">

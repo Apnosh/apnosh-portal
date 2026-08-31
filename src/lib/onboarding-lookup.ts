@@ -48,6 +48,8 @@ export interface BusinessPrefill {
   }>
   price_range: '' | '$' | '$$' | '$$$' | '$$$$'
   is_food: boolean
+  /** Google's own primary read, mapped to the wizard's split types. */
+  place_type: '' | 'Restaurant' | 'Café / coffee shop' | 'Bar / nightlife'
 }
 
 export interface WebsiteExtract {
@@ -252,7 +254,15 @@ export async function getBusinessPrefill(placeId: string): Promise<BusinessPrefi
     }
 
     const foodTypes = ['restaurant', 'cafe', 'bar', 'bakery', 'meal_takeaway', 'meal_delivery', 'food']
-    const isFood = (p.types || []).some((t) => foodTypes.includes(t))
+    const gTypes = p.types || []
+    const isFood = gTypes.some((t) => foodTypes.includes(t))
+    // A bar that also serves as a restaurant reads as a restaurant; pure bars
+    // and cafes keep their own type.
+    const placeType: BusinessPrefill['place_type'] = gTypes.includes('restaurant')
+      ? 'Restaurant'
+      : gTypes.some((t) => t === 'bar' || t === 'night_club') ? 'Bar / nightlife'
+      : gTypes.some((t) => t === 'cafe' || t === 'coffee_shop' || t === 'bakery') ? 'Café / coffee shop'
+      : isFood ? 'Restaurant' : ''
 
     const streetNumber = comp(p.addressComponents, 'street_number')
     const route = comp(p.addressComponents, 'route')
@@ -271,6 +281,7 @@ export async function getBusinessPrefill(placeId: string): Promise<BusinessPrefi
       hours: mapHours(p.regularOpeningHours?.periods),
       price_range: mapPriceLevel(p.priceLevel),
       is_food: isFood,
+      place_type: placeType,
     }
   } catch (e) {
     console.error('[lookup] getBusinessPrefill threw:', e)
