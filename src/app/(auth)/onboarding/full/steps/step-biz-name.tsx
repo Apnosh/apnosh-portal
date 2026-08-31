@@ -165,8 +165,9 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
   function updateSpot(i: number, patch: Partial<LocationDraft>) {
     update('locations', data.locations.map((l, x) => (x === i ? { ...l, ...patch } : l)))
   }
-  const spotPeek = (phone: string, hours: WeekHours) => {
+  const spotPeek = (phone: string, hours: WeekHours, kind?: string) => {
     const bits: string[] = []
+    if (kind && kind.trim()) bits.push(kind.trim())
     if (phone.trim()) bits.push(phone.trim())
     if (hasOpenHours(hours)) bits.push('Hours saved')
     return bits.length ? bits.join(' \u00B7 ') : 'Add phone and hours'
@@ -433,7 +434,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                   <div className="min-w-0 flex-1">
                     {l.name.trim() ? <div className="text-[13px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{l.name}</div> : null}
                     <div className="text-[12px] truncate" style={{ color: '#6e6e73' }}>{l.full_address}</div>
-                    <div className="text-[11.5px] mt-0.5 truncate" style={{ color: (l.phone || '').trim() || hasOpenHours(l.hours) ? '#8e8e93' : '#0f6e56' }}>{spotPeek(l.phone || '', l.hours || {})}</div>
+                    <div className="text-[11.5px] mt-0.5 truncate" style={{ color: (l.phone || '').trim() || hasOpenHours(l.hours) ? '#8e8e93' : '#0f6e56' }}>{spotPeek(l.phone || '', l.hours || {}, l.biz_type)}</div>
                   </div>
                   <ChevronDown size={15} color="#aeaeb2" className="flex-shrink-0" style={{ transform: openCard === i ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }} />
                   <button type="button" aria-label={`Remove ${l.name || l.full_address}`} onClick={(e) => { e.stopPropagation(); removeSpot(i) }} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
