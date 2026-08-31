@@ -8,7 +8,8 @@
  * ledger; this component never invents or estimates.
  */
 
-import { X, ChevronRight } from 'lucide-react'
+import { useState } from 'react'
+import { X, ChevronRight, ChevronDown } from 'lucide-react'
 
 export interface ProofCardData {
   /** Stable id for dismissal, e.g. "gbp-2026-08-24". */
@@ -25,12 +26,33 @@ export interface ProofCardData {
   spark?: number[]
 }
 
-export default function ProofCard({ card, onDismiss, onSee }: {
+export default function ProofCard({ card, onDismiss, onSee, defaultOpen = false }: {
   card: ProofCardData
   onDismiss: () => void
   onSee?: () => void
+  /** Home renders the slim strip first so the funnel hero keeps its height. */
+  defaultOpen?: boolean
 }) {
+  const [open, setOpen] = useState(defaultOpen)
   const max = card.spark && card.spark.length ? Math.max(...card.spark, 1) : 1
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mvp-rise"
+        style={{
+          display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+          background: '#fff', border: 'none', borderRadius: 14, padding: '9px 12px', marginBottom: 10,
+          boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.06)', cursor: 'pointer',
+        }}
+      >
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: '#4abd98', flexShrink: 0 }} />
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: '#2e9a78', flexShrink: 0 }}>{card.label}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#1d1d1f', fontVariantNumeric: 'tabular-nums', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{card.big}</span>
+        <ChevronDown size={14} color="#aeaeb2" style={{ flexShrink: 0 }} />
+      </button>
+    )
+  }
   return (
     <div
       className="mvp-rise"

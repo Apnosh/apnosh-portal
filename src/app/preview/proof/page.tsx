@@ -41,9 +41,12 @@ export default function ProofPreviewPage() {
         <p style={{ fontSize: 12.5, color: '#8e8e93', margin: '0 0 18px' }}>
           The card lands one at a time at the top of Home, where the monthly review note shows today. These are the three launch types.
         </p>
-        {SAMPLES.map((c) => (
-          <ProofCard key={c.id} card={c} onDismiss={() => { /* preview: stays */ }} onSee={() => { /* preview: noop */ }} />
+        {SAMPLES.map((c, i) => (
+          <ProofCard key={c.id} card={c} defaultOpen={i > 0} onDismiss={() => { /* preview: stays */ }} onSee={() => { /* preview: noop */ }} />
         ))}
+        <p style={{ fontSize: 11.5, color: '#aeaeb2', marginTop: 14 }}>
+          On Home the card starts as the slim strip (like the first one here) so the funnel keeps its full height. Tap it to expand.
+        </p>
       </div>
     </div>
   )
