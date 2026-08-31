@@ -11,7 +11,9 @@ export const ROLES: Array<{ id: string; emoji: string; title: string; desc: stri
 ]
 
 export const BIZ_TYPES = [
-  'Restaurant / café / bar',
+  'Restaurant',
+  'Café / coffee shop',
+  'Bar / nightlife',
   'Retail store',
   'Salon / spa / beauty',
   'Fitness / gym / wellness',
@@ -23,10 +25,11 @@ export const BIZ_TYPES = [
   'Other',
 ] as const
 
-export const FOOD_BIZ_TYPES = ['Restaurant / café / bar'] as const
+// Legacy combined value kept so older saved drafts still read as food.
+export const FOOD_BIZ_TYPES = ['Restaurant', 'Café / coffee shop', 'Bar / nightlife', 'Restaurant / café / bar'] as const
 
 export const CUISINES = [
-  'American', 'Asian Fusion', 'Chinese', 'Japanese', 'Korean', 'Vietnamese',
+  'American', 'Asian Fusion', 'Chinese', 'Japanese', 'Korean', 'Korean BBQ', 'Vietnamese',
   'Thai', 'Indian', 'Mexican', 'Italian', 'Mediterranean', 'French',
   'Middle Eastern', 'Caribbean', 'Soul / Southern', 'Seafood',
   'BBQ / Smokehouse', 'Vegan / Vegetarian', 'Bakery / Desserts', 'Other',
@@ -205,7 +208,7 @@ export function rangesForDay(day: DayHours | undefined): HourRange[] {
 
 // Step IDs in order — food steps are inserted dynamically
 export type StepId =
-  | 'role' | 'biz_name' | 'confirm' | 'biz_type' | 'serve'
+  | 'role' | 'biz_name' | 'about' | 'confirm' | 'biz_type' | 'serve'
   | 'menu_details' | 'ordering' | 'menu' | 'specials'
   | 'location' | 'location_details' | 'rhythm' | 'story' | 'audience' | 'goals'
   | 'promote' | 'brand_voice' | 'discovery' | 'approval' | 'connect'
@@ -223,9 +226,9 @@ export const STEP_PHASES: Record<StepId, PhaseLabel> = {
   biz_name: 'Business', confirm: 'Business', biz_type: 'Business', location: 'Business', location_details: 'Business',
   serve: 'Menu', menu_details: 'Menu',
   ordering: 'Menu', menu: 'Menu', specials: 'Menu', rhythm: 'Menu',
-  story: 'Story', audience: 'Story', goals: 'Story', promote: 'Story',
+  story: 'Story', audience: 'Story', goals: 'Story', promote: 'Story', about: 'Story',
   brand_voice: 'Brand', discovery: 'Brand',
-  approval: 'Launch', connect: 'Launch', assets: 'Launch', review: 'Launch',
+  approval: 'Launch', connect: 'Launch', assets: 'Story', review: 'Launch',
 }
 
 export interface PhaseInfo {
@@ -253,7 +256,7 @@ export function getPhaseInfo(stepId: StepId, bizType: string): PhaseInfo {
 
 // Steps that always get their own screen, even inside a shared phase, because
 // they are a focused review/detail page rather than a quick question.
-const SOLO_SCREENS: StepId[] = ['location_details', 'review']
+const SOLO_SCREENS: StepId[] = ['location_details', 'review', 'goals']
 
 // Service styles that don't imply a fixed dine-in room. When an owner picks
 // ONLY these, the "how people order" and busy/slow "rhythm" questions do not
@@ -363,7 +366,9 @@ export function getSteps(): StepId[] {
   /* 'confirm' (the What-we-found recap) retired 2026-08-29: the location
    * cards + name/website fields on biz_name now carry everything it showed;
    * type/cuisine/price still fill silently and stay fixable at review. */
-  return ['role', 'biz_name', 'goals', 'connect', 'assets', 'review']
+  /* 'about' + 'assets' share one screen: the business's story and its brand
+   * materials belong together (owner call 2026-08-31). */
+  return ['role', 'biz_name', 'about', 'assets', 'goals', 'connect', 'review']
 }
 
 // A single menu row captured during onboarding. Promoted to a
@@ -394,6 +399,8 @@ export interface LocationDraft {
   place_id: string      // Google place_id when picked, for later GBP linking
   phone: string         // this location's phone (review page; not persisted to CRM yet)
   hours: WeekHours
+  website?: string      // this spot's own page (a location may keep a deep URL)
+  menu_url?: string     // this spot's own menu link, when it differs
 }
 
 // Form data shape

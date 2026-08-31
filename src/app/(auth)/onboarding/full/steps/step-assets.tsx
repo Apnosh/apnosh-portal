@@ -20,7 +20,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
 
   return (
     <>
-      <Question small title="Brand materials" subtitle="All optional." />
+      <Question small title="Brand materials" subtitle="All optional. Your designers use these to make work that looks like you. The more you add, the better and faster it gets." />
       <div className="mt-4 space-y-4">
         {/* Logo upload */}
         <button
@@ -117,14 +117,31 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           </div>
         </div>
 
-        {/* Brand drive */}
+        {/* Brand links — as many as they have, stored newline-joined in
+            brand_drive so every existing reader keeps working. */}
         <div>
-          <FieldLabel>Brand folder link</FieldLabel>
-          <Input
-            value={data.brand_drive}
-            onChange={(v) => update('brand_drive', v)}
-            placeholder="Google Drive or Dropbox link"
-          />
+          <FieldLabel>Brand links <span style={{ color: '#98989d', fontWeight: 400 }}>(optional)</span></FieldLabel>
+          {(data.brand_drive ? data.brand_drive.split('\n') : ['']).map((link, i, all) => (
+            <div key={i} className="mb-2">
+              <Input
+                value={link}
+                onChange={(v) => {
+                  const next = [...all]; next[i] = v
+                  update('brand_drive', next.filter((x, xi) => x.trim() || xi === next.length - 1).join('\n'))
+                }}
+                placeholder={i === 0 ? 'Google Drive, Dropbox, your site...' : 'Another link'}
+                type="url"
+              />
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => update('brand_drive', (data.brand_drive ? data.brand_drive + '\n' : '\n'))}
+            className="text-[12.5px] font-semibold"
+            style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}
+          >
+            + Add another link
+          </button>
         </div>
       </div>
       {nav}

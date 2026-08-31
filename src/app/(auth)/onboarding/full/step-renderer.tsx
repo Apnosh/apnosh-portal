@@ -18,6 +18,7 @@ import StepLocation from './steps/step-location'
 import StepLocationDetails from './steps/step-location-details'
 import StepRhythm from './steps/step-rhythm'
 import StepStory from './steps/step-story'
+import StepAbout from './steps/step-about'
 import StepAudience from './steps/step-audience'
 import StepGoals from './steps/step-goals'
 import StepPromote from './steps/step-promote'
@@ -315,6 +316,7 @@ export default function StepRenderer(props: Props) {
       case 'location': return <StepLocation data={data} update={update} nav={null} businessId={props.businessId} onSaveBeforeRedirect={props.onSaveBeforeRedirect} />
       case 'location_details': return <StepLocationDetails data={data} update={update} nav={null} />
       case 'rhythm': return <StepRhythm data={data} update={update} nav={null} />
+      case 'about': return <StepAbout data={data} update={update} nav={null} />
       case 'story': return <StepStory data={data} update={update} nav={null} />
       case 'audience': return <StepAudience data={data} update={update} nav={null} />
       case 'goals': return <StepGoals data={data} update={update} nav={null} />

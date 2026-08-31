@@ -16,6 +16,12 @@ interface Props {
   onJumpToReview?: () => void
 }
 
+/** The business website is the DOMAIN. Google often hands back a page deep
+ * inside the site (a location's menu page); only a location may keep that. */
+function originOf(url: string): string {
+  try { return new URL(url.startsWith('http') ? url : `https://${url}`).origin } catch { return url }
+}
+
 /** A short line describing what a prefill pass populated, for the recap card. */
 function summarize(found: string[]): string {
   if (!found.length) return ''
@@ -76,13 +82,14 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
     /* Only ever fill BLANKS. Anything already typed is the owner's and outranks Google. */
     const got: string[] = []
     update('primary_place_id', c.placeId)
+    update('primary_location_name', c.name)
     if (!data.biz_name.trim() && p.name) update('biz_name', p.name)
     if (p.full_address) { update('full_address', p.full_address); got.push('address') }
     if (p.city) update('city', p.city)
     if (p.state) update('state', p.state)
     if (p.zip) update('zip', p.zip)
     if (p.phone && !data.phone) { update('phone', p.phone); got.push('phone') }
-    if (p.website && !data.website.trim()) { update('website', p.website); got.push('website') }
+    if (p.website && !data.website.trim()) { update('website', originOf(p.website)); got.push('website') }
     if (p.price_range && !data.price_range) { update('price_range', p.price_range); got.push('price range') }
     if (p.hours && Object.keys(p.hours).length && !Object.keys(data.hours || {}).length) {
       update('hours', p.hours); got.push('opening hours')
@@ -123,6 +130,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
         name: c.name, full_address: p?.full_address || c.address,
         city: p?.city ?? '', state: p?.state ?? '', zip: p?.zip ?? '',
         place_id: c.placeId, phone: p?.phone ?? '', hours: p?.hours ?? {},
+        website: p?.website ?? '',
       })
     }
     if (extras.length) {
@@ -448,6 +456,14 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                       <Input value={l.phone || ''} onChange={(v) => updateSpot(i, { phone: v })} placeholder="(555) 123-4567" type="tel" />
                     </div>
                     <div>
+                      <FieldLabel>This spot{'\u2019'}s web page</FieldLabel>
+                      <Input value={l.website || ''} onChange={(v) => updateSpot(i, { website: v })} placeholder="Its own page, if it has one" type="url" />
+                    </div>
+                    <div>
+                      <FieldLabel>This spot{'\u2019'}s menu link</FieldLabel>
+                      <Input value={l.menu_url || ''} onChange={(v) => updateSpot(i, { menu_url: v })} placeholder="Its own menu, if it differs" type="url" />
+                    </div>
+                    <div>
                       <FieldLabel>Hours</FieldLabel>
                       <HoursEditor hours={l.hours || {}} onChange={(h) => updateSpot(i, { hours: h })} />
                     </div>
@@ -498,25 +514,12 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
             menu, and specials so the owner is not typing it from scratch. */}
         <div>
           <FieldLabel>Website <span style={{ color: '#98989d', fontWeight: 400 }}>(optional)</span></FieldLabel>
-          <div className="flex gap-2">
-            <Input
-              value={data.website}
-              onChange={(v) => update('website', v)}
-              placeholder="https://yourbusiness.com"
-              type="url"
-            />
-            <button
-              type="button"
-              onClick={() => runScan(data.website)}
-              disabled={!data.website.trim() || scanning}
-              className="flex-shrink-0 px-4 rounded-[12px] text-[13px] font-semibold text-white transition-all disabled:opacity-30 disabled:cursor-not-allowed"
-              style={{ background: 'linear-gradient(135deg, #4abd98, #2e9a78)', boxShadow: '0 4px 14px rgba(74,189,152,0.30)' }}
-              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.background = 'linear-gradient(135deg, #3fae8b, #23815f)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #4abd98, #2e9a78)' }}
-            >
-              {scanning ? 'Reading...' : 'Scan site'}
-            </button>
-          </div>
+          <Input
+            value={data.website}
+            onChange={(v) => update('website', v)}
+            placeholder="https://yourbusiness.com"
+            type="url"
+          />
         </div>
 
         {/* Scan recap */}

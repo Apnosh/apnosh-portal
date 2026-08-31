@@ -53,12 +53,16 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           { label: 'Name', value: data.biz_name || null },
           { label: 'Website', value: data.website || null },
           { label: 'Phone', value: data.phone || null },
-          { label: 'Type', value: (data.biz_type === 'Other' ? data.biz_other : data.biz_type) || null },
-          { label: 'Cuisine', value: isFood ? ((data.cuisine === 'Other' ? data.cuisine_other : data.cuisine) || null) : null },
-          { label: 'Style', value: isFood && data.service_styles.length ? data.service_styles.join(', ') : null },
           { label: 'Location', value: mainLoc },
           { label: 'Locations', value: locationsValue },
           { label: 'Other spots', value: extraLocList },
+        ]} />
+        <ReviewCard title="What you are" stepId="about" onEdit={onGoToStep} rows={[
+          { label: 'Type', value: (data.biz_type === 'Other' ? data.biz_other : data.biz_type) || null },
+          { label: 'Cuisine', value: isFood ? ((data.cuisine === 'Other' ? data.cuisine_other : data.cuisine) || null) : null },
+          { label: 'Vibe', value: isFood && data.service_styles.length ? data.service_styles.join(', ') : null },
+          { label: 'Mission', value: data.biz_desc || null },
+          { label: 'Audience', value: data.customer_types.length ? data.customer_types.join(', ') : null },
         ]} />
         {isFood && (
           <ReviewCard title="Menu" stepId="menu" onEdit={onGoToStep} rows={[
@@ -70,13 +74,9 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
             { label: 'Recurring', value: specialsList },
           ]} />
         )}
-        <ReviewCard title="Story" stepId="story" onEdit={onGoToStep} rows={[
-          { label: 'About', value: data.biz_desc || null },
+        <ReviewCard title="Story" stepId="about" onEdit={onGoToStep} rows={[
           { label: 'Stand out', value: data.unique || null },
           { label: 'Competitors', value: data.competitors || null },
-        ]} />
-        <ReviewCard title="Customers" stepId="audience" onEdit={onGoToStep} rows={[
-          { label: 'Types', value: data.customer_types.length ? data.customer_types.join(', ') : null },
           { label: 'Why you', value: data.why_choose.length ? data.why_choose.join(', ') : null },
         ]} />
         <ReviewCard title="Goals" stepId="goals" onEdit={onGoToStep} rows={[

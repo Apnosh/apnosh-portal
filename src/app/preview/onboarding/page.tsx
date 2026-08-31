@@ -42,18 +42,6 @@ export default function OnboardingPreviewPage() {
   // Review carries its own Complete-setup pill, so the frame's bar steps aside.
   const isReviewScreen = Array.isArray(screen) && screen.includes('review')
 
-  /* Preview chrome: just the honest banner, as a slim strip ABOVE the
-     frame's top bar so the frame itself stays pixel-true. Navigation is the
-     flow's own Continue/back, exactly like a real owner. */
-  const previewStrip = (
-    <div style={{ flexShrink: 0, padding: '10px 16px 8px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#0f6e56', background: '#f0faf6', border: '1px solid rgba(74,189,152,0.3)', borderRadius: 7, padding: '3px 8px' }}>Preview</span>
-        <span style={{ fontSize: 12, color: '#6e6e73' }}>Sample walkthrough. Nothing saves.</span>
-      </div>
-    </div>
-  )
-
   return (
     <OnboardingFrame
       step={idx + 1}
@@ -68,7 +56,6 @@ export default function OnboardingPreviewPage() {
       onNext={next}
       isSuccess={success}
       hideAction={isReviewScreen}
-      topSlot={previewStrip}
     >
       <StepRenderer
         screen={screen}
