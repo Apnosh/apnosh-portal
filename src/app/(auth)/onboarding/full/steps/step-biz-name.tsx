@@ -456,12 +456,8 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                       <Input value={l.phone || ''} onChange={(v) => updateSpot(i, { phone: v })} placeholder="(555) 123-4567" type="tel" />
                     </div>
                     <div>
-                      <FieldLabel>This spot{'\u2019'}s web page</FieldLabel>
-                      <Input value={l.website || ''} onChange={(v) => updateSpot(i, { website: v })} placeholder="Its own page, if it has one" type="url" />
-                    </div>
-                    <div>
-                      <FieldLabel>This spot{'\u2019'}s menu link</FieldLabel>
-                      <Input value={l.menu_url || ''} onChange={(v) => updateSpot(i, { menu_url: v })} placeholder="Its own menu, if it differs" type="url" />
+                      <FieldLabel>Website</FieldLabel>
+                      <Input value={l.website || ''} onChange={(v) => updateSpot(i, { website: v })} placeholder="From this spot's Google listing" type="url" />
                     </div>
                     <div>
                       <FieldLabel>Hours</FieldLabel>
@@ -522,31 +518,6 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
           />
         </div>
 
-        {/* Scan recap */}
-        {scanNote && (
-          <div
-            className="text-[13px] leading-relaxed rounded-[12px] px-3.5 py-2.5"
-            style={{ background: '#f5f5f7', color: '#48484a', borderLeft: '3px solid #4abd98' }}
-          >
-            {scanNote}
-          </div>
-        )}
-
-
-        {/* Fast-forward: once the AI has filled fields, let the owner jump
-            straight to the review screen instead of tapping every step. */}
-        {filledSomething && onJumpToReview && (
-          <button
-            type="button"
-            onClick={onJumpToReview}
-            className="w-full py-3 rounded-[12px] text-[13px] font-semibold text-white transition-all"
-            style={{ background: 'linear-gradient(135deg, #2e9a78, #0f6e56)', boxShadow: '0 6px 18px rgba(46,154,120,0.30)', minHeight: 52, borderRadius: 26 }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #23815f, #0a5a45)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #2e9a78, #0f6e56)' }}
-          >
-            See what we filled →
-          </button>
-        )}
       </div>
       {nav}
     </>
