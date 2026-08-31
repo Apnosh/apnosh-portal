@@ -26,6 +26,24 @@ export default function OnboardingPreviewPage() {
     else if (q && /^\d+$/.test(q)) setIdx(Math.max(0, Number(q) - 1))
     const biz = sp.get('biz')
     if (biz) setData((prev) => ({ ...prev, biz_name: biz }))
+    /* ?demo=locs seeds a two-location roster (one differing spot) so card
+     * states can be screenshotted without clicks. Preview-only, saves nothing. */
+    if (sp.get('demo') === 'locs') {
+      setData((prev) => ({
+        ...prev,
+        biz_name: prev.biz_name || 'Do Si Korean BBQ',
+        biz_type: 'Restaurant',
+        primary_location_name: 'Do Si Korean BBQ Kent',
+        full_address: '12912 SE Kent-Kangley Rd, Kent, WA',
+        phone: '(253) 981-4277',
+        locations: [{
+          name: 'Do Si Alki', full_address: '1000 Alki Ave SW, Seattle, WA',
+          city: 'Seattle', state: 'WA', zip: '98116', place_id: '',
+          phone: '(206) 555-0100', hours: {},
+          biz_type: 'Bar / nightlife',
+        }],
+      }))
+    }
   }, [])
 
   const screens = useMemo(
