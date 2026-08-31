@@ -66,6 +66,8 @@ export async function GET(req: NextRequest) {
           attribution: c.attribution ?? undefined,
           spark: Array.isArray(c.spark) ? c.spark : undefined,
           firedAt: c.fired_at,
+          tone: c.card_type === 'gbp_down' ? 'heads_up' : 'win',
+          cta: c.card_type === 'gbp_down' ? { label: 'Plan the push', href: '/campaigns/new' } : undefined,
         },
       }, { headers: { 'Cache-Control': 'no-store' } })
     }

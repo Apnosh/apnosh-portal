@@ -28,6 +28,13 @@ const SAMPLES = [
     context: 'Every one got a reply within a day.',
     attribution: 'Since the review kit went up by your register, Aug 2.',
   },
+  {
+    id: 'sample-down', label: 'Quieter week on Google',
+    big: '3 calls · 14 direction taps',
+    context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.',
+    tone: 'heads_up' as const,
+    cta: { label: 'Plan the push', href: '/campaigns/new' },
+  },
 ]
 
 export default function ProofPreviewPage() {
@@ -45,7 +52,7 @@ export default function ProofPreviewPage() {
           <ProofCard key={c.id} card={c} defaultOpen={i > 0} onDismiss={() => { /* preview: stays */ }} onSee={() => { /* preview: noop */ }} />
         ))}
         <p style={{ fontSize: 11.5, color: '#aeaeb2', marginTop: 14 }}>
-          On Home the card starts as the slim strip (like the first one here) so the funnel keeps its full height. Tap it to expand.
+          On Home every card starts as the slim strip (like the first one here) so the funnel keeps its full height. Tap to expand. The gray one is the quieter-week card: it only fires on a real drop, at most every two weeks, and always carries the move.
         </p>
       </div>
     </div>

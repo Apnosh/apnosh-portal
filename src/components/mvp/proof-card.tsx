@@ -26,6 +26,10 @@ export interface ProofCardData {
   spark?: number[]
   /** From proof_cards.fired_at once migrated; drives newest-wins on Home. */
   firedAt?: string
+  /** 'win' (mint, default) or 'heads_up' (gray) — the down-week material. */
+  tone?: 'win' | 'heads_up'
+  /** The move a heads-up card carries. Renders as the card's one action. */
+  cta?: { label: string; href: string }
 }
 
 export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen = false }: {
@@ -38,6 +42,9 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   defaultOpen?: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  const headsUp = card.tone === 'heads_up'
+  const dotColor = headsUp ? '#aeaeb2' : '#4abd98'
+  const labelColor = headsUp ? '#6e6e73' : '#2e9a78'
   const max = card.spark && card.spark.length ? Math.max(...card.spark, 1) : 1
   if (!open) {
     return (
@@ -50,8 +57,8 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
           boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.06)', cursor: 'pointer',
         }}
       >
-        <span style={{ width: 6, height: 6, borderRadius: 99, background: '#4abd98', flexShrink: 0 }} />
-        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: '#2e9a78', flexShrink: 0 }}>{card.label}</span>
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: dotColor, flexShrink: 0 }} />
+        <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: labelColor, flexShrink: 0 }}>{card.label}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#1d1d1f', fontVariantNumeric: 'tabular-nums', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{card.big}</span>
         <ChevronDown size={14} color="#aeaeb2" style={{ flexShrink: 0 }} />
       </button>
@@ -71,8 +78,8 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       >
         <X size={13} />
       </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: '#2e9a78', marginBottom: 8 }}>
-        <span style={{ width: 6, height: 6, borderRadius: 99, background: '#4abd98' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: labelColor, marginBottom: 8 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: dotColor }} />
         {card.label}
       </div>
       <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', color: '#1d1d1f', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>
@@ -91,7 +98,14 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
           {card.attribution}
         </div>
       )}
-      {onSee && (
+      {card.cta ? (
+        <a
+          href={card.cta.href}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: '#0f6e56', marginTop: 9, textDecoration: 'none' }}
+        >
+          {card.cta.label} <ChevronRight size={13} />
+        </a>
+      ) : onSee && (
         <button
           onClick={onSee}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: '#0f6e56', marginTop: 9, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}

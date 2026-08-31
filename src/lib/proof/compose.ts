@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface ProofCardRow {
   card_key: string
-  card_type: 'gbp_week' | 'post' | 'reviews'
+  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down'
   label: string
   big: string
   context: string
@@ -27,47 +27,55 @@ export interface ProofCardRow {
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
 
-/** R-01 — "This week on Google": last 7 full days vs the 7 before. */
-export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
+interface GbpWindows {
+  cur: { directions: number; calls: number }
+  prior: { directions: number; calls: number }
+  daily: Map<string, number>
+  hasDemo: boolean
+  curStart: Date
+}
+
+async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date): Promise<GbpWindows> {
   const end = new Date(now); end.setUTCHours(0, 0, 0, 0)
   const curStart = new Date(end); curStart.setUTCDate(curStart.getUTCDate() - 7)
   const priorStart = new Date(end); priorStart.setUTCDate(priorStart.getUTCDate() - 14)
-
   const { data: rows } = await admin
     .from('gbp_metrics')
     .select('date, directions, calls, location_id')
     .eq('client_id', clientId)
     .gte('date', iso(priorStart))
     .lt('date', iso(end))
-
-  const cur = { directions: 0, calls: 0 }
-  const prior = { directions: 0, calls: 0 }
-  const daily = new Map<string, number>()
-  let hasDemo = false
+  const w: GbpWindows = { cur: { directions: 0, calls: 0 }, prior: { directions: 0, calls: 0 }, daily: new Map(), hasDemo: false, curStart }
   for (const r of rows ?? []) {
-    if (r.location_id === 'demo-proof') hasDemo = true
+    if (r.location_id === 'demo-proof') w.hasDemo = true
     const d = String(r.date)
     const dirs = Number(r.directions) || 0
     const calls = Number(r.calls) || 0
     if (d >= iso(curStart)) {
-      cur.directions += dirs; cur.calls += calls
-      daily.set(d, (daily.get(d) ?? 0) + dirs + calls)
+      w.cur.directions += dirs; w.cur.calls += calls
+      w.daily.set(d, (w.daily.get(d) ?? 0) + dirs + calls)
     } else {
-      prior.directions += dirs; prior.calls += calls
+      w.prior.directions += dirs; w.prior.calls += calls
     }
   }
-  const curTotal = cur.directions + cur.calls
-  const priorTotal = prior.directions + prior.calls
+  return w
+}
+
+/** R-01 — "This week on Google": last 7 full days vs the 7 before. */
+export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
+  const w = await readGbpWindows(admin, clientId, now)
+  const curTotal = w.cur.directions + w.cur.calls
+  const priorTotal = w.prior.directions + w.prior.calls
   if (curTotal === 0 || curTotal <= priorTotal) return null
 
   const spark: number[] = []
   for (let i = 0; i < 7; i++) {
-    const d = new Date(curStart); d.setUTCDate(d.getUTCDate() + i)
-    spark.push(daily.get(iso(d)) ?? 0)
+    const d = new Date(w.curStart); d.setUTCDate(d.getUTCDate() + i)
+    spark.push(w.daily.get(iso(d)) ?? 0)
   }
 
   let attribution: string | undefined
-  const since = new Date(end); since.setUTCDate(since.getUTCDate() - 30)
+  const since = new Date(now); since.setUTCDate(since.getUTCDate() - 30)
   const { data: wo } = await admin
     .from('service_work_orders')
     .select('title, delivered_at')
@@ -83,22 +91,51 @@ export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: 
   }
 
   const parts: string[] = []
-  if (cur.calls > 0) parts.push(plural(cur.calls, 'call'))
-  parts.push(`${cur.directions} direction tap${cur.directions === 1 ? '' : 's'}`)
+  if (w.cur.calls > 0) parts.push(plural(w.cur.calls, 'call'))
+  parts.push(`${w.cur.directions} direction tap${w.cur.directions === 1 ? '' : 's'}`)
 
   return {
-    card_key: `gbp-${iso(curStart)}`,
+    card_key: `gbp-${iso(w.curStart)}`,
     card_type: 'gbp_week',
-    label: hasDemo ? 'Sample · a week on Google' : 'This week on Google',
+    label: w.hasDemo ? 'Sample · a week on Google' : 'This week on Google',
     big: parts.join(' · '),
     context: priorTotal > 0
-      ? `Up from ${plural(prior.calls, 'call')} and ${plural(prior.directions, 'tap')} the week before.`
+      ? `Up from ${plural(w.prior.calls, 'call')} and ${plural(w.prior.directions, 'tap')} the week before.`
       : 'Your first tracked week.',
-    attribution: hasDemo
+    attribution: w.hasDemo
       ? 'Demo numbers so you can see the card. Real weeks replace this.'
       : attribution,
     spark,
-    is_sample: hasDemo,
+    is_sample: w.hasDemo,
+  }
+}
+
+/** R-06 — the quieter week, transparency with a move attached.
+ *  Fires only on a meaningful drop (25%+ with real volume), never from demo
+ *  data, at most one per 14 days, and never in a week that earned a win. */
+export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
+  const w = await readGbpWindows(admin, clientId, now)
+  if (w.hasDemo) return null
+  const curTotal = w.cur.directions + w.cur.calls
+  const priorTotal = w.prior.directions + w.prior.calls
+  if (priorTotal < 20) return null
+  if (curTotal >= priorTotal * 0.75) return null
+
+  const twoWeeksAgo = new Date(now); twoWeeksAgo.setUTCDate(twoWeeksAgo.getUTCDate() - 14)
+  const { count } = await admin
+    .from('proof_cards')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId)
+    .eq('card_type', 'gbp_down')
+    .gte('fired_at', twoWeeksAgo.toISOString())
+  if ((count ?? 0) > 0) return null
+
+  return {
+    card_key: `gbp-down-${iso(w.curStart)}`,
+    card_type: 'gbp_down',
+    label: 'Quieter week on Google',
+    big: `${plural(w.cur.calls, 'call')} · ${w.cur.directions} direction tap${w.cur.directions === 1 ? '' : 's'}`,
+    context: `Down from ${plural(w.prior.calls, 'call')} and ${plural(w.prior.directions, 'tap')} the week before. A push this week turns it around.`,
   }
 }
 
@@ -217,20 +254,21 @@ export async function composeForClient(admin: SupabaseClient, clientId: string, 
   let budget = Math.max(0, 2 - (count ?? 0))
   if (budget === 0) return []
 
-  const candidates = (
-    await Promise.all([
-      evalGbpWeek(admin, clientId, now),
-      evalPost(admin, clientId, now),
-      evalReviews(admin, clientId, now),
-    ])
-  ).filter((c): c is ProofCardRow => !!c)
+  const [win, post, reviews] = await Promise.all([
+    evalGbpWeek(admin, clientId, now),
+    evalPost(admin, clientId, now),
+    evalReviews(admin, clientId, now),
+  ])
+  // The down-week card only speaks when the win card has nothing to say.
+  const down = win ? null : await evalGbpDownWeek(admin, clientId, now)
+  const candidates = [win, post, reviews, down].filter((c): c is ProofCardRow => !!c)
 
   const fired: string[] = []
   for (const c of candidates) {
     if (budget === 0) break
     const { error } = await admin.from('proof_cards').insert({ client_id: clientId, ...c })
     if (!error) { fired.push(c.card_key); budget-- }
-    // unique-violation (23505) = already fired earlier; anything else logs upstream
+    // 23505 = already fired earlier; 23514 = card_type check pre-migration-250
   }
   return fired
 }
