@@ -21,6 +21,7 @@ export interface BrandFacts {
   cuisine?: string | null
   menu_url?: string | null
   hours?: Record<string, unknown> | null
+  service_styles?: string[] | null
 }
 
 export interface LocationOverrides extends BrandFacts {
@@ -37,7 +38,7 @@ export interface ResolvedLocationFacts extends BrandFacts {
   overridden: string[]
 }
 
-const OVERRIDE_KEYS = ['phone', 'website', 'price_range', 'biz_type', 'cuisine', 'menu_url', 'hours'] as const
+const OVERRIDE_KEYS = ['phone', 'website', 'price_range', 'biz_type', 'cuisine', 'menu_url', 'hours', 'service_styles'] as const
 
 function isSet(v: unknown): boolean {
   if (v == null) return false

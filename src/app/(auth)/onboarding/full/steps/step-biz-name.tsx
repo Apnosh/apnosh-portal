@@ -1,10 +1,10 @@
 'use client'
 
 import { type ReactNode, useEffect, useState } from 'react'
-import { type OnboardingData, type LocationDraft, type WeekHours, FOOD_BIZ_TYPES } from '../data'
+import { type OnboardingData, type LocationDraft, type WeekHours, FOOD_BIZ_TYPES, SERVICE_STYLES } from '../data'
 import { Store, MapPin, X, ChevronDown, Check } from 'lucide-react'
 import { HoursEditor, hasOpenHours } from './step-location-details'
-import { Question, Input, FieldLabel } from '../ui'
+import { Question, Input, SingleChipGroup, ChipGroup, FieldLabel } from '../ui'
 import { matchCuisine } from '../cuisine'
 import { extractFromWebsite, isLookupEnabled, searchBusinesses, getBusinessPrefill, type PlaceCandidate } from '@/lib/onboarding-lookup'
 
@@ -132,6 +132,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
         city: p?.city ?? '', state: p?.state ?? '', zip: p?.zip ?? '',
         place_id: c.placeId, phone: p?.phone ?? '', hours: p?.hours ?? {},
         website: p?.website ?? '',
+        biz_type: p?.place_type ?? '',
       })
     }
     if (extras.length) {
@@ -459,6 +460,27 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                     <div>
                       <FieldLabel>Website</FieldLabel>
                       <Input value={l.website || ''} onChange={(v) => updateSpot(i, { website: v })} placeholder="From this spot's Google listing" type="url" />
+                    </div>
+                    <div>
+                      <FieldLabel>What this spot is</FieldLabel>
+                      <SingleChipGroup
+                        options={['Restaurant', 'Caf\u00e9 / coffee shop', 'Bar / nightlife']}
+                        selected={l.biz_type || ''}
+                        onSelect={(v) => updateSpot(i, { biz_type: v === l.biz_type ? '' : v })}
+                      />
+                      {!l.biz_type && <div className="text-[11px] mt-1" style={{ color: '#aeaeb2' }}>Empty means same as your business.</div>}
+                    </div>
+                    <div>
+                      <FieldLabel>This spot{'\u2019'}s vibe</FieldLabel>
+                      <ChipGroup
+                        options={SERVICE_STYLES as unknown as string[]}
+                        selected={l.service_styles ?? []}
+                        onToggle={(v) => {
+                          const cur = l.service_styles ?? []
+                          updateSpot(i, { service_styles: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] })
+                        }}
+                      />
+                      {!(l.service_styles ?? []).length && <div className="text-[11px] mt-1" style={{ color: '#aeaeb2' }}>Empty means same as your business.</div>}
                     </div>
                     <div>
                       <FieldLabel>Hours</FieldLabel>

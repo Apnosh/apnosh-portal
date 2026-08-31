@@ -401,6 +401,8 @@ export interface LocationDraft {
   hours: WeekHours
   website?: string      // this spot's own page (a location may keep a deep URL)
   menu_url?: string     // this spot's own menu link, when it differs
+  biz_type?: string     // override: this spot reads differently on Google (a bar, a cafe)
+  service_styles?: string[]  // override: this spot's own vibe; empty inherits
 }
 
 // Form data shape

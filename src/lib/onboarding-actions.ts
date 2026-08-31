@@ -358,6 +358,7 @@ export async function completeOnboardingCRM(
           name?: unknown; full_address?: unknown
           city?: unknown; state?: unknown; zip?: unknown; place_id?: unknown
           hours?: unknown; phone?: unknown; website?: unknown; menu_url?: unknown
+          biz_type?: unknown; service_styles?: unknown
         }>)
       : []
     const cleanLocs = locDraft.filter(
@@ -398,6 +399,10 @@ export async function completeOnboardingCRM(
             phone: str(l.phone),
             website: str(l.website),
             menu_url: str(l.menu_url),
+            // A classification equal to the business default is NOT an
+            // override; store null so the spot keeps inheriting.
+            biz_type: str(l.biz_type) && str(l.biz_type) !== str(data.biz_type) ? str(l.biz_type) : null,
+            service_styles: Array.isArray(l.service_styles) && l.service_styles.length ? l.service_styles : null,
             is_primary: false,
           })
         }
@@ -405,7 +410,7 @@ export async function completeOnboardingCRM(
           let { error: locErr } = await supabase.from('client_locations').insert(rows)
           if (locErr && locErr.code === '42703') {
             // phone column not migrated yet (245): save everything else
-            const bare = rows.map(({ phone: _p, website: _w, menu_url: _m, ...rest }) => rest)
+            const bare = rows.map(({ phone: _p, website: _w, menu_url: _m, biz_type: _b, service_styles: _s, ...rest }) => rest)
             ;({ error: locErr } = await supabase.from('client_locations').insert(bare))
           }
           if (locErr) console.error('[completeOnboardingCRM] locations seed error:', locErr.message)

@@ -38,6 +38,7 @@ export default function StepAbout({ data, update, nav }: Props) {
             selected={data.biz_type}
             onSelect={(v) => update('biz_type', v)}
           />
+          <div className="text-[11px] mt-1" style={{ color: '#aeaeb2' }}>Sets your default. A location can differ on its own card.</div>
         </div>
 
         {isFood && (
