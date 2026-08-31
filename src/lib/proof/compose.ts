@@ -130,12 +130,17 @@ export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, n
     .gte('fired_at', twoWeeksAgo.toISOString())
   if ((count ?? 0) > 0) return null
 
+  const parts: string[] = []
+  if (w.cur.calls > 0) parts.push(plural(w.cur.calls, 'call'))
+  parts.push(`${w.cur.directions} direction tap${w.cur.directions === 1 ? '' : 's'}`)
   return {
     card_key: `gbp-down-${iso(w.curStart)}`,
     card_type: 'gbp_down',
     label: 'Quieter week on Google',
-    big: `${plural(w.cur.calls, 'call')} · ${w.cur.directions} direction tap${w.cur.directions === 1 ? '' : 's'}`,
-    context: `Down from ${plural(w.prior.calls, 'call')} and ${plural(w.prior.directions, 'tap')} the week before. A push this week turns it around.`,
+    big: parts.join(' · '),
+    context: w.prior.calls > 0
+      ? `Down from ${plural(w.prior.calls, 'call')} and ${plural(w.prior.directions, 'tap')} the week before. A push this week turns it around.`
+      : `Down from ${plural(w.prior.directions, 'tap')} the week before. A push this week turns it around.`,
   }
 }
 
