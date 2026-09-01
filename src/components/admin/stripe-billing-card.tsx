@@ -771,10 +771,9 @@ function SetupBillingForm({
           />
           <input
             type="text"
-            placeholder="ZIP *"
+            placeholder="ZIP"
             value={postal}
             onChange={e => setPostal(e.target.value)}
-            required
             className="px-3 py-2 border border-ink-6 rounded-lg text-sm bg-white"
           />
         </div>
