@@ -127,7 +127,9 @@ export default function ReportView({ report, bizName, backHref }: {
         {r.moved && (
           <Sec label="What it moved">
             <div style={{ display: 'flex', gap: 8 }}>
-              {[['Calls', r.moved.calls, r.moved.priorCalls], ['Directions', r.moved.directions, r.moved.priorDirections], ['Site visits', r.moved.siteClicks, r.moved.priorSiteClicks]].map(([label, n, prior]) => (
+              {[['Calls', r.moved.calls, r.moved.priorCalls], ['Directions', r.moved.directions, r.moved.priorDirections], ['Site visits', r.moved.siteClicks, r.moved.priorSiteClicks]]
+                .filter(([, n, prior]) => Number(n) > 0 || Number(prior) > 0)
+                .map(([label, n, prior]) => (
                 <div key={String(label)} style={{ flex: 1, background: '#f9f9fb', borderRadius: 12, padding: '9px 11px' }}>
                   <div style={{ fontSize: 10, color: FAINT, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', marginBottom: 2 }}>{label}</div>
                   <div style={{ fontSize: 19, fontWeight: 800, letterSpacing: '-0.03em', color: INK, fontVariantNumeric: 'tabular-nums' }}>{Number(n).toLocaleString('en-US')}</div>
