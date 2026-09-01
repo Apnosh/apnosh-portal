@@ -28,10 +28,10 @@ import { markInboxRead, markAllInboxRead } from './actions'
 type PrimaryTab = 'all' | 'action' | 'reviews' | 'updates'
 
 const PRIMARY_TABS: Array<{ key: PrimaryTab; label: string; kinds: InboxItemKind[] }> = [
-  { key: 'all',      label: 'All',      kinds: ['approval', 'post_review', 'review', 'task', 'connection'] },
+  { key: 'all',      label: 'All',      kinds: ['approval', 'post_review', 'review', 'task', 'connection', 'proof'] },
   { key: 'action',   label: 'Action',   kinds: ['approval', 'post_review', 'task'] },
   { key: 'reviews',  label: 'Reviews',  kinds: ['review'] },
-  { key: 'updates',  label: 'Updates',  kinds: ['connection'] },
+  { key: 'updates',  label: 'Updates',  kinds: ['connection', 'proof'] },
 ]
 
 /* Source filter chips. Badge is a short monochrome label — no rainbow
@@ -57,12 +57,14 @@ const KIND_ICONS: Record<InboxItemKind, React.ComponentType<{ className?: string
   review:      Star,
   task:        Calendar,
   connection:  Plug,
+  proof:       Sparkles,
 }
 
 /* Maps a kind to an icon-circle modifier class for tinting. */
 function kindClass(kind: InboxItemKind): string {
   if (kind === 'review') return 'k-review'
   if (kind === 'connection') return 'k-connection'
+  if (kind === 'proof') return 'k-connection'
   return ''
 }
 

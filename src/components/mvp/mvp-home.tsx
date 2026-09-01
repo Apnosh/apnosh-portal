@@ -175,46 +175,41 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
   const { C } = useMvpTheme()
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
-  /* PROOF CARD (spec R-01): one real number from this week, in the banner
-   * slot. Computed on read; silence when the week did not beat the last one.
-   * Dismissal is per-device until the archive table ships. */
-  const [proofCard, setProofCard] = useState<ProofCardData | null>(null)
+  /* PROOF DECK (owner call 2026-09-01): fired cards live in the stackable
+   * deck BELOW the funnel (the first-iteration stack), and in the inbox.
+   * Nothing sits above the funnel anymore; the graph never compresses. */
+  const [proofCards, setProofCards] = useState<ProofCardData[]>([])
   useEffect(() => {
     if (!clientId) return
     let alive = true
-    fetch(`/api/dashboard/proof?clientId=${clientId}`)
+    fetch(`/api/dashboard/proof?clientId=${clientId}&list=1`)
       .then((r) => r.json())
       .then((j) => {
-        if (!alive || !j?.card) return
-        try { if (localStorage.getItem(`proof-hide-${j.card.id}`)) return } catch { /* storage off */ }
-        setProofCard(j.card as ProofCardData)
+        if (!alive || !Array.isArray(j?.cards)) return
+        const mapped: ProofCardData[] = (j.cards as Array<Record<string, unknown>>)
+          .filter((c) => !c.dismissed_at)
+          .slice(0, 5)
+          .map((c) => ({
+            id: String(c.card_key ?? c.id),
+            label: String(c.label), big: String(c.big), context: String(c.context),
+            attribution: (c.attribution as string) ?? undefined,
+            spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
+            firedAt: (c.fired_at as string) ?? undefined,
+            tone: c.card_type === 'gbp_down' ? 'heads_up' : 'win',
+            cta: c.card_type === 'gbp_down' ? { label: 'Plan the push', href: '/campaigns/new' } : undefined,
+          }))
+        setProofCards(mapped)
       })
       .catch(() => { /* silence is the failure mode */ })
     return () => { alive = false }
   }, [clientId])
-  const dismissProof = () => {
-    if (proofCard) {
-      try { localStorage.setItem(`proof-hide-${proofCard.id}`, '1') } catch { /* storage off */ }
-      if (clientId) {
-        void fetch('/api/dashboard/proof', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clientId, id: proofCard.id, action: 'dismiss' }),
-        }).catch(() => { /* localStorage already covers this device */ })
-      }
-    }
-    setProofCard(null)
+  const proofAct = (id: string, action: 'read' | 'dismiss') => {
+    if (!clientId) return
+    void fetch('/api/dashboard/proof', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId, id, action }),
+    }).catch(() => { /* best effort */ })
   }
-  const readProof = () => {
-    if (proofCard && clientId) {
-      void fetch('/api/dashboard/proof', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, id: proofCard.id, action: 'read' }),
-      }).catch(() => { /* best effort */ })
-    }
-  }
-  /* Newest wins the banner slot: a proof card fired in the last 48h outranks
-   * the monthly review nudge; otherwise the nudge shows and the card waits. */
-  const proofFresh = !!proofCard && (!proofCard.firedAt || (Date.now() - new Date(proofCard.firedAt).getTime()) < 48 * 3600 * 1000)
   // Whether the funnel hero actually rendered. Without Google data it hides, and Home
   // shows an honest connect card in its place — never a blank screen (the sim's most-hit
   // defect: 6 of 20 owners finished onboarding onto an empty white page).
@@ -270,7 +265,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
 
       <div style={{ padding: '16px 18px 0' }}>
         {/* monthly review nudge */}
-        {data.review && !reviewHidden && !(proofCard && proofFresh) && (
+        {data.review && !reviewHidden && (
           <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff' }}>
             {/* drifting / spinning shapes, ported from the design */}
             <i aria-hidden className="mvp-driftB" style={{ position: 'absolute', width: 118, height: 118, top: -44, right: -28, borderRadius: '50%', background: 'rgba(255,255,255,.10)' }} />
@@ -288,17 +283,6 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             </div>
             <button onClick={() => setReviewHidden(true)} aria-label="Hide review" style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.22)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
           </div>
-        )}
-
-        {/* The proof card shares the banner slot with the review nudge and
-            never stacks under it: review wins while visible. */}
-        {proofCard && (proofFresh || !data.review || reviewHidden) && (
-          <ProofCard
-            card={proofCard}
-            onOpen={readProof}
-            onDismiss={dismissProof}
-            onSee={() => { try { document.getElementById('home-funnel-hero')?.scrollIntoView({ behavior: 'smooth' }) } catch { /* noop */ } }}
-          />
         )}
 
         {/* Everything below the banner cascades in on load (staggered rise). */}
@@ -323,6 +307,13 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             </div>
             <ChevronRight size={17} color={C.faint} />
           </Link>
+        )}
+
+        {/* RESULTS DECK — fired proof cards as the stackable deck under the
+            graph (the first-iteration stack, revived). Front card in flow,
+            the next ones peek behind; nothing above the funnel competes. */}
+        {proofCards.length > 0 && (
+          <ProofDeck cards={proofCards} onAct={proofAct} onGone={(id) => setProofCards((prev) => prev.filter((c) => c.id !== id))} />
         )}
 
         {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
@@ -583,6 +574,64 @@ function StepBtn({ children, onClick, disabled, label }: { children: React.React
     <button onClick={onClick} disabled={disabled} aria-label={label} style={{ width: 32, height: 32, borderRadius: '50%', border: `1px solid ${C.line}`, background: C.card, color: disabled ? C.faint : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: disabled ? 'default' : 'pointer', padding: 0, opacity: disabled ? 0.45 : 1, transition: 'opacity .15s' }}>
       {children}
     </button>
+  )
+}
+
+/* The results deck: proof cards in the first-iteration stacked style.
+   Front card fully expanded; stepping through marks each card read. */
+function ProofDeck({ cards, onAct, onGone }: {
+  cards: ProofCardData[]
+  onAct: (id: string, action: 'read' | 'dismiss') => void
+  onGone: (id: string) => void
+}) {
+  const { C } = useMvpTheme()
+  const [step, setStep] = useState(0)
+  const safeStep = Math.min(step, Math.max(0, cards.length - 1))
+  const deck = cards.slice(safeStep, safeStep + 3)
+  const front = deck[0]
+  // Seeing a card front-and-center counts as reading it.
+  const readMarked = useRef<Set<string>>(new Set())
+  useEffect(() => {
+    if (front && !readMarked.current.has(front.id)) {
+      readMarked.current.add(front.id)
+      onAct(front.id, 'read')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [front?.id])
+  if (!front) return null
+  return (
+    <div style={{ marginTop: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Results</span>
+        <span style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+          {cards.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setStep((p) => (p + 1) % cards.length)}
+              style={{ fontSize: 11.5, fontWeight: 700, color: C.mute, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              {safeStep + 1} of {cards.length} ›
+            </button>
+          )}
+          <Link href="/dashboard/results" style={{ fontSize: 11.5, fontWeight: 700, color: '#0f6e56', textDecoration: 'none' }}>All</Link>
+        </span>
+      </div>
+      <div style={{ position: 'relative', paddingBottom: deck.length > 1 ? 14 : 0 }}>
+        {deck.map((c, pos) => (
+          <div key={c.id} style={{ ...deckDepth(pos), transformOrigin: 'top center', transition: 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s', height: pos === 0 ? undefined : '100%' }}>
+            {pos === 0 ? (
+              <ProofCard
+                card={c}
+                defaultOpen
+                onDismiss={() => { onAct(c.id, 'dismiss'); onGone(c.id) }}
+              />
+            ) : (
+              <div style={{ background: '#fff', borderRadius: 16, height: '100%', boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07)' }} />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 

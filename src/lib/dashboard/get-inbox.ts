@@ -20,7 +20,7 @@ import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
 import { getCampaignReadiness } from '@/lib/campaigns/readiness'
 import { setupOwed } from '@/lib/campaigns/readiness-types'
 
-export type InboxItemKind = 'approval' | 'post_review' | 'review' | 'task' | 'connection'
+export type InboxItemKind = 'approval' | 'post_review' | 'review' | 'task' | 'connection' | 'proof'
 
 /* Where the item originated. Drives the source badge on the row
    (Google "G", Yelp "Y", Instagram camera, etc.) and the
@@ -150,6 +150,34 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
   ])
 
   const items: InboxItem[] = []
+
+  /* Proof cards: fired results join the inbox as quiet updates — the bell is
+     one of the homes for "what happened" (owner call 2026-09-01). Tolerates
+     the table not existing (rows just come back empty). */
+  {
+    const { data: proofRows } = await admin
+      .from('proof_cards')
+      .select('id, label, big, card_type, fired_at')
+      .eq('client_id', clientId)
+      .is('dismissed_at', null)
+      .gte('fired_at', new Date(Date.now() - 30 * 86400e3).toISOString())
+      .order('fired_at', { ascending: false })
+      .limit(10)
+    for (const r of proofRows ?? []) {
+      items.push({
+        id: `proof-${r.id}`,
+        kind: 'proof',
+        title: r.big as string,
+        detail: r.label as string,
+        urgency: 'low',
+        href: '/dashboard/results',
+        whenIso: r.fired_at as string,
+        status: (r.card_type as string) === 'gbp_down' ? 'Heads up' : 'Result',
+        source: (r.card_type as string) === 'post' ? 'instagram' : 'google',
+        senderName: null,
+      })
+    }
+  }
 
   for (const d of delivsRow.data ?? []) {
     items.push({
