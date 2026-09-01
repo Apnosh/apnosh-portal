@@ -66,8 +66,11 @@ export async function createStripeCustomerForClient(args: {
     line1?: string
     line2?: string
     city?: string
-    state: string         // required for Stripe Tax
-    postal_code: string   // required for Stripe Tax
+    /** With state + postal_code set, Stripe Tax adds sales tax automatically.
+     *  Without them the customer is still created and invoices go out
+     *  WITHOUT automatic tax until an address is added. */
+    state?: string
+    postal_code?: string
     country?: string
   }
   /** Optional override for where invoices go. Persisted to
@@ -77,10 +80,8 @@ export async function createStripeCustomerForClient(args: {
   const auth = await requireAdmin()
   if (!auth.ok) return { success: false, error: auth.error }
 
-  // Minimum validation: need state + postal code for Stripe Tax.
-  if (!args.address?.state || !args.address?.postal_code) {
-    return { success: false, error: 'State and postal code are required so sales tax can be calculated.' }
-  }
+  // No hard address requirement: the client's zip is often unknown at setup.
+  // Without state + postal, Stripe Tax simply stays off for their invoices.
 
   const admin = getAdminSupabase()
 
@@ -116,7 +117,7 @@ export async function createStripeCustomerForClient(args: {
       email: invoiceEmail,
       name: client.name,
       phone: client.phone ?? undefined,
-      address: args.address,
+      address: args.address?.state && args.address?.postal_code ? args.address : undefined,
     })
 
     revalidatePath(`/admin/clients/${args.clientId}`)
@@ -283,6 +284,7 @@ export async function startMonthlyRetainer(args: {
 
     const sub = await startMonthlyRetainerStripe({
       customerId: bc.stripe_customer_id,
+      taxEnabled: await customerHasTaxAddress(bc.stripe_customer_id),
       clientId: args.clientId,
       amountCents: dollarsToCents(args.monthlyAmountDollars),
       planName: args.planNameOverride ?? 'Monthly Retainer',
@@ -383,6 +385,18 @@ export interface InvoiceLineInput {
   compedFromDollars?: number
 }
 
+/** Stripe Tax needs the customer's address as the tax destination; a
+ *  customer without state+zip cannot have automatic tax, and enabling it
+ *  anyway makes Stripe refuse to finalize the invoice. */
+async function customerHasTaxAddress(stripeCustomerId: string): Promise<boolean> {
+  try {
+    const c = await stripe.customers.retrieve(stripeCustomerId)
+    if (!c || (c as { deleted?: boolean }).deleted) return false
+    const a = (c as { address?: { state?: string | null; postal_code?: string | null } }).address
+    return !!(a?.state && a?.postal_code)
+  } catch { return false }
+}
+
 export async function createOneTimeInvoice(args: {
   clientId: string
   lines: InvoiceLineInput[]
@@ -481,7 +495,7 @@ export async function createOneTimeInvoice(args: {
       collection_method: 'send_invoice',
       days_until_due: args.dueDateDays ?? 14,
       auto_advance: false,
-      automatic_tax: { enabled: true },
+      automatic_tax: { enabled: await customerHasTaxAddress(bc.stripe_customer_id) },
       payment_settings: {
         payment_method_types: ['us_bank_account', 'card'],
       },

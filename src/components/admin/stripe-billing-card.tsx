@@ -212,7 +212,7 @@ export function StripeBillingCard({ clientId }: { clientId: string }) {
   // ----- Action handlers -----
 
   async function onSetupStripe(
-    address: { line1?: string; line2?: string; city?: string; state: string; postal_code: string },
+    address: { line1?: string; line2?: string; city?: string; state?: string; postal_code?: string },
     billingEmail: string,
   ) {
     setBusyAction('setup'); setError(null); setNotice(null)
@@ -671,7 +671,7 @@ function SetupBillingForm({
 }: {
   onClose: () => void
   onSubmit: (
-    addr: { line1?: string; city?: string; state: string; postal_code: string },
+    addr: { line1?: string; city?: string; state?: string; postal_code?: string },
     billingEmail: string,
   ) => Promise<void>
   busy: boolean
@@ -703,7 +703,8 @@ function SetupBillingForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!state || !postal) { setErr('State and ZIP are required'); return }
+    // Address optional: without state + ZIP, invoices go out without
+    // automatic sales tax until the client's address is added.
     if (!billingEmail.trim()) { setErr('Billing email is required so Stripe knows where to send invoices'); return }
     setErr(null)
     await onSubmit({
@@ -751,7 +752,7 @@ function SetupBillingForm({
       <div className="pt-2 border-t border-ink-6 space-y-2">
         <label className="text-[10.5px] font-semibold text-ink-3 uppercase tracking-wide block">Billing address</label>
         <p className="text-[10.5px] text-ink-4 leading-snug">
-          State + ZIP are required (sales tax). Street + city appear on the invoice PDF.
+          With state + ZIP, sales tax is added automatically. No ZIP yet? Leave it empty: invoices go out without automatic tax until an address is added. Street + city appear on the invoice PDF.
         </p>
         <input
           type="text"

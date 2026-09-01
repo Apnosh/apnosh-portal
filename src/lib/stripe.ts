@@ -93,8 +93,8 @@ export async function getOrCreateStripeCustomerForClient(opts: {
     line1?: string
     line2?: string
     city?: string
-    state: string           // e.g. 'WA'
-    postal_code: string     // e.g. '98101'
+    state?: string          // with postal_code, enables Stripe Tax
+    postal_code?: string    // without both, invoices go out untaxed
     country?: string        // defaults to 'US'
   }
 }): Promise<string> {
@@ -188,6 +188,8 @@ export async function startMonthlyRetainer(opts: {
   retainerProductId: string
   billingAnchor?: Date
   couponId?: string
+  /** false when the customer has no tax address (Stripe would refuse to finalize). */
+  taxEnabled?: boolean
 }): Promise<Stripe.Subscription> {
   const anchor = opts.billingAnchor ?? nextBillingAnchor()
   const anchorUnix = Math.floor(anchor.getTime() / 1000)
