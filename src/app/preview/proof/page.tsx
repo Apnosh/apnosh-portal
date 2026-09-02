@@ -52,7 +52,7 @@ export default function ProofPreviewPage() {
           <ProofCard key={c.id} card={c} defaultOpen onDismiss={() => { /* preview: stays */ }} onSee={() => { /* preview: noop */ }} />
         ))}
         <p style={{ fontSize: 11.5, color: '#aeaeb2', marginTop: 14 }}>
-          Mint cards are wins. The warm one is the quieter-week card: it only fires on a real drop, at most every two weeks, and always carries the move. Until a client{'\u2019'}s first real card fires, the deck shows labeled examples like these.
+          Green numbers are wins. The gray one is the quieter-week card: it only fires on a real drop, at most every two weeks, and always carries the move. Until a client{'\u2019'}s first real card fires, the deck shows labeled examples like these.
         </p>
       </div>
     </div>
