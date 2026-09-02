@@ -1118,7 +1118,7 @@ export default function HomeFunnel({
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '2px 16px 8px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
           {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
-          <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>· platforms report a few days behind{yoyAbs ? ` · +/- vs ${compareLabel}` : ''}</span>
+          <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>· platforms report a few days behind{yoy ? ` · change vs ${compareLabel}` : ''}</span>
         </div>
       )}
       </div>
@@ -1366,7 +1366,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
   if (data.views.total <= 0 && !everShown.current) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
-      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} yoyAbs={data.yoyAbs} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
+      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
       {/* "Choose your metrics" lives ONLY on the Insights detail screen (owner
           ask 2026-08-18) — the home graph stays clean with nothing below it.
           Toggles saved there still apply here: the funnel refetches every time

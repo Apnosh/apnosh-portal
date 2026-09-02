@@ -36,8 +36,7 @@ function Inner() {
         views={{ total: 13700, maps: 11645, search: 2055, social: 1840 }}
         actions={{ directions: 464, calls: 99, websiteClicks: 222 }}
         counts={{ interest: 2100, actions: 785, retention: 6 }}
-        yoy={{ awareness: 18, interest: 9, actions: 24, orders: null }}
-        yoyAbs={{ awareness: 1920, interest: 156, actions: 128, orders: 61 }}
+        yoy={{ awareness: 18, interest: -9, actions: 24, orders: 24 }}
         asOf={localYmd(asOf)}
         windowStart={localYmd(start)}
         windowEnd={localYmd(today)}

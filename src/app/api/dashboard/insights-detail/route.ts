@@ -136,12 +136,19 @@ export async function GET(req: NextRequest) {
     // per-stage YoY, computed on the SAME fields both years so each % is like-for-like
     const p = gbp.value.prevTotals
     const chg = (cur: number, prev: number) => (prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null)
+    // Home's tick beside each number: % change against the PRIOR PERIOD (the same length,
+    // ending the day before this window began), on the SAME fields the numbers show —
+    // Found you = Google impressions, Interest = website clicks, Actions = directions +
+    // calls, Orders = directions (× the walk-in rate, so its % equals the directions %).
+    // Owner call 2026-09-02: percent, not counts; prior period, not last year.
+    const q0 = gbp.value.priorTotals
     yoy = {
-      awareness: chg(t.impressions, p.impressions),
-      interest: chg(t.directions + t.calls + t.websiteClicks, p.directions + p.calls + p.websiteClicks),
-      actions: chg(t.directions + t.calls, p.directions + p.calls),
-      orders: chg(t.directions, p.directions), // Orders = directions × rate → its % equals the directions %
+      awareness: chg(t.impressions, q0.impressions),
+      interest: chg(t.websiteClicks, q0.websiteClicks),
+      actions: chg(t.directions + t.calls, q0.directions + q0.calls),
+      orders: chg(t.directions, q0.directions),
     }
+    void p // the year-ago totals stay available for the report; Home no longer reads them
     // the +/- COUNT beside each number compares the PRIOR period (the same length, ending the day
     // before this window began), so it moves every morning as the window slides
     const q = gbp.value.priorTotals
