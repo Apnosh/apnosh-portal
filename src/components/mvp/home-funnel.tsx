@@ -401,6 +401,17 @@ export default function HomeFunnel({
     try { if (t) localStorage.setItem(audKey, t); else localStorage.removeItem(audKey) } catch { /* ignore */ }
   }
 
+  /* "the 30 days before" / "the year before" — from the real window when known, else the tab */
+  const compareLabel = useMemo(() => {
+    if (curRange === '12m') return 'the year before'
+    let days: number | null = null
+    if (windowStart && windowEnd) {
+      const d = Math.round((new Date(windowEnd + 'T00:00:00').getTime() - new Date(windowStart + 'T00:00:00').getTime()) / 86400000) + 1
+      if (d > 0) days = d
+    }
+    if (days == null) days = curRange === '7d' ? 7 : curRange === '90d' ? 90 : 30
+    return `the ${days} days before`
+  }, [curRange, windowStart, windowEnd])
   const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts, yoyAbs), [views, actions, walkInRate, avgTicket, currency, yoy, counts, yoyAbs])
 
   const geom = useRef({ W: 400 })
@@ -1148,6 +1159,9 @@ export default function HomeFunnel({
             {/* the standing honesty line (owner ask, 2026-08-18): platforms report
                 late by nature — Google by days — so the newest days always trail */}
             <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>Platforms report a few days behind</div>
+            {/* what the +/- beside each number compares against: the window of the same
+                length that ended the day before this one began (owner ask 2026-09-02) */}
+            {yoyAbs && <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>+/- vs {compareLabel}</div>}
           </div>
         )}
       </div>
