@@ -21,7 +21,16 @@ const SAMPLE: MonthlyReport = {
       { q: 'google business help', n: 41 },
     ],
   },
-  said: { count: 2, avg: 5.0, priorCount: 1, quote: 'Our Fridays are full for the first time since we opened.' },
+  said: {
+    count: 2, avg: 5.0, priorCount: 1, quote: 'Our Fridays are full for the first time since we opened.',
+    loved: [
+      { theme: 'Results', mentions: 4, snippet: 'full for the first time' },
+      { theme: 'Communication', mentions: 3, snippet: 'always knew what was happening' },
+    ],
+    heard: [
+      { theme: 'Response time when starting out', mentions: 2, move: 'New clients now get a first reply within one business day, and we say so on the site.', operational: false },
+    ],
+  },
   worked: { posts: 6, topTitle: 'the before and after reel', topReach: 2418 },
   moved: { calls: 14, directions: 0, siteClicks: 391, priorCalls: 9, priorDirections: 0, priorSiteClicks: 344 },
 }

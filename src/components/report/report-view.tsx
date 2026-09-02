@@ -108,6 +108,31 @@ export default function ReportView({ report, bizName, backHref }: {
               {r.said.count} new review{r.said.count === 1 ? '' : 's'} &middot; {r.said.avg.toFixed(1)} average
               {r.said.priorCount > 0 ? ` · ${r.said.priorCount} the month before` : ''}
             </div>
+            {r.said.loved.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#2e9a78', marginBottom: 6 }}>Loved lately</div>
+                {r.said.loved.map((t) => (
+                  <span key={t.theme} style={{ display: 'inline-block', borderRadius: 99, padding: '4px 11px', margin: '0 5px 6px 0', fontSize: 12.5, fontWeight: 700, color: '#0f6e56', background: '#f0faf6' }}>
+                    {t.theme} <span style={{ fontWeight: 600, color: '#2e9a78' }}>&middot; {t.mentions}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {r.said.heard.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: '#6e6e73', marginBottom: 6 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: '#aeaeb2' }} />Heard more than once
+                </div>
+                {r.said.heard.map((t) => (
+                  <div key={t.theme} style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{t.theme} <span style={{ fontWeight: 500, color: FAINT }}>&middot; {t.mentions} mention{t.mentions === 1 ? '' : 's'}</span></div>
+                    <div style={{ fontSize: 12, color: t.operational ? '#6e4408' : '#8a5a12', background: '#fdf6ec', borderRadius: 10, padding: '8px 11px', marginTop: 5, lineHeight: 1.45 }}>
+                      <b style={{ fontWeight: 700 }}>The move:</b> {t.move}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Sec>
         )}
 

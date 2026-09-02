@@ -6,17 +6,24 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getCachedThemes } from '@/lib/review-themes'
+import { moveForTheme, titleCase } from '@/lib/reviews/moves'
 
 export interface FoundChapter {
   total: number
   prior: number
   words: Array<{ q: string; n: number }>
 }
+export interface LovedTheme { theme: string; mentions: number; snippet: string | null }
+export interface HeardTheme { theme: string; mentions: number; move: string; operational: boolean }
 export interface SaidChapter {
   count: number
   avg: number
   priorCount: number
   quote: string | null
+  /** From the cached 90-day theme engine; null when no themes exist yet. */
+  loved: LovedTheme[]
+  heard: HeardTheme[]
 }
 export interface WorkedChapter {
   posts: number
@@ -116,11 +123,26 @@ export async function buildMonthlyReport(
       const quotable = inMonth
         .filter((r) => typeof r.review_text === 'string' && r.review_text.trim().length >= 30 && r.review_text.trim().length <= 160 && Number(r.rating) >= 4)
         .sort((a, b) => Number(b.rating) - Number(a.rating))[0]
+      // Themes ride the engine's rolling window (recent reviews), not the
+      // calendar month; the counts above stay monthly.
+      const themes = await getCachedThemes(clientId, null, 45).catch(() => null)
+      const loved: LovedTheme[] = (themes?.themes ?? [])
+        .filter((t) => t.mentions >= 2 && t.praise > t.critical)
+        .sort((a, b) => b.praise - a.praise).slice(0, 3)
+        .map((t) => ({
+          theme: titleCase(t.theme), mentions: t.praise,
+          snippet: (t.examples ?? []).find((e) => e.rating >= 4)?.snippet ?? null,
+        }))
+      const heard: HeardTheme[] = (themes?.themes ?? [])
+        .filter((t) => t.critical >= 2)
+        .sort((a, b) => b.critical - a.critical).slice(0, 2)
+        .map((t) => ({ theme: titleCase(t.theme), mentions: t.critical, ...moveForTheme(t.theme) }))
       said = {
         count: inMonth.length,
         avg: Math.round(avg * 10) / 10,
         priorCount: before,
         quote: quotable ? String(quotable.review_text).trim() : null,
+        loved, heard,
       }
     }
   }

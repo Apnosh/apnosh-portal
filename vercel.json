@@ -123,6 +123,10 @@
     {
       "path": "/api/cron/compose-proof",
       "schedule": "15 16 * * *"
+    },
+    {
+      "path": "/api/cron/review-themes-refresh",
+      "schedule": "45 15 * * *"
     }
   ]
 }

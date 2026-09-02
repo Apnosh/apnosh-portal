@@ -12,10 +12,12 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getCachedThemes } from '@/lib/review-themes'
+import { moveForTheme, titleCase } from '@/lib/reviews/moves'
 
 export interface ProofCardRow {
   card_key: string
-  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'approval_waiting'
+  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'approval_waiting' | 'complaint_watch'
   label: string
   big: string
   context: string
@@ -387,6 +389,22 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
       big: `${waiting} review${waiting === 1 ? '' : 's'} waiting for a reply`,
       context: 'A quick reply keeps your rating climbing and shows Google you are listening.',
     })
+  }
+
+  // heard more than once (transparency): a complaint theme with 2+ mentions,
+  // always carrying the move. Only once review history is mature.
+  if (reviewsMature) {
+    const themes = await getCachedThemes(clientId, null, 30).catch(() => null)
+    const worst = (themes?.themes ?? []).filter((t) => t.critical >= 2).sort((a, b) => b.critical - a.critical)[0]
+    if (worst) {
+      const mv = moveForTheme(worst.theme)
+      out.push({
+        card_key: `state-complaint-${worst.theme.replace(/\W+/g, '-').toLowerCase()}`, card_type: 'complaint_watch',
+        label: 'Heard more than once',
+        big: titleCase(worst.theme),
+        context: `${worst.critical} recent reviews mention it. The move: ${mv.move}`,
+      })
+    }
   }
 
   // waiting on the owner (action): work finished and ready for their approval
