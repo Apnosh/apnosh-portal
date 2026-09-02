@@ -46,13 +46,13 @@ export default function ProofPreviewPage() {
           <span style={{ fontSize: 12, color: '#6e6e73' }}>Sample numbers. Nothing saves.</span>
         </div>
         <p style={{ fontSize: 12.5, color: '#8e8e93', margin: '0 0 18px' }}>
-          The card lands one at a time at the top of Home, where the monthly review note shows today. These are the three launch types.
+          Cards land in the results deck on your Insights screen, right under the histogram, and in your inbox. These are the four types.
         </p>
-        {SAMPLES.map((c, i) => (
-          <ProofCard key={c.id} card={c} defaultOpen={i > 0} onDismiss={() => { /* preview: stays */ }} onSee={() => { /* preview: noop */ }} />
+        {SAMPLES.map((c) => (
+          <ProofCard key={c.id} card={c} defaultOpen onDismiss={() => { /* preview: stays */ }} onSee={() => { /* preview: noop */ }} />
         ))}
         <p style={{ fontSize: 11.5, color: '#aeaeb2', marginTop: 14 }}>
-          On Home every card starts as the slim strip (like the first one here) so the funnel keeps its full height. Tap to expand. The gray one is the quieter-week card: it only fires on a real drop, at most every two weeks, and always carries the move.
+          Mint cards are wins. The warm one is the quieter-week card: it only fires on a real drop, at most every two weeks, and always carries the move. Until a client{'\u2019'}s first real card fires, the deck shows labeled examples like these.
         </p>
       </div>
     </div>
