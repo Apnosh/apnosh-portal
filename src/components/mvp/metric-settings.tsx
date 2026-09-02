@@ -15,18 +15,24 @@ import { useClient } from '@/lib/client-context'
 import { listMetricToggles, setMetricToggle, type MetricToggleGroup } from '@/lib/metric-prefs-actions'
 import { C } from '@/components/mvp/mvp-detail'
 
-export function MetricSettingsButton({ onChanged }: { onChanged?: () => void }) {
+export function MetricSettingsButton({ onChanged, compact = false }: { onChanged?: () => void; compact?: boolean }) {
   const [open, setOpen] = useState(false)
   const [touched, setTouched] = useState(false)
   return (
     <>
+      {compact ? (
+        <button type="button" onClick={() => setOpen(true)} aria-label="Choose your metrics" title="Choose your metrics" style={{ width: 36, height: 36, borderRadius: 99, border: `1px solid ${C.line}`, background: '#fff', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, padding: 0 }}>
+          <SlidersHorizontal size={15} />
+        </button>
+      ) : (
       <button
-        type="button"
-        onClick={() => setOpen(true)}
-        style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '10px auto 0', border: `1px solid ${C.line}`, background: '#fff', color: C.mute, borderRadius: 999, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
-      >
-        <SlidersHorizontal size={14} /> Choose your metrics
-      </button>
+          type="button"
+          onClick={() => setOpen(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '10px auto 0', border: `1px solid ${C.line}`, background: '#fff', color: C.mute, borderRadius: 999, padding: '7px 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}
+        >
+          <SlidersHorizontal size={14} /> Choose your metrics
+        </button>
+      )}
       {open && (
         <MetricSettingsSheet
           onDirty={() => setTouched(true)}

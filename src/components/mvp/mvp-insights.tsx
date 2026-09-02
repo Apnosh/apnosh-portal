@@ -322,9 +322,11 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
         </div>
         {/* one button, reads the WHOLE funnel (the drop-off is cross-stage) */}
         <AnalystButton />
+        {/* the per-client metric toggles, up here where settings live (was a lone pill at the very bottom) */}
+        <MetricSettingsButton compact onChanged={() => window.location.reload()} />
       </div>
 
-      <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', background: C.bg }}>
         <PullIndicator pull={pull} phase={phase} />
         {loading ? (
           <Centered>Loading your numbers&hellip;</Centered>
@@ -335,12 +337,6 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
         ) : (
           <>
             <Body data={data} focusKey={initialStageKey} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} clientId={clientId} campaigns={campaigns} />
-            {/* the setting under the graphs (owner ask 2026-08-18): per-client
-                metric toggles; the whole screen reloads so every stage,
-                headline and chart reflects the new selection at once */}
-            <div style={{ padding: '0 0 26px' }}>
-              <MetricSettingsButton onChanged={() => window.location.reload()} />
-            </div>
           </>
         )}
       </div>
@@ -410,6 +406,11 @@ function AnalystButton() {
 // The five funnel stages, in funnel order — the swipeable header moves through
 // these, so every stage is reachable from every stage and a deep-link lands on
 // exactly the stage that was tapped.
+/* the page's card + heading kit: white cards on the soft ground, sentence-case headings,
+   no hairline borders (the ground does the separating) */
+const CARD: React.CSSProperties = { marginTop: 14, background: '#fff', borderRadius: 18, padding: '16px 16px 18px' }
+const H2: React.CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }
+const TILE: React.CSSProperties = { background: C.bg, borderRadius: 14 }
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },
@@ -464,8 +465,9 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
   }
 
   return (
-    <div style={{ padding: '14px 0 44px' }}>
-
+    <div style={{ padding: '0 0 44px' }}>
+      {/* the hero block sits on white; everything under the dots sits on the soft grey ground as cards */}
+      <div style={{ background: '#fff', padding: '16px 0 4px', borderBottom: `0.5px solid ${C.line}` }}>
       {/* SWIPEABLE GRAPHS — each slide is a stage's title + number + trend +
           histogram; swipe the graph left/right to change stages */}
       <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', alignItems: 'flex-start' }}>
@@ -487,9 +489,10 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
         ))}
       </div>
 
+      </div>
       {/* RESULTS — the stackable deck of fired proof cards, right between the
           histogram's dots and the by-source tiles (owner placement). */}
-      <ProofDeck clientId={clientId} mute={C.mute} />
+      <div style={{ paddingTop: 10 }}><ProofDeck clientId={clientId} mute={C.mute} /></div>
 
       {/* everything below the dots follows the ACTIVE stage: its by-source
           cards (scoped to the chart's picked range), extras, and campaigns */}
@@ -575,7 +578,7 @@ function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; 
             ? <RangeSources cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" title="Interest by source" range={range} />
             : <WhatFeedsThis feed={buildInterestFeed(toFeedInput(detail))} unit="Looked closer" />}
           {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
-          {!detail.socialConnected && <ConnectSocial connected={false} />}
+          {!cs && !detail.socialConnected && <ConnectSocial connected={false} />}
         </>
       )
     }
@@ -615,7 +618,6 @@ function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: C
   const s = stage ?? cs
   return (
     <>
-      {s.groups && s.groups.length > 0 && <GroupCards groups={s.groups} />}
       <GroupedSources stage={s} sub={sub} />
     </>
   )
@@ -630,40 +632,56 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
     .map((g) => ({ g, srcs: g.sourceIds.map((id) => stage.sources.find((x) => x.id === id)).filter((v): v is StageSourceView => !!v) }))
     .filter((x) => x.srcs.length > 0)
   if (rows.length === 0) return null
+  const isOff = (x: StageSourceView) => x.status === 'AVAILABLE_NOT_CONNECTED' || x.status === 'COMING_SOON'
+  const live = rows.filter(({ srcs }) => !srcs.every(isOff))
+  const off = rows.filter(({ srcs }) => srcs.every(isOff))
+  // groups that hold ONE source read as a list row (label left, number right); groups with
+  // several keep the tile grid. Everything unconnected folds into a single connect row.
+  const singles = live.filter(({ srcs }) => srcs.length === 1)
+  const multis = live.filter(({ srcs }) => srcs.length > 1)
+  const offLabel = off.map(({ g }, k) => (k === 0 ? g.label : g.label.charAt(0).toLowerCase() + g.label.slice(1))).join(', ')
   return (
     <Section title="Breakdown by source" sub={sub}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        {rows.map(({ g, srcs }) => (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {singles.length > 0 && (
+          <div>
+            {singles.map(({ g, srcs }, k) => <SourceRow key={g.key} label={g.label} s={srcs[0]} first={k === 0} />)}
+          </div>
+        )}
+        {multis.map(({ g, srcs }) => (
           <div key={g.key}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 8 }}>{g.label}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 8 }}>{g.label}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-              {srcs.map((s) => <SourceStateCard key={s.id} s={s} small />)}
+              {srcs.map((x) => <SourceStateCard key={x.id} s={x} small />)}
             </div>
           </div>
         ))}
+        {off.length > 0 && <ConnectRow label={offLabel} sources={off.flatMap(({ srcs }) => srcs)} />}
       </div>
     </Section>
   )
 }
-
-// The 4 grouped highlight cards (2x2): the "best 4" rollups for the stage. Each
-// shows its total, or an honest "Connect"/"Soon" when nothing's counted yet. The
-// by-source detail sits below these as the specifics.
-function GroupCards({ groups }: { groups: StageGroup[] }) {
+/** One source as a list row: the group label, then the number (or a dash) on the right. */
+function SourceRow({ label, s, first }: { label: string; s: StageSourceView; first: boolean }) {
+  const has = s.status === 'CONNECTED' && s.hasData && s.value != null
+  const asOf = friendlyStamp(s.asOf)
+  const manual = s.status === 'MANUAL_ENTRY'
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, marginBottom: 18 }}>
-      {groups.map((g) => (
-        <div key={g.key} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '14px 15px', minHeight: 70 }}>
-          <div style={{ fontSize: 12.5, color: C.mute, fontWeight: 500 }}>{g.label}</div>
-          {g.state === 'has'
-            ? <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', marginTop: 3, lineHeight: 1 }}>{(g.total ?? 0).toLocaleString()}</div>
-            : <div style={{ fontSize: 12, color: C.faint, marginTop: 8 }}>{g.state === 'connect' ? 'Connect to see' : 'Coming soon'}</div>}
-        </div>
-      ))}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 500, color: C.ink }}>{label}</div>
+        {(s.context || asOf || manual || s.status === 'ERROR') && (
+          <div style={{ fontSize: 11.5, color: s.status === 'ERROR' ? C.coral : C.faint, marginTop: 1 }}>
+            {s.status === 'ERROR' ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : s.context ? s.context : `as of ${asOf}`}
+          </div>
+        )}
+      </div>
+      <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: has || manual ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+        {has || (manual && s.value != null) ? s.value!.toLocaleString() : DASH}
+      </div>
     </div>
   )
 }
-
 // The graceful Sales collapse: honest about what we cannot see yet, with the one
 // door that unlocks it. Actions remains the visible endpoint of the funnel.
 function SalesLocked({ note }: { note?: string }) {
@@ -671,7 +689,7 @@ function SalesLocked({ note }: { note?: string }) {
     <div style={{ textAlign: 'center', padding: '44px 24px' }}>
       <div style={{ width: 52, height: 52, borderRadius: 14, background: C.bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Lock size={22} color={C.faint} /></div>
       <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 14 }}>We cannot see sales yet</div>
-      <div style={{ fontSize: 12.5, color: C.faint, marginTop: 6, lineHeight: 1.5, maxWidth: 280, margin: '6px auto 0' }}>{note || 'Connect your register to measure guests and revenue.'}</div>
+      <div style={{ fontSize: 12.5, color: C.faint, marginTop: 6, lineHeight: 1.5, maxWidth: 280, margin: '6px auto 0' }}>{note && !/cannot see sales/i.test(note) ? note : 'Connect your register to measure guests and revenue.'}</div>
       <Link href="/dashboard/connect-accounts" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 16, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 99, padding: '10px 16px', textDecoration: 'none' }}>Connect your register <ArrowRight size={15} /></Link>
     </div>
   )
@@ -812,7 +830,7 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
   // COMING_SOON — no adapter yet. Ghost card, never a number.
   if (s.status === 'COMING_SOON') {
     return (
-      <div style={{ ...base, background: '#fbfcfb', border: `1px dashed ${C.line}`, opacity: 0.75 }}>
+      <div style={{ ...base, ...TILE, opacity: 0.7 }}>
         {label}
         <span style={{ fontSize: 10, color: C.faint }}>Coming soon</span>
       </div>
@@ -825,7 +843,7 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
   if (s.status === 'AVAILABLE_NOT_CONNECTED') {
     const cfg = SOURCE_BY_ID[s.id]?.configMissingReason
     return (
-      <div style={{ ...base, background: '#fff', border: `0.5px solid ${C.line}`, opacity: 0.6 }}>
+      <div style={{ ...base, ...TILE, opacity: 0.6 }}>
         {label}
         <span style={{ fontSize: 10, color: C.greenDk, fontWeight: 600, lineHeight: 1.3 }}>{cfg ?? `${sourceActionVerb(s.status) ?? 'Connect'} to see`}</span>
       </div>
@@ -839,7 +857,7 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
      * single dashboard-wide "updated" line would be a guess for four of five cards. */
     const asOf = friendlyStamp(s.asOf)
     return (
-      <div style={{ ...base, background: hero ? C.greenSoft : '#fff', border: hero ? `1px solid ${C.greenLine}` : `0.5px solid ${C.line}` }}>
+      <div style={{ ...base, ...TILE, ...(hero ? { background: C.greenSoft } : {}) }}>
         {num(s.value, hero ? C.greenDk : C.ink)}
         {label}
         {s.context && <span style={{ fontSize: 9.5, color: C.mute, lineHeight: 1.2 }}>{s.context}</span>}
@@ -851,7 +869,7 @@ export function SourceStateCard({ s, hero, small }: { s: StageSourceView; hero?:
   // CONNECTED + NO_DATA — connected and genuinely zero. A dash (never a real 0)
   // plus a calm hint so it never reads as broken.
   return (
-    <div style={{ ...base, background: '#fff', border: `0.5px solid ${C.line}` }}>
+    <div style={{ ...base, ...TILE }}>
       {dash}
       {label}
       {/* "0 new followers" with no other number reads as "you have no followers". The real
@@ -870,7 +888,7 @@ function SeparatedSources({ title, sources }: { title: string; sources: StageSou
   const cols = Math.min(3, Math.max(2, sources.length))
   return (
     <>
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 8px' }}>{title}</div>
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '16px 0 8px' }}>{title}</div>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
         {sources.map((s) => <SourceStateCard key={s.id} s={s} small />)}
       </div>
@@ -889,6 +907,15 @@ export function SourceBreakdown({ stage, unit, showReconcile = true, showExtras 
   const drills = stage.sources.filter((s) => s.feedRole === 'drilldown')
   const headline = stage.headline ?? 0
   const cols = Math.min(4, Math.max(2, sums.length))
+  const nothingYet = stage.sources.every((s) => s.status === 'AVAILABLE_NOT_CONNECTED' || s.status === 'COMING_SOON')
+  if (nothingYet) {
+    // no ghost tiles: one row that names what fills this, and the door to it
+    return (
+      <Section title={title} sub={sub}>
+        <ConnectRow label={unit} sources={stage.sources} />
+      </Section>
+    )
+  }
   return (
     <Section title={title} sub={sub}>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 8 }}>
@@ -897,8 +924,8 @@ export function SourceBreakdown({ stage, unit, showReconcile = true, showExtras 
       {showReconcile && (
         <div style={{ fontSize: 12.5, color: C.faint, marginTop: 10, textAlign: 'center' }}>Adds up to <b style={{ color: C.greenDk, fontFamily: DISPLAY, fontSize: 14 }}>{headline.toLocaleString()}</b> {unit.toLowerCase()}</div>
       )}
-      {showExtras && context.length > 0 && <SeparatedSources title="Also tracked · not part of this number" sources={context} />}
-      {showExtras && drills.length > 0 && <SeparatedSources title="More detail · not part of this number" sources={drills} />}
+      {showExtras && context.length > 0 && <SeparatedSources title="Also tracked, not part of this number" sources={context} />}
+      {showExtras && drills.length > 0 && <SeparatedSources title="More detail, not part of this number" sources={drills} />}
     </Section>
   )
 }
@@ -1100,7 +1127,7 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   // SVG geometry (uniform-scaled so pins stay round). y grows downward. A left
   // gutter holds the y-axis numbers; a taller bottom holds per-pin date labels
   // when markers crowd together. Full-width, comfortable height.
-  const W = 344, H = 202, padL = 32, padR = 14, padT = 24, padB = 44
+  const W = 344, H = 190, padL = 32, padR = 14, padT = 24, padB = 32
   const plotW = W - padL - padR, yTop = padT, yBot = H - padB
   const head = maxV * 1.2
   const xAt = (t: number) => padL + ((t - startMs) / spanMs) * plotW
@@ -1150,21 +1177,23 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   // When markers sit close enough that the numbers touch, show each one's date
   // beneath its pin so they can be told apart. Stagger crowded labels across rows
   // so the dates themselves don't collide.
-  const CROWD = 24, LBL_GAP = 34
-  const rowLastX: number[] = []
-  const marksUi = marks.map((m, i) => {
-    const crowded = marks.some((o, j) => j !== i && Math.abs(o.cx - m.cx) < CROWD)
-    let row = -1
-    if (crowded) { row = 0; while (rowLastX[row] != null && m.cx - rowLastX[row] < LBL_GAP) row++; rowLastX[row] = m.cx }
-    return { ...m, crowded, row }
-  })
+  // Pins that would overlap merge into ONE pin that reads "2–6" and carries one date span,
+  // so the chart stays legible; the list below still shows every launch day on its own.
+  const CROWD = 26
+  type Cluster = { first: number; last: number; cx: number; cy: number; ms0: number; ms1: number }
+  const clusters: Cluster[] = []
+  for (const m of marks) {
+    const c = clusters[clusters.length - 1]
+    if (c && m.cx - c.cx < CROWD) { c.last = m.n; c.ms1 = m.ms; c.cx = (c.cx + m.cx) / 2; c.cy = yOnLine(c.cx) }
+    else clusters.push({ first: m.n, last: m.n, cx: m.cx, cy: m.cy, ms0: m.ms, ms1: m.ms })
+  }
 
   const gid = `trendfill-${mv?.key ?? 'x'}`
   return (
-    <div style={{ marginTop: 28 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>Did it move?</div>
-      <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.4, marginBottom: 12 }}>Each pin marks a day a campaign went live. The dashed line is a typical day, so you can see when you ran above it.</div>
-      <div style={{ display: 'flex', background: '#f1f3f2', borderRadius: 9, padding: 3, marginBottom: 14 }}>
+    <div style={CARD}>
+      <div style={{ ...H2, marginBottom: 2 }}>Did it move?</div>
+      <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.4, marginBottom: 12 }}>Pins are launch days. The dashed line is a typical day.</div>
+      <div style={{ display: 'flex', background: C.bg, borderRadius: 10, padding: 3, marginBottom: 14 }}>
         {(['month', 'quarter', 'year', 'all'] as TrendRange[]).map((r) => {
           const on = range === r
           return <button key={r} onClick={() => setRange(r)} style={{ flex: 1, border: 'none', borderRadius: 7, padding: '6px 0', fontSize: 12, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none', cursor: 'pointer' }}>{TREND_LABEL[r]}</button>
@@ -1190,14 +1219,20 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
         <text x={W - padR} y={yAt(avgV) - 4} textAnchor="end" fontSize={9.5} fontWeight={600} fill={C.greenDk}>typical day</text>
         <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={C.green} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
-        {marksUi.map((m) => (
-          <g key={m.ms}>
-            <line x1={m.cx} y1={m.cy} x2={m.cx} y2={yBot} stroke={C.greenLine} strokeWidth={1} strokeDasharray="3 3" />
-            <circle cx={m.cx} cy={m.cy} r={10.5} fill="#fff" stroke={C.green} strokeWidth={2} />
-            <text x={m.cx} y={m.cy} textAnchor="middle" dominantBaseline="central" fontSize={11} fontWeight={700} fill={C.greenDk}>{m.n}</text>
-            {m.crowded && <text x={m.cx} y={yBot + 12 + m.row * 10} textAnchor="middle" fontSize={8.5} fontWeight={700} fill={C.greenDk}>{fmtPinDate(m.ms)}</text>}
-          </g>
-        ))}
+        {clusters.map((c) => {
+          const multi = c.last !== c.first
+          const tag = multi ? `${c.first}–${c.last}` : String(c.first)
+          const r = multi ? 13 : 10.5
+          const when = multi ? (fmtPinDate(c.ms0) === fmtPinDate(c.ms1) ? fmtPinDate(c.ms0) : `${fmtPinDate(c.ms0)} – ${fmtPinDate(c.ms1)}`) : null
+          return (
+            <g key={c.ms0}>
+              <line x1={c.cx} y1={c.cy} x2={c.cx} y2={yBot} stroke={C.greenLine} strokeWidth={1} strokeDasharray="3 3" />
+              <circle cx={c.cx} cy={c.cy} r={r} fill="#fff" stroke={C.green} strokeWidth={2} />
+              <text x={c.cx} y={c.cy} textAnchor="middle" dominantBaseline="central" fontSize={multi ? 10 : 11} fontWeight={700} fill={C.greenDk}>{tag}</text>
+              {when && <text x={c.cx} y={yBot + 12} textAnchor="middle" fontSize={8.5} fontWeight={700} fill={C.greenDk}>{when}</text>}
+            </g>
+          )
+        })}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.faint, margin: '2px 4px 0', paddingLeft: 18 }}>
         <span>{fmtPinDate(startMs)}</span>
@@ -1207,7 +1242,7 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
 
       {marks.length > 0 ? (
         <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 4 }}>What we did</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 4 }}>What we did</div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {marks.map((m, i) => (
               <div key={m.ms} style={{ display: 'flex', gap: 12, padding: '12px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
@@ -1226,9 +1261,10 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
                     )}
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {m.items.map((c) => (
-                      <Link key={c.id} href={c.href ?? `/dashboard/campaigns/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', color: 'inherit' }}>
+                    {foldSameNames(m.items).map(({ c, count }) => (
+                      <Link key={c.id} href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', color: 'inherit' }}>
                         <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                        {count > 1 && <span style={{ fontSize: 11, fontWeight: 700, color: C.mute, background: C.bg, borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>× {count}</span>}
                         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
                       </Link>
                     ))}
@@ -1246,22 +1282,52 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   )
 }
 
+/* A friendly network name from a source's provider id ("instagram" → "Instagram"). */
+const PROVIDER_NAMES: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn', youtube: 'YouTube', google_business_profile: 'Google', google_analytics: 'Google Analytics', google_search_console: 'Search Console', yelp: 'Yelp', social: 'a social account', ads: 'an ads account', pos: 'your register', reservations: 'a reservations app', delivery: 'a delivery app', loyalty: 'a loyalty program', email: 'your email tool' }
+function providerName(id: string): string {
+  const p = String(SOURCE_BY_ID[id]?.provider ?? '')
+  return PROVIDER_NAMES[p] ?? (p ? p.charAt(0).toUpperCase() + p.slice(1) : '')
+}
+/** One quiet row for a group with nothing connected yet: names the networks that would
+ *  fill it and opens the connect screen. Replaces a tile per network saying "Connect to see". */
+function ConnectRow({ label, sources }: { label: string; sources: StageSourceView[] }) {
+  const names = [...new Set(sources.filter((s) => s.status === 'AVAILABLE_NOT_CONNECTED').map((s) => providerName(s.id)).filter(Boolean))]
+  const list = names.length <= 2 ? names.join(' or ') : `${names.slice(0, 2).join(', ')} or ${names.length - 2} more`
+  return (
+    <Link href="/dashboard/connected-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', ...TILE, padding: '13px 15px' }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{label}</div>
+        <div style={{ fontSize: 12, color: C.mute, marginTop: 2, lineHeight: 1.35 }}>{names.length ? `Connect ${list} to see it here.` : 'Coming soon.'}</div>
+      </div>
+      {names.length > 0 && <span style={{ fontSize: 12.5, fontWeight: 600, color: C.greenDk, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Connect <ChevronRight size={14} /></span>}
+    </Link>
+  )
+}
+/** Several campaigns shipped the same day under the same title read as one row with a count. */
+function foldSameNames(items: StageCampaign[]): { c: StageCampaign; count: number }[] {
+  const out: { c: StageCampaign; count: number }[] = []
+  for (const c of items) {
+    const hit = out.find((o) => o.c.name === c.name)
+    if (hit) hit.count++; else out.push({ c, count: 1 })
+  }
+  return out
+}
 function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
   if (list === null) return null // stay quiet until the fetch lands
   const MAX = 3
   const shown = list.slice(0, MAX)
   const extra = list.length - shown.length
   return (
-    <div style={{ marginTop: 28 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Active campaigns</div>
+    <div style={CARD}>
+      <div style={{ ...H2, marginBottom: 6 }}>Active campaigns</div>
       {list.length > 0 ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {shown.map((c) => (
-            <Link key={c.id} href={c.href ?? `/dashboard/campaigns/${c.id}`} style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, textDecoration: 'none', color: 'inherit' }}>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {foldSameNames(shown).map(({ c, count }) => (
+            <Link key={c.id} href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: 'inherit' }}>
               <div style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={C.greenDk} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: C.greenDk, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: C.green }} />Live</div>
+                <div style={{ fontSize: 11, color: C.greenDk, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: C.green }} />Live{count > 1 ? ` · ${count} campaigns` : ''}</div>
               </div>
               <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
             </Link>
@@ -1750,10 +1816,10 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
 
 function Section({ title, sub, action, children }: { title: string; sub?: string; action?: { label: string; href: string }; children: React.ReactNode }) {
   return (
-    <div style={{ marginTop: 28 }}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>{title}</span>
-        {sub && <span style={{ fontSize: 11, color: C.faint }}>{sub}</span>}
+    <div style={CARD}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14 }}>
+        <span style={H2}>{title}</span>
+        {sub && <span style={{ fontSize: 12.5, color: C.faint }}>{sub}</span>}
         {action && <Link href={action.href} style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>{action.label} <ChevronRight size={13} /></Link>}
       </div>
       {children}

@@ -715,7 +715,7 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
    from useChartRange (shared with the hero), so switching the range moves the
    headline number and delta, not only the bars. */
 export type ChartRange = '7d' | '30d' | '90d' | '1y' | 'custom'
-const CHART_RANGES: [ChartRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['1y', 'Last year'], ['custom', 'Custom']]
+const CHART_RANGES: [ChartRange, string][] = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['1y', 'Year'], ['custom', 'Custom']]
 
 export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -955,11 +955,11 @@ export function ActionsChart({
 
   return (
     <div style={{ margin: '8px 0 0' }}>
-      <div style={{ display: 'flex', gap: 7, marginBottom: 12, overflowX: 'auto', paddingBottom: 2 }}>
+      <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: C.bg, borderRadius: 10, padding: 3 }}>
         {CHART_RANGES.map(([k, l]) => {
           const on = range === k
           return (
-            <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : C.card, color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer' }}>{l}</button>
+            <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 8, padding: '7px 0', fontSize: 12.5, fontWeight: on ? 600 : 500, cursor: 'pointer', boxShadow: on ? '0 1px 3px rgba(0,0,0,.10)' : 'none', transition: 'background .15s' }}>{l}</button>
           )
         })}
       </div>

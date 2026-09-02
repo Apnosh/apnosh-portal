@@ -106,8 +106,8 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
   return (
     <div style={{ padding: '0 18px', marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: mute }}>
-          {examples ? 'Examples · your results land here' : 'Results'}
+        <span style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: '#1d1d1f' }}>
+          {examples ? 'Examples' : 'Results'}{examples && <span style={{ fontSize: 12.5, fontWeight: 400, color: mute }}> · your results land here</span>}
         </span>
         <span style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
           {cards.length > 1 && (

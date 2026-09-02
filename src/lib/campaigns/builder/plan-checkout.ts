@@ -43,9 +43,18 @@ export function planProBlocked(items: CartItem[], tier: string | null | undefine
   return items.some((it) => it.doer != null && gbpLaneFromDoer(it.doer) === 'ai')
 }
 
-/** "Marketing plan · Jul 11" — the one-campaign container name. */
+/** "Marketing plan · Jul 11" — the one-campaign container name (the fallback when no item has a name). */
 export function planCheckoutName(now: Date = new Date()): string {
   return `Marketing plan · ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+}
+/** The container takes its name from what is in it — "Menu photos" or "Menu photos + 2 more" —
+ *  so a list of campaigns reads as what each one IS, not seven rows of "Marketing plan · Jul 21"
+ *  (owner ask 2026-09-02). Falls back to the dated default when the items carry no name. */
+export function planNameFromItems(itemNames: string[], now: Date = new Date()): string {
+  const names = [...new Set(itemNames.map((n) => n.trim()).filter(Boolean))]
+  if (!names.length) return planCheckoutName(now)
+  const first = names[0].length > 40 ? names[0].slice(0, 38).trimEnd() + '…' : names[0]
+  return names.length === 1 ? first : `${first} + ${names.length - 1} more`
 }
 
 /** Merge the per-item briefs into one. Base = the first brief (its template/objective/kpi
@@ -117,7 +126,7 @@ export function composePlanCampaign(items: CartItem[], now: Date = new Date()): 
 
   const draft: CampaignDraft = {
     id: 'new',
-    name: planCheckoutName(now),
+    name: planNameFromItems(perItem.map((p) => p.draft.name), now),
     intent: perItem.some((p) => p.draft.intent === 'ongoing') ? 'ongoing' : 'one-off',
     path: 'strategist',
     phase: 'build',
