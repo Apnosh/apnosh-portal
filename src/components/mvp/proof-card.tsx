@@ -68,8 +68,13 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
     <div
       className="mvp-rise"
       style={{
-        position: 'relative', background: '#fff', borderRadius: 16, padding: 14, marginBottom: 12,
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07)',
+        position: 'relative', borderRadius: 20, padding: '18px 16px 16px', marginBottom: 12,
+        background: headsUp
+          ? 'radial-gradient(140% 90% at 18% 0%, rgba(232,161,61,.16), rgba(232,161,61,.04) 55%, rgba(255,255,255,0)), linear-gradient(180deg, #fffdf9, #fbfaf7)'
+          : 'radial-gradient(140% 90% at 18% 0%, rgba(74,189,152,.26), rgba(74,189,152,.06) 55%, rgba(255,255,255,0)), linear-gradient(180deg, #fdfefd, #f4faf7)',
+        boxShadow: headsUp
+          ? '0 1px 2px rgba(0,0,0,.04), 0 14px 36px rgba(138,90,18,.12)'
+          : '0 1px 2px rgba(0,0,0,.04), 0 14px 36px rgba(46,154,120,.16)',
       }}
     >
       <button
@@ -78,39 +83,47 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       >
         <X size={13} />
       </button>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: labelColor, marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, letterSpacing: '.14em', textTransform: 'uppercase', color: labelColor, marginBottom: 10 }}>
         <span style={{ width: 6, height: 6, borderRadius: 99, background: dotColor }} />
-        {card.label}
+        {card.label.replace(/^Example · /i, '')}
+        {/^example/i.test(card.id) && (
+          <span style={{ marginLeft: 4, fontSize: 9, letterSpacing: '.1em', background: '#1d1d1f', color: '#fff', borderRadius: 5, padding: '2px 6px' }}>Example</span>
+        )}
       </div>
-      <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.03em', color: '#1d1d1f', lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>
+      <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.045em', color: headsUp ? '#1d1d1f' : '#0f6e56', lineHeight: 1.05, fontVariantNumeric: 'tabular-nums' }}>
         {card.big}
       </div>
-      <div style={{ fontSize: 12.5, color: '#48484a', marginTop: 6 }}>{card.context}</div>
+      <div style={{ fontSize: 13, color: '#48484a', marginTop: 7, lineHeight: 1.45 }}>{card.context}</div>
       {card.spark && card.spark.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 26, marginTop: 9 }} aria-hidden>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 34, marginTop: 12 }} aria-hidden>
           {card.spark.map((v, i) => (
-            <span key={i} style={{ flex: 1, height: `${Math.max(8, Math.round((v / max) * 100))}%`, background: i === card.spark!.length - 1 ? '#4abd98' : '#dff0e9', borderRadius: '2px 2px 0 0' }} />
+            <span key={i} style={{
+              flex: 1, height: `${Math.max(10, Math.round((v / max) * 100))}%`, borderRadius: '3px 3px 0 0',
+              background: i === card.spark!.length - 1
+                ? 'linear-gradient(180deg, #4abd98, #2e9a78)'
+                : 'linear-gradient(180deg, rgba(74,189,152,.42), rgba(74,189,152,.18))',
+            }} />
           ))}
         </div>
       )}
       {card.attribution && (
-        <div style={{ fontSize: 11.5, color: '#8e8e93', marginTop: 8, paddingTop: 8, borderTop: '1px solid #f2f2f4' }}>
+        <div style={{ fontSize: 11.5, color: '#6e6e73', marginTop: 12, paddingTop: 10, borderTop: headsUp ? '1px solid rgba(138,90,18,.12)' : '1px solid rgba(46,154,120,.14)' }}>
           {card.attribution}
         </div>
       )}
       {card.cta ? (
         <a
           href={card.cta.href}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: '#0f6e56', marginTop: 9, textDecoration: 'none' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12.5, fontWeight: 800, color: '#fff', marginTop: 12, textDecoration: 'none', padding: '9px 14px', borderRadius: 99, background: 'linear-gradient(135deg, #2b2b2e, #111114)', boxShadow: '0 6px 16px rgba(0,0,0,.18)' }}
         >
-          {card.cta.label} <ChevronRight size={13} />
+          {card.cta.label} <ChevronRight size={14} />
         </a>
       ) : onSee && (
         <button
           onClick={onSee}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12, fontWeight: 700, color: '#0f6e56', marginTop: 9, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12.5, fontWeight: 800, color: '#fff', marginTop: 12, padding: '9px 14px', borderRadius: 99, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #4abd98, #2e9a78)', boxShadow: '0 8px 20px rgba(74,189,152,.32)' }}
         >
-          See the week <ChevronRight size={13} />
+          See the week <ChevronRight size={14} />
         </button>
       )}
     </div>

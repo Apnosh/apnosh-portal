@@ -19,10 +19,10 @@ function deckDepth(pos: number): React.CSSProperties {
 }
 
 const SAMPLE_CARDS: ProofCardData[] = [
-  { id: 'sample-gbp', label: 'Example · a week on Google', big: '9 calls · 31 direction taps', context: 'Up from 4 calls and 12 taps the week before.', attribution: 'Since your menu photos went live, Aug 21.', spark: [9, 12, 10, 13, 17, 22, 31] },
-  { id: 'sample-post', label: 'Example · a post that landed', big: '2,418 people saw it', context: '86 saved or shared it.', attribution: 'You approved it Monday. It published Tuesday at 5 pm.' },
-  { id: 'sample-reviews', label: 'Example · a review month', big: '6 new reviews · 4.7 average', context: 'Every one got a reply within a day.', attribution: 'Since the review kit went up by your register, Aug 2.' },
-  { id: 'sample-down', label: 'Example · a quieter week', big: '3 calls · 14 direction taps', context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
+  { id: 'example-gbp', label: 'Example · a week on Google', big: '9 calls · 31 direction taps', context: 'Up from 4 calls and 12 taps the week before.', attribution: 'Since your menu photos went live, Aug 21.', spark: [9, 12, 10, 13, 17, 22, 31] },
+  { id: 'example-post', label: 'Example · a post that landed', big: '2,418 people saw it', context: '86 saved or shared it.', attribution: 'You approved it Monday. It published Tuesday at 5 pm.' },
+  { id: 'example-reviews', label: 'Example · a review month', big: '6 new reviews · 4.7 average', context: 'Every one got a reply within a day.', attribution: 'Since the review kit went up by your register, Aug 2.' },
+  { id: 'example-down', label: 'Example · a quieter week', big: '3 calls · 14 direction taps', context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
 ]
 
 export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: string; mute?: string }) {
@@ -68,7 +68,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
   }, [clientId])
 
   const act = (id: string, action: 'read' | 'dismiss') => {
-    if (!clientId || id.startsWith('sample-')) return
+    if (!clientId || id.startsWith('example-')) return
     void fetch('/api/dashboard/proof', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientId, id, action }),
@@ -120,7 +120,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
                 }}
               />
             ) : (
-              <div style={{ background: '#fff', borderRadius: 16, height: '100%', boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07)' }} />
+              <div style={{ borderRadius: 20, height: '100%', background: c.tone === 'heads_up' ? 'linear-gradient(180deg, #fffdf9, #f6f2ea)' : 'linear-gradient(180deg, #f6fbf8, #e9f5ef)', boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)' }} />
             )}
           </div>
         ))}
