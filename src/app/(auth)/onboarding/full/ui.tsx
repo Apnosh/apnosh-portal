@@ -22,13 +22,13 @@ export function Question({ title, subtitle, icon, small }: {
     return (
       <div className="mb-2">
         <h2
-          className="text-[15px] font-semibold"
+          className="text-[1.05rem] font-semibold"
           style={{ fontFamily: "'Inter', -apple-system, system-ui, sans-serif", color: '#1d1d1f', letterSpacing: '-0.02em', lineHeight: 1.2 }}
         >
           {title}
         </h2>
         {subtitle && (
-          <p className="text-[13px] leading-relaxed mt-1" style={{ color: '#6e6e73' }}>
+          <p className="text-[0.95rem] leading-relaxed mt-1" style={{ color: '#48484a' }}>
             {subtitle}
           </p>
         )}
@@ -54,13 +54,13 @@ export function Question({ title, subtitle, icon, small }: {
         </div>
       )}
       <h2
-        className="text-[30px] font-bold"
+        className="text-[1.875rem] font-bold"
         style={{ fontFamily: "'Inter', -apple-system, system-ui, sans-serif", color: '#1d1d1f', letterSpacing: '-0.04em', lineHeight: 1.1 }}
       >
         {title}
       </h2>
       {subtitle && (
-        <p className="text-[13.5px] leading-relaxed" style={{ color: '#6e6e73', marginTop: 6 }}>
+        <p className="text-[0.95rem] leading-relaxed" style={{ color: '#48484a', marginTop: 6 }}>
           {subtitle}
         </p>
       )}
@@ -82,14 +82,14 @@ export function Chip({
     <button
       type="button"
       onClick={onClick}
-      className="px-4 rounded-[20px] text-[13px] select-none"
+      className="px-4 rounded-[22px] text-[0.95rem] select-none"
       style={{
         border: selected ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
         background: selected ? '#f0faf6' : 'white',
         color: selected ? '#0f6e56' : '#48484a',
         fontWeight: selected ? 600 : 400,
         fontFamily: 'DM Sans, sans-serif',
-        minHeight: 40,
+        minHeight: 44,
         transition: 'all .15s ease',
       }}
     >
@@ -211,7 +211,7 @@ export function Input({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       autoFocus={autoFocus}
-      className="w-full text-[15px] rounded-[12px] px-4 outline-none transition-all"
+      className="w-full text-[1rem] rounded-[12px] px-4 outline-none transition-all"
       style={{
         border: '1.5px solid transparent',
         color: '#1d1d1f',
@@ -251,7 +251,7 @@ export function TextArea({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
-      className="w-full text-[15px] rounded-[12px] px-4 py-3.5 outline-none resize-none transition-all leading-relaxed"
+      className="w-full text-[1rem] rounded-[12px] px-4 py-3.5 outline-none resize-none transition-all leading-relaxed"
       style={{
         border: '1.5px solid transparent',
         color: '#1d1d1f',
@@ -276,7 +276,7 @@ export function TextArea({
 // Field label
 export function FieldLabel({ children }: { children: ReactNode }) {
   return (
-    <label className="block text-[13px] font-medium mb-2" style={{ color: '#6e6e73' }}>
+    <label className="block text-[0.9375rem] font-semibold mb-2" style={{ color: '#3a3a3c' }}>
       {children}
     </label>
   )
@@ -285,7 +285,7 @@ export function FieldLabel({ children }: { children: ReactNode }) {
 // Hint text
 export function Hint({ children }: { children: ReactNode }) {
   return (
-    <p className="text-xs leading-relaxed mt-2" style={{ color: '#98989d' }}>
+    <p className="text-[0.875rem] leading-relaxed mt-2" style={{ color: '#6e6e73' }}>
       {children}
     </p>
   )

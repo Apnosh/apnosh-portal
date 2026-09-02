@@ -33,7 +33,7 @@ export default function StepBizType({ data, update, nav, onAnswered }: Props) {
               update('biz_type', b)
               if (b !== 'Other') onAnswered?.()
             }}
-            className="min-h-[52px]"
+            className="min-h-[56px]"
           >
             <div className="flex items-center">
               <div className="text-[15px] font-semibold" style={{ color: data.biz_type === b ? '#0f6e56' : '#1d1d1f' }}>
