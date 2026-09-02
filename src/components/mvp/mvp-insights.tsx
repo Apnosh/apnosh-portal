@@ -36,6 +36,7 @@ import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
+import ProofDeck from './proof-deck'
 import { MetricSettingsButton } from './metric-settings'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
@@ -485,6 +486,10 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
           <button key={s.key} aria-label={s.label} onClick={() => pick(s.key)} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === idx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
         ))}
       </div>
+
+      {/* RESULTS — the stackable deck of fired proof cards, right between the
+          histogram's dots and the by-source tiles (owner placement). */}
+      <ProofDeck clientId={clientId} mute={C.mute} />
 
       {/* everything below the dots follows the ACTIVE stage: its by-source
           cards (scoped to the chart's picked range), extras, and campaigns */}

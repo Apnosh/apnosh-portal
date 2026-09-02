@@ -1,0 +1,106 @@
+'use client'
+
+/**
+ * The results deck: fired proof cards in the first-iteration stacked style,
+ * placed on the Insights stage screen right between the histogram's dots
+ * and the by-source tiles (owner call 2026-09-01). Self-contained: fetches
+ * the client's live cards, marks the front card read, dismisses cross-device.
+ */
+
+import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
+import ProofCard, { type ProofCardData } from './proof-card'
+
+function deckDepth(pos: number): React.CSSProperties {
+  if (pos === 0) return { position: 'relative', zIndex: 30, opacity: 1 }
+  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(6px) scaleX(0.955)', opacity: 1 }
+  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(12px) scaleX(0.91)', opacity: 1 }
+  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(18px) scaleX(0.865)', opacity: 0, pointerEvents: 'none' }
+}
+
+export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: string; mute?: string }) {
+  const [cards, setCards] = useState<ProofCardData[]>([])
+  const [step, setStep] = useState(0)
+  const readMarked = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!clientId) return
+    let alive = true
+    fetch(`/api/dashboard/proof?clientId=${clientId}&list=1`)
+      .then((r) => r.json())
+      .then((j) => {
+        if (!alive || !Array.isArray(j?.cards)) return
+        const mapped: ProofCardData[] = (j.cards as Array<Record<string, unknown>>)
+          .filter((c) => !c.dismissed_at)
+          .slice(0, 5)
+          .map((c) => ({
+            id: String(c.card_key ?? c.id),
+            label: String(c.label), big: String(c.big), context: String(c.context),
+            attribution: (c.attribution as string) ?? undefined,
+            spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
+            firedAt: (c.fired_at as string) ?? undefined,
+            tone: c.card_type === 'gbp_down' ? 'heads_up' : 'win',
+            cta: c.card_type === 'gbp_down' ? { label: 'Plan the push', href: '/campaigns/new' } : undefined,
+          }))
+        setCards(mapped)
+      })
+      .catch(() => { /* silence is the failure mode */ })
+    return () => { alive = false }
+  }, [clientId])
+
+  const act = (id: string, action: 'read' | 'dismiss') => {
+    if (!clientId) return
+    void fetch('/api/dashboard/proof', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId, id, action }),
+    }).catch(() => { /* best effort */ })
+  }
+
+  const safeStep = Math.min(step, Math.max(0, cards.length - 1))
+  const deck = cards.slice(safeStep, safeStep + 3)
+  const front = deck[0]
+
+  useEffect(() => {
+    if (front && !readMarked.current.has(front.id)) {
+      readMarked.current.add(front.id)
+      act(front.id, 'read')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [front?.id])
+
+  if (!front) return null
+  return (
+    <div style={{ padding: '0 18px', marginBottom: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: mute }}>Results</span>
+        <span style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+          {cards.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setStep((p) => (p + 1) % cards.length)}
+              style={{ fontSize: 11.5, fontWeight: 700, color: mute, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+              {safeStep + 1} of {cards.length} ›
+            </button>
+          )}
+          <Link href="/dashboard/results" style={{ fontSize: 11.5, fontWeight: 700, color: '#0f6e56', textDecoration: 'none' }}>All</Link>
+        </span>
+      </div>
+      <div style={{ position: 'relative', paddingBottom: deck.length > 1 ? 14 : 0 }}>
+        {deck.map((c, pos) => (
+          <div key={c.id} style={{ ...deckDepth(pos), transformOrigin: 'top center', transition: 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s', height: pos === 0 ? undefined : '100%' }}>
+            {pos === 0 ? (
+              <ProofCard
+                card={c}
+                defaultOpen
+                onDismiss={() => { act(c.id, 'dismiss'); setCards((prev) => prev.filter((x) => x.id !== c.id)) }}
+              />
+            ) : (
+              <div style={{ background: '#fff', borderRadius: 16, height: '100%', boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07)' }} />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
