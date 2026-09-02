@@ -9,12 +9,13 @@ export interface ProofCta { label: string; href: string }
 
 export const STATE_TYPES = ['steady', 'coming_up', 'reviews_waiting', 'approval_waiting', 'complaint_watch', 'start_campaign', 'connect_google', 'google_paused', 'google_quiet'] as const
 export type StateType = typeof STATE_TYPES[number]
-export type EventType = 'gbp_week' | 'post' | 'reviews' | 'gbp_down'
+export type EventType = 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'campaign_moved' | 'social_month' | 'site_week'
 export type AnyCardType = EventType | StateType
 
 export function presentCardType(type: string): { tone: ProofTone; cta?: ProofCta } {
   switch (type) {
-    case 'gbp_week': case 'post': case 'reviews': return { tone: 'win' }
+    case 'gbp_week': case 'post': case 'reviews': case 'social_month': case 'site_week': return { tone: 'win' }
+    case 'campaign_moved': return { tone: 'win', cta: { label: 'See the campaign', href: '/dashboard/campaigns' } }
     case 'gbp_down': return { tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } }
     case 'steady': return { tone: 'heads_up' }
     case 'coming_up': return { tone: 'heads_up', cta: { label: 'See what is coming', href: '/dashboard/campaigns' } }

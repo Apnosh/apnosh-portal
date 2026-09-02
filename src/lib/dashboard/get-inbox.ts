@@ -173,7 +173,7 @@ export async function getInbox(clientId: string, userId?: string): Promise<Inbox
         href: '/dashboard/results',
         whenIso: r.fired_at as string,
         status: (r.card_type as string) === 'gbp_down' ? 'Heads up' : 'Result',
-        source: (r.card_type as string) === 'post' ? 'instagram' : 'google',
+        source: (['post', 'social_month'].includes(String(r.card_type)) ? 'instagram' : String(r.card_type) === 'site_week' ? 'apnosh' : 'google') as InboxSource,
         senderName: null,
       })
     }

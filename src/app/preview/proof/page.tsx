@@ -23,6 +23,29 @@ const SAMPLES = [
     attribution: 'You approved it Monday. It published Tuesday at 5 pm.',
   },
   {
+    id: 'sample-campaign', label: 'Since Google Business Profile setup',
+    big: '+38 calls and direction taps',
+    context: 'The two weeks after Aug 12: 141, against 103 the two before.',
+    attribution: 'It shows what happened, not proof of cause.',
+  },
+  {
+    id: 'sample-video', label: 'Your TikTok video',
+    big: '662 views',
+    context: '48 likes · 9 shares.',
+    attribution: '"Friday night galbi, the way we…" · went up Tuesday.',
+  },
+  {
+    id: 'sample-social', label: 'This month on social',
+    big: '41 new followers',
+    context: '12,480 people reached across Instagram and TikTok.',
+    attribution: 'Up from 17 the month before.',
+  },
+  {
+    id: 'sample-site', label: 'This week on your website',
+    big: '312 people visited',
+    context: 'Up from 240 the week before. 96 looked at the menu · 14 tapped to order.',
+  },
+  {
     id: 'sample-reviews', label: 'August reviews',
     big: '6 new reviews · 4.7 average',
     context: 'Every one got a reply within a day.',

@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState } from 'react'
+import { presentCardType } from '@/lib/proof/present'
 import { TrendingUp } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import MvpShell from '@/components/mvp/mvp-shell'
@@ -42,8 +43,7 @@ export default function ResultsPage() {
           spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
           fired_at: String(c.fired_at ?? ''),
           is_sample: !!c.is_sample,
-          tone: c.card_type === 'gbp_down' ? 'heads_up' as const : 'win' as const,
-          cta: c.card_type === 'gbp_down' ? { label: 'Plan the push', href: '/campaigns/new' } : undefined,
+          ...presentCardType(String(c.card_type)),
         })))
       })
       .catch(() => { if (alive) setRows([]) })

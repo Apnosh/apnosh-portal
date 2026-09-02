@@ -14,10 +14,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getCachedThemes } from '@/lib/review-themes'
 import { moveForTheme, titleCase } from '@/lib/reviews/moves'
+import { getStageCampaigns } from '@/lib/dashboard/get-stage-campaigns'
 
 export interface ProofCardRow {
   card_key: string
-  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'google_quiet' | 'approval_waiting' | 'complaint_watch'
+  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'campaign_moved' | 'social_month' | 'site_week' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'google_quiet' | 'approval_waiting' | 'complaint_watch'
   label: string
   big: string
   context: string
@@ -197,7 +198,7 @@ export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, n
 /** R-02 — a published post that beat the account's usual reach.
  *  Source: content_drafts.outcome_summary ({ reach, interactions, ... }),
  *  72h+ after publish, needing 3+ prior published posts for an honest median. */
-export async function evalPost(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
+async function evalPostFromDrafts(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
   const cutoff = new Date(now); cutoff.setUTCHours(cutoff.getUTCHours() - 72)
   const windowStart = new Date(now); windowStart.setUTCDate(windowStart.getUTCDate() - 30)
 
@@ -254,6 +255,220 @@ export async function evalPost(admin: SupabaseClient, clientId: string, now: Dat
       : `More reach than your usual post.`,
     attribution: `You approved it. It published ${day}.`,
   }
+}
+
+/** The post card, from the synced social feed (every post on every connected network,
+ *  with views for video). A post qualifies 72h after it went up, inside 30 days, when it
+ *  beat the median of at least 3 earlier posts. Video leads with views ("662 views"),
+ *  everything else with reach ("155 people saw it"). Falls back to the drafts-based
+ *  read when a client has no synced feed yet. */
+export async function evalPost(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
+  const cutoff = new Date(now); cutoff.setUTCHours(cutoff.getUTCHours() - 72)
+  const windowStart = new Date(now); windowStart.setUTCDate(windowStart.getUTCDate() - 30)
+  const { data: rows } = await admin
+    .from('social_posts')
+    .select('id, platform, media_type, caption, posted_at, reach, likes, comments, saves, shares, video_views')
+    .eq('client_id', clientId)
+    .not('posted_at', 'is', null)
+    .order('posted_at', { ascending: false })
+    .limit(60)
+  if (!rows || rows.length < 4) return evalPostFromDrafts(admin, clientId, now)
+  type P = { id: string; platform: string; video: boolean; caption: string | null; posted_at: string; views: number; reach: number; score: number; likes: number; saves: number; shares: number; comments: number }
+  const parsed: P[] = rows.map((r) => {
+    const views = Number(r.video_views) || 0, reach = Number(r.reach) || 0
+    return {
+      id: String(r.id), platform: String(r.platform ?? ''), video: String(r.media_type ?? '') === 'video' || views > 0,
+      caption: (r.caption as string | null) ?? null, posted_at: String(r.posted_at),
+      views, reach, score: Math.max(views, reach),
+      likes: Number(r.likes) || 0, saves: Number(r.saves) || 0, shares: Number(r.shares) || 0, comments: Number(r.comments) || 0,
+    }
+  }).filter((p) => p.score > 0)
+  if (parsed.length < 4) return evalPostFromDrafts(admin, clientId, now)
+  const { data: carded } = await admin
+    .from('proof_cards').select('card_key').eq('client_id', clientId).eq('card_type', 'post').limit(300)
+  const done = new Set((carded ?? []).map((c) => String(c.card_key)))
+  let cand: P | null = null
+  for (const p of parsed) {
+    if (p.posted_at > cutoff.toISOString() || p.posted_at < windowStart.toISOString()) continue
+    if (done.has(`post-${p.id}`)) continue
+    const priors = parsed.filter((q) => q.posted_at < p.posted_at).map((q) => q.score)
+    if (priors.length < 3) continue
+    const sorted = [...priors].sort((a, b) => a - b)
+    const median = sorted[Math.floor(sorted.length / 2)]
+    if (p.score <= median) continue
+    if (!cand || p.score > cand.score) cand = p
+  }
+  if (!cand) return null
+  const net = PLATFORM_WORD[cand.platform] ?? cand.platform
+  const day = new Date(cand.posted_at).toLocaleDateString('en-US', { weekday: 'long' })
+  const bits: string[] = []
+  if (cand.likes > 0) bits.push(plural(cand.likes, 'like'))
+  if (cand.saves > 0) bits.push(plural(cand.saves, 'save'))
+  if (cand.shares > 0) bits.push(plural(cand.shares, 'share'))
+  if (cand.comments > 0) bits.push(plural(cand.comments, 'comment'))
+  const cap = cand.caption ? cand.caption.replace(/\s+/g, ' ').trim() : ''
+  const short = cap ? cap.slice(0, 34).replace(/\s+\S*$/, '') + (cap.length > 34 ? '…' : '') : ''
+  return {
+    card_key: `post-${cand.id}`,
+    card_type: 'post',
+    label: `Your ${net} ${cand.video ? 'video' : 'post'}`,
+    big: cand.video && cand.views > 0 ? `${cand.views.toLocaleString('en-US')} views` : `${cand.reach.toLocaleString('en-US')} people saw it`,
+    context: bits.length ? bits.join(' · ') + '.' : 'More than your usual post.',
+    attribution: short ? `"${short}" · went up ${day}.` : `It went up ${day}.`,
+  }
+}
+const PLATFORM_WORD: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', linkedin: 'LinkedIn', threads: 'Threads', pinterest: 'Pinterest' }
+
+/** A month of social growth: followers gained across every connected network in the last
+ *  30 days, against the 30 before. Fires once per 30 days, only for a real rise. */
+export async function evalSocialMonth(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
+  if (await firedWithin(admin, clientId, 'social_month', 30, now)) return null
+  const start = new Date(now); start.setUTCDate(start.getUTCDate() - 60)
+  const { data: rows } = await admin
+    .from('social_metrics')
+    .select('platform, date, reach, followers_gained, followers_total')
+    .eq('client_id', clientId)
+    .gte('date', iso(start))
+    .order('date', { ascending: true })
+  if (!rows || rows.length === 0) return null
+  const latest = rows[rows.length - 1].date as string
+  const ageDays = Math.floor((now.getTime() - new Date(`${latest}T00:00:00Z`).getTime()) / 86400e3)
+  if (ageDays > 5) return null
+  const curStart = new Date(`${latest}T00:00:00Z`); curStart.setUTCDate(curStart.getUTCDate() - 29)
+  const priorStart = new Date(curStart); priorStart.setUTCDate(priorStart.getUTCDate() - 30)
+  const cur = { gained: 0, reach: 0, days: new Set<string>(), nets: new Set<string>() }
+  const prior = { gained: 0, reach: 0, days: new Set<string>() }
+  for (const r of rows) {
+    const d = String(r.date)
+    const g = Number(r.followers_gained) || 0, re = Number(r.reach) || 0
+    if (d >= iso(curStart)) { cur.gained += g; cur.reach += re; cur.days.add(d); cur.nets.add(String(r.platform)) }
+    else if (d >= iso(priorStart)) { prior.gained += g; prior.reach += re; prior.days.add(d) }
+  }
+  if (cur.days.size < 20) return null
+  const priorKnown = prior.days.size >= 20
+  // a real rise: at least 10 new followers, and more than the month before when we know it
+  if (cur.gained < 10) return null
+  if (priorKnown && cur.gained <= prior.gained) return null
+  if (!priorKnown && cur.gained < 20) return null
+  const nets = [...cur.nets].map((n) => PLATFORM_WORD[n] ?? n)
+  const where = nets.length === 1 ? `on ${nets[0]}` : `across ${nets.slice(0, -1).join(', ')} and ${nets[nets.length - 1]}`
+  return {
+    card_key: `social-month-${latest}`,
+    card_type: 'social_month',
+    label: 'This month on social',
+    big: `${plural(cur.gained, 'new follower')}`,
+    context: cur.reach > 0 ? `${cur.reach.toLocaleString('en-US')} people reached ${where}.` : `Growing ${where}.`,
+    attribution: priorKnown ? `Up from ${prior.gained.toLocaleString('en-US')} the month before.` : undefined,
+  }
+}
+
+/** A week on your website: visitors in the last full week against the week before.
+ *  Same discipline as the Google card: fresh data, both weeks covered, a real jump. */
+export async function evalSiteWeek(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
+  if (await firedWithin(admin, clientId, 'site_week', 7, now)) return null
+  const start = new Date(now); start.setUTCDate(start.getUTCDate() - 21)
+  const { data: rows } = await admin
+    .from('website_metrics')
+    .select('date, visitors, sessions, menu_views, order_clicks')
+    .eq('client_id', clientId)
+    .gte('date', iso(start))
+    .order('date', { ascending: true })
+  if (!rows || rows.length < 10) return null
+  const withData = rows.filter((r) => (Number(r.visitors) || 0) > 0)
+  if (withData.length < 10) return null
+  const latest = String(withData[withData.length - 1].date)
+  const ageDays = Math.floor((now.getTime() - new Date(`${latest}T00:00:00Z`).getTime()) / 86400e3)
+  if (ageDays > 5) return null
+  const curStart = new Date(`${latest}T00:00:00Z`); curStart.setUTCDate(curStart.getUTCDate() - 6)
+  const priorStart = new Date(curStart); priorStart.setUTCDate(priorStart.getUTCDate() - 7)
+  const cur = { visitors: 0, menu: 0, orders: 0, days: 0 }, prior = { visitors: 0, days: 0 }
+  for (const r of rows) {
+    const d = String(r.date), v = Number(r.visitors) || 0
+    if (d >= iso(curStart) && d <= latest) { cur.visitors += v; cur.menu += Number(r.menu_views) || 0; cur.orders += Number(r.order_clicks) || 0; cur.days++ }
+    else if (d >= iso(priorStart) && d < iso(curStart)) { prior.visitors += v; prior.days++ }
+  }
+  if (cur.days < 5 || prior.days < 5) return null
+  if (cur.visitors < 30 || prior.visitors <= 0) return null
+  if (cur.visitors < prior.visitors * 1.10 || cur.visitors - prior.visitors < 10) return null
+  const extras: string[] = []
+  if (cur.menu > 0) extras.push(`${cur.menu.toLocaleString('en-US')} looked at the menu`)
+  if (cur.orders > 0) extras.push(`${cur.orders.toLocaleString('en-US')} tapped to order`)
+  return {
+    card_key: `site-week-${latest}`,
+    card_type: 'site_week',
+    label: 'This week on your website',
+    big: `${cur.visitors.toLocaleString('en-US')} people visited`,
+    context: `Up from ${prior.visitors.toLocaleString('en-US')} the week before.${extras.length ? ' ' + extras.join(' · ') + '.' : ''}`,
+  }
+}
+
+/* Which Google number a campaign's stage moves, and how big a change has to be to count. */
+const STAGE_METRIC: Record<string, { pick: (r: Record<string, unknown>) => number; noun: string; minAbs: number }> = {
+  shown: { pick: (r) => Number(r.impressions_total ?? r.search_views) || 0, noun: 'times you showed up on Google', minAbs: 50 },
+  engaged: { pick: (r) => Number(r.website_clicks) || 0, noun: 'website clicks from Google', minAbs: 5 },
+  moved: { pick: (r) => (Number(r.directions) || 0) + (Number(r.calls) || 0), noun: 'calls and direction taps', minAbs: 5 },
+}
+/** Did a campaign move its number? The two weeks after launch against the two before,
+ *  on the Google number its stage works on. One card per campaign, wins only, and only
+ *  once the full two weeks after launch have reported. Honest by wording: it shows what
+ *  happened, not proof of cause. */
+export async function evalCampaignMoved(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
+  let stages
+  try { stages = await getStageCampaigns(clientId) } catch { return null }
+  const seen = new Set<string>()
+  const cands: { id: string; name: string; shippedAt: string; stage: string }[] = []
+  for (const stage of ['moved', 'engaged', 'shown']) {
+    for (const c of stages[stage] ?? []) {
+      if (!c.shippedAt || seen.has(c.id)) continue
+      seen.add(c.id); cands.push({ id: c.id, name: c.name, shippedAt: c.shippedAt, stage })
+    }
+  }
+  if (!cands.length) return null
+  const { data: carded } = await admin
+    .from('proof_cards').select('card_key').eq('client_id', clientId).eq('card_type', 'campaign_moved').limit(300)
+  const done = new Set((carded ?? []).map((c) => String(c.card_key)))
+  const start = new Date(now); start.setUTCDate(start.getUTCDate() - 60)
+  const { data: rows } = await admin
+    .from('gbp_metrics')
+    .select('date, impressions_total, search_views, website_clicks, directions, calls, location_id')
+    .eq('client_id', clientId)
+    .gte('date', iso(start))
+    .order('date', { ascending: true })
+  const real = (rows ?? []).filter((r) => r.location_id !== 'demo-proof')
+  if (real.length < 20) return null
+  const latest = String(real[real.length - 1].date)
+  let best: ProofCardRow | null = null; let bestDiff = 0
+  for (const c of cands) {
+    if (done.has(`campaign-moved-${c.id}`)) continue
+    const launch = new Date(c.shippedAt); launch.setUTCHours(0, 0, 0, 0)
+    const afterEnd = new Date(launch); afterEnd.setUTCDate(afterEnd.getUTCDate() + 13)
+    const beforeStart = new Date(launch); beforeStart.setUTCDate(beforeStart.getUTCDate() - 14)
+    if (iso(afterEnd) > latest) continue // the after-window has not fully reported yet
+    if (iso(beforeStart) < iso(start)) continue
+    const m = STAGE_METRIC[c.stage]; if (!m) continue
+    let before = 0, after = 0, bd = new Set<string>(), ad = new Set<string>()
+    for (const r of real) {
+      const d = String(r.date)
+      if (d >= iso(beforeStart) && d < iso(launch)) { before += m.pick(r as Record<string, unknown>); bd.add(d) }
+      else if (d >= iso(launch) && d <= iso(afterEnd)) { after += m.pick(r as Record<string, unknown>); ad.add(d) }
+    }
+    if (bd.size < 10 || ad.size < 10 || before <= 0) continue
+    const diff = after - before
+    if (after < before * 1.10 || diff < m.minAbs) continue
+    if (diff > bestDiff) {
+      bestDiff = diff
+      const when = launch.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      best = {
+        card_key: `campaign-moved-${c.id}`,
+        card_type: 'campaign_moved',
+        label: `Since ${c.name.length > 38 ? c.name.slice(0, 36).replace(/\s+\S*$/, '') + '…' : c.name}`,
+        big: `+${diff.toLocaleString('en-US')} ${m.noun}`,
+        context: `The two weeks after ${when}: ${after.toLocaleString('en-US')}, against ${before.toLocaleString('en-US')} the two before.`,
+        attribution: 'It shows what happened, not proof of cause.',
+      }
+    }
+  }
+  return best
 }
 
 /** R-03 — a rising review month, fired in the first 3 days of the next month,
@@ -325,14 +540,19 @@ export async function composeForClient(admin: SupabaseClient, clientId: string, 
   let budget = Math.max(0, 2 - (count ?? 0))
   if (budget === 0) return []
 
-  const [win, post, reviews] = await Promise.all([
+  const [win, moved, post, social, site, reviews] = await Promise.all([
     evalGbpWeek(admin, clientId, now),
+    evalCampaignMoved(admin, clientId, now).catch(() => null),
     evalPost(admin, clientId, now),
+    evalSocialMonth(admin, clientId, now).catch(() => null),
+    evalSiteWeek(admin, clientId, now).catch(() => null),
     evalReviews(admin, clientId, now),
   ])
   // The down-week card only speaks when the win card has nothing to say.
   const down = win ? null : await evalGbpDownWeek(admin, clientId, now)
-  const candidates = [win, post, reviews, down].filter((c): c is ProofCardRow => !!c)
+  // priority: the Google week, then what a campaign moved, then the best post,
+  // social growth, the website week, reviews, and the heads-up last
+  const candidates = [win, moved, post, social, site, reviews, down].filter((c): c is ProofCardRow => !!c)
 
   const fired: string[] = []
   for (const c of candidates) {
