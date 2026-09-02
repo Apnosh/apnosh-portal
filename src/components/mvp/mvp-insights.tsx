@@ -408,7 +408,8 @@ function AnalystButton() {
 // exactly the stage that was tapped.
 /* the page's card + heading kit: white cards on the soft ground, sentence-case headings,
    no hairline borders (the ground does the separating) */
-const CARD: React.CSSProperties = { marginTop: 14, background: '#fff', borderRadius: 18, padding: '16px 16px 18px' }
+const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.045)'
+const CARD: React.CSSProperties = { marginTop: 14, background: '#fff', borderRadius: 18, padding: '16px 16px 18px', boxShadow: CARD_SHADOW }
 const H2: React.CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }
 const TILE: React.CSSProperties = { background: C.bg, borderRadius: 14 }
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
@@ -466,8 +467,8 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
 
   return (
     <div style={{ padding: '0 0 44px' }}>
-      {/* the hero block sits on white; everything under the dots sits on the soft grey ground as cards */}
-      <div style={{ background: '#fff', padding: '16px 0 4px', borderBottom: `0.5px solid ${C.line}` }}>
+      {/* the hero is a card like everything else: one soft ground, no seam between the graph and the rest */}
+      <div style={{ margin: '14px 18px 0', background: '#fff', borderRadius: 18, padding: '18px 0 8px', boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
       {/* SWIPEABLE GRAPHS — each slide is a stage's title + number + trend +
           histogram; swipe the graph left/right to change stages */}
       <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', alignItems: 'flex-start' }}>

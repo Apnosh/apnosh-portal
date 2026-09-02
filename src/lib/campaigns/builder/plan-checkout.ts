@@ -53,7 +53,9 @@ export function planCheckoutName(now: Date = new Date()): string {
 export function planNameFromItems(itemNames: string[], now: Date = new Date()): string {
   const names = [...new Set(itemNames.map((n) => n.trim()).filter(Boolean))]
   if (!names.length) return planCheckoutName(now)
-  const first = names[0].length > 40 ? names[0].slice(0, 38).trimEnd() + '…' : names[0]
+  // long product names cut at a word, never mid-word ("Google Business Profile setup & optimization" fits whole)
+  const cap = 56
+  const first = names[0].length > cap ? names[0].slice(0, cap).replace(/\s+\S*$/, '').trimEnd() + '…' : names[0]
   return names.length === 1 ? first : `${first} + ${names.length - 1} more`
 }
 
