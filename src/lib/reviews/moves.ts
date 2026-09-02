@@ -9,7 +9,9 @@ export interface ThemeMove { move: string; operational: boolean }
 const RULES: Array<{ test: RegExp; move: string; operational: boolean }> = [
   { test: /wait|slow|line|took forever|long time|waited/i, move: 'The next push goes to your quieter nights, and every wait review gets a reply with the reservation link.', operational: false },
   { test: /park/i, move: 'A parking note goes on your Google listing and your site so guests arrive knowing.', operational: false },
-  { test: /price|expensive|pricey|overpriced|value|cost/i, move: 'A value item or lunch offer leads the next campaign, so the price story changes.', operational: false },
+  { test: /pric|expensive|overpriced|value|cost|cheap/i, move: 'A value item or lunch offer leads the next campaign, so the price story changes.', operational: false },
+  { test: /expired|stale|spoiled|rotten|moldy|out of date|freshness/i, move: 'This one is operational, not marketing. Worth a check of the shelves today; we reply to each one and watch it next month.', operational: true },
+  { test: /\btip|tipping|gratuity|checkout|register/i, move: 'This one is operational, not marketing. Worth a look at the checkout flow; we reply to each one kindly.', operational: true },
   { test: /reserv|book|table|seat/i, move: 'The reservation link goes front and center on Google and the next posts.', operational: false },
   { test: /hours|closed|open late|open early/i, move: 'Hours get checked on Google today so nobody shows up to a locked door.', operational: false },
   { test: /rude|staff|attitude|unfriendly|ignored|service/i, move: 'This one is operational, not marketing. Worth a look with the team this week; we reply to each one kindly.', operational: true },
