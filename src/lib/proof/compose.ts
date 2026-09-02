@@ -17,7 +17,7 @@ import { moveForTheme, titleCase } from '@/lib/reviews/moves'
 
 export interface ProofCardRow {
   card_key: string
-  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'approval_waiting' | 'complaint_watch'
+  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'google_quiet' | 'approval_waiting' | 'complaint_watch'
   label: string
   big: string
   context: string
@@ -476,6 +476,20 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
     }
   }
 
+  // connected and current, but nobody has called or asked for directions in either
+  // window: the listing is live and quiet. Say so, with the one move that gives people a
+  // reason to act — never a blank deck (the Apnosh sandbox sat on examples for this).
+  if (realGbpRows > 0 && w.latestDate && !hasGoogleData) {
+    const ageDays = Math.floor((now.getTime() - new Date(`${w.latestDate}T00:00:00Z`).getTime()) / 86400e3)
+    if (ageDays <= 5) {
+      out.push({
+        card_key: `state-google-quiet`, card_type: 'google_quiet',
+        label: 'Google',
+        big: 'Connected, and quiet so far',
+        context: 'No calls or direction taps yet. Photos, hours and a menu link give people a reason to act.',
+      })
+    }
+  }
   // no Google data at all (setup): rows would exist if the listing were linked,
   // even for a quiet listing — so this means genuinely not connected.
   if (realGbpRows === 0) {
