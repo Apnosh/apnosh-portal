@@ -102,10 +102,12 @@ const bandVigor = (b: HealthBand | null): number => (b === 'veryHigh' ? 1 : b ==
 // be labelled truthfully; both are optional so older callers (Google-only) stay byte-identical.
 export interface Views { total: number; maps: number; search: number; google?: number; social?: number }
 export interface Actions { directions: number; calls: number; websiteClicks: number }
+/** the same year-over-year comparison as COUNTS (how many more / fewer) */
+export interface FunnelYoYAbs { awareness: number | null; interest: number | null; actions: number | null; orders: number | null }
 export interface FunnelYoY { awareness: number | null; interest: number | null; actions: number | null; orders: number | null }
 
 type Emblem = 'eye' | 'spark' | 'tap' | 'door' | 'heart'
-interface HStage { key: string; label: string; sub?: string; count: number | null; zone: Zone; conv?: string; tag: string; split?: string; emblem?: Emblem; deltaYoY?: number | null; insightsStage?: string }
+interface HStage { key: string; label: string; sub?: string; count: number | null; zone: Zone; conv?: string; tag: string; split?: string; emblem?: Emblem; deltaYoY?: number | null; deltaAbs?: number | null; insightsStage?: string }
 
 export type FunnelRange = '7d' | '30d' | '90d' | '12m' | 'custom'
 const RANGES: [FunnelRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['12m', 'Last year'], ['custom', 'Custom']]
@@ -135,6 +137,8 @@ export interface HomeFunnelProps {
   windowEnd?: string
   /** signed year-over-year % change per stage (same window last year), null where no baseline */
   yoy?: FunnelYoY | null
+  /** the same comparison as counts, drawn as "+1,920" beside the number */
+  yoyAbs?: FunnelYoYAbs | null
   /** selected time range — the tabs replace the header and drive the data */
   range?: FunnelRange
   onRange?: (r: FunnelRange) => void
@@ -232,7 +236,7 @@ function drawEmblem(ctx: CanvasRenderingContext2D, ox: number, oy: number, r: nu
  *  computeHome falls back to deriving them from the raw actions. */
 export interface StageCounts { interest?: number; actions?: number; retention?: number }
 
-export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts) {
+export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts, yoyAbs?: FunnelYoYAbs | null) {
   const total = Math.max(0, views.total)
   // Awareness folds SOCIAL reach into the Google views (top of funnel = "people who saw you").
   // When social is 0/undefined the labels stay exactly as before (Google-only accounts see no
@@ -260,11 +264,11 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const retention = counts?.retention ?? 0
 
   const stages: HStage[] = [
-    { key: 'shown', label: 'Found you', sub: awareSub, count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, insightsStage: 'discovery' },
-    { key: 'engaged', label: 'Looked closer', sub: 'website visits & clicks', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, insightsStage: 'intent' },
-    { key: 'moved', label: 'Took action', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, insightsStage: 'intent' },
-    { key: 'camein', label: 'Walked in', sub: 'walk-in orders from Google', count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, insightsStage: 'conversion' },
-    { key: 'back', label: 'Came back', sub: 'came back for more', count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
+    { key: 'shown', label: 'Awareness', sub: awareSub, count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, deltaAbs: yoyAbs?.awareness ?? null, insightsStage: 'discovery' },
+    { key: 'engaged', label: 'Interest', sub: 'website visits & clicks', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
+    { key: 'moved', label: 'Customer actions', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
+    { key: 'camein', label: 'Orders', sub: 'walk-in orders from Google', count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, deltaAbs: yoyAbs?.orders != null ? Math.round(yoyAbs.orders * walkInRate) : null, insightsStage: 'conversion' },
+    { key: 'back', label: 'Retention', sub: 'came back for more', count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
   ]
   const stats = [
     { value: total.toLocaleString(), label: 'Awareness' },
@@ -305,6 +309,7 @@ export default function HomeFunnel({
   windowStart,
   windowEnd,
   yoy,
+  yoyAbs = null,
   range,
   onRange,
   cStart,
@@ -396,7 +401,7 @@ export default function HomeFunnel({
     try { if (t) localStorage.setItem(audKey, t); else localStorage.removeItem(audKey) } catch { /* ignore */ }
   }
 
-  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts), [views, actions, walkInRate, avgTicket, currency, yoy, counts])
+  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts, yoyAbs), [views, actions, walkInRate, avgTicket, currency, yoy, counts, yoyAbs])
 
   const geom = useRef({ W: 400 })
 
@@ -493,9 +498,6 @@ export default function HomeFunnel({
       if (i === 0) return 'veryHigh'
       const a = stages[i - 1].count, b = s.count
       if (a == null || b == null || a <= 0 || b <= 0) return null
-      // Came back is counted from reviews only (no register yet), so its tiny rate is a
-      // measurement gap, not a business failure: it reads neutral, never red.
-      if (i === n - 1) return 'high'
       return bandFor(b / a, s.key)
     })
     const dark = theme === 'dark'
@@ -684,14 +686,11 @@ export default function HomeFunnel({
       // other. label above · big hero number (auto-fit) · YoY tick below.
       const side = L.side // -1 = number hugs the LEFT edge, +1 = the RIGHT edge
       const P = 32 // more breathing room from the screen edge
-      // on a wide screen the ledger hugs a phone-wide column around the spine instead of
-      // the far edges, so a laptop never reads as a stretched phone
-      const CW = Math.min(W, 640), off = (W - CW) / 2
       const numLeft = side < 0
       ctx.textAlign = numLeft ? 'left' : 'right'
-      const anchorX = numLeft ? off + P : off + CW - P
+      const anchorX = numLeft ? P : W - P
       // the room = the gap between the edge and the near side of the orb
-      const roomOut = Math.max(72, numLeft ? (ox - r - 14) - anchorX : anchorX - (ox + r + 14))
+      const roomOut = Math.max(72, numLeft ? (ox - r - 14) - P : (W - P) - (ox + r + 14))
 
       ctx.fillStyle = C.mute
       setLS('0.2px'); ctx.font = '600 14px Inter, sans-serif'
@@ -704,7 +703,7 @@ export default function HomeFunnel({
       // as big as the room allows, from a bold 54px down to a floor of 24px; if a very long number
       // still won't fit at the floor (tiny embed × 8 digits), maxWidth compresses it to the room as a
       // last resort so it never spills into the orb or across the centre path.
-      let numPx = 54
+      let numPx = 40
       setLS('-0.5px'); ctx.font = `600 ${numPx}px ${DISPLAY}`
       while (numPx > 24 && ctx.measureText(num).width > roomOut) { numPx -= 2; ctx.font = `600 ${numPx}px ${DISPLAY}` }
       const numBase = oy + numPx * 0.34
@@ -714,13 +713,16 @@ export default function HomeFunnel({
 
       // YoY % — sits BESIDE the number (on its inner side, toward the centre), vertically centred on the
       // row. The glyph carries direction, |percent| the magnitude: ▲ up=green, ▼ down=coral, – flat=mute.
-      const dy = s.deltaYoY
+      const dy = s.deltaAbs != null ? s.deltaAbs : s.deltaYoY
       if (dy != null && s.count != null) {
         const tickIn = clamp01((entrance - (i * 0.09 + 0.5)) / 0.35) // resolves just after the count-up
         if (tickIn > 0.01) {
           const r0 = Math.round(dy)
-          const glyph = r0 > 0 ? '▲' : r0 < 0 ? '▼' : ''
-          const tickStr = r0 === 0 ? '– even' : glyph + Math.abs(r0) + '%'
+          // how many more or fewer than the same window last year ("+1,920" / "−140");
+          // the % tick remains the fallback when only a rate is known
+          const tickStr = s.deltaAbs != null
+            ? (r0 === 0 ? '± 0' : (r0 > 0 ? '+' : '−') + Math.abs(r0).toLocaleString())
+            : (r0 === 0 ? '– even' : (r0 > 0 ? '▲' : '▼') + Math.abs(r0) + '%')
           ctx.font = '700 13px Inter, sans-serif'
           ctx.textAlign = numLeft ? 'left' : 'right'
           const tx = numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8
@@ -733,11 +735,11 @@ export default function HomeFunnel({
 
       // a hint chevron in the right margin — the whole row taps through to this stage's
       // full insights breakdown
-      const chX = off + CW - 12
+      const chX = W - 12
       ctx.beginPath()
       ctx.moveTo(chX - 4, oy - 6); ctx.lineTo(chX + 2, oy); ctx.lineTo(chX - 4, oy + 6)
       ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'
-      ctx.strokeStyle = `rgba(${baseRowStr},${(0.45 + 0.45 * pr) * eIn})`
+      ctx.strokeStyle = `rgba(${baseRowStr},${(0.3 + 0.5 * pr) * eIn})`
       ctx.stroke()
 
       ctx.restore() // close the press push-in transform
@@ -758,10 +760,9 @@ export default function HomeFunnel({
       const weak = dband === 'veryLow' || dband === 'low'
       const cr = bandCol(dband) // theme-aware band colour for the text
       const pct = Math.round((b / a) * 100)
-      // everyday ratio: "1 in 7" (or "37%" when more than a third convert); the band word
-      // only when the leg is weak, so a healthy funnel carries no jargon at all
+      // a ratio that makes sense out loud: "1 in 7" (or "37%" once more than a third convert), with the band word
       const ratio = pct >= 34 ? pct + '%' : '1 in ' + Math.max(2, Math.round(a / b))
-      const label = weak ? ratio + ' · ' + BAND_WORD[dband] : ratio
+      const label = ratio + ' · ' + BAND_WORD[dband] // e.g. "1 in 7 · very high", "37% · average"
       const midY = (layout[i].y + rAt(i) + (layout[i + 1].y - rAt(i + 1))) / 2
       const px = cx + (layout[i].dx + layout[i + 1].dx) / 2
       ctx.font = weak ? '700 11px Inter, sans-serif' : '600 11px Inter, sans-serif'
@@ -1077,7 +1078,7 @@ export default function HomeFunnel({
           flow streams in behind the text; the rings sit headerH below, clear of it. */}
       <div ref={headerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }}>
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px 4px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 6px' }}>
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, minWidth: 0, WebkitOverflowScrolling: 'touch' }}>
           {RANGES.map(([k, label]) => {
             const on = curRange === k
@@ -1115,9 +1116,9 @@ export default function HomeFunnel({
       )}
 
       {/* WHO the funnel is for (left) + the date window (right) — directly under the tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '2px 16px 8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 16px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-          <span style={{ fontSize: 13, color: C.mute, flexShrink: 0 }}>for</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: C.faint, flexShrink: 0 }}>Target audience</span>
           {editingAud ? (
             <input
               autoFocus
@@ -1146,7 +1147,7 @@ export default function HomeFunnel({
             <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{rangeLabel}</div>
             {/* the standing honesty line (owner ask, 2026-08-18): platforms report
                 late by nature — Google by days — so the newest days always trail */}
-            <div style={{ fontSize: 10.5, color: C.faint, marginTop: 1 }}>Google runs a few days behind</div>
+            <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>Platforms report a few days behind</div>
           </div>
         )}
       </div>
@@ -1160,7 +1161,7 @@ export default function HomeFunnel({
         onPointerCancel={clearPress}
         onPointerLeave={clearPress}
         style={{ display: 'block', position: 'absolute', top: 0, left: 0, zIndex: 0, width: '100%', height: effH, cursor: 'pointer', opacity: loading ? 0.5 : 1, transition: 'opacity .2s' }}
-        aria-label="Your marketing funnel from Google: Found you (how many times you showed up), Looked closer (everyone who clicked, called, or asked directions), Took action (directions and calls), Walked in (an estimate of who came in and bought), and Came back (customers who returned). The first three are measured from Google; the amber Walked in stage is estimated from your walk-in rate; Came back counts only what reviews show until a register connects."
+        aria-label="Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Customer actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects."
       />
     </div>
   )
@@ -1322,7 +1323,7 @@ export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
 }
 
 export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void }) {
-  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null } | null>(null)
+  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null; yoyAbs: FunnelYoYAbs | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   /* custom-range bounds — default to the last 14 days ending today */
   const [cStart, setCStart] = useState(() => { const t = new Date(); return localYmdOf(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) })
@@ -1368,7 +1369,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
         setData({
           views, actions,
           counts: derived?.counts,
-          asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, windowEnd: d.windowEnd ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null,
+          asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, windowEnd: d.windowEnd ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null, yoyAbs: d.yoyAbs ?? null,
         })
         const shown = !!(views && actions && views.total > 0)
         if (shown) everShown.current = true
@@ -1395,7 +1396,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
   if (data.views.total <= 0 && !everShown.current) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
-      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
+      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} yoyAbs={data.yoyAbs} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
       {/* "Choose your metrics" lives ONLY on the Insights detail screen (owner
           ask 2026-08-18) — the home graph stays clean with nothing below it.
           Toggles saved there still apply here: the funnel refetches every time

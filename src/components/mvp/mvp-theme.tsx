@@ -60,7 +60,7 @@ const light: Palette = {
   pillGoodBg: '#eaf6f1', pillGoodInk: '#2e9a78', pillWeakBg: '#fde7d6', pillWeakInk: '#b45309',
   personGreen: '#34B98A', personGreenGlow: '#EAFBF4', personAmber: '#C79A57', personAmberGlow: '#F7ECD6',
   crowdA: 0.62,
-  pathRGB: '74,189,152', pathAlpha: 0.30,
+  pathRGB: '74,189,152', pathAlpha: 0.16,
 }
 
 const dark: Palette = {
@@ -77,7 +77,7 @@ const dark: Palette = {
   pillGoodBg: 'rgba(74,189,152,0.16)', pillGoodInk: '#63d2ac', pillWeakBg: 'rgba(249,115,22,0.18)', pillWeakInk: '#f9a35f',
   personGreen: '#57cfa7', personGreenGlow: '#d6fcee', personAmber: '#d8ab53', personAmberGlow: '#f7ecd6',
   crowdA: 0.72,
-  pathRGB: '110,214,180', pathAlpha: 0.42,
+  pathRGB: '110,214,180', pathAlpha: 0.24,
 }
 
 export const PALETTES: Record<Theme, Palette> = { light, dark }

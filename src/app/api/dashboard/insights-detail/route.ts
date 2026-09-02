@@ -112,6 +112,7 @@ export async function GET(req: NextRequest) {
   // signed year-over-year % change per funnel stage (same calendar window last year);
   // null where there's no prior-year baseline to compare against.
   let yoy: { awareness: number | null; interest: number | null; actions: number | null; orders: number | null } | null = null
+  let yoyAbs: { awareness: number | null; interest: number | null; actions: number | null; orders: number | null } | null = null
   if (gbp.status === 'fulfilled' && gbp.value) {
     const b = gbp.value.impressionBreakdown
     const maps = b.mapsMobile + b.mapsDesktop
@@ -140,6 +141,14 @@ export async function GET(req: NextRequest) {
       interest: chg(t.directions + t.calls + t.websiteClicks, p.directions + p.calls + p.websiteClicks),
       actions: chg(t.directions + t.calls, p.directions + p.calls),
       orders: chg(t.directions, p.directions), // Orders = directions × rate → its % equals the directions %
+    }
+    // the same comparison as COUNTS ("+1,920"), so the tick can say how many more, not just how much more
+    const dif = (cur: number, prev: number) => (prev > 0 ? cur - prev : null)
+    yoyAbs = {
+      awareness: dif(t.impressions, p.impressions),
+      interest: dif(t.directions + t.calls + t.websiteClicks, p.directions + p.calls + p.websiteClicks),
+      actions: dif(t.directions + t.calls, p.directions + p.calls),
+      orders: dif(t.directions, p.directions), // raw directions delta; the funnel applies the walk-in rate
     }
   }
 
@@ -228,5 +237,5 @@ export async function GET(req: NextRequest) {
     if (frontier) asOf = frontier
   } catch { /* keep the Google-derived asOf rather than showing none */ }
 
-  return NextResponse.json({ findYou, topQueries, topPosts, postCount, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, windowEnd, audience, yoy, stages })
+  return NextResponse.json({ findYou, topQueries, topPosts, postCount, views, actions, socialReach, socialConnected, googleConnected, profileVisits, followersGained, socialEngagement, asOf, windowStart, windowEnd, audience, yoy, yoyAbs, stages })
 }
