@@ -24,7 +24,6 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Pencil } from 'lucide-react'
 import { useMvpTheme } from './mvp-theme'
 
 /* the browser's local calendar date — the server must never guess the client's timezone */
@@ -339,18 +338,14 @@ export default function HomeFunnel({
 
   const rateKey = `apnosh.homefunnel.rate.${storageKey}`
   const ticketKey = `apnosh.homefunnel.ticket.${storageKey}`
-  const audKey = `apnosh.homefunnel.audience.${storageKey}`
   const [walkInRate, setWalkInRate] = useState(initialWalkInRate)
   const [avgTicket, setAvgTicket] = useState<number | null>(initialAvgTicket)
-  const [audOverride, setAudOverride] = useState<string | null>(null) // owner-set audience, wins over the detected city
-  const [editingAud, setEditingAud] = useState(false)
   useEffect(() => {
     try {
       const r = localStorage.getItem(rateKey); if (r != null && r !== '') setWalkInRate(Math.min(0.9, Math.max(0.1, Number(r) || 0.5)))
       const t = localStorage.getItem(ticketKey); if (t != null && t !== '') setAvgTicket(Number(t) || null)
-      const a = localStorage.getItem(audKey); if (a != null && a !== '') setAudOverride(a)
     } catch { /* defaults stand */ }
-  }, [rateKey, ticketKey, audKey])
+  }, [rateKey, ticketKey])
 
   // fill mode: size the canvas to fill the visible screen EXACTLY — from just under the
   // range tabs down to the top of the bottom nav — so all five stages read as one
@@ -395,12 +390,6 @@ export default function HomeFunnel({
     return () => ro.disconnect()
   }, [])
 
-  const saveAudience = (v: string) => {
-    const t = v.trim()
-    setAudOverride(t || null); setEditingAud(false)
-    try { if (t) localStorage.setItem(audKey, t); else localStorage.removeItem(audKey) } catch { /* ignore */ }
-  }
-
   /* "the 30 days before" / "the year before" — from the real window when known, else the tab */
   const compareLabel = useMemo(() => {
     if (curRange === '12m') return 'the year before'
@@ -420,7 +409,7 @@ export default function HomeFunnel({
     const n = stages.length
     // the tabs + audience chrome floats OVER the canvas now, so start the rings headerH below the top —
     // the flow streams up behind the chrome, but the rings + big numbers clear it (no text/number collision).
-    const yTop = 78 + headerH, yBot = effH - 64 // lead-in up top for the crowd; small bottom margin
+    const yTop = 62 + headerH, yBot = effH - 64 // the mouth ring clears the one-line header // lead-in up top for the crowd; small bottom margin
     // FUNNEL-NARROWING beads: biggest at the mouth, tapering down the path like a real
     // funnel (the mockup's silhouette). Magnitude still lives in the number + the crowd;
     // the taper gives the funnel its shape. Even y-spacing means the edge-gaps WIDEN as
@@ -771,9 +760,7 @@ export default function HomeFunnel({
       const weak = dband === 'veryLow' || dband === 'low'
       const cr = bandCol(dband) // theme-aware band colour for the text
       const pct = Math.round((b / a) * 100)
-      // a ratio that makes sense out loud: "1 in 7" (or "37%" once more than a third convert), with the band word
-      const ratio = pct >= 34 ? pct + '%' : '1 in ' + Math.max(2, Math.round(a / b))
-      const label = ratio + ' · ' + BAND_WORD[dband] // e.g. "1 in 7 · very high", "37% · average"
+      const label = (pct >= 1 ? pct : '<1') + '% · ' + BAND_WORD[dband] // e.g. "4% · average", "45% · very high"
       const midY = (layout[i].y + rAt(i) + (layout[i + 1].y - rAt(i + 1))) / 2
       const px = cx + (layout[i].dx + layout[i + 1].dx) / 2
       ctx.font = weak ? '700 11px Inter, sans-serif' : '600 11px Inter, sans-serif'
@@ -1067,7 +1054,6 @@ export default function HomeFunnel({
   const clearPress = () => { pressRef.current.i = -1 }
 
   const pickRange = onRange ?? setLocRange
-  const shownAudience = audOverride ?? audience // owner override → detected city → "Your area"
   // the real window this graph covers: "‹start› – ‹today›". The window is calendar-true;
   // reporting for the newest days arrives a few days late and fills in on its own.
   const rangeLabel = useMemo(() => {
@@ -1126,45 +1112,15 @@ export default function HomeFunnel({
         </div>
       )}
 
-      {/* WHO the funnel is for (left) + the date window (right) — directly under the tabs */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '4px 16px 10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: C.faint, flexShrink: 0 }}>Target audience</span>
-          {editingAud ? (
-            <input
-              autoFocus
-              defaultValue={audOverride ?? (audience && audience !== 'Your area' ? audience : '')}
-              placeholder="e.g. Seattle locals"
-              onBlur={(e) => saveAudience(e.currentTarget.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') saveAudience(e.currentTarget.value); else if (e.key === 'Escape') setEditingAud(false) }}
-              style={{ fontSize: 14, fontWeight: 700, color: C.ink, fontFamily: 'inherit', border: 'none', borderBottom: `1.5px solid ${C.green}`, outline: 'none', background: 'transparent', padding: '0 0 1px', width: 160, minWidth: 0 }}
-              aria-label="Target audience"
-            />
-          ) : (
-            <button
-              type="button"
-              onClick={() => setEditingAud(true)}
-              title="Change target audience"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: '100%', border: 'none', background: 'transparent', padding: 0, margin: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, color: C.ink }}
-            >
-              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shownAudience}</span>
-              <Pencil size={11} color={C.faint} style={{ flexShrink: 0 }} />
-            </button>
-          )}
+      {/* one quiet line under the tabs: the real window · the lag note · what the +/- compares
+          (owner ask 2026-09-02: the audience row came out so the funnel gets the room) */}
+      {rangeLabel && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '2px 16px 8px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
+          {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
+          <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>· platforms report a few days behind{yoyAbs ? ` · +/- vs ${compareLabel}` : ''}</span>
         </div>
-        {/* the real window this graph covers — pinned to the RIGHT of the audience line */}
-        {rangeLabel && (
-          <div style={{ whiteSpace: 'nowrap', flexShrink: 0, textAlign: 'right' }}>
-            <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{rangeLabel}</div>
-            {/* the standing honesty line (owner ask, 2026-08-18): platforms report
-                late by nature — Google by days — so the newest days always trail */}
-            <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>Platforms report a few days behind</div>
-            {/* what the +/- beside each number compares against: the window of the same
-                length that ended the day before this one began (owner ask 2026-09-02) */}
-            {yoyAbs && <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>+/- vs {compareLabel}</div>}
-          </div>
-        )}
-      </div>
+      )}
       </div>
 
       <canvas
