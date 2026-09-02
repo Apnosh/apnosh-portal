@@ -28,7 +28,7 @@ export interface ProofCardRow {
 }
 
 const iso = (d: Date) => d.toISOString().slice(0, 10)
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
+const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`
 
 interface GbpWindows {
   cur: { directions: number; calls: number }
