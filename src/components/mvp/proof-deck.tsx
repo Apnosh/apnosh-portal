@@ -19,14 +19,16 @@ function deckDepth(pos: number): React.CSSProperties {
 }
 
 const SAMPLE_CARDS: ProofCardData[] = [
-  { id: 'sample-gbp', label: 'Sample · this week on Google', big: '9 calls · 31 direction taps', context: 'Up from 4 calls and 12 taps the week before.', attribution: 'Since your menu photos went live, Aug 21.', spark: [9, 12, 10, 13, 17, 22, 31] },
-  { id: 'sample-post', label: 'Sample · your galbi reel', big: '2,418 people saw it', context: '86 saved or shared it.', attribution: 'You approved it Monday. It published Tuesday at 5 pm.' },
-  { id: 'sample-reviews', label: 'Sample · August reviews', big: '6 new reviews · 4.7 average', context: 'Every one got a reply within a day.', attribution: 'Since the review kit went up by your register, Aug 2.' },
-  { id: 'sample-down', label: 'Sample · quieter week on Google', big: '3 calls · 14 direction taps', context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
+  { id: 'sample-gbp', label: 'Example · a week on Google', big: '9 calls · 31 direction taps', context: 'Up from 4 calls and 12 taps the week before.', attribution: 'Since your menu photos went live, Aug 21.', spark: [9, 12, 10, 13, 17, 22, 31] },
+  { id: 'sample-post', label: 'Example · a post that landed', big: '2,418 people saw it', context: '86 saved or shared it.', attribution: 'You approved it Monday. It published Tuesday at 5 pm.' },
+  { id: 'sample-reviews', label: 'Example · a review month', big: '6 new reviews · 4.7 average', context: 'Every one got a reply within a day.', attribution: 'Since the review kit went up by your register, Aug 2.' },
+  { id: 'sample-down', label: 'Example · a quieter week', big: '3 calls · 14 direction taps', context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
 ]
 
 export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: string; mute?: string }) {
   const [cards, setCards] = useState<ProofCardData[]>([])
+  const [examples, setExamples] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState(0)
   const readMarked = useRef<Set<string>>(new Set())
 
@@ -35,7 +37,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
      * be judged on an account with nothing fired yet. Reads no real data. */
     try {
       if (new URLSearchParams(window.location.search).get('demo') === 'proof') {
-        setCards(SAMPLE_CARDS)
+        setCards(SAMPLE_CARDS); setExamples(true); setLoaded(true)
         return
       }
     } catch { /* no window */ }
@@ -57,9 +59,11 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
             tone: c.card_type === 'gbp_down' ? 'heads_up' : 'win',
             cta: c.card_type === 'gbp_down' ? { label: 'Plan the push', href: '/campaigns/new' } : undefined,
           }))
-        setCards(mapped)
+        if (mapped.length) { setCards(mapped); setExamples(false) }
+        else { setCards(SAMPLE_CARDS); setExamples(true) }
+        setLoaded(true)
       })
-      .catch(() => { /* silence is the failure mode */ })
+      .catch(() => { if (alive) { setCards(SAMPLE_CARDS); setExamples(true); setLoaded(true) } })
     return () => { alive = false }
   }, [clientId])
 
@@ -83,11 +87,13 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [front?.id])
 
-  if (!front) return null
+  if (!loaded || !front) return null
   return (
     <div style={{ padding: '0 18px', marginBottom: 18 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: mute }}>Results</span>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: mute }}>
+          {examples ? 'Examples · your results land here' : 'Results'}
+        </span>
         <span style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
           {cards.length > 1 && (
             <button
@@ -108,7 +114,10 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
               <ProofCard
                 card={c}
                 defaultOpen
-                onDismiss={() => { act(c.id, 'dismiss'); setCards((prev) => prev.filter((x) => x.id !== c.id)) }}
+                onDismiss={() => {
+                  if (examples) { setStep((p) => (p + 1) % cards.length); return }
+                  act(c.id, 'dismiss'); setCards((prev) => prev.filter((x) => x.id !== c.id))
+                }}
               />
             ) : (
               <div style={{ background: '#fff', borderRadius: 16, height: '100%', boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07)' }} />
