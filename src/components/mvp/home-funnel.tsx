@@ -1218,7 +1218,7 @@ export function HomeFunnelSkeleton({ height = 620, message = 'Importing your num
    * that gently cycles. Pure CSS, honors prefers-reduced-motion, both themes
    * (green is #4abd98 in each, so the fixed-alpha glows hold). */
   const spine = [56, 44, 34, 26]
-  const cycle = [message, 'Reading your Google profile', 'Shaping your funnel']
+  const cycle = ['Reading your Google profile', 'Shaping your funnel', 'Almost there']
   return (
     <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', boxSizing: 'border-box', overflow: 'hidden' }}>
       <style>{`
@@ -1231,7 +1231,7 @@ export function HomeFunnelSkeleton({ height = 620, message = 'Importing your num
 .hf-sk-hero{animation:hfSkBreathe 3.2s ease-in-out infinite}
 .hf-sk-ring{animation:hfSkRing 2.8s linear infinite}
 .hf-sk-flow{animation:hfSkFlow 2.2s ease-in-out infinite}
-.hf-sk-line{animation:hfSkCycle 9s ease-in-out infinite;position:absolute;left:0;right:0;top:0;text-align:center}
+.hf-sk-line{animation:hfSkCycle 9s ease-in-out infinite both;position:absolute;left:0;right:0;top:0;text-align:center}
 @media (prefers-reduced-motion: reduce){
   .hf-sk-in,.hf-sk-hero,.hf-sk-ring,.hf-sk-flow{animation:none}
   .hf-sk-flow{opacity:.6}
@@ -1276,6 +1276,36 @@ export function HomeFunnelSkeleton({ height = 620, message = 'Importing your num
           {cycle.map((line, i) => (
             <span key={i} className="hf-sk-line" style={{ animationDelay: `${i * 3}s` }}>{line}</span>
           ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * HomeFunnelEmpty — the dashboard with nothing in it yet. The funnel's shape
+ * stays on screen (still, dimmed) so the page reads as a dashboard, and the
+ * one thing that fills it sits where the numbers will: connect an account.
+ */
+export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
+  const { C } = useMvpTheme()
+  const spine = [56, 44, 34, 26]
+  return (
+    <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', boxSizing: 'border-box', overflow: 'hidden', position: 'relative' }}>
+      <div aria-hidden style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', opacity: 0.45 }}>
+        <div style={{ width: 88, height: 88, borderRadius: '50%', border: `1.5px solid ${C.greenLine}`, background: `radial-gradient(circle at 32% 26%, rgba(255,255,255,.6), ${C.greenSoft} 62%)` }} />
+        {spine.map((d, i) => (
+          <React.Fragment key={i}>
+            <div style={{ width: 1.5, height: 13, background: `linear-gradient(${C.greenLine}, transparent)` }} />
+            <div style={{ width: d, height: d, borderRadius: '50%', border: `1.5px solid ${C.greenLine}`, background: `radial-gradient(circle at 34% 28%, rgba(255,255,255,.5), ${C.greenSoft} 62%)` }} />
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{ position: 'absolute', left: 18, right: 18, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+        <div style={{ background: C.card, borderRadius: 20, padding: '20px 18px', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.10)', maxWidth: 340 }}>
+          <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: C.ink }}>Your numbers show here</div>
+          <div style={{ fontSize: 14, color: C.mute, marginTop: 6, lineHeight: 1.5 }}>Connect your Google Business Profile and this fills with real calls, directions and reviews. Never made-up numbers.</div>
+          <a href="/dashboard/connected-accounts" style={{ display: 'inline-block', marginTop: 14, padding: '12px 22px', borderRadius: 99, background: 'linear-gradient(135deg, #4abd98, #2e9a78)', color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none', boxShadow: '0 8px 22px rgba(74,189,152,.34)' }}>Connect accounts</a>
         </div>
       </div>
     </div>
@@ -1348,10 +1378,12 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
     // is never blank. Once the load settles empty, this yields to Home's
     // connect card (onVisibility fired 'empty' above).
     if (clientId && loading) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelSkeleton height={height} /></div>
-    return null
+    // Settled empty: the dashboard stays a dashboard, with the connect prompt
+    // sitting where the numbers will land (owner call 2026-09-02).
+    return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
   }
-  // never shown anything yet AND this window is empty → let Home render its Day-0 body
-  if (data.views.total <= 0 && !everShown.current) return null
+  // never shown anything yet AND this window is empty → the empty dashboard
+  if (data.views.total <= 0 && !everShown.current) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
       <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />

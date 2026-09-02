@@ -258,21 +258,6 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
           <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} /></>
         </div>
 
-        {/* NO GOOGLE DATA — the funnel hid, so say so honestly and give the fix.
-            Never a blank screen, never invented numbers. Lives OUTSIDE the parked
-            home body: with the funnel as the whole home, a zero-data account
-            would otherwise land on an empty page right after onboarding. */}
-        {funnelVis === 'empty' && (
-          <Link href="/dashboard/connected-accounts" className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 18, padding: '16px 15px', marginTop: 16, marginBottom: 4, textDecoration: 'none', color: 'inherit', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
-            <div style={{ width: 42, height: 42, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plug size={20} color={C.greenDk} /></div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 14.5, color: C.ink }}>Your numbers show here</div>
-              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.45 }}>Connect your Google Business Profile and this page fills with real numbers. We never show made-up ones.</div>
-            </div>
-            <ChevronRight size={17} color={C.faint} />
-          </Link>
-        )}
-
         {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
             the owner. Flip the flag to bring back the suggestions, orders, and
             quick links. */}
