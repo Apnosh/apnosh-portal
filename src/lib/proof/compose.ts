@@ -46,14 +46,15 @@ async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date
    * dip. So the window ends the day AFTER the latest day Google has given us
    * (never later than today). */
   const today = new Date(now); today.setUTCHours(0, 0, 0, 0)
-  const { data: latest } = await admin
+  // NOTE: SQL `neq` drops NULL location_id rows, so demo rows are excluded in
+  // JS here (most clients' rows carry no location id at all).
+  const { data: latestRows } = await admin
     .from('gbp_metrics')
-    .select('date')
+    .select('date, location_id')
     .eq('client_id', clientId)
-    .neq('location_id', 'demo-proof')
     .order('date', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    .limit(10)
+  const latest = (latestRows ?? []).find((r) => r.location_id !== 'demo-proof')
   let end = today
   if (latest?.date) {
     const d = new Date(`${String(latest.date)}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)
@@ -366,8 +367,8 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
     admin.from('proof_cards').select('card_type, fired_at')
       .eq('client_id', clientId).in('card_type', ['gbp_week', 'gbp_down'])
       .gte('fired_at', new Date(now.getTime() - 7 * 86400e3).toISOString()).limit(1),
-    admin.from('gbp_metrics').select('id', { count: 'exact', head: true })
-      .eq('client_id', clientId).neq('location_id', 'demo-proof').gte('date', iso(ninetyAgo)),
+    admin.from('gbp_metrics').select('location_id')
+      .eq('client_id', clientId).gte('date', iso(ninetyAgo)).limit(200),
     admin.from('reviews').select('created_at').eq('client_id', clientId)
       .order('created_at', { ascending: true }).limit(1).maybeSingle(),
   ])
@@ -456,9 +457,10 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
     })
   }
 
+  const realGbpRows = (anyGbpRows.data ?? []).filter((r) => r.location_id !== 'demo-proof').length
   // Google went quiet: rows exist but the newest is more than 5 days old —
   // the sync is broken (token, permissions), not the business.
-  if ((anyGbpRows.count ?? 0) > 0 && w.latestDate) {
+  if (realGbpRows > 0 && w.latestDate) {
     const ageDays = Math.floor((now.getTime() - new Date(`${w.latestDate}T00:00:00Z`).getTime()) / 86400e3)
     if (ageDays > 5) {
       out.push({
@@ -472,7 +474,7 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
 
   // no Google data at all (setup): rows would exist if the listing were linked,
   // even for a quiet listing — so this means genuinely not connected.
-  if ((anyGbpRows.count ?? 0) === 0) {
+  if (realGbpRows === 0) {
     out.push({
       card_key: `state-connect-google`, card_type: 'connect_google',
       label: 'Get set up',
