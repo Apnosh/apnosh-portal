@@ -38,6 +38,8 @@ interface GbpWindows {
   curDays: number
   priorDays: number
   latestDate: string | null
+  /** newest Google day is within 10 days of now: the numbers are current */
+  fresh: boolean
 }
 
 async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date): Promise<GbpWindows> {
@@ -68,7 +70,9 @@ async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date
     .eq('client_id', clientId)
     .gte('date', iso(priorStart))
     .lt('date', iso(end))
-  const w: GbpWindows = { cur: { directions: 0, calls: 0 }, prior: { directions: 0, calls: 0 }, daily: new Map(), hasDemo: false, curStart, curDays: 0, priorDays: 0, latestDate: latest?.date ? String(latest.date) : null }
+  const latestDate = latest?.date ? String(latest.date) : null
+  const fresh = !!latestDate && (today.getTime() - new Date(`${latestDate}T00:00:00Z`).getTime()) <= 10 * 86400e3
+  const w: GbpWindows = { cur: { directions: 0, calls: 0 }, prior: { directions: 0, calls: 0 }, daily: new Map(), hasDemo: false, curStart, curDays: 0, priorDays: 0, latestDate, fresh }
   const curDays = new Set<string>(), priorDays = new Set<string>()
   for (const r of rows ?? []) {
     if (r.location_id === 'demo-proof') w.hasDemo = true
@@ -91,7 +95,7 @@ async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date
 /** Both windows need real coverage (5 of 7 days each) before any Google
  *  card may speak. A half-synced week is silence, not a signal. */
 function gbpCovered(w: GbpWindows): boolean {
-  return w.curDays >= 5 && w.priorDays >= 5
+  return w.curDays >= 5 && w.priorDays >= 5 && w.fresh
 }
 
 /** True when a card of this type fired for the client within N days. */
@@ -368,7 +372,7 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
       .eq('client_id', clientId).in('card_type', ['gbp_week', 'gbp_down'])
       .gte('fired_at', new Date(now.getTime() - 7 * 86400e3).toISOString()).limit(1),
     admin.from('gbp_metrics').select('location_id')
-      .eq('client_id', clientId).gte('date', iso(ninetyAgo)).limit(200),
+      .eq('client_id', clientId).limit(200),
     admin.from('reviews').select('created_at').eq('client_id', clientId)
       .order('created_at', { ascending: true }).limit(1).maybeSingle(),
   ])
@@ -458,8 +462,8 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
   }
 
   const realGbpRows = (anyGbpRows.data ?? []).filter((r) => r.location_id !== 'demo-proof').length
-  // Google went quiet: rows exist but the newest is more than 5 days old —
-  // the sync is broken (token, permissions), not the business.
+  // Google went quiet: the client HAD data once but the newest day is more
+  // than 5 days old — the sync is broken (token, permissions), not the business.
   if (realGbpRows > 0 && w.latestDate) {
     const ageDays = Math.floor((now.getTime() - new Date(`${w.latestDate}T00:00:00Z`).getTime()) / 86400e3)
     if (ageDays > 5) {
