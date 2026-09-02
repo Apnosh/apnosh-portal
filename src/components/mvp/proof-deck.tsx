@@ -120,7 +120,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
                 }}
               />
             ) : (
-              <div style={{ borderRadius: 20, height: '100%', background: c.tone === 'heads_up' ? 'linear-gradient(180deg, #fffdf9, #f6f2ea)' : 'linear-gradient(180deg, #f6fbf8, #e9f5ef)', boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)' }} />
+              <div style={{ borderRadius: 18, height: '100%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)' }} />
             )}
           </div>
         ))}
