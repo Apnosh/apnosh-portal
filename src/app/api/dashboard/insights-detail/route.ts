@@ -142,13 +142,15 @@ export async function GET(req: NextRequest) {
       actions: chg(t.directions + t.calls, p.directions + p.calls),
       orders: chg(t.directions, p.directions), // Orders = directions × rate → its % equals the directions %
     }
-    // the same comparison as COUNTS ("+1,920"), so the tick can say how many more, not just how much more
-    const dif = (cur: number, prev: number) => (prev > 0 ? cur - prev : null)
+    // the +/- COUNT beside each number compares the PRIOR period (the same length, ending the day
+    // before this window began), so it moves every morning as the window slides
+    const q = gbp.value.priorTotals
+    const dif = (cur: number, prior: number) => (prior > 0 ? cur - prior : null)
     yoyAbs = {
-      awareness: dif(t.impressions, p.impressions),
-      interest: dif(t.directions + t.calls + t.websiteClicks, p.directions + p.calls + p.websiteClicks),
-      actions: dif(t.directions + t.calls, p.directions + p.calls),
-      orders: dif(t.directions, p.directions), // raw directions delta; the funnel applies the walk-in rate
+      awareness: dif(t.impressions, q.impressions),
+      interest: dif(t.directions + t.calls + t.websiteClicks, q.directions + q.calls + q.websiteClicks),
+      actions: dif(t.directions + t.calls, q.directions + q.calls),
+      orders: dif(t.directions, q.directions), // raw directions delta; the funnel applies the walk-in rate
     }
   }
 

@@ -52,6 +52,9 @@ export interface AnalyticsSummary {
   /* Totals for the SAME calendar window one year ago (YoY). Restaurants
      are seasonal, so YoY is more meaningful than prior-period. */
   prevTotals: AnalyticsSummary['totals']
+  /** the window of the same length that ended the day before this one began — the
+      "previous period" a daily check can feel move, unlike the year-ago window */
+  priorTotals: AnalyticsSummary['totals']
   /* Where impressions came from across the window — Search vs Maps,
      Mobile vs Desktop. Each is a sum of impressions over the window. */
   impressionBreakdown: {
@@ -161,6 +164,11 @@ export async function getGbpAnalytics(
   prevStartDate.setUTCFullYear(prevStartDate.getUTCFullYear() - 1)
   const prevEndDate = new Date(endDate)
   prevEndDate.setUTCFullYear(prevEndDate.getUTCFullYear() - 1)
+  /* The PRIOR period — same length, ending the day before this window starts. Home's +/-
+     count uses this one, so the tick moves every morning as the window slides. */
+  const windowDays = Math.round((endDate.getTime() - startDate.getTime()) / 86400000) + 1
+  const priorEndDate = new Date(startDate); priorEndDate.setUTCDate(priorEndDate.getUTCDate() - 1)
+  const priorStartDate = new Date(priorEndDate); priorStartDate.setUTCDate(priorStartDate.getUTCDate() - (windowDays - 1))
 
   /* Supabase / PostgREST caps row results at 1000 server-side
      regardless of .limit(). Paginate with .range() so the full
@@ -199,7 +207,7 @@ export async function getGbpAnalytics(
   }
   type PrevRow = Omit<CurrRow, 'date' | 'top_queries' | 'impressions_search_mobile' | 'impressions_search_desktop' | 'impressions_maps_mobile' | 'impressions_maps_desktop'>
 
-  const [currData, prevData] = await Promise.all([
+  const [currData, prevData, priorData] = await Promise.all([
     fetchAllPaged<CurrRow>((from, to) => {
       let q = admin
         .from('gbp_metrics')
@@ -223,10 +231,22 @@ export async function getGbpAnalytics(
       if (metricsLocationId) q = q.eq('location_id', metricsLocationId)
       return q.then(r => ({ data: r.data as PrevRow[] | null }))
     }),
+    fetchAllPaged<PrevRow>((from, to) => {
+      let q = admin
+        .from('gbp_metrics')
+        .select('impressions_total, directions, calls, website_clicks, post_views, post_clicks, photo_views, conversations, bookings, food_orders, food_menu_clicks, search_views')
+        .eq('client_id', clientId)
+        .gte('date', ymd(priorStartDate))
+        .lte('date', ymd(priorEndDate))
+        .range(from, to)
+      if (metricsLocationId) q = q.eq('location_id', metricsLocationId)
+      return q.then(r => ({ data: r.data as PrevRow[] | null }))
+    }),
   ])
 
   const currRes = { data: currData }
   const prevRes = { data: prevData }
+  const priorRes = { data: priorData }
 
   const dailyByDate = new Map<string, DailyPoint>()
   const impressionBreakdown = {
@@ -310,7 +330,7 @@ export async function getGbpAnalytics(
       foodMenuClicks: acc.foodMenuClicks + (r.food_menu_clicks ?? 0),
     }), emptyTotals())
 
-  const prevTotals = ((prevRes.data ?? []) as PrevRow[]).reduce<AnalyticsSummary['totals']>((acc, r) => ({
+  const sumRows = (rows: PrevRow[]) => rows.reduce<AnalyticsSummary['totals']>((acc, r) => ({
     impressions: acc.impressions + (r.impressions_total ?? r.search_views ?? 0),
     directions: acc.directions + (r.directions ?? 0),
     calls: acc.calls + (r.calls ?? 0),
@@ -323,6 +343,8 @@ export async function getGbpAnalytics(
     foodOrders: acc.foodOrders + (r.food_orders ?? 0),
     foodMenuClicks: acc.foodMenuClicks + (r.food_menu_clicks ?? 0),
   }), emptyTotals())
+  const prevTotals = sumRows((prevRes.data ?? []) as PrevRow[])
+  const priorTotals = sumRows((priorRes.data ?? []) as PrevRow[])
 
   return {
     range,
@@ -331,6 +353,7 @@ export async function getGbpAnalytics(
     daily,
     totals,
     prevTotals,
+    priorTotals,
     impressionBreakdown,
     topQueries,
   }
