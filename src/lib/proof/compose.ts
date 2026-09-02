@@ -61,12 +61,29 @@ async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date
   return w
 }
 
+/** True when a card of this type fired for the client within N days. */
+async function firedWithin(admin: SupabaseClient, clientId: string, type: string, days: number, now: Date): Promise<boolean> {
+  const since = new Date(now); since.setUTCDate(since.getUTCDate() - days)
+  const { count } = await admin
+    .from('proof_cards')
+    .select('id', { count: 'exact', head: true })
+    .eq('client_id', clientId)
+    .eq('card_type', type)
+    .gte('fired_at', since.toISOString())
+  return (count ?? 0) > 0
+}
+
 /** R-01 — "This week on Google": last 7 full days vs the 7 before. */
 export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
   const w = await readGbpWindows(admin, clientId, now)
   const curTotal = w.cur.directions + w.cur.calls
   const priorTotal = w.prior.directions + w.prior.calls
-  if (curTotal === 0 || curTotal <= priorTotal) return null
+  // A win is a REAL rise: 10%+ over the prior week with at least 5 actions
+  // (a first tracked week counts once it reaches 5). Not "+1".
+  if (curTotal < 5) return null
+  if (priorTotal > 0 && curTotal < priorTotal * 1.10) return null
+  // The composer runs nightly on a rolling window: one Google win per 7 days.
+  if (await firedWithin(admin, clientId, 'gbp_week', 7, now)) return null
 
   const spark: number[] = []
   for (let i = 0; i < 7; i++) {
@@ -121,14 +138,9 @@ export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, n
   if (priorTotal < 20) return null
   if (curTotal >= priorTotal * 0.75) return null
 
-  const twoWeeksAgo = new Date(now); twoWeeksAgo.setUTCDate(twoWeeksAgo.getUTCDate() - 14)
-  const { count } = await admin
-    .from('proof_cards')
-    .select('id', { count: 'exact', head: true })
-    .eq('client_id', clientId)
-    .eq('card_type', 'gbp_down')
-    .gte('fired_at', twoWeeksAgo.toISOString())
-  if ((count ?? 0) > 0) return null
+  if (await firedWithin(admin, clientId, 'gbp_down', 14, now)) return null
+  // Never a down card in the week after a win card either.
+  if (await firedWithin(admin, clientId, 'gbp_week', 7, now)) return null
 
   const parts: string[] = []
   if (w.cur.calls > 0) parts.push(plural(w.cur.calls, 'call'))
@@ -294,7 +306,8 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
   const out: ProofCardRow[] = []
   const sixtyAgo = new Date(now); sixtyAgo.setUTCDate(sixtyAgo.getUTCDate() - 60)
 
-  const [w, reviewsRes, woRes, campRes, recentEvents] = await Promise.all([
+  const ninetyAgo = new Date(now); ninetyAgo.setUTCDate(ninetyAgo.getUTCDate() - 90)
+  const [w, reviewsRes, woRes, campRes, recentEvents, anyGbpRows] = await Promise.all([
     readGbpWindows(admin, clientId, now),
     admin.from('reviews').select('id', { count: 'exact', head: true })
       .eq('client_id', clientId).is('responded_at', null).gte('created_at', sixtyAgo.toISOString()),
@@ -304,6 +317,8 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
     admin.from('proof_cards').select('card_type, fired_at')
       .eq('client_id', clientId).in('card_type', ['gbp_week', 'gbp_down'])
       .gte('fired_at', new Date(now.getTime() - 7 * 86400e3).toISOString()).limit(1),
+    admin.from('gbp_metrics').select('id', { count: 'exact', head: true })
+      .eq('client_id', clientId).neq('location_id', 'demo-proof').gte('date', iso(ninetyAgo)),
   ])
 
   const curTotal = w.cur.directions + w.cur.calls
@@ -336,7 +351,7 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
   // steady week (only when no win/down card spoke this week)
   if (hasGoogleData && curTotal > 0 && !eventThisWeek && !w.hasDemo) {
     const ratio = priorTotal > 0 ? curTotal / priorTotal : 1
-    if (ratio >= 0.75 && ratio <= 1.25) {
+    if (ratio >= 0.75 && ratio < 1.10) {
       const parts: string[] = []
       if (w.cur.calls > 0) parts.push(plural(w.cur.calls, 'call'))
       parts.push(`${w.cur.directions} direction tap${w.cur.directions === 1 ? '' : 's'}`)
@@ -359,8 +374,9 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
     })
   }
 
-  // no Google data at all (setup)
-  if (!hasGoogleData) {
+  // no Google data at all (setup): rows would exist if the listing were linked,
+  // even for a quiet listing — so this means genuinely not connected.
+  if ((anyGbpRows.count ?? 0) === 0) {
     out.push({
       card_key: `state-connect-google`, card_type: 'connect_google',
       label: 'Get set up',
