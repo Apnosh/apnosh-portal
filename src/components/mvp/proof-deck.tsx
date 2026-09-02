@@ -18,12 +18,27 @@ function deckDepth(pos: number): React.CSSProperties {
   return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(18px) scaleX(0.865)', opacity: 0, pointerEvents: 'none' }
 }
 
+const SAMPLE_CARDS: ProofCardData[] = [
+  { id: 'sample-gbp', label: 'Sample · this week on Google', big: '9 calls · 31 direction taps', context: 'Up from 4 calls and 12 taps the week before.', attribution: 'Since your menu photos went live, Aug 21.', spark: [9, 12, 10, 13, 17, 22, 31] },
+  { id: 'sample-post', label: 'Sample · your galbi reel', big: '2,418 people saw it', context: '86 saved or shared it.', attribution: 'You approved it Monday. It published Tuesday at 5 pm.' },
+  { id: 'sample-reviews', label: 'Sample · August reviews', big: '6 new reviews · 4.7 average', context: 'Every one got a reply within a day.', attribution: 'Since the review kit went up by your register, Aug 2.' },
+  { id: 'sample-down', label: 'Sample · quieter week on Google', big: '3 calls · 14 direction taps', context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
+]
+
 export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: string; mute?: string }) {
   const [cards, setCards] = useState<ProofCardData[]>([])
   const [step, setStep] = useState(0)
   const readMarked = useRef<Set<string>>(new Set())
 
   useEffect(() => {
+    /* ?demo=proof shows the four sample cards (labeled) so the placement can
+     * be judged on an account with nothing fired yet. Reads no real data. */
+    try {
+      if (new URLSearchParams(window.location.search).get('demo') === 'proof') {
+        setCards(SAMPLE_CARDS)
+        return
+      }
+    } catch { /* no window */ }
     if (!clientId) return
     let alive = true
     fetch(`/api/dashboard/proof?clientId=${clientId}&list=1`)
@@ -49,7 +64,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
   }, [clientId])
 
   const act = (id: string, action: 'read' | 'dismiss') => {
-    if (!clientId) return
+    if (!clientId || id.startsWith('sample-')) return
     void fetch('/api/dashboard/proof', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientId, id, action }),
