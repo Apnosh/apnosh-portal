@@ -11,7 +11,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
-import { evalGbpWeek } from '@/lib/proof/compose'
+import { evalGbpWeek, computeStateCards } from '@/lib/proof/compose'
+import { presentCardType } from '@/lib/proof/present'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +45,7 @@ export async function GET(req: NextRequest) {
 
   const admin0 = adminDb()
   const wantList = new URL(req.url).searchParams.get('list') === '1'
+  const wantState = new URL(req.url).searchParams.get('state') === '1'
 
   // Table-first: fired cards are the source of truth once migration 249 ran.
   {
@@ -56,7 +58,11 @@ export async function GET(req: NextRequest) {
     const { data: cards, error } = wantList ? await q.limit(60) : await q.is('dismissed_at', null).gte('fired_at', weekAgo.toISOString()).limit(1)
     if (!error) {
       if (wantList) {
-        return NextResponse.json({ cards: cards ?? [] }, { headers: { 'Cache-Control': 'no-store' } })
+        const stored = (cards ?? []).map((c) => ({ ...c, ...presentCardType(String(c.card_type)) }))
+        if (!wantState) return NextResponse.json({ cards: stored }, { headers: { 'Cache-Control': 'no-store' } })
+        const states = (await computeStateCards(admin0, clientId, new Date()).catch(() => []))
+          .map((c) => ({ ...c, id: c.card_key, fired_at: new Date().toISOString(), is_state: true, ...presentCardType(c.card_type) }))
+        return NextResponse.json({ cards: [...stored, ...states] }, { headers: { 'Cache-Control': 'no-store' } })
       }
       const c = cards?.[0]
       if (!c) return NextResponse.json({ card: null }, { headers: { 'Cache-Control': 'no-store' } })
@@ -66,13 +72,18 @@ export async function GET(req: NextRequest) {
           attribution: c.attribution ?? undefined,
           spark: Array.isArray(c.spark) ? c.spark : undefined,
           firedAt: c.fired_at,
-          tone: c.card_type === 'gbp_down' ? 'heads_up' : 'win',
-          cta: c.card_type === 'gbp_down' ? { label: 'Plan the push', href: '/campaigns/new' } : undefined,
+          ...presentCardType(String(c.card_type)),
         },
       }, { headers: { 'Cache-Control': 'no-store' } })
     }
     // Table missing (migration 249 not run): fall through to compute-on-read.
-    if (wantList) return NextResponse.json({ cards: [], pending: 'migration 249' }, { headers: { 'Cache-Control': 'no-store' } })
+    if (wantList) {
+      const states = wantState
+        ? (await computeStateCards(admin0, clientId, new Date()).catch(() => []))
+            .map((c) => ({ ...c, id: c.card_key, fired_at: new Date().toISOString(), is_state: true, ...presentCardType(c.card_type) }))
+        : []
+      return NextResponse.json({ cards: states, pending: 'migration 249' }, { headers: { 'Cache-Control': 'no-store' } })
+    }
   }
 
   const live = await evalGbpWeek(admin0, clientId, new Date())

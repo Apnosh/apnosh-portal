@@ -35,6 +35,11 @@ const SAMPLES = [
     tone: 'heads_up' as const,
     cta: { label: 'Plan the push', href: '/campaigns/new' },
   },
+  { id: 'sample-steady', label: 'This week on Google', big: '5 calls · 22 direction taps', context: 'About the same as last week. Steady is good; a push turns steady into growth.', tone: 'heads_up' as const },
+  { id: 'sample-coming', label: 'Coming up', big: '3 pieces in production', context: 'Your team is on them. Each one lands here when it is ready.', tone: 'heads_up' as const, cta: { label: 'See what is coming', href: '/dashboard/campaigns' } },
+  { id: 'sample-waiting', label: 'Reviews', big: '2 reviews waiting for a reply', context: 'A quick reply keeps your rating climbing and shows Google you are listening.', tone: 'heads_up' as const, cta: { label: 'Reply now', href: '/dashboard/inbox' } },
+  { id: 'sample-start', label: 'Grow', big: 'Start your first campaign', context: 'A plan built from your numbers, ready in a few minutes.', tone: 'heads_up' as const, cta: { label: 'Start a campaign', href: '/campaigns/new' } },
+  { id: 'sample-connect', label: 'Get set up', big: 'Connect Google to see your numbers', context: 'Calls, directions and reviews show up here once your listing is linked.', tone: 'heads_up' as const, cta: { label: 'Connect Google', href: '/dashboard/connected-accounts' } },
 ]
 
 export default function ProofPreviewPage() {
@@ -46,13 +51,13 @@ export default function ProofPreviewPage() {
           <span style={{ fontSize: 12, color: '#6e6e73' }}>Sample numbers. Nothing saves.</span>
         </div>
         <p style={{ fontSize: 12.5, color: '#8e8e93', margin: '0 0 18px' }}>
-          Cards land in the results deck on your Insights screen, right under the histogram, and in your inbox. These are the four types.
+          Cards land in the results deck on your Insights screen, right under the histogram. Wins are stored and can notify you; the gray ones describe where you are right now, so the deck always has something true to say.
         </p>
         {SAMPLES.map((c) => (
           <ProofCard key={c.id} card={c} defaultOpen onDismiss={() => { /* preview: stays */ }} onSee={() => { /* preview: noop */ }} />
         ))}
         <p style={{ fontSize: 11.5, color: '#aeaeb2', marginTop: 14 }}>
-          Green numbers are wins. The gray one is the quieter-week card: it only fires on a real drop, at most every two weeks, and always carries the move. Until a client{'\u2019'}s first real card fires, the deck shows labeled examples like these.
+          Green numbers are wins. Gray cards are heads-ups and where-you-are cards; the quieter week only fires on a real drop, at most every two weeks, and always carries the move.
         </p>
       </div>
     </div>

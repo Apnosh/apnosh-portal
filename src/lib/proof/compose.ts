@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface ProofCardRow {
   card_key: string
-  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down'
+  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google'
   label: string
   big: string
   context: string
@@ -276,4 +276,98 @@ export async function composeForClient(admin: SupabaseClient, clientId: string, 
     // 23505 = already fired earlier; 23514 = card_type check pre-migration-250
   }
   return fired
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * STATE CARDS — computed on every read, never stored, never notified.
+ * They describe where the business IS right now, so the deck always has
+ * something true to say no matter how the numbers are moving:
+ *   steady          a Google week within ±25% of the last one (no event fired)
+ *   coming_up       work in production for this client
+ *   reviews_waiting reviews without a reply
+ *   start_campaign  nothing has ever shipped
+ *   connect_google  no Google data at all
+ * Order below is the deck's priority after event cards.
+ * ───────────────────────────────────────────────────────────────────────── */
+export async function computeStateCards(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow[]> {
+  const out: ProofCardRow[] = []
+  const sixtyAgo = new Date(now); sixtyAgo.setUTCDate(sixtyAgo.getUTCDate() - 60)
+
+  const [w, reviewsRes, woRes, campRes, recentEvents] = await Promise.all([
+    readGbpWindows(admin, clientId, now),
+    admin.from('reviews').select('id', { count: 'exact', head: true })
+      .eq('client_id', clientId).is('responded_at', null).gte('created_at', sixtyAgo.toISOString()),
+    admin.from('service_work_orders').select('id, title, status')
+      .eq('client_id', clientId).in('status', ['queued', 'claimed', 'in_progress', 'ready_for_client']).limit(5),
+    admin.from('campaigns').select('id', { count: 'exact', head: true }).eq('client_id', clientId),
+    admin.from('proof_cards').select('card_type, fired_at')
+      .eq('client_id', clientId).in('card_type', ['gbp_week', 'gbp_down'])
+      .gte('fired_at', new Date(now.getTime() - 7 * 86400e3).toISOString()).limit(1),
+  ])
+
+  const curTotal = w.cur.directions + w.cur.calls
+  const priorTotal = w.prior.directions + w.prior.calls
+  const hasGoogleData = curTotal + priorTotal > 0
+  const eventThisWeek = (recentEvents.data ?? []).length > 0
+
+  // reviews waiting (action)
+  const waiting = reviewsRes.count ?? 0
+  if (waiting > 0) {
+    out.push({
+      card_key: `state-reviews-waiting`, card_type: 'reviews_waiting',
+      label: 'Reviews',
+      big: `${waiting} review${waiting === 1 ? '' : 's'} waiting for a reply`,
+      context: 'A quick reply keeps your rating climbing and shows Google you are listening.',
+    })
+  }
+
+  // coming up (anticipation)
+  const inFlight = woRes.data ?? []
+  if (inFlight.length > 0) {
+    out.push({
+      card_key: `state-coming-up`, card_type: 'coming_up',
+      label: 'Coming up',
+      big: inFlight.length === 1 ? String(inFlight[0].title) : `${inFlight.length} pieces in production`,
+      context: inFlight.length === 1 ? 'Your team is on it. It lands here when it is ready.' : 'Your team is on them. Each one lands here when it is ready.',
+    })
+  }
+
+  // steady week (only when no win/down card spoke this week)
+  if (hasGoogleData && curTotal > 0 && !eventThisWeek && !w.hasDemo) {
+    const ratio = priorTotal > 0 ? curTotal / priorTotal : 1
+    if (ratio >= 0.75 && ratio <= 1.25) {
+      const parts: string[] = []
+      if (w.cur.calls > 0) parts.push(plural(w.cur.calls, 'call'))
+      parts.push(`${w.cur.directions} direction tap${w.cur.directions === 1 ? '' : 's'}`)
+      out.push({
+        card_key: `state-steady-${iso(w.curStart)}`, card_type: 'steady',
+        label: 'This week on Google',
+        big: parts.join(' · '),
+        context: 'About the same as last week. Steady is good; a push turns steady into growth.',
+      })
+    }
+  }
+
+  // nothing shipped yet (growth nudge)
+  if ((campRes.count ?? 0) === 0) {
+    out.push({
+      card_key: `state-start-campaign`, card_type: 'start_campaign',
+      label: 'Grow',
+      big: 'Start your first campaign',
+      context: 'A plan built from your numbers, ready in a few minutes.',
+    })
+  }
+
+  // no Google data at all (setup)
+  if (!hasGoogleData) {
+    out.push({
+      card_key: `state-connect-google`, card_type: 'connect_google',
+      label: 'Get set up',
+      big: 'Connect Google to see your numbers',
+      context: 'Calls, directions and reviews show up here once your listing is linked.',
+    })
+  }
+
+  return out
 }

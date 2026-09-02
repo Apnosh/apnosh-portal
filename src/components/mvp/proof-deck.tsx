@@ -13,9 +13,9 @@ import ProofCard, { type ProofCardData } from './proof-card'
 
 function deckDepth(pos: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, opacity: 1 }
-  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(6px) scaleX(0.955)', opacity: 1 }
-  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(12px) scaleX(0.91)', opacity: 1 }
-  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(18px) scaleX(0.865)', opacity: 0, pointerEvents: 'none' }
+  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(4px) scaleX(0.97)', opacity: 1 }
+  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(8px) scaleX(0.94)', opacity: 1 }
+  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(12px) scaleX(0.91)', opacity: 0, pointerEvents: 'none' }
 }
 
 const SAMPLE_CARDS: ProofCardData[] = [
@@ -23,6 +23,7 @@ const SAMPLE_CARDS: ProofCardData[] = [
   { id: 'example-post', label: 'Example · a post that landed', big: '2,418 people saw it', context: '86 saved or shared it.', attribution: 'You approved it Monday. It published Tuesday at 5 pm.' },
   { id: 'example-reviews', label: 'Example · a review month', big: '6 new reviews · 4.7 average', context: 'Every one got a reply within a day.', attribution: 'Since the review kit went up by your register, Aug 2.' },
   { id: 'example-down', label: 'Example · a quieter week', big: '3 calls · 14 direction taps', context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
+  { id: 'example-start', label: 'Example · grow', big: 'Start your first campaign', context: 'A plan built from your numbers, ready in a few minutes.', tone: 'heads_up', cta: { label: 'Start a campaign', href: '/campaigns/new' } },
 ]
 
 export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: string; mute?: string }) {
@@ -43,12 +44,21 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
     } catch { /* no window */ }
     if (!clientId) return
     let alive = true
-    fetch(`/api/dashboard/proof?clientId=${clientId}&list=1`)
+    fetch(`/api/dashboard/proof?clientId=${clientId}&list=1&state=1`)
       .then((r) => r.json())
       .then((j) => {
         if (!alive || !Array.isArray(j?.cards)) return
+        const hidden = (id: string) => {
+          try {
+            const raw = localStorage.getItem(`proof-hide-${id}`)
+            if (!raw) return false
+            const ts = Number(raw)
+            return Number.isFinite(ts) ? Date.now() - ts < 7 * 86400e3 : true
+          } catch { return false }
+        }
         const mapped: ProofCardData[] = (j.cards as Array<Record<string, unknown>>)
           .filter((c) => !c.dismissed_at)
+          .filter((c) => !hidden(String(c.card_key ?? c.id)))
           .slice(0, 5)
           .map((c) => ({
             id: String(c.card_key ?? c.id),
@@ -56,8 +66,8 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
             attribution: (c.attribution as string) ?? undefined,
             spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
             firedAt: (c.fired_at as string) ?? undefined,
-            tone: c.card_type === 'gbp_down' ? 'heads_up' : 'win',
-            cta: c.card_type === 'gbp_down' ? { label: 'Plan the push', href: '/campaigns/new' } : undefined,
+            tone: (c.tone as ProofCardData['tone']) ?? 'win',
+            cta: (c.cta as ProofCardData['cta']) ?? undefined,
           }))
         if (mapped.length) { setCards(mapped); setExamples(false) }
         else { setCards(SAMPLE_CARDS); setExamples(true) }
@@ -69,6 +79,11 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
 
   const act = (id: string, action: 'read' | 'dismiss') => {
     if (!clientId || id.startsWith('example-')) return
+    // State cards are not stored: a dismissal rests on this device for 7 days.
+    if (id.startsWith('state-')) {
+      if (action === 'dismiss') { try { localStorage.setItem(`proof-hide-${id}`, String(Date.now())) } catch { /* storage off */ } }
+      return
+    }
     void fetch('/api/dashboard/proof', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientId, id, action }),
@@ -107,7 +122,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
           <Link href="/dashboard/results" style={{ fontSize: 11.5, fontWeight: 700, color: '#0f6e56', textDecoration: 'none' }}>All</Link>
         </span>
       </div>
-      <div style={{ position: 'relative', paddingBottom: deck.length > 1 ? 14 : 0 }}>
+      <div style={{ position: 'relative', paddingBottom: deck.length > 1 ? 9 : 0 }}>
         {deck.map((c, pos) => (
           <div key={c.id} style={{ ...deckDepth(pos), transformOrigin: 'top center', transition: 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s', height: pos === 0 ? undefined : '100%' }}>
             {pos === 0 ? (
