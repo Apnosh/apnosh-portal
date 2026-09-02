@@ -15,7 +15,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface ProofCardRow {
   card_key: string
-  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google'
+  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'approval_waiting'
   label: string
   big: string
   context: string
@@ -33,10 +33,30 @@ interface GbpWindows {
   daily: Map<string, number>
   hasDemo: boolean
   curStart: Date
+  curDays: number
+  priorDays: number
+  latestDate: string | null
 }
 
 async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date): Promise<GbpWindows> {
-  const end = new Date(now); end.setUTCHours(0, 0, 0, 0)
+  /* Google's performance data lands 2-3 days late. Anchoring the window to
+   * "yesterday" would leave the newest days empty and read every week as a
+   * dip. So the window ends the day AFTER the latest day Google has given us
+   * (never later than today). */
+  const today = new Date(now); today.setUTCHours(0, 0, 0, 0)
+  const { data: latest } = await admin
+    .from('gbp_metrics')
+    .select('date')
+    .eq('client_id', clientId)
+    .neq('location_id', 'demo-proof')
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  let end = today
+  if (latest?.date) {
+    const d = new Date(`${String(latest.date)}T00:00:00Z`); d.setUTCDate(d.getUTCDate() + 1)
+    if (d.getTime() < today.getTime()) end = d
+  }
   const curStart = new Date(end); curStart.setUTCDate(curStart.getUTCDate() - 7)
   const priorStart = new Date(end); priorStart.setUTCDate(priorStart.getUTCDate() - 14)
   const { data: rows } = await admin
@@ -45,7 +65,8 @@ async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date
     .eq('client_id', clientId)
     .gte('date', iso(priorStart))
     .lt('date', iso(end))
-  const w: GbpWindows = { cur: { directions: 0, calls: 0 }, prior: { directions: 0, calls: 0 }, daily: new Map(), hasDemo: false, curStart }
+  const w: GbpWindows = { cur: { directions: 0, calls: 0 }, prior: { directions: 0, calls: 0 }, daily: new Map(), hasDemo: false, curStart, curDays: 0, priorDays: 0, latestDate: latest?.date ? String(latest.date) : null }
+  const curDays = new Set<string>(), priorDays = new Set<string>()
   for (const r of rows ?? []) {
     if (r.location_id === 'demo-proof') w.hasDemo = true
     const d = String(r.date)
@@ -54,11 +75,20 @@ async function readGbpWindows(admin: SupabaseClient, clientId: string, now: Date
     if (d >= iso(curStart)) {
       w.cur.directions += dirs; w.cur.calls += calls
       w.daily.set(d, (w.daily.get(d) ?? 0) + dirs + calls)
+      curDays.add(d)
     } else {
       w.prior.directions += dirs; w.prior.calls += calls
+      priorDays.add(d)
     }
   }
+  w.curDays = curDays.size; w.priorDays = priorDays.size
   return w
+}
+
+/** Both windows need real coverage (5 of 7 days each) before any Google
+ *  card may speak. A half-synced week is silence, not a signal. */
+function gbpCovered(w: GbpWindows): boolean {
+  return w.curDays >= 5 && w.priorDays >= 5
 }
 
 /** True when a card of this type fired for the client within N days. */
@@ -80,8 +110,9 @@ export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: 
   const priorTotal = w.prior.directions + w.prior.calls
   // A win is a REAL rise: 10%+ over the prior week with at least 5 actions
   // (a first tracked week counts once it reaches 5). Not "+1".
-  if (curTotal < 5) return null
-  if (priorTotal > 0 && curTotal < priorTotal * 1.10) return null
+  if (!w.hasDemo && !gbpCovered(w)) return null
+  if (curTotal < 10) return null
+  if (priorTotal > 0 && (curTotal < priorTotal * 1.10 || curTotal - priorTotal < 3)) return null
   // The composer runs nightly on a rolling window: one Google win per 7 days.
   if (await firedWithin(admin, clientId, 'gbp_week', 7, now)) return null
 
@@ -132,7 +163,7 @@ export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: 
  *  data, at most one per 14 days, and never in a week that earned a win. */
 export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, now: Date): Promise<ProofCardRow | null> {
   const w = await readGbpWindows(admin, clientId, now)
-  if (w.hasDemo) return null
+  if (w.hasDemo || !gbpCovered(w)) return null
   const curTotal = w.cur.directions + w.cur.calls
   const priorTotal = w.prior.directions + w.prior.calls
   if (priorTotal < 20) return null
@@ -187,14 +218,23 @@ export async function evalPost(admin: SupabaseClient, clientId: string, now: Dat
     .filter((p) => p.reach > 0)
   if (parsed.length < 4) return null
 
-  // Candidate: newest post published 72h+ ago, within the last 30 days.
-  const cand = parsed.find((p) => p.published_at <= cutoff.toISOString() && p.published_at >= windowStart.toISOString())
+  // Candidates: every post 72h+ old within 30 days that has not been carded
+  // yet (two posts can cross 72h the same night). The best one fires.
+  const { data: carded } = await admin
+    .from('proof_cards').select('card_key').eq('client_id', clientId).eq('card_type', 'post').limit(200)
+  const done = new Set((carded ?? []).map((c) => String(c.card_key)))
+  let cand: P | null = null
+  for (const p of parsed) {
+    if (p.published_at > cutoff.toISOString() || p.published_at < windowStart.toISOString()) continue
+    if (done.has(`post-${p.id}`)) continue
+    const priors = parsed.filter((q) => q.published_at < p.published_at).map((q) => q.reach)
+    if (priors.length < 3) continue
+    const sorted = [...priors].sort((a, b) => a - b)
+    const median = sorted[Math.floor(sorted.length / 2)]
+    if (p.reach <= median) continue
+    if (!cand || p.reach > cand.reach) cand = p
+  }
   if (!cand) return null
-  const priors = parsed.filter((p) => p.published_at < cand.published_at).map((p) => p.reach)
-  if (priors.length < 3) return null
-  const sorted = [...priors].sort((a, b) => a - b)
-  const median = sorted[Math.floor(sorted.length / 2)]
-  if (cand.reach <= median) return null
 
   const day = new Date(cand.published_at).toLocaleDateString('en-US', { weekday: 'long' })
   return {
@@ -217,6 +257,13 @@ export async function evalReviews(admin: SupabaseClient, clientId: string, now: 
   const prevStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
   const prev2Start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 2, 1))
 
+  /* Reviews carry only their INGEST time. A fresh connection backfills years
+   * of reviews in one night, which would read as a huge review month. So the
+   * card needs the client's review history to be older than the window. */
+  const { data: first } = await admin
+    .from('reviews').select('created_at').eq('client_id', clientId)
+    .order('created_at', { ascending: true }).limit(1).maybeSingle()
+  if (!first?.created_at || new Date(String(first.created_at)).getTime() > prev2Start.getTime()) return null
   const { data: rows } = await admin
     .from('reviews')
     .select('rating, created_at')
@@ -307,18 +354,20 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
   const sixtyAgo = new Date(now); sixtyAgo.setUTCDate(sixtyAgo.getUTCDate() - 60)
 
   const ninetyAgo = new Date(now); ninetyAgo.setUTCDate(ninetyAgo.getUTCDate() - 90)
-  const [w, reviewsRes, woRes, campRes, recentEvents, anyGbpRows] = await Promise.all([
+  const [w, reviewsRes, woRes, campRes, recentEvents, anyGbpRows, firstReview] = await Promise.all([
     readGbpWindows(admin, clientId, now),
     admin.from('reviews').select('id', { count: 'exact', head: true })
       .eq('client_id', clientId).is('responded_at', null).gte('created_at', sixtyAgo.toISOString()),
     admin.from('service_work_orders').select('id, title, status')
-      .eq('client_id', clientId).in('status', ['queued', 'claimed', 'in_progress', 'ready_for_client']).limit(5),
+      .eq('client_id', clientId).in('status', ['queued', 'claimed', 'in_progress', 'ready_for_client']).limit(10),
     admin.from('campaigns').select('id', { count: 'exact', head: true }).eq('client_id', clientId),
     admin.from('proof_cards').select('card_type, fired_at')
       .eq('client_id', clientId).in('card_type', ['gbp_week', 'gbp_down'])
       .gte('fired_at', new Date(now.getTime() - 7 * 86400e3).toISOString()).limit(1),
     admin.from('gbp_metrics').select('id', { count: 'exact', head: true })
       .eq('client_id', clientId).neq('location_id', 'demo-proof').gte('date', iso(ninetyAgo)),
+    admin.from('reviews').select('created_at').eq('client_id', clientId)
+      .order('created_at', { ascending: true }).limit(1).maybeSingle(),
   ])
 
   const curTotal = w.cur.directions + w.cur.calls
@@ -326,9 +375,12 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
   const hasGoogleData = curTotal + priorTotal > 0
   const eventThisWeek = (recentEvents.data ?? []).length > 0
 
-  // reviews waiting (action)
+  // reviews waiting (action) — not during the first 45 days after connecting,
+  // when a backfill of old reviews would read as a pile of new ones.
   const waiting = reviewsRes.count ?? 0
-  if (waiting > 0) {
+  const fortyFiveAgo = new Date(now); fortyFiveAgo.setUTCDate(fortyFiveAgo.getUTCDate() - 45)
+  const reviewsMature = !!firstReview.data?.created_at && new Date(String(firstReview.data.created_at)).getTime() < fortyFiveAgo.getTime()
+  if (waiting > 0 && reviewsMature) {
     out.push({
       card_key: `state-reviews-waiting`, card_type: 'reviews_waiting',
       label: 'Reviews',
@@ -337,8 +389,20 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
     })
   }
 
-  // coming up (anticipation)
-  const inFlight = woRes.data ?? []
+  // waiting on the owner (action): work finished and ready for their approval
+  const all = woRes.data ?? []
+  const ready = all.filter((o) => o.status === 'ready_for_client')
+  if (ready.length > 0) {
+    out.push({
+      card_key: `state-approval-waiting`, card_type: 'approval_waiting',
+      label: 'Ready for you',
+      big: ready.length === 1 ? String(ready[0].title) : `${ready.length} pieces ready for your approval`,
+      context: ready.length === 1 ? 'Take a look and approve it, and it goes live.' : 'Take a look and approve them, and they go live.',
+    })
+  }
+
+  // coming up (anticipation): work still in production
+  const inFlight = all.filter((o) => o.status !== 'ready_for_client')
   if (inFlight.length > 0) {
     out.push({
       card_key: `state-coming-up`, card_type: 'coming_up',
@@ -349,7 +413,7 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
   }
 
   // steady week (only when no win/down card spoke this week)
-  if (hasGoogleData && curTotal > 0 && !eventThisWeek && !w.hasDemo) {
+  if (hasGoogleData && curTotal > 0 && !eventThisWeek && !w.hasDemo && gbpCovered(w)) {
     const ratio = priorTotal > 0 ? curTotal / priorTotal : 1
     if (ratio >= 0.75 && ratio < 1.10) {
       const parts: string[] = []
@@ -364,14 +428,28 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
     }
   }
 
-  // nothing shipped yet (growth nudge)
-  if ((campRes.count ?? 0) === 0) {
+  // nothing shipped yet (growth nudge) — no campaign AND no work orders ever
+  if ((campRes.count ?? 0) === 0 && all.length === 0) {
     out.push({
       card_key: `state-start-campaign`, card_type: 'start_campaign',
       label: 'Grow',
       big: 'Start your first campaign',
       context: 'A plan built from your numbers, ready in a few minutes.',
     })
+  }
+
+  // Google went quiet: rows exist but the newest is more than 5 days old —
+  // the sync is broken (token, permissions), not the business.
+  if ((anyGbpRows.count ?? 0) > 0 && w.latestDate) {
+    const ageDays = Math.floor((now.getTime() - new Date(`${w.latestDate}T00:00:00Z`).getTime()) / 86400e3)
+    if (ageDays > 5) {
+      out.push({
+        card_key: `state-google-paused`, card_type: 'google_paused',
+        label: 'Google',
+        big: `No new Google data for ${ageDays} days`,
+        context: 'The connection needs a quick reconnect. Your numbers pick up where they left off.',
+      })
+    }
   }
 
   // no Google data at all (setup): rows would exist if the listing were linked,

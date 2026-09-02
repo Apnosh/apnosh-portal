@@ -60,9 +60,11 @@ export async function GET(req: NextRequest) {
       if (wantList) {
         const stored = (cards ?? []).map((c) => ({ ...c, ...presentCardType(String(c.card_type)) }))
         if (!wantState) return NextResponse.json({ cards: stored }, { headers: { 'Cache-Control': 'no-store' } })
+        // The deck is the present tense: events older than 14 days live in the archive only.
+        const fresh = stored.filter((c) => new Date(String(c.fired_at)).getTime() > Date.now() - 14 * 86400e3)
         const states = (await computeStateCards(admin0, clientId, new Date()).catch(() => []))
           .map((c) => ({ ...c, id: c.card_key, fired_at: new Date().toISOString(), is_state: true, ...presentCardType(c.card_type) }))
-        return NextResponse.json({ cards: [...stored, ...states] }, { headers: { 'Cache-Control': 'no-store' } })
+        return NextResponse.json({ cards: [...fresh, ...states] }, { headers: { 'Cache-Control': 'no-store' } })
       }
       const c = cards?.[0]
       if (!c) return NextResponse.json({ card: null }, { headers: { 'Cache-Control': 'no-store' } })
