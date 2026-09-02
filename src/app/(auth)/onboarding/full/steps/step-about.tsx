@@ -9,7 +9,7 @@
 
 import { type ReactNode } from 'react'
 import { Sparkles } from 'lucide-react'
-import { type OnboardingData, BIZ_TYPES, CUISINES, SERVICE_STYLES, CUSTOMER_TYPES, FOOD_BIZ_TYPES } from '../data'
+import { type OnboardingData, CUISINES, SERVICE_STYLES, CUSTOMER_TYPES, FOOD_BIZ_TYPES } from '../data'
 import { Question, TextArea, FieldLabel, SingleChipGroup, ChipGroup } from '../ui'
 
 interface Props {
@@ -20,30 +20,17 @@ interface Props {
 
 export default function StepAbout({ data, update, nav }: Props) {
   const isFood = FOOD_BIZ_TYPES.includes(data.biz_type as typeof FOOD_BIZ_TYPES[number])
-  /* When the listing or site already answered, say so: the screen becomes a
-   * check, not a quiz. */
-  const prefilled = !!(data.biz_type || data.cuisine || data.service_styles.length || data.biz_desc.trim())
   return (
     <>
       <Question
         title="About your business"
-        subtitle={prefilled ? 'We picked what your listing and site told us. Fix anything that is off.' : 'Tap what fits. Skip anything.'}
+        subtitle="Tap what fits. Skip anything."
         icon={<Sparkles size={26} strokeWidth={2} />}
       />
       <div className="mt-5 space-y-5">
-        <div>
-          <FieldLabel>What kind of place is it?</FieldLabel>
-          <SingleChipGroup
-            options={BIZ_TYPES as unknown as string[]}
-            selected={data.biz_type}
-            onSelect={(v) => update('biz_type', v)}
-          />
-          <div className="text-[11px] mt-1" style={{ color: '#aeaeb2' }}>Sets your default. A location can differ on its own card.</div>
-        </div>
-
         {isFood && (
           <div>
-            <FieldLabel>What kind of food?</FieldLabel>
+            <FieldLabel>Cuisine type</FieldLabel>
             <SingleChipGroup
               options={CUISINES as unknown as string[]}
               selected={data.cuisine}
@@ -54,7 +41,7 @@ export default function StepAbout({ data, update, nav }: Props) {
 
         {isFood && (
           <div>
-            <FieldLabel>How would you describe the vibe?</FieldLabel>
+            <FieldLabel>Describe the vibe</FieldLabel>
             <ChipGroup
               options={SERVICE_STYLES as unknown as string[]}
               selected={data.service_styles}

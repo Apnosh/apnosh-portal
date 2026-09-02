@@ -256,7 +256,7 @@ export function getPhaseInfo(stepId: StepId, bizType: string): PhaseInfo {
 
 // Steps that always get their own screen, even inside a shared phase, because
 // they are a focused review/detail page rather than a quick question.
-const SOLO_SCREENS: StepId[] = ['location_details', 'review', 'goals']
+const SOLO_SCREENS: StepId[] = ['location_details', 'review', 'goals', 'biz_type', 'biz_name']
 
 // Service styles that don't imply a fixed dine-in room. When an owner picks
 // ONLY these, the "how people order" and busy/slow "rhythm" questions do not
@@ -368,7 +368,7 @@ export function getSteps(): StepId[] {
    * type/cuisine/price still fill silently and stay fixable at review. */
   /* 'about' + 'assets' share one screen: the business's story and its brand
    * materials belong together (owner call 2026-08-31). */
-  return ['role', 'biz_name', 'about', 'assets', 'goals', 'connect', 'review']
+  return ['role', 'biz_name', 'biz_type', 'about', 'assets', 'goals', 'connect', 'review']
 }
 
 // A single menu row captured during onboarding. Promoted to a
