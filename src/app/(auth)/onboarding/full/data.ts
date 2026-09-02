@@ -223,12 +223,12 @@ export type PhaseLabel = typeof PHASE_ORDER[number]
 
 export const STEP_PHASES: Record<StepId, PhaseLabel> = {
   role: 'You',
-  biz_name: 'Business', confirm: 'Business', biz_type: 'Business', location: 'Business', location_details: 'Business',
+  biz_name: 'Business', confirm: 'Business', biz_type: 'You', location: 'Business', location_details: 'Business',
   serve: 'Menu', menu_details: 'Menu',
   ordering: 'Menu', menu: 'Menu', specials: 'Menu', rhythm: 'Menu',
-  story: 'Story', audience: 'Story', goals: 'Story', promote: 'Story', about: 'Story',
+  story: 'Story', audience: 'Story', goals: 'Story', promote: 'Story', about: 'You',
   brand_voice: 'Brand', discovery: 'Brand',
-  approval: 'Launch', connect: 'Launch', assets: 'Story', review: 'Launch',
+  approval: 'Launch', connect: 'Launch', assets: 'You', review: 'Launch',
 }
 
 export interface PhaseInfo {
@@ -368,7 +368,10 @@ export function getSteps(): StepId[] {
    * type/cuisine/price still fill silently and stay fixable at review. */
   /* 'about' + 'assets' share one screen: the business's story and its brand
    * materials belong together (owner call 2026-08-31). */
-  return ['role', 'biz_name', 'biz_type', 'about', 'assets', 'goals', 'connect', 'review']
+  /* Brand first, locations later (owner call 2026-09-02): who you are, what
+   * you are, then the specific place(s). Screens group by phase, so
+   * biz_type/about/assets ride the 'You' phase ahead of 'Business'. */
+  return ['role', 'biz_type', 'about', 'assets', 'biz_name', 'goals', 'connect', 'review']
 }
 
 // A single menu row captured during onboarding. Promoted to a
