@@ -69,11 +69,12 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
             tone: (c.tone as ProofCardData['tone']) ?? 'win',
             cta: (c.cta as ProofCardData['cta']) ?? undefined,
           }))
-        if (mapped.length) { setCards(mapped); setExamples(false) }
-        else { setCards(SAMPLE_CARDS); setExamples(true) }
+        // a real account never sees samples (owner 2026-09-03): every client has at least one
+        // real card, so an empty deck here means the owner hid it — stay quiet, not fake
+        setCards(mapped); setExamples(false)
         setLoaded(true)
       })
-      .catch(() => { if (alive) { setCards(SAMPLE_CARDS); setExamples(true); setLoaded(true) } })
+      .catch(() => { if (alive) { setCards([]); setExamples(false); setLoaded(true) } })
     return () => { alive = false }
   }, [clientId])
 
