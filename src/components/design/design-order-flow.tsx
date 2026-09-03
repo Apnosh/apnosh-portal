@@ -107,10 +107,10 @@ function BoardKeyframes() {
 }
 
 /* ── the step ticker: the order sheet's own header ───────────────────────────────────────── */
-function StepHead({ n, title, sub, total = 6, accent = DESK.mint, aside }: { n: number; title: string; sub?: string; total?: number; accent?: string; aside?: React.ReactNode }) {
+function StepHead({ n, title, sub, total = 6, accent = DESK.mint, aside, quiet }: { n: number; title: string; sub?: string; total?: number; accent?: string; aside?: React.ReactNode; quiet?: boolean }) {
   return (
     <div className="db-pop" style={{ marginBottom: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+      {!quiet && <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         <span style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', color: DESK.mute, whiteSpace: 'nowrap' }}>
           {n}{' / '}{total}
         </span>
@@ -119,7 +119,7 @@ function StepHead({ n, title, sub, total = 6, accent = DESK.mint, aside }: { n: 
             <span key={i} style={{ height: 3, flex: 1, borderRadius: 2, background: i < n ? accent : 'rgba(22,33,28,0.09)', transition: 'background .25s ease' }} />
           ))}
         </span>
-      </div>
+      </div>}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
         <h2 style={{ fontFamily: DESK.disp, fontSize: 25, fontWeight: 700, color: DESK.ink, lineHeight: 1.12, margin: sub ? '0 0 5px' : 0, letterSpacing: '-0.02em' }}>{title}</h2>
         {aside}
@@ -381,15 +381,19 @@ function Chip({ on, label, onClick }: { on: boolean; label: string; onClick: () 
  * over, and the order records where it came from. */
 export interface DesignSeed { draftId?: string; described?: string; referenceUrl?: string | null; eventDateISO?: string; job?: DesignJobId }
 
-export default function DesignOrderFlow({ menu, assets, businessName, seed, express }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null; seed?: DesignSeed | null; express?: boolean }) {
+export default function DesignOrderFlow({ menu, assets, businessName, seed, express: expressProp }: { menu: { id: string; name: string }[]; assets: DesignAsset[]; businessName?: string | null; seed?: DesignSeed | null; express?: boolean }) {
   /* Client-side back to the store keeps the app shell mounted (owner ask 2026-08-18). */
   const router = useRouter()
   const today = todayISO()
 
   const [step, setStep] = useState(seed?.job ? 2 : 1)
+  /* express starts true for tile arrivals; a DESCRIBED request that reads as a known type
+   * also switches into it (owner ask 2026-09-02: graphics are quick requests — describe
+   * first, then the one-screen order), so the six-step walk is only for the unreadable case */
+  const [express, setExpress] = useState(!!expressProp)
   /* EXPRESS (?express=1, owner test): one screen, defaults visible, wizard
    * steps become tap-to-change editors reached from the order rows */
-  const [expressHome, setExpressHome] = useState(!!express)
+  const [expressHome, setExpressHome] = useState(!!expressProp)
   /* DoorDash focus (owner call 2026-08-24): a tapped order row edits ONLY its own
    * thing; the wizard shows the whole step only when walked classically */
   const [xpFocus, setXpFocus] = useState<'where' | 'build' | 'brand' | 'extras' | null>(null)
@@ -785,6 +789,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
       })
       const j = (await r.json()) as { ok?: boolean; result?: { read: DesignRead } }
       const rd = j.ok && j.result ? j.result.read : null
+      let quick = false
       if (rd) {
         setRead(rd)
         if (rd.jobType) setJob(rd.jobType)
@@ -792,12 +797,15 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         if (rd.message) setHeadline(titleCase(rd.message))
         if (rd.offer) setOffer(rd.offer)
         if (rd.eventDateISO) { setEventDate(rd.eventDateISO); setDetails(fmtLong(rd.eventDateISO)) }
+        // a recognized type = a quick request: straight to the one-screen order, story already told
+        if (rd.jobType && jobSpec(rd.jobType)) { quick = true; setExpress(true); setExpressHome(true); setXpPhase('order') }
       }
+      if (!quick) setStep(2)
     } catch {
       /* the chips keep the flow alive; the read is a shortcut, never a dependency */
+      setStep(2)
     } finally {
       setReading(false)
-      setStep(2)
     }
   }
 
@@ -1428,7 +1436,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
         {step === 1 && (
           <>
             <StepHead
-              n={1} total={stepTotal} accent={dot}
+              n={1} total={stepTotal} accent={dot} quiet={job === null}
               title={job !== null ? (jobLabel ?? T.job) : T.job}
               sub={job !== null ? (jobSpec(job)?.voice?.blurb ?? S.job) : S.job}
             />
@@ -1436,7 +1444,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
               <textarea
                 value={described} onChange={(e) => setDescribed(e.target.value)}
                 placeholder="A flyer and an Instagram post for our event on the 15th, 20% off that night…"
-                rows={3}
+                rows={4} autoFocus
                 style={{ ...inputStyle, height: 'auto', padding: '12px 14px', resize: 'none', lineHeight: 1.5, borderRadius: 14 }}
               />
             )}
@@ -1467,7 +1475,7 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                       const sp = jobSpec(id)
                       return sp ? <Chip key={id} on={false} label={`${sp.emoji} ${DESIGN_JOBS.find((x) => x.id === id)?.label ?? id}`} onClick={() => setJob(id)} /> : null
                     })}
-                    <Chip on={false} label={`${L['job.alltypes']} ›`} onClick={() => setShelfOpen(true)} />
+                    <Chip on={false} label={`${L['job.alltypes']} ›`} onClick={() => router.push('/dashboard/design/browse')} />
                   </div>
                 )}
               </>

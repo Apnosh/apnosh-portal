@@ -19,7 +19,7 @@ import { WALK_SUBS, fill } from '../campaigns/data/walk-copy'
 export { fill }
 
 export const DESIGN_TITLES: Record<string, string> = {
-  job: 'What are we making?',
+  job: 'What do you need?',
   where: 'Where will this go?',
   say: 'What should it say?',
   photos: 'Which photos should we use?',
@@ -29,7 +29,7 @@ export const DESIGN_TITLES: Record<string, string> = {
 }
 
 export const DESIGN_SUBS: Record<string, string> = {
-  job: 'Say it in a sentence. We handle the rest.',
+  job: 'Say it like a text to your designer. We take it from there.',
   where: 'Tap every spot you need. We cut the right size for each one. Your first spot is included.',
   say: 'Watch it take shape. Tap a suggestion or write your own.',
   /* The walk's assets line, verbatim: the promise is the same promise. */
@@ -191,8 +191,8 @@ export const DESIGN_LINES: Record<string, string> = {
   'dest.other.label': 'Custom size',
   'dest.other.ph': 'What is it for, like a sticker or a billboard',
   'dest.other.note': 'Enter the exact size if you know it. We check it and quote it with the rest.',
-  'job.popular': 'Or start from a favorite',
-  'job.alltypes': 'All types',
+  'job.popular': 'Popular',
+  'job.alltypes': 'Browse all types',
   'job.less': 'Show less',
   'job.making': 'Making',
   'job.swap': 'Swap',
