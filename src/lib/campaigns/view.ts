@@ -220,6 +220,10 @@ export interface CampCard {
   perf: CampPerf | null
   review: boolean
   href: string
+  /** the one thing the card offers, by state: Finish setup · See results · (nothing while the team is making) */
+  action?: string | null
+  /** the card's time line: "Launched Jul 21" */
+  when?: string | null
 }
 
 /** Honest cost label from the included line items. */
@@ -404,11 +408,12 @@ export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | n
   const items = s.draft.items
   const total = items.filter((it) => it.included && !it.optOut).length
   const { cost, recurring } = billLabel(items)
-  const base = { key: s.draft.id, title: s.draft.name, cost, recurring, review: false, href: `/dashboard/campaigns/${s.draft.id}` }
+  const launched = s.shippedAt ? `Launched ${new Date(s.shippedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : null
+  const base = { key: s.draft.id, title: s.draft.name, cost, recurring, review: false, href: `/dashboard/campaigns/${s.draft.id}`, action: null as string | null, when: launched }
 
   // Stopped is terminal — never the Draft card (which carries a live Ship footer).
   if (s.status === 'stopped') {
-    return { ...base, kind: 'done', pill: 'Stopped', pillIcon: 'dot', blurb: 'Stopped · anything in flight finished and billed', perf: null }
+    return { ...base, kind: 'done', pill: 'Stopped', pillIcon: 'dot', blurb: 'Stopped · anything in flight finished and billed', perf: null, action: 'See details' }
   }
 
   if (s.status !== 'shipped') {
@@ -417,6 +422,7 @@ export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | n
       ...base, kind: 'draft', pill: inReview ? 'In review' : 'Draft', pillIcon: 'dot', review: inReview,
       blurb: inReview ? 'Apnosh is building this · you approve before it ships' : total ? `Ready when you are · ${plural(total, 'piece', 'pieces')}` : 'Ready when you are',
       perf: total ? { type: 'ready', ready: total } : null,
+      action: inReview ? 'Review it' : 'Open',
     }
   }
 
@@ -425,5 +431,8 @@ export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | n
     ...base, kind: st.phase === 'done' ? 'done' : 'live', pill: st.label, pillIcon: st.phase === 'done' ? 'check' : 'dot', blurb: st.blurb,
     review: st.phase === 'setup',
     perf: st.total > 0 ? { type: 'progress', live: st.live, total: st.total } : null,
+    // one action per state (owner ask 2026-09-02): setup → Finish setup; making → none, the
+    // progress line says it; live/done → See results
+    action: st.phase === 'setup' ? 'Finish setup' : st.phase === 'production' ? null : 'See results',
   }
 }

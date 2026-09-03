@@ -13,7 +13,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import {
-  ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Eye, Loader2, Minus, Plus, TrendingDown, TrendingUp,
+  ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Loader2, Minus, Plus, TrendingDown, TrendingUp,
 } from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { upcomingOccasions } from '@/lib/design/occasions'
@@ -225,8 +225,8 @@ function CampaignCard({ c }: { c: CampCard }) {
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: C.greenDk, fontWeight: 700, fontSize: 12.5 }}>See how it&apos;s doing <ArrowRight size={14} /></span>
-        {c.review && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: C.amberBg, border: `0.5px solid ${C.amberLine}`, color: C.amber, borderRadius: 99, padding: '4px 10px', fontWeight: 700, fontSize: 11.5 }}><Eye size={12} /> Needs your OK</span>}
+        <span style={{ fontSize: 12, color: C.faint }}>{c.when ?? ''}</span>
+        {c.action && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: needsYou ? '#8A5A12' : C.greenDk, fontWeight: 700, fontSize: 12.5 }}>{c.action} <ArrowRight size={14} /></span>}
       </div>
     </Link>
   )
