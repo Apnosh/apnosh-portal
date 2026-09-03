@@ -716,10 +716,11 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
   // ── the rest of the account's situation (owner 2026-09-03: "why is it just Google") ──
   // Every one below is a real fact about THIS account, each with the one move it points to.
   try {
-    const [chan, camps, occ] = await Promise.all([
+    const [chan, camps, occ, socialRows] = await Promise.all([
       admin.from('channel_connections').select('channel, status, access_token').eq('client_id', clientId),
       listCampaigns(clientId).catch(() => [] as SavedCampaign[]),
       Promise.resolve(upcomingOccasions(now, 75, 8, 1)), // same horizon as the Campaigns page's Coming up rail
+      admin.from('social_metrics').select('id', { count: 'exact', head: true }).eq('client_id', clientId),
     ])
     const live = new Set(((chan.data ?? []) as { channel: string; status: string; access_token: string | null }[])
       .filter((c) => c.status === 'active' && !!c.access_token).map((c) => c.channel))
@@ -746,7 +747,8 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
       })
     }
     // nothing social connected: posts, reach and followers are invisible until one is
-    if (!['instagram', 'facebook', 'tiktok'].some((p) => live.has(p))) {
+    const socialLinked = ['instagram', 'facebook', 'tiktok', 'zernio', 'ayrshare'].some((p) => live.has(p)) || (socialRows.count ?? 0) > 0
+    if (!socialLinked) {
       out.push({
         card_key: `state-connect-social`, card_type: 'connect_social',
         label: 'Social',
