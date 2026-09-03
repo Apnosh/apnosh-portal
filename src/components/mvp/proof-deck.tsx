@@ -48,12 +48,16 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
       .then((r) => r.json())
       .then((j) => {
         if (!alive || !Array.isArray(j?.cards)) return
+        // X on a STATE card rests it for a day, not a week: these describe where the account
+        // stands, and the owner should see them again tomorrow. The key changed (v2) so every
+        // earlier hide is forgotten once, which brings a hidden only-card straight back.
         const hidden = (id: string) => {
           try {
-            const raw = localStorage.getItem(`proof-hide-${id}`)
+            const raw = localStorage.getItem(`proof-hide-v2-${id}`)
             if (!raw) return false
             const ts = Number(raw)
-            return Number.isFinite(ts) ? Date.now() - ts < 7 * 86400e3 : true
+            const rest = id.startsWith('state-') ? 86400e3 : 7 * 86400e3
+            return Number.isFinite(ts) ? Date.now() - ts < rest : true
           } catch { return false }
         }
         const mapped: ProofCardData[] = (j.cards as Array<Record<string, unknown>>)
@@ -82,7 +86,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
     if (!clientId || id.startsWith('example-')) return
     // State cards are not stored: a dismissal rests on this device for 7 days.
     if (id.startsWith('state-')) {
-      if (action === 'dismiss') { try { localStorage.setItem(`proof-hide-${id}`, String(Date.now())) } catch { /* storage off */ } }
+      if (action === 'dismiss') { try { localStorage.setItem(`proof-hide-v2-${id}`, String(Date.now())) } catch { /* storage off */ } }
       return
     }
     void fetch('/api/dashboard/proof', {
