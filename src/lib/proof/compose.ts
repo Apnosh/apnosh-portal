@@ -12,13 +12,16 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { listCampaigns } from '@/lib/campaigns/server'
+import { ownerSetupComplete, type SavedCampaign } from '@/lib/campaigns/view'
+import { upcomingOccasions } from '@/lib/design/occasions'
 import { getCachedThemes } from '@/lib/review-themes'
 import { moveForTheme, titleCase } from '@/lib/reviews/moves'
 import { getStageCampaigns } from '@/lib/dashboard/get-stage-campaigns'
 
 export interface ProofCardRow {
   card_key: string
-  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'campaign_moved' | 'social_month' | 'site_week' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'google_quiet' | 'approval_waiting' | 'complaint_watch'
+  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'campaign_moved' | 'social_month' | 'site_week' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'google_quiet' | 'approval_waiting' | 'complaint_watch' | 'setup_waiting' | 'connect_social' | 'connect_site' | 'reviews_none' | 'occasion_soon'
   label: string
   big: string
   context: string
@@ -710,6 +713,67 @@ export async function computeStateCards(admin: SupabaseClient, clientId: string,
       })
     }
   }
+  // ── the rest of the account's situation (owner 2026-09-03: "why is it just Google") ──
+  // Every one below is a real fact about THIS account, each with the one move it points to.
+  try {
+    const [chan, camps, occ] = await Promise.all([
+      admin.from('channel_connections').select('channel, status, access_token').eq('client_id', clientId),
+      listCampaigns(clientId).catch(() => [] as SavedCampaign[]),
+      Promise.resolve(upcomingOccasions(now, 75, 8, 1)), // same horizon as the Campaigns page's Coming up rail
+    ])
+    const live = new Set(((chan.data ?? []) as { channel: string; status: string; access_token: string | null }[])
+      .filter((c) => c.status === 'active' && !!c.access_token).map((c) => c.channel))
+    const googleLinked = live.has('google_business_profile') || realGbpRows > 0
+    // a launched campaign still waiting on the owner's own setup answers
+    const waitingSetup = camps.filter((c) => c.status === 'shipped' && !ownerSetupComplete(c))
+    if (waitingSetup.length > 0) {
+      const one = waitingSetup[0]
+      out.push({
+        card_key: `state-setup-waiting`, card_type: 'setup_waiting',
+        label: 'Your team is waiting',
+        big: waitingSetup.length === 1 ? one.draft.name : `${waitingSetup.length} campaigns need your setup`,
+        context: 'A few answers from you and the work can start.',
+      })
+    }
+    // no reviews at all on a linked listing: the first ones are the hardest, the kit helps
+    const feedFresh = !!w.latestDate && Math.floor((now.getTime() - new Date(`${w.latestDate}T00:00:00Z`).getTime()) / 86400e3) <= 5
+    if (googleLinked && feedFresh && !firstReview.data) {
+      out.push({
+        card_key: `state-reviews-none`, card_type: 'reviews_none',
+        label: 'Reviews',
+        big: 'No Google reviews yet',
+        context: 'The first few matter most. Ask your regulars this week; a review link by the register does the rest.',
+      })
+    }
+    // nothing social connected: posts, reach and followers are invisible until one is
+    if (!['instagram', 'facebook', 'tiktok'].some((p) => live.has(p))) {
+      out.push({
+        card_key: `state-connect-social`, card_type: 'connect_social',
+        label: 'Social',
+        big: 'Connect Instagram or Facebook',
+        context: 'Then every post shows up here with how many people it reached.',
+      })
+    }
+    // no site analytics: visits and searches stay dark
+    if (!live.has('google_analytics') && !live.has('google_search_console')) {
+      out.push({
+        card_key: `state-connect-site`, card_type: 'connect_site',
+        label: 'Website',
+        big: 'Connect your website',
+        context: 'See how many people visit, and what they searched to find you.',
+      })
+    }
+    // an occasion close enough to plan for, far enough to make something
+    const next = occ[0]
+    if (next) {
+      out.push({
+        card_key: `state-occasion-${next.id}-${next.dateISO}`, card_type: 'occasion_soon',
+        label: 'Coming up',
+        big: `${next.emoji} ${next.name} in ${next.daysAway} days`,
+        context: 'A post or a flyer now beats a scramble the week of.',
+      })
+    }
+  } catch { /* situation cards are best-effort; the deck never fails on them */ }
   // no Google data at all (setup): rows would exist if the listing were linked,
   // even for a quiet listing — so this means genuinely not connected.
   if (realGbpRows === 0) {
