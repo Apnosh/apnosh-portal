@@ -34,6 +34,7 @@ import ContactSupport from '@/components/campaigns/contact-support'
 import { fmtShort } from '@/components/campaigns/tracker/piece-tracker'
 import ActivityFeed from '@/components/campaigns/tracker/activity-feed'
 import type { CampaignOutcomes } from '@/lib/campaigns/outcomes/verdict'
+import { outcomeLine, type CampaignOutcome } from '@/lib/campaigns/outcome-view'
 import type { TrackerPiece, ActivityEvent } from '@/lib/campaigns/tracker/types'
 import { setupOwed, type ReadinessReport } from '@/lib/campaigns/readiness-types'
 import { C, DISPLAY, GRAD, SHADOW_CARD, EYEBROW } from '@/components/campaigns/ui'
@@ -45,6 +46,7 @@ export default function CampaignDetailPage() {
   const [camp, setCamp] = useState<SavedCampaign | null>(null)
   const [progress, setProgress] = useState<CampaignProgress | null>(null)
   const [outcomes, setOutcomes] = useState<CampaignOutcomes | null>(null)
+  const [since, setSince] = useState<CampaignOutcome | null>(null)
   const [pieces, setPieces] = useState<TrackerPiece[]>([])
   const [activity, setActivity] = useState<ActivityEvent[]>([])
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null)
@@ -68,6 +70,7 @@ export default function CampaignDetailPage() {
       setCamp(j.campaign as SavedCampaign)
       setProgress((j.progress as CampaignProgress) ?? null)
       setOutcomes((j.outcomes as CampaignOutcomes) ?? null)
+      setSince((j.since as CampaignOutcome) ?? null)
       setPieces((j.pieces as TrackerPiece[]) ?? [])
       setActivity((j.activity as ActivityEvent[]) ?? [])
       setReadiness((j.readiness as ReadinessReport) ?? null)
@@ -147,7 +150,7 @@ export default function CampaignDetailPage() {
     // Land on the "Get it ready" checklist (team-run campaigns only — DIY mints
     // no orders, so there's nothing for the team to need from the owner).
     if (camp.draft.path !== 'diy') router.push(`/dashboard/campaigns/${id}/ready`)
-    else fetch(`/api/campaigns/${id}`).then((r) => r.json()).then((j) => { setProgress((j.progress as CampaignProgress) ?? null); setOutcomes((j.outcomes as CampaignOutcomes) ?? null) }).catch(() => {})
+    else fetch(`/api/campaigns/${id}`).then((r) => r.json()).then((j) => { setProgress((j.progress as CampaignProgress) ?? null); setOutcomes((j.outcomes as CampaignOutcomes) ?? null); setSince((j.since as CampaignOutcome) ?? null) }).catch(() => {})
   }
   async function del() {
     setBusy(true)
@@ -208,7 +211,7 @@ export default function CampaignDetailPage() {
                     {stopNote.summary}
                   </div>
                 )}
-                <Detail camp={camp} progress={progress} outcomes={outcomes} pieces={pieces} activity={activity} readiness={readiness} booking={booking} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />
+                <Detail camp={camp} progress={progress} outcomes={outcomes} since={since} pieces={pieces} activity={activity} readiness={readiness} booking={booking} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />
               </>}
         </div>
 
@@ -235,10 +238,11 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
+function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, booking, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   outcomes: CampaignOutcomes | null
+  since: CampaignOutcome | null
   pieces: TrackerPiece[]
   activity: ActivityEvent[]
   readiness: ReadinessReport | null
@@ -424,6 +428,8 @@ function Detail({ camp, progress, outcomes, pieces, activity, readiness, booking
               onReload={onReload}
             />
           )}
+          {/* the Google read since launch: the stage's own number, two weeks after vs before */}
+          <SinceLaunch o={since} />
           {/* the ONE home for outcomes — the real target of "See every piece" */}
           <div id="campaign-results"><CampaignResults outcomes={outcomes} pieces={pieces} /></div>
           {/* Shoot booking (Checkout Gates): confirmed date, a needs-reschedule prompt, or request-mode —
@@ -539,3 +545,24 @@ function Row({ k, v }: { k: string; v: string }) {
     </div>
   )
 }
+
+/** "On Google since launch": one plain line from the two-week read, with the honest footnote. */
+function SinceLaunch({ o }: { o: CampaignOutcome | null }) {
+  if (!o) return null
+  const line = outcomeLine(o)
+  if (!line) return null
+  const color = line.trend === 'up' ? C.greenDk : line.trend === 'down' ? C.red : C.ink
+  return (
+    <div style={{ marginTop: 24 }}>
+      <div style={{ ...EYEBROW, marginBottom: 8 }}>On Google since launch</div>
+      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '13px 15px' }}>
+        <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{line.text}</div>
+        {o.pct != null && (
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4 }}>{o.after.toLocaleString('en-US')} in the two weeks after, against {o.before.toLocaleString('en-US')} the two before.</div>
+        )}
+        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6, lineHeight: 1.4 }}>It shows what happened, not proof of cause.</div>
+      </div>
+    </div>
+  )
+}
+

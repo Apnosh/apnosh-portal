@@ -208,6 +208,8 @@ export type CampPerf =
   | { type: 'trend'; trend: 'up' | 'down' | 'flat'; note: string; metric: string; spark: number[] }
   | { type: 'lift'; pct: number; reach: number }
 
+/** the campaign-outcome read as the list needs it (see lib/campaigns/outcome.ts) */
+export interface CampaignOutcomeLite { text: string; trend: 'up' | 'down' | 'flat'; spark: number[] }
 export interface CampCard {
   key: string
   kind: 'live' | 'draft' | 'done'
@@ -404,7 +406,7 @@ export function canWrap(progress: CampaignProgress | null | undefined, hasOpenSu
   return progress.live >= progress.total
 }
 
-export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | null): CampCard {
+export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | null, outcome?: CampaignOutcomeLite | null): CampCard {
   const items = s.draft.items
   const total = items.filter((it) => it.included && !it.optOut).length
   const { cost, recurring } = billLabel(items)
@@ -430,7 +432,11 @@ export function campaignCardVM(s: SavedCampaign, progress?: CampaignProgress | n
   return {
     ...base, kind: st.phase === 'done' ? 'done' : 'live', pill: st.label, pillIcon: st.phase === 'done' ? 'check' : 'dot', blurb: st.blurb,
     review: st.phase === 'setup',
-    perf: st.total > 0 ? { type: 'progress', live: st.live, total: st.total } : null,
+    // once live or done, the honest two-week read replaces the progress bar; setup and
+    // production keep the bar (or nothing) because there is no result to show yet
+    perf: (st.phase === 'live' || st.phase === 'done') && outcome && outcome.text
+      ? { type: 'trend', trend: outcome.trend, metric: outcome.text, note: '', spark: outcome.spark }
+      : st.total > 0 ? { type: 'progress', live: st.live, total: st.total } : null,
     // one action per state (owner ask 2026-09-02): setup → Finish setup; making → none, the
     // progress line says it; live/done → See results
     action: st.phase === 'setup' ? 'Finish setup' : st.phase === 'production' ? null : 'See results',

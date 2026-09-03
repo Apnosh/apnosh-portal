@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCampaignOutcomesBatch } from '@/lib/campaigns/outcome'
 import { createClient } from '@/lib/supabase/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { listCampaigns, createCampaign, getCampaignProgressBatch } from '@/lib/campaigns/server'
@@ -27,13 +28,15 @@ export async function GET(req: NextRequest) {
   // view shows what a stopped campaign actually billed, not just live ones.
   // Best-effort: null (not {}) on failure so the client renders "unknown", not "$0".
   const launchedIds = campaigns.filter((c) => c.status !== 'draft').map((c) => c.draft.id).filter((x): x is string => !!x)
-  const [progress, charges, payments] = await Promise.all([
+  const [progress, charges, payments, outcomes] = await Promise.all([
     getCampaignProgressBatch(shippedIds).catch(() => ({})),
     getCampaignChargesBatch(launchedIds).catch(() => null),
     // Upfront charge-at-checkout receipts per launched campaign ({} on failure).
     getCampaignPaymentsBatch(launchedIds).catch(() => ({})),
+    // Did each launched campaign move its number? Two weeks after vs before, best-effort ({}).
+    getCampaignOutcomesBatch(clientId, campaigns.filter((c) => c.status !== 'draft').map((c) => ({ id: c.draft.id, shippedAt: c.shippedAt }))).catch(() => ({})),
   ])
-  return NextResponse.json({ campaigns, progress, charges, payments })
+  return NextResponse.json({ campaigns, progress, charges, payments, outcomes })
 }
 
 // POST /api/campaigns — create a campaign from a built CampaignDraft.

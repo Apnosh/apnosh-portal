@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getCampaignOutcomesBatch } from '@/lib/campaigns/outcome'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getCampaign, replaceLineItems, updateCampaignFields, deleteCampaign, materializeCampaignDrafts, getCampaignProgress } from '@/lib/campaigns/server'
 import { mintWorkOrders, clearCampaignBriefCache, getCampaignCharges, campaignHasAccruedMoney, reconcileCampaignProduction } from '@/lib/campaigns/work-orders'
@@ -39,7 +40,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const shippedTeamRun = shipped && campaign!.draft.path !== 'diy'
   // Outcomes apply to any shipped campaign with published pieces (team or DIY); progress/
   // charges are team-run only. Each read is best-effort so one failure never blanks the page.
-  const [progress, charges, outcomes, pieces, activity, readiness, payment, booking, svcOrders] = await Promise.all([
+  const [progress, charges, outcomes, pieces, activity, readiness, payment, booking, svcOrders, since] = await Promise.all([
     shippedTeamRun ? getCampaignProgress(id).catch(() => null) : Promise.resolve(null),
     shippedTeamRun ? getCampaignCharges(id).catch(() => null) : Promise.resolve(null),
     shipped ? getCampaignOutcomes(id).catch(() => null) : Promise.resolve(null),
@@ -52,12 +53,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     shipped ? getBookingForCampaign(id).catch(() => null) : Promise.resolve(null),
     // Per-service work-order state (slim, owner-safe) for the per-item detail page.
     shippedTeamRun ? getServiceWorkOrders(id).catch(() => null) : Promise.resolve(null),
+    // the Google read since launch (two weeks after vs before, on the stage's own number) — any launched campaign
+    campaign.status !== 'draft' ? getCampaignOutcomesBatch(campaign.clientId, [{ id, shippedAt: campaign.shippedAt }]).then((m) => m[id] ?? null).catch(() => null) : Promise.resolve(null),
   ])
   // Additive: only the owner-safe columns ride out — never steps, assignees, or internal notes.
   const serviceOrders: ItemServiceOrder[] | null = svcOrders
     ? svcOrders.map((o) => ({ lineItemId: o.lineItemId, serviceId: o.serviceId, status: o.status, dueDate: o.dueDate, deliveredAt: o.deliveredAt }))
     : null
-  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking, serviceOrders })
+  return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking, serviceOrders, since })
 }
 
 // PATCH /api/campaigns/:id — { items?: LineItem[], fields?: {...} }.

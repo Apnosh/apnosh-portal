@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { outcomeLine, type CampaignOutcome } from '@/lib/campaigns/outcome-view'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
@@ -40,6 +41,7 @@ export default function MvpCampaigns() {
   const { client, loading: clientLoading } = useClient()
   const [saved, setSaved] = useState<SavedCampaign[] | null>(null)
   const [progress, setProgress] = useState<Record<string, CampaignProgress>>({})
+  const [outcomes, setOutcomes] = useState<Record<string, CampaignOutcome>>({})
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<'list' | 'calendar'>('list')
   const [tab, setTab] = useState<Tab>('all')
@@ -50,13 +52,17 @@ export default function MvpCampaigns() {
     setError(null)
     fetch(`/api/campaigns?clientId=${client.id}`)
       .then(async (r) => { if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Load failed (${r.status})`); return r.json() })
-      .then((j) => { if (live) { setSaved((j.campaigns ?? []) as SavedCampaign[]); setProgress((j.progress ?? {}) as Record<string, CampaignProgress>) } })
+      .then((j) => { if (live) { setSaved((j.campaigns ?? []) as SavedCampaign[]); setProgress((j.progress ?? {}) as Record<string, CampaignProgress>); setOutcomes((j.outcomes ?? {}) as Record<string, CampaignOutcome>) } })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
   }, [client?.id])
 
   // Drafts (unshipped plans) live on the Orders tab now — Campaigns shows only shipped/live/done.
-  const cards: CampCard[] = (saved ?? []).map((c) => campaignCardVM(c, progress[c.draft.id])).filter((c) => c.kind !== 'draft')
+  const cards: CampCard[] = (saved ?? []).map((c) => {
+    const o = outcomes[c.draft.id]
+    const line = o ? outcomeLine(o) : null
+    return campaignCardVM(c, progress[c.draft.id], line ? { ...line, spark: o.spark } : null)
+  }).filter((c) => c.kind !== 'draft')
   const counts: Record<Tab, number> = {
     all: cards.length,
     live: cards.filter((c) => c.kind === 'live').length,
