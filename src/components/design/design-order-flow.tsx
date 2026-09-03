@@ -1475,8 +1475,14 @@ export default function DesignOrderFlow({ menu, assets, businessName, seed, expr
                       const sp = jobSpec(id)
                       return sp ? <Chip key={id} on={false} label={`${sp.emoji} ${DESIGN_JOBS.find((x) => x.id === id)?.label ?? id}`} onClick={() => setJob(id)} /> : null
                     })}
-                    <Chip on={false} label={`${L['job.alltypes']} ›`} onClick={() => router.push('/dashboard/design/browse')} />
                   </div>
+                )}
+                {/* the template grid keeps its own door (owner ask 2026-09-02): a plain row under the chips */}
+                {!shelfOpen && (
+                  <button type="button" onClick={() => router.push('/dashboard/design/browse')}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 14, background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: DESK.body, fontSize: 14, fontWeight: 700, color: DESK.mintDeep }}>
+                    {L['job.alltypes']} {'›'}
+                  </button>
                 )}
               </>
             )}

@@ -192,7 +192,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'dest.other.ph': 'What is it for, like a sticker or a billboard',
   'dest.other.note': 'Enter the exact size if you know it. We check it and quote it with the rest.',
   'job.popular': 'Popular',
-  'job.alltypes': 'Browse all types',
+  'job.alltypes': 'Browse through templates',
   'job.less': 'Show less',
   'job.making': 'Making',
   'job.swap': 'Swap',
