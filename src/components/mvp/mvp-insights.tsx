@@ -20,7 +20,7 @@
  * from /api/dashboard/insights-detail, keyed on clientId, so the home stays lean.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import MvpShell from './mvp-shell'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -31,14 +31,13 @@ import {
   Search, ExternalLink, Image as ImageIcon, Check,
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
-  Route, Heart, Megaphone, Sparkles,
+  Route, Heart, Megaphone, Sparkles, Info, Globe, Store,
 } from 'lucide-react'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
-import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, type MetricView } from './mvp-home'
+import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, type MetricView } from './mvp-home'
 import ProofDeck from './proof-deck'
-import { MetricSettingsButton } from './metric-settings'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
@@ -303,23 +302,6 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
       <div style={{ background: '#fff', minHeight: '100%' }}>
 
         <PullIndicator pull={pull} phase={phase} />
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '16px 18px 6px' }}>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, lineHeight: 1.1, letterSpacing: '-.01em' }}>Insights</div>
-            {refreshing ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', marginTop: 3 }}>
-                <span className="mvp-spin" style={{ width: 10, height: 10, border: `2px solid ${C.line}`, borderTopColor: C.green, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
-                Getting the latest numbers…
-              </div>
-            ) : (
-              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3 }}>Where your numbers come from</div>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-            <AnalystButton />
-            <MetricSettingsButton compact onChanged={() => window.location.reload()} />
-          </div>
-        </div>
         {loading ? (
           <Centered>Loading your numbers&hellip;</Centered>
         ) : error ? (
@@ -328,7 +310,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
           <EmptyState />
         ) : (
           <>
-            <Body data={data} focusKey={initialStageKey} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} clientId={clientId} campaigns={campaigns} />
+            <Body data={data} focusKey={initialStageKey} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} clientId={clientId} campaigns={campaigns} refreshing={refreshing} />
           </>
         )}
       </div>
@@ -377,23 +359,16 @@ function AnalystButton() {
 
   return (
     <button
+      type="button"
       onClick={go}
       aria-label={pro ? 'AI Analyst' : 'AI Analyst, Pro plan only'}
-      style={{
-        marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6,
-        background: pro ? C.greenSoft : '#f2f2f4',
-        color: pro ? C.greenDk : C.mute,
-        border: `1px solid ${pro ? C.greenLine : C.line}`,
-        borderRadius: 99, padding: '7px 13px', fontSize: 12.5, fontWeight: 700,
-        flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit',
-        opacity: pressed ? 0.55 : 1, transition: 'opacity .12s ease',
-      }}
+      title={pro ? 'AI Analyst' : 'AI Analyst (Pro)'}
+      style={{ ...GLASS_CIRCLE, background: pro ? C.greenSoft : GLASS_CIRCLE.background, color: pro ? C.greenDk : C.mute, border: `1px solid ${pro ? C.greenLine : 'rgba(255,255,255,0.75)'}`, opacity: pressed ? 0.55 : 1, transition: 'opacity .12s ease' }}
     >
-      {pro ? <Sparkles size={14} /> : <Lock size={13} />} AI Analyst
+      {pro ? <Sparkles size={16} /> : <Lock size={14} />}
     </button>
   )
 }
-
 // The five funnel stages, in funnel order — the swipeable header moves through
 // these, so every stage is reachable from every stage and a deep-link lands on
 // exactly the stage that was tapped.
@@ -403,6 +378,31 @@ const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.045)'
 const CARD: React.CSSProperties = { marginTop: 14, background: '#fff', borderRadius: 18, padding: '16px 16px 18px', boxShadow: CARD_SHADOW }
 const H2: React.CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }
 const TILE: React.CSSProperties = { background: '#f5f5f7', borderRadius: 14 }
+/* a 36px frosted round button — the page's tools on the stage row */
+const GLASS_CIRCLE: React.CSSProperties = { width: 36, height: 36, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.06)', color: C.ink, textDecoration: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, flexShrink: 0 }
+/* each stage owns a hue — the bars, dots, source bars and pins below the graph all
+   take it, so swiping stages visibly changes the page's colour (owner 2026-09-04:
+   "missing some colour"). Up/down stays green/coral everywhere: those are signals,
+   not identity. */
+type Accent = { main: string; soft: string; dark: string }
+const STAGE_ACCENT: Record<string, Accent> = {
+  shown: { main: '#2e9a78', soft: '#e4f5ee', dark: '#1f7a5c' },
+  engaged: { main: '#3d8ed8', soft: '#e6f1fb', dark: '#2a6cb0' },
+  moved: { main: '#7a5fd6', soft: '#eeeafb', dark: '#5b44b3' },
+  camein: { main: '#dd9a1c', soft: '#fbf1da', dark: '#a8720c' },
+  back: { main: '#1fa39a', soft: '#dff4f2', dark: '#157d76' },
+}
+/* what each stage counts — behind the ⓘ next to the stage name, so the row stays
+   one line ("Awareness" + "Times you showed up" was two, owner 2026-09-04) */
+const STAGE_EXPLAIN: Record<string, string> = {
+  shown: 'Times you showed up: your listing, posts and site appearing in Google searches, Maps and social feeds.',
+  engaged: 'People who looked closer: profile visits, website clicks and menu taps after seeing you.',
+  moved: 'Moves people made: calls, direction taps, bookings and orders.',
+  camein: 'Orders and guests served, from your register and delivery apps.',
+  back: 'People who came back: repeat customers and new reviews.',
+}
+const AccentCtx = createContext<Accent>(STAGE_ACCENT.shown)
+const useAccent = () => useContext(AccentCtx)
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },
@@ -411,7 +411,7 @@ const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'back', label: 'Retention' },
 ]
 
-function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; campaigns: Record<string, StageCampaign[]> | null }) {
+function Body({ data, focusKey, detail, campaigns, clientId, refreshing }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; refreshing?: boolean; campaigns: Record<string, StageCampaign[]> | null }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
   // The tapped funnel stage seeds the view; SWIPING the graph block moves
@@ -419,6 +419,7 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
   // re-render to match. The URL follows (replaceState) so a refresh or share
   // keeps the same stage.
   const [sel, setSel] = useState<string | undefined>(focusKey)
+  const [explain, setExplain] = useState(false)
   useEffect(() => { if (focusKey) setSel(focusKey) }, [focusKey])
   // Warm the other range windows up front so switching tabs is instant.
   useEffect(() => { prewarmStageWindows(clientId) }, [clientId])
@@ -457,9 +458,14 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
   }
 
   return (
-    <div style={{ padding: '0 0 44px' }}>
+    <div style={{ padding: '0 0 8px' }}>
       {/* the hero is a card like everything else: one soft ground, no seam between the graph and the rest */}
-      <div style={{ margin: '14px 18px 0', background: '#fff', borderRadius: 18, padding: '18px 0 8px', boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
+      <div style={{ margin: '12px 18px 0', background: '#fff', borderRadius: 18, padding: '14px 0 4px', boxShadow: CARD_SHADOW, overflow: 'hidden', position: 'relative' }}>
+      {/* the page's two tools ride the stage row, top right, over every slide */}
+      <div style={{ position: 'absolute', top: 12, right: 14, display: 'flex', gap: 8, zIndex: 2 }}>
+        <AnalystButton />
+        <Link href="/dashboard/insights/metrics" aria-label="Choose your metrics" title="Choose your metrics" style={GLASS_CIRCLE}><SlidersHorizontal size={16} /></Link>
+      </div>
       {/* SWIPEABLE GRAPHS — each slide is a stage's title + number + trend +
           histogram; swipe the graph left/right to change stages */}
       <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', alignItems: 'flex-start' }}>
@@ -467,17 +473,23 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
           const smv = byKey.get(resolveFocus(s.key).metric)
           return (
             <div key={s.key} style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'center', padding: '0 18px' }}>
-              <div style={{ fontFamily: DISPLAY, fontSize: 27, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1, marginBottom: 14 }}>{s.label}</div>
-              <StageTop stageKey={s.key} detail={detail} mv={smv} clientId={clientId} onRange={rangeFor(s.key)} />
+              {/* stage name + ⓘ (tap: what this counts); the tools sit to the right */}
+              <button type="button" onClick={() => setExplain((v) => !v)} aria-expanded={explain} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', background: 'none', padding: 0, margin: '2px 0 0', cursor: 'pointer', fontFamily: 'inherit', color: C.ink, maxWidth: 'calc(100% - 88px)', height: 36 }}>
+                <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+                <span style={{ width: 18, height: 18, borderRadius: 99, background: explain ? STAGE_ACCENT[s.key].soft : C.bg, color: explain ? STAGE_ACCENT[s.key].dark : C.faint, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Info size={12} /></span>
+                {refreshing && <span className="mvp-spin" style={{ width: 11, height: 11, border: `2px solid ${C.line}`, borderTopColor: STAGE_ACCENT[s.key].main, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />}
+              </button>
+              {explain && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, margin: '2px 0 4px' }}>{STAGE_EXPLAIN[s.key]}</div>}
+              <StageTop stageKey={s.key} detail={detail} mv={smv} clientId={clientId} onRange={rangeFor(s.key)} accent={STAGE_ACCENT[s.key].main} />
             </div>
           )
         })}
       </div>
 
       {/* the swipe dots — BELOW the histogram; tappable to jump */}
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', margin: '14px 18px 18px' }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center', margin: '10px 18px 14px' }}>
         {STAGE_ORDER.map((s, i) => (
-          <button key={s.key} aria-label={s.label} onClick={() => pick(s.key)} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === idx ? C.green : C.line, transition: 'width .2s, background .2s' }} />
+          <button key={s.key} aria-label={s.label} onClick={() => pick(s.key)} style={{ width: i === idx ? 18 : 6, height: 6, borderRadius: 99, border: 'none', padding: 0, cursor: 'pointer', background: i === idx ? STAGE_ACCENT[STAGE_ORDER[idx].key].main : C.line, transition: 'width .2s, background .2s' }} />
         ))}
       </div>
 
@@ -488,6 +500,7 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
 
       {/* everything below the dots follows the ACTIVE stage: its by-source
           cards (scoped to the chart's picked range), extras, and campaigns */}
+      <AccentCtx.Provider value={STAGE_ACCENT[focus.stageKey] ?? STAGE_ACCENT.shown}>
       <div style={{ padding: '0 18px' }}>
         <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
         {/* Campaign-correlation block: "Did it move?" (the metric with a pin at
@@ -495,19 +508,20 @@ function Body({ data, focusKey, detail, campaigns, clientId }: { data: InsightsD
         <CampaignTrend mv={byKey.get(focus.metric)} list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
         <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
       </div>
+      </AccentCtx.Provider>
     </div>
   )
 }
 
 // ── The swipeable TOP of a stage: number + trend + histogram (no cards). ──
-function StageTop({ stageKey, detail, mv, clientId, onRange }: { stageKey: string; detail: InsightsDetail | null; mv?: MetricView; clientId?: string; onRange?: (r: string) => void }) {
+function StageTop({ stageKey, detail, mv, clientId, onRange, accent }: { stageKey: string; detail: InsightsDetail | null; mv?: MetricView; clientId?: string; onRange?: (r: string) => void; accent?: string }) {
   if (!detail) return <FeedLoading />
   switch (stageKey) {
     case 'shown': {
       const cs = computedStage(detail, 1)
       const feed = cs ? stageFeedFrom(cs) : buildAwarenessFeed(toFeedInput(detail))
       return mv && cs
-        ? <StageWithChart mv={mv} label="Times you showed up" cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" showBreakdown={false} onRange={onRange} />
+        ? <StageWithChart mv={mv} label="Times you showed up" cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" showBreakdown={false} onRange={onRange} accent={accent} />
         : <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
     }
     case 'engaged': {
@@ -515,14 +529,14 @@ function StageTop({ stageKey, detail, mv, clientId, onRange }: { stageKey: strin
       if (cs?.isEmpty) return <EmptyStageHero label="People who looked closer" note="Connect Instagram (or add your menu link) to measure this." />
       const feed = cs ? stageFeedFrom(cs) : buildInterestFeed(toFeedInput(detail))
       return mv && cs
-        ? <StageWithChart mv={mv} label="People who looked closer" cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" showBreakdown={false} onRange={onRange} />
+        ? <StageWithChart mv={mv} label="People who looked closer" cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" showBreakdown={false} onRange={onRange} accent={accent} />
         : <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
     }
     case 'moved': {
       const cs = computedStage(detail, 3)
       const feed = cs ? stageFeedFrom(cs) : buildActionsFeed(toFeedInput(detail))
       return mv && cs
-        ? <StageWithChart mv={mv} label="Moves people made" cs={cs} stageNumber={3} clientId={clientId} unit="Moves people made" showBreakdown={false} onRange={onRange} />
+        ? <StageWithChart mv={mv} label="Moves people made" cs={cs} stageNumber={3} clientId={clientId} unit="Moves people made" showBreakdown={false} onRange={onRange} accent={accent} />
         : <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
     }
     case 'camein': {
@@ -535,7 +549,7 @@ function StageTop({ stageKey, detail, mv, clientId, onRange }: { stageKey: strin
       const cs = computedStage(detail, 5)
       if (cs && !cs.isEmpty) {
         const registerLive = cs.sources.some((s) => s.id === 'pos_repeat_customers' && s.counted)
-        if (mv && !registerLive) return <StageWithChart mv={mv} label="New reviews" cs={cs} stageNumber={5} clientId={clientId} unit="Came back" showBreakdown={false} onRange={onRange} />
+        if (mv && !registerLive) return <StageWithChart mv={mv} label="New reviews" cs={cs} stageNumber={5} clientId={clientId} unit="Came back" showBreakdown={false} onRange={onRange} accent={accent} />
         const feed = stageFeedFrom(cs)
         return <StageHero total={feed.headline} label="Guests who came back" caption={feed.caption} />
       }
@@ -632,12 +646,13 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
   const singles = live.filter(({ srcs }) => srcs.length === 1)
   const multis = live.filter(({ srcs }) => srcs.length > 1)
   const offLabel = off.map(({ g }, k) => (k === 0 ? g.label : g.label.charAt(0).toLowerCase() + g.label.slice(1))).join(', ')
+  const top = Math.max(0, ...singles.map(({ srcs }) => srcs[0].value ?? 0))
   return (
     <Section title="Breakdown by source" sub={sub}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {singles.length > 0 && (
           <div>
-            {singles.map(({ g, srcs }, k) => <SourceRow key={g.key} label={g.label} s={srcs[0]} first={k === 0} />)}
+            {singles.map(({ g, srcs }, k) => <SourceRow key={g.key} label={g.label} s={srcs[0]} first={k === 0} share={singles.length > 1 && top > 0 && srcs[0].value != null ? srcs[0].value / top : null} />)}
           </div>
         )}
         {multis.map(({ g, srcs }) => (
@@ -653,27 +668,71 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
     </Section>
   )
 }
-/** One source as a list row: the group label, then the number (or a dash) on the right. */
-function SourceRow({ label, s, first }: { label: string; s: StageSourceView; first: boolean }) {
+/** One source as a list row: its brand mark, the group label, the number on the right, and
+ *  (when the group has company) a thin share bar in the stage's hue. */
+function SourceRow({ label, s, first, share }: { label: string; s: StageSourceView; first: boolean; share?: number | null }) {
+  const A = useAccent()
   const has = s.status === 'CONNECTED' && s.hasData && s.value != null
   const asOf = friendlyStamp(s.asOf)
   const manual = s.status === 'MANUAL_ENTRY'
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 0', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 500, color: C.ink }}>{label}</div>
-        {(s.context || asOf || manual || s.status === 'ERROR') && (
-          <div style={{ fontSize: 11.5, color: s.status === 'ERROR' ? C.coral : C.faint, marginTop: 1 }}>
-            {s.status === 'ERROR' ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : s.context ? s.context : `as of ${asOf}`}
-          </div>
-        )}
+    <div style={{ padding: '10px 0 11px', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <ProviderMark provider={String(s.provider)} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, color: C.ink }}>{label}</div>
+          {(s.context || asOf || manual || s.status === 'ERROR') && (
+            <div style={{ fontSize: 11.5, color: s.status === 'ERROR' ? C.coral : C.faint, marginTop: 1 }}>
+              {s.status === 'ERROR' ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : s.context ? s.context : `as of ${asOf}`}
+            </div>
+          )}
+        </div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: has || manual ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+          {has || (manual && s.value != null) ? s.value!.toLocaleString() : DASH}
+        </div>
       </div>
-      <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: has || manual ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-        {has || (manual && s.value != null) ? s.value!.toLocaleString() : DASH}
-      </div>
+      {share != null && (
+        <div style={{ height: 4, borderRadius: 99, background: C.bg, marginTop: 8, marginLeft: 40, overflow: 'hidden' }}>
+          <div style={{ width: `${Math.max(2, Math.round(share * 100))}%`, height: '100%', borderRadius: 99, background: A.main }} />
+        </div>
+      )}
     </div>
   )
 }
+
+/* Brand marks: a small tile in each network's own colour, so a row reads at a glance
+   without a word. Unknown providers get a quiet globe. */
+const PROVIDER_MARK: Record<string, { bg: string; fg?: string; text?: string; icon?: 'globe' | 'store' | 'bag' | 'cal' | 'heart' | 'mail' | 'share' | 'mega' }> = {
+  google_business_profile: { bg: '#4285f4', text: 'G' },
+  google: { bg: '#4285f4', text: 'G' },
+  gbp: { bg: '#4285f4', text: 'G' },
+  google_analytics: { bg: '#e37400', text: 'GA' },
+  google_search_console: { bg: '#4285f4', text: 'GS' },
+  instagram: { bg: 'linear-gradient(135deg, #f9a13d 0%, #e1306c 55%, #7b3fbf 100%)', text: 'IG' },
+  facebook: { bg: '#1877f2', text: 'f' },
+  tiktok: { bg: '#111111', text: 'TT' },
+  linkedin: { bg: '#0a66c2', text: 'in' },
+  youtube: { bg: '#ff0033', text: '▶' },
+  yelp: { bg: '#d32323', text: 'Y' },
+  pos: { bg: '#dd9a1c', icon: 'store' },
+  delivery: { bg: '#dd9a1c', icon: 'bag' },
+  reservations: { bg: '#7a5fd6', icon: 'cal' },
+  loyalty: { bg: '#1fa39a', icon: 'heart' },
+  email: { bg: '#6e6e73', icon: 'mail' },
+  social: { bg: '#e1306c', icon: 'share' },
+  ads: { bg: '#3d8ed8', icon: 'mega' },
+}
+export function ProviderMark({ provider, size = 28 }: { provider: string; size?: number }) {
+  const m = PROVIDER_MARK[provider] ?? { bg: C.bg, fg: C.mute, icon: 'globe' as const }
+  const ic = Math.round(size * 0.5)
+  const icon = m.icon === 'store' ? <Store size={ic} /> : m.icon === 'bag' ? <ShoppingBag size={ic} /> : m.icon === 'cal' ? <CalendarDays size={ic} /> : m.icon === 'heart' ? <Heart size={ic} /> : m.icon === 'mail' ? <Mail size={ic} /> : m.icon === 'share' ? <Share2 size={ic} /> : m.icon === 'mega' ? <Megaphone size={ic} /> : m.icon === 'globe' ? <Globe size={ic} /> : null
+  return (
+    <span aria-hidden style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), background: m.bg, color: m.fg ?? '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: m.text && m.text.length > 1 ? size * 0.36 : size * 0.5, fontWeight: 800, letterSpacing: '-.02em', flexShrink: 0, fontFamily: DISPLAY, lineHeight: 1 }}>
+      {icon ?? m.text}
+    </span>
+  )
+}
+
 // The graceful Sales collapse: honest about what we cannot see yet, with the one
 // door that unlocks it. Actions remains the visible endpoint of the funnel.
 function SalesLocked({ note }: { note?: string }) {
@@ -990,7 +1049,7 @@ function useRangeStage(cs: ComputedStage | undefined, stageNumber: number | unde
 //    instead of a frozen arrow. In the swipeable layout the source cards live
 //    BELOW the dots (showBreakdown=false + onRange reports the picked range up so
 //    the cards outside stay scoped to this chart's window). ──
-function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNumber, showBreakdown = true, onRange }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; breakdownTitle?: string; clientId?: string; stageNumber?: number; showBreakdown?: boolean; onRange?: (r: string) => void }) {
+function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNumber, showBreakdown = true, onRange, accent }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; accent?: string; breakdownTitle?: string; clientId?: string; stageNumber?: number; showBreakdown?: boolean; onRange?: (r: string) => void }) {
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
   const fresh = isFresh(mv.lastDataDate, summary.periodDays)
   const dn = summary.deltaPct < 0
@@ -1008,18 +1067,18 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
 
   return (
     <>
-      {/* number + trend on top */}
+      {/* the number sits right under the stage name; its "Times you showed up"
+          line now lives behind the ⓘ (owner 2026-09-04) */}
       <div>
-        <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{label}</div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
-          <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{total.toLocaleString()}</span>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+          <span aria-label={label} style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{total.toLocaleString()}</span>
           {total > 0 && fresh && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
-              <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{Math.abs(summary.deltaPct)}% {summary.cmpFrame}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: ac, background: acbg, padding: '4px 10px', borderRadius: 99, marginBottom: 4 }}>
+              <span style={{ fontSize: 10.5 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}
             </span>
           )}
           {total > 0 && !fresh && mv.lastDataDate && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: C.mute, background: C.bg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: C.mute, background: C.bg, padding: '4px 10px', borderRadius: 99, marginBottom: 4 }}>
               Updated {relDate(mv.lastDataDate)}
             </span>
           )}
@@ -1027,15 +1086,15 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
         {/* year-over-year: same window a year ago. Shows only when we can honestly
             make the claim (fresh data + a real prior-year number). */}
         {fresh && summary.yoyPct != null && (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: summary.yoyPct > 0 ? C.greenDk : summary.yoyPct < 0 ? C.coral : C.mute }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontSize: 12, fontWeight: 600, color: summary.yoyPct > 0 ? C.greenDk : summary.yoyPct < 0 ? C.coral : C.mute }}>
             {summary.yoyPct > 0 ? <TrendingUp size={14} /> : summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
-            {summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
+            {summary.yoyPct > 999 ? `Far above ${summary.yoyLabel}` : summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
           </div>
         )}
       </div>
       {/* histogram — trend/shape only; the ONE number for this card is the
           by-source total above, so the chart's own sum caption stays off */}
-      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} />
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} accent={accent} />
       {/* inline source cards (legacy single-column layout only — the swipeable
           layout renders them below the dots instead via RangeSources) */}
       {showBreakdown && (rangeStage ?? cs) ? <SourceBreakdown stage={(rangeStage ?? cs)!} unit={unit} title={breakdownTitle} sub={sub} showReconcile={false} showExtras={false} /> : null}
@@ -1088,6 +1147,7 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
 }
 
 function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | null }) {
+  const A = useAccent()
   const [range, setRange] = useState<TrendRange>('quarter')
   const daily = (mv?.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0)
   if (daily.length < 2) return null // no series → nothing honest to draw
@@ -1195,8 +1255,8 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} role="img" aria-label="Stage trend with campaign go-live markers">
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={C.green} stopOpacity="0.20" />
-            <stop offset="100%" stopColor={C.green} stopOpacity="0.02" />
+            <stop offset="0%" stopColor={A.main} stopOpacity="0.20" />
+            <stop offset="100%" stopColor={A.main} stopOpacity="0.02" />
           </linearGradient>
         </defs>
         {/* y-axis: gridlines + numbers (a day's worth for this stage) */}
@@ -1207,10 +1267,10 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
           </g>
         ))}
         {/* typical-day baseline for context */}
-        <line x1={padL} y1={yAt(avgV)} x2={W - padR} y2={yAt(avgV)} stroke={C.greenLine} strokeWidth={1} strokeDasharray="4 4" />
-        <text x={W - padR} y={yAt(avgV) - 4} textAnchor="end" fontSize={9.5} fontWeight={600} fill={C.greenDk}>typical day</text>
+        <line x1={padL} y1={yAt(avgV)} x2={W - padR} y2={yAt(avgV)} stroke={A.main} strokeWidth={1} strokeDasharray="4 4" />
+        <text x={W - padR} y={yAt(avgV) - 4} textAnchor="end" fontSize={9.5} fontWeight={600} fill={A.dark}>typical day</text>
         <path d={area} fill={`url(#${gid})`} />
-        <path d={line} fill="none" stroke={C.green} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={line} fill="none" stroke={A.main} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
         {clusters.map((c) => {
           const multi = c.last !== c.first
           const tag = multi ? `${c.first}–${c.last}` : String(c.first)
@@ -1218,10 +1278,10 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
           const when = multi ? (fmtPinDate(c.ms0) === fmtPinDate(c.ms1) ? fmtPinDate(c.ms0) : `${fmtPinDate(c.ms0)} – ${fmtPinDate(c.ms1)}`) : null
           return (
             <g key={c.ms0}>
-              <line x1={c.cx} y1={c.cy} x2={c.cx} y2={yBot} stroke={C.greenLine} strokeWidth={1} strokeDasharray="3 3" />
-              <circle cx={c.cx} cy={c.cy} r={r} fill="#fff" stroke={C.green} strokeWidth={2} />
-              <text x={c.cx} y={c.cy} textAnchor="middle" dominantBaseline="central" fontSize={multi ? 10 : 11} fontWeight={700} fill={C.greenDk}>{tag}</text>
-              {when && <text x={c.cx} y={yBot + 12} textAnchor="middle" fontSize={8.5} fontWeight={700} fill={C.greenDk}>{when}</text>}
+              <line x1={c.cx} y1={c.cy} x2={c.cx} y2={yBot} stroke={A.main} strokeWidth={1} strokeDasharray="3 3" />
+              <circle cx={c.cx} cy={c.cy} r={r} fill="#fff" stroke={A.main} strokeWidth={2} />
+              <text x={c.cx} y={c.cy} textAnchor="middle" dominantBaseline="central" fontSize={multi ? 10 : 11} fontWeight={700} fill={A.dark}>{tag}</text>
+              {when && <text x={c.cx} y={yBot + 12} textAnchor="middle" fontSize={8.5} fontWeight={700} fill={A.dark}>{when}</text>}
             </g>
           )
         })}
@@ -1238,7 +1298,7 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {marks.map((m, i) => (
               <div key={m.ms} style={{ display: 'flex', gap: 12, padding: '12px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
-                <div style={{ width: 26, height: 26, borderRadius: 99, border: `1.5px solid ${C.green}`, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{m.n}</div>
+                <div style={{ width: 26, height: 26, borderRadius: 99, border: `1.5px solid ${A.main}`, color: A.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{m.n}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>{fmtPinDate(m.ms)}</span>
@@ -1305,6 +1365,7 @@ function foldSameNames(items: StageCampaign[]): { c: StageCampaign; count: numbe
   return out
 }
 function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
+  const A = useAccent()
   if (list === null) return null // stay quiet until the fetch lands
   const MAX = 3
   const shown = list.slice(0, MAX)
@@ -1316,22 +1377,22 @@ function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {foldSameNames(shown).map(({ c, count }) => (
             <Link key={c.id} href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: 'inherit' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={C.greenDk} /></div>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={A.dark} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: C.greenDk, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: C.green }} />Live{count > 1 ? ` · ${count} campaigns` : ''}</div>
+                <div style={{ fontSize: 11, color: A.dark, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: A.main }} />Live{count > 1 ? ` · ${count} campaigns` : ''}</div>
               </div>
               <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
             </Link>
           ))}
           {extra > 0 && (
-            <Link href="/dashboard/campaigns" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>{extra} more working on this <ChevronRight size={15} /></Link>
+            <Link href="/dashboard/campaigns" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 12.5, fontWeight: 600, color: A.dark, textDecoration: 'none' }}>{extra} more working on this <ChevronRight size={15} /></Link>
           )}
         </div>
       ) : (
-        <Link href="/dashboard/campaigns" style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fbfcfb', border: `1px dashed ${C.greenLine}`, borderRadius: 14, padding: 14, textDecoration: 'none', color: 'inherit' }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={C.greenDk} /></div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>No live campaign on this yet. <span style={{ color: C.greenDk, fontWeight: 600 }}>Start one →</span></div>
+        <Link href="/dashboard/campaigns" style={{ display: 'flex', alignItems: 'center', gap: 11, ...TILE, padding: 14, textDecoration: 'none', color: 'inherit' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={A.dark} /></div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>No live campaign on this yet. <span style={{ color: A.dark, fontWeight: 600 }}>Start one →</span></div>
         </Link>
       )}
     </div>
@@ -1757,13 +1818,13 @@ function TopSearches({ queries }: { queries: { query: string; impressions: numbe
 export function PostRow({ p }: { p: InsightsPost }) {
           const inner = (
             <>
-              <div style={{ width: 52, height: 52, borderRadius: 10, backgroundColor: p.thumbnailUrl ? '#000' : C.bg, backgroundImage: p.thumbnailUrl ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: p.thumbnailUrl ? '#000' : '#e9e9ee', backgroundImage: p.thumbnailUrl ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {!p.thumbnailUrl && <ImageIcon size={18} color={C.faint} />}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}>{p.type}</span>
-                  <span style={{ fontSize: 11, color: C.faint, textTransform: 'capitalize' }}>{p.platform}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.mute, textTransform: 'capitalize' }}><ProviderMark provider={p.platform} size={16} />{p.platform}</span>
                   {p.postedAt && reviewDate(p.postedAt) && <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{reviewDate(p.postedAt)}</span>}
                 </div>
                 <div style={{ display: 'flex', gap: 14, fontSize: 12, flexWrap: 'wrap' }}>
@@ -1779,7 +1840,7 @@ export function PostRow({ p }: { p: InsightsPost }) {
               {p.permalink && <ExternalLink size={15} color={C.faint} style={{ flexShrink: 0 }} />}
             </>
           )
-          const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 11, alignItems: 'center', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 10 }
+          const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 11, alignItems: 'center', ...TILE, padding: 10 }
           return p.permalink
             ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
             : <div style={box}>{inner}</div>

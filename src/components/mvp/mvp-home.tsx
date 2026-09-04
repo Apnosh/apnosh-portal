@@ -662,7 +662,7 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
           <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{summary.total ? summary.total.toLocaleString() : '—'}</span>
           {summary.total > 0 && fresh && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
-              <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{Math.abs(summary.deltaPct)}% {summary.cmpFrame}
+              <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}
             </span>
           )}
           {summary.total > 0 && !fresh && mv.lastDataDate && (
@@ -715,7 +715,7 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
    from useChartRange (shared with the hero), so switching the range moves the
    headline number and delta, not only the bars. */
 export type ChartRange = '7d' | '30d' | '90d' | '1y' | 'custom'
-const CHART_RANGES: [ChartRange, string][] = [['7d', '7 days'], ['30d', '30 days'], ['90d', '90 days'], ['1y', 'Year'], ['custom', 'Custom']]
+const CHART_RANGES: [ChartRange, string][] = [['7d', '7d'], ['30d', '30d'], ['90d', '90d'], ['1y', '1y'], ['custom', 'Custom']]
 
 export function isoDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -781,16 +781,25 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     })
   } else if (range === '90d') {
     curLbl = 'Last 90 days'; cmpLbl = 'Prior 90 days'; cmpFrame = 'vs prior 90 days'; periodDays = 90
-    /* The literal last 90 calendar days ending TODAY, same date-aware
-       elapsed/settled rules as the 30-day view. */
+    /* 90 daily bars are hairlines on a phone — the owner could not see them at all
+       (2026-09-04). Thirteen WEEK buckets ending today instead (13 × 7 = 91 days, so
+       each week lines up weekday-for-weekday with the prior window's), each summing
+       its days; elapsed/settled come from the bucket's edge dates, same rules as
+       the 30-day view. */
     const now = new Date()
     const todayD = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-    bars = Array.from({ length: 90 }, (_, i) => {
-      const dt = new Date(todayD.getFullYear(), todayD.getMonth(), todayD.getDate() - (89 - i))
-      const prior = new Date(dt); prior.setDate(prior.getDate() - 90)
-      const elapsed = frontier ? dt.getTime() <= frontier.getTime() : true
-      const settled = frontier ? dt.getTime() < frontier.getTime() : i < 89
-      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: `${dt.getMonth() + 1}/${dt.getDate()}`, tip: full(dt), cmpLabel: '90 days earlier', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt) }
+    const short = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const shift = (d: Date, n: number) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+    const sumDays = (from: Date, n: number) => { let t = 0; for (let k = 0; k < n; k++) t += dmap.get(isoDate(shift(from, k))) ?? 0; return t }
+    const agoDays = (from: Date, n: number) => { let t = 0; for (let k = 0; k < n; k++) t += yearAgo(shift(from, k)); return t }
+    bars = Array.from({ length: 13 }, (_, i) => {
+      const s0 = shift(todayD, -(12 - i) * 7 - 6)
+      const e0 = shift(s0, 6)
+      const ps = shift(s0, -91)
+      const pe = shift(ps, 6)
+      const elapsed = frontier ? s0.getTime() <= frontier.getTime() : true
+      const settled = frontier ? e0.getTime() < frontier.getTime() : i < 12
+      return { value: sumDays(s0, 7), compare: sumDays(ps, 7), label: `${s0.getMonth() + 1}/${s0.getDate()}`, tip: `${short(s0)} – ${short(e0)}`, cmpLabel: '13 weeks earlier', cmpDate: `${short(ps)} – ${short(pe)}`, settled, elapsed, ago: agoDays(s0, 7) }
     })
   } else if (range === '1y') {
     curLbl = 'Last 12 months'; cmpLbl = 'Prior year'; cmpFrame = 'vs prior year'; periodDays = 365
@@ -932,7 +941,7 @@ export function relDate(lastDataDate: string): string {
 }
 
 export function ActionsChart({
-  range, setRange, cStart, setCStart, cEnd, setCEnd, summary, noun = 'took action', showTotal = true,
+  range, setRange, cStart, setCStart, cEnd, setCEnd, summary, noun = 'took action', showTotal = true, accent,
 }: {
   range: ChartRange; setRange: (r: ChartRange) => void
   cStart: string; setCStart: (s: string) => void
@@ -944,22 +953,30 @@ export function ActionsChart({
      close-but-different numbers on one card — owner-confirmed confusing. There
      the caption is off; the home card keeps it (it IS that card's number). */
   showTotal?: boolean
+  /* the bar colour — Insights paints each stage in its own hue */
+  accent?: string
 }) {
   const { C } = useMvpTheme()
-  const H = 62
+  const H = 84
   const [picked, setPicked] = useState<number | null>(null)
   const { bars, curLbl, cmpLbl, total, avg, max } = summary
   const avgY = (avg / max) * H
   const dense = bars.length > 8
+  const col = accent ?? C.green
   const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.card }
-
+  const pickedBar = picked != null ? bars[picked] : null
   return (
-    <div style={{ margin: '8px 0 0' }}>
-      <div style={{ display: 'flex', gap: 2, marginBottom: 12, borderRadius: 999, padding: 3, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
+    <div style={{ margin: '10px 0 0' }}>
+      {/* the range capsule: short labels (the long ones overlapped on a phone) and a
+          calendar for a custom window */}
+      <div style={{ display: 'flex', gap: 2, marginBottom: 12, borderRadius: 999, padding: 3, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
         {CHART_RANGES.map(([k, l]) => {
           const on = range === k
+          const cal = k === 'custom'
           return (
-            <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 12.5, fontWeight: on ? 600 : 500, cursor: 'pointer', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s' }}>{l}</button>
+            <button key={k} aria-label={cal ? 'Custom dates' : l} title={cal ? 'Custom dates' : undefined} onClick={() => { setRange(k); setPicked(null) }} style={{ flex: cal ? '0 0 44px' : 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 13.5, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s' }}>
+              {cal ? <CalendarDays size={15} /> : l}
+            </button>
           )
         })}
       </div>
@@ -979,36 +996,18 @@ export function ActionsChart({
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: dense ? 3 : 10, height: '100%' }}>
           {bars.map((b, i) => {
             const isPicked = picked === i
-            const edge = i < 2 ? 'left' : i > bars.length - 3 ? 'right' : 'mid'
+            const dim = picked != null && !isPicked
             const pending = b.elapsed === false
             return (
               <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: dense ? 1.5 : 3, cursor: 'pointer' }}>
                 {/* a day no source has reported yet: a faint dashed stub, not an
                     empty slot — the window is current, the numbers are en route */}
                 {pending ? (
-                  <div style={{ width: '42%', maxWidth: 17, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '3px 3px 0 0', opacity: 0.55 }} />
+                  <div style={{ width: '46%', maxWidth: 18, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '4px 4px 0 0', opacity: 0.55 }} />
                 ) : (
-                <div className="mvp-grow" style={{ width: '42%', maxWidth: 17, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: isPicked ? C.greenDk : C.green, borderRadius: '3px 3px 0 0', boxShadow: b.value > 0 ? '0 1px 7px rgba(74,189,152,0.45)' : 'none', animationDelay: `${20 + i * 14}ms` }} />
+                  <div className="mvp-grow" style={{ width: '46%', maxWidth: 18, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: `linear-gradient(180deg, ${col} 0%, ${col}b8 100%)`, opacity: dim ? 0.4 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 0 2px ${C.card}, 0 0 0 3.5px ${col}` : 'none', transition: 'opacity .15s' }} />
                 )}
-                <div style={{ width: '42%', maxWidth: 17, height: `${(b.compare / max) * 100}%`, background: C.ghost, borderRadius: '3px 3px 0 0' }} />
-                {isPicked && (() => {
-                  const delta = b.value - b.compare
-                  const dpct = b.compare ? Math.round((delta / b.compare) * 100) : null
-                  const dCol = delta > 0 ? '#6fe3bf' : delta < 0 ? '#ef9a9a' : 'rgba(255,255,255,.6)'
-                  return (
-                    <div style={{ position: 'absolute', bottom: '100%', marginBottom: 6, ...(edge === 'mid' ? { left: '50%', transform: 'translateX(-50%)' } : edge === 'left' ? { left: 0 } : { right: 0 }), background: '#12211b', color: '#fff', borderRadius: 8, padding: '8px 11px', fontSize: 11, whiteSpace: 'nowrap', zIndex: 5, lineHeight: 1.45, textAlign: 'left' }}>
-                      <div style={{ fontWeight: 700 }}>{b.tip}</div>
-                      <div style={{ opacity: 0.9 }}>{b.value.toLocaleString()} {noun}</div>
-                      <div style={{ borderTop: '1px solid rgba(255,255,255,.22)', marginTop: 6, paddingTop: 6 }}>
-                        <div style={{ opacity: 0.6, fontSize: 10 }}>vs {b.cmpLabel}{b.cmpDate ? ` · ${b.cmpDate}` : ''}</div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 1 }}>
-                          <span style={{ opacity: 0.9 }}>{b.compare.toLocaleString()} {noun}</span>
-                          {dpct != null && <span style={{ color: dCol, fontWeight: 700 }}>{delta > 0 ? '▲' : delta < 0 ? '▼' : ''}{Math.abs(dpct)}%</span>}
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })()}
+                <div style={{ width: '46%', maxWidth: 18, height: `${(b.compare / max) * 100}%`, background: C.ghost, opacity: dim ? 0.5 : 1, borderRadius: '4px 4px 0 0' }} />
               </div>
             )
           })}
@@ -1020,11 +1019,40 @@ export function ActionsChart({
           return <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: dense ? 9 : 10.5, color: C.faint, whiteSpace: 'nowrap' }}>{show ? b.label : ''}</div>
         })}
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 9, fontSize: 11, flexWrap: 'wrap' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.green }} /> {curLbl}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.ghost }} /> {cmpLbl}</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 11, borderTop: `1px dashed ${C.faint}`, display: 'inline-block' }} /> Avg {avg}</span>
+      {/* ONE fixed-height line under the axis: the legend, or — while a bar is
+          picked — that bar's readout. It used to float above the bars, where it
+          covered the range tabs and the number (owner, 2026-09-04). */}
+      <div style={{ minHeight: 22, marginTop: 9, fontSize: 11.5, display: 'flex', alignItems: 'center' }}>
+        {pickedBar ? (() => {
+          const b = pickedBar
+          const delta = b.value - b.compare
+          const dpct = b.compare ? Math.round((delta / b.compare) * 100) : null
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              <b style={{ color: C.ink, fontWeight: 700 }}>{b.tip}</b>
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><b style={{ color: C.ink, fontWeight: 700 }}>{b.value.toLocaleString()}</b> {noun}</span>
+              {dpct != null && <span style={{ fontWeight: 700, color: delta > 0 ? C.greenDk : delta < 0 ? '#c0564f' : C.mute, flexShrink: 0 }}>{delta > 0 ? '▲' : delta < 0 ? '▼' : ''}{Math.abs(dpct)}%</span>}
+              <span style={{ color: C.faint, flexShrink: 0 }}>vs {b.compare.toLocaleString()} {b.cmpLabel.replace('13 weeks earlier', 'earlier').replace('30 days earlier', 'earlier').replace('90 days earlier', 'earlier')}</span>
+            </div>
+          )
+        })() : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 9, height: 9, borderRadius: 3, background: col }} /> {curLbl}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.ghost }} /> {cmpLbl}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 11, borderTop: `1px dashed ${C.faint}`, display: 'inline-block' }} /> Avg {avg.toLocaleString()}</span>
+          </div>
+        )}
       </div>
     </div>
   )
+}
+
+/** The delta pill's words. A tiny prior period makes the percentage absurd
+ *  ("▲ 136,968%", seen on the sandbox 2026-09-04) — past 999% or under a base
+ *  of 20 it says what actually happened instead. */
+export function deltaLabel(summary: RangeSummary): string {
+  const { deltaPct, compareTotal, cmpFrame } = summary
+  if (compareTotal === 0 && summary.total > 0) return `new ${cmpFrame}`
+  if (compareTotal < 20 || Math.abs(deltaPct) > 999) return `${deltaPct >= 0 ? 'up' : 'down'} from ${compareTotal.toLocaleString()}`
+  return `${Math.abs(deltaPct)}% ${cmpFrame}`
 }
