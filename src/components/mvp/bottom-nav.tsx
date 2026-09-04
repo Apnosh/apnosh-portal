@@ -16,7 +16,7 @@ export type NavKey = 'home' | 'campaigns' | 'orders' | 'inbox' | 'more' | 'messa
 
 export default function BottomNav({ active }: { active: NavKey }) {
   return (
-    <nav style={{ flexShrink: 0, position: 'relative', overflow: 'visible', borderTop: '1px solid rgba(0,0,0,.06)', background: '#fff', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', padding: '8px 8px calc(8px + env(safe-area-inset-bottom))' }}>
+    <nav style={{ position: 'absolute', left: 12, right: 12, bottom: 'max(10px, env(safe-area-inset-bottom))', zIndex: 5, overflow: 'visible', borderRadius: 999, background: 'rgba(255,255,255,0.72)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', border: '1px solid rgba(255,255,255,0.8)', boxShadow: '0 2px 4px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.12)', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', padding: '8px 8px calc(8px + env(safe-area-inset-bottom))' }}>
       <Item href="/dashboard" icon={<HomeIcon size={21} />} label="Home" on={active === 'home'} />
       <Item href="/dashboard/campaigns" icon={<CalendarDays size={21} />} label="Campaigns" on={active === 'campaigns'} />
       <Link href="/dashboard/campaigns/new" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, textDecoration: 'none', minWidth: 56 }}>

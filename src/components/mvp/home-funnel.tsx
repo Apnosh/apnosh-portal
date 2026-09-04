@@ -1105,11 +1105,11 @@ export default function HomeFunnel({
       <div ref={headerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }}>
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 6px' }}>
-        <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, background: theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f2f3f2', borderRadius: 10, padding: 3 }}>
+        <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, borderRadius: 999, padding: 3, background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
           {RANGES.map(([k, label]) => {
             const on = curRange === k
             return (
-              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.14)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 8, padding: '7px 0', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 1px 3px rgba(0,0,0,.10)' : 'none', transition: 'background .15s, color .15s' }}>{label.replace('Last ', '').replace('year', 'Year')}</button>
+              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }}>{label.replace('Last ', '').replace('year', 'Year')}</button>
             )
           })}
         </div>

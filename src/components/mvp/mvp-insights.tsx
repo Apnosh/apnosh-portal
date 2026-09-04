@@ -1185,10 +1185,10 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
     <div style={CARD}>
       <div style={{ ...H2, marginBottom: 2 }}>Did it move?</div>
       <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.4, marginBottom: 12 }}>Pins are launch days. The dashed line is a typical day.</div>
-      <div style={{ display: 'flex', background: C.bg, borderRadius: 10, padding: 3, marginBottom: 14 }}>
+      <div style={{ display: 'flex', borderRadius: 999, padding: 3, marginBottom: 14, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
         {(['month', 'quarter', 'year', 'all'] as TrendRange[]).map((r) => {
           const on = range === r
-          return <button key={r} onClick={() => setRange(r)} style={{ flex: 1, border: 'none', borderRadius: 7, padding: '6px 0', fontSize: 12, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none', cursor: 'pointer' }}>{TREND_LABEL[r]}</button>
+          return <button key={r} onClick={() => setRange(r)} style={{ flex: 1, border: 'none', borderRadius: 999, padding: '7px 0', fontSize: 12, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none', cursor: 'pointer' }}>{TREND_LABEL[r]}</button>
         })}
       </div>
 

@@ -955,11 +955,11 @@ export function ActionsChart({
 
   return (
     <div style={{ margin: '8px 0 0' }}>
-      <div style={{ display: 'flex', gap: 2, marginBottom: 12, background: C.bg, borderRadius: 10, padding: 3 }}>
+      <div style={{ display: 'flex', gap: 2, marginBottom: 12, borderRadius: 999, padding: 3, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
         {CHART_RANGES.map(([k, l]) => {
           const on = range === k
           return (
-            <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 8, padding: '7px 0', fontSize: 12.5, fontWeight: on ? 600 : 500, cursor: 'pointer', boxShadow: on ? '0 1px 3px rgba(0,0,0,.10)' : 'none', transition: 'background .15s' }}>{l}</button>
+            <button key={k} onClick={() => { setRange(k); setPicked(null) }} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 12.5, fontWeight: on ? 600 : 500, cursor: 'pointer', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s' }}>{l}</button>
           )
         })}
       </div>

@@ -87,10 +87,10 @@ export default function MvpCampaigns() {
 
       <div style={{ padding: '16px 18px 0' }}>
         {!empty && (
-          <div style={{ display: 'inline-flex', background: '#f1f3f2', borderRadius: 10, padding: 3, marginBottom: 18 }}>
+          <div style={{ display: 'inline-flex', borderRadius: 999, padding: 3, marginBottom: 18, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
             {([['list', 'List'], ['calendar', 'Calendar']] as const).map(([k, l]) => {
               const on = view === k
-              return <button key={k} onClick={() => setView(k)} style={{ border: 'none', borderRadius: 8, padding: '6px 18px', fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 3px rgba(0,0,0,.08)' : 'none', cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
+              return <button key={k} onClick={() => setView(k)} style={{ border: 'none', borderRadius: 999, padding: '7px 18px', fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none', cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
             })}
           </div>
         )}
