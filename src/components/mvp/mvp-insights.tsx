@@ -1521,13 +1521,11 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
   const clampX = (x: number) => Math.max(padL + 11, Math.min(W - padR - 11, x))
   const yTicks = [maxV, maxV / 2, 0]
   const slot = plotW / n
-  const barW = slot < 2.2 ? slot * 0.7 : Math.min(10, slot * 0.55)
   const xOf = (i: number) => padL + (i + 0.5) * slot
   const pts = days.map((_, i) => ({ x: xOf(i), y: yAt(roll[i]) }))
   const line = pts.map((pt, i) => `${i ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')
   const area = `${line} L${pts[n - 1].x.toFixed(1)},${yBot} L${pts[0].x.toFixed(1)},${yBot} Z`
   const priorLine = prior.map((v, i) => (v == null ? '' : `${i > 0 && prior[i - 1] != null ? 'L' : 'M'}${xOf(i).toFixed(1)},${yAt(v).toFixed(1)}`)).filter(Boolean).join(' ')
-  const peakI = days.reduce((b, d, i) => (d.v > days[b].v ? i : b), 0)
   const noun = mv?.unit ?? ''
 
   const yOnLine = (x: number) => {
@@ -1609,7 +1607,7 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
         onPointerLeave={() => setPick(null)}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={A.main} stopOpacity="0.16" />
+            <stop offset="0%" stopColor={A.main} stopOpacity="0.22" />
             <stop offset="100%" stopColor={A.main} stopOpacity="0.01" />
           </linearGradient>
         </defs>
@@ -1620,20 +1618,11 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
             <text x={padL - 6} y={yAt(v)} textAnchor="end" dominantBaseline="central" fontSize={9} fill={C.faint}>{trendCompact(v)}</text>
           </g>
         ))}
-        {/* every day, as a thin bar */}
-        {days.map((d, i) => (
-          <rect key={d.t} x={xOf(i) - barW / 2} y={yAt(d.v)} width={barW} height={Math.max(0, yBot - yAt(d.v))} rx={barW > 3 ? 1.5 : 0} fill={A.main} opacity={pick === i ? 0.75 : 0.2} />
-        ))}
         {/* the same window one period earlier */}
         {priorHas && <path d={priorLine} fill="none" stroke={C.mute} strokeOpacity={0.55} strokeWidth={1.3} strokeDasharray="3 3" strokeLinejoin="round" />}
         {/* the trend: a 7-day rolling average */}
         <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={A.main} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
-        {/* the best day, marked */}
-        <g>
-          <circle cx={xOf(peakI)} cy={yAt(days[peakI].v)} r={3} fill="#fff" stroke={A.dark} strokeWidth={1.6} />
-          <text x={Math.max(padL + 30, Math.min(W - padR - 30, xOf(peakI)))} y={Math.max(yTop + 9, yAt(days[peakI].v) - 8)} textAnchor="middle" fontSize={9.5} fontWeight={700} fill={A.dark}>Best day · {trendCompact(days[peakI].v)}</text>
-        </g>
         {/* the latest average, at the line's end */}
         <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r={3.5} fill={A.main} stroke="#fff" strokeWidth={1.5} />
         {clusters.map((c) => {
@@ -1667,13 +1656,11 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
         {pick != null ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
             <b style={{ color: C.ink }}>{fmtPinDate(days[pick].t)}</b>
-            <span><b style={{ color: C.ink }}>{days[pick].v.toLocaleString()}</b> {noun}</span>
-            <span style={{ color: C.faint }}>· 7-day avg {Math.round(roll[pick]).toLocaleString()}</span>
+            <span><b style={{ color: C.ink }}>{Math.round(roll[pick]).toLocaleString()}</b> {noun} a day, on average</span>
             {prior[pick] != null && <span style={{ color: C.faint }}>· prior period {prior[pick]!.toLocaleString()}</span>}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 4, height: 11, borderRadius: 2, background: A.main, opacity: 0.35 }} /> Each day</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 14, height: 0, borderTop: `2.2px solid ${A.main}` }} /> 7-day average</span>
             {priorHas && <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 14, borderTop: `1.3px dashed ${C.mute}`, display: 'inline-block' }} /> Prior period</span>}
           </div>
