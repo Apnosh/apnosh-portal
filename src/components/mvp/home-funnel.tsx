@@ -92,7 +92,7 @@ const BAND_RGB: Record<HealthBand, [number, number, number]> = {
 }
 // darker variants for text/marks on the LIGHT ground (the bright ramp above is for dark, and for fills/rings/crowd on dark).
 const BAND_INK: Record<HealthBand, [number, number, number]> = {
-  veryLow: [201, 45, 50], low: [186, 78, 28], average: [150, 112, 14], high: [40, 140, 74], veryHigh: [28, 120, 86],
+  veryLow: [255, 107, 87], low: [186, 78, 28], average: [150, 112, 14], high: [46, 154, 120], veryHigh: [46, 154, 120],
 }
 const BAND_WORD: Record<HealthBand, string> = { veryLow: 'very low', low: 'low', average: 'average', high: 'high', veryHigh: 'very high' }
 const bandVigor = (b: HealthBand | null): number => (b === 'veryHigh' ? 1 : b === 'high' ? 0.66 : 0.38) // pulse liveliness by band
@@ -532,8 +532,8 @@ export default function HomeFunnel({
         const my = (py + qy) / 2
         ctx.bezierCurveTo(px, my, qx, my, qx, qy) // a smooth S through the centres
       }
-      ctx.lineWidth = 2; ctx.lineCap = 'round'
-      ctx.setLineDash([1, 7])
+      ctx.lineWidth = dark ? 2 : 1.6; ctx.lineCap = 'round'
+      ctx.setLineDash(dark ? [1, 7] : [3, 5])
       ctx.strokeStyle = `rgba(${C.pathRGB},${C.pathAlpha * pathIn})`
       ctx.stroke(); ctx.setLineDash([])
       ctx.restore()
@@ -549,6 +549,13 @@ export default function HomeFunnel({
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
       const rgb = bd ? bandCol(bd).join(',') : TONE[effZone].rgb
       const peak = (effZone === 'estimate' ? 0.20 : effZone === 'measured' ? 0.15 : 0.05) * (bd === 'veryLow' ? 1.2 : bd === 'low' ? 1.1 : 1)
+      // light: a white disc with a soft green-grey shadow, painted BEFORE the crowd so the people sit on it
+      if (!dark) {
+        ctx.save()
+        ctx.shadowColor = `rgba(18,80,58,${0.12 * eIn})`; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6
+        ctx.beginPath(); ctx.arc(ox, oy, r, 0, 7); ctx.fillStyle = effZone === 'locked' ? '#fafafa' : '#ffffff'; ctx.fill()
+        ctx.restore()
+      }
       const g = ctx.createRadialGradient(ox, oy, r * 0.08, ox, oy, r * 1.02)
       g.addColorStop(0, `rgba(${rgb},${peak * eIn})`)
       g.addColorStop(0.7, `rgba(${rgb},${peak * 0.4 * eIn})`)
@@ -566,6 +573,7 @@ export default function HomeFunnel({
          dial), so it never carries the same authority as a measured ring. ── */
     for (let i = 0; i < n; i++) {
       const s = stages[i]
+      if (!dark) break // the light look is still: solid green rings, no pulse (owner pick 2026-09-03)
       if (s.count == null || s.count === 0) continue // no data yet → no signal at all
       const L = layout[i], ox = cx + L.dx, oy = L.y, r = rAt(i)
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
@@ -649,8 +657,8 @@ export default function HomeFunnel({
       const rc: number[] = band ? bandCol(band) : TONE[effZone].rgb.split(',').map(Number)
       const ringStr = `${Math.round(rc[0])},${Math.round(rc[1])},${Math.round(rc[2])}`
       const baseRowStr = TONE[effZone].rgb // the row's OWN zone hue → press tint + chevron wake
-      const baseA = effZone === 'measured' ? 0.82 : effZone === 'estimate' ? 0.52 : 0.32
-      const lw = effZone === 'locked' ? 1.4 : 1.6
+      const baseA = !dark ? (effZone === 'locked' ? 0.35 : 0.95) : effZone === 'measured' ? 0.82 : effZone === 'estimate' ? 0.52 : 0.32
+      const lw = effZone === 'locked' ? 1.4 : !dark ? 1.4 : 1.6
       const dash: number[] | null = effZone === 'estimate' ? [4, 5] : null // the estimate orb is dashed (the mockup's "~about" bead)
 
       // entrance: each ring fades + settles in, staggered 90ms top-to-bottom
@@ -677,9 +685,11 @@ export default function HomeFunnel({
       ctx.strokeStyle = `rgba(${ringStr},${baseA * eIn})`; ctx.stroke(); ctx.setLineDash([])
       ctx.restore()
 
-      // a bright core dot at the orb's centre (the mockup's lit bead)
-      ctx.beginPath(); ctx.arc(ox, oy, effZone === 'locked' ? 1.8 : 2.6, 0, 7)
-      ctx.fillStyle = `rgba(${ringStr},${(effZone === 'locked' ? 0.4 : 0.9) * eIn})`; ctx.fill()
+      // a bright core dot at the orb's centre (the mockup's lit bead) — night only
+      if (dark) {
+        ctx.beginPath(); ctx.arc(ox, oy, effZone === 'locked' ? 1.8 : 2.6, 0, 7)
+        ctx.fillStyle = `rgba(${ringStr},${(effZone === 'locked' ? 0.4 : 0.9) * eIn})`; ctx.fill()
+      }
 
       // the ledger — the number is pinned to the SCREEN EDGE (small padding) OPPOSITE the
       // orb, so every row spans the full width: crowd/orb on one side, the big figure on the
@@ -710,9 +720,9 @@ export default function HomeFunnel({
       ctx.fillText(num, anchorX, numBase, roomOut)
       const drawnNumW = Math.min(ctx.measureText(num).width, roomOut) // width actually drawn (maxWidth may compress it)
       setLS('0px')
-
       // YoY % — sits BESIDE the number (on its inner side, toward the centre), vertically centred on the
       // row. The glyph carries direction, |percent| the magnitude: ▲ up=green, ▼ down=coral, – flat=mute.
+      let tickW = 0 // the tick's width, so the connector starts after it
       const dy = s.deltaAbs != null ? s.deltaAbs : s.deltaYoY
       if (dy != null && s.count != null) {
         const tickIn = clamp01((entrance - (i * 0.09 + 0.5)) / 0.35) // resolves just after the count-up
@@ -725,11 +735,28 @@ export default function HomeFunnel({
             : (r0 === 0 ? '– even' : (r0 > 0 ? '▲' : '▼') + Math.abs(r0) + '%')
           ctx.font = '700 13px Inter, sans-serif'
           ctx.textAlign = numLeft ? 'left' : 'right'
+          tickW = ctx.measureText(tickStr).width + 8
           const tx = numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8
           ctx.globalAlpha = tickIn
           ctx.fillStyle = r0 > 0 ? C.greenDk : r0 < 0 ? (band === 'veryLow' ? C.faint : C.coral) : C.mute
           ctx.fillText(tickStr, tx, oy + 5)
           ctx.globalAlpha = 1
+        }
+      }
+
+      // the connector (owner pick 2026-09-03): a hairline from the number's inner edge to the orb's rim, ending in a dot,
+      // so there is never a question which circle a number belongs to
+      {
+        const gap = 10
+        const x0 = numLeft ? anchorX + drawnNumW + tickW + gap : anchorX - drawnNumW - tickW - gap
+        const x1 = numLeft ? ox - r - 4 : ox + r + 4
+        if ((numLeft && x1 - x0 > 14) || (!numLeft && x0 - x1 > 14)) {
+          ctx.save()
+          ctx.globalAlpha = eIn
+          ctx.beginPath(); ctx.moveTo(x0, oy); ctx.lineTo(x1, oy)
+          ctx.lineWidth = 1; ctx.setLineDash([]); ctx.strokeStyle = `rgba(${ringStr},${dark ? 0.45 : 0.6})`; ctx.stroke()
+          ctx.beginPath(); ctx.arc(x1, oy, 2.4, 0, 7); ctx.fillStyle = `rgba(${ringStr},0.9)`; ctx.fill()
+          ctx.restore()
         }
       }
 
@@ -767,9 +794,10 @@ export default function HomeFunnel({
       const pw = ctx.measureText(label).width + 20, ph = 18
       ctx.globalAlpha = pillIn
       roundRectP(px - pw / 2, midY - ph / 2, pw, ph, ph / 2)
-      ctx.fillStyle = `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
+      const alarm = !dark && dband === 'veryLow' // the weak step is the one filled chip on the page (owner pick 2026-09-03)
+      ctx.fillStyle = alarm ? '#ff6b57' : `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
       ctx.fill()
-      ctx.fillStyle = `rgb(${cr.join(',')})` // band-coloured text (bright on dark, dark ink on light)
+      ctx.fillStyle = alarm ? '#ffffff' : `rgb(${cr.join(',')})` // band-coloured text (bright on dark, dark ink on light)
       ctx.fillText(label, px, midY + 4)
       ctx.globalAlpha = 1
     }
@@ -1076,11 +1104,11 @@ export default function HomeFunnel({
       <div ref={headerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }}>
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 6px' }}>
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flex: 1, minWidth: 0, WebkitOverflowScrolling: 'touch' }}>
+        <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, background: theme === 'dark' ? 'rgba(255,255,255,0.06)' : '#f2f3f2', borderRadius: 10, padding: 3 }}>
           {RANGES.map(([k, label]) => {
             const on = curRange === k
             return (
-              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flexShrink: 0, whiteSpace: 'nowrap', border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : C.card, color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'background .15s, border-color .15s, color .15s' }}>{label}</button>
+              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.14)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 8, padding: '7px 0', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 1px 3px rgba(0,0,0,.10)' : 'none', transition: 'background .15s, color .15s' }}>{label.replace('Last ', '').replace('year', 'Year')}</button>
             )
           })}
         </div>
@@ -1118,7 +1146,7 @@ export default function HomeFunnel({
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '2px 16px 8px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
           {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
-          <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>· platforms report a few days behind{yoy ? ` · change vs ${compareLabel}` : ''}</span>
+          <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· change vs ${compareLabel}` : '· platforms report a few days behind'}</span>
         </div>
       )}
       </div>

@@ -55,12 +55,12 @@ const light: Palette = {
   coral: '#a85c3c', coralBg: '#f8efe9',
   concern: '#c2410c', concernRGB: [194, 65, 12],
   tipBg: '#1d1d1f', tipInk: '#ffffff',
-  funnelBg: 'radial-gradient(120% 42% at 28% 0%, rgba(74,189,152,0.09), rgba(255,255,255,0) 60%), #FCFCFD',
-  pageBg: 'radial-gradient(135% 55% at 50% 0%, rgba(74,189,152,0.10), rgba(255,255,255,0) 52%), #ffffff',
+  funnelBg: '#ffffff', // the chosen look (2026-09-03): white ground, green rings, a visible green pathway
+  pageBg: '#ffffff',
   pillGoodBg: '#eaf6f1', pillGoodInk: '#2e9a78', pillWeakBg: '#fde7d6', pillWeakInk: '#b45309',
-  personGreen: '#34B98A', personGreenGlow: '#EAFBF4', personAmber: '#C79A57', personAmberGlow: '#F7ECD6',
-  crowdA: 0.62,
-  pathRGB: '74,189,152', pathAlpha: 0.16,
+  personGreen: '#2e9a78', personGreenGlow: '#EAFBF4', personAmber: '#C79A57', personAmberGlow: '#F7ECD6',
+  crowdA: 0.78,
+  pathRGB: '46,154,120', pathAlpha: 0.55,
 }
 
 const dark: Palette = {
