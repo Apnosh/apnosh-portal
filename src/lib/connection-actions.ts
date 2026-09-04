@@ -137,13 +137,17 @@ async function resolveClientId(userId: string, requestedClientId?: string | null
   const admin = createAdminClient()
 
   if (requestedClientId) {
-    const [{ data: link }, { data: owned }] = await Promise.all([
+    const [{ data: link }, { data: owned }, { data: prof }] = await Promise.all([
       admin.from('client_users').select('client_id')
         .eq('auth_user_id', userId).eq('client_id', requestedClientId).maybeSingle(),
       admin.from('businesses').select('client_id')
         .eq('owner_id', userId).eq('client_id', requestedClientId).maybeSingle(),
+      // an admin picks any client (same rule as the rest of the dashboard); without this the
+      // connections page fell back to the admin's own business and read "Nothing connected yet"
+      admin.from('profiles').select('role').eq('id', userId).maybeSingle(),
     ])
-    if (link?.client_id || owned?.client_id) return requestedClientId
+    const isAdmin = prof?.role === 'admin' || prof?.role === 'super_admin'
+    if (link?.client_id || owned?.client_id || isAdmin) return requestedClientId
   }
 
   const { data: biz } = await admin
