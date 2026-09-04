@@ -113,7 +113,7 @@ export default function ClientAgreementsPage() {
         ) : (
           <>
             {pending && (
-              <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 16, marginBottom: 22 }}>
+              <div style={{ background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 18, padding: 16, marginBottom: 22 }}>
                 <MvpPill tone="warn" label="Ready to sign" />
                 <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 9 }}>An agreement is waiting for your signature</div>
                 <div style={{ fontSize: 13, color: C.mute, marginTop: 2 }}>

@@ -44,7 +44,7 @@ function socialHint(info: BusinessInfo | undefined): string {
 
 function StatusPill({ label, on }: { label: string; on: boolean }) {
   return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: '#fff', border: `0.5px solid ${T.line}`, borderRadius: 13, padding: '10px 12px' }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 9, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 14, padding: '10px 12px' }}>
       <span style={{ width: 8, height: 8, borderRadius: 99, background: on ? T.green : T.faint, flexShrink: 0 }} />
       <span style={{ minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: T.ink }}>{label}</span>

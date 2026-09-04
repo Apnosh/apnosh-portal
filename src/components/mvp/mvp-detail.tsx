@@ -47,10 +47,10 @@ export function MvpGroup({ title, children }: { title?: string; children: React.
   return (
     <div style={{ marginBottom: 22 }}>
       {title && <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>{title}</div>}
-      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+      <div style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
         {items.map((child, i) => (
           <React.Fragment key={i}>
-            {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 61 }} />}
+            {i > 0 && <div style={{ height: '0.5px', background: 'rgba(0,0,0,.07)', marginLeft: 61 }} />}
             {child}
           </React.Fragment>
         ))}

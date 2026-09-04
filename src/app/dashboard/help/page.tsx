@@ -58,7 +58,7 @@ function FaqGroup({ cat, query, openKeys, toggle }: { cat: FaqCategory; query: s
         <Icon size={13} color={C.faint} />
         <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>{cat.category}</span>
       </div>
-      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+      <div style={{ background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 18, overflow: 'hidden' }}>
         {cat.items.map((item, i) => {
           const key = item.q
           return (
@@ -107,7 +107,7 @@ export default function HelpPage() {
         </div>
 
         {filtered.length === 0 ? (
-          <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '30px 20px', textAlign: 'center' }}>
+          <div style={{ background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 18, padding: '30px 20px', textAlign: 'center' }}>
             <Search size={26} color={C.faint} style={{ margin: '0 auto 10px' }} />
             <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>No matches</div>
             <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4, lineHeight: 1.45 }}>Try different words, or message your team and we will help.</div>

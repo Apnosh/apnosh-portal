@@ -239,7 +239,13 @@ About "themes": group what people talk about into up to 6 topics, most-mentioned
 
 /** Validate + narrow the model's JSON into an AnalystRead. Throws on bad shape. */
 export function parseAnalystRead(raw: string, quoteCount = 0): AnalystRead {
-  const json = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+  // After a web search the model sometimes narrates ("Here is the report as JSON:") before the
+  // fenced object (seen live 2026-09-04). Take the object wherever it sits: a fenced block
+  // first, else the outermost braces.
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
+  let json = (fenced ? fenced[1] : raw).trim()
+  const a = json.indexOf('{'), b = json.lastIndexOf('}')
+  if (a >= 0 && b > a) json = json.slice(a, b + 1)
   let o: unknown
   try {
     o = JSON.parse(json)

@@ -116,7 +116,7 @@ export default function AssetsPage() {
               {filtered.map(a => {
                 const Icon = TYPE_ICON[a.type] ?? FileText
                 return (
-                  <button key={a.id} type="button" onClick={() => setDetail(a)} style={{ aspectRatio: '1 / 1', borderRadius: 12, overflow: 'hidden', border: `0.5px solid ${C.line}`, background: '#f3f3f5', padding: 0, cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <button key={a.id} type="button" onClick={() => setDetail(a)} style={{ aspectRatio: '1 / 1', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', background: '#f3f3f5', padding: 0, cursor: 'pointer', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     {a.type === 'image' && a.file_url ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={a.file_url} alt={a.name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -201,7 +201,7 @@ function DetailSheet({ asset, onClose, onChanged }: { asset: Asset; onClose: () 
         <input className="mvp-input" value={name} onChange={e => setName(e.target.value)} onBlur={saveName} style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', fontSize: 16, color: C.ink, fontFamily: 'inherit', outline: 'none', marginBottom: 4 }} />
         <p style={{ fontSize: 11.5, color: C.faint, margin: '0 2px 16px' }}>{savingName ? 'Saving...' : 'Tap away to save the name.'}</p>
 
-        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '10px 14px', marginBottom: 18, fontSize: 12.5, color: C.mute, lineHeight: 1.7 }}>
+        <div style={{ background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 16, padding: '10px 14px', marginBottom: 18, fontSize: 12.5, color: C.mute, lineHeight: 1.7 }}>
           <div>Type: {asset.type}</div>
           {asset.dimensions && <div>Size: {asset.dimensions}</div>}
           {asset.file_size != null && <div>File: {fmtSize(asset.file_size)}</div>}

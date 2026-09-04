@@ -199,7 +199,7 @@ export default function BillingPage() {
             {orders.length > 0 && (
               <div style={{ marginBottom: 22 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>Orders</div>
-                <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+                <div style={{ background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 18, overflow: 'hidden' }}>
                   {orders.map((o, i) => {
                     const r = buildReceipt(o, today)
                     return (
@@ -278,7 +278,7 @@ export default function BillingPage() {
             {invoices.length > 0 && (
               <div style={{ marginBottom: 22 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>Invoices</div>
-                <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+                <div style={{ background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 18, overflow: 'hidden' }}>
                   {invoices.map((inv, i) => {
                     const st = invoiceStatus(inv.status)
                     const canPay = (inv.status === 'open' || inv.status === 'failed') && !!inv.hosted_invoice_url
