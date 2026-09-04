@@ -1111,9 +1111,11 @@ export default function HomeFunnel({
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: bar ? '10px 12px 4px' : '14px 16px 6px' }}>
         {bar && (
-          <Link href="/dashboard/more" aria-label="Your business" style={{ flexShrink: 0, width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, color: C.greenDk, textDecoration: 'none', position: 'relative', overflow: 'hidden' }}>
-            {bar.initial ?? '·'}
-            {bar.image && <img src={bar.image} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+          <Link href="/dashboard/more" aria-label="Your business" style={{ flexShrink: 0, width: 40, height: 40, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: theme === 'dark' ? '0 0 0 1px rgba(255,255,255,0.08)' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(46,154,120,.18)', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', position: 'relative', overflow: 'hidden', fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: theme === 'dark' ? '#eef3f0' : C.greenDk, background: theme === 'dark' ? 'rgba(13,21,18,0.85)' : 'rgba(255,255,255,0.82)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)' }}>
+              {bar.initial ?? '·'}
+              {bar.image && <img src={bar.image} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+            </span>
           </Link>
         )}
         <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, borderRadius: 999, padding: 3, background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>

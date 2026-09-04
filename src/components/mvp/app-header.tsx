@@ -25,7 +25,9 @@ export default function AppHeader({ count }: { count?: number }) {
     <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 10px 9px 12px', background: 'rgba(255,255,255,0.78)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', borderBottom: '1px solid rgba(0,0,0,.05)' }}>
       {/* location switcher */}
       <button onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, background: 'none', border: 'none', padding: '4px 4px 4px 0', cursor: 'pointer' }}>
-        <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.greenDk, flexShrink: 0 }}>{initial}</div>
+        <div style={{ width: 32, height: 32, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(46,154,120,.18)', flexShrink: 0, boxSizing: 'border-box' }}>
+          <div style={{ width: '100%', height: '100%', borderRadius: '50%', background: 'rgba(255,255,255,0.86)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, letterSpacing: '-.02em', color: C.greenDk, position: 'relative', overflow: 'hidden' }}>{initial}</div>
+        </div>
         <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 150 }}>{name}</span>
         <ChevronDown size={16} color={C.mute} style={{ flexShrink: 0, transition: 'transform .15s', transform: open ? 'rotate(180deg)' : 'none' }} />
       </button>
