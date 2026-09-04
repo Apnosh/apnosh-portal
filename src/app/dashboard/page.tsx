@@ -76,7 +76,7 @@ export default function DashboardHomePage() {
   const view: MvpHomeData = data ? (aiSuggestions !== null ? { ...data, suggestions: aiSuggestions } : data) : placeholder
 
   return (
-    <MvpShell active="home" unread={data?.approvals?.length ?? 0}>
+    <MvpShell active="home" unread={data?.approvals?.length ?? 0} noHeader>
       {clientLoading ? (
         /* client context still resolving — show the funnel's shape, not a bare
            line of text, so the seconds right after onboarding never look broken */

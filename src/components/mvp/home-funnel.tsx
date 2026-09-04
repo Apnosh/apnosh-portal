@@ -23,6 +23,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { Bell, MessageCircle, CalendarDays } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useMvpTheme } from './mvp-theme'
 
@@ -138,6 +140,8 @@ export interface HomeFunnelProps {
   yoy?: FunnelYoY | null
   /** the same comparison as counts, drawn as "+1,920" beside the number */
   yoyAbs?: FunnelYoYAbs | null
+  /** Home's one top row (owner 2026-09-04): avatar · ranges · alerts · messages, replacing the app bar */
+  bar?: { initial?: string; image?: string; unread?: number } | null
   /** selected time range — the tabs replace the header and drive the data */
   range?: FunnelRange
   onRange?: (r: FunnelRange) => void
@@ -309,6 +313,7 @@ export default function HomeFunnel({
   windowEnd,
   yoy,
   yoyAbs = null,
+  bar = null,
   range,
   onRange,
   cStart,
@@ -1104,15 +1109,32 @@ export default function HomeFunnel({
           flow streams in behind the text; the rings sit headerH below, clear of it. */}
       <div ref={headerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }}>
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px 6px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: bar ? '10px 12px 4px' : '14px 16px 6px' }}>
+        {bar && (
+          <Link href="/dashboard/more" aria-label="Your business" style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: C.greenDk, textDecoration: 'none', position: 'relative', overflow: 'hidden' }}>
+            {bar.initial ?? '·'}
+            {bar.image && <img src={bar.image} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+          </Link>
+        )}
         <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, borderRadius: 999, padding: 3, background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
           {RANGES.map(([k, label]) => {
             const on = curRange === k
             return (
-              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }}>{label.replace('Last ', '').replace('year', 'Year')}</button>
+              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }} aria-label={label}>{bar ? (k === 'custom' ? <CalendarDays size={14} style={{ verticalAlign: '-2px' }} /> : k === '12m' ? '1y' : k) : label.replace('Last ', '').replace('year', 'Year')}</button>
             )
           })}
         </div>
+        {bar && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <Link href="/dashboard/inbox" aria-label={bar.unread ? `Alerts (${bar.unread})` : 'Alerts'} style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
+              <Bell size={17} />
+              {(bar.unread ?? 0) > 0 && <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{(bar.unread ?? 0) > 9 ? '9+' : bar.unread}</span>}
+            </Link>
+            <Link href="/dashboard/messages" aria-label="Messages" style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
+              <MessageCircle size={17} />
+            </Link>
+          </div>
+        )}
         {/* the light/dark switch moved to Settings (owner ask 2026-08-18) — it
             now skins the whole platform, so it is an account preference, not a
             chart control */}
@@ -1144,7 +1166,7 @@ export default function HomeFunnel({
       {/* one quiet line under the tabs: the real window · the lag note · what the +/- compares
           (owner ask 2026-09-02: the audience row came out so the funnel gets the room) */}
       {rangeLabel && (
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '2px 16px 8px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6, padding: '2px 16px 8px', whiteSpace: 'nowrap', overflow: 'hidden', textAlign: 'center' }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
           {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
           <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· change vs ${compareLabel}` : '· platforms report a few days behind'}</span>
@@ -1321,7 +1343,7 @@ export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
   )
 }
 
-export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void }) {
+export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void; bar?: HomeFunnelProps['bar'] }) {
   const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null; yoyAbs: FunnelYoYAbs | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   /* custom-range bounds — default to the last 14 days ending today */
@@ -1395,7 +1417,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility }: { clien
   if (data.views.total <= 0 && !everShown.current) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
-      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
+      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} bar={bar} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
       {/* "Choose your metrics" lives ONLY on the Insights detail screen (owner
           ask 2026-08-18) — the home graph stays clean with nothing below it.
           Toggles saved there still apply here: the funnel refetches every time

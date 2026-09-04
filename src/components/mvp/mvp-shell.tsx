@@ -28,14 +28,14 @@ const SHELL_CSS = `
 
 // `header` replaces the default AppHeader — detail pages reached from a tab
 // pass an MvpDetailHeader (back + title) instead of the full app header.
-export default function MvpShell({ active, unread, header, children, wide }: { active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean }) {
+export default function MvpShell({ active, unread, header, children, wide, noHeader }: { active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean }) {
   return (
     <div className="mvp-shell">
       <style>{SHELL_CSS}</style>
       <div className={wide ? 'mvp-frame mvp-frame-wide' : 'mvp-frame'}>
         {/* the standard app bar floats over the scroll (glass); a page's own header stays in flow */}
-        {header ? header : <div className="mvp-frame-top"><AppHeader count={unread} /></div>}
-        <div className={header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}>{children}</div>
+        {noHeader ? null : header ? header : <div className="mvp-frame-top"><AppHeader count={unread} /></div>}
+        <div className={header || noHeader ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}>{children}</div>
         <BottomNav active={active} />
       </div>
     </div>

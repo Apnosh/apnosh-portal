@@ -255,7 +255,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             funnel (Awareness → Interest → Customer actions → Orders → Retention)
             in the glass-vessel view. Renders only when the business has Google data. */}
         <div id="home-funnel-hero" style={{ margin: '-16px -18px 0' }}>
-          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} /></>
+          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
         </div>
 
         {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
