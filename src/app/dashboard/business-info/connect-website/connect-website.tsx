@@ -51,7 +51,7 @@ export default function ConnectWebsite({ connection }: { connection: WebsiteConn
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Connect your website" subtitle="Auto-publish your info to your site" backHref="/dashboard/business-info" backLabel="Business info" />}>
-      <div style={{ background: C.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <div style={{ background: '#fff', minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
         <div style={{ flex: 1, padding: '14px 14px 12px' }}>
 
           {connection.connected && (

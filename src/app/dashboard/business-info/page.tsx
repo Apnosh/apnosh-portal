@@ -71,7 +71,7 @@ export default async function BusinessInfoPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Business info" subtitle={subtitle} />}>
-      <div style={{ background: '#f5f5f7', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           <StatusPill label="Google" on={loaded.gbpConnected} />

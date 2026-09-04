@@ -8,6 +8,7 @@
  * OAuth connect/reconnect are links to the existing /api/auth/* routes.
  */
 
+import { BrandOrMark } from '@/components/mvp/mvp-insights'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Camera, Globe, Tv, Briefcase, BarChart3, Search, MapPin, Star,
@@ -207,7 +208,7 @@ export default function ConnectedAccountsPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Connected accounts" subtitle="Link the places your numbers come from." backHref="/dashboard/more" backLabel="More" />}>
-      <div style={{ background: C.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <div style={{ background: '#fff', minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
         <div style={{ flex: 1, padding: '14px 14px 24px' }}>
           {loading ? (
             <div style={{ textAlign: 'center', color: C.mute, fontSize: 14, padding: '40px 0' }}>Loading...</div>
@@ -244,7 +245,7 @@ export default function ConnectedAccountsPage() {
                           {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 61 }} />}
                           {isAvailable(p) ? (
                             <a href={connectHref(p.authPath)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', textDecoration: 'none', color: 'inherit' }}>
-                              <span style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><p.Icon size={18} /></span>
+                              <LaneMark platform={p.id} Icon={p.Icon} />
                               <span style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
                                 <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</span>
@@ -255,7 +256,7 @@ export default function ConnectedAccountsPage() {
                             /* the server says this lane's keys are not set — an honest
                                non-link beats a connect that dead-ends on a JSON error */
                             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', opacity: 0.55 }}>
-                              <span style={{ width: 34, height: 34, borderRadius: 9, background: '#f0f0f3', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><p.Icon size={18} /></span>
+                              <LaneMark platform={p.id} Icon={p.Icon} dim />
                               <span style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
                                 <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>Coming soon</span>
@@ -289,13 +290,23 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
   )
 }
 
+/* the network's own mark leads a row whenever we have one (owner 2026-09-04: "Google shows
+   the Google symbol"); a lane with no mark (a register, an email tool) keeps its icon */
+const MARKED = new Set(['google', 'google_business_profile', 'gbp', 'google_analytics', 'google_search_console', 'instagram', 'facebook', 'tiktok', 'yelp', 'youtube', 'linkedin'])
+function LaneMark({ platform, Icon, dim }: { platform: string; Icon: React.ComponentType<{ size?: number }>; dim?: boolean }) {
+  const key = String(platform || '').toLowerCase()
+  const marked = MARKED.has(key) || key.startsWith('google')
+  if (marked) return <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: dim ? 0.55 : 1, filter: dim ? 'grayscale(.5)' : undefined }}><BrandOrMark provider={key.startsWith('google') ? 'google' : key} size={20} /></span>
+  return <span style={{ width: 36, height: 36, borderRadius: 11, background: dim ? '#f0f0f3' : C.greenSoft, color: dim ? C.mute : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} /></span>
+}
+
 function ConnRow({ conn, onTap }: { conn: UnifiedConnection; onTap: () => void }) {
   const Icon = iconFor(conn.platform)
   return (
     <button type="button" onClick={onTap} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
-      <span style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-        <Icon size={18} />
-        <span style={{ position: 'absolute', right: -1, top: -1, width: 10, height: 10, borderRadius: 99, background: dotColor(conn.status), border: '2px solid #fff' }} />
+      <span style={{ position: 'relative', flexShrink: 0 }}>
+        <LaneMark platform={conn.platform} Icon={Icon} />
+        <span style={{ position: 'absolute', right: -1, top: -1, width: 11, height: 11, borderRadius: 99, background: dotColor(conn.status), border: '2px solid #fff' }} />
       </span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{conn.label}</span>

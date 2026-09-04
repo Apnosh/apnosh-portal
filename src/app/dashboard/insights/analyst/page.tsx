@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown, TrendingUp, Search, ChevronRight, BarChart3, MessageSquareText, Activity, Globe, PenLine } from 'lucide-react'
+import { Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown, TrendingUp, Search, ChevronRight, BarChart3, MessageSquareText, Activity, Globe, PenLine, Newspaper, ArrowUpRight } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { GLASS } from '@/components/mvp/top-row'
@@ -124,6 +124,7 @@ interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: str
   trends?: Array<{ stage: number; label: string; read: string }>
   outside?: { summary: string; items: Array<{ note: string; source: string | null }> } | null
   gaps?: Array<{ gap: string; why: string; fix: string }>
+  reading?: Array<{ title: string; why: string; source: string | null; when: string | null }>
   numbers?: { trends: Array<{ stage: number; label: string; firstAvg: number; lastAvg: number; changePct: number | null; days: number }>; rhythm: { strongestDay: string; weakestDay: string; weekendVsWeekdayPct: number | null; byDay: Array<{ day: string; avg: number }> } | null; standouts: Array<{ date: string; value: number; vsWeekPct: number; holiday: string | null; weekday: string }>; launches: Array<{ name: string; date: string; stage: string }> }
 }
 function ReviewsBlock({ r, stats }: { r: ReviewRead; stats: ReviewStats | null }) {
@@ -436,6 +437,24 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
         </Section>
       )}
 
+      {(read.reading?.length ?? 0) > 0 && (
+        <Section title="Worth reading" sub="found this week, for a place like yours">
+          <div>
+            {read.reading!.map((it, i) => (
+              <a key={i} href={it.source ?? undefined} target="_blank" rel="noreferrer noopener" className="mvp-row" style={{ display: 'flex', gap: 12, padding: '11px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}`, textDecoration: 'none', color: 'inherit' }}>
+                <span style={{ width: 36, height: 36, borderRadius: 11, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Newspaper size={17} /></span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{it.title}</span>
+                  {it.why && <span style={{ display: 'block', fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>{it.why}</span>}
+                  <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 4 }}>{[it.when, it.source ? new URL(it.source).hostname.replace(/^www\./, '') : null].filter(Boolean).join(' · ')}</span>
+                </span>
+                {it.source && <ArrowUpRight size={16} color={C.faint} style={{ flexShrink: 0, marginTop: 2 }} />}
+              </a>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {read.blindSpots.length > 0 && (
         <Section title="What we can't see yet">
           <Bullets items={read.blindSpots} tone="muted" />
@@ -506,7 +525,8 @@ const WORK_STEPS: Array<{ at: number; icon: React.ReactNode; label: string; sub:
   { at: 7, icon: <MessageSquareText size={17} />, label: 'Reading what customers wrote', sub: 'praise and complaints, in their words' },
   { at: 16, icon: <Activity size={17} />, label: 'Following each line', sub: 'where it is heading, the days that stood out' },
   { at: 28, icon: <Globe size={17} />, label: 'Checking outside your walls', sub: 'weather, local events, the calendar' },
-  { at: 44, icon: <PenLine size={17} />, label: 'Writing it up', sub: 'plain words, no jargon' },
+  { at: 40, icon: <Newspaper size={17} />, label: 'Finding what is worth reading', sub: 'your city, your trade, your platforms' },
+  { at: 56, icon: <PenLine size={17} />, label: 'Writing it up', sub: 'plain words, no jargon' },
 ]
 function ReportWorking() {
   const [t, setT] = useState(0)

@@ -53,12 +53,14 @@ export interface AnalystRead {
   outside: { summary: string; items: Array<{ note: string; source: string | null }> } | null
   /** the pitfalls and missing pieces a good marketer would flag, each with the fix */
   gaps: Array<{ gap: string; why: string; fix: string }>
+  /** things worth the owner's reading, found on the web and specific to this business: local news, their trade, the platforms they live on — each with its source */
+  reading: Array<{ title: string; why: string; source: string | null; when: string | null }>
   /** the version of the report shape this read was written to */
   version: number
   /** server-computed numbers the page DRAWS (never written by the model): attached by the route */
   numbers?: { trends: AnalystPayload['trends']; rhythm: AnalystPayload['rhythm']; standouts: AnalystPayload['standouts']; launches: AnalystPayload['launches'] }
 }
-export const READ_VERSION = 3
+export const READ_VERSION = 4
 
 /** The review read. Every point must be traceable to a quote in the brief. */
 export interface ReviewRead {
@@ -211,7 +213,7 @@ HARD RULES (breaking any of these fails the task):
 - Be specific and short. No filler, no hype, no "leverage/synergy/optimize" jargon.
 
 WHAT THIS IS: a full report a world-class marketer would write for an owner who knows nothing about marketing. Explain every term the first time it appears, in one short clause (e.g. "Awareness, the number of times you showed up in a search or a feed"). Weigh what customers wrote, where the lines are heading, and the gaps a professional would spot. Be the sharpest, kindest advisor they have ever had.
-OUTSIDE THE BUSINESS: you may use the web_search tool ONLY for things outside the owner's walls that could have mattered in this window — the weather where they are, big local events or games, a holiday, the season. Use it at most a few times. Report only what you actually found, with its source. Never search for the owner's own numbers, competitors' numbers, or "industry averages", and never present a search result as a cause; say "this happened in the same window".
+OUTSIDE THE BUSINESS: you may use the web_search tool ONLY for (a) things outside the owner's walls that could have mattered in this window — the weather where they are, big local events or games, a holiday, the season — and (b) up to three things WORTH THEIR READING right now: news in their city or neighbourhood that touches a restaurant like theirs, news in their trade (their kind of food, their kind of place), and changes on the platforms they live on (Google, Instagram, TikTok, delivery apps). Use the tool at most a few times. Report only what you actually found, with its source and its date. Never search for the owner's own numbers, competitors' numbers, or "industry averages", and never present a search result as a cause; say "this happened in the same window".
 Return ONLY a JSON object, no prose around it, in exactly this shape:
 {
   "bottomLine": "one or two sentences: the single most important thing happening",
@@ -221,6 +223,7 @@ Return ONLY a JSON object, no prose around it, in exactly this shape:
   "trends": [{"stage": 1, "label": "Awareness", "read": "one or two plain sentences: where this line is heading inside the window and what stood out (a strong weekday, a day that spiked), using only TRENDS, WEEKDAY RHYTHM and DAYS THAT STOOD OUT"}],
   "outside": {"summary": "one or two sentences on what outside the business may have mattered in this window, or that nothing notable turned up", "items": [{"note": "one specific thing (a heat wave, a game, a holiday) and the dates it covers", "source": "the URL you found it at, or 'holiday calendar', or null"}]},
   "gaps": [{"gap": "a pitfall or missing piece a professional would flag", "why": "why it costs them, tied to a number where one exists", "fix": "the concrete fix, in plain words"}],
+  "reading": [{"title": "the piece, in plain words", "why": "one sentence on why it matters to THIS business", "source": "the URL", "when": "the date or month it was published, or null"}],
   "reviews": {
     "headline": "one plain sentence on what reviews add up to",
     "praise": ["what people say they like, in their words not yours"],
@@ -232,7 +235,7 @@ Return ONLY a JSON object, no prose around it, in exactly this shape:
     ]
   }
 }
-Keep working to at most 3 bullets, fixes to at most 3, blindSpots to at most 3, praise and complaints to at most 3 each, trends to one per measured stage, outside items to at most 4, gaps to at most 4.
+Keep working to at most 3 bullets, fixes to at most 3, blindSpots to at most 3, praise and complaints to at most 3 each, trends to one per measured stage, outside items to at most 4, gaps to at most 4, reading to at most 3 (an empty list is fine when nothing genuinely useful turned up).
 Set "reviews" to null ONLY when the brief says reviews could not be read or there are too few.
 
 About "themes": group what people talk about into up to 6 topics, most-mentioned first. Name topics the way the owner would (the dish, the staff, the prices, the wait), not in marketing words. Put each quote number under positive or negative for that topic. A quote can appear under several DIFFERENT topics, because one review often mentions the food and the price. Only cite numbers that appear in the brief. These numbers are counted and drawn as a chart, so a number you invent becomes a visible lie.`
@@ -291,6 +294,10 @@ export function parseAnalystRead(raw: string, quoteCount = 0): AnalystRead {
     ? r.gaps.map((g) => g as Record<string, unknown>).filter((g) => typeof g?.gap === 'string' && (g.gap as string).trim())
         .map((g) => ({ gap: (g.gap as string).trim(), why: typeof g.why === 'string' ? (g.why as string).trim() : '', fix: typeof g.fix === 'string' ? (g.fix as string).trim() : '' })).slice(0, 4)
     : []
+  const reading = Array.isArray(r.reading)
+    ? r.reading.map((x) => x as Record<string, unknown>).filter((x) => typeof x?.title === 'string' && (x.title as string).trim())
+        .map((x) => ({ title: (x.title as string).trim(), why: typeof x.why === 'string' ? (x.why as string).trim() : '', source: typeof x.source === 'string' && /^https?:/.test(x.source) ? x.source.trim() : null, when: typeof x.when === 'string' && x.when.trim() ? x.when.trim() : null })).slice(0, 3)
+    : []
   return {
     bottomLine,
     working: asStrings(r.working).slice(0, 3),
@@ -300,6 +307,7 @@ export function parseAnalystRead(raw: string, quoteCount = 0): AnalystRead {
     trends,
     outside,
     gaps,
+    reading,
     version: READ_VERSION,
   }
 }
@@ -352,7 +360,7 @@ export async function runAnalyst(payload: AnalystPayload): Promise<AnalystRunRes
       max_tokens: 9000,
       output_config: { effort: 'medium' },
       system: SYSTEM,
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 2 }],
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 4 }],
       messages,
     })
     tokensIn += response.usage.input_tokens; tokensOut += response.usage.output_tokens

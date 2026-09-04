@@ -945,7 +945,7 @@ function ApprovalsPageInner() {
 export default function ApprovalsPage() {
   return (
     <MvpShell active="inbox" header={<MvpDetailHeader title="Approvals" subtitle="Review and approve your content" backHref="/dashboard/inbox" backLabel="Inbox" />}>
-      <div style={{ background: '#f5f5f7', minHeight: '100%', padding: '14px 14px 28px', boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', boxSizing: 'border-box' }}>
         <ApprovalsPageInner />
       </div>
     </MvpShell>

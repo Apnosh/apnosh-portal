@@ -207,7 +207,7 @@ export default function MvpOrders() {
   const payingMonthly = paying.reduce((s, c) => s + (bills.get(c.draft.id)?.perMonth ?? 0), 0)
 
   return (
-    <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 32px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+    <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 32px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{ORDERS_CSS}</style>
 
       {/* header */}

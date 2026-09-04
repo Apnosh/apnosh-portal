@@ -122,7 +122,7 @@ export default function SettingsPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Settings" subtitle="Your account and preferences" />}>
-      <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {loading ? (
           <div style={{ marginTop: 4 }}>
             {[140, 180, 200].map((h, i) => <div key={i} style={{ height: h, background: '#ececef', borderRadius: 16, marginBottom: 14, animation: 'mvpPulse 1.2s ease-in-out infinite' }} />)}

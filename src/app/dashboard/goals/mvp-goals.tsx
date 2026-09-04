@@ -120,7 +120,7 @@ export default function MvpGoals({ clientId, catalog, activeGoals }: { clientId:
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Your goals" subtitle="What you want us to focus on" />}>
-      <div style={{ background: '#f5f5f7', minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <div style={{ background: '#fff', minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
         <div style={{ flex: 1, padding: '14px 14px 10px' }}>
           <p style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, margin: '2px 6px 16px' }}>
             Pick up to 3 things to focus on. We tailor your marketing to these and review them with you every 90 days.

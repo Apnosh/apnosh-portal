@@ -116,7 +116,7 @@ export default function MvpMenuEditor({ initial }: { initial: MenuItem[] }) {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Menu" subtitle="What customers browse on your website. Edits publish to your site." backHref="/dashboard/business-info" backLabel="Business info" />}>
-      <div style={{ background: C.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <div style={{ background: '#fff', minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
         <div style={{ flex: 1, padding: '14px 14px 12px' }}>
           {items.length === 0 ? (
             <div style={{ background: '#fff', border: '0.5px dashed rgba(74,189,152,0.32)', borderRadius: 16, padding: '28px 20px', textAlign: 'center' }}>

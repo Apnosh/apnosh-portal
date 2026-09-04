@@ -59,7 +59,7 @@ export default function ResultsPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Results" subtitle="Proof from your weeks, kept" />}>
-      <div style={{ background: '#f5f5f7', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {rows === null ? (
           <div style={{ color: '#8e8e93', fontSize: 13, padding: '30px 0', textAlign: 'center' }}>Loading…</div>
         ) : rows.length === 0 ? (
@@ -75,7 +75,7 @@ export default function ResultsPage() {
         ) : (
           [...groups.entries()].map(([month, cards]) => (
             <div key={month} style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#8e8e93', margin: '4px 2px 10px' }}>{month}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#6e6e73', margin: '4px 2px 10px' }}>{month}</div>
               {cards.map((c) => (
                 <ProofCard key={c.rowKey} card={c} defaultOpen onDismiss={() => { /* archive: cards stay */ }} />
               ))}

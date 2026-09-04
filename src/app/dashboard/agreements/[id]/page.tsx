@@ -116,7 +116,7 @@ export default function AgreementSignPage() {
   if (loading) {
     return (
       <MvpShell active="more" header={<MvpDetailHeader title="Service agreement" backHref="/dashboard/agreements" backLabel="Agreements" />}>
-        <div style={{ background: C.bg, minHeight: '100%', padding: 14 }}>
+        <div style={{ background: '#fff', minHeight: '100%', padding: 14 }}>
           {[80, 320].map((h, i) => <div key={i} style={{ height: h, background: '#ececef', borderRadius: 16, marginBottom: 14, animation: 'mvpPulse 1.2s ease-in-out infinite' }} />)}
           <style>{`@keyframes mvpPulse{0%,100%{opacity:1}50%{opacity:.55}}`}</style>
         </div>
@@ -127,7 +127,7 @@ export default function AgreementSignPage() {
   if (!agreement) {
     return (
       <MvpShell active="more" header={<MvpDetailHeader title="Service agreement" backHref="/dashboard/agreements" backLabel="Agreements" />}>
-        <div style={{ background: C.bg, minHeight: '100%', padding: '40px 22px', textAlign: 'center' }}>
+        <div style={{ background: '#fff', minHeight: '100%', padding: '40px 22px', textAlign: 'center' }}>
           <FileText size={30} color={C.faint} style={{ margin: '0 auto 12px' }} />
           <div style={{ fontSize: 17, fontWeight: 600, color: C.ink, fontFamily: DISPLAY }}>Agreement not found</div>
           <div style={{ fontSize: 13.5, color: C.mute, marginTop: 5 }}>It may have been removed, or you do not have access.</div>
@@ -140,7 +140,7 @@ export default function AgreementSignPage() {
   if (signed) {
     return (
       <MvpShell active="more" header={<MvpDetailHeader title="Service agreement" backHref="/dashboard/agreements" backLabel="Agreements" />}>
-        <div style={{ background: C.bg, minHeight: '100%', padding: '44px 22px', textAlign: 'center' }}>
+        <div style={{ background: '#fff', minHeight: '100%', padding: '44px 22px', textAlign: 'center' }}>
           <div style={{ width: 64, height: 64, borderRadius: 18, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
             <CheckCircle size={32} color={C.greenDk} />
           </div>
@@ -166,7 +166,7 @@ export default function AgreementSignPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Service agreement" backHref="/dashboard/agreements" backLabel="Agreements" />}>
-      <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
 
         {agreement.pdf_url && (
           <a href={agreement.pdf_url} target="_blank" rel="noopener noreferrer"

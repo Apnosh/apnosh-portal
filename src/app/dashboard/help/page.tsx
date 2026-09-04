@@ -93,7 +93,7 @@ export default function HelpPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Help" subtitle="Find answers or message your team" />}>
-      <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {/* Search */}
         <div style={{ position: 'relative', marginBottom: 18 }}>
           <Search size={17} color={C.faint} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />

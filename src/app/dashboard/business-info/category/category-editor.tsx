@@ -111,7 +111,7 @@ export default function CategoryEditor() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Cuisine & category" subtitle="The main thing you're found for. Updates Google." backHref="/dashboard/business-info" backLabel="Business info" />}>
-      <div style={{ background: C.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <div style={{ background: '#fff', minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
         <div style={{ flex: 1, padding: '16px 14px 14px' }}>
           {loading ? (
             <div style={{ textAlign: 'center', color: C.mute, fontSize: 14, padding: '40px 0' }}>Loading...</div>

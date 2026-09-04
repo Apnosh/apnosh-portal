@@ -182,7 +182,7 @@ export default function BillingPage() {
   const today = new Date().toISOString().slice(0, 10)
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Billing" subtitle="Your plan and invoices" />}>
-      <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
 
         {/* Banners */}
         {portalError && <Banner tone="bad">{portalError}</Banner>}

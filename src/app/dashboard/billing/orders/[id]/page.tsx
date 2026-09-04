@@ -47,7 +47,7 @@ export default function OrderReceiptPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Order receipt" subtitle="What you ordered" backHref="/dashboard/billing" backLabel="Billing" />}>
-      <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', boxSizing: 'border-box' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '48px 0', color: C.faint }}><Loader2 size={16} className="mvp-spin" /> Loading…</div>
         ) : error || !camp || !receipt ? (

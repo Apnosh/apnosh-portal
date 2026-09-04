@@ -138,7 +138,7 @@ export function MvpEditorShell({ title, subtitle, saving, dirty = true, onSave, 
       {saved && result ? (
         <MvpSavedView result={result} synced={sync} onEditAgain={onEditAgain} />
       ) : (
-        <div style={{ background: C.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+        <div style={{ background: '#fff', minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
           <div style={{ flex: 1, padding: '16px 14px 14px' }}>{children}</div>
           <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `0.5px solid ${C.line}`, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '2px 2px 11px' }}>
@@ -164,7 +164,7 @@ function MvpSavedView({ result, synced, onEditAgain }: { result: SaveResult; syn
   const wState: 'ok' | 'warn' | 'skip' = !synced ? 'skip' : (w === 'committed' || w === 'queued') ? 'ok' : w === 'failed' ? 'warn' : 'skip'
   const wDetail = !synced ? 'Syncing was off' : w === 'committed' ? 'Rebuilding now' : w === 'queued' ? 'Updating shortly' : w === 'failed' ? (result.websiteError ?? 'Could not update') : 'No site connected'
   return (
-    <div style={{ background: C.bg, minHeight: '100%', padding: '28px 18px 28px', fontFamily: "'Inter',system-ui,sans-serif" }}>
+    <div style={{ background: '#fff', minHeight: '100%', padding: '28px 18px 28px', fontFamily: "'Inter',system-ui,sans-serif" }}>
       <div style={{ width: 60, height: 60, borderRadius: '50%', background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '6px auto 14px' }}>
         <CheckCircle2 size={32} color={C.greenDk} />
       </div>

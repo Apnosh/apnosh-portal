@@ -356,7 +356,7 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
   const loading = clientLoading || (!diag && !loadError)
 
   return (
-    <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+    <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{FIXER_CSS}</style>
 
       {door === 'qanda' && (

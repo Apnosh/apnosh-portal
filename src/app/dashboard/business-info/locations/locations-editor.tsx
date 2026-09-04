@@ -117,7 +117,7 @@ export default function LocationsEditor({
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Locations" subtitle="Each spot can have its own info" />}>
-      <div style={{ background: '#f5f5f7', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         <EditorHeader title="Locations" subtitle="Empty fields match your business. Fill one to make a spot different." />
 
         <div className="flex flex-col gap-2.5 mt-4">

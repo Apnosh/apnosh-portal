@@ -88,7 +88,7 @@ export default function AssetsPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Photos & files" subtitle="Your logo, photos, and videos for your posts." backHref="/dashboard/more" backLabel="More" />}>
-      <div style={{ background: C.bg, minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
+      <div style={{ background: '#fff', minHeight: '100%', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif" }}>
         <div style={{ flex: 1, padding: '12px 14px 14px' }}>
           <div style={{ position: 'relative', marginBottom: 12 }}>
             <Search size={16} color={C.faint} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }} />

@@ -675,7 +675,7 @@ function SendOffPanel({ deliverableId, onDone }: { deliverableId: string; onDone
 export default function ApprovalDetailPage() {
   return (
     <MvpShell active="inbox" header={<MvpDetailHeader title="Review" subtitle="Approve, request changes, or send it off" backHref="/dashboard/approvals" backLabel="Approvals" />}>
-      <div style={{ background: '#f5f5f7', minHeight: '100%', padding: '14px 14px 28px', boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', boxSizing: 'border-box' }}>
         <ApprovalDetailPageInner />
       </div>
     </MvpShell>
