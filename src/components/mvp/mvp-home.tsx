@@ -210,7 +210,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
   const goTo = (i: number) => { const el = scrollRef.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
 
   return (
-    <div className="apnosh-native-skin" style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: C.pageBg, minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
+    <div className="apnosh-native-skin" style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: C.pageBg, minHeight: '100%', overflowY: 'auto', paddingBottom: 0 }}>
       <style>{MVP_ANIM_CSS}</style>
       {/* sticky greeting bar — suppressed when embedded under the portal's
           own top bar (the design's full chrome lands in the nav-shell step). */}

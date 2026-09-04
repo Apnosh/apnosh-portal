@@ -1107,7 +1107,7 @@ export default function HomeFunnel({
     <div ref={wrapRef} style={{ position: 'relative', height: effH, background: C.funnelBg, overflow: 'hidden', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, ...(fill ? { border: 'none', borderRadius: 0, boxShadow: 'none' } : { border: `0.5px solid ${C.line}`, borderRadius: 20, boxShadow: '0 24px 60px -24px rgba(18,80,58,.30), 0 6px 18px -6px rgba(0,0,0,.06)' }) }}>
       {/* the tabs + audience chrome now FLOATS over the canvas (which fills the whole card from the top) so the
           flow streams in behind the text; the rings sit headerH below, clear of it. */}
-      <div ref={headerRef} style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }}>
+      <div ref={headerRef} style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 3 }}>
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: bar ? '10px 12px 4px' : '14px 16px 6px' }}>
         {bar && (
