@@ -31,7 +31,7 @@ import {
   Search, ExternalLink, Image as ImageIcon, Check,
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
-  Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight,
+  Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight, FileText,
 } from 'lucide-react'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
@@ -364,11 +364,11 @@ function AnalystButton() {
     <button
       type="button"
       onClick={go}
-      aria-label={pro ? 'AI Analyst' : 'AI Analyst, Pro plan only'}
-      title={pro ? 'AI Analyst' : 'AI Analyst (Pro)'}
+      aria-label={pro ? 'Your report' : 'Your report, Pro plan only'}
+      title={pro ? 'Your report' : 'Your report (Pro)'}
       style={{ ...GLASS_CIRCLE, background: pro ? C.greenSoft : GLASS_CIRCLE.background, color: pro ? C.greenDk : C.mute, border: `1px solid ${pro ? C.greenLine : 'rgba(255,255,255,0.75)'}`, opacity: pressed ? 0.55 : 1, transition: 'opacity .12s ease' }}
     >
-      {pro ? <Sparkles size={16} /> : <Lock size={14} />}
+      {pro ? <FileText size={16} /> : <Lock size={14} />}
     </button>
   )
 }
@@ -470,6 +470,21 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
 
   const swipeRef = useRef<HTMLDivElement>(null)
   const progRef = useRef(false) // true while WE scroll it (deep-link) — don't re-pick
+  /* the WHOLE hero card swipes (owner 2026-09-04: "not very swipable"): a horizontal drag that
+     starts on the name row, the number, the dots or the padding is forwarded to the carousel */
+  const dragRef = useRef<{ x: number; y: number; left: number; horiz: boolean | null } | null>(null)
+  const onCardTouchStart = (e: React.TouchEvent) => { const t = e.touches[0]; dragRef.current = { x: t.clientX, y: t.clientY, left: swipeRef.current?.scrollLeft ?? 0, horiz: null } }
+  const onCardTouchMove = (e: React.TouchEvent) => {
+    const d = dragRef.current, el = swipeRef.current; if (!d || !el) return
+    const t = e.touches[0]; const dx = t.clientX - d.x, dy = t.clientY - d.y
+    if (d.horiz === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) d.horiz = Math.abs(dx) > Math.abs(dy)
+    if (d.horiz && !el.contains(e.target as Node)) el.scrollLeft = d.left - dx
+  }
+  const onCardTouchEnd = () => {
+    const d = dragRef.current, el = swipeRef.current
+    if (d?.horiz && el) { const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
+    dragRef.current = null
+  }
   const pick = (k: string) => {
     setSel(k)
     try { window.history.replaceState(null, '', `/dashboard/insights?stage=${k}`) } catch { /* ignore */ }
@@ -498,7 +513,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
   return (
     <div style={{ padding: '0 0 8px' }}>
       {/* the hero is a card like everything else: one soft ground, no seam between the graph and the rest */}
-      <div style={{ margin: '12px 18px 0', background: '#fff', borderRadius: 18, padding: '14px 0 4px', boxShadow: CARD_SHADOW, overflow: 'hidden', position: 'relative' }}>
+      <div onTouchStart={onCardTouchStart} onTouchMove={onCardTouchMove} onTouchEnd={onCardTouchEnd} onTouchCancel={onCardTouchEnd} style={{ margin: '12px 18px 0', background: '#fff', borderRadius: 18, padding: '14px 0 4px', boxShadow: CARD_SHADOW, overflow: 'hidden', position: 'relative', touchAction: 'pan-y' }}>
       {/* the page's two tools ride the stage row, top right, over every slide */}
       <div style={{ position: 'absolute', top: 12, right: 14, display: 'flex', gap: 8, zIndex: 2 }}>
         <AnalystButton />
@@ -1259,6 +1274,9 @@ const TREND_RANGES: [ChartRange, string][] = [['7d', '7d'], ['30d', '30d'], ['90
 function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: InsightsDetail | null; campaigns: Record<string, StageCampaign[]> | null; byKey: Map<string, MetricView>; initial: string; clientId?: string }) {
   const [range, setRange] = useState<ChartRange>('30d')
   const [sel, setSel] = useState(initial)
+  const [pins, setPins] = useState<Record<string, number>>({})
+  const [lit, setLit] = useState<number | null>(null)
+  const onPins = useCallback((m: Record<string, number>) => setPins(m), [])
   const days = TREND_DAYS[(TREND_OF_RANGE[range] ?? 'month') as 'week' | 'month' | 'quarter' | 'year']
   const rows = STAGE_ORDER.map((st) => {
     const mv = byKey.get(resolveFocus(st.key).metric)
@@ -1287,10 +1305,96 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
       </div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && !cur.locked
-          ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} title={cur.st.label} />
+          ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} title={cur.st.label} onPins={onPins} litPin={lit} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
-        <StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} />
+        <StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} />
+        {cur.mv && !cur.locked && <ContextCard mv={cur.mv} days={days} label={cur.st.label} />}
       </AccentCtx.Provider>
+    </div>
+  )
+}
+
+/* ── Context: what moves the number that is NOT a campaign. Only what the data itself can
+   show honestly today — the weekday rhythm, the days that stood out (named when they land
+   on a holiday). Weather and local events need an outside source and are named as missing. ── */
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+function nthWeekday(y: number, m: number, dow: number, n: number): Date { const d = new Date(y, m, 1); const off = (dow - d.getDay() + 7) % 7; return new Date(y, m, 1 + off + (n - 1) * 7) }
+function lastWeekday(y: number, m: number, dow: number): Date { const d = new Date(y, m + 1, 0); const off = (d.getDay() - dow + 7) % 7; return new Date(y, m + 1, -off) }
+function usHolidays(y: number): { ms: number; name: string }[] {
+  const f = (m: number, d: number, name: string) => ({ ms: new Date(y, m, d).getTime(), name })
+  const w = (d: Date, name: string) => ({ ms: d.getTime(), name })
+  return [
+    f(0, 1, "New Year's Day"), w(nthWeekday(y, 0, 1, 3), 'MLK Day'), w(nthWeekday(y, 1, 0, 2), 'Super Bowl Sunday'), f(1, 14, "Valentine's Day"), w(nthWeekday(y, 1, 1, 3), "Presidents' Day"),
+    f(2, 17, "St. Patrick's Day"), f(4, 5, 'Cinco de Mayo'), w(nthWeekday(y, 4, 0, 2), "Mother's Day"), w(lastWeekday(y, 4, 1), 'Memorial Day'), w(nthWeekday(y, 5, 0, 3), "Father's Day"), f(5, 19, 'Juneteenth'),
+    f(6, 4, 'July 4th'), w(nthWeekday(y, 8, 1, 1), 'Labor Day'), f(9, 31, 'Halloween'), f(10, 11, 'Veterans Day'), w(nthWeekday(y, 10, 4, 4), 'Thanksgiving'), w(new Date(nthWeekday(y, 10, 4, 4).getTime() + DAY_MS), 'Black Friday'),
+    f(11, 24, 'Christmas Eve'), f(11, 25, 'Christmas'), f(11, 31, "New Year's Eve"),
+  ]
+}
+function holidayOn(ms: number): string | null {
+  const y = new Date(ms).getFullYear()
+  const hit = [...usHolidays(y), ...usHolidays(y - 1)].find((h) => Math.abs(h.ms - ms) < DAY_MS / 2)
+  return hit?.name ?? null
+}
+function ContextCard({ mv, days, label }: { mv: MetricView; days: number; label: string }) {
+  const A = useAccent()
+  const raw = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0)
+  let cut = raw.length
+  while (cut > 0 && cut > raw.length - 7 && (raw[cut - 1].value ?? 0) === 0) cut--
+  const all = raw.slice(0, cut).map((d) => ({ t: trendDayMs(d.date), v: d.value ?? 0 }))
+  if (all.length < 14) return null
+  // the weekday rhythm, from the last eight weeks
+  const recent = all.slice(-56)
+  const byDow = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }))
+  for (const d of recent) { const k = new Date(d.t).getDay(); byDow[k].sum += d.v; byDow[k].n++ }
+  const dowMean = byDow.map((b) => (b.n ? b.sum / b.n : 0))
+  const dowMax = Math.max(1, ...dowMean)
+  const bestDow = dowMean.indexOf(dowMax)
+  const weekdayMean = [1, 2, 3, 4, 5].reduce((t, k) => t + dowMean[k], 0) / 5
+  const weekendMean = (dowMean[0] + dowMean[6]) / 2
+  const wkPct = weekdayMean > 0 ? Math.round(((weekendMean - weekdayMean) / weekdayMean) * 100) : null
+  // the days that stood out inside this window, against their 7-day average
+  const win = all.slice(-days)
+  const dev = win.map((d, i) => { const sl = win.slice(Math.max(0, i - 6), i + 1); const avg = sl.reduce((t, x) => t + x.v, 0) / sl.length; return { ...d, avg, pct: avg > 0 ? Math.round(((d.v - avg) / avg) * 100) : 0 } })
+  const stood = [...dev].filter((d) => Math.abs(d.pct) >= 25).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 3).sort((a, b) => a.t - b.t)
+  const noun = mv.unit ?? ''
+  return (
+    <div style={CARD}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={H2}>Context</span>
+        <span style={{ fontSize: 12.5, color: C.faint }}>what moves {label.toLowerCase()} besides you</span>
+      </div>
+      {/* the weekday rhythm */}
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>
+          <b>{WEEKDAYS[bestDow] === 'Sat' || WEEKDAYS[bestDow] === 'Sun' ? `${WEEKDAYS[bestDow]}urdays`.replace('Sunurdays', 'Sundays').replace('Saturdays', 'Saturdays') : `${WEEKDAYS[bestDow]}days`.replace('Tuedays', 'Tuesdays').replace('Weddays', 'Wednesdays').replace('Thudays', 'Thursdays')}</b> are your strongest day{wkPct != null && Math.abs(wkPct) >= 8 ? <>. Weekends run <b style={{ color: wkPct > 0 ? C.greenDk : C.coral }}>{wkPct > 0 ? '+' : ''}{wkPct}%</b> against weekdays</> : null}.
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 44, marginTop: 10 }}>
+          {[1, 2, 3, 4, 5, 6, 0].map((k) => (
+            <div key={k} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
+              <div style={{ width: '100%', maxWidth: 26, height: `${Math.max(4, (dowMean[k] / dowMax) * 100)}%`, borderRadius: 4, background: k === bestDow ? A.main : `${A.main}55` }} />
+              <span style={{ fontSize: 10, color: k === bestDow ? A.dark : C.faint, fontWeight: k === bestDow ? 700 : 500 }}>{WEEKDAYS[k]}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>Average by day of the week, last eight weeks.</div>
+      </div>
+      {/* the days that stood out */}
+      {stood.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 4 }}>Days that stood out</div>
+          {stood.map((d, i) => {
+            const hol = holidayOn(d.t)
+            return (
+              <div key={d.t} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                <span style={{ minWidth: 58, fontSize: 13, fontWeight: 600, color: C.ink }}>{fmtPinDate(d.t)}</span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hol ? hol : WEEKDAYS[new Date(d.t).getDay()] === 'Sat' || WEEKDAYS[new Date(d.t).getDay()] === 'Sun' ? 'a weekend day' : 'a weekday'} · {d.v.toLocaleString()} {noun}</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: d.pct > 0 ? C.greenDk : C.coral, flexShrink: 0 }}>{d.pct > 0 ? '▲' : '▼'}{Math.abs(d.pct)}% vs its week</span>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, marginTop: 14 }}>Weather, local games and events are not in here yet. When they are, they will pin on the trend the same way launches do.</div>
     </div>
   )
 }
@@ -1363,10 +1467,13 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
   return { mean: n > 0 ? sum / n : 0, n }
 }
 
-function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend' }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string; title?: string }) {
+function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, litPin }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null }) {
   const A = useAccent()
   const range: TrendRange = TREND_OF_RANGE[chartRange] ?? 'month'
   const [pick, setPick] = useState<number | null>(null) // the day under the finger
+  const pinsRef = useRef<string>('')
+  const [pinsKey, setPinsKey] = useState('')
+  useEffect(() => { if (onPins && pinsKey) onPins(JSON.parse(pinsKey)) }, [pinsKey, onPins])
   // the sync writes zero rows for the newest days Google has not delivered yet; drawn as
   // data they dive the line and fake a "trending down" — so the series ends at the last
   // day with a real number (at most a week trimmed)
@@ -1474,6 +1581,10 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend' }: { mv?:
   }
 
   const gid = `trendfill-${mv?.key ?? 'x'}`
+  const pinMap: Record<string, number> = {}
+  for (const m of marks) for (const c of m.items) pinMap[c.id] = m.n
+  const pinsJson = JSON.stringify(pinMap)
+  if (pinsJson !== pinsRef.current) { pinsRef.current = pinsJson; queueMicrotask(() => setPinsKey(pinsJson)) }
   return (
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
@@ -1490,7 +1601,7 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend' }: { mv?:
             {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
           </span>
         )}
-        <span style={{ fontSize: 12.5, color: C.faint }}>· {marks.length === 0 ? 'nothing launched in this window' : marks.length === 1 ? '1 launch, pinned' : `${marks.length} launches, pinned`}</span>
+        <span style={{ fontSize: 12.5, color: C.faint }}>· {marks.length === 0 ? 'nothing launched in this window' : marks.length === 1 ? '1 launch pinned below' : `${marks.length} launches pinned below`}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', touchAction: 'pan-y' }} role="img" aria-label="Stage trend: every day, the 7-day average, the prior period, and campaign go-live markers"
         onPointerDown={(e) => { const r = e.currentTarget.getBoundingClientRect(); const x = ((e.clientX - r.left) / r.width) * W; setPick(Math.max(0, Math.min(n - 1, Math.round((x - padL) / slot - 0.5)))) }}
@@ -1509,17 +1620,6 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend' }: { mv?:
             <text x={padL - 6} y={yAt(v)} textAnchor="end" dominantBaseline="central" fontSize={9} fill={C.faint}>{trendCompact(v)}</text>
           </g>
         ))}
-        {/* the effect of each launch: its two weeks after, tinted green when the line rose, red when it fell, with the lift printed */}
-        {marks.filter((m) => m.delta != null && Math.abs(m.delta) >= 3).map((m) => {
-          const x0 = clampX(xAt(m.ms)), x1 = Math.min(W - padR, xAt(m.ms + HALF))
-          const up = m.delta! > 0
-          return (
-            <g key={`fx${m.ms}`}>
-              <rect x={x0} y={yTop} width={Math.max(0, x1 - x0)} height={yBot - yTop} fill={up ? C.greenDk : C.coral} opacity={0.07} />
-              <text x={Math.min(W - padR - 2, x0 + 4)} y={yTop + 9} textAnchor={x1 - x0 < 34 ? 'end' : 'start'} fontSize={9.5} fontWeight={700} fill={up ? C.greenDk : C.coral}>{up ? '▲' : '▼'}{Math.abs(m.delta!)}% after</text>
-            </g>
-          )
-        })}
         {/* every day, as a thin bar */}
         {days.map((d, i) => (
           <rect key={d.t} x={xOf(i) - barW / 2} y={yAt(d.v)} width={barW} height={Math.max(0, yBot - yAt(d.v))} rx={barW > 3 ? 1.5 : 0} fill={A.main} opacity={pick === i ? 0.75 : 0.2} />
@@ -1539,12 +1639,13 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend' }: { mv?:
         {clusters.map((c) => {
           const multi = c.last !== c.first
           const tag = multi ? `${c.first}–${c.last}` : String(c.first)
-          const r = multi ? 13 : 10.5
+          const r = multi ? 11 : 9
+          const lit = litPin != null && litPin >= c.first && litPin <= c.last
           return (
             <g key={c.ms0}>
-              <line x1={c.cx} y1={c.cy} x2={c.cx} y2={yBot} stroke={A.main} strokeWidth={1} strokeDasharray="3 3" />
-              <circle cx={c.cx} cy={c.cy} r={r} fill="#fff" stroke={A.main} strokeWidth={2} />
-              <text x={c.cx} y={c.cy} textAnchor="middle" dominantBaseline="central" fontSize={multi ? 10 : 11} fontWeight={700} fill={A.dark}>{tag}</text>
+              <line x1={c.cx} y1={yTop} x2={c.cx} y2={yBot} stroke={lit ? A.dark : A.main} strokeWidth={lit ? 1.6 : 1} strokeOpacity={lit ? 0.9 : 0.55} strokeDasharray="3 3" />
+              <circle cx={c.cx} cy={yBot} r={r} fill={lit ? A.dark : '#fff'} stroke={lit ? A.dark : A.main} strokeWidth={1.8} />
+              <text x={c.cx} y={yBot} textAnchor="middle" dominantBaseline="central" fontSize={multi ? 8.5 : 10} fontWeight={700} fill={lit ? '#fff' : A.dark}>{tag}</text>
             </g>
           )
         })}
@@ -1579,51 +1680,7 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend' }: { mv?:
         )}
       </div>
 
-      {marks.length > 0 ? (
-        <div style={{ marginTop: 18 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 4 }}>What we did</div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {marks.map((m, i) => (
-              <div key={m.ms} style={{ display: 'flex', gap: 12, padding: '12px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
-                <div style={{ width: 26, height: 26, borderRadius: 99, border: `1.5px solid ${A.main}`, color: A.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{m.n}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>{fmtPinDate(m.ms)}</span>
-                    {m.delta == null ? (
-                      <span style={{ fontSize: 11, fontWeight: 600, color: C.faint }}>too soon to tell</span>
-                    ) : Math.abs(m.delta) < 3 ? (
-                      <span style={{ fontSize: 11, fontWeight: 700, color: C.mute, background: C.bg, padding: '2px 8px', borderRadius: 99 }}>about the same after</span>
-                    ) : (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: m.delta > 0 ? C.greenDk : C.coral, background: m.delta > 0 ? C.greenSoft : C.coralBg, padding: '2px 8px', borderRadius: 99 }}>
-                        <span style={{ fontSize: 9 }}>{m.delta > 0 ? '▲' : '▼'}</span>{Math.abs(m.delta)}% after
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {foldSameNames(m.items).map(({ c, count }) => (
-                      <Link key={c.id} href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 6, textDecoration: 'none', color: 'inherit' }}>
-                        <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
-                        {count > 1 && <span style={{ fontSize: 11, fontWeight: 700, color: C.mute, background: C.bg, borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>× {count}</span>}
-                        <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          {(() => {
-            const reads = marks.filter((m) => m.delta != null).map((m) => m.delta as number)
-            if (reads.length < 2) return null
-            const avg = Math.round(reads.reduce((a, b) => a + b, 0) / reads.length)
-            const up = reads.filter((d) => d >= 3).length
-            return <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: C.bg, fontSize: 13, color: C.ink, lineHeight: 1.45 }}><b>{up} of {reads.length}</b> launches were followed by a rise. On average this number moved <b style={{ color: avg > 0 ? C.greenDk : avg < 0 ? C.coral : C.mute }}>{avg > 0 ? '+' : ''}{avg}%</b> in the two weeks after a launch.</div>
-          })()}
-          <div style={{ fontSize: 11, color: C.faint, lineHeight: 1.45, marginTop: 8 }}>&ldquo;After&rdquo; compares the two weeks after each launch to the two weeks before. Shaded stretches are those two weeks. It shows what happened, not proof of cause.</div>
-        </div>
-      ) : (
-        <div style={{ marginTop: 14, fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>Nothing launched in this window. When something goes live, its day pins here and the two weeks after are shaded so you can see what it did.</div>
-      )}
+      {marks.length === 0 && <div style={{ marginTop: 12, fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>Nothing launched in this window. When something goes live, its day pins here.</div>}
     </div>
   )
 }
@@ -1666,7 +1723,7 @@ function foldSameNames(items: StageCampaign[]): { c: StageCampaign; count: numbe
   }
   return out
 }
-function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
+function StageCampaigns({ list, pins = {}, lit = null, onLight }: { list: StageCampaign[] | null; /** campaign id → its pin number on the trend above */ pins?: Record<string, number>; lit?: number | null; onLight?: (n: number | null) => void }) {
   const A = useAccent()
   if (list === null) return null // stay quiet until the fetch lands
   const MAX = 3
@@ -1674,19 +1731,25 @@ function StageCampaigns({ list }: { list: StageCampaign[] | null }) {
   const extra = list.length - shown.length
   return (
     <div style={CARD}>
-      <div style={{ ...H2, marginBottom: 6 }}>Active campaigns</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={H2}>Active campaigns</span>{Object.keys(pins).length > 0 && <span style={{ fontSize: 12.5, color: C.faint }}>numbers match the pins above</span>}</div>
       {list.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {foldSameNames(shown).map(({ c, count }) => (
-            <Link key={c.id} href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: 'inherit' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={A.dark} /></div>
+          {foldSameNames(shown).map(({ c, count }) => {
+            const n = pins[c.id]
+            const isLit = n != null && lit === n
+            return (
+            <Link key={c.id} href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} onClick={(e) => { if (n != null && onLight) { e.preventDefault(); onLight(isLit ? null : n) } }} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: 'inherit' }}>
+              {n != null
+                ? <span style={{ width: 34, height: 34, borderRadius: 99, background: isLit ? A.dark : '#fff', border: `1.8px solid ${isLit ? A.dark : A.main}`, color: isLit ? '#fff' : A.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0, transition: 'background .15s' }}>{n}</span>
+                : <div style={{ width: 34, height: 34, borderRadius: 9, background: A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={A.dark} /></div>}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: A.dark, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: A.main }} />Live{count > 1 ? ` · ${count} campaigns` : ''}</div>
+                <div style={{ fontSize: 11, color: A.dark, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: A.main }} />Live{count > 1 ? ` · ${count} alike` : ''}{n != null ? ` · pinned ${n}` : ''}</div>
               </div>
-              <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
+              {n != null ? <span style={{ fontSize: 12, fontWeight: 600, color: C.faint }}>{isLit ? 'shown' : 'show'}</span> : <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />}
             </Link>
-          ))}
+            )
+          })}
           {extra > 0 && (
             <Link href="/dashboard/campaigns" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 12.5, fontWeight: 600, color: A.dark, textDecoration: 'none' }}>{extra} more working on this <ChevronRight size={15} /></Link>
           )}

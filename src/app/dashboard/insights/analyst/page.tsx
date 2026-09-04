@@ -12,8 +12,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { ChevronLeft, Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown, TrendingUp } from 'lucide-react'
+import { Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown, TrendingUp, Search, ChevronRight } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
+import MvpShell from '@/components/mvp/mvp-shell'
+import { GLASS } from '@/components/mvp/top-row'
+const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)'
+const CARD: React.CSSProperties = { background: '#fff', borderRadius: 18, padding: '16px 16px 18px', boxShadow: CARD_SHADOW }
+const STAGE_HUE = ['#2e9a78', '#3d8ed8', '#7a5fd6', '#dd9a1c', '#1fa39a']
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenLine: 'rgba(74,189,152,0.32)',
@@ -190,6 +195,13 @@ export default function AnalystPage() {
   const [state, setState] = useState<'loading' | 'ready' | 'locked' | 'error'>('loading')
   const [data, setData] = useState<AnalystResponse | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [queries, setQueries] = useState<{ query: string; impressions: number }[]>([])
+  useEffect(() => {
+    if (!client?.id) return
+    let live = true
+    fetch(`/api/dashboard/insights-detail?clientId=${client.id}`).then((r) => r.json()).then((j) => { if (live && Array.isArray(j?.topQueries)) setQueries(j.topQueries.slice(0, 6)) }).catch(() => {})
+    return () => { live = false }
+  }, [client?.id])
 
   // First open serves the cached read (cheap); the Refresh button forces a
   // fresh generate (refresh: true skips the cache on the server).
@@ -247,39 +259,25 @@ export default function AnalystPage() {
     return () => clearTimeout(t)
   }, [waitingForClient])
 
-  const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard/insights') }
-
+  void router
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
-      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
-        {/* header */}
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
-          <button onClick={back} aria-label="Back" style={{ width: 38, height: 38, borderRadius: 99, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.ink }}><ChevronLeft size={24} /></button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
-            <Sparkles size={17} color={C.greenDk} />
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>AI Analyst</div>
-          </div>
-          {state === 'ready' && (
-            <button onClick={() => run(true)} aria-label="Refresh" style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, border: `1px solid ${C.line}`, background: '#fff', color: C.mute, borderRadius: 99, padding: '6px 11px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}><RefreshCw size={13} /> Refresh</button>
-          )}
-        </div>
-
-        <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '16px 16px 40px' }}>
-          {/* Exhaustive on purpose: the last branch is a plain else, so there is no
-              combination of state and data that renders an empty screen. */}
-          {state === 'loading' ? <Centered>Reading your numbers&hellip;</Centered>
-            : state === 'locked' ? <Locked />
-            : state === 'ready' && data?.read ? <ReadView read={data.read} funnel={data.funnel ?? []} stats={data.reviewStats ?? null} when={whenLabel(data.generatedAt)} />
-            : <Centered>
-                We could not put your read together{err ? `: ${err}` : '.'}
-                <div style={{ marginTop: 12 }}><button onClick={() => run(false)} style={btn}>Try again</button></div>
-              </Centered>}
-        </div>
+    <MvpShell active="home" back="/dashboard/insights" title="Report" right={state === 'ready' ? (
+      <button onClick={() => run(true)} aria-label="Refresh the report" title="Refresh" style={{ ...GLASS, width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, cursor: 'pointer', boxSizing: 'border-box' }}><RefreshCw size={17} /></button>
+    ) : undefined}>
+      <div style={{ padding: '12px 18px 24px', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
+        {/* Exhaustive on purpose: the last branch is a plain else, so there is no
+            combination of state and data that renders an empty screen. */}
+        {state === 'loading' ? <Centered>Reading your numbers&hellip;</Centered>
+          : state === 'locked' ? <Locked />
+          : state === 'ready' && data?.read ? <ReadView read={data.read} funnel={data.funnel ?? []} stats={data.reviewStats ?? null} when={whenLabel(data.generatedAt)} business={data.business?.name ?? client?.name ?? ''} queries={queries} />
+          : <Centered>
+              We could not put your read together{err ? `: ${err}` : '.'}
+              <div style={{ marginTop: 12 }}><button onClick={() => run(false)} style={btn}>Try again</button></div>
+            </Centered>}
       </div>
-    </div>
+    </MvpShell>
   )
 }
-
 const btn: React.CSSProperties = { background: C.green, color: '#fff', border: 'none', fontWeight: 700, fontSize: 13, borderRadius: 99, padding: '10px 16px', cursor: 'pointer' }
 
 function Centered({ children }: { children: React.ReactNode }) {
@@ -287,40 +285,37 @@ function Centered({ children }: { children: React.ReactNode }) {
 }
 
 // ── The read ─────────────────────────────────────────────────────────────
-function ReadView({ read, funnel, stats, when }: { read: Read; funnel: FunnelStep[]; stats: ReviewStats | null; when: string }) {
+function ReadView({ read, funnel, stats, when, business, queries }: { read: Read; funnel: FunnelStep[]; stats: ReviewStats | null; when: string; business: string; queries: { query: string; impressions: number }[] }) {
+  const topQ = Math.max(1, ...queries.map((q) => q.impressions))
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {/* bottom line */}
-      <div style={{ background: C.greenSoft, border: `1px solid ${C.greenLine}`, borderRadius: 16, padding: '15px 16px' }}>
-        <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.09em', textTransform: 'uppercase', color: C.greenDk }}>The bottom line</div>
-        <div style={{ fontSize: 16, lineHeight: 1.45, marginTop: 7, fontWeight: 500 }}>{read.bottomLine}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* the cover: the one dark moment on the page — the period, the business, and the bottom line */}
+      <div style={{ borderRadius: 20, padding: '20px 20px 22px', color: '#fff', backgroundColor: '#16211c', backgroundImage: 'radial-gradient(circle at 88% 8%, rgba(74,189,152,0.42), transparent 55%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(22,33,28,0.22)' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.72)' }}>Your report · last 30 days{business ? ` · ${business}` : ''}</div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, lineHeight: 1.25, marginTop: 10, letterSpacing: '-.01em' }}>{read.bottomLine}</div>
+        {when && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 12 }}>{when} · read from your real numbers, never guesses</div>}
       </div>
 
-      {/* the funnel, numbers straight from the payload */}
       {funnel.length > 0 && (
-        <Section title="Your funnel">
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {funnel.map((s, i) => (
-              <div key={s.stage}>
-                {i > 0 && s.keptFromPrevPct != null && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 0 3px 4px', fontSize: 11.5, color: C.faint }}>
-                    <TrendingDown size={12} /> {s.keptFromPrevPct}% made it here
-                  </div>
-                )}
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, padding: '9px 13px', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 12 }}>
-                  <span style={{ fontSize: 13, color: C.mute, flex: 1 }}>{s.label}</span>
-                  {s.isEmpty
-                    ? <span style={{ fontSize: 12, color: C.faint }}>No data yet</span>
-                    : <span style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600 }}>{(s.value ?? 0).toLocaleString('en-US')}</span>}
-                  {!s.isEmpty && s.changePct != null && <ChangeChip pct={s.changePct} />}
-                </div>
+        <Section title="Your funnel" sub="each step, and how much of the step before it kept">
+          <div>
+            {funnel.map((f, i) => (
+              <div key={f.stage} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                <span style={{ width: 9, height: 9, borderRadius: 99, background: STAGE_HUE[i] ?? C.green, flexShrink: 0 }} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: f.isEmpty ? C.faint : C.ink }}>{f.label}</span>
+                  {f.keptFromPrevPct != null && <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1 }}>kept {f.keptFromPrevPct}% of the step before</span>}
+                  {f.isEmpty && <span style={{ display: 'block', fontSize: 12, color: C.faint, marginTop: 1 }}>not measured yet</span>}
+                </span>
+                <span style={{ textAlign: 'right', flexShrink: 0 }}>
+                  <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: f.isEmpty || f.value == null ? C.faint : C.ink, letterSpacing: '-.01em' }}>{f.value == null ? '—' : f.value.toLocaleString()}</span>
+                  {f.changePct != null && <span style={{ display: 'inline-block', marginTop: 2 }}><ChangeChip pct={f.changePct} /></span>}
+                </span>
               </div>
             ))}
           </div>
         </Section>
       )}
-
-      {read.reviews && <ReviewsBlock r={read.reviews} stats={stats} />}
 
       {read.working.length > 0 && (
         <Section title="What's working">
@@ -329,35 +324,58 @@ function ReadView({ read, funnel, stats, when }: { read: Read; funnel: FunnelSte
       )}
 
       {read.fixes.length > 0 && (
-        <Section title="What to fix">
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <Section title="What to change" sub="in order, the moves that matter most">
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
             {read.fixes.map((f, i) => (
-              <div key={i} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '13px 14px' }}>
-                <div style={{ fontSize: 14, fontWeight: 700 }}>{f.move}</div>
-                {f.why && <div style={{ fontSize: 13, color: C.mute, marginTop: 4, lineHeight: 1.45 }}>{f.why}</div>}
+              <div key={i} style={{ display: 'flex', gap: 12, padding: '11px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                <span style={{ width: 26, height: 26, borderRadius: 99, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{f.move}</span>
+                  <span style={{ display: 'block', fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>{f.why}</span>
+                </span>
               </div>
             ))}
           </div>
-          <Link href="/dashboard/campaigns/new" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 12, background: C.green, color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 99, padding: '10px 16px', textDecoration: 'none' }}>Build a campaign <ArrowRight size={15} /></Link>
+          <Link href="/dashboard/campaigns/new" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 12, fontSize: 13.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>Start on the first one <ArrowRight size={15} /></Link>
+        </Section>
+      )}
+
+      {read.reviews && <ReviewsBlock r={read.reviews} stats={stats} />}
+
+      {queries.length > 0 && (
+        <Section title="What people search to find you" sub="the exact words, from Google">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            {queries.map((q) => (
+              <div key={q.query}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5 }}>
+                  <Search size={13} color={C.faint} style={{ flexShrink: 0 }} />
+                  <span style={{ flex: 1, minWidth: 0, color: C.ink, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.query}</span>
+                  <span style={{ color: C.mute, fontSize: 12.5, flexShrink: 0 }}>{q.impressions.toLocaleString()}</span>
+                </div>
+                <div style={{ height: 4, borderRadius: 99, background: C.bg, marginTop: 5, marginLeft: 21, overflow: 'hidden' }}><div style={{ width: `${Math.max(2, (q.impressions / topQ) * 100)}%`, height: '100%', borderRadius: 99, background: C.green }} /></div>
+              </div>
+            ))}
+          </div>
         </Section>
       )}
 
       {read.blindSpots.length > 0 && (
-        <Section title="What I can't see yet">
+        <Section title="What we can't see yet">
           <Bullets items={read.blindSpots} tone="muted" />
-          <Link href="/dashboard/connected-accounts" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 10, fontSize: 12.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>Connect more <ArrowRight size={14} /></Link>
+          <Link href="/dashboard/connected-accounts" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 12, fontSize: 13.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>Connect a source <ChevronRight size={15} /></Link>
         </Section>
       )}
-
-      {when && <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', paddingTop: 4 }}>{when} &middot; from your real numbers</div>}
+      <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, textAlign: 'center', padding: '4px 10px 0' }}>Every number here is yours. The words read what happened; they are not proof of cause.</div>
     </div>
   )
 }
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
-    <div>
-      <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 9 }}>{title}</div>
+    <div style={CARD}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }}>{title}</span>
+        {sub && <span style={{ fontSize: 12.5, color: C.faint }}>{sub}</span>}
+      </div>
       {children}
     </div>
   )
