@@ -147,12 +147,12 @@ export function deriveRhythm(series: Array<{ date: string; value: number }>): An
     byDay: [1, 2, 3, 4, 5, 6, 0].map((k) => ({ day: WEEKDAY_NAMES[k].slice(0, 3), avg: Math.round(avg[k]) })),
   }
 }
-export function deriveStandouts(series: Array<{ date: string; value: number }>, max = 3): AnalystStandout[] {
+export function deriveStandouts(series: Array<{ date: string; value: number }>, max = 3, window = 7): AnalystStandout[] {
   let cut = series.length
   while (cut > 0 && cut > series.length - 7 && series[cut - 1].value === 0) cut--
   // the newest two days may still be filling in — never call one of them a stand-out
   const s = series.slice(0, Math.max(0, cut - 2))
-  const dev = s.map((d, i) => { const sl = s.slice(Math.max(0, i - 6), i + 1); const avg = sl.reduce((t, x) => t + x.value, 0) / sl.length; return { d, pct: avg > 0 ? Math.round(((d.value - avg) / avg) * 100) : 0 } })
+  const dev = s.map((d, i) => { const sl = s.slice(Math.max(0, i - (window - 1)), i + 1); const avg = sl.reduce((t, x) => t + x.value, 0) / sl.length; return { d, pct: avg > 0 ? Math.round(((d.value - avg) / avg) * 100) : 0 } })
   return dev.filter((x) => Math.abs(x.pct) >= 25).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, max).sort((a, b) => a.d.date.localeCompare(b.d.date))
     .map((x) => ({ date: x.d.date, value: x.d.value, vsWeekPct: x.pct, holiday: holidayOn(x.d.date), weekday: WEEKDAY_NAMES[new Date(x.d.date + 'T00:00:00').getDay()] }))
 }

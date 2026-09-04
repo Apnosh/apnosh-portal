@@ -1274,6 +1274,16 @@ function FeedLoading() {
 // ── "Campaigns working on this" — the shipped campaigns whose live pieces push on
 //    this stage's number, each a tap into its campaign. A calm prompt when none. ──
 // ── The TRENDS tab (owner 2026-09-04): every stage side by side, then one stage in depth ──
+/* the smoothing follows the window (owner 2026-09-04): a week shows real days, a month a
+   7-day average, a quarter two weeks, a year a month; a custom span picks by its length */
+function smoothDays(range: string, spanDays: number): number {
+  if (range === '7d') return 1
+  if (range === '30d') return 7
+  if (range === '90d') return 14
+  if (range === '1y') return 30
+  return spanDays <= 14 ? 1 : spanDays <= 45 ? 7 : spanDays <= 120 ? 14 : 30
+}
+const avgLabel = (n: number) => (n <= 1 ? 'Each day' : `${n}-day average`)
 const TREND_RANGES: [ChartRange, string][] = [['7d', '7d'], ['30d', '30d'], ['90d', '90d'], ['1y', '1y'], ['custom', 'Custom']]
 function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: InsightsDetail | null; campaigns: Record<string, StageCampaign[]> | null; byKey: Map<string, MetricView>; initial: string; clientId?: string }) {
   const [range, setRange] = useState<ChartRange>('30d')
@@ -1285,6 +1295,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
   const onPins = useCallback((m: Record<string, number>) => setPins(m), [])
   const customDays = Math.max(2, Math.round((trendDayMs(cEnd) - trendDayMs(cStart)) / DAY_MS) + 1)
   const days = range === 'custom' ? customDays : TREND_DAYS[(TREND_OF_RANGE[range] ?? 'month') as 'week' | 'month' | 'quarter' | 'year']
+  const smooth = smoothDays(range, days)
   const rows = STAGE_ORDER.map((st) => {
     const mv = byKey.get(resolveFocus(st.key).metric)
     const cs = computedStage(detail, STAGE_ORDER.findIndex((x) => x.key === st.key) + 1)
@@ -1315,19 +1326,19 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
           <span style={H2}>All stages</span>
           <span style={{ fontSize: 12.5, color: C.faint }}>tap one to open it</span>
         </div>
-        {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} />)}
+        {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
       </div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && !cur.locked
-          ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />
+          ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
-        {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} />}
+        {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
       </AccentCtx.Provider>
     </div>
   )
 }
 
-function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range }: { label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
+function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range, smooth = 7 }: { smooth?: number; label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
   // the row's total is the SAME by-source headline the Insights tab shows for this window
   // (the series' own sum can differ by definition); the % stays the series' read
   const { stage: rs } = useRangeStage(cs, stageNumber, clientId, range)
@@ -1338,7 +1349,7 @@ function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaign
   let cut = raw.length
   while (cut > 0 && cut > raw.length - 7 && (raw[cut - 1].value ?? 0) === 0) cut--
   const series = raw.slice(Math.max(0, cut - days), cut)
-  const roll = series.map((_, i) => { const sl = series.slice(Math.max(0, i - 6), i + 1); return sl.reduce((t, x) => t + (x.value ?? 0), 0) / sl.length })
+  const roll = series.map((_, i) => { const sl = series.slice(Math.max(0, i - (smooth - 1)), i + 1); return sl.reduce((t, x) => t + (x.value ?? 0), 0) / sl.length })
   const mx = Math.max(1, ...roll)
   const W = 100, H = 30
   const pts = roll.map((v, i) => `${(i / Math.max(1, roll.length - 1)) * W},${H - 3 - (v / mx) * (H - 6)}`)
@@ -1395,7 +1406,7 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
   return { mean: n > 0 ? sum / n : 0, n }
 }
 
-function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, litPin, footer, customStart, customEnd }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
+function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, litPin, footer, customStart, customEnd, smooth = 7 }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; /** the rolling window in days (1 = each day) */ smooth?: number; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
   const A = useAccent()
   const range: TrendRange = TREND_OF_RANGE[chartRange] ?? 'month'
   const [pick, setPick] = useState<number | null>(null) // the day under the finger
@@ -1436,7 +1447,7 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
   const stretch = Math.max(DAY_MS * 2, Math.min(7 * DAY_MS, spanMs / 3))
   const headA = trendMeanIn(dayMs, startMs, startMs + stretch), headB = trendMeanIn(dayMs, endMs - stretch, endMs + 1)
   const trendPct = headA.n >= 2 && headB.n >= 2 && headA.mean > 0 ? Math.round(((headB.mean - headA.mean) / headA.mean) * 100) : null
-  const roll = days.map((_, i) => { const sl = days.slice(Math.max(0, i - 6), i + 1); return sl.reduce((t, x) => t + x.v, 0) / sl.length })
+  const roll = days.map((_, i) => { const sl = days.slice(Math.max(0, i - (smooth - 1)), i + 1); return sl.reduce((t, x) => t + x.v, 0) / sl.length })
   const byT = new Map(dayMs.map((x) => [x.t, x.v]))
   const priorOffset = Math.round(spanMs / DAY_MS + 1) * DAY_MS
   const prior = days.map((d) => byT.get(d.t - priorOffset) ?? null)
@@ -1590,12 +1601,12 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
         {pick != null ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
             <b style={{ color: C.ink }}>{fmtPinDate(days[pick].t)}</b>
-            <span><b style={{ color: C.ink }}>{Math.round(roll[pick]).toLocaleString()}</b> {noun} a day, on average</span>
+            <span><b style={{ color: C.ink }}>{Math.round(roll[pick]).toLocaleString()}</b> {noun}{smooth > 1 ? ' a day, on average' : ''}</span>
             {prior[pick] != null && <span style={{ color: C.faint }}>· prior period {prior[pick]!.toLocaleString()}</span>}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 14, height: 0, borderTop: `2.2px solid ${A.main}` }} /> 7-day average</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 14, height: 0, borderTop: `2.2px solid ${A.main}` }} /> {avgLabel(smooth)}</span>
             {priorHas && <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 14, borderTop: `1.3px dashed ${C.mute}`, display: 'inline-block' }} /> Prior period</span>}
           </div>
         )}
@@ -1696,16 +1707,17 @@ function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: 
 }
 
 /* ── Highlights: only the days that were abnormally high or low against their own week ── */
-function HighlightsCard({ mv, days, label }: { mv: MetricView; days: number; label: string }) {
+function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days: number; label: string; smooth?: number }) {
+  const win_n = Math.max(3, smooth)
   const raw = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0).map((d) => ({ date: d.date, value: d.value ?? 0 }))
   const win = raw.slice(-Math.max(days, 14))
-  const hits = deriveStandouts(win, 4).filter((h) => Math.abs(h.vsWeekPct) >= 30)
+  const hits = deriveStandouts(win, 4, win_n).filter((h) => Math.abs(h.vsWeekPct) >= 30)
   const noun = mv.unit ?? ''
   return (
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
         <span style={H2}>Highlights</span>
-        <span style={{ fontSize: 12.5, color: C.faint }}>days far from their own 7-day average</span>
+        <span style={{ fontSize: 12.5, color: C.faint }}>days far from their own {win_n}-day average</span>
       </div>
       {hits.length === 0 ? (
         <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>No day stood out from its week for {label.toLowerCase()} in this window.</div>
@@ -1714,9 +1726,8 @@ function HighlightsCard({ mv, days, label }: { mv: MetricView; days: number; lab
           <span style={{ width: 34, height: 34, borderRadius: 99, background: h.vsWeekPct > 0 ? C.greenSoft : C.coralBg, color: h.vsWeekPct > 0 ? C.greenDk : C.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{h.vsWeekPct > 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}</span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtPinDate(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>
-            <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1 }}>{h.value.toLocaleString()} {noun}</span>
+            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{h.value.toLocaleString()} {noun} · <b style={{ color: h.vsWeekPct > 0 ? C.greenDk : C.coral, fontWeight: 700 }}>{h.vsWeekPct > 0 ? '▲' : '▼'}{Math.abs(h.vsWeekPct)}%</b> {h.vsWeekPct > 0 ? 'above' : 'below'} its {win_n}-day average</span>
           </span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: h.vsWeekPct > 0 ? C.greenDk : C.coral, flexShrink: 0 }}>{h.vsWeekPct > 0 ? '▲' : '▼'}{Math.abs(h.vsWeekPct)}% {h.vsWeekPct > 0 ? 'above' : 'below'} its 7-day average</span>
         </div>
       ))}
     </div>
