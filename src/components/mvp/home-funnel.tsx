@@ -695,7 +695,7 @@ export default function HomeFunnel({
       // orb, so every row spans the full width: crowd/orb on one side, the big figure on the
       // other. label above · big hero number (auto-fit) · YoY tick below.
       const side = L.side // -1 = number hugs the LEFT edge, +1 = the RIGHT edge
-      const P = 32 // more breathing room from the screen edge
+      const P = 48 // the ledger sits a step in from the edge, closer to the spine (owner 2026-09-03)
       const numLeft = side < 0
       ctx.textAlign = numLeft ? 'left' : 'right'
       const anchorX = numLeft ? P : W - P
