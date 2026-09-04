@@ -92,7 +92,7 @@ const BAND_RGB: Record<HealthBand, [number, number, number]> = {
 }
 // darker variants for text/marks on the LIGHT ground (the bright ramp above is for dark, and for fills/rings/crowd on dark).
 const BAND_INK: Record<HealthBand, [number, number, number]> = {
-  veryLow: [255, 107, 87], low: [186, 78, 28], average: [150, 112, 14], high: [46, 154, 120], veryHigh: [46, 154, 120],
+  veryLow: [201, 45, 50], low: [186, 78, 28], average: [150, 112, 14], high: [46, 154, 120], veryHigh: [46, 154, 120],
 }
 const BAND_WORD: Record<HealthBand, string> = { veryLow: 'very low', low: 'low', average: 'average', high: 'high', veryHigh: 'very high' }
 const bandVigor = (b: HealthBand | null): number => (b === 'veryHigh' ? 1 : b === 'high' ? 0.66 : 0.38) // pulse liveliness by band
@@ -796,7 +796,7 @@ export default function HomeFunnel({
       ctx.globalAlpha = pillIn
       roundRectP(px - pw / 2, midY - ph / 2, pw, ph, ph / 2)
       const alarm = !dark && dband === 'veryLow' // the weak step is the one filled chip on the page (owner pick 2026-09-03)
-      ctx.fillStyle = alarm ? '#ff6b57' : `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
+      ctx.fillStyle = alarm ? '#c92d32' : `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
       ctx.fill()
       ctx.fillStyle = alarm ? '#ffffff' : `rgb(${cr.join(',')})` // band-coloured text (bright on dark, dark ink on light)
       ctx.fillText(label, px, midY + 4)
