@@ -985,7 +985,7 @@ export function ActionsChart({
   accent?: string
 }) {
   const { C } = useMvpTheme()
-  const H = 84
+  const H = 124
   const [picked, setPicked] = useState<number | null>(null)
   const { bars, curLbl, cmpLbl, total, avg, max } = summary
   const avgY = (avg / max) * H
@@ -1019,9 +1019,16 @@ export function ActionsChart({
           <b style={{ color: C.ink, fontWeight: 700 }}>{total.toLocaleString()}</b> {noun}
         </div>
       )}
-      <div style={{ position: 'relative', height: H }}>
-        <div style={{ position: 'absolute', left: 0, right: 0, bottom: avgY, borderTop: `1px dashed ${C.faint}`, opacity: 0.6 }} />
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: dense ? 3 : 10, height: '100%' }}>
+      {/* a quiet axis: three numbers on the left, hairlines across, so the bars have a scale (owner 2026-09-04) */}
+      <div style={{ position: 'relative', height: H, paddingLeft: 34 }}>
+        {[1, 0.5, 0].map((f) => (
+          <div key={f} style={{ position: 'absolute', left: 0, right: 0, bottom: `${f * 100}%`, display: 'flex', alignItems: 'flex-end', pointerEvents: 'none' }}>
+            <span style={{ width: 30, fontSize: 10, color: C.faint, textAlign: 'right', paddingRight: 4, transform: f === 0 ? 'translateY(0)' : f === 1 ? 'translateY(50%)' : 'translateY(50%)', lineHeight: 1 }}>{axisLabel(max * f)}</span>
+            <span style={{ flex: 1, borderTop: `1px solid ${C.ghost}`, opacity: f === 0 ? 1 : 0.7 }} />
+          </div>
+        ))}
+        <div style={{ position: 'absolute', left: 34, right: 0, bottom: avgY, borderTop: `1px dashed ${C.faint}`, opacity: 0.6 }} />
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: dense ? 3 : 10, height: '100%', position: 'relative' }}>
           {bars.map((b, i) => {
             const isPicked = picked === i
             const dim = picked != null && !isPicked
@@ -1042,7 +1049,7 @@ export function ActionsChart({
           })}
         </div>
       </div>
-      <div style={{ display: 'flex', gap: dense ? 3 : 10, marginTop: 5 }}>
+      <div style={{ display: 'flex', gap: dense ? 3 : 10, marginTop: 5, paddingLeft: 34 }}>
         {bars.map((b, i) => {
           const show = !dense || i === 0 || i === bars.length - 1 || i % Math.max(1, Math.ceil(bars.length / 6)) === 0
           return <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: dense ? 9 : 10.5, color: C.faint, whiteSpace: 'nowrap' }}>{show ? b.label : ''}</div>
@@ -1074,6 +1081,13 @@ export function ActionsChart({
       </div>
     </div>
   )
+}
+
+/** axis numbers read short: 1.2K, 25K, 1.3M */
+function axisLabel(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(v >= 10_000_000 ? 0 : 1).replace(/\.0$/, '')}M`
+  if (v >= 1000) return `${(v / 1000).toFixed(v >= 10_000 ? 0 : 1).replace(/\.0$/, '')}K`
+  return String(Math.round(v))
 }
 
 /** The change pill, the way a portfolio app writes it: the arrow carries the direction, then

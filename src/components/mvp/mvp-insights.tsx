@@ -545,7 +545,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing }: { dat
         <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
         {/* Campaign-correlation block: "Did it move?" (the metric with a pin at
             each campaign's real go-live date) and the campaigns behind it. */}
-        <CampaignTrend mv={byKey.get(focus.metric)} list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
+        <CampaignTrend mv={byKey.get(focus.metric)} list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} chartRange={ranges[focus.stageKey] ?? '30d'} />
         <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
       </div>
       </AccentCtx.Provider>
@@ -1261,9 +1261,11 @@ function FeedLoading() {
 // data — no invented comparison line, no fake "before us" region. Campaigns
 // without a known go-live date (or shipped after our last data day) simply don't
 // pin, because we can't honestly show their effect yet.
-type TrendRange = 'month' | 'quarter' | 'year' | 'all'
-const TREND_LABEL: Record<TrendRange, string> = { month: 'Month', quarter: 'Quarter', year: 'Year', all: 'All time' }
-const TREND_DAYS: Record<'month' | 'quarter' | 'year', number> = { month: 30, quarter: 90, year: 365 }
+type TrendRange = 'week' | 'month' | 'quarter' | 'year' | 'all'
+const TREND_LABEL: Record<TrendRange, string> = { week: 'Week', month: 'Month', quarter: 'Quarter', year: 'Year', all: 'All time' }
+/* the chart's range → the trend's window, so both cards read the same days (owner 2026-09-04) */
+const TREND_OF_RANGE: Record<string, TrendRange> = { '7d': 'week', '30d': 'month', '90d': 'quarter', '1y': 'year', custom: 'month' }
+const TREND_DAYS: Record<'week' | 'month' | 'quarter' | 'year', number> = { week: 7, month: 30, quarter: 90, year: 365 }
 const DAY_MS = 86400000
 
 function trendDayMs(iso: string): number { return Date.parse(iso.length <= 10 ? `${iso}T00:00:00Z` : iso) }
@@ -1291,10 +1293,16 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
   return { mean: n > 0 ? sum / n : 0, n }
 }
 
-function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | null }) {
+function CampaignTrend({ mv, list, chartRange = '30d' }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string }) {
   const A = useAccent()
-  const [range, setRange] = useState<TrendRange>('quarter')
-  const daily = (mv?.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0)
+  const range: TrendRange = TREND_OF_RANGE[chartRange] ?? 'month'
+  // the sync writes zero rows for the newest days Google has not delivered yet; drawn as
+  // data they dive the line and fake a "trending down" — so the series ends at the last
+  // day with a real number (at most a week trimmed)
+  const raw = (mv?.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0)
+  let cut = raw.length
+  while (cut > 0 && cut > raw.length - 7 && (raw[cut - 1].value ?? 0) === 0) cut--
+  const daily = raw.slice(0, Math.max(cut, 2))
   if (daily.length < 2) return null // no series → nothing honest to draw
 
   const dayMs = daily.map((d) => ({ t: trendDayMs(d.date), v: d.value }))
@@ -1309,7 +1317,7 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   // Resample the daily series into a handful of evenly-spaced buckets (mean per
   // bucket), then draw a smooth curve through them — so the line reads as a real
   // trend instead of jagged day-to-day noise. Fewer, cleaner points at wider ranges.
-  const nB = range === 'month' ? 10 : range === 'all' ? 16 : 12
+  const nB = range === 'week' ? 7 : range === 'month' ? 10 : range === 'all' ? 16 : 12
   const agg = Array.from({ length: nB }, () => ({ sum: 0, n: 0 }))
   for (const d of win) {
     const bi = Math.min(nB - 1, Math.max(0, Math.floor(((d.t - startMs) / spanMs) * nB)))
@@ -1320,6 +1328,11 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   const maxV = Math.max(...filled.map((b) => b.mean))
   if (maxV <= 0) return null // an all-zero window → don't draw a flat fake line
   const avgV = win.reduce((s, d) => s + d.v, 0) / win.length
+  // the one-line read: the window's last stretch against its first (a week each, or a
+  // third of a short window), so "trending up 12%" means something a person can check
+  const stretch = Math.max(DAY_MS * 2, Math.min(7 * DAY_MS, spanMs / 3))
+  const headA = trendMeanIn(dayMs, startMs, startMs + stretch), headB = trendMeanIn(dayMs, endMs - stretch, endMs + 1)
+  const trendPct = headA.n >= 2 && headB.n >= 2 && headA.mean > 0 ? Math.round(((headB.mean - headA.mean) / headA.mean) * 100) : null
 
   // SVG geometry (uniform-scaled so pins stay round). y grows downward. A left
   // gutter holds the y-axis numbers; a taller bottom holds per-pin date labels
@@ -1388,15 +1401,22 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
   const gid = `trendfill-${mv?.key ?? 'x'}`
   return (
     <div style={CARD}>
-      <div style={{ ...H2, marginBottom: 2 }}>Did it move?</div>
-      <div style={{ fontSize: 12.5, color: C.faint, lineHeight: 1.4, marginBottom: 12 }}>Pins are launch days. The dashed line is a typical day.</div>
-      <div style={{ display: 'flex', borderRadius: 999, padding: 3, marginBottom: 14, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
-        {(['month', 'quarter', 'year', 'all'] as TrendRange[]).map((r) => {
-          const on = range === r
-          return <button key={r} onClick={() => setRange(r)} style={{ flex: 1, border: 'none', borderRadius: 999, padding: '7px 0', fontSize: 12, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,.08)' : 'none', cursor: 'pointer' }}>{TREND_LABEL[r]}</button>
-        })}
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
+        <span style={H2}>Trend</span>
+        <span style={{ fontSize: 12.5, color: C.faint }}>{range === 'all' ? 'all time' : `this ${TREND_LABEL[range].toLowerCase()}`}</span>
       </div>
-
+      {/* the read, in one line: where the line is heading, and what was launched into it */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        {trendPct == null ? (
+          <span style={{ fontSize: 13.5, color: C.mute }}>Not enough days to call a direction yet.</span>
+        ) : (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? C.greenDk : C.coral }}>
+            {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
+            {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
+          </span>
+        )}
+        <span style={{ fontSize: 12.5, color: C.faint }}>· {marks.length === 0 ? 'nothing launched in this window' : marks.length === 1 ? '1 launch, pinned' : `${marks.length} launches, pinned`}</span>
+      </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} role="img" aria-label="Stage trend with campaign go-live markers">
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
@@ -1414,6 +1434,11 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
         {/* typical-day baseline for context */}
         <line x1={padL} y1={yAt(avgV)} x2={W - padR} y2={yAt(avgV)} stroke={A.main} strokeWidth={1} strokeDasharray="4 4" />
         <text x={W - padR} y={yAt(avgV) - 4} textAnchor="end" fontSize={9.5} fontWeight={600} fill={A.dark}>typical day</text>
+        {/* the effect of each launch: its two weeks after, tinted green when the line rose, red when it fell */}
+        {marks.filter((m) => m.delta != null && Math.abs(m.delta) >= 3).map((m) => {
+          const x0 = clampX(xAt(m.ms)), x1 = Math.min(W - padR, xAt(m.ms + HALF))
+          return <rect key={`fx${m.ms}`} x={x0} y={yTop} width={Math.max(0, x1 - x0)} height={yBot - yTop} fill={m.delta! > 0 ? C.greenDk : C.coral} opacity={0.07} />
+        })}
         <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={A.main} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
         {clusters.map((c) => {
@@ -1470,10 +1495,17 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: C.faint, lineHeight: 1.45, marginTop: 8 }}>&ldquo;After&rdquo; compares the two weeks after each launch to the two weeks before. It shows what happened, not proof of cause.</div>
+          {(() => {
+            const reads = marks.filter((m) => m.delta != null).map((m) => m.delta as number)
+            if (reads.length < 2) return null
+            const avg = Math.round(reads.reduce((a, b) => a + b, 0) / reads.length)
+            const up = reads.filter((d) => d >= 3).length
+            return <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: C.bg, fontSize: 13, color: C.ink, lineHeight: 1.45 }}><b>{up} of {reads.length}</b> launches were followed by a rise. On average this number moved <b style={{ color: avg > 0 ? C.greenDk : avg < 0 ? C.coral : C.mute }}>{avg > 0 ? '+' : ''}{avg}%</b> in the two weeks after a launch.</div>
+          })()}
+          <div style={{ fontSize: 11, color: C.faint, lineHeight: 1.45, marginTop: 8 }}>&ldquo;After&rdquo; compares the two weeks after each launch to the two weeks before. Shaded stretches are those two weeks. It shows what happened, not proof of cause.</div>
         </div>
       ) : (
-        <div style={{ marginTop: 14, fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>No campaign went live in this window yet. Launch one and its date will pin here so you can see the effect.</div>
+        <div style={{ marginTop: 14, fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>Nothing launched in this window. When something goes live, its day pins here and the two weeks after are shaded so you can see what it did.</div>
       )}
     </div>
   )
