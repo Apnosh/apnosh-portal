@@ -1705,7 +1705,7 @@ function HighlightsCard({ mv, days, label }: { mv: MetricView; days: number; lab
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
         <span style={H2}>Highlights</span>
-        <span style={{ fontSize: 12.5, color: C.faint }}>days well above or below usual</span>
+        <span style={{ fontSize: 12.5, color: C.faint }}>days far from their own 7-day average</span>
       </div>
       {hits.length === 0 ? (
         <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>No day stood out from its week for {label.toLowerCase()} in this window.</div>
@@ -1716,7 +1716,7 @@ function HighlightsCard({ mv, days, label }: { mv: MetricView; days: number; lab
             <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtPinDate(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>
             <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1 }}>{h.value.toLocaleString()} {noun}</span>
           </span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: h.vsWeekPct > 0 ? C.greenDk : C.coral, flexShrink: 0 }}>{h.vsWeekPct > 0 ? '▲' : '▼'}{Math.abs(h.vsWeekPct)}% vs its week</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: h.vsWeekPct > 0 ? C.greenDk : C.coral, flexShrink: 0 }}>{h.vsWeekPct > 0 ? '▲' : '▼'}{Math.abs(h.vsWeekPct)}% {h.vsWeekPct > 0 ? 'above' : 'below'} its 7-day average</span>
         </div>
       ))}
     </div>

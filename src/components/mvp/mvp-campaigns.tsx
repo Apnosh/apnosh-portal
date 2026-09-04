@@ -13,6 +13,7 @@ import { Segmented, CARD_SHADOW } from './kit'
 import { outcomeLine, type CampaignOutcome } from '@/lib/campaigns/outcome-view'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import MvpCalendar from './mvp-calendar'
 import { useClient } from '@/lib/client-context'
 import {
   ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Loader2, Minus, Plus, TrendingDown, TrendingUp, ShoppingBag } from 'lucide-react'
@@ -116,7 +117,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
         ) : empty ? (
           <EmptyState />
         ) : view === 'calendar' ? (
-          <CampaignCalendar saved={(saved ?? []).filter((c) => c.status !== 'draft')} />
+          <MvpCalendar clientId={client?.id} campaigns={saved ?? []} />
         ) : (
           <>
             <div style={{ marginBottom: 16 }}>

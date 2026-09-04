@@ -288,10 +288,10 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* the cover: the one dark moment on the page — the period, the business, and the bottom line */}
-      <div style={{ borderRadius: 20, padding: '20px 20px 22px', color: '#fff', backgroundColor: '#16211c', backgroundImage: 'radial-gradient(circle at 88% 8%, rgba(74,189,152,0.42), transparent 55%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(22,33,28,0.22)' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.72)' }}>Your report · last 30 days{business ? ` · ${business}` : ''}</div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, lineHeight: 1.25, marginTop: 10, letterSpacing: '-.01em' }}>{read.bottomLine}</div>
-        {when && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 12 }}>{when} · read from your real numbers, never guesses</div>}
+      <div style={{ padding: '6px 2px 2px' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Last 30 days{business ? ` · ${business}` : ''}</div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, lineHeight: 1.3, marginTop: 8, letterSpacing: '-.01em', color: C.ink }}>{read.bottomLine}</div>
+        {when && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10 }}>{when} · read from your real numbers, never guesses</div>}
       </div>
 
       {/* the scorecard: four numbers you can read in a glance before any words */}
@@ -518,13 +518,13 @@ function ReportWorking() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} aria-busy aria-live="polite">
       <style>{`@keyframes rptGhost{0%{background-position:100% 0}100%{background-position:-100% 0}}@keyframes rptPulse{0%,100%{opacity:.55}50%{opacity:1}}@keyframes rptIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}.rpt-in{animation:rptIn .35s ease both}.rpt-pulse{animation:rptPulse 1.4s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.rpt-in,.rpt-pulse,[aria-busy] *{animation:none!important}}`}</style>
       {/* the cover, being written */}
-      <div style={{ borderRadius: 20, padding: '20px 20px 22px', color: '#fff', backgroundColor: '#16211c', backgroundImage: 'radial-gradient(circle at 88% 8%, rgba(74,189,152,0.42), transparent 55%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(22,33,28,0.22)' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.72)' }}>Your report · last 30 days</div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, lineHeight: 1.25, marginTop: 10, letterSpacing: '-.01em' }}>Reading your account{t >= 28 ? ' and checking outside it' : ''}…</div>
-        <div style={{ height: 4, borderRadius: 99, background: 'rgba(255,255,255,0.14)', marginTop: 16, overflow: 'hidden' }}>
-          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: 'linear-gradient(90deg, #4abd98, #8ee5c6)', transition: 'width 1s linear' }} />
+      <div style={{ padding: '6px 2px 2px' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Last 30 days</div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, lineHeight: 1.3, marginTop: 8, letterSpacing: '-.01em', color: C.ink }}>Reading your account{t >= 28 ? ' and checking outside it' : ''}…</div>
+        <div style={{ height: 4, borderRadius: 99, background: C.bg, marginTop: 14, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: 'linear-gradient(90deg, #4abd98, #2e9a78)', transition: 'width 1s linear' }} />
         </div>
-        <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 8 }}>About a minute the first time · cached for a week after that</div>
+        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 8 }}>About a minute the first time · cached for a week after that</div>
       </div>
       {/* the steps, lighting in turn */}
       <div style={CARD}>

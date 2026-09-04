@@ -3212,14 +3212,14 @@ function ScratchHero({ onScratch }) {
   const INK = DESKJ.mintDeep;
   return (
     <div style={{ padding: "0 20px 20px" }}>
-      <div style={{ borderRadius: 20, overflow: "hidden", position: "relative", backgroundColor: GRAD, backgroundImage: "radial-gradient(circle at 85% 10%, rgba(74,189,152,0.38), transparent 55%)", boxShadow: "0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(22,33,28,0.22)" }}>
+      <div style={{ borderRadius: 20, overflow: "hidden", position: "relative", background: "#fff", boxShadow: "0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)" }}>
         <button onClick={onScratch} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: "rgba(255,255,255,0.72)" }}>Built around your restaurant</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={DESKJ.mintDeep}><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: TOKENS.sub }}>Built around your restaurant</span>
           </div>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6 }}>Design a new campaign from scratch</div>
-          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: TOKENS.ink, lineHeight: 1.15, marginBottom: 6 }}>Design a new campaign from scratch</div>
+          <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: TOKENS.sub, lineHeight: 1.4, marginBottom: 14 }}>
             Answer four questions and we build the plan around them. You see both numbers before anything starts.
           </div>
           <div style={{ display: "inline-flex", alignItems: "center", gap: 6, height: 38, padding: "0 16px", borderRadius: 19, background: "linear-gradient(135deg,#4ABD98,#2E9A78)", color: "#fff", boxShadow: "0 6px 16px rgba(46,154,120,0.4)", fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 14.5, fontWeight: 600 }}>

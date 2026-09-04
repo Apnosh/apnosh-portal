@@ -178,8 +178,8 @@ export function renderPayloadForPrompt(payload: AnalystPayload): string {
     lines.push(`WEEKDAY RHYTHM (Awareness, average by day of the week, last eight weeks): ${r.byDay.map((d) => `${d.day} ${num(d.avg)}`).join(', ')}. Strongest ${r.strongestDay}, weakest ${r.weakestDay}${r.weekendVsWeekdayPct == null ? '' : `, weekends ${r.weekendVsWeekdayPct > 0 ? '+' : ''}${r.weekendVsWeekdayPct}% vs weekdays`}.`)
   }
   if (payload.standouts.length) {
-    lines.push('DAYS THAT STOOD OUT (Awareness vs its own 7-day average; the holiday is a calendar fact, not a cause):')
-    for (const d of payload.standouts) lines.push(`  ${d.date} (${d.weekday}${d.holiday ? `, ${d.holiday}` : ''}): ${num(d.value)}, ${d.vsWeekPct > 0 ? '+' : ''}${d.vsWeekPct}% vs its week`)
+    lines.push('DAYS THAT STOOD OUT (Awareness against its own 7-day average ending that day; the holiday is a calendar fact, not a cause):')
+    for (const d of payload.standouts) lines.push(`  ${d.date} (${d.weekday}${d.holiday ? `, ${d.holiday}` : ''}): ${num(d.value)}, ${d.vsWeekPct > 0 ? '+' : ''}${d.vsWeekPct}% against its 7-day average`)
   }
   if (payload.launches.length) {
     lines.push('LAUNCHES (what went live and when; a launch and a move can happen together, never say one caused the other):')
