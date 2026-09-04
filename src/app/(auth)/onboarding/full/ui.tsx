@@ -2,6 +2,40 @@
 
 import { type ReactNode } from 'react'
 
+/* Colour per answer (the Create page's goal hues), so the same thing keeps the same
+ * colour from setup to the shelf: a role, a business type and a goal each carry one. */
+export const HUES: Record<string, [string, string]> = {
+  mint: ['#4abd98', '#2e9a78'], announce: ['#f6a23a', '#ee4c2c'], event: ['#34b6ae', '#2e73b6'],
+  deal: ['#c6d24f', '#5fae3e'], nights: ['#5ba8e8', '#3b6fd4'], newfaces: ['#9a5bf0', '#6a39de'],
+  regulars: ['#f7c948', '#f0922f'], reviews: ['#8089ff', '#5b53d6'], online: ['#6fd06a', '#34a76a'],
+  catering: ['#c85b7c', '#9c3a6a'], brand: ['#23c0b6', '#0f97a8'],
+}
+export const hueOf = (k?: string): [string, string] => HUES[k || 'mint'] || HUES.mint
+export const gradOf = (k?: string) => { const [a, b] = hueOf(k); return `linear-gradient(135deg, ${a}, ${b})` }
+/* The dashboard's display face, so setup reads like the app it opens into. */
+export const DISPLAY = "'Cal Sans', 'Inter', -apple-system, system-ui, sans-serif"
+export const CARD_SHADOW = '0 1px 2px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.05)'
+
+/* A gradient icon tile in the answer's colour, white glyph on top. */
+export function IconTile({ hue, size = 44, radius = 14, children }: { hue?: string; size?: number; radius?: number; children: ReactNode }) {
+  const [, deep] = hueOf(hue)
+  return (
+    <div aria-hidden className="flex items-center justify-center flex-shrink-0" style={{ width: size, height: size, borderRadius: radius, background: gradOf(hue), color: '#fff', boxShadow: `0 6px 14px ${deep}55` }}>
+      {children}
+    </div>
+  )
+}
+
+/* The round check that marks a picked card. */
+export function CheckDot({ on, hue }: { on: boolean; hue?: string }) {
+  const [, deep] = hueOf(hue)
+  return (
+    <span aria-hidden className="flex items-center justify-center flex-shrink-0" style={{ width: 24, height: 24, borderRadius: 12, border: on ? 'none' : '1.5px solid #e3e6e4', background: on ? deep : 'transparent', transition: 'all .15s ease' }}>
+      {on && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>}
+    </span>
+  )
+}
+
 /* Shared visual grammar for the setup wizard (Apple-clean pass, 2026-08):
  * ink #1d1d1f, mute #6e6e73, hairline #e6e6ea, mint #4abd98 / deep #0f6e56,
  * wash #f0faf6. Boxes are 14px radius with constant 1.5px borders (no size
@@ -12,11 +46,13 @@ import { type ReactNode } from 'react'
 // glyph tile above the title. Only the FIRST question on a screen gets the
 // hero + icon; follow-up questions further down a grouped screen pass `small`
 // and render as a quiet left-aligned line, so each screen keeps one hero.
-export function Question({ title, subtitle, icon, small }: {
+export function Question({ title, subtitle, icon, small, hue }: {
   title: string
   subtitle?: string
   icon?: ReactNode
   small?: boolean
+  /** The screen's colour: the glyph tile takes its gradient. Mint when unset. */
+  hue?: string
 }) {
   if (small) {
     return (
@@ -44,18 +80,18 @@ export function Question({ title, subtitle, icon, small }: {
           aria-hidden
           className="mx-auto flex items-center justify-center"
           style={{
-            width: 64, height: 64, borderRadius: 19, marginBottom: 14,
-            background: 'linear-gradient(150deg, rgba(74,189,152,0.18), rgba(74,189,152,0.06))',
-            boxShadow: '0 10px 30px rgba(74,189,152,0.22), inset 0 1px 0 rgba(255,255,255,0.9)',
-            color: '#2e9a78',
+            width: 64, height: 64, borderRadius: 20, marginBottom: 14,
+            background: gradOf(hue),
+            boxShadow: `0 12px 30px ${hueOf(hue)[1]}59`,
+            color: '#fff',
           }}
         >
           {icon}
         </div>
       )}
       <h2
-        className="text-[1.875rem] font-bold"
-        style={{ fontFamily: "'Inter', -apple-system, system-ui, sans-serif", color: '#1d1d1f', letterSpacing: '-0.04em', lineHeight: 1.1 }}
+        className="text-[27px] font-semibold"
+        style={{ fontFamily: DISPLAY, color: '#1d1d1f', letterSpacing: '-0.01em', lineHeight: 1.12, textWrap: 'balance' }}
       >
         {title}
       </h2>
@@ -73,26 +109,32 @@ export function Chip({
   label,
   selected,
   onClick,
+  hue,
 }: {
   label: string
   selected: boolean
   onClick: () => void
+  /** Optional colour: a dot in the chip, and the chip tints to it when picked. */
+  hue?: string
 }) {
+  const [light, deep] = hueOf(hue)
+  const tinted = !!hue
   return (
     <button
       type="button"
       onClick={onClick}
-      className="px-4 rounded-[22px] text-[0.95rem] select-none"
+      className="px-4 rounded-[22px] text-[0.95rem] select-none inline-flex items-center gap-2"
       style={{
-        border: selected ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
-        background: selected ? '#f0faf6' : 'white',
-        color: selected ? '#0f6e56' : '#48484a',
+        border: selected ? `1.5px solid ${tinted ? light : '#4abd98'}` : '1.5px solid #e6e6ea',
+        background: selected ? (tinted ? `${light}26` : '#f0faf6') : 'white',
+        color: selected ? (tinted ? deep : '#0f6e56') : '#48484a',
         fontWeight: selected ? 600 : 400,
         fontFamily: 'DM Sans, sans-serif',
         minHeight: 44,
         transition: 'all .15s ease',
       }}
     >
+      {tinted && <span aria-hidden style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(hue), flexShrink: 0 }} />}
       {label}
     </button>
   )
@@ -159,13 +201,17 @@ export function OptionCard({
   disabled,
   children,
   className = '',
+  hue,
 }: {
   selected: boolean
   onClick: () => void
   disabled?: boolean
   children: ReactNode
   className?: string
+  /** Optional colour: the picked ring takes it instead of mint. */
+  hue?: string
 }) {
+  const ring = hue ? hueOf(hue)[1] : '#4abd98'
   return (
     <button
       type="button"
@@ -177,10 +223,10 @@ export function OptionCard({
       `}
       style={{
         border: 'none',
-        background: selected ? '#f0faf6' : 'white',
+        background: selected && !hue ? '#f0faf6' : 'white',
         boxShadow: selected
-          ? 'inset 0 0 0 1.5px #4abd98, 0 2px 4px rgba(46,154,120,0.10), 0 12px 30px rgba(74,189,152,0.22)'
-          : '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.06)',
+          ? `inset 0 0 0 2px ${ring}, 0 12px 30px ${ring}38`
+          : CARD_SHADOW,
         minHeight: 44,
         transition: 'all .18s ease',
       }}
@@ -327,7 +373,7 @@ export function PrimaryPill({
         width: grow ? '100%' : undefined,
         flex: grow ? 1 : undefined,
         border: 'none',
-        fontFamily: 'DM Sans, sans-serif',
+        fontFamily: DISPLAY,
         letterSpacing: '-0.01em',
         cursor: disabled ? 'not-allowed' : 'pointer',
         background: disabled ? '#e5e5ea' : 'linear-gradient(135deg, #4abd98, #2e9a78)',

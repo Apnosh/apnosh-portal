@@ -25,7 +25,8 @@ export default function StepAbout({ data, update, nav }: Props) {
       <Question
         title="About your business"
         subtitle="Tap what fits. Skip anything."
-        icon={<Sparkles size={26} strokeWidth={2} />}
+        icon={<Sparkles size={28} strokeWidth={2} />}
+        hue="brand"
       />
       <div className="mt-5 space-y-5">
         {isFood && (
@@ -55,12 +56,17 @@ export default function StepAbout({ data, update, nav }: Props) {
 
         <div>
           <FieldLabel>Your mission, in a line</FieldLabel>
-          <TextArea
-            value={data.biz_desc}
-            onChange={(v) => update('biz_desc', v)}
-            placeholder="Like: Korean BBQ worth crossing town for."
-            rows={2}
-          />
+          {/* The describe-it edge from the Create page: one line, in their words. */}
+          <div style={{ padding: 2, borderRadius: 16, background: 'linear-gradient(135deg, #4abd98, #5ba8e8 45%, #9a5bf0)', boxShadow: '0 10px 30px rgba(74,189,152,0.16)' }}>
+            <div style={{ background: '#fff', borderRadius: 14 }}>
+              <TextArea
+                value={data.biz_desc}
+                onChange={(v) => update('biz_desc', v)}
+                placeholder="Like: Korean BBQ worth crossing town for."
+                rows={2}
+              />
+            </div>
+          </div>
         </div>
 
         <div>

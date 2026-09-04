@@ -2,13 +2,38 @@
 
 import { useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { PrimaryPill } from '../ui'
+import { Ticket, Tag, Store, Star, Heart, Camera, Mail, Truck, Video, ShoppingCart, MapPin, type LucideIcon } from 'lucide-react'
+import { PrimaryPill, IconTile, hueOf, DISPLAY, CARD_SHADOW } from '../ui'
 
 interface Props {
   bizName: string
+  /** The owner's top goals (GOAL_CHIPS strings), so the finish can show a first plan. */
+  goals?: string[]
 }
 
-export default function StepDone({ bizName }: Props) {
+/* The finish shows a first plan, not a welcome note: one Create card per goal the owner
+ * picked, with the plain reason it fits. Keys are GOAL_CHIPS strings; ids are catalog
+ * card ids the builder opens with ?template=. Prices are left to the shelf so the two
+ * never disagree. */
+const FIRST_PLAN: Record<string, { id: string; title: string; sub: string; why: string; hue: string; icon: LucideIcon }> = {
+  'More customers on slow days': { id: 'slowoffer', title: 'Slow-night offer', sub: 'An email and text to fill quiet days', why: 'The cheapest test you can run on a quiet night', hue: 'nights', icon: Tag },
+  'More foot traffic overall': { id: 'gbp', title: 'Polish your Google profile', sub: 'Photos, hours, menu, info fixed', why: 'The first thing most searchers see', hue: 'newfaces', icon: Store },
+  'Build local awareness': { id: 'localseo', title: 'Show up in local search', sub: 'Be the answer when neighbors search', why: 'Being found nearby is where awareness starts', hue: 'brand', icon: MapPin },
+  'Promote a specific offering': { id: 'launch', title: 'Launch a special', sub: 'A photo, posts, an email, a Google post', why: 'One item, one week, everywhere at once', hue: 'announce', icon: Tag },
+  'Grow social following': { id: 'reel', title: 'A short video reel', sub: 'A reel for Instagram and TikTok', why: 'Reels reach far more people than posts', hue: 'catering', icon: Video },
+  'Improve online reputation': { id: 'reviewsplan', title: 'Boost reviews and rating', sub: 'Review requests set up, plus the first asks', why: 'Asks lift a rating faster than anything', hue: 'reviews', icon: Star },
+  'Launch something new': { id: 'launch', title: 'Launch a special', sub: 'A photo, posts, an email, a Google post', why: 'A launch week that people hear about twice', hue: 'announce', icon: Tag },
+  'Stay top of mind': { id: 'news', title: 'Monthly newsletter', sub: 'One good email a month, written for you', why: 'Keeps you in their head between visits', hue: 'regulars', icon: Mail },
+  'Compete with nearby businesses': { id: 'gbp', title: 'Polish your Google profile', sub: 'Photos, hours, menu, info fixed', why: 'Win the comparison people make on the map', hue: 'newfaces', icon: Store },
+  'More bookings or orders': { id: 'friction', title: 'Smooth out ordering', sub: 'The Order button on Google, working', why: 'Every tap should land on you, not an app', hue: 'online', icon: ShoppingCart },
+  'Turn first-timers into regulars': { id: 'winback', title: 'Win back quiet guests', sub: 'One email and one text to guests gone quiet', why: 'Regulars who drifted come back first', hue: 'regulars', icon: Heart },
+  'Grow catering orders': { id: 'catering', title: 'Promote your catering', sub: 'A styled photo and a post for group orders', why: 'Offices book from a picture', hue: 'catering', icon: Truck },
+  'Better photos of my food': { id: 'dish', title: 'Feature a dish', sub: 'A styled photo of your best plate', why: 'One great plate changes the whole look', hue: 'event', icon: Camera },
+  'Reach a younger crowd': { id: 'reel', title: 'A short video reel', sub: 'A reel for Instagram and TikTok', why: 'Where a younger crowd actually looks', hue: 'brand', icon: Video },
+}
+const FALLBACK = ['More foot traffic overall', 'Improve online reputation', 'Promote a specific offering']
+
+export default function StepDone({ bizName, goals = [] }: Props) {
   const router = useRouter()
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -77,71 +102,74 @@ export default function StepDone({ bizName }: Props) {
     launchConfetti()
   }, [launchConfetti])
 
+  /* Three cards: one per picked goal, de-duplicated by card, filled from the fallback set. */
+  const seen = new Set<string>()
+  const plan: Array<(typeof FIRST_PLAN)[string]> = []
+  for (const g of [...goals, ...FALLBACK]) {
+    const c = FIRST_PLAN[g]
+    if (!c || seen.has(c.id)) continue
+    seen.add(c.id)
+    plan.push(c)
+    if (plan.length === 3) break
+  }
+
   return (
     <>
       <canvas
         ref={canvasRef}
         className="fixed inset-0 w-full h-full pointer-events-none z-50"
       />
-      <div className="text-center py-6">
-        {/* A soft breathing mint orb behind the mark, echoing the portal's
-            loading screen. CSS only; still under reduced motion. */}
+      <div className="text-center py-4">
+        {/* A slowly turning ring of the goal colours behind the mark; CSS only, still
+            under reduced motion. */}
         <style>{`
           @media (prefers-reduced-motion: no-preference) {
-            .ob-done-orb { animation: obDoneBreathe 3.2s ease-in-out infinite }
-            @keyframes obDoneBreathe {
-              0%,100% { transform: scale(1); box-shadow: 0 0 30px rgba(74,189,152,.30), 0 0 80px rgba(74,189,152,.14) }
-              50% { transform: scale(1.05); box-shadow: 0 0 44px rgba(74,189,152,.44), 0 0 110px rgba(74,189,152,.20) }
-            }
+            .ob-done-ring { animation: obDoneSpin 8s linear infinite }
+            @keyframes obDoneSpin { to { transform: rotate(360deg) } }
           }
         `}</style>
-        <div aria-hidden className="relative inline-flex items-center justify-center mb-5" style={{ width: 96, height: 96 }}>
-          <div className="ob-done-orb absolute inset-1 rounded-full" style={{
-            border: '1.5px solid rgba(74,189,152,.45)',
-            background: 'radial-gradient(circle at 32% 26%, rgba(255,255,255,.65), rgba(74,189,152,.22) 58%, rgba(74,189,152,.10))',
-          }} />
+        <div aria-hidden className="relative inline-flex items-center justify-center mb-4" style={{ width: 110, height: 110 }}>
+          <div className="ob-done-ring absolute inset-0 rounded-full" style={{ background: 'conic-gradient(from 200deg, #f6a23a, #34b6ae, #9a5bf0, #f7c948, #4abd98, #f6a23a)', filter: 'blur(14px)', opacity: 0.55 }} />
+          <div className="absolute rounded-full" style={{ inset: 14, background: '#fff', boxShadow: 'inset 0 0 0 1.5px rgba(74,189,152,.45), 0 10px 30px rgba(0,0,0,.08)' }} />
           <span className="relative text-4xl">🎉</span>
         </div>
         <h2
-          className="text-[28px] font-bold mb-2.5"
-          style={{ color: '#1d1d1f', letterSpacing: '-0.04em', lineHeight: 1.1 }}
+          className="text-[27px] mb-2"
+          style={{ fontFamily: DISPLAY, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.01em', lineHeight: 1.1 }}
         >
-          Welcome to Apnosh{bizName ? `, ${bizName}` : ''}!
+          Welcome{bizName ? `, ${bizName}` : ''}!
         </h2>
-        <p className="text-[15px] leading-relaxed mb-7" style={{ color: '#6e6e73' }}>
-          You're all set. We're building your plan now.
+        <p className="text-[14.5px] leading-relaxed mb-5" style={{ color: '#6e6e73' }}>
+          From what you told us, here is where we would start.
         </p>
 
-        <div className="text-left rounded-[16px] px-4 py-4 mb-6" style={{ background: '#fff', border: '1.5px solid #e6e6ea' }}>
-          <div className="flex gap-3 text-[13px] py-1.5 leading-relaxed" style={{ color: '#48484a' }}>
-            <span
-              className="w-[22px] h-[22px] rounded-full bg-[#4abd98] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0"
-            >
-              1
-            </span>
-            <span>We build your content plan from what you shared</span>
-          </div>
-          <div className="flex gap-3 text-[13px] py-1.5 leading-relaxed" style={{ color: '#48484a' }}>
-            <span
-              className="w-[22px] h-[22px] rounded-full bg-[#4abd98] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0"
-            >
-              2
-            </span>
-            <span>Your account manager reaches out</span>
-          </div>
-          <div className="flex gap-3 text-[13px] py-1.5 leading-relaxed" style={{ color: '#48484a' }}>
-            <span
-              className="w-[22px] h-[22px] rounded-full bg-[#4abd98] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0"
-            >
-              3
-            </span>
-            <span>First content within a week</span>
-          </div>
+        <div className="text-left flex flex-col gap-2.5 mb-6">
+          {plan.map((c) => {
+            const Icon = c.icon
+            const [, deep] = hueOf(c.hue)
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => router.push(`/dashboard/campaigns/new?template=${c.id}`)}
+                className="ob-card flex items-center gap-3 rounded-[18px] p-3 text-left"
+                style={{ background: '#fff', boxShadow: CARD_SHADOW, border: 'none' }}
+              >
+                <IconTile hue={c.hue} size={52} radius={14}><Icon size={22} strokeWidth={2.2} /></IconTile>
+                <div className="flex-1 min-w-0">
+                  <div className="text-[15px]" style={{ fontFamily: DISPLAY, fontWeight: 600, color: '#1d1d1f' }}>{c.title}</div>
+                  <div className="text-[12px]" style={{ color: '#6e6e73', marginTop: 1 }}>{c.sub}</div>
+                  <div className="text-[11.5px] font-semibold" style={{ color: deep, marginTop: 3 }}>{c.why}</div>
+                </div>
+              </button>
+            )
+          })}
         </div>
 
         <PrimaryPill onClick={() => router.push('/dashboard')} grow>
           Go to my dashboard
         </PrimaryPill>
+        <div className="text-[12px] mt-3" style={{ color: '#98989d' }}>Nothing starts until you say so.</div>
       </div>
     </>
   )

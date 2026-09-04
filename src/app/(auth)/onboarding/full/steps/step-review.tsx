@@ -2,7 +2,7 @@
 
 import { CheckCircle2 } from 'lucide-react'
 import { type OnboardingData, type StepId, ROLES, APPROVAL_TYPES, FOOD_BIZ_TYPES } from '../data'
-import { Question, PrimaryPill } from '../ui'
+import { Question, PrimaryPill, gradOf, DISPLAY, CARD_SHADOW } from '../ui'
 
 interface Props {
   data: OnboardingData
@@ -44,7 +44,7 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
 
   return (
     <>
-      <Question title="One last look" icon={<CheckCircle2 size={26} strokeWidth={2} />} />
+      <Question title="One last look" subtitle="Tap Edit to change anything." icon={<CheckCircle2 size={28} strokeWidth={2} />} />
       <div className="mt-5 space-y-2">
         <ReviewCard title="You" stepId="role" onEdit={onGoToStep} rows={[
           { label: 'Role', value: roleName },
@@ -138,6 +138,13 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
   )
 }
 
+/* One colour per section, the same hues the setup screens used. */
+const REVIEW_HUE: Record<string, string> = {
+  You: 'mint', Business: 'newfaces', 'What you are': 'announce', Menu: 'announce', Specials: 'deal',
+  Story: 'brand', Goals: 'event', Promote: 'announce', Brand: 'brand', Discovery: 'newfaces',
+  Workflow: 'nights', Connected: 'nights', Assets: 'catering',
+}
+
 function ReviewCard({
   title,
   stepId,
@@ -154,16 +161,17 @@ function ReviewCard({
   const setRows = rows.filter((r) => r.value)
   if (!setRows.length) return null
   return (
-    <div className="rounded-[14px] px-4 py-3.5 bg-white" style={{ boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.05)' }}>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color: '#8e8e93' }}>
+    <div className="rounded-[18px] px-4 py-3.5 bg-white" style={{ boxShadow: CARD_SHADOW }}>
+      <div className="flex items-center gap-2.5 mb-2">
+        <span aria-hidden style={{ width: 10, height: 10, borderRadius: 5, background: gradOf(REVIEW_HUE[title] || 'mint'), flexShrink: 0 }} />
+        <span className="text-[15px] flex-1" style={{ fontFamily: DISPLAY, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.01em' }}>
           {title}
         </span>
         <button
           type="button"
           onClick={() => onEdit(stepId)}
-          className="text-xs font-medium"
-          style={{ color: '#4abd98' }}
+          className="text-[12.5px] font-semibold"
+          style={{ color: '#2e9a78' }}
         >
           Edit
         </button>

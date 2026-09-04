@@ -329,8 +329,8 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
 
   return (
     <>
-      <Question title="Connect your accounts" icon={<Plug size={26} strokeWidth={2} />} />
-      <div className="mt-5 space-y-2">
+      <Question title="Connect your accounts" subtitle="The ones you use. Skip the rest." icon={<Plug size={28} strokeWidth={2} />} hue="nights" />
+      <div className="mt-2 space-y-2.5">
         {PLATFORMS.map((p) => {
           /* A route must exist AND its keys must be set. Either missing means no button. */
           const hasOAuth = !!OAUTH_PATHS[p.name] && (available === null || available[p.name] !== false)
@@ -342,26 +342,31 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
           return (
             <div
               key={p.name}
-              className="flex items-center gap-3.5 px-4 py-3 rounded-[14px]"
+              className="flex items-center gap-3.5 px-3.5 py-3 rounded-[18px]"
               style={{
-                border: isConn ? '1.5px solid #9fe1cb' : '1.5px solid #e6e6ea',
-                background: isConn ? '#f0faf6' : 'white',
+                background: 'white',
+                boxShadow: isConn
+                  ? 'inset 0 0 0 2px #4abd98, 0 12px 30px rgba(74,189,152,0.22)'
+                  : '0 1px 2px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.05)',
+                transition: 'box-shadow .18s ease',
               }}
             >
               <div
-                className="w-[38px] h-[38px] rounded-[9px] flex items-center justify-center text-lg flex-shrink-0"
+                className="w-[44px] h-[44px] rounded-[14px] flex items-center justify-center text-lg flex-shrink-0"
                 style={{ background: p.color + '1a' }}
               >
                 <PlatformLogo name={p.name} fallback={p.emoji} />
               </div>
-              <div className="flex-1">
-                <div className="text-sm font-semibold" style={{ color: '#1d1d1f' }}>{p.name}</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[15px]" style={{ fontFamily: "'Cal Sans', 'Inter', system-ui, sans-serif", fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.01em' }}>{p.name}</div>
+                <div className="text-[12px]" style={{ color: '#6e6e73', marginTop: 1 }}>{isConn ? 'Connected' : hasOAuth ? 'Not connected' : 'Coming soon'}</div>
               </div>
               {isConn ? (
                 <span
-                  className="text-xs font-medium rounded-[20px] px-3 py-1 whitespace-nowrap"
-                  style={{ color: '#0f6e56', background: '#f0faf6', border: '1px solid #9fe1cb' }}
+                  className="text-[13px] font-semibold rounded-[18px] px-3.5 whitespace-nowrap inline-flex items-center gap-1.5"
+                  style={{ height: 36, color: '#0f6e56', background: '#eaf7f3' }}
                 >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 13l4 4L19 7" /></svg>
                   Connected
                 </span>
               ) : isConnecting ? (
@@ -373,15 +378,15 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
                   type="button"
                   onClick={() => connectPlatform(p.name)}
                   disabled={loading && !isConnecting}
-                  className="text-xs font-semibold rounded-[20px] px-3.5 py-1 whitespace-nowrap transition-colors disabled:opacity-50"
-                  style={{ color: '#4abd98', border: '1.5px solid #4abd98' }}
+                  className="text-[13px] font-semibold rounded-[18px] px-4 whitespace-nowrap transition-colors disabled:opacity-50"
+                  style={{ height: 36, color: '#2e9a78', background: '#eaf7f3', boxShadow: 'inset 0 0 0 1.5px #4abd98' }}
                 >
                   Connect
                 </button>
               ) : (
                 <span
-                  className="text-xs font-medium rounded-[20px] px-3 py-1 whitespace-nowrap"
-                  style={{ color: '#6e6e73', border: '1px solid #e6e6ea' }}
+                  className="text-[13px] font-medium rounded-[18px] px-3.5 whitespace-nowrap inline-flex items-center"
+                  style={{ height: 36, color: '#98989d', background: '#f2f3f2' }}
                 >
                   Coming soon
                 </span>

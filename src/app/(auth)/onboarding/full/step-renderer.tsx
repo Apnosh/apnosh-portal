@@ -142,16 +142,18 @@ export function OnboardingFrame({
           tabIndex={showBack ? 0 : -1}
           disabled={saving}
           style={{
-            width: 36,
-            height: 36,
+            width: 40,
+            height: 40,
             borderRadius: '50%',
             flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             padding: 0,
-            background: '#fff',
-            border: '1px solid #e6e6ea',
+            background: 'rgba(255,255,255,0.72)',
+            border: '1px solid rgba(0,0,0,0.06)',
+            backdropFilter: 'saturate(180%) blur(20px)',
+            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
             cursor: 'pointer',
             visibility: showBack ? 'visible' : 'hidden',
           }}
@@ -165,7 +167,7 @@ export function OnboardingFrame({
           aria-valuemax={100}
           aria-valuenow={pct}
           aria-label={`Setup progress: screen ${step} of ${totalSteps}`}
-          style={{ flex: 1, height: 3, borderRadius: 2, overflow: 'hidden', background: '#ececef' }}
+          style={{ flex: 1, height: 4, borderRadius: 2, overflow: 'hidden', background: '#ededec' }}
         >
           <div
             style={{
@@ -228,10 +230,10 @@ export function OnboardingFrame({
           style={{
             flexShrink: 0,
             padding: '12px 20px calc(16px + env(safe-area-inset-bottom))',
-            background: 'rgba(251,251,253,0.85)',
-            backdropFilter: 'blur(14px)',
-            WebkitBackdropFilter: 'blur(14px)',
-            borderTop: '1px solid rgba(0,0,0,0.05)',
+            background: 'rgba(255,255,255,0.72)',
+            backdropFilter: 'saturate(180%) blur(20px)',
+            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+            borderTop: '1px solid #ededec',
           }}
         >
           <div style={{ maxWidth: 520, margin: '0 auto' }}>
@@ -338,7 +340,7 @@ export default function StepRenderer(props: Props) {
       <ScreenKeyframes />
       {screen === 'success' || !screen ? (
         <div key="success" className="ob-screen">
-          <StepDone bizName={data.biz_name} />
+          <StepDone bizName={data.biz_name} goals={data.top_goals} />
         </div>
       ) : (
         /* Keyed to the screen number so every advance replays the entrance. */
