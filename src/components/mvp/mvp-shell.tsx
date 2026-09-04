@@ -65,7 +65,7 @@ export function useHideOnScroll(getEl: () => HTMLElement | null): boolean {
   return tucked
 }
 
-export default function MvpShell({ active, unread, header, children, wide, noHeader, middle, title }: { active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean }) {
+export default function MvpShell({ active, unread, header, children, wide, noHeader, middle, title, back }: { /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const tucked = useHideOnScroll(() => scrollRef.current)
   return (
@@ -73,7 +73,7 @@ export default function MvpShell({ active, unread, header, children, wide, noHea
       <style>{SHELL_CSS}</style>
       <div className={`${wide ? 'mvp-frame mvp-frame-wide' : 'mvp-frame'}${tucked ? ' mvp-scrolling' : ''}`}>
         {/* the standard app bar floats over the scroll (glass); a page's own header stays in flow */}
-        {noHeader ? null : header ? header : <div className="mvp-frame-top"><TopRow middle={middle} title={title} count={unread} /></div>}
+        {noHeader ? null : header ? header : <div className="mvp-frame-top"><TopRow middle={middle} title={title} count={unread} back={back} /></div>}
         <div ref={scrollRef} className={noHeader ? 'mvp-frame-scroll mvp-short-tail' : header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}>{children}</div>
         <BottomNav active={active} />
       </div>

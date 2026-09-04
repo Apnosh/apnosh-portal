@@ -295,7 +295,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 
 
   return (
-    <MvpShell active="home" title="Insights">
+    <MvpShell active="home" title="Insights" back="/dashboard">
       <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
 .mvp-swipe::-webkit-scrollbar{display:none}
 .mvp-spin{animation:mvpspin .8s linear infinite}
@@ -720,7 +720,7 @@ function SourceItemRow({ s, groupLabel, first, top, accent }: { s: StageSourceVi
           <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
           {subText && <div style={{ fontSize: 12, color: err ? C.coral : C.mute, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subText}</div>}
         </div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: v != null ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: v != null ? C.ink : C.faint, flexShrink: 0 }}>
           {v != null ? v.toLocaleString() : DASH}
         </div>
       </div>
@@ -1214,7 +1214,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
           line now lives behind the ⓘ (owner 2026-09-04) */}
       <div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
-          <span aria-label={label} style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink, fontVariantNumeric: 'tabular-nums' }}>{shown.toLocaleString()}</span>
+          <span aria-label={label} style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{shown.toLocaleString()}</span>
           {total > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: ac, background: acbg, padding: '4px 10px', borderRadius: 99, marginBottom: 4 }}>
               <span style={{ fontSize: 10.5 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}

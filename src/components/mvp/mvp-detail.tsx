@@ -16,6 +16,7 @@
 
 import React from 'react'
 import Link from 'next/link'
+import TopRow from './top-row'
 import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react'
 
 /* The palette, the display face and the amber trio all live in tokens.ts now, and are re-exported
@@ -29,14 +30,14 @@ import { C, DISPLAY, AMBER_DK, AMBER_SOFT } from './tokens'
 // Amber accent for "warning"/"due"/"pending" states (kept out of C so the core
 // token map stays the brand greens + coral). Soft bg + dark text for pills.
 
-export function MvpDetailHeader({ title, subtitle, backHref = '/dashboard/more', backLabel = 'More' }: { title: string; subtitle?: string; backHref?: string; backLabel?: string }) {
+export function MvpDetailHeader({ title, subtitle, backHref = '/dashboard/more' }: { title: string; subtitle?: string; backHref?: string; /** kept for callers; the row shows a chevron, not a word */ backLabel?: string }) {
+  // Every screen you click INTO wears the app's top row (owner 2026-09-04): a glass back
+  // chevron on the left, the screen's name in the centre, the bell on the right — then the
+  // subtitle as the first line of the page. Stays in flow so the first row is never hidden.
   return (
-    <div style={{ flexShrink: 0, background: '#fff', borderBottom: `0.5px solid ${C.line}`, padding: '10px 14px 13px' }}>
-      <Link href={backHref} className="mvp-row" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: C.greenDk, textDecoration: 'none', fontSize: 14.5, fontWeight: 600, marginBottom: 6, marginLeft: -4, padding: '2px 4px', borderRadius: 8 }}>
-        <ArrowLeft size={18} /> {backLabel}
-      </Link>
-      <div style={{ fontSize: 24, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.15 }}>{title}</div>
-      {subtitle && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3 }}>{subtitle}</div>}
+    <div style={{ flexShrink: 0, background: '#fff' }}>
+      <TopRow back={backHref} title={title} />
+      {subtitle && <div style={{ fontSize: 12.5, color: C.mute, padding: '0 18px 10px', textAlign: 'center' }}>{subtitle}</div>}
     </div>
   )
 }

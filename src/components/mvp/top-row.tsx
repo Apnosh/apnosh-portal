@@ -8,14 +8,14 @@
  */
 import { useState } from 'react'
 import Link from 'next/link'
-import { Bell, Check, Search, X } from 'lucide-react'
+import { Bell, Check, ChevronLeft, Search, X } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 
 const C = { green: '#4abd98', greenDk: '#2e9a78', ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea' }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 export const GLASS: React.CSSProperties = { background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
 
-export default function TopRow({ middle, title, count }: { middle?: React.ReactNode; title?: string; count?: number }) {
+export default function TopRow({ middle, title, count, back, right }: { middle?: React.ReactNode; title?: string; count?: number; /** a screen you clicked INTO (Insights, a campaign, an order): the left slot is a back chevron to this href instead of the avatar (owner 2026-09-04) */ back?: string; /** replaces the bell (a detail page's own action) */ right?: React.ReactNode }) {
   const { client, availableClients, switchClient } = useClient()
   const name = client?.name?.trim() || 'Your restaurant'
   const initial = (name[0] ?? '·').toUpperCase()
@@ -30,16 +30,18 @@ export default function TopRow({ middle, title, count }: { middle?: React.ReactN
   )
   return (
     <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) 40px', alignItems: 'center', gap: 10, padding: '10px 12px 8px' }}>{/* floats over the page like Home's row: no band, no hairline (owner 2026-09-04) */}
-      {multi
+      {back
+        ? <Link href={back} aria-label="Back" style={{ ...GLASS, width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', boxSizing: 'border-box' }}><ChevronLeft size={21} /></Link>
+        : multi
         ? <button type="button" onClick={() => setOpen((o) => !o)} aria-label={`Switch location (now ${name})`} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>{avatar}</button>
         : <Link href="/dashboard/more" aria-label={name}>{avatar}</Link>}
       <div style={{ minWidth: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         {middle ?? (title ? <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span> : null)}
       </div>
-      <Link href="/dashboard/inbox" aria-label={n > 0 ? `Notifications (${n})` : 'Notifications'} style={{ ...GLASS, position: 'relative', width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', boxSizing: 'border-box' }}>
+      {right !== undefined ? <div style={{ width: 40, display: 'flex', justifyContent: 'flex-end' }}>{right}</div> : <Link href="/dashboard/inbox" aria-label={n > 0 ? `Notifications (${n})` : 'Notifications'} style={{ ...GLASS, position: 'relative', width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', boxSizing: 'border-box' }}>
         <Bell size={19} />
         {n > 0 && <span className="mvp-pop" style={{ position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>{n > 99 ? '99+' : n}</span>}
-      </Link>
+      </Link>}
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />

@@ -9,6 +9,7 @@
  */
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import TopRow from '@/components/mvp/top-row'
 import { ChevronLeft, ChevronRight, Loader2, Trash2, Rocket, Check, CalendarDays, Users, FileText, Ban } from 'lucide-react'
 import { playsFrom } from '@/lib/campaigns/plays'
 import { summarize, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
@@ -187,10 +188,7 @@ export default function CampaignDetailPage() {
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: C.bg, display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 480, background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', height: '100dvh' }}>
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: `1px solid ${C.line}` }}>
-          <button onClick={() => router.push('/dashboard/campaigns')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'none', border: 'none', color: C.mute, fontWeight: 600, fontSize: 14, cursor: 'pointer' }}><ChevronLeft size={18} /> Campaigns</button>
-          {camp && !shipped && <button onClick={del} disabled={busy} aria-label="Delete" style={{ background: 'none', border: 'none', color: C.faint, cursor: 'pointer', width: 44, height: 44, display: 'grid', placeItems: 'center', margin: '-13px -13px -13px 0' }}><Trash2 size={18} /></button>}
-        </div>
+        <TopRow back="/dashboard/campaigns" title="Campaign" right={camp && !shipped ? <button onClick={del} disabled={busy} aria-label="Delete" style={{ background: 'none', border: 'none', color: C.faint, cursor: 'pointer', width: 40, height: 40, display: 'grid', placeItems: 'center' }}><Trash2 size={18} /></button> : null} />
 
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 16px 32px', background: 'radial-gradient(120% 300px at 50% 0%, rgba(74,189,152,0.07), rgba(255,255,255,0) 100%)' }}>
           <MotionStyles />
