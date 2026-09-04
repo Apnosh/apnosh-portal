@@ -260,13 +260,15 @@ function Row({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void 
 
 function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void }) {
   const r = item.review!
+  // the platform is what the eye should land on (owner 2026-09-04: "Google shows the Google
+  // symbol, TikTok TikTok") — its mark leads, the reviewer's real photo rides as the badge
+  const provider = r.source === 'instagram' ? 'instagram' : r.source === 'yelp' ? 'yelp' : r.source === 'facebook' ? 'facebook' : r.source === 'tiktok' ? 'tiktok' : 'google'
   const avatar = (
     <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
+      <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={provider} size={24} /></div>
       {r.avatar
-        ? <img src={r.avatar} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', display: 'block', background: '#eef0ef' }} />
-        : null}
-      <div style={{ position: r.avatar ? 'absolute' : 'static', inset: 0, width: 44, height: 44, borderRadius: '50%', background: '#eef0ef', color: C.mute, fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: r.avatar ? -1 : 0 }}>{r.author.charAt(0).toUpperCase()}</div>
-      <span style={{ position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={r.source === 'instagram' ? 'instagram' : r.source === 'yelp' ? 'yelp' : 'google'} size={12} /></span>
+        ? <img src={r.avatar} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', border: '2px solid #fff', background: '#eef0ef' }} />
+        : <span style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: '#eef0ef', border: '2px solid #fff', color: C.mute, fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r.author.charAt(0).toUpperCase()}</span>}
     </div>
   )
   return (

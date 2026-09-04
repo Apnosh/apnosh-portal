@@ -10,7 +10,7 @@
  * gate also protects the AI spend.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isProTier } from '@/lib/entitlements'
@@ -19,7 +19,7 @@ import { runAnalyst, funnelFromPayload, ANALYST_MODEL, READ_VERSION } from '@/li
 import type { InsightsWindow } from '@/lib/insights/compute-stages'
 
 // the full report reads the whole account and researches outside it: well over 30s
-export const maxDuration = 120
+export const maxDuration = 300
 
 /**
  * Just the counted review stats, for a cache hit. Cheap (one indexed read) and
@@ -71,80 +71,64 @@ export async function POST(req: NextRequest) {
   //    Best-effort on both sides: a missing table (migration 207 not applied
   //    yet) or any read/write hiccup just falls through to a live generate. ──
   const CACHE_FRESH_MS = 7 * 24 * 60 * 60 * 1000 // a week
-  if (!refresh) {
-    try {
-      const admin = createAdminClient()
-      const { data } = await admin
-        .from('analyst_reports')
-        .select('read, funnel, business, reputation, generated_at')
-        .eq('client_id', clientId).eq('report_window', window)
-        .maybeSingle()
-      const row = data as { read: unknown; funnel: unknown; business: unknown; reputation: unknown; generated_at: string } | null
-      const readVersion = (row?.read as { version?: number } | null)?.version ?? 1
-      if (row?.read && readVersion >= READ_VERSION && row.generated_at && Date.now() - new Date(row.generated_at).getTime() < CACHE_FRESH_MS) {
-        // The star chart is counted from rows, not written by the model, so recompute it
-        // on the way out rather than storing it. That keeps the chart on cached reads
-        // WITHOUT a new column: adding one and failing to migrate would break the whole
-        // cache write, and every open would silently re-bill a fresh generate.
-        const digest = await loadReviewDigestForStats(clientId, window)
-        return NextResponse.json({
-          locked: false,
-          read: row.read,
-          funnel: row.funnel,
-          reviewStats: digest,
-          reputation: row.reputation,
-          business: row.business,
-          window,
-          generatedAt: row.generated_at,
-          cached: true,
-        })
-      }
-    } catch { /* no cache → generate live */ }
-  }
-
+  const PENDING_STALE_MS = 4 * 60 * 1000 // a job older than this without a result is presumed dead
+  type Row = { read: Record<string, unknown> | null; funnel: unknown; business: unknown; reputation: unknown; generated_at: string }
+  const admin = createAdminClient()
+  let row: Row | null = null
   try {
+    const { data } = await admin
+      .from('analyst_reports')
+      .select('read, funnel, business, reputation, generated_at')
+      .eq('client_id', clientId).eq('report_window', window)
+      .maybeSingle()
+    row = data as Row | null
+  } catch { /* no cache table → generate */ }
+  const readVersion = Number(row?.read?.version ?? 1)
+  const pendingSince = row?.read?.pending ? Date.parse(String(row.read.startedAt ?? row.generated_at)) : NaN
+  const pendingAlive = Number.isFinite(pendingSince) && Date.now() - pendingSince < PENDING_STALE_MS
+  // a job is already writing this report: say so, the page keeps its working screen and polls
+  if (pendingAlive && !refresh) return NextResponse.json({ pending: true, startedAt: new Date(pendingSince).toISOString() })
+  // a finished, fresh, current-shape read: serve it (only an explicit Refresh regenerates)
+  if (!refresh && row?.read && !row.read.pending && !row.read.failed && readVersion >= READ_VERSION && row.generated_at && Date.now() - new Date(row.generated_at).getTime() < CACHE_FRESH_MS) {
+    const digest = await loadReviewDigestForStats(clientId, window)
+    return NextResponse.json({ locked: false, read: row.read, funnel: row.funnel, reviewStats: digest, reputation: row.reputation, business: row.business, window, generatedAt: row.generated_at, cached: true })
+  }
+  // the last job died: tell the page why, once; the next call (or Refresh) starts a new one
+  if (!refresh && row?.read?.failed && Number.isFinite(pendingSince) && Date.now() - pendingSince < PENDING_STALE_MS) {
+    return NextResponse.json({ error: String(row.read.failed) }, { status: 502 })
+  }
+  /* START THE JOB (2026-09-04). A researched report can take a minute or two — far too long
+     for one request to hold open through a gateway and a phone. So: mark the row pending,
+     answer now, and do the reading + writing AFTER the response inside this same function's
+     time budget. The page polls every few seconds and lands on the finished read. */
+  const startedAt = new Date().toISOString()
+  try {
+    await admin.from('analyst_reports').upsert({
+      client_id: clientId, report_window: window,
+      read: { pending: true, version: 0, startedAt },
+      funnel: row?.funnel ?? [], business: row?.business ?? null, reputation: row?.reputation ?? null,
+      model: ANALYST_MODEL, cost_cents: 0, generated_at: startedAt,
+    })
+  } catch { /* without the table we cannot hand off; fall through to a live generate below */ }
+  const generate = async () => {
     const payload = await buildAnalystPayload(clientId, window)
     const funnel = funnelFromPayload(payload)
     const { read: written, costCents } = await runAnalyst(payload)
     // the visuals are drawn from these, not from the model's words
     const read = { ...written, numbers: { trends: payload.trends, rhythm: payload.rhythm, standouts: payload.standouts, launches: payload.launches } }
-    // The star mix is counted from real rows, so the page can draw it without the model.
-    const reviewStats = payload.reviews
-      ? { recent: payload.reviews.recent, lifetime: payload.reviews.lifetime, unanswered: payload.reviews.unanswered }
-      : null
     const generatedAt = new Date().toISOString()
-
-    // store the fresh read (best-effort; a failure never blocks the response)
-    try {
-      const admin = createAdminClient()
-      await admin.from('analyst_reports').upsert({
-        client_id: clientId,
-        report_window: window,
-        read,
-        funnel,
-        business: payload.business,
-        reputation: payload.reputation,
-        // Read from the engine, never re-typed here: a stored report must name the model
-        // that actually wrote it, or the cost and quality history becomes unreadable.
-        model: ANALYST_MODEL,
-        cost_cents: costCents,
-        generated_at: generatedAt,
-      })
-    } catch { /* cache write is optional */ }
-
-    return NextResponse.json({
-      locked: false,
-      read,
-      funnel,
-      reviewStats,
-      reputation: payload.reputation,
-      business: payload.business,
-      window,
-      generatedAt,
-      costCents,
+    await admin.from('analyst_reports').upsert({
+      client_id: clientId, report_window: window, read, funnel,
+      business: payload.business, reputation: payload.reputation,
+      model: ANALYST_MODEL, cost_cents: costCents, generated_at: generatedAt,
     })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'analyst failed'
-    return NextResponse.json({ error: msg }, { status: 502 })
+    return { read, funnel, payload, generatedAt }
   }
+  after(async () => {
+    try { await generate() } catch (e) {
+      const msg = e instanceof Error ? e.message : 'analyst failed'
+      try { await admin.from('analyst_reports').upsert({ client_id: clientId, report_window: window, read: { pending: false, failed: msg, version: 0, startedAt }, funnel: [], business: null, reputation: null, model: ANALYST_MODEL, cost_cents: 0, generated_at: startedAt }) } catch { /* nothing more to do */ }
+    }
+  })
+  return NextResponse.json({ pending: true, startedAt })
 }

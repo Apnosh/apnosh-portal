@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown, TrendingUp, Search, ChevronRight } from 'lucide-react'
+import { Sparkles, ArrowRight, RefreshCw, Lock, Check, TrendingDown, TrendingUp, Search, ChevronRight, BarChart3, MessageSquareText, Activity, Globe, PenLine } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { GLASS } from '@/components/mvp/top-row'
@@ -212,39 +212,37 @@ export default function AnalystPage() {
   const run = useCallback((refresh = false) => {
     if (!client?.id) return
     setState('loading'); setErr(null)
-
-    // The server may spend up to 30s on a live generate. Without a client-side cap a
-    // dropped connection leaves the page spinning forever with no way out.
-    const ctl = new AbortController()
-    // a full report reads the whole account and checks outside it on the web: allow two minutes
-    const timer = setTimeout(() => ctl.abort(), 120_000)
-
-    fetch('/api/dashboard/analyst', {
+    /* The server hands the report off to a job and answers at once ("pending"); this page
+       keeps its working screen and asks again every few seconds until the read lands. Every
+       path below ends in a state that renders something — a page that shows nothing is worse
+       than an error. */
+    let alive = true
+    const started = Date.now()
+    const ask = (force: boolean) => fetch('/api/dashboard/analyst', {
       method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ clientId: client.id, window: '30d', refresh }),
-      signal: ctl.signal,
+      body: JSON.stringify({ clientId: client.id, window: '30d', refresh: force }),
+    }).then(async (r) => {
+      const j = (await r.json().catch(() => ({}))) as AnalystResponse & { error?: string; pending?: boolean }
+      if (!r.ok) throw new Error(j.error || `Failed (${r.status})`)
+      return j
     })
-      .then(async (r) => {
-        const j = (await r.json().catch(() => ({}))) as AnalystResponse & { error?: string }
-        if (!r.ok) throw new Error(j.error || `Failed (${r.status})`)
-        return j
-      })
-      .then((j) => {
-        if (j.locked) { setData(j); setState('locked'); return }
-        // A 200 with no read is the blank-page case: the old code set 'ready' and then
-        // rendered nothing at all because the render was guarded on data.read.
-        if (!j.read?.bottomLine) throw new Error('the analyst came back empty')
-        setData(j); setState('ready')
-      })
-      .catch((e: unknown) => {
-        const aborted = e instanceof DOMException && e.name === 'AbortError'
-        setErr(aborted ? 'that took too long, so we stopped waiting' : (e instanceof Error ? e.message : 'something went wrong'))
-        setState('error')
-      })
-      .finally(() => clearTimeout(timer))
+    const settle = (j: AnalystResponse & { pending?: boolean }) => {
+      if (!alive) return
+      if (j.locked) { setData(j); setState('locked'); return }
+      if (j.pending) {
+        if (Date.now() - started > 4 * 60_000) { setErr('that took too long, so we stopped waiting'); setState('error'); return }
+        setTimeout(() => { if (alive) ask(false).then(settle).catch(fail) }, 4000)
+        return
+      }
+      if (!j.read?.bottomLine) throw new Error('the analyst came back empty')
+      setData(j); setState('ready')
+    }
+    const fail = (e: unknown) => { if (!alive) return; setErr(e instanceof Error ? e.message : 'something went wrong'); setState('error') }
+    ask(refresh).then(settle).catch(fail)
+    return () => { alive = false }
   }, [client?.id])
 
-  useEffect(() => { run(false) }, [run])
+  useEffect(() => { const stop = run(false); return () => { if (typeof stop === 'function') stop() } }, [run])
 
   // Which restaurant we are reading for comes from context and can arrive a beat late.
   // If it never arrives, `run` returns early and the page would sit on "Reading your
@@ -267,7 +265,7 @@ export default function AnalystPage() {
       <div style={{ padding: '12px 18px 24px', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
         {/* Exhaustive on purpose: the last branch is a plain else, so there is no
             combination of state and data that renders an empty screen. */}
-        {state === 'loading' ? <Centered>Reading your numbers and checking outside your walls&hellip;<div style={{ fontSize: 12.5, color: C.faint, marginTop: 8 }}>This takes about a minute the first time.</div></Centered>
+        {state === 'loading' ? <ReportWorking />
           : state === 'locked' ? <Locked />
           : state === 'ready' && data?.read ? <ReadView read={data.read} funnel={data.funnel ?? []} stats={data.reviewStats ?? null} when={whenLabel(data.generatedAt)} business={data.business?.name ?? client?.name ?? ''} queries={queries} />
           : <Centered>
@@ -496,6 +494,61 @@ function FunnelDrawing({ funnel }: { funnel: FunnelStep[] }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/* ── While the report is written (about a minute the first time): the work, shown. Five steps
+   light in turn on a clock that matches how long each really takes, a slim bar creeps toward
+   the end and only completes when the read lands, and a ghost of the report waits beneath. ── */
+const WORK_STEPS: Array<{ at: number; icon: React.ReactNode; label: string; sub: string }> = [
+  { at: 0, icon: <BarChart3 size={17} />, label: 'Reading your numbers', sub: 'every stage, every source, against last period' },
+  { at: 7, icon: <MessageSquareText size={17} />, label: 'Reading what customers wrote', sub: 'praise and complaints, in their words' },
+  { at: 16, icon: <Activity size={17} />, label: 'Following each line', sub: 'where it is heading, the days that stood out' },
+  { at: 28, icon: <Globe size={17} />, label: 'Checking outside your walls', sub: 'weather, local events, the calendar' },
+  { at: 44, icon: <PenLine size={17} />, label: 'Writing it up', sub: 'plain words, no jargon' },
+]
+function ReportWorking() {
+  const [t, setT] = useState(0)
+  useEffect(() => { const id = setInterval(() => setT((x) => x + 1), 1000); return () => clearInterval(id) }, [])
+  const done = WORK_STEPS.filter((w) => t >= w.at).length // steps lit so far
+  const pct = Math.min(92, 8 + (1 - Math.exp(-t / 28)) * 88) // eases toward the end, never claims done
+  const bone = (w: number | string, h: number, r = 8): React.CSSProperties => ({ width: w, height: h, borderRadius: r, background: 'linear-gradient(90deg, #f0f0f3 0%, #f7f7f9 45%, #f0f0f3 90%)', backgroundSize: '200% 100%', animation: 'rptGhost 1.6s ease-in-out infinite' })
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }} aria-busy aria-live="polite">
+      <style>{`@keyframes rptGhost{0%{background-position:100% 0}100%{background-position:-100% 0}}@keyframes rptPulse{0%,100%{opacity:.55}50%{opacity:1}}@keyframes rptIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}.rpt-in{animation:rptIn .35s ease both}.rpt-pulse{animation:rptPulse 1.4s ease-in-out infinite}@media (prefers-reduced-motion:reduce){.rpt-in,.rpt-pulse,[aria-busy] *{animation:none!important}}`}</style>
+      {/* the cover, being written */}
+      <div style={{ borderRadius: 20, padding: '20px 20px 22px', color: '#fff', backgroundColor: '#16211c', backgroundImage: 'radial-gradient(circle at 88% 8%, rgba(74,189,152,0.42), transparent 55%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(22,33,28,0.22)' }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: 'rgba(255,255,255,0.72)' }}>Your report · last 30 days</div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, lineHeight: 1.25, marginTop: 10, letterSpacing: '-.01em' }}>Reading your account{t >= 28 ? ' and checking outside it' : ''}…</div>
+        <div style={{ height: 4, borderRadius: 99, background: 'rgba(255,255,255,0.14)', marginTop: 16, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: 'linear-gradient(90deg, #4abd98, #8ee5c6)', transition: 'width 1s linear' }} />
+        </div>
+        <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 8 }}>About a minute the first time · cached for a week after that</div>
+      </div>
+      {/* the steps, lighting in turn */}
+      <div style={CARD}>
+        {WORK_STEPS.map((w, i) => {
+          const lit = i < done, active = i === done - 1
+          return (
+            <div key={w.label} className={lit ? 'rpt-in' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}`, opacity: lit ? 1 : 0.38, transition: 'opacity .3s' }}>
+              <span className={active ? 'rpt-pulse' : undefined} style={{ width: 34, height: 34, borderRadius: 99, background: lit && !active ? C.greenSoft : active ? C.greenDk : C.bg, color: lit && !active ? C.greenDk : active ? '#fff' : C.faint, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'background .3s, color .3s' }}>{lit && !active ? <Check size={16} /> : w.icon}</span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink }}>{w.label}</span>
+                <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1 }}>{w.sub}</span>
+              </span>
+            </div>
+          )
+        })}
+      </div>
+      {/* the ghost of what is coming */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+        {[0, 1, 2, 3].map((i) => <div key={i} style={{ ...CARD, padding: '12px 10px 11px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><div style={bone(40, 18, 6)} /><div style={bone(48, 10, 5)} /></div>)}
+      </div>
+      <div style={CARD}>
+        <div style={bone(120, 16, 6)} />
+        {[0.9, 0.6, 0.42, 0.24, 0.16].map((w, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}><div style={bone(`${w * 100}%`, 30, 10)} /><div style={bone(70, 12, 5)} /></div>)}
+      </div>
     </div>
   )
 }

@@ -346,7 +346,7 @@ export async function runAnalyst(payload: AnalystPayload): Promise<AnalystRunRes
       max_tokens: 9000,
       output_config: { effort: 'medium' },
       system: SYSTEM,
-      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 2 }],
       messages,
     })
     tokensIn += response.usage.input_tokens; tokensOut += response.usage.output_tokens
