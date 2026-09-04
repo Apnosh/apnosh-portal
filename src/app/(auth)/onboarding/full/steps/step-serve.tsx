@@ -33,7 +33,7 @@ export default function StepServe({ data, update, nav }: Props) {
         <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
           {CUISINES.map((c) => (
             <OptionCard key={c} selected={data.cuisine === c} onClick={() => update('cuisine', c)}>
-              <div className="text-[13px] font-medium" style={{ color: data.cuisine === c ? '#0f6e56' : '#1d1d1f' }}>
+              <div className="text-[13px] font-medium" style={{ color: data.cuisine === c ? '#1c6b52' : '#1d1d1f' }}>
                 {c}
               </div>
             </OptionCard>
@@ -67,7 +67,7 @@ export default function StepServe({ data, update, nav }: Props) {
                 <div className="flex items-center gap-3">
                   <span
                     className="text-lg font-semibold w-12 shrink-0"
-                    style={{ fontFamily: 'DM Sans, sans-serif', color: selected ? '#0f6e56' : '#1d1d1f' }}
+                    style={{ fontFamily: 'Inter, system-ui, sans-serif', color: selected ? '#1c6b52' : '#1d1d1f' }}
                   >
                     {p.title}
                   </span>

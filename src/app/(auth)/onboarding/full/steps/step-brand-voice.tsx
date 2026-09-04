@@ -55,7 +55,7 @@ export default function StepBrandVoice({ data, update, nav }: Props) {
             const selected = data.emoji_usage === e.id
             return (
               <OptionCard key={e.id} selected={selected} onClick={() => update('emoji_usage', e.id)}>
-                <div className="text-[13px] font-medium" style={{ color: selected ? '#0f6e56' : '#1d1d1f' }}>
+                <div className="text-[13px] font-medium" style={{ color: selected ? '#1c6b52' : '#1d1d1f' }}>
                   {e.title}
                 </div>
               </OptionCard>

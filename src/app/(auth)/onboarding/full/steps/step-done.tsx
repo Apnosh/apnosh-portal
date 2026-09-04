@@ -169,7 +169,7 @@ export default function StepDone({ bizName, goals = [] }: Props) {
         <PrimaryPill onClick={() => router.push('/dashboard')} grow>
           Go to my dashboard
         </PrimaryPill>
-        <div className="text-[12px] mt-3" style={{ color: '#98989d' }}>Nothing starts until you say so.</div>
+        <div className="text-[12px] mt-3" style={{ color: '#aeaeb2' }}>Nothing starts until you say so.</div>
       </div>
     </>
   )

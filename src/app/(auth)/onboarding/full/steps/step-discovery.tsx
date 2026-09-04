@@ -53,7 +53,7 @@ function TagInput({
         <span
           key={t}
           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-[16px] text-[13px]"
-          style={{ background: '#f0faf6', color: '#0f6e56', fontWeight: 500 }}
+          style={{ background: '#eaf7f3', color: '#1c6b52', fontWeight: 500 }}
         >
           {prefix}{t}
           <button
@@ -74,7 +74,7 @@ function TagInput({
         onBlur={commit}
         placeholder={tags.length ? '' : placeholder}
         className="flex-1 min-w-[120px] text-[15px] px-1.5 py-1 outline-none"
-        style={{ color: '#1d1d1f', fontFamily: 'DM Sans, sans-serif' }}
+        style={{ color: '#1d1d1f', fontFamily: 'Inter, system-ui, sans-serif' }}
       />
     </div>
   )

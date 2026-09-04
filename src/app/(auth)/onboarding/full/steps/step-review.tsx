@@ -113,7 +113,7 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
       </div>
 
       {/* Terms */}
-      <div className="my-5 text-sm" style={{ color: '#48484a' }}>
+      <div className="my-5 text-sm" style={{ color: '#6e6e73' }}>
         <label className="flex items-start gap-2 cursor-pointer leading-relaxed">
           <input
             type="checkbox"
@@ -177,7 +177,7 @@ function ReviewCard({
         </button>
       </div>
       {setRows.map((r) => (
-        <div key={r.label} className="text-[13px] leading-relaxed" style={{ color: '#48484a' }}>
+        <div key={r.label} className="text-[13px] leading-relaxed" style={{ color: '#6e6e73' }}>
           {r.label}:{' '}
           <span className="font-medium" style={{ color: '#1d1d1f' }}>{r.value}</span>
         </div>

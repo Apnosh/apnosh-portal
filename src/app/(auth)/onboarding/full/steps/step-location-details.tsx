@@ -23,7 +23,7 @@ const DEFAULT_SECOND_RANGE: HourRange = { open: '17:00', close: '21:00' }
 
 const inputCls =
   'w-[104px] max-sm:w-auto max-sm:flex-1 max-sm:min-w-0 text-sm text-center rounded-[12px] px-2.5 max-sm:px-1.5 py-2 outline-none disabled:opacity-35'
-const inputStyle = { border: '1.5px solid #e6e6ea', fontFamily: 'DM Sans, sans-serif' } as const
+const inputStyle = { border: '1.5px solid #e6e6ea', fontFamily: 'Inter, system-ui, sans-serif' } as const
 
 /**
  * A compact week editor reused for each location's hours. Each day can hold
@@ -117,13 +117,13 @@ export function HoursEditor({ hours, onChange }: { hours: Hours; onChange: (h: H
                 <button
                   type="button" onClick={() => addRange(day)}
                   className="self-start text-[12px] font-medium mt-0.5"
-                  style={{ color: '#0f6e56' }}
+                  style={{ color: '#1c6b52' }}
                 >+ Add hours</button>
               )}
             </div>
             <label
               className="text-[13px] flex items-center gap-1 cursor-pointer whitespace-nowrap flex-shrink-0 pt-2"
-              style={{ color: '#48484a' }}
+              style={{ color: '#6e6e73' }}
             >
               <input
                 type="checkbox" checked={closed}
@@ -214,7 +214,7 @@ export default function StepLocationDetails({ data, update, nav }: Props) {
       {(pulling || pullNote) && (
         <div
           className="mt-4 text-[13px] leading-relaxed rounded-[12px] px-3.5 py-2.5"
-          style={{ background: '#f0faf6', color: '#0f6e56', borderLeft: '3px solid #4abd98' }}
+          style={{ background: '#eaf7f3', color: '#1c6b52', borderLeft: '3px solid #4abd98' }}
         >
           {pulling ? 'Pulling hours and phone from Google...' : `✓ ${pullNote}`}
         </div>

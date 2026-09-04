@@ -312,7 +312,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                         className="w-full text-left flex items-center gap-3 px-3.5 transition-all"
                         style={{
                           border: 'none', minHeight: 54, cursor: 'pointer',
-                          background: on ? '#f0faf6' : '#fff',
+                          background: on ? '#eaf7f3' : '#fff',
                           borderTop: i > 0 || finding ? '1px solid #f2f2f4' : 'none',
                         }}
                       >
@@ -333,7 +333,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                     <button
                       type="button" onClick={() => setShowAllHits(true)}
                       className="w-full text-[12.5px] font-semibold"
-                      style={{ minHeight: 44, border: 'none', borderTop: '1px solid #f2f2f4', background: '#fff', color: '#0f6e56', cursor: 'pointer' }}
+                      style={{ minHeight: 44, border: 'none', borderTop: '1px solid #f2f2f4', background: '#fff', color: '#1c6b52', cursor: 'pointer' }}
                     >
                       Show {matches.length - 5} more
                     </button>
@@ -388,8 +388,8 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                   <MapPin size={16} color="#6e6e73" className="flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     {data.primary_location_name.trim() ? <div className="text-[15px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{data.primary_location_name}</div> : null}
-                    <div className="text-[14px] truncate" style={{ color: '#48484a' }}>{data.full_address}</div>
-                    <div className="text-[13px] mt-0.5 truncate" style={{ color: data.phone.trim() || hasOpenHours(data.hours) ? '#6e6e73' : '#0f6e56' }}>{spotPeek(data.phone, data.hours)}</div>
+                    <div className="text-[14px] truncate" style={{ color: '#6e6e73' }}>{data.full_address}</div>
+                    <div className="text-[13px] mt-0.5 truncate" style={{ color: data.phone.trim() || hasOpenHours(data.hours) ? '#6e6e73' : '#1c6b52' }}>{spotPeek(data.phone, data.hours)}</div>
                   </div>
                   <ChevronDown size={15} color="#aeaeb2" className="flex-shrink-0" style={{ transform: openCard === 'main' ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }} />
                   <button type="button" aria-label="Remove this location" onClick={(e) => { e.stopPropagation(); removePrimary() }} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
@@ -399,7 +399,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                 {openCard === 'main' && (
                   <div className="px-3.5 pb-3.5 flex flex-col gap-3">
                     {data.primary_place_id ? (
-                      <div className="text-[14px]" style={{ color: '#48484a' }}>From your Google listing. Fix anything that looks off.</div>
+                      <div className="text-[14px]" style={{ color: '#6e6e73' }}>From your Google listing. Fix anything that looks off.</div>
                     ) : null}
                     <div>
                       <FieldLabel>Location name</FieldLabel>
@@ -417,7 +417,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                       <FieldLabel>Hours</FieldLabel>
                       <HoursEditor hours={data.hours} onChange={(h) => update('hours', h)} />
                     </div>
-                    <button type="button" onClick={() => setOpenCard(null)} className="self-start text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}>Done</button>
+                    <button type="button" onClick={() => setOpenCard(null)} className="self-start text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#1c6b52', cursor: 'pointer', padding: 0 }}>Done</button>
                   </div>
                 )}
               </div>
@@ -433,8 +433,8 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                   <MapPin size={16} color="#6e6e73" className="flex-shrink-0" />
                   <div className="min-w-0 flex-1">
                     {l.name.trim() ? <div className="text-[15px] font-semibold truncate" style={{ color: '#1d1d1f' }}>{l.name}</div> : null}
-                    <div className="text-[14px] truncate" style={{ color: '#48484a' }}>{l.full_address}</div>
-                    <div className="text-[13px] mt-0.5 truncate" style={{ color: (l.phone || '').trim() || hasOpenHours(l.hours) ? '#6e6e73' : '#0f6e56' }}>{spotPeek(l.phone || '', l.hours || {}, l.biz_type)}</div>
+                    <div className="text-[14px] truncate" style={{ color: '#6e6e73' }}>{l.full_address}</div>
+                    <div className="text-[13px] mt-0.5 truncate" style={{ color: (l.phone || '').trim() || hasOpenHours(l.hours) ? '#6e6e73' : '#1c6b52' }}>{spotPeek(l.phone || '', l.hours || {}, l.biz_type)}</div>
                   </div>
                   <ChevronDown size={15} color="#aeaeb2" className="flex-shrink-0" style={{ transform: openCard === i ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }} />
                   <button type="button" aria-label={`Remove ${l.name || l.full_address}`} onClick={(e) => { e.stopPropagation(); removeSpot(i) }} className="flex items-center justify-center flex-shrink-0" style={{ width: 28, height: 28, border: 'none', background: 'none', color: '#aeaeb2', cursor: 'pointer' }}>
@@ -444,7 +444,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                 {openCard === i && (
                   <div className="px-3.5 pb-3.5 flex flex-col gap-3">
                     {l.place_id ? (
-                      <div className="text-[14px]" style={{ color: '#48484a' }}>From this spot{'\u2019'}s Google listing. Fix anything that looks off.</div>
+                      <div className="text-[14px]" style={{ color: '#6e6e73' }}>From this spot{'\u2019'}s Google listing. Fix anything that looks off.</div>
                     ) : null}
                     <div>
                       <FieldLabel>Location name</FieldLabel>
@@ -487,7 +487,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
                       <FieldLabel>Hours</FieldLabel>
                       <HoursEditor hours={l.hours || {}} onChange={(h) => updateSpot(i, { hours: h })} />
                     </div>
-                    <button type="button" onClick={() => setOpenCard(null)} className="self-start text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}>Done</button>
+                    <button type="button" onClick={() => setOpenCard(null)} className="self-start text-[12.5px] font-semibold" style={{ background: 'none', border: 'none', color: '#1c6b52', cursor: 'pointer', padding: 0 }}>Done</button>
                   </div>
                 )}
               </div>
@@ -522,7 +522,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
               <button
                 type="button" onClick={() => setAddingSpot(true)}
                 className="self-center text-[14px] font-semibold"
-                style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: '4px 0' }}
+                style={{ background: 'none', border: 'none', color: '#1c6b52', cursor: 'pointer', padding: '4px 0' }}
               >
                 + Enter manually
               </button>
@@ -533,7 +533,7 @@ export default function StepBizName({ data, update, nav, onJumpToReview }: Props
         {/* Website + optional scan — paste a site and we draft the story,
             menu, and specials so the owner is not typing it from scratch. */}
         <div>
-          <FieldLabel>Website <span style={{ color: '#98989d', fontWeight: 400 }}>(optional)</span></FieldLabel>
+          <FieldLabel>Website <span style={{ color: '#aeaeb2', fontWeight: 400 }}>(optional)</span></FieldLabel>
           <Input
             value={data.website}
             onChange={(v) => update('website', v)}

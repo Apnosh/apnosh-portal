@@ -34,11 +34,11 @@ export default function StepApproval({ data, update, nav }: Props) {
               className="w-full text-left rounded-[14px] px-4 py-4 select-none"
               style={{
                 border: sel ? '1.5px solid #4abd98' : '1.5px solid #e6e6ea',
-                background: sel ? '#f0faf6' : 'white',
+                background: sel ? '#eaf7f3' : 'white',
                 transition: 'all .15s ease',
               }}
             >
-              <div className="text-sm font-semibold mb-0.5" style={{ color: sel ? '#0f6e56' : '#1d1d1f' }}>
+              <div className="text-sm font-semibold mb-0.5" style={{ color: sel ? '#1c6b52' : '#1d1d1f' }}>
                 {a.title}
               </div>
               <div className="text-xs leading-snug" style={{ color: '#6e6e73' }}>

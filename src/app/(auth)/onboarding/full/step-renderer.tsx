@@ -76,7 +76,7 @@ export interface OnboardingFrameProps {
 const quietTextButton: React.CSSProperties = {
   border: 'none',
   background: 'none',
-  color: '#98989d',
+  color: '#aeaeb2',
   fontSize: 13,
   fontWeight: 500,
   padding: '6px 2px',
@@ -127,7 +127,7 @@ export function OnboardingFrame({
       <style>{`
 .ob-frame{height:100vh;height:100dvh}
 .ob-phone{width:100%;max-width:480px;min-width:0;overflow-x:hidden;height:100%;display:flex;flex-direction:column;background:radial-gradient(120% 34% at 50% 0%, rgba(74,189,152,0.10), rgba(255,255,255,0) 62%), #fbfbfd}
-@media (min-width: 521px){.ob-phone{border-left:1px solid rgba(0,0,0,0.06);border-right:1px solid rgba(0,0,0,0.06);box-shadow:0 0 60px rgba(0,0,0,0.08)}}`}</style>
+@media (min-width: 521px){.ob-phone{border-left:1px solid rgba(255,255,255,0.75);border-right:1px solid rgba(255,255,255,0.75);box-shadow:0 0 60px rgba(0,0,0,0.08)}}`}</style>
       <div className="ob-phone">
 
       {topSlot}
@@ -150,10 +150,10 @@ export function OnboardingFrame({
             alignItems: 'center',
             justifyContent: 'center',
             padding: 0,
-            background: 'rgba(255,255,255,0.72)',
-            border: '1px solid rgba(0,0,0,0.06)',
-            backdropFilter: 'saturate(180%) blur(20px)',
-            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+            background: 'rgba(240,241,240,0.72)',
+            border: '1px solid rgba(255,255,255,0.75)',
+            backdropFilter: 'saturate(180%) blur(16px)',
+            WebkitBackdropFilter: 'saturate(180%) blur(16px)',
             cursor: 'pointer',
             visibility: showBack ? 'visible' : 'hidden',
           }}
@@ -230,9 +230,9 @@ export function OnboardingFrame({
           style={{
             flexShrink: 0,
             padding: '12px 20px calc(16px + env(safe-area-inset-bottom))',
-            background: 'rgba(255,255,255,0.72)',
-            backdropFilter: 'saturate(180%) blur(20px)',
-            WebkitBackdropFilter: 'saturate(180%) blur(20px)',
+            background: 'rgba(240,241,240,0.72)',
+            backdropFilter: 'saturate(180%) blur(16px)',
+            WebkitBackdropFilter: 'saturate(180%) blur(16px)',
             borderTop: '1px solid #ededec',
           }}
         >

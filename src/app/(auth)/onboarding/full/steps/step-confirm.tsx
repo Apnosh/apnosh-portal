@@ -49,7 +49,7 @@ function Row({ id, label, value, openRow, setOpenRow, children }: {
         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 2px', background: 'none', border: 'none', minHeight: 52 }}
       >
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 11.5, color: '#98989d', letterSpacing: '.02em' }}>{label}</span>
+          <span style={{ display: 'block', fontSize: 11.5, color: '#aeaeb2', letterSpacing: '.02em' }}>{label}</span>
           <span style={{ display: 'block', fontSize: 15, color: missing ? '#c7c7cc' : '#1d1d1f', fontWeight: missing ? 400 : 500, marginTop: 1 }}>
             {value || 'Not set'}
           </span>
@@ -163,7 +163,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
           </>
         ) : (
           <div style={{ borderBottom: '1px solid #f0f0f2', padding: '14px 2px 16px' }}>
-            <div style={{ fontSize: 11.5, color: '#98989d', marginBottom: 10 }}>
+            <div style={{ fontSize: 11.5, color: '#aeaeb2', marginBottom: 10 }}>
               {extras.length + 1} LOCATIONS
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -171,7 +171,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
                 ...extras.map((l) => ({ name: l.name, addr: l.full_address, primary: false }))]
                 .map((loc, i) => (
                   <div key={i} style={{ display: 'flex', gap: 11, alignItems: 'flex-start', border: '1px solid #e6e6ea', borderRadius: 12, padding: '11px 12px', background: '#fff' }}>
-                    <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: '#f0faf6', color: '#2e9a78', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+                    <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 99, background: '#eaf7f3', color: '#2e9a78', fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
                       {i + 1}
                     </span>
                     <span style={{ flex: 1, minWidth: 0 }}>
@@ -182,7 +182,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
                         {loc.addr || 'No address yet'}
                       </span>
                       {loc.primary && (
-                        <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 700, color: '#2e9a78', background: '#f0faf6', borderRadius: 99, padding: '2px 7px', marginTop: 6 }}>
+                        <span style={{ display: 'inline-block', fontSize: 10.5, fontWeight: 700, color: '#2e9a78', background: '#eaf7f3', borderRadius: 99, padding: '2px 7px', marginTop: 6 }}>
                           MAIN
                         </span>
                       )}
@@ -220,7 +220,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
                 <button
                   type="button"
                   onClick={() => update('locations', extras.filter((_, j) => j !== i).map(toDraft))}
-                  style={{ alignSelf: 'flex-start', border: 'none', background: 'none', color: '#98989d', fontSize: 12.5, padding: '4px 0', minHeight: 32 }}
+                  style={{ alignSelf: 'flex-start', border: 'none', background: 'none', color: '#aeaeb2', fontSize: 12.5, padding: '4px 0', minHeight: 32 }}
                 >
                   Remove
                 </button>
@@ -229,7 +229,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
             {adding ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <Input value={q} onChange={setQ} placeholder="Search Google for the location" autoFocus />
-                {busy && <span style={{ fontSize: 12, color: '#98989d' }}>Searching…</span>}
+                {busy && <span style={{ fontSize: 12, color: '#aeaeb2' }}>Searching…</span>}
                 {hits.map((h) => (
                   <button
                     key={h.placeId}
@@ -239,7 +239,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
                     style={{ border: '1px solid #e6e6ea', background: '#fff', borderRadius: 12, padding: '10px 12px', minHeight: 52 }}
                   >
                     <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: '#1d1d1f' }}>{h.name}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: '#98989d' }}>{h.address}</span>
+                    <span style={{ display: 'block', fontSize: 12, color: '#aeaeb2' }}>{h.address}</span>
                   </button>
                 ))}
                 <div style={{ display: 'flex', gap: 14 }}>
@@ -254,7 +254,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
                   <button
                     type="button"
                     onClick={() => { setAdding(false); setQ(''); setHits([]) }}
-                    style={{ border: 'none', background: 'none', color: '#98989d', fontSize: 12.5, padding: '6px 0', minHeight: 34 }}
+                    style={{ border: 'none', background: 'none', color: '#aeaeb2', fontSize: 12.5, padding: '6px 0', minHeight: 34 }}
                   >
                     Cancel
                   </button>
@@ -264,7 +264,7 @@ export default function StepConfirm({ data, update, nav }: Props) {
               <button
                 type="button"
                 onClick={() => (lookupOn ? setAdding(true) : update('locations', [...extras.map(toDraft), blankLocation()]))}
-                style={{ border: '1px solid #d8ece4', background: '#f0faf6', color: '#2e9a78', fontSize: 13, fontWeight: 600, borderRadius: 12, minHeight: 44 }}
+                style={{ border: '1px solid #d8ece4', background: '#eaf7f3', color: '#2e9a78', fontSize: 13, fontWeight: 600, borderRadius: 12, minHeight: 44 }}
               >
                 Add another location
               </button>

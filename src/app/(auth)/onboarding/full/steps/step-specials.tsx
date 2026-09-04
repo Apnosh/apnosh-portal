@@ -17,7 +17,7 @@ const EMPTY: SpecialDraft = { title: '', time_window: '', details: '' }
 const fieldStyle: React.CSSProperties = {
   border: '1.5px solid #e6e6ea',
   color: '#1d1d1f',
-  fontFamily: 'DM Sans, sans-serif',
+  fontFamily: 'Inter, system-ui, sans-serif',
 }
 
 function focusOn(e: React.FocusEvent<HTMLInputElement>) {

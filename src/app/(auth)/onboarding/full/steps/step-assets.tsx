@@ -28,10 +28,10 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           onClick={() => logoRef.current?.click()}
           className="w-full rounded-[14px] px-6 py-5 text-center transition-all cursor-pointer"
           style={{ border: '2px dashed #e6e6ea', background: '#f5f5f7' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#4abd98'; e.currentTarget.style.background = '#f0faf6' }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#4abd98'; e.currentTarget.style.background = '#eaf7f3' }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e6e6ea'; e.currentTarget.style.background = '#f5f5f7' }}
         >
-          <div className="text-sm font-medium" style={{ color: '#48484a' }}>Upload your logo</div>
+          <div className="text-sm font-medium" style={{ color: '#6e6e73' }}>Upload your logo</div>
           <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>PNG or SVG</div>
           <input
             ref={logoRef}
@@ -45,7 +45,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           />
         </button>
         {!!data.logo_name && (
-          <div className="text-[13px] font-medium" style={{ color: '#0f6e56' }}>
+          <div className="text-[13px] font-medium" style={{ color: '#1c6b52' }}>
             ✓ {data.logo_name}
           </div>
         )}
@@ -56,10 +56,10 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           onClick={() => photosRef.current?.click()}
           className="w-full rounded-[14px] px-6 py-5 text-center transition-all cursor-pointer"
           style={{ border: '2px dashed #e6e6ea', background: '#f5f5f7' }}
-          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#4abd98'; e.currentTarget.style.background = '#f0faf6' }}
+          onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#4abd98'; e.currentTarget.style.background = '#eaf7f3' }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e6e6ea'; e.currentTarget.style.background = '#f5f5f7' }}
         >
-          <div className="text-sm font-medium" style={{ color: '#48484a' }}>Upload brand photos</div>
+          <div className="text-sm font-medium" style={{ color: '#6e6e73' }}>Upload brand photos</div>
           <div className="text-xs mt-0.5" style={{ color: '#6e6e73' }}>Up to 20</div>
           <input
             ref={photosRef}
@@ -73,7 +73,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           />
         </button>
         {data.photo_count > 0 && (
-          <div className="text-[13px] font-medium" style={{ color: '#0f6e56' }}>
+          <div className="text-[13px] font-medium" style={{ color: '#1c6b52' }}>
             ✓ {data.photo_count} photo{data.photo_count !== 1 ? 's' : ''}
           </div>
         )}
@@ -111,7 +111,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
           </div>
           <div className="text-[13px] mt-2" style={{ color: '#777' }}>
             No logo yet?{' '}
-            <a href="/dashboard/requests?type=logo" target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: '#0f6e56' }}>
+            <a href="/dashboard/requests?type=logo" target="_blank" rel="noreferrer" className="font-semibold underline" style={{ color: '#1c6b52' }}>
               Have one made →
             </a>
           </div>
@@ -120,7 +120,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
         {/* Brand links — as many as they have, stored newline-joined in
             brand_drive so every existing reader keeps working. */}
         <div>
-          <FieldLabel>Brand links <span style={{ color: '#98989d', fontWeight: 400 }}>(optional)</span></FieldLabel>
+          <FieldLabel>Brand links <span style={{ color: '#aeaeb2', fontWeight: 400 }}>(optional)</span></FieldLabel>
           {(data.brand_drive ? data.brand_drive.split('\n') : ['']).map((link, i, all) => (
             <div key={i} className="mb-2">
               <Input
@@ -138,7 +138,7 @@ export default function StepAssets({ data, update, nav, onLogoUpload, onPhotosUp
             type="button"
             onClick={() => update('brand_drive', (data.brand_drive ? data.brand_drive + '\n' : '\n'))}
             className="text-[12.5px] font-semibold"
-            style={{ background: 'none', border: 'none', color: '#0f6e56', cursor: 'pointer', padding: 0 }}
+            style={{ background: 'none', border: 'none', color: '#1c6b52', cursor: 'pointer', padding: 0 }}
           >
             + Add another link
           </button>

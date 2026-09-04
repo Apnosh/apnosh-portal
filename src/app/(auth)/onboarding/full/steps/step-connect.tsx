@@ -364,7 +364,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
               {isConn ? (
                 <span
                   className="text-[13px] font-semibold rounded-[18px] px-3.5 whitespace-nowrap inline-flex items-center gap-1.5"
-                  style={{ height: 36, color: '#0f6e56', background: '#eaf7f3' }}
+                  style={{ height: 36, color: '#1c6b52', background: '#eaf7f3' }}
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M5 13l4 4L19 7" /></svg>
                   Connected
@@ -386,7 +386,7 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
               ) : (
                 <span
                   className="text-[13px] font-medium rounded-[18px] px-3.5 whitespace-nowrap inline-flex items-center"
-                  style={{ height: 36, color: '#98989d', background: '#f2f3f2' }}
+                  style={{ height: 36, color: '#aeaeb2', background: '#f2f3f2' }}
                 >
                   Coming soon
                 </span>
@@ -396,14 +396,14 @@ export default function StepConnect({ data, update, nav, businessId }: Props) {
         })}
       </div>
       {gbpNote && (
-        <div className="mt-4 rounded-[12px] px-3.5 py-3 text-[13px] leading-relaxed" style={{ background: '#f0faf6', border: '1px solid #d8ece4', color: '#2e9a78' }}>
+        <div className="mt-4 rounded-[12px] px-3.5 py-3 text-[13px] leading-relaxed" style={{ background: '#eaf7f3', border: '1px solid #d8ece4', color: '#2e9a78' }}>
           {gbpNote}
         </div>
       )}
 
       {/* ONE LINE, NOT A LECTURE. Shown always, so it reads as a note about how phones behave
           rather than as an error report about something the owner just did wrong. */}
-      <div className="mt-4 text-[12px] leading-relaxed" style={{ color: '#98989d' }}>
+      <div className="mt-4 text-[12px] leading-relaxed" style={{ color: '#aeaeb2' }}>
         Some phones open the app instead of signing you in. If that happens, skip it and
         connect from a computer later.
         {connectUrl && (

@@ -34,7 +34,7 @@ export default function StepRhythm({ data, update, nav }: Props) {
       <div className="flex flex-col gap-1.5 mt-5 mb-1">
         {DAYS.map((day) => (
           <div key={day} className="flex items-center gap-2">
-            <span className="text-[13px] w-[68px] shrink-0" style={{ color: '#48484a' }}>
+            <span className="text-[13px] w-[68px] shrink-0" style={{ color: '#6e6e73' }}>
               {FULL_DAY[day]}
             </span>
             <div className="flex gap-1.5 flex-1">

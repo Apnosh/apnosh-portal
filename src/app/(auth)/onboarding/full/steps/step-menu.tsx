@@ -17,7 +17,7 @@ const EMPTY: MenuDraftItem = { name: '', price: '', category: '' }
 const fieldStyle: React.CSSProperties = {
   border: '1.5px solid #e6e6ea',
   color: '#1d1d1f',
-  fontFamily: 'DM Sans, sans-serif',
+  fontFamily: 'Inter, system-ui, sans-serif',
 }
 
 function focusOn(e: React.FocusEvent<HTMLInputElement>) {
@@ -60,9 +60,9 @@ export default function StepMenu({ data, update, nav }: Props) {
       />
       <div className="flex flex-col gap-2 mt-5 mb-1">
         <div className="flex gap-2 px-1">
-          <span className="flex-1 text-[11px] font-medium" style={{ color: '#98989d' }}>Item</span>
-          <span className="w-20 text-[11px] font-medium" style={{ color: '#98989d' }}>Price</span>
-          <span className="w-28 text-[11px] font-medium" style={{ color: '#98989d' }}>Section</span>
+          <span className="flex-1 text-[11px] font-medium" style={{ color: '#aeaeb2' }}>Item</span>
+          <span className="w-20 text-[11px] font-medium" style={{ color: '#aeaeb2' }}>Price</span>
+          <span className="w-28 text-[11px] font-medium" style={{ color: '#aeaeb2' }}>Section</span>
           <span className="w-6" />
         </div>
         {rows.slice(0, MAX).map((row, idx) => {

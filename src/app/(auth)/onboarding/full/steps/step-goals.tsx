@@ -83,8 +83,8 @@ export default function StepGoals({ data, update, nav }: Props) {
           className="inline-flex items-center gap-2 text-[13px] font-semibold rounded-[17px] px-3.5"
           style={{
             height: 34,
-            background: '#f0faf6',
-            color: '#0f6e56',
+            background: '#eaf7f3',
+            color: '#1c6b52',
             animation: bump ? 'goalCounterPulse .35s ease' : undefined,
           }}
         >

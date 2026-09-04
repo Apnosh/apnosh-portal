@@ -37,8 +37,8 @@ export function CheckDot({ on, hue }: { on: boolean; hue?: string }) {
 }
 
 /* Shared visual grammar for the setup wizard (Apple-clean pass, 2026-08):
- * ink #1d1d1f, mute #6e6e73, hairline #e6e6ea, mint #4abd98 / deep #0f6e56,
- * wash #f0faf6. Boxes are 14px radius with constant 1.5px borders (no size
+ * ink #1d1d1f, mute #6e6e73, hairline #e6e6ea, mint #4abd98 / deep #1c6b52,
+ * wash #eaf7f3. Boxes are 14px radius with constant 1.5px borders (no size
  * jump on select), inputs are 52px tall with a soft mint focus ring, and the
  * title is a display-weight line with tight tracking. */
 
@@ -64,7 +64,7 @@ export function Question({ title, subtitle, icon, small, hue }: {
           {title}
         </h2>
         {subtitle && (
-          <p className="text-[0.95rem] leading-relaxed mt-1" style={{ color: '#48484a' }}>
+          <p className="text-[0.95rem] leading-relaxed mt-1" style={{ color: '#6e6e73' }}>
             {subtitle}
           </p>
         )}
@@ -96,7 +96,7 @@ export function Question({ title, subtitle, icon, small, hue }: {
         {title}
       </h2>
       {subtitle && (
-        <p className="text-[0.95rem] leading-relaxed" style={{ color: '#48484a', marginTop: 6 }}>
+        <p className="text-[0.95rem] leading-relaxed" style={{ color: '#6e6e73', marginTop: 6 }}>
           {subtitle}
         </p>
       )}
@@ -126,10 +126,10 @@ export function Chip({
       className="px-4 rounded-[22px] text-[0.95rem] select-none inline-flex items-center gap-2"
       style={{
         border: selected ? `1.5px solid ${tinted ? light : '#4abd98'}` : '1.5px solid #e6e6ea',
-        background: selected ? (tinted ? `${light}26` : '#f0faf6') : 'white',
-        color: selected ? (tinted ? deep : '#0f6e56') : '#48484a',
+        background: selected ? (tinted ? `${light}26` : '#eaf7f3') : 'white',
+        color: selected ? (tinted ? deep : '#1c6b52') : '#6e6e73',
         fontWeight: selected ? 600 : 400,
-        fontFamily: 'DM Sans, sans-serif',
+        fontFamily: 'Inter, system-ui, sans-serif',
         minHeight: 44,
         transition: 'all .15s ease',
       }}
@@ -223,7 +223,7 @@ export function OptionCard({
       `}
       style={{
         border: 'none',
-        background: selected && !hue ? '#f0faf6' : 'white',
+        background: selected && !hue ? '#eaf7f3' : 'white',
         boxShadow: selected
           ? `inset 0 0 0 2px ${ring}, 0 12px 30px ${ring}38`
           : CARD_SHADOW,
@@ -261,8 +261,8 @@ export function Input({
       style={{
         border: '1.5px solid transparent',
         color: '#1d1d1f',
-        background: '#f1f1f4',
-        fontFamily: 'DM Sans, sans-serif',
+        background: '#f5f5f7',
+        fontFamily: 'Inter, system-ui, sans-serif',
         height: 52,
       }}
       onFocus={(e) => {
@@ -271,7 +271,7 @@ export function Input({
         e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.15), 0 8px 20px rgba(0,0,0,0.05)'
       }}
       onBlur={(e) => {
-        e.currentTarget.style.background = '#f1f1f4'
+        e.currentTarget.style.background = '#f5f5f7'
         e.currentTarget.style.borderColor = 'transparent'
         e.currentTarget.style.boxShadow = 'none'
       }}
@@ -301,8 +301,8 @@ export function TextArea({
       style={{
         border: '1.5px solid transparent',
         color: '#1d1d1f',
-        background: '#f1f1f4',
-        fontFamily: 'DM Sans, sans-serif',
+        background: '#f5f5f7',
+        fontFamily: 'Inter, system-ui, sans-serif',
         minHeight: 96,
       }}
       onFocus={(e) => {
@@ -311,7 +311,7 @@ export function TextArea({
         e.currentTarget.style.boxShadow = '0 0 0 3px rgba(74,189,152,0.15), 0 8px 20px rgba(0,0,0,0.05)'
       }}
       onBlur={(e) => {
-        e.currentTarget.style.background = '#f1f1f4'
+        e.currentTarget.style.background = '#f5f5f7'
         e.currentTarget.style.borderColor = 'transparent'
         e.currentTarget.style.boxShadow = 'none'
       }}
@@ -322,7 +322,7 @@ export function TextArea({
 // Field label
 export function FieldLabel({ children }: { children: ReactNode }) {
   return (
-    <label className="block text-[0.9375rem] font-semibold mb-2" style={{ color: '#3a3a3c' }}>
+    <label className="block text-[0.9375rem] font-semibold mb-2" style={{ color: '#1d1d1f' }}>
       {children}
     </label>
   )
@@ -340,7 +340,7 @@ export function Hint({ children }: { children: ReactNode }) {
 // Badge
 export function Badge({ children }: { children: ReactNode }) {
   return (
-    <span className="absolute top-2 right-2 text-[10px] font-semibold rounded-[20px] px-2 py-0.5" style={{ background: '#f5f5f7', color: '#98989d' }}>
+    <span className="absolute top-2 right-2 text-[10px] font-semibold rounded-[20px] px-2 py-0.5" style={{ background: '#f5f5f7', color: '#aeaeb2' }}>
       {children}
     </span>
   )
