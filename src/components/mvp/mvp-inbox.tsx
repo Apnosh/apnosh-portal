@@ -15,8 +15,9 @@
 import { useEffect, useState } from 'react'
 import { CARD_SHADOW, Segmented } from './kit'
 import Link from 'next/link'
-import { Check, Star, Loader2, Search, MoreHorizontal } from 'lucide-react'
+import { Bell, CalendarDays, Check, Clapperboard, CreditCard, FileText, Flag, Hourglass, Loader2, MoreHorizontal, Palette, PartyPopper, Plug, Rocket, Search, Star, ThumbsUp, TrendingUp } from 'lucide-react'
 import { markInboxRead } from '@/app/dashboard/inbox/actions'
+import { BrandOrMark } from './mvp-insights'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
@@ -77,7 +78,6 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
   if (!data) return <Shell><Centered><Loader2 size={16} className="animate-spin" /> Loading your notifications…</Centered></Shell>
 
   const needsYou = items.length
-  const status = needsYou === 0 ? "You're all caught up 🎉" : `${needsYou} thing${needsYou === 1 ? '' : 's'} need${needsYou === 1 ? 's' : ''} you`
   const q = (queryProp ?? query).trim().toLowerCase()
   const countFor = (k: string) => k === 'all' ? items.length : items.filter((i) => CHIPS[k]?.includes(i.chip)).length
 
@@ -86,22 +86,12 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
 
   return (
     <Shell>
-      {/* header */}
-      <div style={{ padding: '18px 16px 10px', flexShrink: 0, borderBottom: `0.5px solid ${C.line}` }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
-          <div>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, lineHeight: 1.1, letterSpacing: '-.01em' }}>Notifications</div>
-            <div style={{ fontSize: 12.5, color: needsYou ? C.mute : C.greenDk, marginTop: 5, fontWeight: needsYou ? 400 : 600 }}>{status}</div>
-          </div>
-          {queryProp == null && <GlyphBtn onClick={() => setSearchOpen((s) => !s)} active={searchOpen}><Search size={18} /></GlyphBtn>}
-        </div>
-        {searchOpen && (
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notifications…" style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
+      {/* the top row is the header (owner 2026-09-04): no title, no count line — just the filter */}
+      <div style={{ padding: '4px 16px 10px', flexShrink: 0 }}>
+        {queryProp == null && searchOpen && (
+          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notifications…" style={{ width: '100%', marginBottom: 12, border: 'none', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 12, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit' }} />
         )}
-        {/* LinkedIn-style filter pills */}
-        <div style={{ marginTop: 13 }}>
-          <Segmented items={FILTERS.map((f) => [f.key, f.label] as [typeof f.key, string])} value={filter} onChange={setFilter} counts={Object.fromEntries(FILTERS.filter((f) => COUNTED.has(f.key)).map((f) => [f.key, countFor(f.key)]))} />
-        </div>
+        <Segmented items={FILTERS.map((f) => [f.key, f.label] as [typeof f.key, string])} value={filter} onChange={setFilter} counts={Object.fromEntries(FILTERS.filter((f) => COUNTED.has(f.key)).map((f) => [f.key, countFor(f.key)]))} />
       </div>
 
       <ListView filter={filter} items={items} wins={data.wins} q={q} onDismiss={onDismiss} />
@@ -141,8 +131,8 @@ function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { 
   // Unread = a soft green wash across the whole row + a green dot/timestamp.
   const frame: React.CSSProperties = {
     display: 'flex', gap: 12, alignItems: 'flex-start',
-    padding: '14px 16px', borderBottom: `0.5px solid ${C.line}`,
-    background: unread ? 'rgba(74,189,152,0.07)' : '#fff',
+    padding: '13px 14px', borderTop: `0.5px solid ${C.line}`,
+    background: unread ? 'rgba(74,189,152,0.05)' : 'transparent',
   }
   const inner = (
     <>
@@ -166,8 +156,15 @@ function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { 
     : <div className="inrise" style={frame}>{inner}</div>
 }
 
+/* the feed still sends an emoji per kind; here each one becomes a real icon in a soft tile
+   (owner 2026-09-04: "real icons, our aesthetic") */
+const EMOJI_ICON: Record<string, React.ReactNode> = {
+  '🎨': <Palette size={20} />, '📝': <FileText size={20} />, '🚀': <Rocket size={20} />, '⭐': <Star size={20} />, '🔌': <Plug size={20} />, '✅': <Check size={20} />, '🎉': <PartyPopper size={20} />,
+  '🎬': <Clapperboard size={20} />, '👍': <ThumbsUp size={20} />, '💳': <CreditCard size={20} />, '🗓️': <CalendarDays size={20} />, '📈': <TrendingUp size={20} />, '🔍': <Search size={20} />, '⏳': <Hourglass size={20} />, '🏁': <Flag size={20} />,
+}
 function IconAvatar({ emoji, danger }: { emoji: string; danger?: boolean }) {
-  return <div style={{ width: 48, height: 48, borderRadius: '50%', background: danger ? C.coralSoft : C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{emoji}</div>
+  const icon = EMOJI_ICON[emoji] ?? <Bell size={20} />
+  return <div style={{ width: 44, height: 44, borderRadius: 14, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
 }
 const clampStyle = (lines: number): React.CSSProperties => ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' })
 
@@ -254,14 +251,17 @@ function Row({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void 
 function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void }) {
   const r = item.review!
   const tone = ['#4abd98', '#a85c3c', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'][(r.author.charCodeAt(0) || 0) % 6]
-  const source = r.source === 'instagram' ? 'Instagram' : r.source === 'yelp' ? 'Yelp' : 'Google'
-  const avatar = <div style={{ width: 48, height: 48, borderRadius: '50%', background: tone, color: '#fff', fontWeight: 700, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{r.author.charAt(0).toUpperCase()}</div>
+  const avatar = (
+    <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
+      <div style={{ width: 44, height: 44, borderRadius: '50%', background: tone, color: '#fff', fontWeight: 700, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r.author.charAt(0).toUpperCase()}</div>
+      <span style={{ position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={r.source === 'instagram' ? 'instagram' : r.source === 'yelp' ? 'yelp' : 'google'} size={12} /></span>
+    </div>
+  )
   return (
     <NotifRow href={`/dashboard/reviews/${r.reviewId}`} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id) }} avatar={avatar}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', fontSize: 14, lineHeight: 1.3, color: C.ink }}>
         <b style={{ fontWeight: 700 }}>{r.author}</b>
         <Stars n={r.rating} />
-        <span style={{ color: C.faint, fontSize: 12 }}>{source}</span>
       </div>
       {r.text && <div style={{ marginTop: 4, fontSize: 13.5, color: C.mute, lineHeight: 1.45, ...clampStyle(2) }}>&ldquo;{r.text}&rdquo;</div>}
     </NotifRow>
