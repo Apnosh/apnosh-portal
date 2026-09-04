@@ -1,4 +1,6 @@
 'use client'
+import { useState } from 'react'
+import { TopSearch } from '@/components/mvp/top-row'
 
 /**
  * /dashboard/more — the owner More hub, rendered in the apnosh-mvp shell.
@@ -13,13 +15,14 @@ import MvpShell from '@/components/mvp/mvp-shell'
 import MvpMore from '@/components/mvp/mvp-more'
 
 export default function MorePage() {
+  const [query, setQuery] = useState('')
   const { client, loading } = useClient()
   return (
-    <MvpShell active="more">
+    <MvpShell active="more" middle={<TopSearch value={query} onChange={setQuery} placeholder="Search settings and tools" />}>
       {loading ? (
         <Centered>Loading…</Centered>
       ) : client ? (
-        <MvpMore name={client.name || 'Your restaurant'} location={client.location} tier={client.tier} />
+        <MvpMore name={client.name || 'Your restaurant'} location={client.location} tier={client.tier} query={query} />
       ) : (
         <Centered>
           <div>

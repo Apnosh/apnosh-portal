@@ -213,7 +213,7 @@ export default function MvpOrders() {
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '2px 2px 14px' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, lineHeight: 1.1, letterSpacing: '-.01em', margin: 0 }}>Orders</h1>
+          <h1 style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, lineHeight: 1.1, letterSpacing: '-.01em', margin: 0, display: 'none' }}>Orders</h1>
         </div>
       </div>
 

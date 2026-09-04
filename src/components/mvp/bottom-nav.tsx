@@ -2,11 +2,12 @@
 
 /**
  * Shared bottom nav for the apnosh-mvp owner experience:
- * Home / Campaigns / + Create / Orders / More.
+ * Home / Campaigns / + Create / Inbox / More. (Orders lives inside Campaigns since 2026-09-04;
+ * Inbox is the chat with your team, notifications are the bell in the top row.)
  */
 
 import Link from 'next/link'
-import { Home as HomeIcon, CalendarDays, Plus, ShoppingBag, Menu } from 'lucide-react'
+import { Home as HomeIcon, CalendarDays, Plus, MessageCircle, Menu } from 'lucide-react'
 
 const C = { green: '#4abd98', greenDk: '#2e9a78', line: '#e6e6ea', navOff: '#aeaeb2' }
 
@@ -23,7 +24,7 @@ export default function BottomNav({ active }: { active: NavKey }) {
         <span style={{ width: 26, height: 26, borderRadius: 99, background: C.greenDk, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(46,154,120,.30)' }}><Plus size={16} strokeWidth={2.6} /></span>
         <span style={{ fontSize: 10.5, fontWeight: 600, color: C.navOff }}>Create</span>
       </Link>
-      <Item href="/dashboard/orders" icon={<ShoppingBag size={21} />} label="Orders" on={active === 'orders'} />
+      <Item href="/dashboard/messages" icon={<MessageCircle size={21} />} label="Inbox" on={active === 'messages' || active === 'inbox'} />
       <Item href="/dashboard/more" icon={<Menu size={21} />} label="More" on={active === 'more'} />
     </nav>
   )

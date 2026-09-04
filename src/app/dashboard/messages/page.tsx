@@ -1,4 +1,6 @@
 'use client'
+import { useState } from 'react'
+import { TopSearch } from '@/components/mvp/top-row'
 
 /**
  * Owner Messages — full-screen mobile app surface (apnosh-mvp shell). Reached
@@ -10,9 +12,10 @@ import MvpShell from '@/components/mvp/mvp-shell'
 import MvpMessages from '@/components/mvp/mvp-messages'
 
 export default function MessagesPage() {
+  const [query, setQuery] = useState('')
   return (
-    <MvpShell active="messages">
-      <MvpMessages />
+    <MvpShell active="messages" middle={<TopSearch value={query} onChange={setQuery} placeholder="Search inbox" />}>
+      <MvpMessages query={query} />
     </MvpShell>
   )
 }

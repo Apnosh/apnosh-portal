@@ -1,4 +1,5 @@
 'use client'
+import { MvpDetailHeader } from '@/components/mvp/mvp-detail'
 
 /**
  * /dashboard/orders — the owner "Orders" tab: the MONEY story of every campaign
@@ -13,7 +14,7 @@ import MvpOrders from '@/components/mvp/mvp-orders'
 
 export default function OrdersPage() {
   return (
-    <MvpShell active="orders">
+    <MvpShell active="campaigns" header={<MvpDetailHeader title="Orders" subtitle="What you bought and where it stands" backHref="/dashboard/campaigns" backLabel="Campaigns" />}>
       <MvpOrders />
     </MvpShell>
   )

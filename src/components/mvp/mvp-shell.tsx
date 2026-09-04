@@ -8,13 +8,13 @@
  */
 
 import BottomNav, { type NavKey } from './bottom-nav'
-import AppHeader from './app-header'
+import TopRow from './top-row'
 
 const SHELL_CSS = `
 .mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center;overflow:hidden}
 .mvp-frame{width:100%;max-width:none;background:#fff;display:flex;flex-direction:column;min-height:0;position:relative}
 .mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-.mvp-frame-scroll.mvp-under-top{padding-top:56px}
+.mvp-frame-scroll.mvp-under-top{padding-top:58px}
 .mvp-frame-scroll.mvp-short-tail{padding-bottom:calc(42px + env(safe-area-inset-bottom))}
 .mvp-frame-top{position:absolute;top:0;left:0;right:0;z-index:6}
 @media (min-width:560px){.mvp-frame{max-width:480px;box-shadow:0 0 40px rgba(0,0,0,0.06)}.mvp-frame.mvp-frame-wide{max-width:920px}}
@@ -29,13 +29,13 @@ const SHELL_CSS = `
 
 // `header` replaces the default AppHeader — detail pages reached from a tab
 // pass an MvpDetailHeader (back + title) instead of the full app header.
-export default function MvpShell({ active, unread, header, children, wide, noHeader }: { active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean }) {
+export default function MvpShell({ active, unread, header, children, wide, noHeader, middle, title }: { active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean }) {
   return (
     <div className="mvp-shell">
       <style>{SHELL_CSS}</style>
       <div className={wide ? 'mvp-frame mvp-frame-wide' : 'mvp-frame'}>
         {/* the standard app bar floats over the scroll (glass); a page's own header stays in flow */}
-        {noHeader ? null : header ? header : <div className="mvp-frame-top"><AppHeader count={unread} /></div>}
+        {noHeader ? null : header ? header : <div className="mvp-frame-top"><TopRow middle={middle} title={title} count={unread} /></div>}
         <div className={noHeader ? 'mvp-frame-scroll mvp-short-tail' : header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}>{children}</div>
         <BottomNav active={active} />
       </div>

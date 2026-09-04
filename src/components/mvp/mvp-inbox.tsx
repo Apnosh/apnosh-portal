@@ -47,7 +47,7 @@ const CHIPS: Record<string, Chip[]> = {
 // Old ?tab= deep-link values still resolve (home + suggestion cards use them).
 const TAB_ALIAS: Record<string, string> = { approvals: 'needsyou', fix: 'needsyou', reviews: 'reviews', todos: 'activity', all: 'all' }
 
-export default function MvpInbox({ clientId }: { clientId: string }) {
+export default function MvpInbox({ clientId, query: queryProp }: { clientId: string; /** the top row's search (2026-09-04) */ query?: string }) {
   const [data, setData] = useState<InboxData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('all')
@@ -78,7 +78,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
 
   const needsYou = items.length
   const status = needsYou === 0 ? "You're all caught up 🎉" : `${needsYou} thing${needsYou === 1 ? '' : 's'} need${needsYou === 1 ? 's' : ''} you`
-  const q = query.trim().toLowerCase()
+  const q = (queryProp ?? query).trim().toLowerCase()
   const countFor = (k: string) => k === 'all' ? items.length : items.filter((i) => CHIPS[k]?.includes(i.chip)).length
 
   // Dismiss an item via the "⋯" (mark read + drop from the feed).
@@ -93,7 +93,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, lineHeight: 1.1, letterSpacing: '-.01em' }}>Notifications</div>
             <div style={{ fontSize: 12.5, color: needsYou ? C.mute : C.greenDk, marginTop: 5, fontWeight: needsYou ? 400 : 600 }}>{status}</div>
           </div>
-          <GlyphBtn onClick={() => setSearchOpen((s) => !s)} active={searchOpen}><Search size={18} /></GlyphBtn>
+          {queryProp == null && <GlyphBtn onClick={() => setSearchOpen((s) => !s)} active={searchOpen}><Search size={18} /></GlyphBtn>}
         </div>
         {searchOpen && (
           <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notifications…" style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />

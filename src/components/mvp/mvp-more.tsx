@@ -69,7 +69,9 @@ const GROUPS: { title: string; rows: Row[] }[] = [
   },
 ]
 
-export default function MvpMore({ name, location, tier }: { name: string; location?: string | null; tier?: string | null }) {
+export default function MvpMore({ name, location, tier, query = '' }: { name: string; location?: string | null; tier?: string | null; /** the top row's search — filters every row by name or description */ query?: string }) {
+  const q = query.trim().toLowerCase()
+  const groups = q ? GROUPS.map((g) => ({ ...g, rows: g.rows.filter((r) => `${r.label} ${r.sub}`.toLowerCase().includes(q)) })).filter((g) => g.rows.length > 0) : GROUPS
   const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || 'A'
   const planLabel = tier && tier !== 'Internal' ? `${tier} plan` : null
   const subLine = [planLabel, location].filter(Boolean).join(' · ') || 'Manage your business'
@@ -87,7 +89,8 @@ export default function MvpMore({ name, location, tier }: { name: string; locati
         <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0 }} />
       </Link>
 
-      {GROUPS.map(group => (
+      {q && groups.length === 0 && <div style={{ padding: '30px 18px', textAlign: 'center', color: '#6e6e73', fontSize: 13.5 }}>Nothing matches &ldquo;{query.trim()}&rdquo;.</div>}
+      {groups.map(group => (
         <div key={group.title} style={{ marginBottom: 22 }}>
           <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '0 6px 8px' }}>{group.title}</div>
           <div style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>

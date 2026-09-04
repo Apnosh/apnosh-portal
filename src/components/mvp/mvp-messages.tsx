@@ -70,7 +70,7 @@ function timeAgo(iso?: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export default function MvpMessages() {
+export default function MvpMessages({ query: queryProp }: { query?: string } = {}) {
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [businessId, setBusinessId] = useState<string | null>(null)
@@ -162,7 +162,7 @@ export default function MvpMessages() {
     return <Conversation key={active.threadId ?? active.subject} active={active} userId={userId} onBack={onBack} onThreadCreated={onThreadCreated} />
   }
 
-  const q = query.trim().toLowerCase()
+  const q = (queryProp ?? query).trim().toLowerCase()
   const convos = threads.filter((t) => {
     if (!q) return true
     const name = contactForSubject(t.subject)?.name ?? t.subject
@@ -178,14 +178,14 @@ export default function MvpMessages() {
       <div style={{ padding: '18px 18px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
           <div>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 25, lineHeight: 1 }}>Messages</div>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 25, lineHeight: 1 }}>Inbox</div>
             <div style={{ fontSize: 12.5, color: totalUnread ? C.greenDk : C.mute, marginTop: 5, fontWeight: totalUnread ? 600 : 400 }}>
               {totalUnread ? `${totalUnread} new repl${totalUnread === 1 ? 'y' : 'ies'}` : 'Reach your Apnosh team'}
             </div>
           </div>
-          <button onClick={() => setSearchOpen((s) => !s)} style={{ width: 38, height: 38, borderRadius: '50%', border: `1px solid ${searchOpen ? C.green : C.line}`, background: searchOpen ? C.greenSoft : '#fff', color: searchOpen ? C.greenDk : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+          {queryProp == null && <button onClick={() => setSearchOpen((s) => !s)} style={{ width: 38, height: 38, borderRadius: '50%', border: `1px solid ${searchOpen ? C.green : C.line}`, background: searchOpen ? C.greenSoft : '#fff', color: searchOpen ? C.greenDk : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <Search size={18} />
-          </button>
+          </button>}
         </div>
         {searchOpen && (
           <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages…" style={{ width: '100%', marginTop: 12, borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />

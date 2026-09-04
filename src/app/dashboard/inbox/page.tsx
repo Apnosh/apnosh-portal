@@ -1,4 +1,6 @@
 'use client'
+import { useState } from 'react'
+import { TopSearch } from '@/components/mvp/top-row'
 
 /**
  * /dashboard/inbox — the owner Inbox, redesigned to the apnosh-mvp design.
@@ -13,13 +15,14 @@ import MvpShell from '@/components/mvp/mvp-shell'
 import MvpInbox from '@/components/mvp/mvp-inbox'
 
 export default function InboxPage() {
+  const [query, setQuery] = useState('')
   const { client, loading } = useClient()
   return (
-    <MvpShell active="inbox">
+    <MvpShell active="inbox" middle={<TopSearch value={query} onChange={setQuery} placeholder="Search notifications" />}>
       {loading ? (
         <Centered>Loading…</Centered>
       ) : client?.id ? (
-        <MvpInbox clientId={client.id} />
+        <MvpInbox clientId={client.id} query={query} />
       ) : (
         <Centered>Sign in as a client to see your inbox.</Centered>
       )}

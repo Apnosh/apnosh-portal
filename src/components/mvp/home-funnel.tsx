@@ -720,9 +720,11 @@ export default function HomeFunnel({
       ctx.fillText(fit(ctx, s.label, roomOut), anchorX, oy - 28)
 
       const disp = numDispRef.current[i] != null ? numDispRef.current[i] : (s.count ?? 0)
-      const num = s.count == null ? '—' : (s.zone === 'estimate' ? '~' : '') + Math.round(disp).toLocaleString()
+      const compact = (v: number) => v >= 10_000_000 ? `${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : v.toLocaleString()
+      const num = s.count == null ? '—' : (s.zone === 'estimate' ? '~' : '') + compact(Math.round(disp))
       // the number wears its direction: red when down, green otherwise (owner 2026-09-04: "black should still be green").
-      ctx.fillStyle = s.count == null ? C.faint : band ? `rgb(${bandCol(band).join(',')})` : s.zone === 'estimate' ? C.amberDk : C.ink
+      // red when down; otherwise plain ink — big green digits were hard to read (owner 2026-09-04)
+      ctx.fillStyle = s.count == null ? C.faint : band === 'veryLow' ? `rgb(${bandCol(band).join(',')})` : s.zone === 'estimate' ? C.amberDk : C.ink
       // as big as the room allows, from a bold 54px down to a floor of 24px; if a very long number
       // still won't fit at the floor (tiny embed × 8 digits), maxWidth compresses it to the room as a
       // last resort so it never spills into the orb or across the centre path.
@@ -743,16 +745,23 @@ export default function HomeFunnel({
           const r0 = Math.round(dy)
           // how many more or fewer than the same window last year ("+1,920" / "−140");
           // the % tick remains the fallback when only a rate is known
+          // a viral month reads as a multiplier, not a 5-digit percent ("▲ 14×", never "▲ 1,369%")
+          const pctStr = Math.abs(r0) > 999 ? `${Math.round(Math.abs(r0) / 100 + 1)}×` : `${Math.abs(r0)}%`
           const tickStr = s.deltaAbs != null
             ? (r0 === 0 ? '± 0' : (r0 > 0 ? '+' : '−') + Math.abs(r0).toLocaleString())
-            : (r0 === 0 ? '– even' : (r0 > 0 ? '▲' : '▼') + Math.abs(r0) + '%')
+            : (r0 === 0 ? '– even' : (r0 > 0 ? '▲' : '▼') + pctStr)
           ctx.font = '700 13px Inter, sans-serif'
           ctx.textAlign = numLeft ? 'left' : 'right'
-          tickW = ctx.measureText(tickStr).width + 8
-          const tx = numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8
+          const tw = ctx.measureText(tickStr).width
+          // when the number and its tick would not both fit beside the orb, the tick drops
+          // UNDER the number (aligned to its outer edge) instead of colliding with the circle
+          const fits = drawnNumW + 8 + tw <= roomOut
+          tickW = fits ? tw + 8 : 0
+          const tx = fits ? (numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8) : anchorX
+          const ty = fits ? oy + 5 : numBase + 17
           ctx.globalAlpha = tickIn
           ctx.fillStyle = r0 > 0 ? C.greenDk : r0 < 0 ? C.coral : C.mute
-          ctx.fillText(tickStr, tx, oy + 5)
+          ctx.fillText(tickStr, tx, ty)
           ctx.globalAlpha = 1
         }
       }
@@ -1117,7 +1126,7 @@ export default function HomeFunnel({
           flow streams in behind the text; the rings sit headerH below, clear of it. */}
       <div ref={headerRef} style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 3 }}>
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: bar ? '10px 12px 4px' : '14px 16px 6px' }}>
+      <div style={bar ? { display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) 40px', alignItems: 'center', gap: 10, padding: '10px 12px 4px' } : { display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px 6px' }}>
         {bar && (
           <Link href="/dashboard/more" aria-label="Your business" style={{ flexShrink: 0, width: 40, height: 40, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: theme === 'dark' ? '0 0 0 1px rgba(255,255,255,0.08)' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(46,154,120,.18)', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', position: 'relative', overflow: 'hidden', fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: theme === 'dark' ? '#eef3f0' : C.greenDk, background: theme === 'dark' ? 'rgba(13,21,18,0.85)' : 'rgba(255,255,255,0.82)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)' }}>
@@ -1139,9 +1148,6 @@ export default function HomeFunnel({
             <Link href="/dashboard/inbox" aria-label={bar.unread ? `Alerts (${bar.unread})` : 'Alerts'} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
               <Bell size={19} />
               {(bar.unread ?? 0) > 0 && <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{(bar.unread ?? 0) > 9 ? '9+' : bar.unread}</span>}
-            </Link>
-            <Link href="/dashboard/messages" aria-label="Messages" style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
-              <MessageCircle size={19} />
             </Link>
           </div>
         )}
@@ -1252,82 +1258,53 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
  * instead of a blank page, so the wait reads as "working on it", not broken.
  * Also used by /dashboard while the client context itself resolves.
  */
-export function HomeFunnelSkeleton({ height = 620, message = 'Importing your numbers' }: { height?: number; message?: string }) {
+export function HomeFunnelSkeleton({ height = 620, message = 'Getting your numbers' }: { height?: number; message?: string }) {
   const { C } = useMvpTheme()
-  /* Apple-clean loading (owner call 2026-08-27): one breathing hero orb with a
-   * slow halo sweep, light cascading down the funnel spine, and a status line
-   * that gently cycles. Pure CSS, honors prefers-reduced-motion, both themes
-   * (green is #4abd98 in each, so the fixed-alpha glows hold). */
-  const spine = [56, 44, 34, 26]
-  const cycle = ['Reading your Google profile', 'Shaping your funnel', 'Almost there']
+  /* 2026-09-04 (owner: "simple, but the design we are going for"): a quiet GHOST of the
+   * funnel itself — five hairline rings on the same zig-zag the real page draws, joined by
+   * the dashed path, with one soft light sweeping down through them — and one plain line
+   * under it. No hero orb, no cycling copy. Pure CSS, honours prefers-reduced-motion. */
+  const W = 390
+  const rings = [
+    { cx: 0.74, cy: 0.16, r: 62 }, { cx: 0.26, cy: 0.34, r: 52 }, { cx: 0.68, cy: 0.52, r: 46 }, { cx: 0.31, cy: 0.70, r: 44 }, { cx: 0.68, cy: 0.88, r: 40 },
+  ]
+  const H = Math.max(420, height - 40)
+  const pts = rings.map((k) => ({ x: k.cx * W, y: k.cy * H, r: k.r }))
+  const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
   return (
-    <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', boxSizing: 'border-box', overflow: 'hidden' }}>
+    <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px 0 0', boxSizing: 'border-box', overflow: 'hidden' }} aria-busy aria-label={message}>
       <style>{`
-@keyframes hfSkIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
-@keyframes hfSkBreathe{0%,100%{transform:scale(1);box-shadow:0 0 30px rgba(74,189,152,.30),0 0 80px rgba(74,189,152,.14),inset 0 1px 6px rgba(255,255,255,.45)}50%{transform:scale(1.05);box-shadow:0 0 44px rgba(74,189,152,.44),0 0 110px rgba(74,189,152,.20),inset 0 1px 6px rgba(255,255,255,.45)}}
-@keyframes hfSkRing{to{transform:rotate(360deg)}}
-@keyframes hfSkFlow{0%,100%{opacity:.35}50%{opacity:1}}
-@keyframes hfSkCycle{0%{opacity:0;transform:translateY(6px)}5%,28%{opacity:1;transform:none}33%,100%{opacity:0;transform:translateY(-6px)}}
-.hf-sk-in{animation:hfSkIn .6s cubic-bezier(.32,.72,.35,1) both}
-.hf-sk-hero{animation:hfSkBreathe 3.2s ease-in-out infinite}
-.hf-sk-ring{animation:hfSkRing 2.8s linear infinite}
-.hf-sk-flow{animation:hfSkFlow 2.2s ease-in-out infinite}
-.hf-sk-line{animation:hfSkCycle 9s ease-in-out infinite both;position:absolute;left:0;right:0;top:0;text-align:center}
-@media (prefers-reduced-motion: reduce){
-  .hf-sk-in,.hf-sk-hero,.hf-sk-ring,.hf-sk-flow{animation:none}
-  .hf-sk-flow{opacity:.6}
-  .hf-sk-ring{display:none}
-  .hf-sk-line{animation:none;opacity:0}
-  .hf-sk-line:first-child{opacity:1}
-}`}</style>
-      <div className="hf-sk-in" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        {/* the hero orb: the funnel's first light, breathing, with a halo sweep */}
-        <div aria-hidden style={{ position: 'relative', width: 116, height: 116, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
-          <div className="hf-sk-ring" style={{
-            position: 'absolute', inset: 0, borderRadius: '50%',
-            background: 'conic-gradient(from 0deg, transparent 0 72%, rgba(74,189,152,.75) 92%, transparent 100%)',
-            WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px))',
-            mask: 'radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 1.5px))',
-          }} />
-          <div className="hf-sk-hero" style={{
-            width: 88, height: 88, borderRadius: '50%',
-            border: `1.5px solid ${C.greenLine}`,
-            background: 'radial-gradient(circle at 32% 26%, rgba(255,255,255,.6), rgba(74,189,152,.20) 58%, rgba(74,189,152,.10))',
-          }} />
-        </div>
-        {/* light cascades down the spine, one orb at a time */}
-        <div aria-hidden style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          {spine.map((d, i) => (
-            <React.Fragment key={i}>
-              <div style={{ width: 1.5, height: 13, background: `linear-gradient(${C.greenLine}, transparent)` }} />
-              <div className="hf-sk-flow" style={{
-                width: d, height: d, borderRadius: '50%',
-                background: `radial-gradient(circle at 34% 28%, rgba(255,255,255,.5), ${C.greenSoft} 62%)`,
-                border: `1.5px solid ${C.greenLine}`,
-                boxShadow: '0 0 18px rgba(74,189,152,.16)',
-                animationDelay: `${0.35 + i * 0.3}s`,
-              }} />
-            </React.Fragment>
+@keyframes hfGhostIn{from{opacity:0}to{opacity:1}}
+@keyframes hfGhostSweep{0%{transform:translateY(-30%)}100%{transform:translateY(130%)}}
+@keyframes hfGhostBreathe{0%,100%{opacity:.55}50%{opacity:1}}
+.hf-ghost{animation:hfGhostIn .5s ease-out both}
+.hf-ghost-sweep{animation:hfGhostSweep 2.6s cubic-bezier(.45,.05,.55,.95) infinite}
+.hf-ghost-ring{animation:hfGhostBreathe 2.6s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.hf-ghost-sweep{display:none}.hf-ghost-ring{animation:none;opacity:.8}}`}</style>
+      <div className="hf-ghost" style={{ position: 'relative', width: '100%', maxWidth: W, flex: 1, minHeight: 0 }}>
+        <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style={{ display: 'block' }}>
+          <defs>
+            <linearGradient id="hfGhostLight" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={C.green} stopOpacity="0" />
+              <stop offset="0.5" stopColor={C.green} stopOpacity="0.16" />
+              <stop offset="1" stopColor={C.green} stopOpacity="0" />
+            </linearGradient>
+            <clipPath id="hfGhostClip">{pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={p.r} />)}</clipPath>
+          </defs>
+          <path d={path} fill="none" stroke={C.green} strokeOpacity="0.28" strokeWidth="1.6" strokeDasharray="3 5" />
+          {pts.map((p, i) => (
+            <circle key={i} className="hf-ghost-ring" cx={p.x} cy={p.y} r={p.r} fill="none" stroke={C.green} strokeOpacity="0.55" strokeWidth="1.4" style={{ animationDelay: `${i * 0.25}s` }} />
           ))}
-        </div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: C.ink, marginTop: 26 }}>
-          {message}
-        </div>
-        <div style={{ position: 'relative', height: 20, width: 280, marginTop: 6, fontSize: 13, color: C.mute }}>
-          {cycle.map((line, i) => (
-            <span key={i} className="hf-sk-line" style={{ animationDelay: `${i * 3}s` }}>{line}</span>
-          ))}
-        </div>
+          <g clipPath="url(#hfGhostClip)">
+            <rect className="hf-ghost-sweep" x="0" y="0" width={W} height={H * 0.45} fill="url(#hfGhostLight)" />
+          </g>
+        </svg>
       </div>
+      <div style={{ fontSize: 13, color: C.faint, padding: '6px 0 14px', letterSpacing: '.01em' }}>{message}</div>
     </div>
   )
 }
 
-/**
- * HomeFunnelEmpty — the dashboard with nothing in it yet. The funnel's shape
- * stays on screen (still, dimmed) so the page reads as a dashboard, and the
- * one thing that fills it sits where the numbers will: connect an account.
- */
 export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
   const { C } = useMvpTheme()
   const spine = [56, 44, 34, 26]

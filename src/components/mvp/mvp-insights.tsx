@@ -295,7 +295,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 
 
   return (
-    <MvpShell active="home">
+    <MvpShell active="home" title="Insights">
       <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
 .mvp-swipe::-webkit-scrollbar{display:none}
 .mvp-spin{animation:mvpspin .8s linear infinite}
@@ -304,7 +304,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 
         <PullIndicator pull={pull} phase={phase} />
         {loading ? (
-          <Centered>Loading your numbers&hellip;</Centered>
+          <InsightsGhost />
         ) : error ? (
           <Centered>Couldn&apos;t load: {error}</Centered>
         ) : !data || data.metrics.length === 0 ? (
@@ -682,16 +682,54 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
   const isOff = (x: StageSourceView) => x.status === 'AVAILABLE_NOT_CONNECTED' || x.status === 'COMING_SOON'
   const live = rows.filter(({ srcs }) => !srcs.every(isOff))
   const off = rows.filter(({ srcs }) => srcs.every(isOff))
-  const totalOf = (srcs: StageSourceView[]) => srcs.reduce((t, x) => t + (sourceValue(x) ?? 0), 0)
-  const top = Math.max(0, ...live.map(({ srcs }) => totalOf(srcs)))
+  /* EVERY source on its own row (owner 2026-09-04: a folded "Social reach" row hid which
+     network did what) — biggest first, unreported last; the group's name only when the
+     source's own label would not say where it is from */
+  const items = live.flatMap(({ g, srcs }) => srcs.filter((x) => !isOff(x)).map((x) => ({ g, x, v: sourceValue(x) })))
+    .sort((p, q) => (q.v ?? -1) - (p.v ?? -1))
+  const top = Math.max(0, ...items.map((i) => i.v ?? 0))
   const offLabel = off.map(({ g }, k) => (k === 0 ? g.label : g.label.charAt(0).toLowerCase() + g.label.slice(1))).join(', ')
   return (
     <Section title="Breakdown by source" sub={sub}>
+      <div style={{ fontSize: 12, color: C.faint, margin: '-8px 0 6px', lineHeight: 1.4 }}>Each bar is that source next to your biggest one.</div>
       <div>
-        {live.map(({ g, srcs }, k) => <SourceGroupRow key={g.key} g={g} srcs={srcs} first={k === 0} top={top} accent={A} />)}
-        {off.length > 0 && <ConnectRow label={offLabel} sources={off.flatMap(({ srcs }) => srcs)} first={live.length === 0} />}
+        {items.map((it, k) => <SourceItemRow key={it.x.id} s={it.x} groupLabel={it.g.label} first={k === 0} top={top} accent={A} />)}
+        {off.length > 0 && <ConnectRow label={offLabel} sources={off.flatMap(({ srcs }) => srcs)} first={items.length === 0} />}
       </div>
     </Section>
+  )
+}
+
+/** One SOURCE as a row: its network's mark, its own label, its number, and a bar sized
+ *  against the stage's biggest source. */
+function SourceItemRow({ s, groupLabel, first, top, accent }: { s: StageSourceView; groupLabel: string; first: boolean; top: number; accent: Accent }) {
+  const v = sourceValue(s)
+  const err = s.status === 'ERROR'
+  const manual = s.status === 'MANUAL_ENTRY'
+  const asOf = friendlyStamp(s.asOf)
+  const provider = String(s.provider ?? '')
+  const label = s.shortLabel || s.displayName
+  const subText = err ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : s.context || (asOf ? `as of ${asOf}` : (label.toLowerCase().includes(groupLabel.toLowerCase()) ? '' : groupLabel))
+  return (
+    <div style={{ padding: '10px 0 11px', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <BrandOrMark provider={provider} size={20} />
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+          {subText && <div style={{ fontSize: 12, color: err ? C.coral : C.mute, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subText}</div>}
+        </div>
+        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: v != null ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+          {v != null ? v.toLocaleString() : DASH}
+        </div>
+      </div>
+      {v != null && top > 0 && (
+        <div style={{ height: 5, borderRadius: 99, background: C.bg, marginTop: 8, marginLeft: 48, overflow: 'hidden' }}>
+          <div style={{ width: `${Math.max(1.5, (v / top) * 100)}%`, height: '100%', borderRadius: 99, background: accent.main }} />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -706,55 +744,6 @@ function partName(x: StageSourceView): string {
   const t = (x.shortLabel || x.displayName).replace(/\b(Google|Instagram|Facebook|TikTok|YouTube|Yelp|LinkedIn)\b/g, '').replace(/[()]/g, '').replace(/\s+(views?|clicks?)$/i, '').replace(/\s+/g, ' ').trim()
   return t || (x.shortLabel || x.displayName)
 }
-
-/** One source GROUP as a row (2026-09-04 redesign — the grey tiles are gone): the network's
- *  real mark in a white disc, the group's name with its split underneath ("Search 4,956 ·
- *  Maps 11,241"), the total on the right, and a slim bar in the stage's hue sized against the
- *  biggest group — two tones when the group has parts. */
-function SourceGroupRow({ g, srcs, first, top, accent }: { g: StageGroup; srcs: StageSourceView[]; first: boolean; top: number; accent: Accent }) {
-  const parts = srcs.map((x) => ({ x, v: sourceValue(x) }))
-  const total = parts.reduce((t, p) => t + (p.v ?? 0), 0)
-  const hasAny = parts.some((p) => p.v != null)
-  const multi = parts.length > 1
-  const err = parts.find((p) => p.x.status === 'ERROR')
-  const manual = parts.find((p) => p.x.status === 'MANUAL_ENTRY')
-  const asOf = friendlyStamp(parts.find((p) => p.x.asOf)?.x.asOf)
-  const provider = String(srcs[0]?.provider ?? '')
-  // parts from DIFFERENT networks are named by network ("Instagram 18,085 · TikTok 2,731"),
-  // parts of one network by what they are ("Search 4,956 · Maps 11,241")
-  const mixed = new Set(srcs.map((x) => String(x.provider))).size > 1
-  const subText = err
-    ? 'Reconnect'
-    : multi
-    ? parts.map((p) => `${mixed ? (PROVIDER_NAMES[String(p.x.provider)] ?? partName(p.x)) : partName(p.x)} ${p.v != null ? p.v.toLocaleString() : DASH}`).join(' · ')
-    : manual
-    ? `entered by ${manual.x.manualBy ?? 'hand'}`
-    : parts[0]?.x.context || (asOf ? `as of ${asOf}` : '')
-  return (
-    <div style={{ padding: '11px 0 12px', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <BrandOrMark provider={provider} size={20} />
-        </span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.label}</div>
-          {subText && <div style={{ fontSize: 12, color: err ? C.coral : C.mute, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subText}</div>}
-        </div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: hasAny ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-          {hasAny ? total.toLocaleString() : DASH}
-        </div>
-      </div>
-      {hasAny && top > 0 && (
-        <div style={{ height: 5, borderRadius: 99, background: C.bg, marginTop: 9, marginLeft: 48, overflow: 'hidden', display: 'flex' }}>
-          {(multi ? parts.filter((p) => (p.v ?? 0) > 0) : [{ x: parts[0].x, v: total }]).map((p, i) => (
-            <div key={p.x.id} style={{ width: `${Math.max(1.5, ((p.v ?? 0) / top) * 100)}%`, height: '100%', background: i === 0 ? accent.main : `${accent.main}80` }} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
 
 /* ── Real brand marks, inline (no icon package ships them). Each draws inside a
    `size` box; the network's own colours, never ours. Unknown → a quiet globe. ── */
@@ -2328,6 +2317,27 @@ function Stars({ n }: { n: number }) {
     <span style={{ display: 'inline-flex', gap: 1 }}>
       {[1, 2, 3, 4, 5].map((i) => <Star key={i} size={11} color={C.amber} fill={i <= Math.round(n) ? C.amber : 'transparent'} />)}
     </span>
+  )
+}
+
+/** the hero card's shape while the numbers load — a quiet shimmer, no copy to read */
+function InsightsGhost() {
+  const bone = (w: number | string, h: number, r = 8): React.CSSProperties => ({ width: w, height: h, borderRadius: r, background: 'linear-gradient(90deg, #f0f0f3 0%, #f7f7f9 45%, #f0f0f3 90%)', backgroundSize: '200% 100%', animation: 'mvpGhost 1.6s ease-in-out infinite' })
+  return (
+    <div style={{ margin: '12px 18px 0', background: '#fff', borderRadius: 18, padding: '14px 18px 18px', boxShadow: CARD_SHADOW }} aria-busy>
+      <style>{`@keyframes mvpGhost{0%{background-position:100% 0}100%{background-position:-100% 0}}@media (prefers-reduced-motion:reduce){[aria-busy] *{animation:none!important}}`}</style>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={bone(150, 26, 8)} />
+        <div style={{ display: 'flex', gap: 8 }}><div style={bone(36, 36, 99)} /><div style={bone(36, 36, 99)} /></div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 16 }}><div style={bone(120, 40, 10)} /><div style={bone(110, 26, 99)} /></div>
+      <div style={{ ...bone(180, 12, 6), marginTop: 10 }} />
+      <div style={{ ...bone('100%', 40, 999), marginTop: 22 }} />
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 84, marginTop: 16 }}>
+        {Array.from({ length: 30 }, (_, i) => <div key={i} style={{ ...bone('100%', 14 + ((i * 37) % 60), 3), flex: 1 }} />)}
+      </div>
+      <div style={{ ...bone(190, 12, 6), marginTop: 14 }} />
+    </div>
   )
 }
 

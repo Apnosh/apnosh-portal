@@ -15,8 +15,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useClient } from '@/lib/client-context'
 import {
-  ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Loader2, Minus, Plus, TrendingDown, TrendingUp,
-} from 'lucide-react'
+  ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Loader2, Minus, Plus, TrendingDown, TrendingUp, ShoppingBag } from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { upcomingOccasions } from '@/lib/design/occasions'
 import { RATE_CARD } from '@/lib/design/rate-card'
@@ -38,13 +37,14 @@ const ANIM = `
 
 type Tab = 'all' | 'live' | 'production' | 'done'
 
-export default function MvpCampaigns() {
+export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'calendar' } = {}) {
   const { client, loading: clientLoading } = useClient()
   const [saved, setSaved] = useState<SavedCampaign[] | null>(null)
   const [progress, setProgress] = useState<Record<string, CampaignProgress>>({})
   const [outcomes, setOutcomes] = useState<Record<string, CampaignOutcome>>({})
   const [error, setError] = useState<string | null>(null)
-  const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [viewState, setView] = useState<'list' | 'calendar'>('list')
+  const view = viewProp ?? viewState // the top row owns List/Calendar now (2026-09-04); the inline control is the fallback
   const [tab, setTab] = useState<Tab>('all')
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function MvpCampaigns() {
       </div>
 
       <div style={{ padding: '16px 18px 0' }}>
-        {!empty && (
+        {!empty && viewProp == null && (
           <div style={{ display: 'inline-flex', borderRadius: 999, padding: 3, marginBottom: 18, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
             {([['list', 'List'], ['calendar', 'Calendar']] as const).map(([k, l]) => {
               const on = view === k
@@ -94,6 +94,13 @@ export default function MvpCampaigns() {
             })}
           </div>
         )}
+
+        {/* Orders moved in here from its own tab (owner 2026-09-04): one row through to receipts */}
+        <Link href="/dashboard/orders" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', marginBottom: 14, borderRadius: 16, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', textDecoration: 'none', color: 'inherit' }}>
+          <span style={{ width: 34, height: 34, borderRadius: 10, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={17} /></span>
+          <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: C.ink }}>Orders</span><span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1 }}>What you bought, where it stands, receipts</span></span>
+          <ChevronRight size={17} color={C.faint} />
+        </Link>
 
         {/* Entry to the builder. Sits above the board rather than inside the campaign list because
             it is not a campaign yet: it is the thing that makes one. Shown in every state
