@@ -36,7 +36,7 @@ import {
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
-import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, type MetricView } from './mvp-home'
+import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, deltaSub, type MetricView } from './mvp-home'
 import ProofDeck from './proof-deck'
 import { bandFor, BAND_WORD, BAND_INK, type HealthBand } from './home-funnel'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
@@ -176,7 +176,7 @@ function resolveFocus(key?: string): { title: string; metric: string; sub: strin
   switch (key) {
     case 'shown': case 'discovery': return { title: 'Awareness', metric: 'reach', sub: 'People who saw you on Google and social', stageKey: 'shown' }
     case 'engaged': case 'engagement': return { title: 'Interest', metric: 'engagement', sub: 'People who looked closer at your posts and profile', stageKey: 'engaged' }
-    case 'moved': case 'intent': return { title: 'Customer actions', metric: 'interactions', sub: 'Calls, directions, clicks, and likes', stageKey: 'moved' }
+    case 'moved': case 'intent': return { title: 'Actions', metric: 'interactions', sub: 'Calls, directions, clicks, and likes', stageKey: 'moved' }
     case 'camein': case 'conversion': return { title: 'Orders', metric: 'bookings', sub: 'Tables booked and orders placed', stageKey: 'camein' }
     case 'back': case 'retention': return { title: 'Retention', metric: 'reputation', sub: 'Reviews and how people rate you', stageKey: 'back' }
     default: return { title: 'Awareness', metric: 'reach', sub: 'People who saw you on Google and social', stageKey: 'shown' }
@@ -440,7 +440,7 @@ function ConvChip({ c, open, onToggle }: { c: { pct: number; band: HealthBand };
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },
-  { key: 'moved', label: 'Customer actions' },
+  { key: 'moved', label: 'Actions' },
   { key: 'camein', label: 'Orders' },
   { key: 'back', label: 'Retention' },
 ]
@@ -1112,21 +1112,23 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
       <div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
           <span aria-label={label} style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{total.toLocaleString()}</span>
-          {total > 0 && fresh && (
+          {total > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: ac, background: acbg, padding: '4px 10px', borderRadius: 99, marginBottom: 4 }}>
               <span style={{ fontSize: 10.5 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}
             </span>
           )}
-          {total > 0 && !fresh && mv.lastDataDate && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: C.mute, background: C.bg, padding: '4px 10px', borderRadius: 99, marginBottom: 4 }}>
-              Updated {relDate(mv.lastDataDate)}
-            </span>
-          )}
         </div>
+        {/* the two windows behind that change, by date — the way a portfolio app says
+            "past month"; a stale feed says so here instead of hiding the change */}
+        {total > 0 && (
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 5, lineHeight: 1.4 }}>
+            {deltaSub(summary)}{!fresh && mv.lastDataDate ? ` · last update ${relDate(mv.lastDataDate)}` : ''}
+          </div>
+        )}
         {/* year-over-year: same window a year ago. Shows only when we can honestly
             make the claim (fresh data + a real prior-year number). */}
         {fresh && summary.yoyPct != null && (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 5, fontSize: 12, fontWeight: 600, color: summary.yoyPct > 0 ? C.greenDk : summary.yoyPct < 0 ? C.coral : C.mute }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3, fontSize: 12, fontWeight: 600, color: summary.yoyPct > 0 ? C.greenDk : summary.yoyPct < 0 ? C.coral : C.mute }}>
             {summary.yoyPct > 0 ? <TrendingUp size={14} /> : summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
             {summary.yoyPct > 999 ? `Far above ${summary.yoyLabel}` : summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
           </div>

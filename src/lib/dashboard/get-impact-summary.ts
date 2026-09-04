@@ -108,7 +108,7 @@ export async function getImpactSummary(clientId: string): Promise<ImpactSummary>
 
   const metrics: ImpactMetric[] = [
     { key: 'views', label: 'Profile views', value: views_t, prev: views_p, deltaPct: pct(views_t, views_p) },
-    { key: 'actions', label: 'Customer actions', value: actions_t, prev: actions_p, deltaPct: pct(actions_t, actions_p) },
+    { key: 'actions', label: 'Actions', value: actions_t, prev: actions_p, deltaPct: pct(actions_t, actions_p) },
     { key: 'calls', label: 'Calls', value: calls_t, prev: calls_p, deltaPct: pct(calls_t, calls_p) },
     { key: 'directions', label: 'Direction requests', value: dir_t, prev: dir_p, deltaPct: pct(dir_t, dir_p) },
     { key: 'clicks', label: 'Website clicks', value: clicks_t, prev: clicks_p, deltaPct: pct(clicks_t, clicks_p) },

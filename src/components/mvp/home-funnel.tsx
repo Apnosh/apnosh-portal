@@ -269,7 +269,7 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const stages: HStage[] = [
     { key: 'shown', label: 'Awareness', sub: awareSub, count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, deltaAbs: yoyAbs?.awareness ?? null, insightsStage: 'discovery' },
     { key: 'engaged', label: 'Interest', sub: 'website visits & clicks', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
-    { key: 'moved', label: 'Customer actions', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
+    { key: 'moved', label: 'Actions', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
     { key: 'camein', label: 'Orders', sub: 'walk-in orders from Google', count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, deltaAbs: yoyAbs?.orders != null ? Math.round(yoyAbs.orders * walkInRate) : null, insightsStage: 'conversion' },
     { key: 'back', label: 'Retention', sub: 'came back for more', count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
   ]
@@ -721,8 +721,8 @@ export default function HomeFunnel({
 
       const disp = numDispRef.current[i] != null ? numDispRef.current[i] : (s.count ?? 0)
       const num = s.count == null ? '—' : (s.zone === 'estimate' ? '~' : '') + Math.round(disp).toLocaleString()
-      // green (healthy) numbers use the default ink (black on light / white on dark); only red/orange/yellow tint.
-      ctx.fillStyle = s.count == null ? C.faint : (band === 'veryHigh' || band === 'high') ? C.ink : band ? `rgb(${bandCol(band).join(',')})` : s.zone === 'estimate' ? C.amberDk : C.ink
+      // the number wears its direction: red when down, green otherwise (owner 2026-09-04: "black should still be green").
+      ctx.fillStyle = s.count == null ? C.faint : band ? `rgb(${bandCol(band).join(',')})` : s.zone === 'estimate' ? C.amberDk : C.ink
       // as big as the room allows, from a bold 54px down to a floor of 24px; if a very long number
       // still won't fit at the floor (tiny embed × 8 digits), maxWidth compresses it to the room as a
       // last resort so it never spills into the orb or across the centre path.
@@ -1192,7 +1192,7 @@ export default function HomeFunnel({
         onPointerCancel={clearPress}
         onPointerLeave={clearPress}
         style={{ display: 'block', position: 'absolute', top: 0, left: 0, zIndex: 0, width: '100%', height: effH, cursor: 'pointer', opacity: loading ? 0.5 : 1, transition: 'opacity .2s' }}
-        aria-label="Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Customer actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects."
+        aria-label="Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects."
       />
     </div>
   )
@@ -1353,7 +1353,7 @@ export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
   )
 }
 
-export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void; bar?: HomeFunnelProps['bar'] }) {
+export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar, tickFor }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void; bar?: HomeFunnelProps['bar']; /* the +/- ticks from the SAME daily series Insights charts (2026-09-04), so the two screens agree by construction; a null field keeps the route's own read */ tickFor?: (r: FunnelRange) => Partial<FunnelYoY> | null }) {
   const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null; yoyAbs: FunnelYoYAbs | null } | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   /* custom-range bounds — default to the last 14 days ending today */
@@ -1427,7 +1427,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar }: { 
   if (data.views.total <= 0 && !everShown.current) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
-      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={data.yoy} bar={bar} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
+      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={(() => { const o = tickFor?.(range); if (!o) return data.yoy; const base = data.yoy ?? { awareness: null, interest: null, actions: null, orders: null }; return { awareness: o.awareness ?? base.awareness, interest: o.interest ?? base.interest, actions: o.actions ?? base.actions, orders: o.orders ?? base.orders } })()} bar={bar} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
       {/* "Choose your metrics" lives ONLY on the Insights detail screen (owner
           ask 2026-08-18) — the home graph stays clean with nothing below it.
           Toggles saved there still apply here: the funnel refetches every time

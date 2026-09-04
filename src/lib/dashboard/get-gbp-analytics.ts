@@ -206,6 +206,7 @@ export async function getGbpAnalytics(
     top_queries: Array<{ query: string; impressions: number }> | null
   }
   type PrevRow = Omit<CurrRow, 'date' | 'top_queries' | 'impressions_search_mobile' | 'impressions_search_desktop' | 'impressions_maps_mobile' | 'impressions_maps_desktop'>
+  type PriorRow = PrevRow & { date: string }
 
   const [currData, prevData, priorData] = await Promise.all([
     fetchAllPaged<CurrRow>((from, to) => {
@@ -231,16 +232,16 @@ export async function getGbpAnalytics(
       if (metricsLocationId) q = q.eq('location_id', metricsLocationId)
       return q.then(r => ({ data: r.data as PrevRow[] | null }))
     }),
-    fetchAllPaged<PrevRow>((from, to) => {
+    fetchAllPaged<PriorRow>((from, to) => {
       let q = admin
         .from('gbp_metrics')
-        .select('impressions_total, directions, calls, website_clicks, post_views, post_clicks, photo_views, conversations, bookings, food_orders, food_menu_clicks, search_views')
+        .select('date, impressions_total, directions, calls, website_clicks, post_views, post_clicks, photo_views, conversations, bookings, food_orders, food_menu_clicks, search_views')
         .eq('client_id', clientId)
         .gte('date', ymd(priorStartDate))
         .lte('date', ymd(priorEndDate))
         .range(from, to)
       if (metricsLocationId) q = q.eq('location_id', metricsLocationId)
-      return q.then(r => ({ data: r.data as PrevRow[] | null }))
+      return q.then(r => ({ data: r.data as PriorRow[] | null }))
     }),
   ])
 
@@ -344,7 +345,19 @@ export async function getGbpAnalytics(
     foodMenuClicks: acc.foodMenuClicks + (r.food_menu_clicks ?? 0),
   }), emptyTotals())
   const prevTotals = sumRows((prevRes.data ?? []) as PrevRow[])
-  const priorTotals = sumRows((priorRes.data ?? []) as PrevRow[])
+  /* Compare LIKE WITH LIKE (2026-09-04). Google reports a few days late, so the current
+     window's newest days have no rows yet. Sum only the prior days that line up with the
+     days actually reported, else every tick reads a few points low (Home said ▼13% where
+     Insights, which already did this, said ▲3% for the same 30 days). */
+  // a day counts as reported only when Google put a real number on it — the sync writes
+  // zero-filled rows for days Google has not delivered yet (Yellow Bee: Aug 31 – Sep 2 were
+  // all zeros on Sep 4), and those must not count as "no views"
+  const reportedDates = ((currRes.data ?? []) as CurrRow[]).filter(r => (r.impressions_total ?? 0) > 0 || (r.directions ?? 0) > 0 || (r.calls ?? 0) > 0 || (r.website_clicks ?? 0) > 0).map(r => r.date).filter(Boolean).sort()
+  const lastReported = reportedDates.length ? reportedDates[reportedDates.length - 1] : ymd(endDate)
+  const reportedDays = Math.max(1, Math.round((Date.parse(lastReported + 'T00:00:00Z') - startDate.getTime()) / 86400000) + 1)
+  const priorCut = new Date(priorEndDate); priorCut.setUTCDate(priorCut.getUTCDate() - (reportedDays - 1))
+  const priorCutYmd = ymd(priorCut)
+  const priorTotals = sumRows(((priorRes.data ?? []) as PriorRow[]).filter(r => r.date >= priorCutYmd))
 
   return {
     range,

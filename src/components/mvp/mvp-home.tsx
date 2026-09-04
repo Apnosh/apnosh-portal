@@ -24,7 +24,7 @@ import type { TimelineEvent } from '@/lib/dashboard/get-since-last-checked'
 import type { UpcomingWorkItem } from '@/lib/dashboard/get-upcoming-work'
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { selectHomeOrders } from '@/lib/campaigns/home-cards'
-import { HomeFunnelLive } from './home-funnel'
+import { HomeFunnelLive, type FunnelRange, type FunnelYoY } from './home-funnel'
 import { usePullToRefresh, PullIndicator } from './pull-to-refresh'
 import { useMvpTheme } from './mvp-theme'
 
@@ -144,7 +144,7 @@ const TILE_ICON: Record<string, React.ComponentType<{ size?: number; color?: str
 // stage, so its card stays unlinked.
 const METRIC_STAGE: Record<string, { key: string; label: string }> = {
   reach: { key: 'shown', label: 'Awareness' },
-  interactions: { key: 'moved', label: 'Customer actions' },
+  interactions: { key: 'moved', label: 'Actions' },
   bookings: { key: 'camein', label: 'Orders' },
   reputation: { key: 'back', label: 'Retention' },
 }
@@ -209,6 +209,21 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
   }
   const goTo = (i: number) => { const el = scrollRef.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
 
+  /* Home's +/- ticks come from the SAME daily series (and the same settled-days windows) the
+     Insights chart uses, so Awareness cannot say ▼13% here and ▲3% there for the same 30 days
+     (seen 2026-09-04). Orders stays on the route's read (directions × walk-in rate). */
+  const tickFor = useCallback((r: FunnelRange): Partial<FunnelYoY> | null => {
+    if (r === 'custom') return null
+    const cr: ChartRange = r === '12m' ? '1y' : r
+    const by = new Map(data.metrics.map((m) => [m.key, m]))
+    const pct = (key: string): number | null => {
+      const mv = by.get(key); if (!mv) return null
+      const sm = bucketsFor(cr, mv, '', '')
+      return sm.compareTotal > 0 ? sm.deltaPct : null
+    }
+    return { awareness: pct('reach'), interest: pct('engagement'), actions: pct('interactions') }
+  }, [data.metrics])
+
   return (
     <div className="apnosh-native-skin" style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: C.pageBg, minHeight: '100%', overflowY: 'auto', paddingBottom: 0 }}>
       <style>{MVP_ANIM_CSS}</style>
@@ -255,7 +270,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             funnel (Awareness → Interest → Customer actions → Orders → Retention)
             in the glass-vessel view. Renders only when the business has Google data. */}
         <div id="home-funnel-hero" style={{ margin: '-16px -18px 0' }}>
-          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
+          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
         </div>
 
         {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
@@ -660,17 +675,15 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
         <div style={{ fontSize: 15, color: C.mute, fontWeight: 500 }}>{mv.heroLabel}</div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 11, marginTop: 2 }}>
           <span style={{ fontFamily: DISPLAY, fontSize: 47, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{summary.total ? summary.total.toLocaleString() : '—'}</span>
-          {summary.total > 0 && fresh && (
+          {summary.total > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 14, fontWeight: 600, color: ac, background: acbg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
               <span style={{ fontSize: 11 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}
             </span>
           )}
-          {summary.total > 0 && !fresh && mv.lastDataDate && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600, color: C.mute, background: C.bg, padding: '5px 12px', borderRadius: 99, marginBottom: 6 }}>
-              Updated {relDate(mv.lastDataDate)}
-            </span>
-          )}
         </div>
+        {summary.total > 0 && (
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 5 }}>{deltaSub(summary)}{!fresh && mv.lastDataDate ? ` · last update ${relDate(mv.lastDataDate)}` : ''}</div>
+        )}
         <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
         {fresh && summary.yoyPct != null && (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: summary.yoyPct > 0 ? C.green : summary.yoyPct < 0 ? C.coral : C.mute }}>
@@ -725,10 +738,13 @@ type ChartSrc = { chart: { label: string; value: number; prev: number; settled?:
 // settled = fully reported → counted in the %; elapsed = has happened → counted
 // in the total/average. A future/not-yet-reported day is neither (shown, empty).
 // ago = the same day a YEAR earlier (52 weeks back), for the seasonal YoY line.
-type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string; settled: boolean; elapsed: boolean; ago: number }
+type Bar = { value: number; compare: number; label: string; tip: string; cmpLabel: string; cmpDate: string; settled: boolean; elapsed: boolean; ago: number; sMs?: number; eMs?: number; cMs?: number; ceMs?: number }
 export interface RangeSummary {
   bars: Bar[]; curLbl: string; cmpLbl: string; cmpFrame: string
   total: number; compareTotal: number; deltaPct: number
+  /* portfolio-style change (2026-09-04): the count that moved, and the two windows it compares,
+     as dates — settled days only, so both sides hold the same number of days */
+  deltaAbs: number; curDates: string; cmpDates: string
   avg: number; max: number; periodDays: number
   // Year-over-year for the SELECTED window (this period vs the same period last
   // year). null when the range can't support it (annual view — the pill already
@@ -763,7 +779,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       const prior = d ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 7) : null
       const elapsed = b.elapsed ?? true
       const settled = b.settled ?? (i < chart.length - 1)
-      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpLabel: 'last week', cmpDate: prior ? full(prior) : '', settled, elapsed, ago: d ? yearAgo(d) : 0 }
+      return { value: b.value, compare: b.prev, label: d ? wk(d) : b.label, tip: d ? full(d) : b.label, cmpLabel: 'last week', cmpDate: prior ? full(prior) : '', settled, elapsed, ago: d ? yearAgo(d) : 0, sMs: d?.getTime(), cMs: prior?.getTime() }
     })
   } else if (range === '30d') {
     curLbl = 'Last 30 days'; cmpLbl = 'Prior 30 days'; cmpFrame = 'vs prior 30 days'; periodDays = 30
@@ -777,7 +793,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       const prior = new Date(dt); prior.setDate(prior.getDate() - 30)
       const elapsed = frontier ? dt.getTime() <= frontier.getTime() : true
       const settled = frontier ? dt.getTime() < frontier.getTime() : i < 29
-      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt) }
+      return { value: dmap.get(isoDate(dt)) ?? 0, compare: dmap.get(isoDate(prior)) ?? 0, label: String(dt.getDate()), tip: full(dt), cmpLabel: '30 days earlier', cmpDate: full(prior), settled, elapsed, ago: yearAgo(dt), sMs: dt.getTime(), cMs: prior.getTime() }
     })
   } else if (range === '90d') {
     curLbl = 'Last 90 days'; cmpLbl = 'Prior 90 days'; cmpFrame = 'vs prior 90 days'; periodDays = 90
@@ -799,7 +815,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
       const pe = shift(ps, 6)
       const elapsed = frontier ? s0.getTime() <= frontier.getTime() : true
       const settled = frontier ? e0.getTime() < frontier.getTime() : i < 12
-      return { value: sumDays(s0, 7), compare: sumDays(ps, 7), label: `${s0.getMonth() + 1}/${s0.getDate()}`, tip: `${short(s0)} – ${short(e0)}`, cmpLabel: '13 weeks earlier', cmpDate: `${short(ps)} – ${short(pe)}`, settled, elapsed, ago: agoDays(s0, 7) }
+      return { value: sumDays(s0, 7), compare: sumDays(ps, 7), label: `${s0.getMonth() + 1}/${s0.getDate()}`, tip: `${short(s0)} – ${short(e0)}`, cmpLabel: '13 weeks earlier', cmpDate: `${short(ps)} – ${short(pe)}`, settled, elapsed, ago: agoDays(s0, 7), sMs: s0.getTime(), eMs: e0.getTime(), cMs: ps.getTime(), ceMs: pe.getTime() }
     })
   } else if (range === '1y') {
     curLbl = 'Last 12 months'; cmpLbl = 'Prior year'; cmpFrame = 'vs prior year'; periodDays = 365
@@ -842,6 +858,18 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   const curTrend = settled.reduce((s, b) => s + b.value, 0)
   const cmpTrend = settled.reduce((s, b) => s + b.compare, 0)
   const deltaPct = settled.length === 0 ? 0 : (cmpTrend === 0 ? (curTrend > 0 ? 100 : 0) : Math.round(((curTrend - cmpTrend) / cmpTrend) * 100))
+  const deltaAbs = curTrend - cmpTrend
+  const fmtD = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const span = (which: 'cur' | 'cmp'): string => {
+    const a = settled[0], b = settled[settled.length - 1]
+    if (!a || !b) return ''
+    const s0 = which === 'cur' ? a.sMs : a.cMs
+    const e0 = which === 'cur' ? (b.eMs ?? b.sMs) : (b.ceMs ?? b.cMs)
+    if (s0 != null && e0 != null) return s0 === e0 ? fmtD(s0) : `${fmtD(s0)} – ${fmtD(e0)}`
+    const x = which === 'cur' ? a.tip : a.cmpDate, y = which === 'cur' ? b.tip : b.cmpDate
+    return x === y ? x : `${x} – ${y}`
+  }
+  const curDates = span('cur'), cmpDates = span('cmp')
   const avg = elapsed.length ? Math.round(total / elapsed.length) : 0
   const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
 
@@ -857,7 +885,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     yoyPct = Math.round(((total - agoTotal) / agoTotal) * 100)
     yoyLabel = 'vs last year'
   }
-  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, avg, max, periodDays, yoyPct, yoyLabel }
+  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, deltaAbs, curDates, cmpDates, avg, max, periodDays, yoyPct, yoyLabel }
 }
 
 /* ── ONE range for the whole session ──────────────────────────────────────────
@@ -1005,9 +1033,10 @@ export function ActionsChart({
                 {pending ? (
                   <div style={{ width: '46%', maxWidth: 18, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '4px 4px 0 0', opacity: 0.55 }} />
                 ) : (
-                  <div className="mvp-grow" style={{ width: '46%', maxWidth: 18, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.4 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 0 2px ${C.card}, 0 0 0 3.5px ${col}, 0 0 12px ${col}88` : (b.value > 0 ? `0 0 10px ${col}55` : 'none'), transition: 'opacity .15s' }} />
+                  <div className="mvp-grow" style={{ width: '46%', maxWidth: 18, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.28 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 6px ${col}, 0 0 18px ${col}aa` : (b.value > 0 ? `0 0 10px ${col}55` : 'none'), transition: 'opacity .15s, box-shadow .15s' }} />
                 )}
-                <div style={{ width: '46%', maxWidth: 18, height: `${(b.compare / max) * 100}%`, background: C.ghost, opacity: dim ? 0.5 : 1, borderRadius: '4px 4px 0 0' }} />
+                {/* the prior-period bar lights up with its partner, so the pair being compared is unmistakable */}
+                <div style={{ width: '46%', maxWidth: 18, height: `${(b.compare / max) * 100}%`, minHeight: isPicked && b.compare > 0 ? 2 : 0, background: isPicked ? '#9a9aa2' : C.ghost, opacity: dim ? 0.3 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked && b.compare > 0 ? '0 0 6px #9a9aa2, 0 0 14px rgba(120,120,130,.55)' : 'none', transition: 'opacity .15s, background .15s' }} />
               </div>
             )
           })}
@@ -1047,12 +1076,17 @@ export function ActionsChart({
   )
 }
 
-/** The delta pill's words. A tiny prior period makes the percentage absurd
- *  ("▲ 136,968%", seen on the sandbox 2026-09-04) — past 999% or under a base
- *  of 20 it says what actually happened instead. */
+/** The change pill, the way a portfolio app writes it: the arrow carries the direction, then
+ *  the COUNT that moved, then the percent in brackets — "▲ 101 (9%)". Always against the
+ *  previous period of the same length (owner 2026-09-04: "just compare to the previous
+ *  period"); a prior period of zero reads "(new)". */
 export function deltaLabel(summary: RangeSummary): string {
-  const { deltaPct, compareTotal, cmpFrame } = summary
-  if (compareTotal === 0 && summary.total > 0) return `new ${cmpFrame}`
-  if (compareTotal < 20 || Math.abs(deltaPct) > 999) return `${deltaPct >= 0 ? 'up' : 'down'} from ${compareTotal.toLocaleString()}`
-  return `${Math.abs(deltaPct)}% ${cmpFrame}`
+  const { deltaPct, deltaAbs, compareTotal } = summary
+  const n = Math.abs(Math.round(deltaAbs)).toLocaleString()
+  if (compareTotal === 0) return `${n} (new)`
+  return `${n} (${Math.abs(deltaPct).toLocaleString()}%)`
+}
+/** The line under the number: the two windows being compared, by date. */
+export function deltaSub(summary: RangeSummary): string {
+  return summary.curDates && summary.cmpDates ? `${summary.curDates} vs ${summary.cmpDates}` : summary.cmpFrame
 }
