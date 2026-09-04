@@ -754,8 +754,9 @@ export default function HomeFunnel({
           ctx.save()
           ctx.globalAlpha = eIn
           ctx.beginPath(); ctx.moveTo(x0, oy); ctx.lineTo(x1, oy)
-          ctx.lineWidth = 1; ctx.setLineDash([]); ctx.strokeStyle = `rgba(${ringStr},${dark ? 0.45 : 0.6})`; ctx.stroke()
-          ctx.beginPath(); ctx.arc(x1, oy, 2.4, 0, 7); ctx.fillStyle = `rgba(${ringStr},0.9)`; ctx.fill()
+          // quiet on purpose (owner 2026-09-03: "not as apparent"): a whisper of a line, a small dot
+          ctx.lineWidth = 0.8; ctx.setLineDash([]); ctx.strokeStyle = `rgba(${ringStr},${dark ? 0.25 : 0.28})`; ctx.stroke()
+          ctx.beginPath(); ctx.arc(x1, oy, 2, 0, 7); ctx.fillStyle = `rgba(${ringStr},0.6)`; ctx.fill()
           ctx.restore()
         }
       }

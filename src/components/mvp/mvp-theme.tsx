@@ -60,7 +60,7 @@ const light: Palette = {
   pillGoodBg: '#eaf6f1', pillGoodInk: '#2e9a78', pillWeakBg: '#fde7d6', pillWeakInk: '#b45309',
   personGreen: '#2e9a78', personGreenGlow: '#EAFBF4', personAmber: '#C79A57', personAmberGlow: '#F7ECD6',
   crowdA: 0.78,
-  pathRGB: '46,154,120', pathAlpha: 0.55,
+  pathRGB: '46,154,120', pathAlpha: 0.4,
 }
 
 const dark: Palette = {
