@@ -66,7 +66,7 @@ const TONE: Record<Zone, { rgb: string; ink: string; dk: string }> = {
    the downstream steps are far higher), so each leg is graded on its OWN bands rather than one flat cutoff.
    A stage then reads red (very low) → amber (low) → green (average / high / very high). Owner-tunable —
    just edit the numbers here. */
-type HealthBand = 'veryLow' | 'low' | 'average' | 'high' | 'veryHigh'
+export type HealthBand = 'veryLow' | 'low' | 'average' | 'high' | 'veryHigh'
 // owner-set per-leg conversion bands (each value = the upper bound of that band; above `high` = very high).
 // Keyed by the DESTINATION stage — every leg is graded on its OWN scale.
 const LEG_BANDS: Record<string, { veryLow: number; low: number; average: number; high: number }> = {
@@ -76,7 +76,7 @@ const LEG_BANDS: Record<string, { veryLow: number; low: number; average: number;
   back:    { veryLow: 0.10, low: 0.20, average: 0.30, high: 0.40 }, // Orders → Retention: 0-50%+ in 5
 }
 const DEFAULT_BANDS = { veryLow: 0.10, low: 0.25, average: 0.45, high: 0.65 }
-function bandFor(rate: number, key: string): HealthBand {
+export function bandFor(rate: number, key: string): HealthBand {
   const b = LEG_BANDS[key] ?? DEFAULT_BANDS
   return rate <= b.veryLow ? 'veryLow' : rate <= b.low ? 'low' : rate <= b.average ? 'average' : rate <= b.high ? 'high' : 'veryHigh'
 }
@@ -93,10 +93,10 @@ const BAND_RGB: Record<HealthBand, [number, number, number]> = {
   veryHigh: [46, 168, 124], // green
 }
 // darker variants for text/marks on the LIGHT ground (the bright ramp above is for dark, and for fills/rings/crowd on dark).
-const BAND_INK: Record<HealthBand, [number, number, number]> = {
+export const BAND_INK: Record<HealthBand, [number, number, number]> = {
   veryLow: [201, 45, 50], low: [186, 78, 28], average: [150, 112, 14], high: [46, 154, 120], veryHigh: [46, 154, 120],
 }
-const BAND_WORD: Record<HealthBand, string> = { veryLow: 'very low', low: 'low', average: 'average', high: 'high', veryHigh: 'very high' }
+export const BAND_WORD: Record<HealthBand, string> = { veryLow: 'very low', low: 'low', average: 'average', high: 'high', veryHigh: 'very high' }
 const bandVigor = (b: HealthBand | null): number => (b === 'veryHigh' ? 1 : b === 'high' ? 0.66 : 0.38) // pulse liveliness by band
 
 // total = Google views + social reach. google/social carry the honest split so Awareness can
@@ -506,7 +506,15 @@ export default function HomeFunnel({
       return bandFor(b / a, s.key)
     })
     const dark = theme === 'dark'
-    const bandCol = (b: HealthBand): [number, number, number] => (dark ? BAND_RGB[b] : BAND_INK[b]) // bright ramp on dark, darker ink on light so it stays readable
+    const bandCol = (b: HealthBand): [number, number, number] => (dark ? BAND_RGB[b] : BAND_INK[b])
+    // Ring, number and glow colour = DIRECTION vs the prior period (owner 2026-09-04): down → red,
+    // otherwise green (a stage that used to read black now reads green). The conversion bands
+    // (`health`) colour ONLY the step chips between stages, which is where the disconnect shows.
+    const trend: (HealthBand | null)[] = stages.map((s) => {
+      if (s.count == null || s.count === 0) return null
+      const dy = s.deltaAbs != null ? s.deltaAbs : s.deltaYoY
+      return dy != null && Math.round(dy) < 0 ? 'veryLow' : 'veryHigh'
+    }) // bright ramp on dark, darker ink on light so it stays readable
 
     // canvas letterSpacing shim (typed loosely; harmless where unsupported)
     const setLS = (v: string) => { (ctx as unknown as { letterSpacing: string }).letterSpacing = v }
@@ -550,7 +558,7 @@ export default function HomeFunnel({
       const L = layout[i]
       const ox = cx + L.dx, oy = L.y, r = rAt(i)
       const effZone: Zone = s.count === 0 ? 'locked' : s.zone
-      const bd = s.count === 0 ? null : health[i] // the stage's health band tints the inner glow (grey when empty)
+      const bd = s.count === 0 ? null : trend[i] // the stage's direction tints the inner glow (grey when empty)
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
       const rgb = bd ? bandCol(bd).join(',') : TONE[effZone].rgb
       const peak = (effZone === 'estimate' ? 0.20 : effZone === 'measured' ? 0.15 : 0.05) * (bd === 'veryLow' ? 1.2 : bd === 'low' ? 1.1 : 1)
@@ -583,7 +591,7 @@ export default function HomeFunnel({
       const L = layout[i], ox = cx + L.dx, oy = L.y, r = rAt(i)
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
 
-      const band = health[i]
+      const band = trend[i]
       if (band == null) continue // no-data leg → no pulse (the ring reads grey)
       const isEst = s.zone === 'estimate'
       const rgb = bandCol(band).join(',')
@@ -625,7 +633,7 @@ export default function HomeFunnel({
     // colour while it travels, and only recolours when it REACHES the next stage or walks out (leak = terracotta).
     const stageCol = (i: number) => {
       if (i < 0) return CC.wander
-      const b = health[i]
+      const b = trend[i]
       return b ? `rgb(${bandCol(b).join(',')})` : zoneCol(stages[i].count === 0 ? 'locked' : stages[i].zone)
     }
     for (const tr of particlesRef.current) {
@@ -655,7 +663,7 @@ export default function HomeFunnel({
     stages.forEach((s, i) => {
       const L = layout[i]
       const ox = cx + L.dx, oy = L.y, r = rAt(i)
-      const band = health[i] // the stage's health band → its ring/number colour on the 5-band ramp
+      const band = trend[i] // the stage's direction → its ring/number colour (red down, green otherwise)
       const pr = pressAmtRef.current[i] ?? 0 // press "settle" amount for this row
       const effZone: Zone = s.count === 0 ? 'locked' : s.zone // a 0 reads as empty → grey it like a no-data ring
       // the ring IS its band colour (red→green); a no-data / empty ring falls back to its grey zone hue.
@@ -743,7 +751,7 @@ export default function HomeFunnel({
           tickW = ctx.measureText(tickStr).width + 8
           const tx = numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8
           ctx.globalAlpha = tickIn
-          ctx.fillStyle = r0 > 0 ? C.greenDk : r0 < 0 ? (band === 'veryLow' ? C.faint : C.coral) : C.mute
+          ctx.fillStyle = r0 > 0 ? C.greenDk : r0 < 0 ? C.coral : C.mute
           ctx.fillText(tickStr, tx, oy + 5)
           ctx.globalAlpha = 1
         }

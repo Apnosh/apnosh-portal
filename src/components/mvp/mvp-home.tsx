@@ -1005,7 +1005,7 @@ export function ActionsChart({
                 {pending ? (
                   <div style={{ width: '46%', maxWidth: 18, height: 10, border: `1px dashed ${C.faint}`, borderBottom: 'none', borderRadius: '4px 4px 0 0', opacity: 0.55 }} />
                 ) : (
-                  <div className="mvp-grow" style={{ width: '46%', maxWidth: 18, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: `linear-gradient(180deg, ${col} 0%, ${col}b8 100%)`, opacity: dim ? 0.4 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 0 2px ${C.card}, 0 0 0 3.5px ${col}` : 'none', transition: 'opacity .15s' }} />
+                  <div className="mvp-grow" style={{ width: '46%', maxWidth: 18, height: `${(b.value / max) * 100}%`, minHeight: b.value > 0 ? 2 : 0, background: col, opacity: dim ? 0.4 : 1, borderRadius: '4px 4px 0 0', boxShadow: isPicked ? `0 0 0 2px ${C.card}, 0 0 0 3.5px ${col}, 0 0 12px ${col}88` : (b.value > 0 ? `0 0 10px ${col}55` : 'none'), transition: 'opacity .15s' }} />
                 )}
                 <div style={{ width: '46%', maxWidth: 18, height: `${(b.compare / max) * 100}%`, background: C.ghost, opacity: dim ? 0.5 : 1, borderRadius: '4px 4px 0 0' }} />
               </div>

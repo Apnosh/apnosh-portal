@@ -38,6 +38,7 @@ import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, type MetricView } from './mvp-home'
 import ProofDeck from './proof-deck'
+import { bandFor, BAND_WORD, BAND_INK, type HealthBand } from './home-funnel'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
@@ -401,8 +402,41 @@ const STAGE_EXPLAIN: Record<string, string> = {
   camein: 'Orders and guests served, from your register and delivery apps.',
   back: 'People who came back: repeat customers and new reviews.',
 }
+/* the graph's bars take the NUMBER's colour (owner 2026-09-04): green when the period is up on
+   the one before, red when down, amber when even. The stage hue stays on the dots + sections. */
+const TREND_GREEN = '#2e9a78', TREND_RED = '#c92d32', TREND_AMBER = '#d99a1e'
 const AccentCtx = createContext<Accent>(STAGE_ACCENT.shown)
 const useAccent = () => useContext(AccentCtx)
+/* The conversion from the stage before, as a chip beside the stage name (owner 2026-09-04:
+   "see the conversion on insights too"). Same owner-set bands as Home's step chips; tap it
+   for the plain-words read. */
+function convFor(detail: InsightsDetail | null, i: number): { pct: number; band: HealthBand } | null {
+  if (!detail || i <= 0) return null
+  const prev = computedStage(detail, i), cur = computedStage(detail, i + 1)
+  if (!prev || !cur || cur.isEmpty || prev.headline == null || prev.headline <= 0 || cur.headline == null) return null
+  const rate = cur.headline / prev.headline
+  return { pct: Math.round(rate * 100), band: bandFor(rate, STAGE_ORDER[i].key) }
+}
+const CONV_SENTENCE: Record<string, string> = {
+  engaged: 'of the people who saw you looked closer',
+  moved: 'of the people who looked closer made a move (a call, directions or an order)',
+  camein: 'of the people who made a move ordered',
+  back: 'of your customers came back',
+}
+function convExplain(key: string, c: { pct: number; band: HealthBand }): string {
+  const w = BAND_WORD[c.band]
+  const tail = c.band === 'veryLow' || c.band === 'low' ? ' This is the step to work on.' : c.band === 'average' ? '' : ' Keep doing what you are doing.'
+  return `${c.pct >= 1 ? c.pct : '<1'}% ${CONV_SENTENCE[key] ?? 'converted'}. That is ${w} for a restaurant like yours.${tail}`
+}
+function ConvChip({ c, open, onToggle }: { c: { pct: number; band: HealthBand }; open: boolean; onToggle: () => void }) {
+  const ink = `rgb(${BAND_INK[c.band].join(',')})`
+  const alarm = c.band === 'veryLow'
+  return (
+    <button type="button" onClick={onToggle} aria-expanded={open} title="Conversion from the stage before" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: 'none', cursor: 'pointer', fontFamily: 'inherit', borderRadius: 999, padding: '3px 9px', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', background: alarm ? '#c92d32' : `rgba(${BAND_INK[c.band].join(',')},0.13)`, color: alarm ? '#fff' : ink, boxShadow: open ? `0 0 0 2px #fff, 0 0 0 3.5px ${alarm ? '#c92d32' : ink}` : 'none' }}>
+      {c.pct >= 1 ? c.pct : '<1'}% · {BAND_WORD[c.band]}
+    </button>
+  )
+}
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },
@@ -420,6 +454,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing }: { dat
   // keeps the same stage.
   const [sel, setSel] = useState<string | undefined>(focusKey)
   const [explain, setExplain] = useState(false)
+  const [convOpen, setConvOpen] = useState(false)
   useEffect(() => { if (focusKey) setSel(focusKey) }, [focusKey])
   // Warm the other range windows up front so switching tabs is instant.
   useEffect(() => { prewarmStageWindows(clientId) }, [clientId])
@@ -469,17 +504,22 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing }: { dat
       {/* SWIPEABLE GRAPHS — each slide is a stage's title + number + trend +
           histogram; swipe the graph left/right to change stages */}
       <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', scrollSnapType: 'x mandatory', alignItems: 'flex-start' }}>
-        {STAGE_ORDER.map((s) => {
+        {STAGE_ORDER.map((s, si) => {
           const smv = byKey.get(resolveFocus(s.key).metric)
+          const conv = convFor(detail, si)
           return (
             <div key={s.key} style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'center', padding: '0 18px' }}>
               {/* stage name + ⓘ (tap: what this counts); the tools sit to the right */}
-              <button type="button" onClick={() => setExplain((v) => !v)} aria-expanded={explain} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', background: 'none', padding: 0, margin: '2px 0 0', cursor: 'pointer', fontFamily: 'inherit', color: C.ink, maxWidth: 'calc(100% - 88px)', height: 36 }}>
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 10px', maxWidth: 'calc(100% - 88px)', minHeight: 36, margin: '2px 0 0' }}>
+              <button type="button" onClick={() => setExplain((v) => !v)} aria-expanded={explain} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: C.ink, maxWidth: '100%', height: 36 }}>
                 <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
                 <span style={{ width: 18, height: 18, borderRadius: 99, background: explain ? STAGE_ACCENT[s.key].soft : C.bg, color: explain ? STAGE_ACCENT[s.key].dark : C.faint, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Info size={12} /></span>
                 {refreshing && <span className="mvp-spin" style={{ width: 11, height: 11, border: `2px solid ${C.line}`, borderTopColor: STAGE_ACCENT[s.key].main, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />}
               </button>
+              {conv && <ConvChip c={conv} open={convOpen} onToggle={() => setConvOpen((v) => !v)} />}
+              </div>
               {explain && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, margin: '2px 0 4px' }}>{STAGE_EXPLAIN[s.key]}</div>}
+              {convOpen && conv && <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.45, margin: '4px 0 6px', padding: '8px 11px', borderRadius: 12, background: conv.band === 'veryLow' || conv.band === 'low' ? C.coralBg : C.bg }}>{convExplain(s.key, conv)}</div>}
               <StageTop stageKey={s.key} detail={detail} mv={smv} clientId={clientId} onRange={rangeFor(s.key)} accent={STAGE_ACCENT[s.key].main} />
             </div>
           )
@@ -1094,7 +1134,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
       </div>
       {/* histogram — trend/shape only; the ONE number for this card is the
           by-source total above, so the chart's own sum caption stays off */}
-      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} accent={accent} />
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} accent={dn ? TREND_RED : summary.deltaPct === 0 ? TREND_AMBER : TREND_GREEN} />
       {/* inline source cards (legacy single-column layout only — the swipeable
           layout renders them below the dots instead via RangeSources) */}
       {showBreakdown && (rangeStage ?? cs) ? <SourceBreakdown stage={(rangeStage ?? cs)!} unit={unit} title={breakdownTitle} sub={sub} showReconcile={false} showExtras={false} /> : null}
