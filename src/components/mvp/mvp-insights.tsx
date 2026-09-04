@@ -31,7 +31,7 @@ import {
   Search, ExternalLink, Image as ImageIcon, Check,
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
-  Route, Heart, Megaphone, Sparkles, Info, Globe, Store,
+  Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight,
 } from 'lucide-react'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
@@ -674,6 +674,7 @@ function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: C
 // -> Google + website) instead of a flat repeat of them. Groups with no source
 // are skipped.
 function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
+  const A = useAccent()
   const rows = (stage.groups ?? [])
     .map((g) => ({ g, srcs: g.sourceIds.map((id) => stage.sources.find((x) => x.id === id)).filter((v): v is StageSourceView => !!v) }))
     .filter((x) => x.srcs.length > 0)
@@ -681,65 +682,156 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
   const isOff = (x: StageSourceView) => x.status === 'AVAILABLE_NOT_CONNECTED' || x.status === 'COMING_SOON'
   const live = rows.filter(({ srcs }) => !srcs.every(isOff))
   const off = rows.filter(({ srcs }) => srcs.every(isOff))
-  // groups that hold ONE source read as a list row (label left, number right); groups with
-  // several keep the tile grid. Everything unconnected folds into a single connect row.
-  const singles = live.filter(({ srcs }) => srcs.length === 1)
-  const multis = live.filter(({ srcs }) => srcs.length > 1)
+  const totalOf = (srcs: StageSourceView[]) => srcs.reduce((t, x) => t + (sourceValue(x) ?? 0), 0)
+  const top = Math.max(0, ...live.map(({ srcs }) => totalOf(srcs)))
   const offLabel = off.map(({ g }, k) => (k === 0 ? g.label : g.label.charAt(0).toLowerCase() + g.label.slice(1))).join(', ')
-  const top = Math.max(0, ...singles.map(({ srcs }) => srcs[0].value ?? 0))
   return (
     <Section title="Breakdown by source" sub={sub}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {singles.length > 0 && (
-          <div>
-            {singles.map(({ g, srcs }, k) => <SourceRow key={g.key} label={g.label} s={srcs[0]} first={k === 0} share={singles.length > 1 && top > 0 && srcs[0].value != null ? srcs[0].value / top : null} />)}
-          </div>
-        )}
-        {multis.map(({ g, srcs }) => (
-          <div key={g.key}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 8 }}>{g.label}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
-              {srcs.map((x) => <SourceStateCard key={x.id} s={x} small />)}
-            </div>
-          </div>
-        ))}
-        {off.length > 0 && <ConnectRow label={offLabel} sources={off.flatMap(({ srcs }) => srcs)} />}
+      <div>
+        {live.map(({ g, srcs }, k) => <SourceGroupRow key={g.key} g={g} srcs={srcs} first={k === 0} top={top} accent={A} />)}
+        {off.length > 0 && <ConnectRow label={offLabel} sources={off.flatMap(({ srcs }) => srcs)} first={live.length === 0} />}
       </div>
     </Section>
   )
 }
-/** One source as a list row: its brand mark, the group label, the number on the right, and
- *  (when the group has company) a thin share bar in the stage's hue. */
-function SourceRow({ label, s, first, share }: { label: string; s: StageSourceView; first: boolean; share?: number | null }) {
-  const A = useAccent()
-  const has = s.status === 'CONNECTED' && s.hasData && s.value != null
-  const asOf = friendlyStamp(s.asOf)
-  const manual = s.status === 'MANUAL_ENTRY'
+
+/** a source's real number, or null (connected + reported, or typed in by hand) */
+function sourceValue(x: StageSourceView): number | null {
+  if (x.status === 'CONNECTED' && x.hasData && x.value != null) return x.value
+  if (x.status === 'MANUAL_ENTRY' && x.value != null) return x.value
+  return null
+}
+/** "Google Search views" under the Google group reads as "Search" */
+function partName(x: StageSourceView): string {
+  const t = (x.shortLabel || x.displayName).replace(/\b(Google|Instagram|Facebook|TikTok|YouTube|Yelp|LinkedIn)\b/g, '').replace(/[()]/g, '').replace(/\s+(views?|clicks?)$/i, '').replace(/\s+/g, ' ').trim()
+  return t || (x.shortLabel || x.displayName)
+}
+
+/** One source GROUP as a row (2026-09-04 redesign — the grey tiles are gone): the network's
+ *  real mark in a white disc, the group's name with its split underneath ("Search 4,956 ·
+ *  Maps 11,241"), the total on the right, and a slim bar in the stage's hue sized against the
+ *  biggest group — two tones when the group has parts. */
+function SourceGroupRow({ g, srcs, first, top, accent }: { g: StageGroup; srcs: StageSourceView[]; first: boolean; top: number; accent: Accent }) {
+  const parts = srcs.map((x) => ({ x, v: sourceValue(x) }))
+  const total = parts.reduce((t, p) => t + (p.v ?? 0), 0)
+  const hasAny = parts.some((p) => p.v != null)
+  const multi = parts.length > 1
+  const err = parts.find((p) => p.x.status === 'ERROR')
+  const manual = parts.find((p) => p.x.status === 'MANUAL_ENTRY')
+  const asOf = friendlyStamp(parts.find((p) => p.x.asOf)?.x.asOf)
+  const provider = String(srcs[0]?.provider ?? '')
+  // parts from DIFFERENT networks are named by network ("Instagram 18,085 · TikTok 2,731"),
+  // parts of one network by what they are ("Search 4,956 · Maps 11,241")
+  const mixed = new Set(srcs.map((x) => String(x.provider))).size > 1
+  const subText = err
+    ? 'Reconnect'
+    : multi
+    ? parts.map((p) => `${mixed ? (PROVIDER_NAMES[String(p.x.provider)] ?? partName(p.x)) : partName(p.x)} ${p.v != null ? p.v.toLocaleString() : DASH}`).join(' · ')
+    : manual
+    ? `entered by ${manual.x.manualBy ?? 'hand'}`
+    : parts[0]?.x.context || (asOf ? `as of ${asOf}` : '')
   return (
-    <div style={{ padding: '10px 0 11px', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
+    <div style={{ padding: '11px 0 12px', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <ProviderMark provider={String(s.provider)} />
+        <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <BrandOrMark provider={provider} size={20} />
+        </span>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 14, fontWeight: 500, color: C.ink }}>{label}</div>
-          {(s.context || asOf || manual || s.status === 'ERROR') && (
-            <div style={{ fontSize: 11.5, color: s.status === 'ERROR' ? C.coral : C.faint, marginTop: 1 }}>
-              {s.status === 'ERROR' ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : s.context ? s.context : `as of ${asOf}`}
-            </div>
-          )}
+          <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{g.label}</div>
+          {subText && <div style={{ fontSize: 12, color: err ? C.coral : C.mute, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subText}</div>}
         </div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: has || manual ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
-          {has || (manual && s.value != null) ? s.value!.toLocaleString() : DASH}
+        <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: hasAny ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+          {hasAny ? total.toLocaleString() : DASH}
         </div>
       </div>
-      {share != null && (
-        <div style={{ height: 4, borderRadius: 99, background: C.bg, marginTop: 8, marginLeft: 40, overflow: 'hidden' }}>
-          <div style={{ width: `${Math.max(2, Math.round(share * 100))}%`, height: '100%', borderRadius: 99, background: A.main }} />
+      {hasAny && top > 0 && (
+        <div style={{ height: 5, borderRadius: 99, background: C.bg, marginTop: 9, marginLeft: 48, overflow: 'hidden', display: 'flex' }}>
+          {(multi ? parts.filter((p) => (p.v ?? 0) > 0) : [{ x: parts[0].x, v: total }]).map((p, i) => (
+            <div key={p.x.id} style={{ width: `${Math.max(1.5, ((p.v ?? 0) / top) * 100)}%`, height: '100%', background: i === 0 ? accent.main : `${accent.main}80` }} />
+          ))}
         </div>
       )}
     </div>
   )
 }
 
+
+/* ── Real brand marks, inline (no icon package ships them). Each draws inside a
+   `size` box; the network's own colours, never ours. Unknown → a quiet globe. ── */
+const BRAND_OF: Record<string, string> = {
+  google_business_profile: 'google', google: 'google', gbp: 'google', google_analytics: 'google', google_search_console: 'google',
+  instagram: 'instagram', facebook: 'facebook', tiktok: 'tiktok', youtube: 'youtube', yelp: 'yelp', linkedin: 'linkedin',
+}
+export function BrandIcon({ provider, size = 20 }: { provider: string; size?: number }) {
+  const b = BRAND_OF[provider] ?? provider
+  const sz = { width: size, height: size, display: 'block', flexShrink: 0 } as const
+  switch (b) {
+    case 'google':
+      return (
+        <svg viewBox="0 0 48 48" style={sz} aria-hidden>
+          <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.8-.4-4H24v7.3h12.1c-.2 2-1.6 5-4.5 7l-.1.3 6.5 5 .5.1c4.1-3.8 6.6-9.5 6.6-15.7z" />
+          <path fill="#34A853" d="M24 45c5.9 0 10.9-1.9 14.5-5.3l-6.9-5.4c-1.9 1.3-4.4 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-.3 0-6.8 5.2-.1.3C7.9 39.9 15.4 45 24 45z" />
+          <path fill="#FBBC05" d="M11.5 27.4c-.5-1.4-.7-2.8-.7-4.4s.3-3 .7-4.4l0-.3-6.9-5.3-.2.1C2.9 16 2 19.9 2 24s.9 8 2.4 11.4l7.1-5.5z" />
+          <path fill="#EB4335" d="M24 10.5c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.8 4.2 29.9 2 24 2 15.4 2 7.9 7.1 4.4 14.1l7.1 5.5c1.8-5.3 6.7-9.1 12.5-9.1z" />
+        </svg>
+      )
+    case 'facebook':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} aria-hidden>
+          <circle cx="12" cy="12" r="12" fill="#1877F2" />
+          <path fill="#fff" d="M15.9 15.5l.5-3.5h-3.3V9.8c0-1 .5-1.9 2-1.9h1.5V5c-.8-.1-1.8-.2-2.6-.2-2.7 0-4.4 1.6-4.4 4.6V12H6.5v3.5h3.1V24h3.5v-8.5h2.8z" />
+        </svg>
+      )
+    case 'instagram':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} aria-hidden>
+          <defs><linearGradient id="igGrad" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#F9A13D" /><stop offset=".5" stopColor="#E1306C" /><stop offset="1" stopColor="#7B3FBF" /></linearGradient></defs>
+          <rect x="1" y="1" width="22" height="22" rx="6.5" fill="url(#igGrad)" />
+          <rect x="5.2" y="5.2" width="13.6" height="13.6" rx="4" fill="none" stroke="#fff" strokeWidth="1.8" />
+          <circle cx="12" cy="12" r="3.3" fill="none" stroke="#fff" strokeWidth="1.8" />
+          <circle cx="16.4" cy="7.6" r="1" fill="#fff" />
+        </svg>
+      )
+    case 'youtube':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} aria-hidden>
+          <rect x="1" y="4.5" width="22" height="15" rx="4.5" fill="#FF0033" />
+          <path fill="#fff" d="M9.8 8.6v6.8l6-3.4z" />
+        </svg>
+      )
+    case 'tiktok':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} aria-hidden>
+          <rect width="24" height="24" rx="6.5" fill="#111" />
+          <g transform="translate(5.2 4.4) scale(0.6)">
+            <path fill="#69C9D0" d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-1.99 6.15-1.58.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" transform="translate(-.6 -.6)" />
+            <path fill="#EE1D52" d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-1.99 6.15-1.58.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" transform="translate(.6 .6)" />
+            <path fill="#fff" d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-1.99 6.15-1.58.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z" />
+          </g>
+        </svg>
+      )
+    case 'yelp':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} aria-hidden>
+          <rect width="24" height="24" rx="6.5" fill="#D32323" />
+          <text x="12" y="17" textAnchor="middle" fontSize="14" fontWeight="800" fill="#fff" fontFamily="Inter, system-ui, sans-serif">Y</text>
+        </svg>
+      )
+    case 'linkedin':
+      return (
+        <svg viewBox="0 0 24 24" style={sz} aria-hidden>
+          <rect width="24" height="24" rx="5" fill="#0A66C2" />
+          <path fill="#fff" d="M7.1 9.6h2.4V17H7.1zM8.3 5.8a1.4 1.4 0 110 2.8 1.4 1.4 0 010-2.8zM11 9.6h2.3v1c.3-.6 1.1-1.2 2.3-1.2 2.5 0 2.9 1.6 2.9 3.7V17h-2.4v-3.5c0-.8 0-1.9-1.2-1.9s-1.4.9-1.4 1.9V17H11z" />
+        </svg>
+      )
+    default:
+      return null
+  }
+}
+
+export function BrandOrMark({ provider, size = 20 }: { provider: string; size?: number }) {
+  return BRAND_OF[provider] ? <BrandIcon provider={provider} size={size} /> : <ProviderMark provider={provider} size={Math.round(size * 1.1)} />
+}
 /* Brand marks: a small tile in each network's own colour, so a row reads at a glance
    without a word. Unknown providers get a quiet globe. */
 const PROVIDER_MARK: Record<string, { bg: string; fg?: string; text?: string; icon?: 'globe' | 'store' | 'bag' | 'cal' | 'heart' | 'mail' | 'share' | 'mega' }> = {
@@ -1384,14 +1476,22 @@ function providerName(id: string): string {
 }
 /** One quiet row for a group with nothing connected yet: names the networks that would
  *  fill it and opens the connect screen. Replaces a tile per network saying "Connect to see". */
-function ConnectRow({ label, sources }: { label: string; sources: StageSourceView[] }) {
-  const names = [...new Set(sources.filter((s) => s.status === 'AVAILABLE_NOT_CONNECTED').map((s) => providerName(s.id)).filter(Boolean))]
+function ConnectRow({ label, sources, first = false }: { label: string; sources: StageSourceView[]; first?: boolean }) {
+  const provs = [...new Set(sources.filter((s) => s.status === 'AVAILABLE_NOT_CONNECTED').map((s) => String(SOURCE_BY_ID[s.id]?.provider ?? '')).filter(Boolean))]
+  const names = provs.map((p) => PROVIDER_NAMES[p] ?? p)
   const list = names.length <= 2 ? names.join(' or ') : `${names.slice(0, 2).join(', ')} or ${names.length - 2} more`
   return (
-    <Link href="/dashboard/connected-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', ...TILE, padding: '13px 15px' }}>
+    <Link href="/dashboard/connected-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', padding: '11px 0 4px', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
+      <span style={{ display: 'inline-flex', flexShrink: 0, width: 36, justifyContent: 'center' }}>
+        {(provs.length ? provs.slice(0, 3) : ['website']).map((p, i) => (
+          <span key={p} style={{ width: 28, height: 28, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: i ? -10 : 0, opacity: 0.55, filter: 'grayscale(.4)' }}>
+            <BrandOrMark provider={p} size={15} />
+          </span>
+        ))}
+      </span>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{label}</div>
-        <div style={{ fontSize: 12, color: C.mute, marginTop: 2, lineHeight: 1.35 }}>{names.length ? `Connect ${list} to see it here.` : 'Coming soon.'}</div>
+        <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{label}</div>
+        <div style={{ fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.35 }}>{names.length ? `Connect ${list} to see it here.` : 'Coming soon.'}</div>
       </div>
       {names.length > 0 && <span style={{ fontSize: 12.5, fontWeight: 600, color: C.greenDk, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Connect <ChevronRight size={14} /></span>}
     </Link>
@@ -1857,37 +1957,37 @@ function TopSearches({ queries }: { queries: { query: string; impressions: numbe
  * drifts. The honesty rules below live here once: a re-implementation on the full list would
  * be the next place a false zero or a dead link comes back.
  */
-export function PostRow({ p }: { p: InsightsPost }) {
-          const inner = (
-            <>
-              <div style={{ width: 56, height: 56, borderRadius: 12, backgroundColor: p.thumbnailUrl ? '#000' : '#e9e9ee', backgroundImage: p.thumbnailUrl ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {!p.thumbnailUrl && <ImageIcon size={18} color={C.faint} />}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}>{p.type}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.mute, textTransform: 'capitalize' }}><ProviderMark provider={p.platform} size={16} />{p.platform}</span>
-                  {p.postedAt && reviewDate(p.postedAt) && <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, whiteSpace: 'nowrap' }}>{reviewDate(p.postedAt)}</span>}
-                </div>
-                <div style={{ display: 'flex', gap: 14, fontSize: 12, flexWrap: 'wrap' }}>
-                  {p.unreported
-                    ? <span style={{ color: C.faint }}>views not reported</span>
-                    : p.pending
-                    ? <span style={{ color: C.faint }}>numbers still coming in</span>
-                    : <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.reach.toLocaleString()}</b> views</span>}
-                  {p.likes > 0 && <span style={{ color: C.mute }}><b style={{ color: C.ink, fontWeight: 600, fontFamily: DISPLAY }}>{p.likes.toLocaleString()}</b> likes</span>}
-                  {!p.permalink && <span style={{ color: C.faint }}>link unavailable</span>}
-                </div>
-              </div>
-              {p.permalink && <ExternalLink size={15} color={C.faint} style={{ flexShrink: 0 }} />}
-            </>
-          )
-          const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 11, alignItems: 'center', ...TILE, padding: 10 }
-          return p.permalink
-            ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
-            : <div style={box}>{inner}</div>
+export function PostRow({ p, first = true }: { p: InsightsPost; first?: boolean }) {
+  const date = p.postedAt ? reviewDate(p.postedAt) : ''
+  const platform = p.platform ? p.platform.charAt(0).toUpperCase() + p.platform.slice(1) : ''
+  const inner = (
+    <>
+      <div style={{ position: 'relative', width: 60, height: 60, flexShrink: 0 }}>
+        <div style={{ width: 60, height: 60, borderRadius: 12, backgroundColor: p.thumbnailUrl ? '#000' : '#eeeef1', backgroundImage: p.thumbnailUrl ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {!p.thumbnailUrl && <ImageIcon size={20} color={C.faint} />}
+        </div>
+        <span style={{ position: 'absolute', right: -5, bottom: -5, width: 24, height: 24, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <BrandOrMark provider={p.platform} size={14} />
+        </span>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{platform}{p.type ? ` ${p.type.toLowerCase()}` : ''}{date ? ` · ${date}` : ''}</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: C.ink, marginTop: 3, fontFamily: DISPLAY, letterSpacing: '-.01em' }}>
+          {p.unreported ? <span style={{ color: C.faint, fontWeight: 500, fontFamily: 'inherit' }}>Views not reported</span>
+            : p.pending ? <span style={{ color: C.faint, fontWeight: 500, fontFamily: 'inherit' }}>Numbers still coming in</span>
+            : <>{p.reach.toLocaleString()} <span style={{ fontWeight: 500, color: C.mute, fontFamily: 'inherit', fontSize: 13 }}>views</span></>}
+          {p.likes > 0 && <span style={{ fontWeight: 500, color: C.mute, fontSize: 13, fontFamily: 'inherit' }}> · {p.likes.toLocaleString()} likes</span>}
+        </div>
+        {!p.permalink && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 2 }}>link unavailable</div>}
+      </div>
+      {p.permalink && <ArrowUpRight size={16} color={C.faint} style={{ flexShrink: 0 }} />}
+    </>
+  )
+  const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 13, alignItems: 'center', padding: '10px 0', borderTop: first ? 'none' : `0.5px solid ${C.line}` }
+  return p.permalink
+    ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
+    : <div style={box}>{inner}</div>
 }
-
 export const POSTS_FOOTNOTE = 'Your latest posts across every connected account, with how many views each one has so far. A post added very recently can take a day for its numbers to arrive.'
 
 /** The five newest, with a way through to everything. The count is the REAL total we hold,
@@ -1896,11 +1996,11 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
   const more = typeof total === 'number' && total > posts.length
   return (
     <Section title="Recent posts">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {posts.map((p) => <PostRow key={p.id} p={p} />)}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {posts.map((p, i) => <PostRow key={p.id} p={p} first={i === 0} />)}
       </div>
       {more && (
-        <Link href="/dashboard/insights/posts" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 10, padding: '11px 12px', borderRadius: 12, border: `0.5px solid ${C.line}`, background: '#fff', textDecoration: 'none', color: C.greenDk, fontSize: 13, fontWeight: 600 }}>
+        <Link href="/dashboard/insights/posts" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 10, padding: '11px 12px', borderRadius: 999, background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', textDecoration: 'none', color: C.greenDk, fontSize: 13, fontWeight: 600 }}>
           View all {total} posts <ChevronRight size={15} />
         </Link>
       )}

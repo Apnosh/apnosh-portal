@@ -110,8 +110,8 @@ export default function AllPostsPage() {
 
           {posts && posts.length > 0 && (
             <>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {posts.map((p) => <PostRow key={p.id} p={p} />)}
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {posts.map((p, i) => <PostRow key={p.id} p={p} first={i === 0} />)}
               </div>
               {hasMore && (
                 <button
