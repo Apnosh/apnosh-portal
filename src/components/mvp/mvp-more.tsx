@@ -12,6 +12,7 @@
  */
 
 import Link from 'next/link'
+import { CARD_SHADOW } from './kit'
 import { TrendingUp, ChevronRight, CreditCard, FileText, Headset, HelpCircle, Image as ImageIcon, LineChart, LogOut, MapPin, Palette, Plug, Settings, ShoppingBag, Star, Store, Target, Users, Share2 } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 
@@ -77,7 +78,7 @@ export default function MvpMore({ name, location, tier }: { name: string; locati
     <div style={{ background: C.bg, minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{MORE_CSS}</style>
 
-      <Link href="/dashboard/business-info" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14, textDecoration: 'none', color: 'inherit', marginBottom: 22 }}>
+      <Link href="/dashboard/business-info" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 13, background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: 14, textDecoration: 'none', color: 'inherit', marginBottom: 22 }}>
         <span style={{ width: 50, height: 50, borderRadius: '50%', background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18, fontWeight: 700 }}>{initials}</span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 19, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
@@ -88,8 +89,8 @@ export default function MvpMore({ name, location, tier }: { name: string; locati
 
       {GROUPS.map(group => (
         <div key={group.title} style={{ marginBottom: 22 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>{group.title}</div>
-          <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+          <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '0 6px 8px' }}>{group.title}</div>
+          <div style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
             {group.rows.map((r, i) => (
               <div key={r.href}>
                 {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 61 }} />}
@@ -107,7 +108,7 @@ export default function MvpMore({ name, location, tier }: { name: string; locati
         </div>
       ))}
 
-      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden', marginBottom: 14 }}>
+      <div style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, overflow: 'hidden', marginBottom: 14 }}>
         <button type="button" onClick={() => { void signOut() }} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 13, padding: '13px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
           <span style={{ width: 34, height: 34, borderRadius: 9, background: C.coralSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><LogOut size={18} color={C.coral} /></span>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: C.coral }}>Sign out</span>

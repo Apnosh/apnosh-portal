@@ -326,7 +326,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
         <MetricSettingsButton compact onChanged={() => window.location.reload()} />
       </div>
 
-      <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', background: C.bg }}>
+      <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', background: '#fff' }}>
         <PullIndicator pull={pull} phase={phase} />
         {loading ? (
           <Centered>Loading your numbers&hellip;</Centered>
@@ -411,7 +411,7 @@ function AnalystButton() {
 const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.045)'
 const CARD: React.CSSProperties = { marginTop: 14, background: '#fff', borderRadius: 18, padding: '16px 16px 18px', boxShadow: CARD_SHADOW }
 const H2: React.CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }
-const TILE: React.CSSProperties = { background: C.bg, borderRadius: 14 }
+const TILE: React.CSSProperties = { background: '#f5f5f7', borderRadius: 14 }
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },

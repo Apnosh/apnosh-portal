@@ -30,6 +30,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { Segmented, CARD_SHADOW } from './kit'
 import Link from 'next/link'
 import {
   ShoppingBag, Plus, ChevronRight, Trash2, CalendarDays,
@@ -212,7 +213,7 @@ export default function MvpOrders() {
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '2px 2px 14px' }}>
         <div style={{ minWidth: 0 }}>
-          <h1 style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, color: C.ink, lineHeight: 1.1 }}>Orders</h1>
+          <h1 style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, lineHeight: 1.1, letterSpacing: '-.01em', margin: 0 }}>Orders</h1>
         </div>
       </div>
 
@@ -234,21 +235,14 @@ export default function MvpOrders() {
       {!loading && !error && !nothing && (
         <>
           {/* Order tabs: Cart (planned) · Ordered (billing now) · History (closed) */}
-          <div style={{ display: 'flex', gap: 7, marginBottom: 14, overflowX: 'auto', paddingBottom: 2 }}>
-            {([['ordered', 'Ordered', paying.length], ['history', 'History', receipts.length]] as const).map(([k, l, n]) => {
-              const on = tab === k
-              return (
-                <button key={k} type="button" onClick={() => setTab(k)} style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'all .15s' }}>
-                  {l}<span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 99, background: on ? C.green : '#eef0ef', color: on ? '#fff' : C.faint, fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
-                </button>
-              )
-            })}
+          <div style={{ marginBottom: 14 }}>
+            <Segmented items={[['ordered', 'Ordered'], ['history', 'History']]} value={tab} onChange={setTab} counts={{ ordered: paying.length, history: receipts.length }} />
           </div>
 
           {/* ── CART — planned, not ordered yet ─────────────────────── */}
           {tab === 'cart' && (<>
           {planDraft.length > 0 && (
-            <Link href="/dashboard/campaigns/new" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 15px', marginBottom: 14, textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden' }}>
+            <Link href="/dashboard/campaigns/new" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '13px 15px', marginBottom: 14, textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden' }}>
               <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: C.amber }} />
               <span style={{ width: 36, height: 36, borderRadius: 11, background: C.amberBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={17} color={C.amber} /></span>
               <span style={{ flex: 1, minWidth: 0 }}>
@@ -260,7 +254,7 @@ export default function MvpOrders() {
           )}
           {cartParts.length > 0 && <SectionHead label="When you launch" right={cartParts.join(' + ')} />}
           {cart.length === 0 && planDraft.length === 0 ? (
-            <Link href="/dashboard/campaigns/new" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 15px', marginBottom: 22, textDecoration: 'none', color: 'inherit' }}>
+            <Link href="/dashboard/campaigns/new" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '13px 15px', marginBottom: 22, textDecoration: 'none', color: 'inherit' }}>
               <span style={{ width: 36, height: 36, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={17} color={C.greenDk} /></span>
               <span style={{ flex: 1, fontSize: 13.5, color: C.mute }}>Cart&apos;s empty. Plan something new.</span>
               <ChevronRight size={17} color={C.faint} />
@@ -278,7 +272,7 @@ export default function MvpOrders() {
                 const cost = billParts(bills.get(d.id)!).join(' + ')
 
                 return (
-                  <div key={d.id} className={confirming ? 'ord-rise' : 'mvp-press ord-rise'} style={{ position: 'relative', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, marginBottom: 11, boxShadow: '0 1px 3px rgba(0,0,0,.04)', overflow: 'hidden', animationDelay: `${Math.min(i, 12) * 0.04}s` }}>
+                  <div key={d.id} className={confirming ? 'ord-rise' : 'mvp-press ord-rise'} style={{ position: 'relative', background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, marginBottom: 11, overflow: 'hidden', animationDelay: `${Math.min(i, 12) * 0.04}s` }}>
                     <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: inReview ? C.amber : C.faint }} />
 
                     {confirming ? (
@@ -342,11 +336,11 @@ export default function MvpOrders() {
             <>
               {payingMonthly > 0 && <SectionHead label="Right now" right={`$${Math.round(payingMonthly).toLocaleString()}/mo`} />}
               {paying.length === 0 ? (
-                <div className="ord-rise" style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '28px 18px', textAlign: 'center', fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>
+                <div className="ord-rise" style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '28px 18px', textAlign: 'center', fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>
                   Nothing running yet.<br />Launch a plan from your cart and it shows up here.
                 </div>
               ) : (
-              <div className="ord-rise" style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+              <div className="ord-rise" style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
                 {paying.map((c, i) => {
                   const d = c.draft
                   const vm = vms.get(d.id)!
@@ -389,11 +383,11 @@ export default function MvpOrders() {
             <>
               {!chUnknown && receipts.length > 0 && <SectionHead label="All time" right={`${dollars(receipts.reduce((s, c) => s + (charges?.[c.draft.id]?.accruedCents ?? 0), 0))} billed`} />}
               {receipts.length === 0 ? (
-                <div className="ord-rise" style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '28px 18px', textAlign: 'center', fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>
+                <div className="ord-rise" style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '28px 18px', textAlign: 'center', fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>
                   No receipts yet.<br />Finished and stopped campaigns land here.
                 </div>
               ) : (
-              <div className="ord-rise" style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
+              <div className="ord-rise" style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
                 {receipts.map((c, i) => {
                   const d = c.draft
                   const vm = vms.get(d.id)!
@@ -437,7 +431,7 @@ export default function MvpOrders() {
 function SectionHead({ label, right }: { label: string; right?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '0 6px 7px' }}>
-      <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>{label}</span>
       {right && <span style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: C.ink, textAlign: 'right' }}>{right}</span>}
     </div>
   )

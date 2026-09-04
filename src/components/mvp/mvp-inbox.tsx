@@ -13,6 +13,7 @@
  * first. Wired to real data (/api/dashboard/inbox).
  */
 import { useEffect, useState } from 'react'
+import { CARD_SHADOW, Segmented } from './kit'
 import Link from 'next/link'
 import { Check, Star, Loader2, Search, MoreHorizontal } from 'lucide-react'
 import { markInboxRead } from '@/app/dashboard/inbox/actions'
@@ -89,7 +90,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
       <div style={{ padding: '18px 16px 10px', flexShrink: 0, borderBottom: `0.5px solid ${C.line}` }}>
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, padding: '0 2px' }}>
           <div>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 25, lineHeight: 1 }}>Notifications</div>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, lineHeight: 1.1, letterSpacing: '-.01em' }}>Notifications</div>
             <div style={{ fontSize: 12.5, color: needsYou ? C.mute : C.greenDk, marginTop: 5, fontWeight: needsYou ? 400 : 600 }}>{status}</div>
           </div>
           <GlyphBtn onClick={() => setSearchOpen((s) => !s)} active={searchOpen}><Search size={18} /></GlyphBtn>
@@ -98,10 +99,8 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
           <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notifications…" style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
         )}
         {/* LinkedIn-style filter pills */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 13, overflowX: 'auto', paddingBottom: 2 }} className="mvp-swipe-x">
-          {FILTERS.map((f) => (
-            <FilterPill key={f.key} label={f.label} count={COUNTED.has(f.key) ? countFor(f.key) : undefined} active={filter === f.key} onClick={() => setFilter(f.key)} />
-          ))}
+        <div style={{ marginTop: 13 }}>
+          <Segmented items={FILTERS.map((f) => [f.key, f.label] as [typeof f.key, string])} value={filter} onChange={setFilter} counts={Object.fromEntries(FILTERS.filter((f) => COUNTED.has(f.key)).map((f) => [f.key, countFor(f.key)]))} />
         </div>
       </div>
 
@@ -122,13 +121,6 @@ function GlyphBtn({ children, onClick, active }: { children: React.ReactNode; on
   return (
     <button onClick={onClick} style={{ flexShrink: 0, width: 38, height: 38, borderRadius: '50%', border: `1px solid ${active ? C.green : C.line}`, background: active ? C.greenSoft : '#fff', color: active ? C.greenDk : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
       {children}
-    </button>
-  )
-}
-function FilterPill({ label, count, active, onClick }: { label: string; count?: number; active: boolean; onClick: () => void }) {
-  return (
-    <button onClick={onClick} style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, border: `1px solid ${active ? C.green : '#d8d8de'}`, background: active ? C.green : '#fff', color: active ? '#fff' : C.ink2, borderRadius: 999, padding: '7px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer', transition: 'all .15s' }}>
-      {label}{count ? <span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 99, background: active ? 'rgba(255,255,255,0.28)' : '#eef0ef', color: active ? '#fff' : C.faint, fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{count}</span> : null}
     </button>
   )
 }

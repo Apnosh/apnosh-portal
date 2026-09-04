@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { Segmented, CARD_SHADOW } from './kit'
 import { outcomeLine, type CampaignOutcome } from '@/lib/campaigns/outcome-view'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -107,7 +108,7 @@ export default function MvpCampaigns() {
           className="mvp-row"
           style={{
             display: 'flex', alignItems: 'center', gap: 13, textDecoration: 'none',
-            background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16,
+            background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW,
             padding: '14px 15px', marginBottom: 16,
           }}
         >
@@ -142,15 +143,8 @@ export default function MvpCampaigns() {
           <CampaignCalendar saved={(saved ?? []).filter((c) => c.status !== 'draft')} />
         ) : (
           <>
-            <div className="cc-scroll" style={{ display: 'flex', gap: 7, marginBottom: 16, overflowX: 'auto', paddingBottom: 2 }}>
-              {([['all', 'All'], ['live', 'Live'], ['production', 'In production'], ['done', 'Done']] as const).map(([k, l]) => {
-                const on = tab === k; const n = counts[k]
-                return (
-                  <button key={k} onClick={() => setTab(k)} style={{ flexShrink: 0, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 7, border: `1px solid ${on ? C.green : C.line}`, background: on ? C.greenSoft : '#fff', color: on ? C.greenDk : C.mute, borderRadius: 999, padding: '6px 13px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', transition: 'all .15s' }}>
-                    {l}<span style={{ minWidth: 17, height: 17, padding: '0 5px', borderRadius: 99, background: on ? C.green : '#eef0ef', color: on ? '#fff' : C.faint, fontSize: 10.5, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
-                  </button>
-                )
-              })}
+            <div style={{ marginBottom: 16 }}>
+              <Segmented items={[['all', 'All'], ['live', 'Live'], ['production', 'Making'], ['done', 'Done']]} value={tab} onChange={setTab} counts={counts} />
             </div>
             {shown.length === 0 ? (
               <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 16, padding: '26px 16px', textAlign: 'center', color: C.faint, fontSize: 13.5 }}>Nothing in this filter.</div>
@@ -195,7 +189,7 @@ function CampaignCard({ c }: { c: CampCard }) {
   const ts = (t: 'up' | 'down' | 'flat') => t === 'up' ? { c: C.green, bg: C.greenSoft, I: TrendingUp } : t === 'down' ? { c: C.red, bg: C.redBg, I: TrendingDown } : { c: C.mute, bg: '#f0f0ee', I: Minus }
 
   return (
-    <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden', background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '11px 13px 10px', marginBottom: 9, boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
+    <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden', background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '11px 13px 10px', marginBottom: 9, }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: tone.bar }} />
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -258,7 +252,7 @@ function CampaignCalendar({ saved }: { saved: SavedCampaign[] }) {
 
   const cells: (number | null)[] = [...Array(startDow).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)]
   return (
-    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '14px 14px 16px' }}>
+    <div style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '14px 14px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <button onClick={() => setCur((c) => ({ y: c.m === 0 ? c.y - 1 : c.y, m: c.m === 0 ? 11 : c.m - 1 }))} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.mute, padding: 4 }}><ChevronLeft size={18} /></button>
         <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15 }}>{monthLabel}</span>
@@ -313,14 +307,14 @@ function OccasionsRail() {
   }
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 2px 8px' }}>Coming up</div>
+      <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '0 2px 8px' }}>Coming up</div>
       {note && <div style={{ fontSize: 12.5, color: '#8a5a0c', background: '#fbf3e4', border: '0.5px solid #eed9b3', borderRadius: 10, padding: '8px 11px', margin: '0 0 8px' }}>{note}</div>}
       <div className="cc-scroll" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
         {occs.map((o) => (
           <div
             key={o.id}
             className="mvp-row"
-            style={{ flex: '0 0 auto', width: 210, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '13px 14px' }}
+            style={{ flex: '0 0 auto', width: 210, background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '13px 14px' }}
           >
             <span style={{ display: 'block', fontSize: 22, lineHeight: 1 }}>{o.emoji}</span>
             <span style={{ display: 'block', fontSize: 14.5, fontWeight: 700, color: C.ink, marginTop: 8, lineHeight: 1.25 }}>{o.name}</span>

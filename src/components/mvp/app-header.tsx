@@ -22,7 +22,7 @@ export default function AppHeader({ count }: { count?: number }) {
   const locations = availableClients.length ? availableClients : (client?.id ? [{ id: client.id, name }] : [])
 
   return (
-    <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 10px 9px 12px', background: '#fff', borderBottom: `1px solid ${C.line}` }}>
+    <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 10px 9px 12px', background: '#fff', borderBottom: '1px solid rgba(0,0,0,.06)' }}>
       {/* location switcher */}
       <button onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, background: 'none', border: 'none', padding: '4px 4px 4px 0', cursor: 'pointer' }}>
         <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.greenDk, flexShrink: 0 }}>{initial}</div>
