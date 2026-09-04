@@ -14,6 +14,8 @@ const SHELL_CSS = `
 .mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center;overflow:hidden}
 .mvp-frame{width:100%;max-width:none;background:#fff;display:flex;flex-direction:column;min-height:0;position:relative}
 .mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+.mvp-frame-scroll.mvp-under-top{padding-top:56px}
+.mvp-frame-top{position:absolute;top:0;left:0;right:0;z-index:6}
 @media (min-width:560px){.mvp-frame{max-width:480px;box-shadow:0 0 40px rgba(0,0,0,0.06)}.mvp-frame.mvp-frame-wide{max-width:920px}}
 .mvp-row{transition:background .12s ease}
 .mvp-row:active{background:#f1f5f4}
@@ -31,8 +33,9 @@ export default function MvpShell({ active, unread, header, children, wide }: { a
     <div className="mvp-shell">
       <style>{SHELL_CSS}</style>
       <div className={wide ? 'mvp-frame mvp-frame-wide' : 'mvp-frame'}>
-        {header ?? <AppHeader count={unread} />}
-        <div className="mvp-frame-scroll">{children}</div>
+        {/* the standard app bar floats over the scroll (glass); a page's own header stays in flow */}
+        {header ? header : <div className="mvp-frame-top"><AppHeader count={unread} /></div>}
+        <div className={header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}>{children}</div>
         <BottomNav active={active} />
       </div>
     </div>

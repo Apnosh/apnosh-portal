@@ -22,7 +22,7 @@ export default function AppHeader({ count }: { count?: number }) {
   const locations = availableClients.length ? availableClients : (client?.id ? [{ id: client.id, name }] : [])
 
   return (
-    <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 10px 9px 12px', background: '#fff', borderBottom: '1px solid rgba(0,0,0,.06)' }}>
+    <div style={{ position: 'relative', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '9px 10px 9px 12px', background: 'rgba(255,255,255,0.78)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', borderBottom: '1px solid rgba(0,0,0,.05)' }}>
       {/* location switcher */}
       <button onClick={() => setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, background: 'none', border: 'none', padding: '4px 4px 4px 0', cursor: 'pointer' }}>
         <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: C.greenDk, flexShrink: 0 }}>{initial}</div>
@@ -31,9 +31,9 @@ export default function AppHeader({ count }: { count?: number }) {
       </button>
 
       {/* right: alerts (notifications) · messages */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        <IconLink href="/dashboard/inbox" label="Alerts" count={count}><Bell size={19} /></IconLink>
-        <IconLink href="/dashboard/messages" label="Messages"><MessageCircle size={19} /></IconLink>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, borderRadius: 999, padding: 2, background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
+        <IconLink href="/dashboard/inbox" label="Alerts" count={count}><Bell size={18} /></IconLink>
+        <IconLink href="/dashboard/messages" label="Messages"><MessageCircle size={18} /></IconLink>
       </div>
 
       {/* dropdown */}
@@ -63,7 +63,7 @@ export default function AppHeader({ count }: { count?: number }) {
 function IconLink({ href, label, count, children }: { href: string; label: string; count?: number; children: React.ReactNode }) {
   const n = count ?? 0
   return (
-    <Link href={href} aria-label={n > 0 ? `${label} (${n})` : label} style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <Link href={href} aria-label={n > 0 ? `${label} (${n})` : label} style={{ position: 'relative', width: 34, height: 34, borderRadius: '50%', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {children}
       {n > 0 && (
         <span style={{ position: 'absolute', top: 3, right: 3, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #fff' }}>{n > 9 ? '9+' : n}</span>
