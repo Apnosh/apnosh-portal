@@ -100,7 +100,7 @@ export default function ServiceOptionsEditor() {
               </p>
               {groups.map(g => (
                 <div key={g} style={{ marginBottom: 20 }}>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>{g}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>{g}</div>
                   <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
                     {catalog.filter(c => c.group === g).map((c, i) => (
                       <div key={c.id}>

@@ -731,7 +731,7 @@ function WhatFeedsThis({ feed, unit }: { feed: StageFeed; unit: string }) {
       <div style={{ fontSize: 12.5, color: C.faint, marginTop: 10, textAlign: 'center' }}>Adds up to <b style={{ color: C.greenDk, fontFamily: DISPLAY, fontSize: 14 }}>{feed.headline.toLocaleString()}</b> {unit.toLowerCase()}</div>
       {feed.note.length > 0 && (
         <>
-          <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, margin: '16px 0 8px' }}>Audience growth · not part of this number</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, margin: '16px 0 8px' }}>Audience growth · not part of this number</div>
           <div style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, Math.max(2, feed.note.length))}, 1fr)`, gap: 8 }}>
             {feed.note.map((p) => (
               <div key={p.key} style={{ background: '#fbfcfb', border: `1px dashed ${C.line}`, borderRadius: 13, padding: '12px 6px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 68 }}>
@@ -1250,7 +1250,7 @@ function CampaignTrend({ mv, list }: { mv?: MetricView; list: StageCampaign[] | 
                 <div style={{ width: 26, height: 26, borderRadius: 99, border: `1.5px solid ${C.green}`, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{m.n}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
-                    <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint }}>{fmtPinDate(m.ms)}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>{fmtPinDate(m.ms)}</span>
                     {m.delta == null ? (
                       <span style={{ fontSize: 11, fontWeight: 600, color: C.faint }}>too soon to tell</span>
                     ) : Math.abs(m.delta) < 3 ? (

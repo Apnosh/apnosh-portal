@@ -128,7 +128,7 @@ export default function SocialProfilesFix({ campaignId, initialFixed }: { campai
       {/* the shared facts, once — every platform below pastes from these */}
       {facts.length > 0 && (
         <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 16, marginTop: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 10 }}>Your info, the same everywhere</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 10 }}>Your info, the same everywhere</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {facts.map((f) => (
               <button key={f.label} onClick={() => copy(f.value, f.label)}
@@ -163,7 +163,7 @@ export default function SocialProfilesFix({ campaignId, initialFixed }: { campai
                 <button onClick={() => copy(bio, p.key)}
                   style={{ display: 'flex', alignItems: 'flex-start', gap: 10, width: '100%', background: C.bg, border: 'none', borderRadius: 10, padding: '10px 12px', marginTop: 12, cursor: 'pointer', textAlign: 'left' }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 4 }}>Bio to paste ({p.bioMax} letters max)</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 4 }}>Bio to paste ({p.bioMax} letters max)</div>
                     <div style={{ fontSize: 12.5, color: C.ink, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>{bio}</div>
                   </div>
                   {copied === p.key ? <Check size={14} color={C.greenDk} style={{ marginTop: 2 }} /> : <Copy size={14} color={C.faint} style={{ marginTop: 2 }} />}

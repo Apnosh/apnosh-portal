@@ -175,7 +175,7 @@ export default function CampaignReviewBody({ camp, progress, charges, onSetProdu
       {pieces.length > 0 && (
         <>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '4px 2px 8px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>What you&rsquo;re getting</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>What you&rsquo;re getting</div>
             {!shipped && (
               <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: C.mute }}>
                 <CalendarDays size={12} /> {sched.mode === 'event' ? 'Toward' : 'Starts'}
@@ -199,7 +199,7 @@ export default function CampaignReviewBody({ camp, progress, charges, onSetProdu
 
           {remote.length > 0 && (
             <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden', marginBottom: 9 }}>
-              {onSite.length > 0 && <div style={{ padding: '9px 13px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, background: C.bg, borderBottom: `1px solid ${C.line}` }}>No shoot needed</div>}
+              {onSite.length > 0 && <div style={{ padding: '9px 13px', fontSize: 13, fontWeight: 600, color: C.mute, background: C.bg, borderBottom: `1px solid ${C.line}` }}>No shoot needed</div>}
               {remote.map((p) => <Piece key={p.key} p={p} i={pieces.indexOf(p)} />)}
             </div>
           )}
@@ -212,7 +212,7 @@ export default function CampaignReviewBody({ camp, progress, charges, onSetProdu
       {/* services (non-content lines) — quiet */}
       {services.length > 0 && (
         <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden', marginBottom: 9 }}>
-          <div style={{ padding: '9px 13px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, background: C.bg, borderBottom: `1px solid ${C.line}` }}>Always-on</div>
+          <div style={{ padding: '9px 13px', fontSize: 13, fontWeight: 600, color: C.mute, background: C.bg, borderBottom: `1px solid ${C.line}` }}>Always-on</div>
           {services.map((it, i) => (
             <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}>
               <Building2 size={16} color={C.faint} style={{ flexShrink: 0 }} />
@@ -255,7 +255,7 @@ export default function CampaignReviewBody({ camp, progress, charges, onSetProdu
       {/* go further */}
       {recommended.length > 0 && !shipped && (
         <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 8 }}>Go further</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 8 }}>Go further</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {recommended.map((it) => <LineCard key={it.id} item={it} onToggleInclude={() => onToggleInclude(it.id)} />)}
           </div>

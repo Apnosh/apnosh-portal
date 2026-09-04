@@ -196,7 +196,7 @@ export default function BrandEditor() {
 }
 
 function SectionHead({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 2px 9px', marginTop: 6 }}>{children}</div>
+  return <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 2px 9px', marginTop: 6 }}>{children}</div>
 }
 function Label({ children }: { children: React.ReactNode }) {
   return <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.mute, marginBottom: 6 }}>{children}</label>

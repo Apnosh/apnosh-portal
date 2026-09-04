@@ -14,10 +14,10 @@ export const DISPLAY = "'Cal Sans','Inter',sans-serif"
 export const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
 export const AMBER_GRAD = 'linear-gradient(135deg,#e0a13a 0%,#b9760f 100%)'
 /** the one resting card shadow + the hero-only glow — cards read calm, the hero reads alive. */
-export const SHADOW_CARD = '0 1px 3px rgba(0,0,0,.03)'
+export const SHADOW_CARD = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' // the owner app's one card shadow (kit.tsx)
 export const SHADOW_HERO = '0 8px 24px rgba(46,154,120,0.08)'
 /** the one section-label style (matches the portal Home). */
-export const EYEBROW: CSSProperties = { fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: '#6e6e73' }
+export const EYEBROW: CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: '#1d1d1f' } // sentence-case section heading (design kit 2026-09-04)
 
 export const money = (n: number) => (n === 0 ? 'Free' : `$${Math.round(n).toLocaleString()}`)
 

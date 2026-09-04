@@ -74,7 +74,7 @@ export default function MenuCampaignBody({ camp, progress, charges }: { camp: Sa
       {/* ready-now group */}
       {restItems.length > 0 && (
         <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden', marginBottom: 12 }}>
-          <div style={{ padding: '9px 13px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, background: C.bg, borderBottom: `1px solid ${C.line}` }}>Ready now · no visit needed</div>
+          <div style={{ padding: '9px 13px', fontSize: 13, fontWeight: 600, color: C.mute, background: C.bg, borderBottom: `1px solid ${C.line}` }}>Ready now · no visit needed</div>
           {restItems.map((it) => <ReadRow key={it.id} it={it} />)}
         </div>
       )}

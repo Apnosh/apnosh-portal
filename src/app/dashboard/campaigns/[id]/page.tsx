@@ -194,7 +194,7 @@ export default function CampaignDetailPage() {
 
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '18px 16px 32px', background: 'radial-gradient(120% 300px at 50% 0%, rgba(74,189,152,0.07), rgba(255,255,255,0) 100%)' }}>
           <MotionStyles />
-          {error ? <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 18, boxShadow: SHADOW_CARD, padding: '24px 20px', textAlign: 'center', fontSize: 13.5, color: C.red }}>{error}</div>
+          {error ? <div style={{ background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '24px 20px', textAlign: 'center', fontSize: 13.5, color: C.red }}>{error}</div>
             : !camp ? (
               <div>
                 <div className="cw-skel" style={{ width: 96, height: 24, borderRadius: 99, marginBottom: 12 }} />
@@ -223,7 +223,7 @@ export default function CampaignDetailPage() {
             <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: '#fff' }}>
               {shipError && <div style={{ fontSize: 12.5, color: C.red, textAlign: 'center', marginBottom: 8 }}>{shipError}</div>}
               <div style={{ display: 'flex', gap: 10 }}>
-                <button onClick={() => router.push('/dashboard/campaigns')} disabled={busy} style={{ flex: '0 0 auto', minWidth: 104, height: 48, background: '#fff', color: C.ink, border: `1px solid ${C.line}`, borderRadius: 12, padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Save draft</button>
+                <button onClick={() => router.push('/dashboard/campaigns')} disabled={busy} style={{ flex: '0 0 auto', minWidth: 104, height: 48, background: '#fff', color: C.ink, borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Save draft</button>
                 <button onClick={ship} disabled={busy} className="cw-press" style={{ flex: 1, height: 48, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.7 : 1 }}>
                   {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
                   {path === 'strategist' ? 'Approve & ship' : path === 'diy' ? 'Schedule it' : 'Ship it'}
@@ -308,7 +308,7 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
     <CreatorsCard items={core} overrides={camp.creatorChoices ?? {}} vibe={vibeForCampaign(camp.draft.goalKey, camp.draft.occasion)} onChoose={onChooseCreator} />
   )
   const briefBlock = brief ? (
-    <div style={{ marginTop: 16, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 18, padding: 16 }}>
+    <div style={{ marginTop: 16, background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: 16 }}>
       <div style={{ ...EYEBROW, marginBottom: 10 }}>The plan</div>
       {brief.offer && <Row k="Offer" v={brief.offer.label} />}
       <Row k="Goal" v={brief.kpi} />
@@ -509,7 +509,7 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
 /** A quiet reference door: icon + label + where it goes, one per row. */
 function LinkRow({ Icon, label, sub, onClick }: { Icon: typeof Users; label: string; sub: string; onClick: () => void }) {
   return (
-    <button onClick={onClick} className="cw-press" style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, padding: '13px 14px', boxShadow: SHADOW_CARD, cursor: 'pointer', textAlign: 'left', width: '100%' }}>
+    <button onClick={onClick} className="cw-press" style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '13px 14px', cursor: 'pointer', textAlign: 'left', width: '100%' }}>
       <span style={{ flexShrink: 0, width: 36, height: 36, borderRadius: 11, background: C.greenSoft, color: C.greenDk, display: 'grid', placeItems: 'center' }}><Icon size={16} /></span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{label}</span>
@@ -555,7 +555,7 @@ function SinceLaunch({ o }: { o: CampaignOutcome | null }) {
   return (
     <div style={{ marginTop: 24 }}>
       <div style={{ ...EYEBROW, marginBottom: 8 }}>On Google since launch</div>
-      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '13px 15px' }}>
+      <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '13px 15px' }}>
         <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{line.text}</div>
         {o.pct != null && (
           <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4 }}>{o.after.toLocaleString('en-US')} in the two weeks after, against {o.before.toLocaleString('en-US')} the two before.</div>

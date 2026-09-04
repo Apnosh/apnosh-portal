@@ -171,7 +171,7 @@ export default function SettingsPage() {
               <div style={{ padding: 14 }}>
                 <ToggleRow label="Auto-approve all content" desc="Skip review. Your team posts directly." on={approvalGlobal} onToggle={() => setApprovalGlobal((v) => !v)} />
                 <div style={{ height: '0.5px', background: C.line, margin: '12px 0' }} />
-                <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, marginBottom: 10 }}>Auto-approve by type</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 10 }}>Auto-approve by type</div>
                 {APPROVAL_TYPES.map((t) => (
                   <ToggleRow key={t.key} label={t.label} desc={t.desc} on={approvalGlobal || approvalTypes[t.key]} dimmed={approvalGlobal}
                     onToggle={() => { if (!approvalGlobal) setApprovalTypes((prev) => ({ ...prev, [t.key]: !prev[t.key] })) }} />

@@ -45,7 +45,7 @@ export function MvpGroup({ title, children }: { title?: string; children: React.
   const items = React.Children.toArray(children)
   return (
     <div style={{ marginBottom: 22 }}>
-      {title && <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>{title}</div>}
+      {title && <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>{title}</div>}
       <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
         {items.map((child, i) => (
           <React.Fragment key={i}>
@@ -136,7 +136,7 @@ export function StatusPill({ label, on, onText = 'Connected', offText = 'Not con
 
 // Uppercase section caption above a snapshot or group.
 export function MvpSectionLabel({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, padding: '2px 6px 8px' }}>{children}</div>
+  return <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '2px 6px 8px' }}>{children}</div>
 }
 
 // Snapshot stat tile: a number, a label, an optional up/down delta. Zero values

@@ -77,7 +77,7 @@ export default function LineCard({
         <div style={{ padding: '10px 12px 12px 27px', borderTop: `1px solid ${C.line}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
           {guide && (
             <div>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, marginBottom: 5 }}>How to do it</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 5 }}>How to do it</div>
               {guide.steps.map((st, i) => (
                 <div key={st.label} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                   <span style={{ flex: 'none', width: 16, height: 16, borderRadius: 99, background: C.greenSoft, color: C.greenDk, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>{i + 1}</span>

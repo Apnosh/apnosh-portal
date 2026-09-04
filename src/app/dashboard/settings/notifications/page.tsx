@@ -91,7 +91,7 @@ export default function NotificationPreferencesPage() {
                 <Row label="Email notifications" desc="Get notifications in your inbox." on={prefs.email_enabled} onToggle={() => setPrefs((p) => ({ ...p, email_enabled: !p.email_enabled }))} />
                 {prefs.email_enabled && (
                   <div style={{ marginTop: 8, borderTop: `0.5px solid ${C.line}`, paddingTop: 6 }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, margin: '6px 0 2px' }}>Frequency</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, margin: '6px 0 2px' }}>Frequency</div>
                     {FREQUENCIES.map((f) => {
                       const on = prefs.email_digest_frequency === f.value
                       return (

@@ -198,7 +198,7 @@ export default function BillingPage() {
             {/* Orders — campaign receipts, rebuilt from each shipped campaign. Independent of Stripe setup. */}
             {orders.length > 0 && (
               <div style={{ marginBottom: 22 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>Orders</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>Orders</div>
                 <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
                   {orders.map((o, i) => {
                     const r = buildReceipt(o, today)
@@ -277,7 +277,7 @@ export default function BillingPage() {
             {/* Invoices */}
             {invoices.length > 0 && (
               <div style={{ marginBottom: 22 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>Invoices</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>Invoices</div>
                 <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
                   {invoices.map((inv, i) => {
                     const st = invoiceStatus(inv.status)

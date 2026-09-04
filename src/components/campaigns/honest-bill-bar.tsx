@@ -17,7 +17,7 @@ export default function HonestBillBar({ items, note, bill }: { items: LineItem[]
   return (
     <div style={{ background: '#fff', borderTop: `1px solid ${C.line}`, padding: '10px 16px', boxShadow: '0 -6px 20px rgba(0,0,0,0.05)' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mute }}>Your honest bill</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>Your honest bill</span>
         <span key={`${s.oneTimeOnDelivery}-${s.perMonth}`} style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: C.ink, animation: 'billpop .25s ease' }}>
           {free ? 'Free' : (
             <>

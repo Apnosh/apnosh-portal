@@ -56,7 +56,7 @@ function FaqGroup({ cat, query, openKeys, toggle }: { cat: FaqCategory; query: s
     <div style={{ marginBottom: 22 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px 7px' }}>
         <Icon size={13} color={C.faint} />
-        <span style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint }}>{cat.category}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>{cat.category}</span>
       </div>
       <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
         {cat.items.map((item, i) => {

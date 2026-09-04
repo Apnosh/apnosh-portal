@@ -118,7 +118,7 @@ function Back({ onClick, label }: { onClick: () => void; label: string }) {
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '14px 4px 8px' }}>
+    <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '14px 4px 8px' }}>
       {children}
     </div>
   )
@@ -511,7 +511,7 @@ export default function MonthlyPlanFlow({
         </div>
       </ReceiptFrame>
 
-      <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 2px 12px' }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 2px 12px' }}>
         What happens to someone who has never heard of you
       </div>
 

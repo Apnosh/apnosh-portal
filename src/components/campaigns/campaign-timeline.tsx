@@ -67,7 +67,7 @@ export default function CampaignTimeline({ shippedAtISO, sched, postedCount, any
 
   return (
     <div style={{ marginTop: 16 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 4 }}>The journey</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 4 }}>The journey</div>
       {nextLine && <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 3 }}>{nextLine}</div>}
       {done === 0 && beats.length > 0 && <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 12 }}>Nothing posts until you approve each draft.</div>}
       {done > 0 && <div style={{ marginBottom: 12 }} />}

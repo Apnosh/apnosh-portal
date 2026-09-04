@@ -120,7 +120,7 @@ export default function CategoryEditor() {
           ) : (
             <>
               <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '15px 16px', marginBottom: 18 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>You appear on Google as</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 6 }}>You appear on Google as</div>
                 <div style={{ fontSize: 20, fontWeight: 600, color: primary ? C.ink : C.faint, fontFamily: DISPLAY, lineHeight: 1.2 }}>{primary?.displayName ?? 'No category set yet'}</div>
                 <div style={{ fontSize: 12, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>This decides which &ldquo;near me&rdquo; searches you show up in. Make it specific (e.g. &ldquo;Korean BBQ restaurant&rdquo;).</div>
               </div>

@@ -128,7 +128,7 @@ export default function MvpMenuEditor({ initial }: { initial: MenuItem[] }) {
               <p style={{ fontSize: 12, color: C.mute, lineHeight: 1.5, margin: '0 6px 14px' }}>Edits publish to your website automatically. Tap &ldquo;Update Google&rdquo; to refresh your Google menu too.</p>
               {categories.map(cat => (
               <div key={cat} style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>{cat}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>{cat}</div>
                 <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
                   {items.filter(i => i.category === cat).map((it, i) => (
                     <div key={it.id}>

@@ -252,7 +252,7 @@ function PasteRow({ label, value, big }: { label: string; value: string; big?: b
   const [copied, setCopied] = useState(false)
   return (
     <div style={{ marginBottom: 8 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 3 }}>{label}</div>
       <button
         onClick={() => {
           void navigator.clipboard?.writeText(value)

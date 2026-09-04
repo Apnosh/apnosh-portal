@@ -196,7 +196,7 @@ function CartView(p: {
 
         {p.restCart.length > 0 && (
           <div style={{ background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, overflow: 'hidden', marginBottom: 12 }}>
-            <div style={{ padding: '9px 13px', fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, background: C.bg, borderBottom: `1px solid ${C.line}` }}>Ready now · no visit needed</div>
+            <div style={{ padding: '9px 13px', fontSize: 13, fontWeight: 600, color: C.mute, background: C.bg, borderBottom: `1px solid ${C.line}` }}>Ready now · no visit needed</div>
             {p.restCart.map((l) => <Row key={l.id} line={l} onEdit={p.onEdit} onRemove={p.onRemove} onQty={p.onQty} />)}
           </div>
         )}
@@ -316,7 +316,7 @@ function Header({ onBack, title, sub }: { onBack: () => void; title: string; sub
   )
 }
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, margin: '0 0 9px 2px' }}>{children}</div>
+  return <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, margin: '0 0 9px 2px' }}>{children}</div>
 }
 const cardStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 11, width: '100%', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 13, padding: '11px 13px', cursor: 'pointer', textAlign: 'left' }
 const qtyBtn: React.CSSProperties = { width: 24, height: 24, borderRadius: 7, border: `1px solid ${C.line}`, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.mute, padding: 0 }

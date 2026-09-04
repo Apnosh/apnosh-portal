@@ -41,7 +41,7 @@ export default function AppHeader({ count }: { count?: number }) {
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
           <div style={{ position: 'absolute', top: 'calc(100% - 1px)', left: 10, zIndex: 31, minWidth: 230, maxWidth: 300, background: '#fff', border: `1px solid ${C.line}`, borderRadius: 14, boxShadow: '0 10px 30px rgba(0,0,0,.15)', padding: 6, animation: 'hdrpop .15s ease' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '6px 10px 4px' }}>{locations.length > 1 ? 'Your locations' : 'Location'}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '6px 10px 4px' }}>{locations.length > 1 ? 'Your locations' : 'Location'}</div>
             {locations.map((loc) => {
               const active = loc.id === client?.id
               return (

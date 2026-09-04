@@ -104,7 +104,7 @@ function MetricSettingsSheet({ onClose, onDirty }: { onClose: () => void; onDirt
               <div style={{ fontSize: 15, fontWeight: 700, color: C.ink, padding: '0 2px 9px' }}>{g.stageLabel}</div>
               {g.providers.map((pr, pi) => (
                 <div key={pr.providerLabel} style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 4px 6px' }}>{pr.providerLabel}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 4px 6px' }}>{pr.providerLabel}</div>
                   <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>
                     {pr.items.map((it, ii) => (
                       <div key={it.id}>

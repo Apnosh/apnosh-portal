@@ -207,7 +207,7 @@ export default function CampaignReceiptView({ restaurant, orderId, draft, receip
             {timeline.headlineSub && <div style={{ fontSize: 11.5, color: sched.tooSoon ? '#b8860b' : C.mute, marginTop: 2 }}>{timeline.headlineSub}</div>}
           </div>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 12 }}><CalendarDays size={12} /> How it rolls out</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 12 }}><CalendarDays size={12} /> How it rolls out</div>
         {timeline.rows.length === 0 ? <div style={{ fontSize: 12, color: C.faint, paddingBottom: 10 }}>Dates set once it&rsquo;s live.</div> : timeline.rows.map((r, i) => (
           <div key={i} style={{ display: 'flex', gap: 10 }}>
             <span style={{ fontSize: 10.5, fontWeight: 700, color: rowColor(r.kind), width: 42, flexShrink: 0, textAlign: 'right', paddingTop: 1, fontVariantNumeric: 'tabular-nums' }}>{fmtDay(r.iso)}</span>

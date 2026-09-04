@@ -915,7 +915,7 @@ function PathReview({
       {/* zone 1 — masthead */}
       <div className="pf-up" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '20px 18px 0' }}>
         <span style={{ width: 38, height: 38, borderRadius: 12, background: hero.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: `${INSET_HI}, 0 6px 16px -8px ${hero.fg}55` }}><hero.Icon size={19} color={hero.fg} /></span>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: C.mute }}>YOUR PLAN{audienceLabels.length ? ` · for ${audienceLabels[0]}` : ''}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>YOUR PLAN{audienceLabels.length ? ` · for ${audienceLabels[0]}` : ''}</span>
       </div>
 
       {/* zone 2 — standfirst */}
@@ -1228,7 +1228,7 @@ function ServiceSheet({ Icon, plain, deliverable, pieces, charge, billing, inclu
           {pieces && pieces.length ? <div style={{ fontSize: 13, color: C.greenDk, marginTop: 9 }}>{pieces.map((p) => `${p.qty} × ${p.label} (~${money(p.each)} ea)`).join('  ·  ')}</div> : null}
           {included && included.length ? (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 7 }}>What&rsquo;s included</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 7 }}>What&rsquo;s included</div>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {included.map((it, i) => <li key={i} style={{ fontSize: 13, color: C.mute, lineHeight: 1.4, paddingLeft: 15, position: 'relative' }}><span style={{ position: 'absolute', left: 0, color: C.greenDk }}>•</span>{it}</li>)}
               </ul>
@@ -1275,7 +1275,7 @@ function AddServiceSheet({ usedIds, onAdd, onClose }: { usedIds: Set<string>; on
         <div style={{ overflowY: 'auto', padding: '2px 14px calc(14px + env(safe-area-inset-bottom))' }}>
           {groups.map((g) => (
             <div key={g.stage} style={{ marginBottom: 10 }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '6px 2px 6px' }}>{g.stage}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, margin: '6px 2px 6px' }}>{g.stage}</div>
               {g.services.map((s) => {
                 const I = moveIcon(s.id); const plain = serviceToLines(s, 'x')[0]?.plain || s.name
                 return (
@@ -1445,7 +1445,7 @@ function CustomizeSheet({ beat, date, anchorISO, dishes, photoMap, planOffer, on
           </Field>
 
           <div style={{ marginTop: 18 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 8 }}>Change the kind of piece</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 8 }}>Change the kind of piece</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {SWAP_TYPES.map((ty) => { const I = TYPE_ICON[ty]; const on = beat.type === ty; const tt = tintFor(ty); return (
                 <button key={ty} onClick={() => onSwap(ty)} aria-label={ty} style={{ flex: 1, minWidth: 0, padding: '9px 0', borderRadius: 11, border: `1px solid ${on ? tt.fg : C.line}`, background: on ? tt.tint : '#fff', color: on ? tt.fg : C.mute, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, fontSize: 9 }}>{I ? <I size={16} /> : null}{nounFor(ty)}</button>
@@ -1493,7 +1493,7 @@ function FieldSheet({ field, value, dishes, onDone, onClose }: { field: 'feature
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div style={{ marginTop: 15 }}><div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 7 }}>{label}</div>{children}</div>
+  return <div style={{ marginTop: 15 }}><div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 7 }}>{label}</div>{children}</div>
 }
 function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
   return <button onClick={onClick} style={{ borderRadius: 99, padding: '6px 12px', fontSize: 12, fontWeight: on ? 500 : 400, cursor: 'pointer', border: on ? 'none' : `1px solid ${C.line}`, background: on ? C.green : '#fff', color: on ? '#fff' : C.ink }}>{children}</button>
@@ -1682,7 +1682,7 @@ function Summary({ creatives, services, bill, sched, doneSetup, onPiece, monthly
                 {headlineSub && <div style={{ fontSize: 11.5, color: sched.tooSoon ? '#b8860b' : C.mute, marginTop: 2 }}>{headlineSub}</div>}
               </div>
             )}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 12 }}><CalendarDays size={12} /> How it rolls out</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 12 }}><CalendarDays size={12} /> How it rolls out</div>
             {rows.length === 0 ? <div style={{ fontSize: 12, color: C.faint, paddingBottom: 10 }}>Dates set once it&rsquo;s live.</div> : rows.map((r, i) => (
               <div key={i} style={{ display: 'flex', gap: 10 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: color(r.kind), width: 42, flexShrink: 0, textAlign: 'right', paddingTop: 1, fontVariantNumeric: 'tabular-nums' }}>{fmtDay(r.iso)}</span>

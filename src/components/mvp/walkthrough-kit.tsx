@@ -71,7 +71,7 @@ export function Says({ children }: { children: React.ReactNode }) {
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 7 }}>{title}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 7 }}>{title}</div>
       {children}
     </div>
   )

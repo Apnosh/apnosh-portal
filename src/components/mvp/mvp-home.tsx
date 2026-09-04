@@ -280,7 +280,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
         {(data.upcomingWork?.length ?? 0) > 0 && (
         <div style={{ marginTop: 22 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Coming up next</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>Coming up next</span>
             <span style={{ fontSize: 11, color: C.faint }}>what your team is on</span>
           </div>
           {(data.upcomingWork ?? []).map((w) => {
@@ -305,7 +305,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
         {(data.activity?.length ?? 0) > 0 && (
         <div style={{ marginTop: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Since you were here</span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>Since you were here</span>
             <Link href="/dashboard/inbox" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
           </div>
             <div style={{ background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '16px 15px 9px', boxShadow: '0 1px 3px rgba(0,0,0,.03)' }}>
@@ -337,7 +337,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
         {/* QUICK LINKS — handy shortcuts at the foot of the home. Always shown,
             so even a brand-new account has real doors to walk through. */}
         <div style={{ marginTop: 24 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute, marginBottom: 12 }}>Quick links</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 12 }}>Quick links</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {QUICK_LINKS.map((q) => (
               <Link key={q.href} href={q.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 13, background: C.card, border: `0.5px solid ${C.line}`, borderRadius: 14, padding: '15px 14px', textDecoration: 'none', color: 'inherit' }}>
@@ -605,7 +605,7 @@ function HomeOrders({ clientId }: { clientId?: string }) {
   return (
     <div style={{ marginTop: 22 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.mute }}>Your orders</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>Your orders</span>
         <Link href="/dashboard/campaigns" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>See all <ChevronRight size={13} /></Link>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

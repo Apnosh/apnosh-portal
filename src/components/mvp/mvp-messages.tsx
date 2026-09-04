@@ -174,7 +174,7 @@ export default function MvpMessages() {
           </button>
         </div>
         {searchOpen && (
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages…" style={{ width: '100%', marginTop: 12, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
+          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages…" style={{ width: '100%', marginTop: 12, borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
         )}
       </div>
 
@@ -209,7 +209,7 @@ export default function MvpMessages() {
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.faint, margin: '6px 2px 9px' }}>{children}</div>
+  return <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, margin: '8px 2px 10px' }}>{children}</div>
 }
 
 function Avatar({ c, size = 46 }: { c: Contact | null; size?: number }) {
@@ -225,7 +225,7 @@ function ThreadRowView({ t, onOpen }: { t: ThreadRow; onOpen: () => void }) {
   const c = contactForSubject(t.subject)
   const name = c?.name ?? t.subject
   return (
-    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 9, boxShadow: '0 1px 2px rgba(0,0,0,.03)', cursor: 'pointer', textAlign: 'left' }}>
+    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: 12, marginBottom: 9, cursor: 'pointer', textAlign: 'left' }}>
       <Avatar c={c} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -241,7 +241,7 @@ function ThreadRowView({ t, onOpen }: { t: ThreadRow; onOpen: () => void }) {
 
 function ContactRowView({ c, onOpen }: { c: Contact; onOpen: () => void }) {
   return (
-    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 12, marginBottom: 9, boxShadow: '0 1px 2px rgba(0,0,0,.03)', cursor: 'pointer', textAlign: 'left' }}>
+    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: 12, marginBottom: 9, cursor: 'pointer', textAlign: 'left' }}>
       <Avatar c={c} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>

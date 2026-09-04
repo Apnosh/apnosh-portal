@@ -763,7 +763,7 @@ function ProblemCard({ section, mode, open, onToggle, drafting, draft, draftErro
           ) : (
             <>
               <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>Yours today</div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 3 }}>Yours today</div>
                 <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>{section.current}</div>
               </div>
               <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: 0 }}>{section.why}</p>
@@ -1821,7 +1821,7 @@ function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clien
           <>
             <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px', marginBottom: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>On Google now</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>On Google now</span>
                 {!actionable && editableKind && (
                   <button type="button" onClick={openEditor} style={smallEditBtnStyle}>
                     <Pencil size={12} /> Edit anyway
@@ -1849,7 +1849,7 @@ function AiPart({ section, aiAdvice, adviceLoading, chapter, index, total, clien
               style={{ marginBottom: 10 }}
             />
 
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 3 }}>Why it matters</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 3 }}>Why it matters</div>
             <p style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: 0 }}>{section.why}</p>
 
             {/* Menu is the one part the save rail can't write, so the builder used
@@ -2834,7 +2834,7 @@ function ViewerSection({ section, clientId, isPro, aiAdvice, adviceLoading, onSi
       ) : (
         <>
           <div style={{ background: C.bg, borderRadius: 11, padding: '10px 12px' }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 6 }}>On Google now</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 6 }}>On Google now</div>
             {section.status === 'unknown' || !detail
               // Unknown parts show the engine's own safe reason; a detail-less
               // part falls back to the honest summary string, never a blank box.
@@ -2954,7 +2954,7 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
 
       {groups.map((g) => (
         <div key={g.name} style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '0 2px 6px' }}>{g.name}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, margin: '0 2px 6px' }}>{g.name}</div>
           <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: '4px 0', boxShadow: '0 1px 3px rgba(0,0,0,.04)' }}>
             {g.parts.map((s, i) => {
               const o = summaryOutcome(s, outcomes)
@@ -3004,7 +3004,7 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
           Finishing is deliberate now, not a silent auto-stamp, so "finished"
           is always something the owner chose and the server verified. */}
       <div style={{ marginTop: 18 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '0 2px 8px' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, margin: '0 2px 8px' }}>
           Finish
         </div>
 
@@ -3117,7 +3117,7 @@ function AiSummary({ sections, outcomes, allGood, score, taskDone, taskBlocking 
 
       {/* Keep it strong: the other Google tools, now homed on the summary. */}
       <div style={{ marginTop: 18 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, margin: '0 2px 8px' }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, margin: '0 2px 8px' }}>
           Keep it strong
         </div>
         <Link href={REVIEWS_HREF} className="mvp-row" style={hubCardStyle}>
@@ -3303,7 +3303,7 @@ export function GbpQandaView({ clientId, isPro, mapsUri, onBack, initialQuestion
 
           {draft && (
             <div style={{ marginTop: 12, background: C.bg, borderRadius: 12, padding: '12px 13px' }}>
-              <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint, marginBottom: 4 }}>Your draft</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 4 }}>Your draft</div>
               <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{draft}</div>
               <button
                 type="button"

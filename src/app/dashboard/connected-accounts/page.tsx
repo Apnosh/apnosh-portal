@@ -236,9 +236,9 @@ export default function ConnectedAccountsPage() {
 
               {unconnected.length > 0 && (
                 <>
-                  <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '6px 6px 7px' }}>Add a connection</div>
+                  <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '8px 6px 8px' }}>Add a connection</div>
                   {CAT_ORDER.filter(cat => unByCat[cat]?.length).map(cat => (
-                    <div key={cat} style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
+                    <div key={cat} style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden', marginBottom: 12 }}>
                       {unByCat[cat].map((p, i) => (
                         <div key={p.id}>
                           {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 61 }} />}
@@ -283,8 +283,8 @@ export default function ConnectedAccountsPage() {
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, padding: '0 6px 7px' }}>{title}</div>
-      <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, overflow: 'hidden' }}>{children}</div>
+      <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '0 6px 8px' }}>{title}</div>
+      <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>{children}</div>
     </div>
   )
 }

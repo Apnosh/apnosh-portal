@@ -60,7 +60,7 @@ export default function CampaignPreviewPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ width: 60, height: 60, borderRadius: 17, background: CAT_ACCENT[tpl.category].bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, flexShrink: 0 }}>{tpl.icon}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: C.faint }}>{CATEGORY_META[tpl.category].label}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>{CATEGORY_META[tpl.category].label}</div>
                   <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 22, lineHeight: 1.12, marginTop: 2 }}>{tpl.name}</div>
                   <div style={{ fontSize: 13, color: C.mute, marginTop: 2 }}>{tpl.tagline}</div>
                 </div>
@@ -85,7 +85,7 @@ export default function CampaignPreviewPage() {
                 <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 12 }}>The full plan a great marketer would run. You keep what you want.</div>
                 {Array.from(new Set(tpl.contentPlan.map((b) => b.week))).sort((a, b) => a - b).map((wk) => (
                   <div key={wk} style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.faint, marginBottom: 7 }}>Week {wk}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 7 }}>Week {wk}</div>
                     {tpl.contentPlan.filter((b) => b.week === wk).map((b, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: `0.5px solid ${C.line}` }}>
                         <span style={{ width: 34, height: 34, borderRadius: 10, background: C.preview, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0 }}>{BEAT_ICON[b.type] ?? '•'}</span>
@@ -131,7 +131,7 @@ export default function CampaignPreviewPage() {
 function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div style={{ flex: 1, minWidth: 0, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 13, padding: '10px 11px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>{icon}<span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.faint }}>{label}</span></div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>{icon}<span style={{ fontSize: 13, fontWeight: 600, color: C.mute }}>{label}</span></div>
       <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginTop: 4, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{value}</div>
     </div>
   )
