@@ -47,7 +47,18 @@ export interface AnalystRead {
   blindSpots: string[]
   /** what reviewers praise and complain about, drawn only from real quoted reviews */
   reviews: ReviewRead | null
+  /** where each measured line is heading inside the window, in plain words (from TRENDS) */
+  trends: Array<{ stage: number; label: string; read: string }>
+  /** what outside the business may have mattered: holidays from the brief, weather / local events researched on the web, each with its source */
+  outside: { summary: string; items: Array<{ note: string; source: string | null }> } | null
+  /** the pitfalls and missing pieces a good marketer would flag, each with the fix */
+  gaps: Array<{ gap: string; why: string; fix: string }>
+  /** the version of the report shape this read was written to */
+  version: number
+  /** server-computed numbers the page DRAWS (never written by the model): attached by the route */
+  numbers?: { trends: AnalystPayload['trends']; rhythm: AnalystPayload['rhythm']; standouts: AnalystPayload['standouts']; launches: AnalystPayload['launches'] }
 }
+export const READ_VERSION = 3
 
 /** The review read. Every point must be traceable to a quote in the brief. */
 export interface ReviewRead {
@@ -158,6 +169,23 @@ export function renderPayloadForPrompt(payload: AnalystPayload): string {
   const camps = Object.values(payload.activeCampaignsByStage).flat()
   if (camps.length) lines.push('ACTIVE CAMPAIGNS: ' + [...new Set(camps)].join(', '))
   lines.push('')
+  if (payload.trends.length) {
+    lines.push('TRENDS INSIDE THIS WINDOW (7-day average at the start of the window vs at the end; the line the owner sees on their Trends tab):')
+    for (const t of payload.trends) lines.push(`  ${t.label}: ${num(t.firstAvg)} a day at the start -> ${num(t.lastAvg)} a day at the end${t.changePct == null ? '' : ` (${t.changePct > 0 ? 'up' : t.changePct < 0 ? 'down' : 'flat'} ${Math.abs(t.changePct)}%)`}, over ${t.days} reported days`)
+  }
+  if (payload.rhythm) {
+    const r = payload.rhythm
+    lines.push(`WEEKDAY RHYTHM (Awareness, average by day of the week, last eight weeks): ${r.byDay.map((d) => `${d.day} ${num(d.avg)}`).join(', ')}. Strongest ${r.strongestDay}, weakest ${r.weakestDay}${r.weekendVsWeekdayPct == null ? '' : `, weekends ${r.weekendVsWeekdayPct > 0 ? '+' : ''}${r.weekendVsWeekdayPct}% vs weekdays`}.`)
+  }
+  if (payload.standouts.length) {
+    lines.push('DAYS THAT STOOD OUT (Awareness vs its own 7-day average; the holiday is a calendar fact, not a cause):')
+    for (const d of payload.standouts) lines.push(`  ${d.date} (${d.weekday}${d.holiday ? `, ${d.holiday}` : ''}): ${num(d.value)}, ${d.vsWeekPct > 0 ? '+' : ''}${d.vsWeekPct}% vs its week`)
+  }
+  if (payload.launches.length) {
+    lines.push('LAUNCHES (what went live and when; a launch and a move can happen together, never say one caused the other):')
+    for (const l of payload.launches) lines.push(`  ${l.date}: ${l.name} (${l.stage})`)
+  }
+  lines.push('')
   lines.push('CONNECTED SOURCES (data is flowing): ' + (payload.sources.connected.join(', ') || 'none'))
   lines.push('DARK SOURCES (cannot see — do NOT guess these): ' + (payload.sources.dark.map((d) => d.label).join(', ') || 'none'))
   return lines.join('\n')
@@ -182,12 +210,17 @@ HARD RULES (breaking any of these fails the task):
 - If the funnel shows a big drop between two steps, that gap is the story. Name it in plain words.
 - Be specific and short. No filler, no hype, no "leverage/synergy/optimize" jargon.
 
+WHAT THIS IS: a full report a world-class marketer would write for an owner who knows nothing about marketing. Explain every term the first time it appears, in one short clause (e.g. "Awareness, the number of times you showed up in a search or a feed"). Weigh what customers wrote, where the lines are heading, and the gaps a professional would spot. Be the sharpest, kindest advisor they have ever had.
+OUTSIDE THE BUSINESS: you may use the web_search tool ONLY for things outside the owner's walls that could have mattered in this window — the weather where they are, big local events or games, a holiday, the season. Use it at most a few times. Report only what you actually found, with its source. Never search for the owner's own numbers, competitors' numbers, or "industry averages", and never present a search result as a cause; say "this happened in the same window".
 Return ONLY a JSON object, no prose around it, in exactly this shape:
 {
   "bottomLine": "one or two sentences: the single most important thing happening",
   "working": ["short bullet tied to a real number", "..."],
   "fixes": [{"move": "the concrete next thing to do", "why": "why it matters, tied to a number"}],
   "blindSpots": ["what you cannot see yet and what to connect to see it"],
+  "trends": [{"stage": 1, "label": "Awareness", "read": "one or two plain sentences: where this line is heading inside the window and what stood out (a strong weekday, a day that spiked), using only TRENDS, WEEKDAY RHYTHM and DAYS THAT STOOD OUT"}],
+  "outside": {"summary": "one or two sentences on what outside the business may have mattered in this window, or that nothing notable turned up", "items": [{"note": "one specific thing (a heat wave, a game, a holiday) and the dates it covers", "source": "the URL you found it at, or 'holiday calendar', or null"}]},
+  "gaps": [{"gap": "a pitfall or missing piece a professional would flag", "why": "why it costs them, tied to a number where one exists", "fix": "the concrete fix, in plain words"}],
   "reviews": {
     "headline": "one plain sentence on what reviews add up to",
     "praise": ["what people say they like, in their words not yours"],
@@ -199,7 +232,7 @@ Return ONLY a JSON object, no prose around it, in exactly this shape:
     ]
   }
 }
-Keep working to at most 3 bullets, fixes to at most 2, blindSpots to at most 3, praise and complaints to at most 3 each.
+Keep working to at most 3 bullets, fixes to at most 3, blindSpots to at most 3, praise and complaints to at most 3 each, trends to one per measured stage, outside items to at most 4, gaps to at most 4.
 Set "reviews" to null ONLY when the brief says reviews could not be read or there are too few.
 
 About "themes": group what people talk about into up to 6 topics, most-mentioned first. Name topics the way the owner would (the dish, the staff, the prices, the wait), not in marketing words. Put each quote number under positive or negative for that topic. A quote can appear under several DIFFERENT topics, because one review often mentions the food and the price. Only cite numbers that appear in the brief. These numbers are counted and drawn as a chart, so a number you invent becomes a visible lie.`
@@ -240,12 +273,28 @@ export function parseAnalystRead(raw: string, quoteCount = 0): AnalystRead {
     }
   }
 
+  const trends = Array.isArray(r.trends)
+    ? r.trends.map((t) => t as Record<string, unknown>).filter((t) => typeof t?.read === 'string' && (t.read as string).trim())
+        .map((t) => ({ stage: Number(t.stage) || 0, label: typeof t.label === 'string' ? t.label : '', read: (t.read as string).trim() })).slice(0, 5)
+    : []
+  const oo = r.outside as Record<string, unknown> | null | undefined
+  const outside = oo && typeof oo === 'object' && typeof oo.summary === 'string' && oo.summary.trim()
+    ? { summary: oo.summary.trim(), items: (Array.isArray(oo.items) ? oo.items : []).map((i) => i as Record<string, unknown>).filter((i) => typeof i?.note === 'string' && (i.note as string).trim()).map((i) => ({ note: (i.note as string).trim(), source: typeof i.source === 'string' && i.source.trim() ? i.source.trim() : null })).slice(0, 4) }
+    : null
+  const gaps = Array.isArray(r.gaps)
+    ? r.gaps.map((g) => g as Record<string, unknown>).filter((g) => typeof g?.gap === 'string' && (g.gap as string).trim())
+        .map((g) => ({ gap: (g.gap as string).trim(), why: typeof g.why === 'string' ? (g.why as string).trim() : '', fix: typeof g.fix === 'string' ? (g.fix as string).trim() : '' })).slice(0, 4)
+    : []
   return {
     bottomLine,
     working: asStrings(r.working).slice(0, 3),
-    fixes: fixes.slice(0, 2),
+    fixes: fixes.slice(0, 3),
     blindSpots: asStrings(r.blindSpots).slice(0, 3),
     reviews,
+    trends,
+    outside,
+    gaps,
+    version: READ_VERSION,
   }
 }
 
@@ -279,26 +328,39 @@ export async function runAnalyst(payload: AnalystPayload): Promise<AnalystRunRes
   const client = new Anthropic({ apiKey })
 
   const brief = renderPayloadForPrompt(payload)
-  const response = await client.messages.create({
-    model: ANALYST_MODEL,
-    // Reading a funnel is real thinking: find the biggest drop, weigh it against what is
-    // dark, decide the one move worth naming. Adaptive lets the model spend that effort
-    // where it needs to. It is off unless asked for on this model generation.
-    thinking: { type: 'adaptive' },
-    // Thinking tokens are billed against max_tokens, so the old 1200 ceiling would now cut
-    // the JSON off mid-object. Medium effort keeps the page quick without going shallow.
-    max_tokens: 4000,
-    output_config: { effort: 'medium' },
-    system: SYSTEM,
-    messages: [{ role: 'user', content: `Here is the BRIEF:\n\n${brief}\n\nWrite the read as JSON only.` }],
-  })
-  const block = response.content.find((b) => b.type === 'text')
-  const raw = block && block.type === 'text' ? block.text : ''
+  // The full report (2026-09-04): the model may research OUTSIDE context on the web (a
+  // few bounded searches), so the turn can pause while the server tool runs — keep
+  // continuing the same conversation until it stops on its own. The last text block is
+  // the answer; earlier ones are the model narrating its searches.
+  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: `Here is the BRIEF:\n\n${brief}\n\nWrite the report as JSON only.` }]
+  let tokensIn = 0, tokensOut = 0
+  let response: Anthropic.Message | null = null
+  for (let turn = 0; turn < 4; turn++) {
+    response = await client.messages.create({
+      model: ANALYST_MODEL,
+      // Reading a funnel is real thinking: find the biggest drop, weigh it against what is
+      // dark, decide the moves worth naming. Adaptive lets the model spend that effort
+      // where it needs to.
+      thinking: { type: 'adaptive' },
+      // Thinking and search tokens bill against max_tokens; the full report needs the room.
+      max_tokens: 9000,
+      output_config: { effort: 'medium' },
+      system: SYSTEM,
+      tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 3 }],
+      messages,
+    })
+    tokensIn += response.usage.input_tokens; tokensOut += response.usage.output_tokens
+    if (response.stop_reason !== 'pause_turn') break
+    messages.push({ role: 'assistant', content: response.content })
+  }
+  if (!response) throw new Error('Analyst returned nothing')
+  const texts = response.content.filter((b): b is Anthropic.TextBlock => b.type === 'text')
+  const raw = texts.length ? texts[texts.length - 1].text : ''
   const read = parseAnalystRead(raw, payload.reviews?.quotes.length ?? 0)
   return {
     read,
-    tokensIn: response.usage.input_tokens,
-    tokensOut: response.usage.output_tokens,
-    costCents: analystCostCents(response.usage.input_tokens, response.usage.output_tokens),
+    tokensIn,
+    tokensOut,
+    costCents: analystCostCents(tokensIn, tokensOut),
   }
 }

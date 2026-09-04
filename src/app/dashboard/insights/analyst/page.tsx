@@ -120,14 +120,12 @@ function ThemeBars({ themes, countedOver }: { themes: ReviewTheme[]; countedOver
     </div>
   )
 }
-interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[]; reviews: ReviewRead | null }
-
-/**
- * What people are actually saying. Complaints sit ABOVE praise on purpose: an owner
- * scanning this on their phone needs the problem first, and praise reads as reassurance
- * once you have seen the problem. The whole block is absent when the analyst had too
- * few reviews to read, rather than showing an encouraging empty state.
- */
+interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[]; reviews: ReviewRead | null
+  trends?: Array<{ stage: number; label: string; read: string }>
+  outside?: { summary: string; items: Array<{ note: string; source: string | null }> } | null
+  gaps?: Array<{ gap: string; why: string; fix: string }>
+  numbers?: { trends: Array<{ stage: number; label: string; firstAvg: number; lastAvg: number; changePct: number | null; days: number }>; rhythm: { strongestDay: string; weakestDay: string; weekendVsWeekdayPct: number | null; byDay: Array<{ day: string; avg: number }> } | null; standouts: Array<{ date: string; value: number; vsWeekPct: number; holiday: string | null; weekday: string }>; launches: Array<{ name: string; date: string; stage: string }> }
+}
 function ReviewsBlock({ r, stats }: { r: ReviewRead; stats: ReviewStats | null }) {
   return (
     <Section title="What people are saying">
@@ -172,6 +170,7 @@ function ReviewsBlock({ r, stats }: { r: ReviewRead; stats: ReviewStats | null }
     </Section>
   )
 }
+
 interface AnalystResponse {
   locked?: boolean
   read?: Read
@@ -217,7 +216,8 @@ export default function AnalystPage() {
     // The server may spend up to 30s on a live generate. Without a client-side cap a
     // dropped connection leaves the page spinning forever with no way out.
     const ctl = new AbortController()
-    const timer = setTimeout(() => ctl.abort(), 45_000)
+    // a full report reads the whole account and checks outside it on the web: allow two minutes
+    const timer = setTimeout(() => ctl.abort(), 120_000)
 
     fetch('/api/dashboard/analyst', {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -267,7 +267,7 @@ export default function AnalystPage() {
       <div style={{ padding: '12px 18px 24px', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
         {/* Exhaustive on purpose: the last branch is a plain else, so there is no
             combination of state and data that renders an empty screen. */}
-        {state === 'loading' ? <Centered>Reading your numbers&hellip;</Centered>
+        {state === 'loading' ? <Centered>Reading your numbers and checking outside your walls&hellip;<div style={{ fontSize: 12.5, color: C.faint, marginTop: 8 }}>This takes about a minute the first time.</div></Centered>
           : state === 'locked' ? <Locked />
           : state === 'ready' && data?.read ? <ReadView read={data.read} funnel={data.funnel ?? []} stats={data.reviewStats ?? null} when={whenLabel(data.generatedAt)} business={data.business?.name ?? client?.name ?? ''} queries={queries} />
           : <Centered>
@@ -296,9 +296,13 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
         {when && <div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.55)', marginTop: 12 }}>{when} · read from your real numbers, never guesses</div>}
       </div>
 
+      {/* the scorecard: four numbers you can read in a glance before any words */}
+      <Scorecard funnel={funnel} stats={stats} />
+
       {funnel.length > 0 && (
-        <Section title="Your funnel" sub="each step, and how much of the step before it kept">
-          <div>
+        <Section title="Your funnel" sub="each step, drawn to size; the small number is how much of the step before it kept">
+          <FunnelDrawing funnel={funnel} />
+          <div style={{ display: 'none' }}>
             {funnel.map((f, i) => (
               <div key={f.stage} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
                 <span style={{ width: 9, height: 9, borderRadius: 99, background: STAGE_HUE[i] ?? C.green, flexShrink: 0 }} />
@@ -314,6 +318,46 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
               </div>
             ))}
           </div>
+        </Section>
+      )}
+
+      {(read.trends?.length ?? 0) > 0 && (
+        <Section title="Where things are heading" sub="start of the window against the end, a day's average each">
+          <div>
+            {read.trends!.map((t, i) => {
+              const n = read.numbers?.trends.find((x) => x.stage === t.stage)
+              const hue = STAGE_HUE[Math.max(0, (t.stage || 1) - 1)] ?? C.green
+              const mx = n ? Math.max(1, n.firstAvg, n.lastAvg) : 1
+              return (
+                <div key={i} style={{ padding: '11px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ width: 9, height: 9, borderRadius: 99, background: hue, flexShrink: 0 }} />
+                    <span style={{ fontSize: 14, fontWeight: 600, color: C.ink, flex: 1 }}>{t.label}</span>
+                    {n?.changePct != null && <span style={{ fontSize: 12.5, fontWeight: 700, color: Math.abs(n.changePct) < 5 ? C.mute : n.changePct > 0 ? C.greenDk : C.coral }}>{Math.abs(n.changePct) < 5 ? 'steady' : `${n.changePct > 0 ? '▲' : '▼'}${Math.abs(n.changePct) > 999 ? 'sharply' : `${Math.abs(n.changePct)}%`}`}</span>}
+                  </div>
+                  {n && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '44px 1fr 56px', rowGap: 5, columnGap: 8, alignItems: 'center', marginTop: 8, fontSize: 11.5, color: C.mute }}>
+                      <span>then</span><div style={{ height: 8, borderRadius: 99, background: C.bg, overflow: 'hidden' }}><div style={{ width: `${Math.max(2, (n.firstAvg / mx) * 100)}%`, height: '100%', borderRadius: 99, background: `${hue}66` }} /></div><span style={{ textAlign: 'right', color: C.ink, fontWeight: 600 }}>{n.firstAvg.toLocaleString()}</span>
+                      <span>now</span><div style={{ height: 8, borderRadius: 99, background: C.bg, overflow: 'hidden' }}><div style={{ width: `${Math.max(2, (n.lastAvg / mx) * 100)}%`, height: '100%', borderRadius: 99, background: hue }} /></div><span style={{ textAlign: 'right', color: C.ink, fontWeight: 600 }}>{n.lastAvg.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.45, marginTop: 8 }}>{t.read}</div>
+                </div>
+              )
+            })}
+          </div>
+          {read.numbers?.rhythm && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `0.5px solid ${C.line}` }}>
+              <div style={{ fontSize: 13, color: C.ink }}><b>{read.numbers.rhythm.strongestDay}s</b> are your strongest day{read.numbers.rhythm.weekendVsWeekdayPct != null && Math.abs(read.numbers.rhythm.weekendVsWeekdayPct) >= 8 ? <>; weekends run <b style={{ color: read.numbers.rhythm.weekendVsWeekdayPct > 0 ? C.greenDk : C.coral }}>{read.numbers.rhythm.weekendVsWeekdayPct > 0 ? '+' : ''}{read.numbers.rhythm.weekendVsWeekdayPct}%</b> against weekdays</> : null}.</div>
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 40, marginTop: 8 }}>
+                {read.numbers.rhythm.byDay.map((d) => { const mx = Math.max(1, ...read.numbers!.rhythm!.byDay.map((x) => x.avg)); const on = d.day === read.numbers!.rhythm!.strongestDay.slice(0, 3); return (
+                  <div key={d.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', gap: 3, height: '100%' }}>
+                    <div style={{ width: '100%', maxWidth: 24, height: `${Math.max(4, (d.avg / mx) * 100)}%`, borderRadius: 4, background: on ? C.greenDk : `${C.green}66` }} />
+                    <span style={{ fontSize: 9.5, color: on ? C.greenDk : C.faint, fontWeight: on ? 700 : 500 }}>{d.day}</span>
+                  </div>) })}
+              </div>
+            </div>
+          )}
         </Section>
       )}
 
@@ -359,6 +403,41 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
         </Section>
       )}
 
+      {read.outside && (
+        <Section title="Outside your walls" sub="what happened in the same window, not why">
+          <div style={{ fontSize: 14, color: C.ink, lineHeight: 1.5 }}>{read.outside.summary}</div>
+          {read.outside.items.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {read.outside.items.map((it, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderTop: `0.5px solid ${C.line}`, fontSize: 13.5, lineHeight: 1.45 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: 99, background: C.faint, flexShrink: 0, marginTop: 7 }} />
+                  <span style={{ flex: 1, minWidth: 0, color: C.ink }}>
+                    {it.note}
+                    {it.source && (/^https?:/.test(it.source)
+                      ? <> <a href={it.source} target="_blank" rel="noreferrer noopener" style={{ color: C.greenDk, fontWeight: 600, textDecoration: 'none' }}>source</a></>
+                      : <span style={{ color: C.faint }}> · {it.source}</span>)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {(read.gaps?.length ?? 0) > 0 && (
+        <Section title="Gaps and pitfalls" sub="what a professional would flag">
+          <div>
+            {read.gaps!.map((g, i) => (
+              <div key={i} style={{ padding: '10px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+                <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.35 }}>{g.gap}</div>
+                {g.why && <div style={{ fontSize: 13, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>{g.why}</div>}
+                {g.fix && <div style={{ fontSize: 13, color: C.greenDk, fontWeight: 600, marginTop: 5, lineHeight: 1.45 }}>Fix: <span style={{ color: C.ink, fontWeight: 500 }}>{g.fix}</span></div>}
+              </div>
+            ))}
+          </div>
+        </Section>
+      )}
+
       {read.blindSpots.length > 0 && (
         <Section title="What we can't see yet">
           <Bullets items={read.blindSpots} tone="muted" />
@@ -369,6 +448,58 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
     </div>
   )
 }
+/* four numbers in a glance: the two lines that matter most, the rating, and what is waiting */
+function Scorecard({ funnel, stats }: { funnel: FunnelStep[]; stats: ReviewStats | null }) {
+  const byStage = (n: number) => funnel.find((f) => f.stage === n)
+  const aw = byStage(1), ac = byStage(3)
+  const tiles: Array<{ label: string; value: string; delta?: number | null; tone?: 'good' | 'bad' | 'mute' }> = [
+    { label: 'Showed up', value: aw?.value != null ? aw.value.toLocaleString() : '—', delta: aw?.changePct ?? null },
+    { label: 'Actions', value: ac?.value != null ? ac.value.toLocaleString() : '—', delta: ac?.changePct ?? null },
+    { label: 'Rating', value: stats?.recent?.avg != null ? `${stats.recent.avg}★` : '—', tone: 'mute' },
+    { label: 'Unanswered', value: stats ? String(stats.unanswered ?? 0) : '—', tone: stats && (stats.unanswered ?? 0) > 0 ? 'bad' : 'good' },
+  ]
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+      {tiles.map((t) => (
+        <div key={t.label} style={{ ...CARD, padding: '12px 10px 11px', textAlign: 'center' }}>
+          <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: t.tone === 'bad' ? C.coral : C.ink, letterSpacing: '-.01em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.value}</div>
+          <div style={{ fontSize: 10.5, color: C.mute, marginTop: 3, whiteSpace: 'nowrap' }}>{t.label}</div>
+          {t.delta != null && <div style={{ fontSize: 10.5, fontWeight: 700, marginTop: 3, color: t.delta > 0 ? C.greenDk : t.delta < 0 ? C.coral : C.mute }}>{t.delta > 0 ? '▲' : t.delta < 0 ? '▼' : '–'}{Math.abs(Math.round(t.delta))}%</div>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/* the funnel drawn to size (square-root scale so the small steps stay visible), the
+   kept-% written on the narrowing between steps */
+function FunnelDrawing({ funnel }: { funnel: FunnelStep[] }) {
+  const vals = funnel.map((f) => (f.isEmpty || f.value == null ? 0 : f.value))
+  const mx = Math.max(1, ...vals)
+  return (
+    <div>
+      {funnel.map((f, i) => {
+        const hue = STAGE_HUE[i] ?? C.green
+        const w = f.isEmpty || f.value == null ? 0 : Math.max(0.16, Math.sqrt(f.value / mx))
+        return (
+          <div key={f.stage}>
+            {i > 0 && f.keptFromPrevPct != null && (
+              <div style={{ fontSize: 11, color: C.mute, padding: '3px 0 3px 8px', display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ width: 1, height: 10, background: C.line }} />kept {f.keptFromPrevPct}%</div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center' }}>
+                <div style={{ width: `${w * 100}%`, minWidth: f.isEmpty ? 0 : 44, height: 34, borderRadius: 10, background: f.isEmpty ? C.bg : hue, color: '#fff', display: 'flex', alignItems: 'center', paddingLeft: 10, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', boxSizing: 'border-box', transition: 'width .3s' }}>{!f.isEmpty && f.value != null ? f.value.toLocaleString() : ''}</div>
+                <span style={{ marginLeft: 10, fontSize: 13, fontWeight: 600, color: f.isEmpty ? C.faint : C.ink, whiteSpace: 'nowrap' }}>{f.label}{f.isEmpty ? <span style={{ fontWeight: 400, color: C.faint }}> · not measured</span> : ''}</span>
+              </div>
+              {f.changePct != null && <span style={{ flexShrink: 0 }}><ChangeChip pct={f.changePct} /></span>}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function Section({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
     <div style={CARD}>

@@ -86,6 +86,75 @@ export interface AnalystPayload {
   topSearches: Array<{ query: string; impressions: number }>
   activeCampaignsByStage: Record<string, string[]>
   sources: AnalystSourceSummary
+  /** Where each measured stage is heading inside the window (from its 7-day average). */
+  trends: AnalystTrend[]
+  /** The weekday rhythm of the Awareness series, last eight weeks. */
+  rhythm: AnalystRhythm | null
+  /** The days that stood out against their own week, named when they land on a holiday. */
+  standouts: AnalystStandout[]
+  /** Every launch with a known go-live date inside the window. */
+  launches: Array<{ name: string; date: string; stage: string }>
+}
+
+export interface AnalystTrend { stage: number; label: string; firstAvg: number; lastAvg: number; changePct: number | null; days: number }
+export interface AnalystRhythm { strongestDay: string; weakestDay: string; weekendVsWeekdayPct: number | null; byDay: Array<{ day: string; avg: number }> }
+export interface AnalystStandout { date: string; value: number; vsWeekPct: number; holiday: string | null; weekday: string }
+
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+const DAY_MS = 86400000
+function nthWeekday(y: number, m: number, dow: number, n: number): Date { const d = new Date(y, m, 1); const off = (dow - d.getDay() + 7) % 7; return new Date(y, m, 1 + off + (n - 1) * 7) }
+function lastWeekday(y: number, m: number, dow: number): Date { const d = new Date(y, m + 1, 0); const off = (d.getDay() - dow + 7) % 7; return new Date(y, m + 1, -off) }
+/** US holidays the trade feels; used ONLY to name a stand-out day, never to explain it. */
+export function usHolidays(y: number): Array<{ ms: number; name: string }> {
+  const f = (m: number, d: number, name: string) => ({ ms: new Date(y, m, d).getTime(), name })
+  const w = (d: Date, name: string) => ({ ms: d.getTime(), name })
+  return [
+    f(0, 1, "New Year's Day"), w(nthWeekday(y, 0, 1, 3), 'MLK Day'), w(nthWeekday(y, 1, 0, 2), 'Super Bowl Sunday'), f(1, 14, "Valentine's Day"), w(nthWeekday(y, 1, 1, 3), "Presidents' Day"),
+    f(2, 17, "St. Patrick's Day"), f(4, 5, 'Cinco de Mayo'), w(nthWeekday(y, 4, 0, 2), "Mother's Day"), w(lastWeekday(y, 4, 1), 'Memorial Day'), w(nthWeekday(y, 5, 0, 3), "Father's Day"), f(5, 19, 'Juneteenth'),
+    f(6, 4, 'July 4th'), w(nthWeekday(y, 8, 1, 1), 'Labor Day'), f(9, 31, 'Halloween'), f(10, 11, 'Veterans Day'), w(nthWeekday(y, 10, 4, 4), 'Thanksgiving'), w(new Date(nthWeekday(y, 10, 4, 4).getTime() + DAY_MS), 'Black Friday'),
+    f(11, 24, 'Christmas Eve'), f(11, 25, 'Christmas'), f(11, 31, "New Year's Eve"),
+  ]
+}
+export function holidayOn(dateYmd: string): string | null {
+  const ms = new Date(dateYmd + 'T00:00:00').getTime()
+  const y = new Date(ms).getFullYear()
+  return [...usHolidays(y), ...usHolidays(y - 1)].find((h) => Math.abs(h.ms - ms) < DAY_MS / 2)?.name ?? null
+}
+/** 7-day rolling average, first stretch vs last (a week each, or a third of a short window). */
+export function deriveTrend(stage: number, label: string, series: Array<{ date: string; value: number }>): AnalystTrend | null {
+  // trailing zero-filled days are unreported, not quiet — cut them (at most a week)
+  let cut = series.length
+  while (cut > 0 && cut > series.length - 7 && series[cut - 1].value === 0) cut--
+  const s = series.slice(0, cut)
+  if (s.length < 6) return null
+  const stretch = Math.max(2, Math.min(7, Math.floor(s.length / 3)))
+  const mean = (arr: Array<{ value: number }>) => arr.reduce((t, x) => t + x.value, 0) / Math.max(1, arr.length)
+  const firstAvg = mean(s.slice(0, stretch)), lastAvg = mean(s.slice(-stretch))
+  const changePct = firstAvg > 0 ? Math.round(((lastAvg - firstAvg) / firstAvg) * 100) : null
+  return { stage, label, firstAvg: Math.round(firstAvg), lastAvg: Math.round(lastAvg), changePct, days: s.length }
+}
+export function deriveRhythm(series: Array<{ date: string; value: number }>): AnalystRhythm | null {
+  const recent = series.slice(-56).filter((d) => d.value > 0)
+  if (recent.length < 14) return null
+  const by = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }))
+  for (const d of recent) { const k = new Date(d.date + 'T00:00:00').getDay(); by[k].sum += d.value; by[k].n++ }
+  const avg = by.map((b) => (b.n ? b.sum / b.n : 0))
+  const best = avg.indexOf(Math.max(...avg)), worst = avg.indexOf(Math.min(...avg.filter((v) => v > 0).length ? avg.map((v) => (v > 0 ? v : Infinity)) : avg))
+  const weekday = [1, 2, 3, 4, 5].reduce((t, k) => t + avg[k], 0) / 5, weekend = (avg[0] + avg[6]) / 2
+  return {
+    strongestDay: WEEKDAY_NAMES[best], weakestDay: WEEKDAY_NAMES[worst],
+    weekendVsWeekdayPct: weekday > 0 ? Math.round(((weekend - weekday) / weekday) * 100) : null,
+    byDay: [1, 2, 3, 4, 5, 6, 0].map((k) => ({ day: WEEKDAY_NAMES[k].slice(0, 3), avg: Math.round(avg[k]) })),
+  }
+}
+export function deriveStandouts(series: Array<{ date: string; value: number }>, max = 3): AnalystStandout[] {
+  let cut = series.length
+  while (cut > 0 && cut > series.length - 7 && series[cut - 1].value === 0) cut--
+  // the newest two days may still be filling in — never call one of them a stand-out
+  const s = series.slice(0, Math.max(0, cut - 2))
+  const dev = s.map((d, i) => { const sl = s.slice(Math.max(0, i - 6), i + 1); const avg = sl.reduce((t, x) => t + x.value, 0) / sl.length; return { d, pct: avg > 0 ? Math.round(((d.value - avg) / avg) * 100) : 0 } })
+  return dev.filter((x) => Math.abs(x.pct) >= 25).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, max).sort((a, b) => a.d.date.localeCompare(b.d.date))
+    .map((x) => ({ date: x.d.date, value: x.d.value, vsWeekPct: x.pct, holiday: holidayOn(x.d.date), weekday: WEEKDAY_NAMES[new Date(x.d.date + 'T00:00:00').getDay()] }))
 }
 
 // ── Pure derivations (no I/O — unit tested) ──────────────────────────────

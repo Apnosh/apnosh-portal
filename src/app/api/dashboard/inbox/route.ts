@@ -60,13 +60,13 @@ export async function GET(req: NextRequest) {
 
   const [inbox, reviewRes, campaigns, notifs, signedOffRes] = await Promise.all([
     getInbox(clientId, userId),
-    admin.from('reviews').select('id, author_name, rating, review_text, source, posted_at, response_text, responded_at').eq('client_id', clientId).order('posted_at', { ascending: false }).limit(40),
+    admin.from('reviews').select('id, author_name, author_avatar_url, rating, review_text, source, posted_at, response_text, responded_at').eq('client_id', clientId).order('posted_at', { ascending: false }).limit(40),
     listCampaigns(clientId).catch(() => []),
     listForCurrentUser(15).catch(() => []),
     admin.from('content_drafts').select('id, idea, client_signed_off_at').eq('client_id', clientId).not('client_signed_off_at', 'is', null).order('client_signed_off_at', { ascending: false }).limit(15),
   ])
 
-  type Row = { id: string; kind: string; chip: Chip; band: Band; icon: string; title: string; subtitle: string; time: string; whenIso: string; href: string; status?: string; unread: boolean; review?: { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string } }
+  type Row = { id: string; kind: string; chip: Chip; band: Band; icon: string; title: string; subtitle: string; time: string; whenIso: string; href: string; status?: string; unread: boolean; review?: { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string ; avatar?: string | null } }
   const items: Row[] = []
 
   // getInbox action items (skip 'review' — built richly below from the reviews table)
@@ -107,6 +107,7 @@ export async function GET(req: NextRequest) {
         time: timeAgo(r.posted_at as string), whenIso: r.posted_at as string, href: `/dashboard/reviews/${r.id}`, status: `${rating}★`, unread: true,
         review: {
           reviewId: r.id as string, rating, author, source, text: (r.review_text as string) ?? '',
+          avatar: (r.author_avatar_url as string | null) ?? null,
           suggestedReply: rating >= 4
             ? `Thank you so much, ${first}! We're thrilled you enjoyed it and can't wait to welcome you back. 🙏`
             : `Thank you for the honest feedback, ${first}. We're sorry it wasn't perfect and we'd love to make it right next time. Please reach out to us directly.`,

@@ -58,6 +58,8 @@ export interface StageCampaign {
   shippedAt: string | null
   /** Where a tap goes; campaigns default to /dashboard/campaigns/{id}. */
   href?: string
+  /** live = shipped and running · done = wrapped up · production = being made (no pin yet) */
+  state?: 'live' | 'done' | 'production'
 }
 
 /** Active campaigns grouped by the insights stage key their live pieces work on. */
@@ -79,7 +81,7 @@ export async function getStageCampaigns(clientId: string): Promise<StageCampaign
      * sweep stamps execution.wrapUpSentAt when every piece has delivered — so
      * without this check a finished campaign read as "working on this" forever. */
     const exec = (c.execution ?? {}) as Record<string, unknown>
-    if (exec.wrapUpSentAt) continue
+    const state: StageCampaign['state'] = exec.wrapUpSentAt ? 'done' : 'live' // finished ones still pin their launch day (2026-09-04)
     // the distinct insights stages this campaign's real (included) pieces touch
     const hit = new Set<string>()
     for (const line of c.draft.items ?? []) {
@@ -94,7 +96,7 @@ export async function getStageCampaigns(clientId: string): Promise<StageCampaign
      * the honest default home: every campaign at minimum puts the business in
      * front of people. */
     if (hit.size === 0) hit.add('shown')
-    for (const ins of hit) out[ins]?.push({ id: c.draft.id, name: c.draft.name, shippedAt: c.shippedAt })
+    for (const ins of hit) out[ins]?.push({ id: c.draft.id, name: c.draft.name, shippedAt: c.shippedAt, state })
   }
 
   // Creative orders in flight or freshly delivered join their stages.
@@ -118,6 +120,7 @@ export async function getStageCampaigns(clientId: string): Promise<StageCampaign
           id: String(r.id),
           name: ORDER_TYPE_LABEL[type] ?? 'Creative order',
           shippedAt: when ? String(when) : null,
+          state: String(r.status ?? '') === 'delivered' ? 'done' : 'production',
           href: '/dashboard/requests',
         })
       }
@@ -146,6 +149,7 @@ export async function getStageCampaigns(clientId: string): Promise<StageCampaign
           id: String(r.id),
           name: String(r.title ?? 'Service in progress'),
           shippedAt: r.created_at ? String(r.created_at) : null,
+          state: 'production',
           href: '/dashboard/orders',
         })
       }
@@ -169,6 +173,7 @@ export async function getStageCampaigns(clientId: string): Promise<StageCampaign
         id: String(r.id),
         name: String(r.title ?? 'Creator work'),
         shippedAt: r.created_at ? String(r.created_at) : null,
+          state: 'production',
         href: '/dashboard/bookings',
       })
     }

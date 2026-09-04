@@ -33,6 +33,7 @@ import {
   type AnalystStage,
   type ReviewDigest,
   type ReviewRow,
+  deriveTrend, deriveRhythm, deriveStandouts,
 } from './analyst-derive'
 
 const WINDOW_DAYS: Record<string, number> = { '7d': 7, '30d': 30, '90d': 90, '12m': 365 }
@@ -150,12 +151,23 @@ export async function buildAnalystPayload(
       : []
 
   const activeCampaignsByStage: Record<string, string[]> = {}
+  const launches: AnalystPayload['launches'] = []
+  const STAGE_WORD: Record<string, string> = { shown: 'Awareness', engaged: 'Interest', moved: 'Actions', camein: 'Orders', back: 'Retention' }
   if (campaignsRes.status === 'fulfilled' && campaignsRes.value) {
     for (const [stageKey, list] of Object.entries(campaignsRes.value)) {
       const names = (list ?? []).map((c) => c.name).filter(Boolean)
       if (names.length) activeCampaignsByStage[stageKey] = names
+      for (const c of list ?? []) if (c.shippedAt) launches.push({ name: c.name, date: c.shippedAt.slice(0, 10), stage: STAGE_WORD[stageKey] ?? stageKey })
     }
   }
+  // Google's day-by-day rows carry the three measured stages; the derivations are pure
+  // and the model is told exactly what they are (an average, a rhythm, a stand-out day)
+  const daily = gbpRes.status === 'fulfilled' && gbpRes.value?.daily ? gbpRes.value.daily : []
+  const seriesOf = (pick: (d: (typeof daily)[number]) => number) => daily.map((d) => ({ date: d.date, value: pick(d) }))
+  const awareness = seriesOf((d) => d.impressions), interest = seriesOf((d) => d.websiteClicks), actions = seriesOf((d) => d.directions + d.calls)
+  const trends = [deriveTrend(1, 'Awareness', awareness), deriveTrend(2, 'Interest', interest), deriveTrend(3, 'Actions', actions)].filter((t): t is NonNullable<typeof t> => t != null)
+  const rhythm = deriveRhythm(awareness)
+  const standouts = deriveStandouts(awareness)
 
   const bizName =
     bizRes.status === 'fulfilled' && bizRes.value?.data?.name ? bizRes.value.data.name : 'Your restaurant'
@@ -172,5 +184,9 @@ export async function buildAnalystPayload(
     topSearches,
     activeCampaignsByStage,
     sources,
+    trends,
+    rhythm,
+    standouts,
+    launches,
   }
 }

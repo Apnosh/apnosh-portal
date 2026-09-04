@@ -58,6 +58,7 @@ const payload: AnalystPayload = {
   topSearches: [{ query: 'grocery near me', impressions: 900 }],
   activeCampaignsByStage: { shown: ['Summer Awareness Push'] },
   sources: { connected: ['Google Maps views', 'Instagram reach', 'Directions'], dark: [{ label: 'TikTok views', state: 'COMING_SOON' }, { label: 'Guests served', state: 'COMING_SOON' }] },
+  trends: [], rhythm: null, standouts: [], launches: [],
 }
 
 console.log('\n== funnel is built from the payload (numbers never come from the model) ==')

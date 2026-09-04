@@ -27,7 +27,7 @@ const C = {
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 type Chip = 'approvals' | 'reviews' | 'todos' | 'fix'
-interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string }
+interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string; avatar?: string | null }
 interface Item { id: string; kind: string; chip: Chip; band: 'today' | 'week'; icon: string; title: string; subtitle: string; time: string; href: string; status?: string; unread: boolean; review?: Review }
 interface Win { id: string; icon: string; title: string; body: string; time: string; link: string | null; read: boolean }
 interface InboxData { items: Item[]; wins: Win[]; counts: { needsYou: number; today: number } }
@@ -132,7 +132,7 @@ function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { 
   const frame: React.CSSProperties = {
     display: 'flex', gap: 12, alignItems: 'flex-start',
     padding: '13px 14px', borderTop: `0.5px solid ${C.line}`,
-    background: unread ? 'rgba(74,189,152,0.05)' : 'transparent',
+    background: 'transparent',
   }
   const inner = (
     <>
@@ -162,9 +162,19 @@ const EMOJI_ICON: Record<string, React.ReactNode> = {
   '🎨': <Palette size={20} />, '📝': <FileText size={20} />, '🚀': <Rocket size={20} />, '⭐': <Star size={20} />, '🔌': <Plug size={20} />, '✅': <Check size={20} />, '🎉': <PartyPopper size={20} />,
   '🎬': <Clapperboard size={20} />, '👍': <ThumbsUp size={20} />, '💳': <CreditCard size={20} />, '🗓️': <CalendarDays size={20} />, '📈': <TrendingUp size={20} />, '🔍': <Search size={20} />, '⏳': <Hourglass size={20} />, '🏁': <Flag size={20} />,
 }
+/* Apnosh's own mark — the same mint→gold ring the business avatar wears, with an A — for
+   everything Apnosh itself did (built a plan, delivered a piece, sent a recap) */
+function ApnoshMark({ size = 44 }: { size?: number }) {
+  return (
+    <span style={{ display: 'block', width: size, height: size, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.08)', boxSizing: 'border-box', flexShrink: 0 }}>
+      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: '#fff', fontSize: size * 0.4, fontWeight: 800, letterSpacing: '-.02em', color: C.greenDk, fontFamily: DISPLAY }}>A</span>
+    </span>
+  )
+}
 function IconAvatar({ emoji, danger }: { emoji: string; danger?: boolean }) {
-  const icon = EMOJI_ICON[emoji] ?? <Bell size={20} />
-  return <div style={{ width: 44, height: 44, borderRadius: 14, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</div>
+  // a broken connection is the one row that is not Apnosh talking — it wears the plug, in coral
+  if (danger || emoji === '🔌') return <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.coralSoft, color: C.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plug size={19} /></div>
+  return <ApnoshMark />
 }
 const clampStyle = (lines: number): React.CSSProperties => ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' })
 
@@ -250,10 +260,12 @@ function Row({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void 
 
 function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void }) {
   const r = item.review!
-  const tone = ['#4abd98', '#a85c3c', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b'][(r.author.charCodeAt(0) || 0) % 6]
   const avatar = (
     <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
-      <div style={{ width: 44, height: 44, borderRadius: '50%', background: tone, color: '#fff', fontWeight: 700, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r.author.charAt(0).toUpperCase()}</div>
+      {r.avatar
+        ? <img src={r.avatar} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', display: 'block', background: '#eef0ef' }} />
+        : null}
+      <div style={{ position: r.avatar ? 'absolute' : 'static', inset: 0, width: 44, height: 44, borderRadius: '50%', background: '#eef0ef', color: C.mute, fontWeight: 700, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: r.avatar ? -1 : 0 }}>{r.author.charAt(0).toUpperCase()}</div>
       <span style={{ position: 'absolute', right: -4, bottom: -4, width: 20, height: 20, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={r.source === 'instagram' ? 'instagram' : r.source === 'yelp' ? 'yelp' : 'google'} size={12} /></span>
     </div>
   )

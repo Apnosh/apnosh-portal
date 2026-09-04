@@ -40,11 +40,15 @@ import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, 
 import { TopSegmented } from './top-row'
 import ProofDeck from './proof-deck'
 import { bandFor, BAND_WORD, BAND_INK, type HealthBand } from './home-funnel'
+import { deriveStandouts } from '@/lib/insights/analyst-derive'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
 
 /* the browser's local calendar date — the server must never guess the client's timezone */
+function localYmdOf(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 function localYmd(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -1270,20 +1274,23 @@ function FeedLoading() {
 // ── "Campaigns working on this" — the shipped campaigns whose live pieces push on
 //    this stage's number, each a tap into its campaign. A calm prompt when none. ──
 // ── The TRENDS tab (owner 2026-09-04): every stage side by side, then one stage in depth ──
-const TREND_RANGES: [ChartRange, string][] = [['7d', '7d'], ['30d', '30d'], ['90d', '90d'], ['1y', '1y']]
+const TREND_RANGES: [ChartRange, string][] = [['7d', '7d'], ['30d', '30d'], ['90d', '90d'], ['1y', '1y'], ['custom', 'Custom']]
 function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: InsightsDetail | null; campaigns: Record<string, StageCampaign[]> | null; byKey: Map<string, MetricView>; initial: string; clientId?: string }) {
   const [range, setRange] = useState<ChartRange>('30d')
+  const [cStart, setCStart] = useState(() => { const t = new Date(); return localYmdOf(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) })
+  const [cEnd, setCEnd] = useState(() => localYmd())
   const [sel, setSel] = useState(initial)
   const [pins, setPins] = useState<Record<string, number>>({})
   const [lit, setLit] = useState<number | null>(null)
   const onPins = useCallback((m: Record<string, number>) => setPins(m), [])
-  const days = TREND_DAYS[(TREND_OF_RANGE[range] ?? 'month') as 'week' | 'month' | 'quarter' | 'year']
+  const customDays = Math.max(2, Math.round((trendDayMs(cEnd) - trendDayMs(cStart)) / DAY_MS) + 1)
+  const days = range === 'custom' ? customDays : TREND_DAYS[(TREND_OF_RANGE[range] ?? 'month') as 'week' | 'month' | 'quarter' | 'year']
   const rows = STAGE_ORDER.map((st) => {
     const mv = byKey.get(resolveFocus(st.key).metric)
     const cs = computedStage(detail, STAGE_ORDER.findIndex((x) => x.key === st.key) + 1)
     const locked = !mv || cs?.isEmpty === true
-    const sm = mv && !locked ? bucketsFor(range, mv, '', '') : null
-    const launches = (campaigns?.[st.key] ?? []).filter((c) => c.shippedAt && Date.now() - trendDayMs(c.shippedAt) <= days * DAY_MS).length
+    const sm = mv && !locked ? bucketsFor(range, mv, cStart, cEnd) : null
+    const launches = (campaigns?.[st.key] ?? []).filter((c) => c.state !== 'production' && c.shippedAt && Date.now() - trendDayMs(c.shippedAt) <= days * DAY_MS).length
     return { st, mv, sm, launches, locked, cs, n: STAGE_ORDER.findIndex((x) => x.key === st.key) + 1 }
   })
   const cur = rows.find((r) => r.st.key === sel) ?? rows[0]
@@ -1292,9 +1299,16 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
       <div style={{ display: 'flex', gap: 2, borderRadius: 999, padding: 3, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
         {TREND_RANGES.map(([k, l]) => {
           const on = range === k
-          return <button key={k} type="button" onClick={() => setRange(k)} style={{ flex: 1, border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 13.5, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none' }}>{l}</button>
+          const cal = k === 'custom'
+          return <button key={k} type="button" aria-label={cal ? 'Custom dates' : l} onClick={() => setRange(k)} style={{ flex: cal ? '0 0 44px' : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 13.5, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none' }}>{cal ? <CalendarDays size={15} /> : l}</button>
         })}
       </div>
+      {range === 'custom' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>From<input type="date" value={cStart} max={cEnd} onChange={(e) => setCStart(e.target.value)} style={{ border: 'none', borderRadius: 8, padding: '6px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.bg }} /></label>
+          <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>To<input type="date" value={cEnd} min={cStart} onChange={(e) => setCEnd(e.target.value)} style={{ border: 'none', borderRadius: 8, padding: '6px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.bg }} /></label>
+        </div>
+      )}
       {/* every stage on one screen: its 7-day average as a sparkline, its total, its change, its launches */}
       <div style={{ ...CARD, padding: '14px 16px 6px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -1305,96 +1319,10 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
       </div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && !cur.locked
-          ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} title={cur.st.label} onPins={onPins} litPin={lit} />
+          ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
-        <StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} />
-        {cur.mv && !cur.locked && <ContextCard mv={cur.mv} days={days} label={cur.st.label} />}
+        {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} />}
       </AccentCtx.Provider>
-    </div>
-  )
-}
-
-/* ── Context: what moves the number that is NOT a campaign. Only what the data itself can
-   show honestly today — the weekday rhythm, the days that stood out (named when they land
-   on a holiday). Weather and local events need an outside source and are named as missing. ── */
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-function nthWeekday(y: number, m: number, dow: number, n: number): Date { const d = new Date(y, m, 1); const off = (dow - d.getDay() + 7) % 7; return new Date(y, m, 1 + off + (n - 1) * 7) }
-function lastWeekday(y: number, m: number, dow: number): Date { const d = new Date(y, m + 1, 0); const off = (d.getDay() - dow + 7) % 7; return new Date(y, m + 1, -off) }
-function usHolidays(y: number): { ms: number; name: string }[] {
-  const f = (m: number, d: number, name: string) => ({ ms: new Date(y, m, d).getTime(), name })
-  const w = (d: Date, name: string) => ({ ms: d.getTime(), name })
-  return [
-    f(0, 1, "New Year's Day"), w(nthWeekday(y, 0, 1, 3), 'MLK Day'), w(nthWeekday(y, 1, 0, 2), 'Super Bowl Sunday'), f(1, 14, "Valentine's Day"), w(nthWeekday(y, 1, 1, 3), "Presidents' Day"),
-    f(2, 17, "St. Patrick's Day"), f(4, 5, 'Cinco de Mayo'), w(nthWeekday(y, 4, 0, 2), "Mother's Day"), w(lastWeekday(y, 4, 1), 'Memorial Day'), w(nthWeekday(y, 5, 0, 3), "Father's Day"), f(5, 19, 'Juneteenth'),
-    f(6, 4, 'July 4th'), w(nthWeekday(y, 8, 1, 1), 'Labor Day'), f(9, 31, 'Halloween'), f(10, 11, 'Veterans Day'), w(nthWeekday(y, 10, 4, 4), 'Thanksgiving'), w(new Date(nthWeekday(y, 10, 4, 4).getTime() + DAY_MS), 'Black Friday'),
-    f(11, 24, 'Christmas Eve'), f(11, 25, 'Christmas'), f(11, 31, "New Year's Eve"),
-  ]
-}
-function holidayOn(ms: number): string | null {
-  const y = new Date(ms).getFullYear()
-  const hit = [...usHolidays(y), ...usHolidays(y - 1)].find((h) => Math.abs(h.ms - ms) < DAY_MS / 2)
-  return hit?.name ?? null
-}
-function ContextCard({ mv, days, label }: { mv: MetricView; days: number; label: string }) {
-  const A = useAccent()
-  const raw = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0)
-  let cut = raw.length
-  while (cut > 0 && cut > raw.length - 7 && (raw[cut - 1].value ?? 0) === 0) cut--
-  const all = raw.slice(0, cut).map((d) => ({ t: trendDayMs(d.date), v: d.value ?? 0 }))
-  if (all.length < 14) return null
-  // the weekday rhythm, from the last eight weeks
-  const recent = all.slice(-56)
-  const byDow = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }))
-  for (const d of recent) { const k = new Date(d.t).getDay(); byDow[k].sum += d.v; byDow[k].n++ }
-  const dowMean = byDow.map((b) => (b.n ? b.sum / b.n : 0))
-  const dowMax = Math.max(1, ...dowMean)
-  const bestDow = dowMean.indexOf(dowMax)
-  const weekdayMean = [1, 2, 3, 4, 5].reduce((t, k) => t + dowMean[k], 0) / 5
-  const weekendMean = (dowMean[0] + dowMean[6]) / 2
-  const wkPct = weekdayMean > 0 ? Math.round(((weekendMean - weekdayMean) / weekdayMean) * 100) : null
-  // the days that stood out inside this window, against their 7-day average
-  const win = all.slice(-days)
-  const dev = win.map((d, i) => { const sl = win.slice(Math.max(0, i - 6), i + 1); const avg = sl.reduce((t, x) => t + x.v, 0) / sl.length; return { ...d, avg, pct: avg > 0 ? Math.round(((d.v - avg) / avg) * 100) : 0 } })
-  const stood = [...dev].filter((d) => Math.abs(d.pct) >= 25).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 3).sort((a, b) => a.t - b.t)
-  const noun = mv.unit ?? ''
-  return (
-    <div style={CARD}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={H2}>Context</span>
-        <span style={{ fontSize: 12.5, color: C.faint }}>what moves {label.toLowerCase()} besides you</span>
-      </div>
-      {/* the weekday rhythm */}
-      <div style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>
-          <b>{WEEKDAYS[bestDow] === 'Sat' || WEEKDAYS[bestDow] === 'Sun' ? `${WEEKDAYS[bestDow]}urdays`.replace('Sunurdays', 'Sundays').replace('Saturdays', 'Saturdays') : `${WEEKDAYS[bestDow]}days`.replace('Tuedays', 'Tuesdays').replace('Weddays', 'Wednesdays').replace('Thudays', 'Thursdays')}</b> are your strongest day{wkPct != null && Math.abs(wkPct) >= 8 ? <>. Weekends run <b style={{ color: wkPct > 0 ? C.greenDk : C.coral }}>{wkPct > 0 ? '+' : ''}{wkPct}%</b> against weekdays</> : null}.
-        </div>
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 44, marginTop: 10 }}>
-          {[1, 2, 3, 4, 5, 6, 0].map((k) => (
-            <div key={k} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, height: '100%', justifyContent: 'flex-end' }}>
-              <div style={{ width: '100%', maxWidth: 26, height: `${Math.max(4, (dowMean[k] / dowMax) * 100)}%`, borderRadius: 4, background: k === bestDow ? A.main : `${A.main}55` }} />
-              <span style={{ fontSize: 10, color: k === bestDow ? A.dark : C.faint, fontWeight: k === bestDow ? 700 : 500 }}>{WEEKDAYS[k]}</span>
-            </div>
-          ))}
-        </div>
-        <div style={{ fontSize: 11, color: C.faint, marginTop: 6 }}>Average by day of the week, last eight weeks.</div>
-      </div>
-      {/* the days that stood out */}
-      {stood.length > 0 && (
-        <div style={{ marginTop: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 4 }}>Days that stood out</div>
-          {stood.map((d, i) => {
-            const hol = holidayOn(d.t)
-            return (
-              <div key={d.t} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
-                <span style={{ minWidth: 58, fontSize: 13, fontWeight: 600, color: C.ink }}>{fmtPinDate(d.t)}</span>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{hol ? hol : WEEKDAYS[new Date(d.t).getDay()] === 'Sat' || WEEKDAYS[new Date(d.t).getDay()] === 'Sun' ? 'a weekend day' : 'a weekday'} · {d.v.toLocaleString()} {noun}</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: d.pct > 0 ? C.greenDk : C.coral, flexShrink: 0 }}>{d.pct > 0 ? '▲' : '▼'}{Math.abs(d.pct)}% vs its week</span>
-              </div>
-            )
-          })}
-        </div>
-      )}
-      <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.5, marginTop: 14 }}>Weather, local games and events are not in here yet. When they are, they will pin on the trend the same way launches do.</div>
     </div>
   )
 }
@@ -1467,7 +1395,7 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
   return { mean: n > 0 ? sum / n : 0, n }
 }
 
-function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, litPin }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null }) {
+function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, litPin, footer, customStart, customEnd }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
   const A = useAccent()
   const range: TrendRange = TREND_OF_RANGE[chartRange] ?? 'month'
   const [pick, setPick] = useState<number | null>(null) // the day under the finger
@@ -1485,8 +1413,10 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
 
   const dayMs = daily.map((d) => ({ t: trendDayMs(d.date), v: d.value }))
   const firstMs = dayMs[0].t
-  const endMs = dayMs[dayMs.length - 1].t
-  const startMs = range === 'all' ? firstMs : Math.max(firstMs, endMs - TREND_DAYS[range] * DAY_MS)
+  const lastMs = dayMs[dayMs.length - 1].t
+  const isCustom = chartRange === 'custom' && !!customStart && !!customEnd
+  const endMs = isCustom ? Math.min(lastMs, trendDayMs(customEnd!)) : lastMs
+  const startMs = isCustom ? Math.max(firstMs, trendDayMs(customStart!)) : range === 'all' ? firstMs : Math.max(firstMs, endMs - TREND_DAYS[range] * DAY_MS)
   const spanMs = Math.max(DAY_MS, endMs - startMs)
 
   const win = dayMs.filter((d) => d.t >= startMs && d.t <= endMs)
@@ -1511,7 +1441,10 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
   const priorOffset = Math.round(spanMs / DAY_MS + 1) * DAY_MS
   const prior = days.map((d) => byT.get(d.t - priorOffset) ?? null)
   const priorHas = prior.filter((v) => v != null).length >= Math.ceil(n / 2)
-  const head = Math.max(maxV, ...(priorHas ? prior.filter((v): v is number => v != null) : [0])) * 1.18
+  // scale to the LINE that is drawn (the 7-day average), not the raw daily peak — a sharp
+  // rise should fill the chart, not sit in the bottom half (owner 2026-09-04)
+  const lineMax = Math.max(1, ...roll, ...(priorHas ? prior.filter((v): v is number => v != null) : [0]))
+  const head = lineMax * 1.1
   // SVG geometry (uniform-scaled so pins stay round). y grows downward; a left gutter
   // holds the axis numbers.
   const W = 344, H = 214, padL = 34, padR = 14, padT = 28, padB = 22
@@ -1519,7 +1452,7 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
   const xAt = (t: number) => padL + ((t - startMs) / spanMs) * plotW
   const yAt = (v: number) => yBot - (v / head) * (yBot - yTop)
   const clampX = (x: number) => Math.max(padL + 11, Math.min(W - padR - 11, x))
-  const yTicks = [maxV, maxV / 2, 0]
+  const yTicks = [lineMax, lineMax / 2, 0]
   const slot = plotW / n
   const xOf = (i: number) => padL + (i + 0.5) * slot
   const pts = days.map((_, i) => ({ x: xOf(i), y: yAt(roll[i]) }))
@@ -1547,6 +1480,7 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
   const HALF = 14 * DAY_MS
   const byDay = new Map<string, { ms: number; items: StageCampaign[] }>()
   for (const c of list ?? []) {
+    if (c.state === 'production') continue // being made — nothing has gone live to pin
     const ms = c.shippedAt ? trendDayMs(c.shippedAt) : NaN
     if (!Number.isFinite(ms) || ms < startMs || ms > endMs) continue
     const key = new Date(ms).toISOString().slice(0, 10)
@@ -1587,7 +1521,7 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
         <span style={H2}>{title}</span>
-        <span style={{ fontSize: 12.5, color: C.faint }}>{range === 'all' ? 'all time' : `this ${TREND_LABEL[range].toLowerCase()}`}</span>
+        <span style={{ fontSize: 12.5, color: C.faint }}>{isCustom ? `${fmtPinDate(startMs)} – ${fmtPinDate(endMs)}` : range === 'all' ? 'all time' : `this ${TREND_LABEL[range].toLowerCase()}`}</span>
       </div>
       {/* the read, in one line: where the line is heading, and what was launched into it */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -1667,7 +1601,8 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
         )}
       </div>
 
-      {marks.length === 0 && <div style={{ marginTop: 12, fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>Nothing launched in this window. When something goes live, its day pins here.</div>}
+      {marks.length === 0 && !footer && <div style={{ marginTop: 12, fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>Nothing launched in this window. When something goes live, its day pins here.</div>}
+      {footer}
     </div>
   )
 }
@@ -1710,43 +1645,80 @@ function foldSameNames(items: StageCampaign[]): { c: StageCampaign; count: numbe
   }
   return out
 }
-function StageCampaigns({ list, pins = {}, lit = null, onLight }: { list: StageCampaign[] | null; /** campaign id → its pin number on the trend above */ pins?: Record<string, number>; lit?: number | null; onLight?: (n: number | null) => void }) {
+function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: { list: StageCampaign[] | null; /** campaign id → its pin number on the trend above */ pins?: Record<string, number>; lit?: number | null; onLight?: (n: number | null) => void; /** render inside another card (the trend), no card of its own */ bare?: boolean }) {
   const A = useAccent()
   if (list === null) return null // stay quiet until the fetch lands
-  const MAX = 3
-  const shown = list.slice(0, MAX)
-  const extra = list.length - shown.length
+  const MAX = 5
+  // live and finished ones first (they pin), then what is still being made
+  const order = (c: StageCampaign) => (c.state === 'production' ? 2 : c.state === 'done' ? 1 : 0)
+  const sorted = [...list].sort((a, b) => order(a) - order(b) || (pins[a.id] ?? 99) - (pins[b.id] ?? 99))
+  const shown = foldSameNames(sorted).slice(0, MAX)
+  const extra = foldSameNames(sorted).length - shown.length
+  const hasPins = Object.keys(pins).length > 0
+  const wrap: React.CSSProperties = bare ? { marginTop: 16 } : CARD
   return (
-    <div style={CARD}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={H2}>Active campaigns</span>{Object.keys(pins).length > 0 && <span style={{ fontSize: 12.5, color: C.faint }}>numbers match the pins above</span>}</div>
-      {list.length > 0 ? (
+    <div style={wrap}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}><span style={H2}>Campaigns</span>{hasPins && <span style={{ fontSize: 12.5, color: C.faint }}>tap a number to find it above</span>}</div>
+      {shown.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {foldSameNames(shown).map(({ c, count }) => {
+          {shown.map(({ c, count }) => {
             const n = pins[c.id]
             const isLit = n != null && lit === n
+            const stateWord = c.state === 'done' ? 'Finished' : c.state === 'production' ? 'In production' : 'Live'
+            const stateCol = c.state === 'done' ? C.mute : c.state === 'production' ? '#a8720c' : A.dark
             return (
-            <Link key={c.id} href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} onClick={(e) => { if (n != null && onLight) { e.preventDefault(); onLight(isLit ? null : n) } }} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 0', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: 'inherit' }}>
-              {n != null
-                ? <span style={{ width: 34, height: 34, borderRadius: 99, background: isLit ? A.dark : '#fff', border: `1.8px solid ${isLit ? A.dark : A.main}`, color: isLit ? '#fff' : A.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0, transition: 'background .15s' }}>{n}</span>
-                : <div style={{ width: 34, height: 34, borderRadius: 9, background: A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={A.dark} /></div>}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-                <div style={{ fontSize: 11, color: A.dark, display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: A.main }} />Live{count > 1 ? ` · ${count} alike` : ''}{n != null ? ` · pinned ${n}` : ''}</div>
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderTop: `0.5px solid ${C.line}` }}>
+                {n != null
+                  ? <button type="button" onClick={() => onLight?.(isLit ? null : n)} aria-pressed={isLit} aria-label={`Find pin ${n} on the chart`} style={{ width: 34, height: 34, borderRadius: 99, background: isLit ? A.dark : '#fff', border: `1.8px solid ${isLit ? A.dark : A.main}`, color: isLit ? '#fff' : A.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit', padding: 0, transition: 'background .15s' }}>{n}</button>
+                  : <div style={{ width: 34, height: 34, borderRadius: 9, background: c.state === 'production' ? '#fbf1da' : A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={c.state === 'production' ? '#a8720c' : A.dark} /></div>}
+                <Link href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: stateCol, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: stateCol }} />{stateWord}{count > 1 ? ` · ${count} alike` : ''}{c.shippedAt && c.state !== 'production' ? ` · ${fmtPinDate(trendDayMs(c.shippedAt))}` : ''}</span>
+                  </span>
+                  <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+                </Link>
               </div>
-              {n != null ? <span style={{ fontSize: 12, fontWeight: 600, color: C.faint }}>{isLit ? 'shown' : 'show'}</span> : <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />}
-            </Link>
             )
           })}
           {extra > 0 && (
-            <Link href="/dashboard/campaigns" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 2, fontSize: 12.5, fontWeight: 600, color: A.dark, textDecoration: 'none' }}>{extra} more working on this <ChevronRight size={15} /></Link>
+            <Link href="/dashboard/campaigns" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 8, fontSize: 12.5, fontWeight: 600, color: A.dark, textDecoration: 'none' }}>{extra} more on this stage <ChevronRight size={14} /></Link>
           )}
         </div>
       ) : (
-        <Link href="/dashboard/campaigns" style={{ display: 'flex', alignItems: 'center', gap: 11, ...TILE, padding: 14, textDecoration: 'none', color: 'inherit' }}>
+        <Link href="/dashboard/campaigns/new" style={{ display: 'flex', alignItems: 'center', gap: 11, ...TILE, padding: 14, textDecoration: 'none', color: 'inherit', marginTop: 8 }}>
           <div style={{ width: 34, height: 34, borderRadius: 9, background: A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={A.dark} /></div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>No live campaign on this yet. <span style={{ color: A.dark, fontWeight: 600 }}>Start one →</span></div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>No campaign on this yet. <span style={{ color: A.dark, fontWeight: 600 }}>Start one →</span></div>
         </Link>
       )}
+    </div>
+  )
+}
+
+/* ── Highlights: only the days that were abnormally high or low against their own week ── */
+function HighlightsCard({ mv, days, label }: { mv: MetricView; days: number; label: string }) {
+  const raw = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0).map((d) => ({ date: d.date, value: d.value ?? 0 }))
+  const win = raw.slice(-Math.max(days, 14))
+  const hits = deriveStandouts(win, 4).filter((h) => Math.abs(h.vsWeekPct) >= 30)
+  const noun = mv.unit ?? ''
+  return (
+    <div style={CARD}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={H2}>Highlights</span>
+        <span style={{ fontSize: 12.5, color: C.faint }}>days well above or below usual</span>
+      </div>
+      {hits.length === 0 ? (
+        <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>No day stood out from its week for {label.toLowerCase()} in this window.</div>
+      ) : hits.map((h, i) => (
+        <div key={h.date} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+          <span style={{ width: 34, height: 34, borderRadius: 99, background: h.vsWeekPct > 0 ? C.greenSoft : C.coralBg, color: h.vsWeekPct > 0 ? C.greenDk : C.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{h.vsWeekPct > 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}</span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtPinDate(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>
+            <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1 }}>{h.value.toLocaleString()} {noun}</span>
+          </span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: h.vsWeekPct > 0 ? C.greenDk : C.coral, flexShrink: 0 }}>{h.vsWeekPct > 0 ? '▲' : '▼'}{Math.abs(h.vsWeekPct)}% vs its week</span>
+        </div>
+      ))}
     </div>
   )
 }

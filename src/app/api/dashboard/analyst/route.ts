@@ -15,10 +15,11 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isProTier } from '@/lib/entitlements'
 import { buildAnalystPayload } from '@/lib/insights/analyst-payload'
-import { runAnalyst, funnelFromPayload, ANALYST_MODEL } from '@/lib/insights/analyst'
+import { runAnalyst, funnelFromPayload, ANALYST_MODEL, READ_VERSION } from '@/lib/insights/analyst'
 import type { InsightsWindow } from '@/lib/insights/compute-stages'
 
-export const maxDuration = 30
+// the full report reads the whole account and researches outside it: well over 30s
+export const maxDuration = 120
 
 /**
  * Just the counted review stats, for a cache hit. Cheap (one indexed read) and
@@ -79,7 +80,8 @@ export async function POST(req: NextRequest) {
         .eq('client_id', clientId).eq('report_window', window)
         .maybeSingle()
       const row = data as { read: unknown; funnel: unknown; business: unknown; reputation: unknown; generated_at: string } | null
-      if (row?.read && row.generated_at && Date.now() - new Date(row.generated_at).getTime() < CACHE_FRESH_MS) {
+      const readVersion = (row?.read as { version?: number } | null)?.version ?? 1
+      if (row?.read && readVersion >= READ_VERSION && row.generated_at && Date.now() - new Date(row.generated_at).getTime() < CACHE_FRESH_MS) {
         // The star chart is counted from rows, not written by the model, so recompute it
         // on the way out rather than storing it. That keeps the chart on cached reads
         // WITHOUT a new column: adding one and failing to migrate would break the whole
@@ -103,7 +105,9 @@ export async function POST(req: NextRequest) {
   try {
     const payload = await buildAnalystPayload(clientId, window)
     const funnel = funnelFromPayload(payload)
-    const { read, costCents } = await runAnalyst(payload)
+    const { read: written, costCents } = await runAnalyst(payload)
+    // the visuals are drawn from these, not from the model's words
+    const read = { ...written, numbers: { trends: payload.trends, rhythm: payload.rhythm, standouts: payload.standouts, launches: payload.launches } }
     // The star mix is counted from real rows, so the page can draw it without the model.
     const reviewStats = payload.reviews
       ? { recent: payload.reviews.recent, lifetime: payload.reviews.lifetime, unanswered: payload.reviews.unanswered }
