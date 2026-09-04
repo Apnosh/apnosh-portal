@@ -98,47 +98,16 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
         {/* Orders moved in here from its own tab (owner 2026-09-04): one row through to receipts */}
         <Link href="/dashboard/orders" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', marginBottom: 14, borderRadius: 16, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', textDecoration: 'none', color: 'inherit' }}>
           <span style={{ width: 34, height: 34, borderRadius: 10, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={17} /></span>
-          <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: C.ink }}>Orders</span><span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1 }}>What you bought, where it stands, receipts</span></span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Orders</span>
           <ChevronRight size={17} color={C.faint} />
         </Link>
 
-        {/* Entry to the builder. Sits above the board rather than inside the campaign list because
-            it is not a campaign yet: it is the thing that makes one. Shown in every state
-            (including loading and empty) so a new owner with nothing on the board still has a way
-            in.
-
-            Not "a monthly marketing plan": the screen it opens builds grand openings and one-off
-            event nights as readily as anything recurring, and naming the door after one of them
-            told most owners this was not for them before they had opened it. */}
-        <Link
-          href="/dashboard/campaigns/monthly-plan"
-          className="mvp-row"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 13, textDecoration: 'none',
-            background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW,
-            padding: '14px 15px', marginBottom: 16,
-          }}
-        >
-          <span style={{ flex: '0 0 auto', width: 38, height: 38, borderRadius: 11, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Plus size={20} strokeWidth={2.4} />
-          </span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
-              Start a campaign
-            </span>
-            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
-              An opening, a slow night, a new dish. Three questions at most.
-            </span>
-          </span>
-          <ChevronRight size={17} style={{ color: C.faint, flex: '0 0 auto' }} />
-        </Link>
-
+        {/* the builder card and the occasion rail are gone (owner 2026-09-04): the + tab is the door in */}
         {/* GD-3: the occasion calendar brings graphic demand to the owner. The
             next few national moments, each with enough lead time to order today
             and have the piece in hand — one tap opens the design order
             pre-filled with the occasion and its date. Campaigns page by owner
             call (2026-08-19): Home stays pure dashboard. */}
-        <OccasionsRail />
 
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '40px 0', color: C.faint, fontSize: 13.5 }}><Loader2 size={16} className="animate-spin" /> Loading your campaigns…</div>
@@ -151,7 +120,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
         ) : (
           <>
             <div style={{ marginBottom: 16 }}>
-              <Segmented items={[['all', 'All'], ['live', 'Live'], ['production', 'Making'], ['done', 'Done']]} value={tab} onChange={setTab} counts={counts} />
+              <Segmented items={[['all', 'All'], ['live', 'Live'], ['production', 'In progress'], ['done', 'History']]} value={tab} onChange={setTab} counts={counts} />
             </div>
             {shown.length === 0 ? (
               <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 16, padding: '26px 16px', textAlign: 'center', color: C.faint, fontSize: 13.5 }}>Nothing in this filter.</div>

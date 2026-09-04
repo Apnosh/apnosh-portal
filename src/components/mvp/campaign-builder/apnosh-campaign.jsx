@@ -1,9 +1,10 @@
 "use client";
 /* eslint-disable */
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
 import TopRow, { TopSearch } from "../top-row";
+import { useHideOnScroll } from "../mvp-shell";
 import { priceLabel, ITEM_PRICES, priceNotes, passthroughNotesForServices, withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from "@/lib/campaigns/builder/item-prices";
 import { isProTier } from "@/lib/entitlements";
 import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
@@ -5516,6 +5517,8 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
    ============================================================ */
 export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, creatorCards = [], onScratch, onBookCreator, onHoldCreator, onCreatorSlots, onCreatorProfile, tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
   const [browseQ, setBrowseQ] = useState(""); // the top row's "Search campaigns" (2026-09-04)
+  const browseScrollRef = useRef(null);
+  const browseTucked = useHideOnScroll(useCallback(() => browseScrollRef.current, []));
   /* Client-side hops into the creative desks keep the bottom nav mounted (owner ask 2026-08-18). */
   const router = useRouter();
   // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
@@ -5623,7 +5626,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 60, background: "#f0f0f3", display: "flex", justifyContent: "center" }}>
-      <div className="apncreate" style={{ width: "100%", maxWidth: 480, height: "100dvh", background: "#fff", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 0 40px rgba(0,0,0,0.06)" }}>
+      <div className={"apncreate mvp-frame" + (browseTucked ? " mvp-scrolling" : "")} style={{ width: "100%", maxWidth: 480, height: "100dvh", background: "#fff", position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", boxShadow: "0 0 40px rgba(0,0,0,0.06)" }}>
         <style>{`
           .apncreate, .apncreate * { -webkit-font-smoothing: antialiased; box-sizing: border-box; }
           .apncreate ::-webkit-scrollbar { width: 0; height: 0; }
@@ -5637,6 +5640,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
           .apnexpand { animation: apnexpand 200ms ease both; }
           .apnpress { transition: transform 120ms ease, box-shadow 160ms ease; }
           .apnpress:active { transform: scale(0.975); }
+          .apncreate.mvp-scrolling .mvp-frame-top { transform: translateY(-115%); opacity: 0; pointer-events: none; }
+          .apncreate .mvp-nav { transition: transform .28s cubic-bezier(.32,.72,.35,1), opacity .22s; transform-origin: 50% 100%; }
+          .apncreate.mvp-scrolling .mvp-nav { transform: scale(.84) translateY(4px); opacity: .9; }
           @media (prefers-reduced-motion: reduce) { .apnrise, .apnrise2, .apnexpand { animation: none; } .apnpress:active { transform: none; } }
         `}</style>
 
@@ -5647,9 +5653,9 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
         <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
           {route.name === "browse" && (
             <>
-              <TopRow middle={<TopSearch value={browseQ} onChange={setBrowseQ} placeholder="Search campaigns" />} />
+              <div className="mvp-frame-top" style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 6, transition: "transform .28s cubic-bezier(.32,.72,.35,1), opacity .22s" }}><TopRow middle={<TopSearch value={browseQ} onChange={setBrowseQ} placeholder="Search campaigns" />} /></div>
               {/* room under the floating nav (and the plan bar when it is up), so the last shelf is reachable */}
-              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: `calc(${planItems.length > 0 ? 160 : 84}px + env(safe-area-inset-bottom))` }}>
+              <div ref={browseScrollRef} style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingTop: 58, paddingBottom: `calc(${planItems.length > 0 ? 160 : 84}px + env(safe-area-inset-bottom))` }}>
                 <PlanBrowse restaurant={restaurant} externalQuery={browseQ} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} creatorCards={creatorCards} onOpenCreator={openCreator} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} onScratch={onScratch} />
               </div>
             </>
@@ -5730,7 +5736,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
 
         </div>
 
-        <BottomNav active="orders" />{/* "orders" is no longer a tab, so nothing lights up on Create — the + is the tab */}
+        <BottomNav active="create" />
       </div>
     </div>
   );

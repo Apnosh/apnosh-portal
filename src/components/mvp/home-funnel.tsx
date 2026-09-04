@@ -1124,7 +1124,7 @@ export default function HomeFunnel({
     <div ref={wrapRef} style={{ position: 'relative', height: effH, background: C.funnelBg, overflow: 'hidden', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, ...(fill ? { border: 'none', borderRadius: 0, boxShadow: 'none' } : { border: `0.5px solid ${C.line}`, borderRadius: 20, boxShadow: '0 24px 60px -24px rgba(18,80,58,.30), 0 6px 18px -6px rgba(0,0,0,.06)' }) }}>
       {/* the tabs + audience chrome now FLOATS over the canvas (which fills the whole card from the top) so the
           flow streams in behind the text; the rings sit headerH below, clear of it. */}
-      <div ref={headerRef} style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 3 }}>
+      <div ref={headerRef} className="mvp-home-bar" style={{ position: 'sticky', top: 0, left: 0, right: 0, zIndex: 3 }}>
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
       <div style={bar ? { display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) 40px', alignItems: 'center', gap: 10, padding: '10px 12px 4px' } : { display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px 6px' }}>
         {bar && (
@@ -1276,7 +1276,7 @@ export function HomeFunnelSkeleton({ height = 620, message = 'Getting your numbe
       <style>{`
 @keyframes hfGhostIn{from{opacity:0}to{opacity:1}}
 @keyframes hfGhostSweep{0%{transform:translateY(-30%)}100%{transform:translateY(130%)}}
-@keyframes hfGhostBreathe{0%,100%{opacity:.55}50%{opacity:1}}
+@keyframes hfGhostBreathe{0%,100%{opacity:.7}50%{opacity:1}}
 .hf-ghost{animation:hfGhostIn .5s ease-out both}
 .hf-ghost-sweep{animation:hfGhostSweep 2.6s cubic-bezier(.45,.05,.55,.95) infinite}
 .hf-ghost-ring{animation:hfGhostBreathe 2.6s ease-in-out infinite}
@@ -1286,21 +1286,21 @@ export function HomeFunnelSkeleton({ height = 620, message = 'Getting your numbe
           <defs>
             <linearGradient id="hfGhostLight" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0" stopColor={C.green} stopOpacity="0" />
-              <stop offset="0.5" stopColor={C.green} stopOpacity="0.16" />
+              <stop offset="0.5" stopColor={C.green} stopOpacity="0.34" />
               <stop offset="1" stopColor={C.green} stopOpacity="0" />
             </linearGradient>
             <clipPath id="hfGhostClip">{pts.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r={p.r} />)}</clipPath>
           </defs>
-          <path d={path} fill="none" stroke={C.green} strokeOpacity="0.28" strokeWidth="1.6" strokeDasharray="3 5" />
+          <path d={path} fill="none" stroke={C.greenDk} strokeOpacity="0.45" strokeWidth="1.8" strokeDasharray="3 5" />
           {pts.map((p, i) => (
-            <circle key={i} className="hf-ghost-ring" cx={p.x} cy={p.y} r={p.r} fill="none" stroke={C.green} strokeOpacity="0.55" strokeWidth="1.4" style={{ animationDelay: `${i * 0.25}s` }} />
+            <circle key={i} className="hf-ghost-ring" cx={p.x} cy={p.y} r={p.r} fill="rgba(74,189,152,0.06)" stroke={C.greenDk} strokeOpacity="0.9" strokeWidth="1.8" style={{ animationDelay: `${i * 0.25}s` }} />
           ))}
           <g clipPath="url(#hfGhostClip)">
             <rect className="hf-ghost-sweep" x="0" y="0" width={W} height={H * 0.45} fill="url(#hfGhostLight)" />
           </g>
         </svg>
       </div>
-      <div style={{ fontSize: 13, color: C.faint, padding: '6px 0 14px', letterSpacing: '.01em' }}>{message}</div>
+      <div style={{ fontSize: 14, fontWeight: 500, color: C.mute, padding: '6px 0 14px', letterSpacing: '.01em' }}>{message}</div>
     </div>
   )
 }

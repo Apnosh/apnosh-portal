@@ -1170,6 +1170,27 @@ function useRangeStage(cs: ComputedStage | undefined, stageNumber: number | unde
 //    instead of a frozen arrow. In the swipeable layout the source cards live
 //    BELOW the dots (showBreakdown=false + onRange reports the picked range up so
 //    the cards outside stay scoped to this chart's window). ──
+/** the big number rolls to its new value (≈450ms) instead of snapping — the page feels alive
+ *  without saying anything it did not say before; static under prefers-reduced-motion */
+function useCountUp(target: number): number {
+  const [v, setV] = useState(target)
+  const fromRef = useRef(target)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) { setV(target); fromRef.current = target; return }
+    const from = fromRef.current, to = target, t0 = performance.now(), dur = 450
+    if (from === to) return
+    let raf = 0
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3)
+      setV(Math.round(from + (to - from) * e))
+      if (p < 1) raf = requestAnimationFrame(tick); else fromRef.current = to
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [target])
+  return v
+}
+
 function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNumber, showBreakdown = true, onRange, accent }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; accent?: string; breakdownTitle?: string; clientId?: string; stageNumber?: number; showBreakdown?: boolean; onRange?: (r: string) => void }) {
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
   const fresh = isFresh(mv.lastDataDate, summary.periodDays)
@@ -1185,6 +1206,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
   const { stage: rangeStage, sub } = useRangeStage(cs, stageNumber, clientId, range)
   const csTotal = rangeStage?.headline ?? cs?.headline
   const total = csTotal != null ? csTotal : summary.total
+  const shown = useCountUp(total)
 
   return (
     <>
@@ -1192,7 +1214,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
           line now lives behind the ⓘ (owner 2026-09-04) */}
       <div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
-          <span aria-label={label} style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{total.toLocaleString()}</span>
+          <span aria-label={label} style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink, fontVariantNumeric: 'tabular-nums' }}>{shown.toLocaleString()}</span>
           {total > 0 && (
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: ac, background: acbg, padding: '4px 10px', borderRadius: 99, marginBottom: 4 }}>
               <span style={{ fontSize: 10.5 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}

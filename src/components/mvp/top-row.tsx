@@ -29,7 +29,7 @@ export default function TopRow({ middle, title, count }: { middle?: React.ReactN
     </span>
   )
   return (
-    <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) 40px', alignItems: 'center', gap: 10, padding: '10px 12px 8px', background: 'rgba(255,255,255,0.78)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', borderBottom: '1px solid rgba(0,0,0,.05)' }}>
+    <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) 40px', alignItems: 'center', gap: 10, padding: '10px 12px 8px' }}>{/* floats over the page like Home's row: no band, no hairline (owner 2026-09-04) */}
       {multi
         ? <button type="button" onClick={() => setOpen((o) => !o)} aria-label={`Switch location (now ${name})`} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>{avatar}</button>
         : <Link href="/dashboard/more" aria-label={name}>{avatar}</Link>}
@@ -38,7 +38,7 @@ export default function TopRow({ middle, title, count }: { middle?: React.ReactN
       </div>
       <Link href="/dashboard/inbox" aria-label={n > 0 ? `Notifications (${n})` : 'Notifications'} style={{ ...GLASS, position: 'relative', width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', boxSizing: 'border-box' }}>
         <Bell size={19} />
-        {n > 0 && <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>{n > 99 ? '99+' : n}</span>}
+        {n > 0 && <span className="mvp-pop" style={{ position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>{n > 99 ? '99+' : n}</span>}
       </Link>
       {open && (
         <>

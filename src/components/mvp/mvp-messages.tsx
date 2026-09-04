@@ -174,25 +174,11 @@ export default function MvpMessages({ query: queryProp }: { query?: string } = {
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {/* header */}
-      <div style={{ padding: '18px 18px 0', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-          <div>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 25, lineHeight: 1 }}>Inbox</div>
-            <div style={{ fontSize: 12.5, color: totalUnread ? C.greenDk : C.mute, marginTop: 5, fontWeight: totalUnread ? 600 : 400 }}>
-              {totalUnread ? `${totalUnread} new repl${totalUnread === 1 ? 'y' : 'ies'}` : 'Reach your Apnosh team'}
-            </div>
-          </div>
-          {queryProp == null && <button onClick={() => setSearchOpen((s) => !s)} style={{ width: 38, height: 38, borderRadius: '50%', border: `1px solid ${searchOpen ? C.green : C.line}`, background: searchOpen ? C.greenSoft : '#fff', color: searchOpen ? C.greenDk : C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <Search size={18} />
-          </button>}
-        </div>
-        {searchOpen && (
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages…" style={{ width: '100%', marginTop: 12, borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '10px 13px', fontSize: 14, color: C.ink, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
-        )}
-      </div>
-
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 16px 28px' }}>
+      {/* the top row IS the header now (owner 2026-09-04); the old title / "Reach your Apnosh team" block is gone */}
+      {queryProp == null && searchOpen && (
+        <div style={{ padding: '12px 16px 0' }}><input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages…" style={{ width: '100%', borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', border: 'none', padding: '10px 12px', fontSize: 14, fontFamily: 'inherit' }} /></div>
+      )}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 16px 28px' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13.5, padding: 30 }}><Loader2 size={16} className="animate-spin" /> Loading…</div>
         ) : noBusiness ? (
