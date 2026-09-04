@@ -21,6 +21,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import MvpShell from './mvp-shell'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { usePullToRefresh, PullIndicator } from './pull-to-refresh'
@@ -195,7 +196,7 @@ function reviewDate(iso: string): string {
 }
 
 export default function MvpInsights({ data, loading, error, clientId, initialStageKey }: { data: InsightsData | null; loading: boolean; error: string | null; clientId?: string; initialStageKey?: string }) {
-  const router = useRouter()
+
   const [summary, setSummary] = useState<ReviewSummary | null>(null)
   const [topicsData, setTopicsData] = useState<ReviewTopicsData | null>(null)
   const [topicsLoading, setTopicsLoading] = useState(false)
@@ -277,7 +278,6 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
   /* Pull down to refresh. force=1 tells the route this is the owner asking rather than a
    * routine view, so it drops from the 90 minute interval to a 30 second floor, then we reload
    * the numbers. A pull that finds nothing new still ends with genuinely current data. */
-  const scroller = useRef<HTMLDivElement | null>(null)
   const onPullRefresh = useCallback(async () => {
     if (!clientId) return { ok: false, changed: false }
     try {
@@ -291,43 +291,35 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
       return { ok: false, changed: false }
     }
   }, [clientId])
-  const { pull, phase } = usePullToRefresh(useCallback(() => scroller.current, []), onPullRefresh)
+  const { pull, phase } = usePullToRefresh(useCallback(() => (typeof document === 'undefined' ? null : document.querySelector<HTMLElement>('.mvp-frame-scroll')), []), onPullRefresh)
 
-  const back = () => { if (typeof window !== 'undefined' && window.history.length > 1) router.back(); else router.push('/dashboard') }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: '#f0f0f3', display: 'flex', justifyContent: 'center' }}>
-      {/* The swipe row is styled with .mvp-swipe, but that rule is declared inside
-          mvp-home's style block, which never renders on this screen — so the graphs
-          carried a visible scrollbar here. Declared locally so the class actually
-          applies wherever it is used. */}
+    <MvpShell active="home">
       <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
 .mvp-swipe::-webkit-scrollbar{display:none}
 .mvp-spin{animation:mvpspin .8s linear infinite}
 @keyframes mvpspin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ width: '100%', maxWidth: 480, height: '100dvh', background: '#fff', display: 'flex', flexDirection: 'column', boxShadow: '0 0 40px rgba(0,0,0,0.06)', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
-      {/* sticky back header */}
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
-        <button onClick={back} aria-label="Back" style={{ width: 38, height: 38, borderRadius: 99, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.ink }}><ChevronLeft size={24} /></button>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.1 }}>Insights</div>
-          {refreshing ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute, whiteSpace: 'nowrap' }}>
-              <span className="mvp-spin" style={{ width: 10, height: 10, border: `2px solid ${C.line}`, borderTopColor: C.green, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
-              Getting the latest numbers…
-            </div>
-          ) : data?.businessName ? (
-            <div style={{ fontSize: 12, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{data.businessName}</div>
-          ) : null}
-        </div>
-        {/* one button, reads the WHOLE funnel (the drop-off is cross-stage) */}
-        <AnalystButton />
-        {/* the per-client metric toggles, up here where settings live (was a lone pill at the very bottom) */}
-        <MetricSettingsButton compact onChanged={() => window.location.reload()} />
-      </div>
+      <div style={{ background: '#fff', minHeight: '100%' }}>
 
-      <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', background: '#fff' }}>
         <PullIndicator pull={pull} phase={phase} />
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '16px 18px 6px' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, lineHeight: 1.1, letterSpacing: '-.01em' }}>Insights</div>
+            {refreshing ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: C.mute, whiteSpace: 'nowrap', marginTop: 3 }}>
+                <span className="mvp-spin" style={{ width: 10, height: 10, border: `2px solid ${C.line}`, borderTopColor: C.green, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
+                Getting the latest numbers…
+              </div>
+            ) : (
+              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3 }}>Where your numbers come from</div>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <AnalystButton />
+            <MetricSettingsButton compact onChanged={() => window.location.reload()} />
+          </div>
+        </div>
         {loading ? (
           <Centered>Loading your numbers&hellip;</Centered>
         ) : error ? (
@@ -340,8 +332,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
           </>
         )}
       </div>
-      </div>
-    </div>
+    </MvpShell>
   )
 }
 
