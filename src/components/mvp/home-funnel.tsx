@@ -1111,27 +1111,27 @@ export default function HomeFunnel({
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: bar ? '10px 12px 4px' : '14px 16px 6px' }}>
         {bar && (
-          <Link href="/dashboard/more" aria-label="Your business" style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 700, color: C.greenDk, textDecoration: 'none', position: 'relative', overflow: 'hidden' }}>
+          <Link href="/dashboard/more" aria-label="Your business" style={{ flexShrink: 0, width: 40, height: 40, borderRadius: '50%', background: C.greenSoft, border: `1px solid ${C.greenLine}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, color: C.greenDk, textDecoration: 'none', position: 'relative', overflow: 'hidden' }}>
             {bar.initial ?? '·'}
             {bar.image && <img src={bar.image} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
           </Link>
         )}
         <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, borderRadius: 999, padding: 3, background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
-          {RANGES.map(([k, label]) => {
+          {RANGES.filter(([k]) => !bar || k !== 'custom').map(([k, label]) => {
             const on = curRange === k
             return (
-              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }} aria-label={label}>{bar ? (k === 'custom' ? <CalendarDays size={14} style={{ verticalAlign: '-2px' }} /> : k === '12m' ? '1y' : k) : label.replace('Last ', '').replace('year', 'Year')}</button>
+              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: bar ? '10px 0' : '8px 0', fontSize: bar ? 13.5 : 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }} aria-label={label}>{bar ? (k === 'custom' ? <CalendarDays size={15} style={{ verticalAlign: '-2px' }} /> : k === '12m' ? '1y' : k) : label.replace('Last ', '').replace('year', 'Year')}</button>
             )
           })}
         </div>
         {bar && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <Link href="/dashboard/inbox" aria-label={bar.unread ? `Alerts (${bar.unread})` : 'Alerts'} style={{ position: 'relative', width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
-              <Bell size={17} />
+            <Link href="/dashboard/inbox" aria-label={bar.unread ? `Alerts (${bar.unread})` : 'Alerts'} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
+              <Bell size={19} />
               {(bar.unread ?? 0) > 0 && <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{(bar.unread ?? 0) > 9 ? '9+' : bar.unread}</span>}
             </Link>
-            <Link href="/dashboard/messages" aria-label="Messages" style={{ width: 36, height: 36, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
-              <MessageCircle size={17} />
+            <Link href="/dashboard/messages" aria-label="Messages" style={{ width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
+              <MessageCircle size={19} />
             </Link>
           </div>
         )}
