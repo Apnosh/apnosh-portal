@@ -120,7 +120,7 @@ function ThemeBars({ themes, countedOver }: { themes: ReviewTheme[]; countedOver
     </div>
   )
 }
-interface Read { bottomLine: string; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[]; reviews: ReviewRead | null
+interface Read { bottomLine: string; story?: string[]; working: string[]; fixes: Array<{ move: string; why: string }>; blindSpots: string[]; reviews: ReviewRead | null
   trends?: Array<{ stage: number; label: string; read: string }>
   outside?: { summary: string; items: Array<{ note: string; source: string | null }> } | null
   gaps?: Array<{ gap: string; why: string; fix: string }>
@@ -291,8 +291,21 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
       {/* the cover: the one dark moment on the page — the period, the business, and the bottom line */}
       <div style={{ padding: '6px 2px 2px' }}>
         <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Last 30 days{business ? ` · ${business}` : ''}</div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, lineHeight: 1.3, marginTop: 8, letterSpacing: '-.01em', color: C.ink }}>{read.bottomLine}</div>
-        {when && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 10 }}>{when} · read from your real numbers, never guesses</div>}
+        <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, lineHeight: 1.25, marginTop: 8, letterSpacing: '-.01em', color: C.ink }}>{read.bottomLine}</div>
+        {(read.story?.length ?? 0) > 0 && (
+          <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {read.story!.map((line, i) => (
+              <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <span style={{ width: 24, height: 24, borderRadius: 99, background: i === 2 ? C.greenDk : C.greenSoft, color: i === 2 ? '#fff' : C.greenDk, fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>{i + 1}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 11.5, fontWeight: 700, color: C.faint, letterSpacing: '.01em' }}>{['What happened', 'Why it matters', 'What we do next'][i]}</span>
+                  <span style={{ display: 'block', fontSize: 15.5, color: C.ink, lineHeight: 1.45, marginTop: 1 }}>{line}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {when && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 12 }}>{when} · read from your real numbers, never guesses</div>}
       </div>
 
       {/* the scorecard: four numbers you can read in a glance before any words */}
@@ -321,7 +334,7 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
       )}
 
       {(read.trends?.length ?? 0) > 0 && (
-        <Section title="Where things are heading" sub="start of the window against the end, a day's average each">
+        <Section title="Where things are heading" sub="on Google: the start of the window against the end, a day's average each">
           <div>
             {read.trends!.map((t, i) => {
               const n = read.numbers?.trends.find((x) => x.stage === t.stage)
@@ -385,6 +398,12 @@ function ReadView({ read, funnel, stats, when, business, queries }: { read: Read
 
       {read.reviews && <ReviewsBlock r={read.reviews} stats={stats} />}
 
+      {queries.length === 0 && (
+        <Section title="What people search to find you" sub="the exact words, from Google">
+          <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>Google has not shared any search words for this window yet. They arrive once your profile gets searches, and Search Console adds the words people type on the web.</div>
+          <Link href="/dashboard/connected-accounts" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 10, fontSize: 13.5, fontWeight: 600, color: C.greenDk, textDecoration: 'none' }}>Check what is connected <ChevronRight size={15} /></Link>
+        </Section>
+      )}
       {queries.length > 0 && (
         <Section title="What people search to find you" sub="the exact words, from Google">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>

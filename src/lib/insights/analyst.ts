@@ -37,8 +37,10 @@ export const ANALYST_MODEL = process.env.ANALYST_MODEL || 'claude-opus-4-8'
 
 /** The prose the AI returns. NO numbers originate here — see funnelFromPayload. */
 export interface AnalystRead {
-  /** 1–2 plain sentences: the single most important takeaway */
+  /** the headline: at most twelve words, the way a marketer opens for the CEO */
   bottomLine: string
+  /** the story in three beats, one short sentence each: what happened · why it matters · what we do next */
+  story: string[]
   /** short bullets on what's going well, each tied to a real number */
   working: string[]
   /** the 1–2 highest-leverage moves, each with why it matters */
@@ -60,7 +62,7 @@ export interface AnalystRead {
   /** server-computed numbers the page DRAWS (never written by the model): attached by the route */
   numbers?: { trends: AnalystPayload['trends']; rhythm: AnalystPayload['rhythm']; standouts: AnalystPayload['standouts']; launches: AnalystPayload['launches'] }
 }
-export const READ_VERSION = 4
+export const READ_VERSION = 5
 
 /** The review read. Every point must be traceable to a quote in the brief. */
 export interface ReviewRead {
@@ -172,15 +174,15 @@ export function renderPayloadForPrompt(payload: AnalystPayload): string {
   if (camps.length) lines.push('ACTIVE CAMPAIGNS: ' + [...new Set(camps)].join(', '))
   lines.push('')
   if (payload.trends.length) {
-    lines.push('TRENDS INSIDE THIS WINDOW (7-day average at the start of the window vs at the end; the line the owner sees on their Trends tab):')
+    lines.push('TRENDS ON GOOGLE ONLY (Google Search + Maps for Awareness, website clicks for Interest, directions + calls for Actions; 7-day average at the start of the window vs at the end). Social views are NOT in these lines — when a stage is mostly social, say the trend line covers Google only:')
     for (const t of payload.trends) lines.push(`  ${t.label}: ${num(t.firstAvg)} a day at the start -> ${num(t.lastAvg)} a day at the end${t.changePct == null ? '' : ` (${t.changePct > 0 ? 'up' : t.changePct < 0 ? 'down' : 'flat'} ${Math.abs(t.changePct)}%)`}, over ${t.days} reported days`)
   }
   if (payload.rhythm) {
     const r = payload.rhythm
-    lines.push(`WEEKDAY RHYTHM (Awareness, average by day of the week, last eight weeks): ${r.byDay.map((d) => `${d.day} ${num(d.avg)}`).join(', ')}. Strongest ${r.strongestDay}, weakest ${r.weakestDay}${r.weekendVsWeekdayPct == null ? '' : `, weekends ${r.weekendVsWeekdayPct > 0 ? '+' : ''}${r.weekendVsWeekdayPct}% vs weekdays`}.`)
+    lines.push(`WEEKDAY RHYTHM ON GOOGLE (Google views, average by day of the week, last eight weeks): ${r.byDay.map((d) => `${d.day} ${num(d.avg)}`).join(', ')}. Strongest ${r.strongestDay}, weakest ${r.weakestDay}${r.weekendVsWeekdayPct == null ? '' : `, weekends ${r.weekendVsWeekdayPct > 0 ? '+' : ''}${r.weekendVsWeekdayPct}% vs weekdays`}.`)
   }
   if (payload.standouts.length) {
-    lines.push('DAYS THAT STOOD OUT (Awareness against its own 7-day average ending that day; the holiday is a calendar fact, not a cause):')
+    lines.push('DAYS THAT STOOD OUT ON GOOGLE (Google views against their own 7-day average ending that day; the holiday is a calendar fact, not a cause):')
     for (const d of payload.standouts) lines.push(`  ${d.date} (${d.weekday}${d.holiday ? `, ${d.holiday}` : ''}): ${num(d.value)}, ${d.vsWeekPct > 0 ? '+' : ''}${d.vsWeekPct}% against its 7-day average`)
   }
   if (payload.launches.length) {
@@ -212,11 +214,13 @@ HARD RULES (breaking any of these fails the task):
 - If the funnel shows a big drop between two steps, that gap is the story. Name it in plain words.
 - Be specific and short. No filler, no hype, no "leverage/synergy/optimize" jargon.
 
+HOW TO WRITE (this matters as much as what you say): you are a world-class marketer presenting to the owner as if they were the CEO. Tell a STORY, do not list numbers. Open with a headline of at most twelve words. Then three beats, one short sentence each: what happened, why it matters, what we do next. Everywhere: one idea per sentence, at most ONE number in any sentence, sentences under fifteen words, no brackets, no dashes, no "from X to Y (Z%)" strings. Round big numbers the way people say them ("about 350,000", "nearly 6,300"). Name the platform when it is the whole story ("almost all of it came from TikTok").
 WHAT THIS IS: a full report a world-class marketer would write for an owner who knows nothing about marketing. Explain every term the first time it appears, in one short clause (e.g. "Awareness, the number of times you showed up in a search or a feed"). Weigh what customers wrote, where the lines are heading, and the gaps a professional would spot. Be the sharpest, kindest advisor they have ever had.
 OUTSIDE THE BUSINESS: you may use the web_search tool ONLY for (a) things outside the owner's walls that could have mattered in this window — the weather where they are, big local events or games, a holiday, the season — and (b) up to three things WORTH THEIR READING right now: news in their city or neighbourhood that touches a restaurant like theirs, news in their trade (their kind of food, their kind of place), and changes on the platforms they live on (Google, Instagram, TikTok, delivery apps). Use the tool at most a few times. Report only what you actually found, with its source and its date. Never search for the owner's own numbers, competitors' numbers, or "industry averages", and never present a search result as a cause; say "this happened in the same window".
 Return ONLY a JSON object, no prose around it, in exactly this shape:
 {
-  "bottomLine": "one or two sentences: the single most important thing happening",
+  "bottomLine": "the headline, at most twelve words",
+  "story": ["what happened, one sentence", "why it matters, one sentence", "what we do next, one sentence"],
   "working": ["short bullet tied to a real number", "..."],
   "fixes": [{"move": "the concrete next thing to do", "why": "why it matters, tied to a number"}],
   "blindSpots": ["what you cannot see yet and what to connect to see it"],
@@ -260,6 +264,7 @@ export function parseAnalystRead(raw: string, quoteCount = 0): AnalystRead {
     Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim().length > 0) : []
   const bottomLine = typeof r.bottomLine === 'string' ? r.bottomLine.trim() : ''
   if (!bottomLine) throw new Error('Analyst read missing bottomLine')
+  const story = asStrings(r.story).slice(0, 3)
   const fixes = Array.isArray(r.fixes)
     ? r.fixes
         .map((f) => f as Record<string, unknown>)
@@ -300,6 +305,7 @@ export function parseAnalystRead(raw: string, quoteCount = 0): AnalystRead {
     : []
   return {
     bottomLine,
+    story,
     working: asStrings(r.working).slice(0, 3),
     fixes: fixes.slice(0, 3),
     blindSpots: asStrings(r.blindSpots).slice(0, 3),
