@@ -11,6 +11,7 @@
  * never leaves empty threads lying around.
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useClient } from '@/lib/client-context'
 import { ChevronLeft, Search, Send, Loader2, Plus, MessageCircle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
@@ -81,20 +82,33 @@ export default function MvpMessages() {
   const [active, setActive] = useState<Active | null>(null)
   const deepLinked = useRef(false)
 
-  // Resolve the signed-in owner + their business (messaging is owner ↔ team).
+  // Resolve the signed-in user + the business (messaging is owner ↔ team). The business
+  // comes from the SELECTED client, like every other screen, so a team member or an admin
+  // viewing a client sees its threads; the owner-of-record lookup is the fallback.
+  const { client: selClient, loading: clientLoading } = useClient()
   useEffect(() => {
+    if (clientLoading) return
     let live = true
     ;(async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { if (live) setLoading(false); return }
       if (live) setUserId(user.id)
-      const { data: biz } = await supabase.from('businesses').select('id').eq('owner_id', user.id).maybeSingle()
+      let bizId: string | null = null
+      if (selClient?.id) {
+        const { data: byClient } = await supabase.from('businesses').select('id').eq('client_id', selClient.id).maybeSingle()
+        bizId = (byClient?.id as string) ?? null
+      }
+      if (!bizId) {
+        const { data: biz } = await supabase.from('businesses').select('id').eq('owner_id', user.id).maybeSingle()
+        bizId = (biz?.id as string) ?? null
+      }
       if (!live) return
-      if (!biz?.id) { setNoBusiness(true); setLoading(false); return }
-      setBusinessId(biz.id as string)
+      if (!bizId) { setNoBusiness(true); setLoading(false); return }
+      setNoBusiness(false)
+      setBusinessId(bizId)
     })()
     return () => { live = false }
-  }, [supabase])
+  }, [supabase, selClient?.id, clientLoading])
 
   const loadThreads = useCallback(async () => {
     if (!businessId || !userId) return
