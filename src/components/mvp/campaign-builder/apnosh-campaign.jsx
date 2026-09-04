@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import BottomNav from "../bottom-nav";
-import AppHeader from "../app-header";
+import TopRow, { TopSearch } from "../top-row";
 import { priceLabel, ITEM_PRICES, priceNotes, passthroughNotesForServices, withServiceFee, plainCostNote, passthroughMonthlyMinimumCents } from "@/lib/campaigns/builder/item-prices";
 import { isProTier } from "@/lib/entitlements";
 import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
@@ -2115,7 +2115,7 @@ function IconG({ name, size = 26 }) {
 
 const CADENCE_TAG = { once: "One-time", recurring: "Recurring", auto: "Automatic", setup: "Setup", group: "Multi-step" };
 function TagPill({ children, accent }) {
-  return <span style={{ fontFamily: accent ? "'SF Mono', ui-monospace, Menlo, monospace" : "Inter, sans-serif", fontSize: accent ? 9.5 : 10, fontWeight: accent ? 700 : 600, color: accent ? DESKJ.mintDeep : DESKJ.ink2, background: accent ? DESKJ.mintWash : "#F1EEE6", border: accent ? `1px solid ${DESKJ.mintLine}` : "1px solid transparent", borderRadius: 6, padding: "2.5px 6px", whiteSpace: "nowrap" }}>{children}</span>;
+  return <span style={{ fontFamily: "Inter, sans-serif", fontSize: 11, fontWeight: 600, color: accent ? DESKJ.mintDeep : DESKJ.ink2, background: accent ? DESKJ.mintWash : "#f5f5f7", borderRadius: 999, padding: "3px 8px", whiteSpace: "nowrap", lineHeight: 1.4 }}>{children}</span>;
 }
 
 const CATALOG = [
@@ -2399,14 +2399,14 @@ function planTags(p) {
   const oneTimeShown = pr ? withServiceFee(pr.oneTime) : 0;
   if (pr && (pr.oneTime > 0 || pr.perMonth > 0)) {
     if (pr.oneTime > 0 && pr.perMonth > 0) {
-      t.push({ label: `Setup $${oneTimeShown.toLocaleString()}, fee included`, accent: true });
+      t.push({ label: `Setup $${oneTimeShown.toLocaleString()}`, accent: true });
       t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
       priceSaysCadence = p.cad === "recurring";
     } else if (pr.perMonth > 0) {
       t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
       priceSaysCadence = p.cad === "recurring";
     } else {
-      t.push({ label: creative ? `Starting $${oneTimeShown.toLocaleString()}, fee included` : `$${oneTimeShown.toLocaleString()}, fee included`, accent: true });
+      t.push({ label: creative ? `Starting $${oneTimeShown.toLocaleString()}` : `$${oneTimeShown.toLocaleString()}`, accent: true });
     }
   }
   // Pass-through costs (Fix: honest ad spend): a card whose services bill real extra costs
@@ -2433,8 +2433,8 @@ function SoonBadge() {
 function PlanCardV({ p, onOpen, full }) {
   const soon = !buyableId(p.id);
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: `1px solid ${DESKJ.line}`, borderRadius: 16, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 6px 16px rgba(22,33,28,0.07)", opacity: soon ? 0.82 : 1 }}>
-      <div style={{ position: "relative", height: 86, backgroundImage: `radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px), ${gType(p.type)}`, backgroundSize: "14px 14px, 100% 100%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
+    <button onClick={() => onOpen(p.id)} className="apnpress" style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 156, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(22,33,28,0.07)", opacity: soon ? 0.82 : 1 }}>
+      <div style={{ position: "relative", height: 86, backgroundImage: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 16, borderTopRightRadius: 16 }}>
         {soon && <SoonBadge />}
         <div style={{ position: "absolute", width: 120, height: 120, borderRadius: 60, background: "rgba(255,255,255,0.1)", bottom: -44, right: -28 }} />
         <div style={{ position: "relative", width: 54, height: 54, borderRadius: 15, background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)", boxShadow: "0 4px 12px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(2px)" }}><Art id={p.id} size={34} /></div>
@@ -2471,8 +2471,8 @@ function PlanCardBig({ p, onOpen, full }) {
   const clamp2 = { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" };
   const soon = !buyableId(p.id);
   return (
-    <button onClick={() => onOpen(p.id)} style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: `1px solid ${DESKJ.line}`, borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 8px 20px rgba(22,33,28,0.08)", opacity: soon ? 0.82 : 1 }}>
-      <div style={{ position: "relative", height: 92, backgroundImage: `radial-gradient(rgba(255,255,255,0.09) 1px, transparent 1px), ${gType(p.type)}`, backgroundSize: "14px 14px, 100% 100%", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
+    <button onClick={() => onOpen(p.id)} className="apnpress" style={{ flexShrink: full ? undefined : 0, width: full ? "100%" : 160, textAlign: "left", background: "#fff", border: "none", borderRadius: 18, cursor: "pointer", WebkitTapHighlightColor: "transparent", padding: 0, boxShadow: "0 8px 20px rgba(22,33,28,0.08)", opacity: soon ? 0.82 : 1 }}>
+      <div style={{ position: "relative", height: 92, backgroundImage: gType(p.type), display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
         {soon && <SoonBadge />}
         <div style={{ position: "absolute", width: 130, height: 130, borderRadius: 65, background: "rgba(255,255,255,0.1)", bottom: -46, right: -30 }} />
         <div style={{ position: "relative", width: 58, height: 58, borderRadius: 16, background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.25)", boxShadow: "0 4px 12px rgba(0,0,0,0.18)", display: "flex", alignItems: "center", justifyContent: "center", backdropFilter: "blur(2px)" }}><Art id={p.id} size={36} /></div>
@@ -3184,7 +3184,7 @@ function CategoryRow({ row, onOpen, onSeeAll, creatorCards = [], onOpenCreator }
     <div style={{ marginBottom: big ? 26 : 22 }}>
       <button onClick={() => onSeeAll(row.id)} style={{ width: "100%", background: "none", border: "none", cursor: "pointer", padding: "0 20px 10px", display: "flex", alignItems: "center", justifyContent: "space-between", WebkitTapHighlightColor: "transparent" }}>
         <div style={{ textAlign: "left" }}>
-          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: big ? 21 : 18.5, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.3 }}>{row.title}</div>
+          <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: big ? 19 : 17, fontWeight: 600, color: TOKENS.ink, letterSpacing: -0.2 }}>{row.title}</div>
           {row.note && <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: DESKJ.mute, marginTop: 1 }}>{row.note}</div>}
         </div>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
@@ -3211,11 +3211,11 @@ function ScratchHero({ onScratch }) {
   const INK = DESKJ.mintDeep;
   return (
     <div style={{ padding: "0 20px 20px" }}>
-      <div style={{ borderRadius: 18, overflow: "hidden", position: "relative", backgroundColor: GRAD, backgroundImage: "radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), radial-gradient(circle at 85% 10%, rgba(74,189,152,0.35), transparent 55%)", backgroundSize: "18px 18px, 100% 100%", boxShadow: "0 14px 30px rgba(22,33,28,0.28)" }}>
+      <div style={{ borderRadius: 20, overflow: "hidden", position: "relative", backgroundColor: GRAD, backgroundImage: "radial-gradient(circle at 85% 10%, rgba(74,189,152,0.38), transparent 55%)", boxShadow: "0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(22,33,28,0.22)" }}>
         <button onClick={onScratch} style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "15px 16px 16px", background: "none", WebkitTapHighlightColor: "transparent" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 9 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="#fff"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z" /></svg>
-            <span style={{ fontFamily: "'SF Mono', ui-monospace, Menlo, monospace", fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(255,255,255,0.75)" }}>Built around your restaurant</span>
+            <span style={{ fontFamily: "Inter, sans-serif", fontSize: 12.5, fontWeight: 600, color: "rgba(255,255,255,0.72)" }}>Built around your restaurant</span>
           </div>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 21, fontWeight: 600, color: "#fff", lineHeight: 1.15, marginBottom: 6 }}>Design a new campaign from scratch</div>
           <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13, color: "rgba(255,255,255,0.92)", lineHeight: 1.4, marginBottom: 14 }}>
@@ -3243,8 +3243,9 @@ function SearchBar({ value, onChange }) {
   );
 }
 
-function PlanBrowse({ restaurant, onOpen, onSeeAll, onScratch, recommended, recsLoading, initialLens, creatorCards = [], onOpenCreator }) {
-  const [q, setQ] = useState("");
+function PlanBrowse({ restaurant, onOpen, onSeeAll, onScratch, recommended, recsLoading, initialLens, creatorCards = [], onOpenCreator, externalQuery }) {
+  const [qState, setQ] = useState("");
+  const q = externalQuery != null ? externalQuery : qState; // the top row owns the search when it is there
   // A funnel-stage deep link (Home's weak-leg tap) lands with its shelf pre-filtered.
   const [lens, setLens] = useState(() => (initialLens && LENS_CHIPS.some((c) => c.id === initialLens) ? initialLens : "all"));
   const query = q.trim().toLowerCase();
@@ -3284,10 +3285,9 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, onScratch, recommended, recs
     ? [...shelfRows, { id: "__soon", title: "Coming soon", note: "We only sell what really works today. These are on the way", ids: soonIds }]
     : shelfRows;
   return (
-    <div style={{ paddingBottom: 26, background: DESKJ.paper, backgroundImage: "radial-gradient(rgba(22,33,28,0.028) 1px, transparent 1px)", backgroundSize: "22px 22px" }}>
+    <div style={{ paddingBottom: 8, paddingTop: 14, background: "#fff" }}>
       <style>{`.apnosh-row::-webkit-scrollbar{display:none}`}</style>
-      <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>
-      <div style={{ padding: "0 20px 14px" }}><div style={{ fontFamily: "'SF Mono', ui-monospace, Menlo, monospace", fontSize: 10.5, letterSpacing: "0.04em", color: DESKJ.mute, lineHeight: 1.5 }}>You see the full price before you pay. Your card is only charged at checkout.</div></div>
+      {externalQuery == null && <div style={{ paddingTop: 6 }}><SearchBar value={q} onChange={setQ} /></div>}
       {!query && recsLoading && recList.length === 0 && (
         <div style={{ padding: "0 20px 14px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9, background: TOKENS.mintTint, border: `1px solid ${TOKENS.line}`, borderRadius: 12, padding: "9px 13px" }}>
@@ -3331,7 +3331,7 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, onScratch, recommended, recs
         <>
           <div className="apnosh-row" style={{ display: "flex", gap: 8, overflowX: "auto", padding: "0 20px 16px" }}>
             {LENS_CHIPS.map((c) => { const on = lens === c.id; return (
-              <button key={c.id} onClick={() => setLens(c.id)} style={{ flexShrink: 0, height: 34, padding: "0 14px", borderRadius: 17, border: on ? "none" : `1px solid ${TOKENS.line}`, background: on ? TOKENS.ink : "#fff", color: on ? "#fff" : TOKENS.sub, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>{c.label}</button>
+              <button key={c.id} onClick={() => setLens(c.id)} style={{ flexShrink: 0, height: 36, padding: "0 15px", borderRadius: 999, border: on ? "1px solid transparent" : "1px solid rgba(255,255,255,0.75)", background: on ? TOKENS.ink : "rgba(240,241,240,0.72)", backdropFilter: "saturate(180%) blur(16px)", WebkitBackdropFilter: "saturate(180%) blur(16px)", boxShadow: on ? "0 4px 12px rgba(0,0,0,.14)" : "0 1px 3px rgba(0,0,0,.05)", color: on ? "#fff" : TOKENS.sub, fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>{c.label}</button>
             ); })}
           </div>
           {lens === "all" ? (
@@ -3373,16 +3373,7 @@ function PlanBrowse({ restaurant, onOpen, onSeeAll, onScratch, recommended, recs
               </div>
             );
           })()}
-          <div style={{ padding: "4px 20px 0" }}>
-            <button onClick={() => onOpen("__else")} style={{ width: "100%", display: "flex", alignItems: "center", gap: 11, cursor: "pointer", background: "#fff", border: `1.5px dashed ${TOKENS.dash}`, borderRadius: 14, padding: "14px 15px", WebkitTapHighlightColor: "transparent" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={TOKENS.sub} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
-              <div style={{ flex: 1, textAlign: "left" }}>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink }}>Don't see it? Describe your own</div>
-                <div style={{ fontFamily: "Inter, sans-serif", fontSize: 11.5, color: TOKENS.sub, marginTop: 1 }}>Tell us in your words and we'll draft it</div>
-              </div>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={TOKENS.faint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
-            </button>
-          </div>
+          <div style={{ padding: "6px 20px 0", fontFamily: "Inter, sans-serif", fontSize: 12, color: TOKENS.faint, lineHeight: 1.5 }}>Prices include our service fee. You see the full price before you pay, and your card is only charged at checkout.</div>
         </>
       )}
     </div>
@@ -3580,9 +3571,9 @@ function feeIncludedLabel(id) {
   const pr = ITEM_PRICES[id];
   if (!pr) return priceLabel(id);
   const one = withServiceFee(pr.oneTime);
-  if (pr.oneTime > 0 && pr.perMonth > 0) return `$${one.toLocaleString()} + $${pr.perMonth.toLocaleString()}/mo, fee included`;
+  if (pr.oneTime > 0 && pr.perMonth > 0) return `$${one.toLocaleString()} + $${pr.perMonth.toLocaleString()}/mo`;
   if (pr.perMonth > 0) return `$${pr.perMonth.toLocaleString()}/mo`;
-  if (pr.oneTime > 0) return `$${one.toLocaleString()}, fee included`;
+  if (pr.oneTime > 0) return `$${one.toLocaleString()}`;
   return priceLabel(id);
 }
 
@@ -3598,10 +3589,10 @@ function pdpPrice(p, doer) {
   // charged number (pre-tax) — same rule as the shelf pills.
   if (!pr) return priceLabel(buildIdFor(p.id));
   const oneShown = withServiceFee(pr.oneTime);
-  if (creative && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${oneShown.toLocaleString()}, fee included`;
-  if (pr.perMonth > 0 && pr.oneTime > 0) return `$${oneShown.toLocaleString()} + $${pr.perMonth.toLocaleString()}/mo, fee included`;
+  if (creative && pr.oneTime > 0 && !(pr.perMonth > 0)) return `Starting $${oneShown.toLocaleString()}`;
+  if (pr.perMonth > 0 && pr.oneTime > 0) return `$${oneShown.toLocaleString()} + $${pr.perMonth.toLocaleString()}/mo`;
   if (pr.perMonth > 0) return `$${pr.perMonth.toLocaleString()}/mo`;
-  if (pr.oneTime > 0) return `$${oneShown.toLocaleString()}, fee included`;
+  if (pr.oneTime > 0) return `$${oneShown.toLocaleString()}`;
   return priceLabel(buildIdFor(p.id));
 }
 
@@ -5524,6 +5515,7 @@ export function PlanView({ items, tier, clientId, onBack, onOpenItem, onRemove, 
      onClose    : () => void                           — exit the builder
    ============================================================ */
 export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe", menu, initialItem, initialView, recommended, recsLoading, initialLens, monthlyCommitment = 0, liveCount = 0, monthlyCap = 0, hasList, profile, whySignals, contentOverrides = null, dbCampaigns = null, creatorCards = [], onScratch, onBookCreator, onHoldCreator, onCreatorSlots, onCreatorProfile, tier = null, clientId = null, onCreate, onClose, onPlan, onCheckout } = {}) {
+  const [browseQ, setBrowseQ] = useState(""); // the top row's "Search campaigns" (2026-09-04)
   /* Client-side hops into the creative desks keep the bottom nav mounted (owner ask 2026-08-18). */
   const router = useRouter();
   // Publish the CMS override map for catGet + the product page (see CONTENT_OVERRIDES above).
@@ -5655,9 +5647,10 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
         <div style={{ flex: 1, minHeight: 0, position: "relative", display: "flex", flexDirection: "column" }}>
           {route.name === "browse" && (
             <>
-              <AppHeader />
-              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: planItems.length > 0 ? 76 : 0 }}>
-                <PlanBrowse restaurant={restaurant} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} creatorCards={creatorCards} onOpenCreator={openCreator} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} onScratch={onScratch} />
+              <TopRow middle={<TopSearch value={browseQ} onChange={setBrowseQ} placeholder="Search campaigns" />} />
+              {/* room under the floating nav (and the plan bar when it is up), so the last shelf is reachable */}
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", paddingBottom: `calc(${planItems.length > 0 ? 160 : 84}px + env(safe-area-inset-bottom))` }}>
+                <PlanBrowse restaurant={restaurant} externalQuery={browseQ} recommended={recommended} recsLoading={recsLoading} initialLens={initialLens} creatorCards={creatorCards} onOpenCreator={openCreator} onOpen={(id) => openCard(id, "browse")} onSeeAll={(rowId) => setRoute({ name: "catall", rowId })} onScratch={onScratch} />
               </div>
             </>
           )}
@@ -5737,7 +5730,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
 
         </div>
 
-        <BottomNav active="campaigns" />
+        <BottomNav active="orders" />{/* "orders" is no longer a tab, so nothing lights up on Create — the + is the tab */}
       </div>
     </div>
   );
