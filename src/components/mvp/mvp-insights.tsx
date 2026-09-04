@@ -36,7 +36,8 @@ import {
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
-import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, deltaSub, type MetricView } from './mvp-home'
+import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, deltaSub, bucketsFor, type MetricView, type ChartRange } from './mvp-home'
+import { TopSegmented } from './top-row'
 import ProofDeck from './proof-deck'
 import { bandFor, BAND_WORD, BAND_INK, type HealthBand } from './home-funnel'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
@@ -196,6 +197,7 @@ function reviewDate(iso: string): string {
 }
 
 export default function MvpInsights({ data, loading, error, clientId, initialStageKey }: { data: InsightsData | null; loading: boolean; error: string | null; clientId?: string; initialStageKey?: string }) {
+  const [tab, setTab] = useState<'insights' | 'trends'>('insights') // Insights | Trends, the top row's two tabs (owner 2026-09-04)
 
   const [summary, setSummary] = useState<ReviewSummary | null>(null)
   const [topicsData, setTopicsData] = useState<ReviewTopicsData | null>(null)
@@ -295,7 +297,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 
 
   return (
-    <MvpShell active="home" title="Insights" back="/dashboard">
+    <MvpShell active="home" back="/dashboard" middle={<TopSegmented options={[['insights', 'Insights'], ['trends', 'Trends']]} value={tab} onChange={setTab} />}>
       <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
 .mvp-swipe::-webkit-scrollbar{display:none}
 .mvp-spin{animation:mvpspin .8s linear infinite}
@@ -311,7 +313,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
           <EmptyState />
         ) : (
           <>
-            <Body data={data} focusKey={initialStageKey} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} clientId={clientId} campaigns={campaigns} refreshing={refreshing} />
+            <Body data={data} focusKey={initialStageKey} summary={summary} topicsData={topicsData} topicsLoading={topicsLoading} detail={detail} clientId={clientId} campaigns={campaigns} refreshing={refreshing} tab={tab} />
           </>
         )}
       </div>
@@ -445,7 +447,7 @@ const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'back', label: 'Retention' },
 ]
 
-function Body({ data, focusKey, detail, campaigns, clientId, refreshing }: { data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; refreshing?: boolean; campaigns: Record<string, StageCampaign[]> | null }) {
+function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = 'insights' }: { tab?: 'insights' | 'trends'; data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; refreshing?: boolean; campaigns: Record<string, StageCampaign[]> | null }) {
   const metrics = data.metrics
   const byKey = new Map(metrics.map((m) => [m.key, m]))
   // The tapped funnel stage seeds the view; SWIPING the graph block moves
@@ -492,6 +494,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing }: { dat
     if (k && k !== focus.stageKey) pick(k)
   }
 
+  if (tab === 'trends') return <TrendsTab detail={detail} campaigns={campaigns} byKey={byKey} initial={focus.stageKey} clientId={clientId} />
   return (
     <div style={{ padding: '0 0 8px' }}>
       {/* the hero is a card like everything else: one soft ground, no seam between the graph and the rest */}
@@ -513,7 +516,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing }: { dat
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 10px', maxWidth: 'calc(100% - 88px)', minHeight: 36, margin: '2px 0 0' }}>
               <button type="button" onClick={() => setExplain((v) => !v)} aria-expanded={explain} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: C.ink, maxWidth: '100%', height: 36 }}>
                 <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
-                <span style={{ width: 18, height: 18, borderRadius: 99, background: explain ? STAGE_ACCENT[s.key].soft : C.bg, color: explain ? STAGE_ACCENT[s.key].dark : C.faint, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Info size={12} /></span>
+                <Info size={16} color={explain ? STAGE_ACCENT[s.key].dark : C.faint} style={{ flexShrink: 0 }} />
                 {refreshing && <span className="mvp-spin" style={{ width: 11, height: 11, border: `2px solid ${C.line}`, borderTopColor: STAGE_ACCENT[s.key].main, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />}
               </button>
               {conv && <ConvChip c={conv} open={convOpen} onToggle={() => setConvOpen((v) => !v)} />}
@@ -543,10 +546,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing }: { dat
       <AccentCtx.Provider value={STAGE_ACCENT[focus.stageKey] ?? STAGE_ACCENT.shown}>
       <div style={{ padding: '0 18px' }}>
         <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
-        {/* Campaign-correlation block: "Did it move?" (the metric with a pin at
-            each campaign's real go-live date) and the campaigns behind it. */}
-        <CampaignTrend mv={byKey.get(focus.metric)} list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} chartRange={ranges[focus.stageKey] ?? '30d'} />
-        <StageCampaigns list={campaigns ? (campaigns[focus.stageKey] ?? []) : null} />
+        {/* the trend chart and the campaigns live on the Trends tab now (owner 2026-09-04) */}
       </div>
       </AccentCtx.Provider>
     </div>
@@ -1254,6 +1254,88 @@ function FeedLoading() {
 
 // ── "Campaigns working on this" — the shipped campaigns whose live pieces push on
 //    this stage's number, each a tap into its campaign. A calm prompt when none. ──
+// ── The TRENDS tab (owner 2026-09-04): every stage side by side, then one stage in depth ──
+const TREND_RANGES: [ChartRange, string][] = [['7d', '7d'], ['30d', '30d'], ['90d', '90d'], ['1y', '1y']]
+function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: InsightsDetail | null; campaigns: Record<string, StageCampaign[]> | null; byKey: Map<string, MetricView>; initial: string; clientId?: string }) {
+  const [range, setRange] = useState<ChartRange>('30d')
+  const [sel, setSel] = useState(initial)
+  const days = TREND_DAYS[(TREND_OF_RANGE[range] ?? 'month') as 'week' | 'month' | 'quarter' | 'year']
+  const rows = STAGE_ORDER.map((st) => {
+    const mv = byKey.get(resolveFocus(st.key).metric)
+    const cs = computedStage(detail, STAGE_ORDER.findIndex((x) => x.key === st.key) + 1)
+    const locked = !mv || cs?.isEmpty === true
+    const sm = mv && !locked ? bucketsFor(range, mv, '', '') : null
+    const launches = (campaigns?.[st.key] ?? []).filter((c) => c.shippedAt && Date.now() - trendDayMs(c.shippedAt) <= days * DAY_MS).length
+    return { st, mv, sm, launches, locked, cs, n: STAGE_ORDER.findIndex((x) => x.key === st.key) + 1 }
+  })
+  const cur = rows.find((r) => r.st.key === sel) ?? rows[0]
+  return (
+    <div style={{ padding: '12px 18px 8px' }}>
+      <div style={{ display: 'flex', gap: 2, borderRadius: 999, padding: 3, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+        {TREND_RANGES.map(([k, l]) => {
+          const on = range === k
+          return <button key={k} type="button" onClick={() => setRange(k)} style={{ flex: 1, border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 13.5, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none' }}>{l}</button>
+        })}
+      </div>
+      {/* every stage on one screen: its 7-day average as a sparkline, its total, its change, its launches */}
+      <div style={{ ...CARD, padding: '14px 16px 6px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+          <span style={H2}>All stages</span>
+          <span style={{ fontSize: 12.5, color: C.faint }}>tap one to open it</span>
+        </div>
+        {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} />)}
+      </div>
+      <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
+        {cur.mv && !cur.locked
+          ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} title={cur.st.label} />
+          : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
+        <StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} />
+      </AccentCtx.Provider>
+    </div>
+  )
+}
+
+function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range }: { label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
+  // the row's total is the SAME by-source headline the Insights tab shows for this window
+  // (the series' own sum can differ by definition); the % stays the series' read
+  const { stage: rs } = useRangeStage(cs, stageNumber, clientId, range)
+  const headline = rs?.headline ?? cs?.headline ?? null
+  const total = headline != null ? headline : sm?.total ?? null
+  // the sparkline: the last N days' 7-day rolling average, trailing unreported zeros trimmed
+  const raw = (mv?.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0)
+  let cut = raw.length
+  while (cut > 0 && cut > raw.length - 7 && (raw[cut - 1].value ?? 0) === 0) cut--
+  const series = raw.slice(Math.max(0, cut - days), cut)
+  const roll = series.map((_, i) => { const sl = series.slice(Math.max(0, i - 6), i + 1); return sl.reduce((t, x) => t + (x.value ?? 0), 0) / sl.length })
+  const mx = Math.max(1, ...roll)
+  const W = 100, H = 30
+  const pts = roll.map((v, i) => `${(i / Math.max(1, roll.length - 1)) * W},${H - 3 - (v / mx) * (H - 6)}`)
+  const t0 = series.length ? trendDayMs(series[0].date) : 0, t1 = series.length ? trendDayMs(series[series.length - 1].date) : 1
+  const pins = campaigns.map((c) => (c.shippedAt ? trendDayMs(c.shippedAt) : NaN)).filter((ms) => Number.isFinite(ms) && ms >= t0 && ms <= t1)
+  const dn = (sm?.deltaPct ?? 0) < 0
+  return (
+    <button type="button" onClick={onPick} aria-pressed={on} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 8px', margin: '0 -8px', boxSizing: 'content-box', borderTop: first ? 'none' : `0.5px solid ${C.line}`, background: on ? accent.soft : 'none', borderRadius: on ? 12 : 0, border: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s' }}>
+      <span style={{ width: 9, height: 9, borderRadius: 99, background: accent.main, flexShrink: 0 }} />
+      <span style={{ width: 92, flexShrink: 0 }}>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 2, whiteSpace: 'nowrap' }}>{locked ? 'not measured' : launches === 0 ? 'no launches' : launches === 1 ? '1 launch' : `${launches} launches`}</span>
+      </span>
+      <span style={{ flex: 1, minWidth: 0, height: H }}>
+        {roll.length > 1 && !locked && (
+          <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block' }} aria-hidden>
+            <polyline points={pts.join(' ')} fill="none" stroke={accent.main} strokeWidth={1.8} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+            {pins.map((ms, i) => { const x = ((ms - t0) / Math.max(1, t1 - t0)) * W; return <line key={i} x1={x} y1={2} x2={x} y2={H - 2} stroke={accent.main} strokeOpacity={0.45} strokeWidth={1} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" /> })}
+          </svg>
+        )}
+      </span>
+      <span style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
+        <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: locked ? C.faint : C.ink, letterSpacing: '-.01em' }}>{!locked && total != null ? total.toLocaleString() : DASH}</span>
+        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? C.coral : C.greenDk }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
+      </span>
+    </button>
+  )
+}
+
 // ── Campaign impact trend ──────────────────────────────────────────────────
 // A separate line chart for the active stage: the stage's real daily series with
 // a numbered pin at each campaign's real go-live date, so the owner can see
@@ -1273,18 +1355,6 @@ function fmtPinDate(ms: number): string { return new Date(ms).toLocaleDateString
 function trendCompact(n: number): string { const v = Math.round(n); return v >= 1000 ? `${(v / 1000).toFixed(v >= 10000 ? 0 : 1).replace(/\.0$/, '')}k` : String(v) }
 // a smooth (Catmull-Rom → bézier) curve through the points, so the line reads as
 // a trend instead of a jagged connect-the-dots.
-function trendSmoothPath(pts: { x: number; y: number }[]): string {
-  if (pts.length < 2) return ''
-  if (pts.length === 2) return `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)} L${pts[1].x.toFixed(1)},${pts[1].y.toFixed(1)}`
-  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[i - 1] ?? pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] ?? p2
-    const c1x = p1.x + (p2.x - p0.x) / 6, c1y = p1.y + (p2.y - p0.y) / 6
-    const c2x = p2.x - (p3.x - p1.x) / 6, c2y = p2.y - (p3.y - p1.y) / 6
-    d += ` C${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`
-  }
-  return d
-}
 
 // mean of the daily series in [a, b) — the honest before/after read on a launch
 function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): { mean: number; n: number } {
@@ -1293,9 +1363,10 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
   return { mean: n > 0 ? sum / n : 0, n }
 }
 
-function CampaignTrend({ mv, list, chartRange = '30d' }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string }) {
+function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend' }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string; title?: string }) {
   const A = useAccent()
   const range: TrendRange = TREND_OF_RANGE[chartRange] ?? 'month'
+  const [pick, setPick] = useState<number | null>(null) // the day under the finger
   // the sync writes zero rows for the newest days Google has not delivered yet; drawn as
   // data they dive the line and fake a "trending down" — so the series ends at the last
   // day with a real number (at most a week trimmed)
@@ -1314,39 +1385,43 @@ function CampaignTrend({ mv, list, chartRange = '30d' }: { mv?: MetricView; list
   const win = dayMs.filter((d) => d.t >= startMs && d.t <= endMs)
   if (win.length < 2) return null
 
-  // Resample the daily series into a handful of evenly-spaced buckets (mean per
-  // bucket), then draw a smooth curve through them — so the line reads as a real
-  // trend instead of jagged day-to-day noise. Fewer, cleaner points at wider ranges.
-  const nB = range === 'week' ? 7 : range === 'month' ? 10 : range === 'all' ? 16 : 12
-  const agg = Array.from({ length: nB }, () => ({ sum: 0, n: 0 }))
-  for (const d of win) {
-    const bi = Math.min(nB - 1, Math.max(0, Math.floor(((d.t - startMs) / spanMs) * nB)))
-    agg[bi].sum += d.v; agg[bi].n++
-  }
-  const filled = agg.map((b, i) => ({ i, mean: b.n ? b.sum / b.n : null })).filter((b): b is { i: number; mean: number } => b.mean != null)
-  if (filled.length < 2) return null
-  const maxV = Math.max(...filled.map((b) => b.mean))
+  /* Every day drawn (owner 2026-09-04: the smoothed dozen-bucket curve "didn't share much"):
+     thin bars for the raw days, weekends and all; a 7-DAY ROLLING AVERAGE as the trend
+     line; the same window one period earlier as a faint dashed line; the best day marked;
+     the latest average labelled. Shape, direction and "better than last time" read at once. */
+  const days = win
+  const n = days.length
+  const maxV = Math.max(...days.map((d) => d.v))
   if (maxV <= 0) return null // an all-zero window → don't draw a flat fake line
-  const avgV = win.reduce((s, d) => s + d.v, 0) / win.length
+  const avgV = days.reduce((s, d) => s + d.v, 0) / n
   // the one-line read: the window's last stretch against its first (a week each, or a
   // third of a short window), so "trending up 12%" means something a person can check
   const stretch = Math.max(DAY_MS * 2, Math.min(7 * DAY_MS, spanMs / 3))
   const headA = trendMeanIn(dayMs, startMs, startMs + stretch), headB = trendMeanIn(dayMs, endMs - stretch, endMs + 1)
   const trendPct = headA.n >= 2 && headB.n >= 2 && headA.mean > 0 ? Math.round(((headB.mean - headA.mean) / headA.mean) * 100) : null
-
-  // SVG geometry (uniform-scaled so pins stay round). y grows downward. A left
-  // gutter holds the y-axis numbers; a taller bottom holds per-pin date labels
-  // when markers crowd together. Full-width, comfortable height.
-  const W = 344, H = 190, padL = 32, padR = 14, padT = 24, padB = 32
+  const roll = days.map((_, i) => { const sl = days.slice(Math.max(0, i - 6), i + 1); return sl.reduce((t, x) => t + x.v, 0) / sl.length })
+  const byT = new Map(dayMs.map((x) => [x.t, x.v]))
+  const priorOffset = Math.round(spanMs / DAY_MS + 1) * DAY_MS
+  const prior = days.map((d) => byT.get(d.t - priorOffset) ?? null)
+  const priorHas = prior.filter((v) => v != null).length >= Math.ceil(n / 2)
+  const head = Math.max(maxV, ...(priorHas ? prior.filter((v): v is number => v != null) : [0])) * 1.18
+  // SVG geometry (uniform-scaled so pins stay round). y grows downward; a left gutter
+  // holds the axis numbers.
+  const W = 344, H = 214, padL = 34, padR = 14, padT = 28, padB = 22
   const plotW = W - padL - padR, yTop = padT, yBot = H - padB
-  const head = maxV * 1.2
   const xAt = (t: number) => padL + ((t - startMs) / spanMs) * plotW
   const yAt = (v: number) => yBot - (v / head) * (yBot - yTop)
   const clampX = (x: number) => Math.max(padL + 11, Math.min(W - padR - 11, x))
   const yTicks = [maxV, maxV / 2, 0]
-  const pts = filled.map((b) => ({ x: padL + ((b.i + 0.5) / nB) * plotW, y: yAt(b.mean) }))
-  const line = trendSmoothPath(pts)
-  const area = `${line} L${pts[pts.length - 1].x.toFixed(1)},${yBot} L${pts[0].x.toFixed(1)},${yBot} Z`
+  const slot = plotW / n
+  const barW = slot < 2.2 ? slot * 0.7 : Math.min(10, slot * 0.55)
+  const xOf = (i: number) => padL + (i + 0.5) * slot
+  const pts = days.map((_, i) => ({ x: xOf(i), y: yAt(roll[i]) }))
+  const line = pts.map((pt, i) => `${i ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')
+  const area = `${line} L${pts[n - 1].x.toFixed(1)},${yBot} L${pts[0].x.toFixed(1)},${yBot} Z`
+  const priorLine = prior.map((v, i) => (v == null ? '' : `${i > 0 && prior[i - 1] != null ? 'L' : 'M'}${xOf(i).toFixed(1)},${yAt(v).toFixed(1)}`)).filter(Boolean).join(' ')
+  const peakI = days.reduce((b, d, i) => (d.v > days[b].v ? i : b), 0)
+  const noun = mv?.unit ?? ''
 
   const yOnLine = (x: number) => {
     if (x <= pts[0].x) return pts[0].y
@@ -1402,7 +1477,7 @@ function CampaignTrend({ mv, list, chartRange = '30d' }: { mv?: MetricView; list
   return (
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
-        <span style={H2}>Trend</span>
+        <span style={H2}>{title}</span>
         <span style={{ fontSize: 12.5, color: C.faint }}>{range === 'all' ? 'all time' : `this ${TREND_LABEL[range].toLowerCase()}`}</span>
       </div>
       {/* the read, in one line: where the line is heading, and what was launched into it */}
@@ -1417,49 +1492,91 @@ function CampaignTrend({ mv, list, chartRange = '30d' }: { mv?: MetricView; list
         )}
         <span style={{ fontSize: 12.5, color: C.faint }}>· {marks.length === 0 ? 'nothing launched in this window' : marks.length === 1 ? '1 launch, pinned' : `${marks.length} launches, pinned`}</span>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block' }} role="img" aria-label="Stage trend with campaign go-live markers">
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', touchAction: 'pan-y' }} role="img" aria-label="Stage trend: every day, the 7-day average, the prior period, and campaign go-live markers"
+        onPointerDown={(e) => { const r = e.currentTarget.getBoundingClientRect(); const x = ((e.clientX - r.left) / r.width) * W; setPick(Math.max(0, Math.min(n - 1, Math.round((x - padL) / slot - 0.5)))) }}
+        onPointerMove={(e) => { if (e.buttons === 0 && e.pointerType !== 'mouse') return; const r = e.currentTarget.getBoundingClientRect(); const x = ((e.clientX - r.left) / r.width) * W; setPick(Math.max(0, Math.min(n - 1, Math.round((x - padL) / slot - 0.5)))) }}
+        onPointerLeave={() => setPick(null)}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={A.main} stopOpacity="0.20" />
-            <stop offset="100%" stopColor={A.main} stopOpacity="0.02" />
+            <stop offset="0%" stopColor={A.main} stopOpacity="0.16" />
+            <stop offset="100%" stopColor={A.main} stopOpacity="0.01" />
           </linearGradient>
         </defs>
-        {/* y-axis: gridlines + numbers (a day's worth for this stage) */}
+        {/* axis: three numbers, hairlines */}
         {yTicks.map((v, i) => (
           <g key={i}>
-            <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke={C.line} strokeWidth={0.5} opacity={v === 0 ? 0.9 : 0.5} />
+            <line x1={padL} y1={yAt(v)} x2={W - padR} y2={yAt(v)} stroke={C.line} strokeWidth={0.6} opacity={v === 0 ? 1 : 0.6} />
             <text x={padL - 6} y={yAt(v)} textAnchor="end" dominantBaseline="central" fontSize={9} fill={C.faint}>{trendCompact(v)}</text>
           </g>
         ))}
-        {/* typical-day baseline for context */}
-        <line x1={padL} y1={yAt(avgV)} x2={W - padR} y2={yAt(avgV)} stroke={A.main} strokeWidth={1} strokeDasharray="4 4" />
-        <text x={W - padR} y={yAt(avgV) - 4} textAnchor="end" fontSize={9.5} fontWeight={600} fill={A.dark}>typical day</text>
-        {/* the effect of each launch: its two weeks after, tinted green when the line rose, red when it fell */}
+        {/* the effect of each launch: its two weeks after, tinted green when the line rose, red when it fell, with the lift printed */}
         {marks.filter((m) => m.delta != null && Math.abs(m.delta) >= 3).map((m) => {
           const x0 = clampX(xAt(m.ms)), x1 = Math.min(W - padR, xAt(m.ms + HALF))
-          return <rect key={`fx${m.ms}`} x={x0} y={yTop} width={Math.max(0, x1 - x0)} height={yBot - yTop} fill={m.delta! > 0 ? C.greenDk : C.coral} opacity={0.07} />
+          const up = m.delta! > 0
+          return (
+            <g key={`fx${m.ms}`}>
+              <rect x={x0} y={yTop} width={Math.max(0, x1 - x0)} height={yBot - yTop} fill={up ? C.greenDk : C.coral} opacity={0.07} />
+              <text x={Math.min(W - padR - 2, x0 + 4)} y={yTop + 9} textAnchor={x1 - x0 < 34 ? 'end' : 'start'} fontSize={9.5} fontWeight={700} fill={up ? C.greenDk : C.coral}>{up ? '▲' : '▼'}{Math.abs(m.delta!)}% after</text>
+            </g>
+          )
         })}
+        {/* every day, as a thin bar */}
+        {days.map((d, i) => (
+          <rect key={d.t} x={xOf(i) - barW / 2} y={yAt(d.v)} width={barW} height={Math.max(0, yBot - yAt(d.v))} rx={barW > 3 ? 1.5 : 0} fill={A.main} opacity={pick === i ? 0.75 : 0.2} />
+        ))}
+        {/* the same window one period earlier */}
+        {priorHas && <path d={priorLine} fill="none" stroke={C.mute} strokeOpacity={0.55} strokeWidth={1.3} strokeDasharray="3 3" strokeLinejoin="round" />}
+        {/* the trend: a 7-day rolling average */}
         <path d={area} fill={`url(#${gid})`} />
-        <path d={line} fill="none" stroke={A.main} strokeWidth={2.4} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={line} fill="none" stroke={A.main} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
+        {/* the best day, marked */}
+        <g>
+          <circle cx={xOf(peakI)} cy={yAt(days[peakI].v)} r={3} fill="#fff" stroke={A.dark} strokeWidth={1.6} />
+          <text x={Math.max(padL + 30, Math.min(W - padR - 30, xOf(peakI)))} y={Math.max(yTop + 9, yAt(days[peakI].v) - 8)} textAnchor="middle" fontSize={9.5} fontWeight={700} fill={A.dark}>Best day · {trendCompact(days[peakI].v)}</text>
+        </g>
+        {/* the latest average, at the line's end */}
+        <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r={3.5} fill={A.main} stroke="#fff" strokeWidth={1.5} />
         {clusters.map((c) => {
           const multi = c.last !== c.first
           const tag = multi ? `${c.first}–${c.last}` : String(c.first)
           const r = multi ? 13 : 10.5
-          const when = multi ? (fmtPinDate(c.ms0) === fmtPinDate(c.ms1) ? fmtPinDate(c.ms0) : `${fmtPinDate(c.ms0)} – ${fmtPinDate(c.ms1)}`) : null
           return (
             <g key={c.ms0}>
               <line x1={c.cx} y1={c.cy} x2={c.cx} y2={yBot} stroke={A.main} strokeWidth={1} strokeDasharray="3 3" />
               <circle cx={c.cx} cy={c.cy} r={r} fill="#fff" stroke={A.main} strokeWidth={2} />
               <text x={c.cx} y={c.cy} textAnchor="middle" dominantBaseline="central" fontSize={multi ? 10 : 11} fontWeight={700} fill={A.dark}>{tag}</text>
-              {when && <text x={c.cx} y={yBot + 12} textAnchor="middle" fontSize={8.5} fontWeight={700} fill={A.dark}>{when}</text>}
             </g>
           )
         })}
+        {/* the day under the finger */}
+        {pick != null && (
+          <g>
+            <line x1={xOf(pick)} y1={yTop} x2={xOf(pick)} y2={yBot} stroke={C.ink} strokeOpacity={0.35} strokeWidth={1} />
+            <circle cx={xOf(pick)} cy={yAt(roll[pick])} r={4} fill="#fff" stroke={A.dark} strokeWidth={2} />
+          </g>
+        )}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: C.faint, margin: '2px 4px 0', paddingLeft: 18 }}>
         <span>{fmtPinDate(startMs)}</span>
         <span>{fmtPinDate((startMs + endMs) / 2)}</span>
         <span>{fmtPinDate(endMs)}</span>
+      </div>
+      {/* one fixed line under the axis: the legend, or the picked day's read */}
+      <div style={{ minHeight: 22, marginTop: 8, fontSize: 11.5, display: 'flex', alignItems: 'center' }}>
+        {pick != null ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            <b style={{ color: C.ink }}>{fmtPinDate(days[pick].t)}</b>
+            <span><b style={{ color: C.ink }}>{days[pick].v.toLocaleString()}</b> {noun}</span>
+            <span style={{ color: C.faint }}>· 7-day avg {Math.round(roll[pick]).toLocaleString()}</span>
+            {prior[pick] != null && <span style={{ color: C.faint }}>· prior period {prior[pick]!.toLocaleString()}</span>}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 4, height: 11, borderRadius: 2, background: A.main, opacity: 0.35 }} /> Each day</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 14, height: 0, borderTop: `2.2px solid ${A.main}` }} /> 7-day average</span>
+            {priorHas && <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 14, borderTop: `1.3px dashed ${C.mute}`, display: 'inline-block' }} /> Prior period</span>}
+          </div>
+        )}
       </div>
 
       {marks.length > 0 ? (
