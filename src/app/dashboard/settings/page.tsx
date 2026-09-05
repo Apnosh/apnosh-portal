@@ -15,24 +15,15 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Bell, Plug, Eye, EyeOff, LifeBuoy, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import MvpShell from '@/components/mvp/mvp-shell'
-import { useMvpTheme } from '@/components/mvp/mvp-theme'
-import { MvpDetailHeader, MvpGroup, MvpRow, MvpToggle, MvpPill, C, AMBER_DK, AMBER_SOFT } from '@/components/mvp/mvp-detail'
+import { MvpDetailHeader, MvpGroup, MvpPill, C } from '@/components/mvp/mvp-detail'
 import { EditorField } from '../business-info/editor-shell'
 
-const APPROVAL_TYPES = [
-  { key: 'graphic', label: 'Social posts', desc: 'Feed posts, carousels, stories' },
-  { key: 'caption', label: 'Captions and blogs', desc: 'Written content' },
-  { key: 'video', label: 'Video', desc: 'Reels, TikToks, edits' },
-  { key: 'email', label: 'Email campaigns', desc: 'Newsletters and sequences' },
-  { key: 'branding', label: 'Branding assets', desc: 'Logos and design files' },
-]
 
 export default function SettingsPage() {
   const [loading, setLoading] = useState(true)
-  const { theme, setTheme } = useMvpTheme()
 
   // Profile
   const [fullName, setFullName] = useState('')
@@ -52,10 +43,6 @@ export default function SettingsPage() {
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   // Approvals
-  const [approvalGlobal, setApprovalGlobal] = useState(false)
-  const [approvalTypes, setApprovalTypes] = useState<Record<string, boolean>>({ graphic: false, caption: false, video: false, email: false, branding: false })
-  const [approvalSaving, setApprovalSaving] = useState(false)
-  const [approvalMsg, setApprovalMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   useEffect(() => {
     async function run() {
@@ -69,12 +56,6 @@ export default function SettingsPage() {
       setEmail(profile?.email || user.email || '')
       setInitials(name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'U')
 
-      const { data: biz } = await supabase.from('businesses').select('approval_preferences').eq('owner_id', user.id).single()
-      if (biz?.approval_preferences) {
-        const prefs = biz.approval_preferences as Record<string, unknown>
-        if (typeof prefs.auto_approve === 'boolean') setApprovalGlobal(prefs.auto_approve)
-        if (prefs.types && typeof prefs.types === 'object') setApprovalTypes((prev) => ({ ...prev, ...(prefs.types as Record<string, boolean>) }))
-      }
       setLoading(false)
     }
     run()
@@ -107,21 +88,10 @@ export default function SettingsPage() {
     setPwSaving(false)
   }
 
-  async function handleSaveApprovals() {
-    setApprovalSaving(true); setApprovalMsg(null)
-    const supabase = createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setApprovalSaving(false); return }
-    const { error } = await supabase.from('businesses').update({ approval_preferences: { auto_approve: approvalGlobal, types: approvalTypes } }).eq('owner_id', user.id)
-    if (error) setApprovalMsg({ ok: false, text: error.message })
-    else setApprovalMsg({ ok: true, text: 'Saved.' })
-    setApprovalSaving(false)
-  }
-
   const btn = (busy: boolean): React.CSSProperties => ({ width: '100%', height: 44, marginTop: 14, borderRadius: 12, border: 'none', background: busy ? '#bfe7da' : C.green, color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 })
 
   return (
-    <MvpShell active="more" header={<MvpDetailHeader title="Settings" subtitle="Your account and preferences" />}>
+    <MvpShell active="more" header={<MvpDetailHeader title="Login and password" subtitle="Your name, email and password" />}>
       <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {loading ? (
           <div style={{ marginTop: 4 }}>
@@ -166,44 +136,8 @@ export default function SettingsPage() {
               </div>
             </MvpGroup>
 
-            {/* Content approvals */}
-            <MvpGroup title="Content approvals">
-              <div style={{ padding: 14 }}>
-                <ToggleRow label="Auto-approve all content" desc="Skip review. Your team posts directly." on={approvalGlobal} onToggle={() => setApprovalGlobal((v) => !v)} />
-                <div style={{ height: '0.5px', background: C.line, margin: '12px 0' }} />
-                <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, marginBottom: 10 }}>Auto-approve by type</div>
-                {APPROVAL_TYPES.map((t) => (
-                  <ToggleRow key={t.key} label={t.label} desc={t.desc} on={approvalGlobal || approvalTypes[t.key]} dimmed={approvalGlobal}
-                    onToggle={() => { if (!approvalGlobal) setApprovalTypes((prev) => ({ ...prev, [t.key]: !prev[t.key] })) }} />
-                ))}
-                {approvalGlobal && (
-                  <div style={{ fontSize: 11.5, color: AMBER_DK, background: AMBER_SOFT, borderRadius: 10, padding: '8px 11px', marginTop: 10 }}>Auto-approve is on. Everything is approved automatically.</div>
-                )}
-                {approvalMsg && <Msg msg={approvalMsg} />}
-                <button type="button" onClick={handleSaveApprovals} disabled={approvalSaving} style={btn(approvalSaving)}>
-                  {approvalSaving && <Loader2 size={16} className="mvp-spin" />}Save preferences
-                </button>
-              </div>
-            </MvpGroup>
-
-            {/* Appearance (owner ask 2026-08-18): the dark-mode switch moved
-                here from the home graph, and it skins the whole platform. */}
-            <MvpGroup title="Appearance">
-              <div style={{ padding: 14 }}>
-                <ToggleRow label="Dark mode" desc="The whole app, not just the home graph" on={theme === 'dark'} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-              </div>
-            </MvpGroup>
-
-            {/* Link-outs (the real homes for these) */}
-            <MvpGroup title="More">
-              <MvpRow icon={<Bell size={18} />} label="Notifications" sub="Email and SMS preferences" href="/dashboard/settings/notifications" />
-              <MvpRow icon={<Plug size={18} />} label="Connected accounts" sub="Instagram, Google, Yelp" href="/dashboard/connected-accounts" />
-            </MvpGroup>
-
-            {/* Cancellation routes to the team, not a delete button */}
-            <MvpGroup title="Account">
-              <MvpRow icon={<LifeBuoy size={18} />} label="Pause or cancel" sub="30 days notice, through your team" href="/dashboard/messages" />
-            </MvpGroup>
+            {/* Approvals, dark mode, alerts, connected accounts and pause/cancel moved to Your settings,
+                Connected accounts and Plan and billing (owner 2026-09-05). This page is login only. */}
           </>
         )}
       </div>
@@ -219,17 +153,6 @@ function Msg({ msg }: { msg: { ok: boolean; text: string } }) {
   )
 }
 
-function ToggleRow({ label, desc, on, onToggle, dimmed }: { label: string; desc: string; on: boolean; onToggle: () => void; dimmed?: boolean }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '7px 0', opacity: dimmed ? 0.55 : 1 }}>
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{label}</div>
-        <div style={{ fontSize: 12, color: C.mute, marginTop: 1 }}>{desc}</div>
-      </div>
-      <MvpToggle on={on} onClick={onToggle} label={label} />
-    </div>
-  )
-}
 
 function PwField({ label, value, onChange, show, onToggle, placeholder }: { label: string; value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void; placeholder?: string }) {
   return (

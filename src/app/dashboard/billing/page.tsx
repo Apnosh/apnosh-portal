@@ -16,7 +16,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { Calendar, CreditCard, ExternalLink, Download, Loader2, ChevronRight, ReceiptText } from 'lucide-react'
+import { Calendar, CreditCard, ExternalLink, Download, Loader2, ChevronRight, ReceiptText, LifeBuoy } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpRow, MvpPill, C, DISPLAY, type PillTone } from '@/components/mvp/mvp-detail'
@@ -181,7 +181,7 @@ export default function BillingPage() {
 
   const today = new Date().toISOString().slice(0, 10)
   return (
-    <MvpShell active="more" header={<MvpDetailHeader title="Billing" subtitle="Your plan and invoices" />}>
+    <MvpShell active="more" header={<MvpDetailHeader title="Plan and billing" subtitle="Your plan, your card, your invoices" />}>
       <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
 
         {/* Banners */}
@@ -225,7 +225,7 @@ export default function BillingPage() {
             {!billingCustomer ? (
           <div style={{ background: '#fff', border: `1px dashed ${C.green}`, borderRadius: 16, padding: '30px 22px', textAlign: 'center', marginTop: 4 }}>
             <CreditCard size={26} color={C.greenDk} style={{ margin: '0 auto 10px' }} />
-            <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>Billing not set up yet</div>
+            <div style={{ padding: '30px 20px', textAlign: 'center' }}>Billing not set up yet</div>
             <div style={{ fontSize: 13, color: C.mute, marginTop: 5, lineHeight: 1.45 }}>Your Apnosh team manages billing. Once your first invoice is sent, it shows up here.</div>
           </div>
         ) : (
@@ -336,6 +336,9 @@ export default function BillingPage() {
             )}
           </>
         )}
+        <MvpGroup title="Need a break?" hue="grey">
+          <MvpRow icon={<LifeBuoy size={18} />} hue="grey" label="Pause or cancel" sub="Message your team. 30 days notice." href="/dashboard/messages?to=account" />
+        </MvpGroup>
           </>
         )}
       </div>

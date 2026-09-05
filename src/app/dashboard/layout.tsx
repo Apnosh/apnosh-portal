@@ -104,6 +104,7 @@ const MVP_EXACT = new Set([
   '/dashboard/assets', '/dashboard/goals', '/dashboard/help', '/dashboard/google-profile',
   '/dashboard/order-buttons', '/dashboard/review-replies', '/dashboard/listings', '/dashboard/measure',
   '/dashboard/team', // the team page moved onto the mobile kit (portal redesign 2026-09-04)
+  '/dashboard/preferences', '/dashboard/people', '/dashboard/get-help', '/dashboard/whats-new', // the More tab's pages (owner 2026-09-05)
   '/dashboard/guests', // the guest list (send-rail audience) owns its full-screen chrome
 ])
 const MVP_PREFIX = [
