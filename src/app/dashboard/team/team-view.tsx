@@ -37,7 +37,7 @@ const ROLE_CONTACT: Record<string, string> = {
   designer: 'designer',
 }
 
-function messageHref(member: TeamMember): string {
+export function messageHref(member: TeamMember): string {
   if (member.isPrimaryContact) return '/dashboard/messages?to=strategist'
   const key = member.roles.map(r => ROLE_CONTACT[r]).find(Boolean) ?? 'strategist'
   const first = member.displayName.split(' ')[0]
@@ -391,7 +391,7 @@ const REASON_TAGS = [
   { key: 'specific_skills', label: 'Specific skills' },
 ]
 
-function SwapModal({
+export function SwapModal({
   clientId, target, onClose,
 }: {
   clientId: string
@@ -567,7 +567,7 @@ function EmptyTeamInline() {
 // Add-to-your-team: conversational prompt
 // ─────────────────────────────────────────────────────────────────────
 
-function AskPrompt({
+export function AskPrompt({
   clientId, primaryName,
 }: {
   clientId: string

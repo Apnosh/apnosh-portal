@@ -234,30 +234,36 @@ export default function BillingPage() {
             {subscription && (() => {
               const s = subStatus(subscription.status)
               return (
-                <MvpGroup title="Plan">
-                  <div style={{ padding: 14 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                      <span style={{ fontSize: 16.5, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.2 }}>{subscription.plan_name}</span>
-                      <MvpPill tone={s.tone} label={s.label} />
-                    </div>
-                    <div style={{ fontSize: 14, color: C.mute, marginTop: 5 }}>
-                      <span style={{ fontWeight: 700, color: C.ink }}>{formatCents(subscription.amount_cents)}</span>/{subscription.interval === 'year' ? 'year' : 'month'}
-                    </div>
-                    {subscription.current_period_end && (
-                      <div style={{ fontSize: 12, color: C.faint, marginTop: 7, display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <Calendar size={12} />
-                        {subscription.cancel_at_period_end
-                          ? `Cancels on ${formatDate(subscription.current_period_end)}`
-                          : `Next invoice ${formatDate(subscription.current_period_end)}`}
+                <div style={{ marginBottom: 22 }}>
+                  <div style={{ fontSize: 15.5, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', padding: '0 6px 8px' }}>Plan</div>
+                  {/* the plan as a gradient card (portal redesign 2026-09-04) */}
+                  <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 20, padding: 16, color: '#fff', background: 'linear-gradient(135deg, #2e9a78, #3b6fd4 70%, #6a39de)', boxShadow: '0 12px 30px rgba(46,115,182,.35)' }}>
+                    <span aria-hidden style={{ position: 'absolute', right: '-20%', top: '-50%', width: '70%', aspectRatio: '1', borderRadius: '50%', background: 'rgba(255,255,255,.12)' }} />
+                    <div style={{ position: 'relative' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', opacity: .85 }}>Your plan</span>
+                        <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '3px 9px', background: 'rgba(255,255,255,.22)', color: '#fff' }}>{s.label}</span>
                       </div>
-                    )}
+                      <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, marginTop: 4, lineHeight: 1.15, fontVariantNumeric: 'normal' }}>{subscription.plan_name}</div>
+                      <div style={{ fontSize: 13, opacity: .92, marginTop: 2 }}>
+                        <b style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15 }}>{formatCents(subscription.amount_cents)}</b> / {subscription.interval === 'year' ? 'year' : 'month'}
+                      </div>
+                      {subscription.current_period_end && (
+                        <div style={{ fontSize: 12, opacity: .85, marginTop: 9, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <Calendar size={12} />
+                          {subscription.cancel_at_period_end
+                            ? `Cancels on ${formatDate(subscription.current_period_end)}`
+                            : `Next invoice ${formatDate(subscription.current_period_end)}`}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </MvpGroup>
+                </div>
               )
             })()}
 
             {/* Payment method */}
-            <MvpGroup title="Payment method">
+            <MvpGroup title="Payment method" hue="nights">
               <MvpRow
                 icon={<CreditCard size={18} />}
                 label={billingCustomer.payment_method_brand && billingCustomer.payment_method_last4

@@ -11,7 +11,7 @@ import { redirect } from 'next/navigation'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { getTeamForClient } from '@/lib/dashboard/get-team'
 import { getOpenTeamRequests } from '@/lib/dashboard/get-team-requests'
-import TeamView from './team-view'
+import TeamMvp from './team-mvp'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +36,7 @@ export default async function TeamPage({ searchParams }: PageProps) {
     getOpenTeamRequests(clientId),
   ])
   return (
-    <TeamView
+    <TeamMvp
       clientId={clientId}
       team={team}
       openRequests={openRequests}

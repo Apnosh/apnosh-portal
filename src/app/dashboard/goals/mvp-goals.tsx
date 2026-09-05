@@ -13,12 +13,26 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Footprints, Repeat, ShoppingBag, CalendarCheck, Star, Award, Clock, ChefHat,
-  CheckCircle2, Circle, ChevronUp, ChevronDown, X,
+  CheckCircle2, ChevronUp, ChevronDown, X,
 } from 'lucide-react'
 import type { CatalogGoal, ClientGoal, GoalSlug } from '@/lib/goals/types'
 import { setClientGoal, closeGoal } from '@/lib/goals/mutations'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpSaveBar, C } from '@/components/mvp/mvp-detail'
+import { gradOf, glow, hueOf, tint, type HueKey } from '@/components/mvp/hues'
+
+/* every goal wears the same hue on every screen (the builder's goal colours) */
+const GOAL_HUE: Record<GoalSlug, HueKey> = {
+  more_foot_traffic: 'newfaces',
+  regulars_more_often: 'regulars',
+  more_online_orders: 'online',
+  more_reservations: 'event',
+  better_reputation: 'reviews',
+  be_known_for: 'brand',
+  fill_slow_times: 'nights',
+  grow_catering: 'catering',
+}
+const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 const GOAL_ICONS: Record<GoalSlug, React.ComponentType<{ size?: number }>> = {
   more_foot_traffic: Footprints,
@@ -133,6 +147,7 @@ export default function MvpGoals({ clientId, catalog, activeGoals }: { clientId:
                 return (
                   <FocusRow
                     key={slug}
+                    hue={GOAL_HUE[slug] ?? 'mint'}
                     n={i + 1}
                     title={g?.displayName ?? slug}
                     sub={g?.ownerVoice}
@@ -147,24 +162,29 @@ export default function MvpGoals({ clientId, catalog, activeGoals }: { clientId:
             </MvpGroup>
           )}
 
-          <MvpGroup title={filledCount > 0 ? 'Add another goal' : 'Choose your goals'}>
-            {catalog.map(g => {
-              const picked = pickedSet.has(g.slug)
-              const disabled = !picked && filledCount >= 3
-              const Icon = GOAL_ICONS[g.slug] ?? Star
-              return (
-                <ChoiceRow
-                  key={g.slug}
-                  icon={<Icon size={18} />}
-                  title={g.displayName}
-                  rationale={g.rationale}
-                  picked={picked}
-                  disabled={disabled}
-                  onClick={() => toggle(g.slug)}
-                />
-              )
-            })}
-          </MvpGroup>
+          <div style={{ marginBottom: 22 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 600, color: C.ink, letterSpacing: '-.01em', padding: '0 6px 8px' }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf('mint') }} />{filledCount > 0 ? 'Add another goal' : 'Choose your goals'}</div>
+            {/* goal tiles, two across, each in its own hue (portal redesign 2026-09-04) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {catalog.map(g => {
+                const picked = pickedSet.has(g.slug)
+                const disabled = !picked && filledCount >= 3
+                const Icon = GOAL_ICONS[g.slug] ?? Star
+                return (
+                  <GoalTile
+                    key={g.slug}
+                    hue={GOAL_HUE[g.slug] ?? 'mint'}
+                    icon={<Icon size={17} />}
+                    title={g.displayName}
+                    sub={g.ownerVoice ?? g.rationale}
+                    picked={picked}
+                    disabled={disabled}
+                    onClick={() => toggle(g.slug)}
+                  />
+                )
+              })}
+            </div>
+          </div>
 
           {error && <p style={{ fontSize: 13, color: C.coral, textAlign: 'center', margin: '4px 8px 0' }}>{error}</p>}
 
@@ -187,10 +207,10 @@ function IconBtn({ onClick, disabled, label, children }: { onClick: () => void; 
   )
 }
 
-function FocusRow({ n, title, sub, canUp, canDown, onUp, onDown, onRemove }: { n: number; title: string; sub?: string; canUp: boolean; canDown: boolean; onUp: () => void; onDown: () => void; onRemove: () => void }) {
+function FocusRow({ n, title, sub, canUp, canDown, onUp, onDown, onRemove, hue }: { n: number; title: string; sub?: string; canUp: boolean; canDown: boolean; onUp: () => void; onDown: () => void; onRemove: () => void; hue: HueKey }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 8px 11px 14px' }}>
-      <span style={{ width: 26, height: 26, borderRadius: 99, background: C.green, color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</span>
+      <span style={{ width: 28, height: 28, borderRadius: 99, background: gradOf(hue), boxShadow: glow(hue, 0.3), color: '#fff', fontSize: 13, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{n}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.25 }}>{title}</span>
         {sub && <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>}
@@ -204,17 +224,15 @@ function FocusRow({ n, title, sub, canUp, canDown, onUp, onDown, onRemove }: { n
   )
 }
 
-function ChoiceRow({ icon, title, rationale, picked, disabled, onClick }: { icon: React.ReactNode; title: string; rationale: string; picked: boolean; disabled?: boolean; onClick: () => void }) {
+function GoalTile({ icon, title, sub, picked, disabled, onClick, hue }: { icon: React.ReactNode; title: string; sub: string; picked: boolean; disabled?: boolean; onClick: () => void; hue: HueKey }) {
+  const [h1, h2] = hueOf(hue)
   return (
-    <button type="button" onClick={onClick} disabled={disabled} className="mvp-row" style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '13px 14px', width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.45 : 1 }}>
-      <span style={{ width: 34, height: 34, borderRadius: 9, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1 }}>{icon}</span>
-      <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>{title}</span>
-        <span style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>{rationale}</span>
-      </span>
-      <span style={{ flexShrink: 0, marginTop: 2 }}>
-        {picked ? <CheckCircle2 size={21} color={C.greenDk} /> : <Circle size={21} color={C.faint} />}
-      </span>
+    <button type="button" onClick={onClick} disabled={disabled} aria-pressed={picked} className="mvp-press" style={{ position: 'relative', textAlign: 'left', padding: 12, borderRadius: 18, border: 'none', background: '#fff', boxShadow: picked ? `inset 0 0 0 2px ${h2}, 0 12px 30px ${tint(hue, 0.28, 1)}` : '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', minHeight: 108, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, font: 'inherit' }}>
+      <span aria-hidden style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${h1}2e, ${h2}0f)` }} />
+      <span style={{ position: 'relative', width: 34, height: 34, borderRadius: 11, background: gradOf(hue), boxShadow: glow(hue, 0.35), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
+      <span style={{ position: 'relative', fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.15, marginTop: 'auto' }}>{title}</span>
+      <span style={{ position: 'relative', fontSize: 11, color: C.mute, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sub}</span>
+      {picked && <span style={{ position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: 10, background: h2, color: '#fff', display: 'grid', placeItems: 'center' }}><CheckCircle2 size={13} /></span>}
     </button>
   )
 }

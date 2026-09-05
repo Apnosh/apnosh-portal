@@ -12,37 +12,20 @@
  */
 
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { getGoalsCatalog, getActiveClientGoals } from '@/lib/goals/queries'
 import MvpGoals from './mvp-goals'
 
 export const dynamic = 'force-dynamic'
 
-export default async function GoalsPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+interface PageProps { searchParams: Promise<{ clientId?: string }> }
+
+export default async function GoalsPage({ searchParams }: PageProps) {
+  /* the shared resolver (owner → their business; admin → ?clientId), so an admin can see and
+     set a client's goals from the switcher like every other More page (portal redesign 2026-09-04) */
+  const { clientId: clientIdParam } = await searchParams
+  const { user, clientId } = await resolveCurrentClient(clientIdParam ?? null)
   if (!user) redirect('/login')
-
-  // Resolve client_id the same way the rest of the portal does: an
-  // onboarded owner is linked via businesses.owner_id -> client_id; a
-  // magic-link portal user via client_users.auth_user_id. (We do NOT read
-  // profiles.client_id — that column doesn't exist, so the old query here
-  // always errored and made owners fall through to the gate below.)
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('client_id')
-    .eq('owner_id', user.id)
-    .maybeSingle()
-  let clientId = business?.client_id as string | null | undefined
-
-  if (!clientId) {
-    const { data: cu } = await supabase
-      .from('client_users')
-      .select('client_id')
-      .eq('auth_user_id', user.id)
-      .maybeSingle()
-    clientId = cu?.client_id as string | null | undefined
-  }
 
   if (!clientId) {
     return (

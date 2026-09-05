@@ -18,6 +18,7 @@ import React from 'react'
 import Link from 'next/link'
 import TopRow from './top-row'
 import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { gradOf, glow, type HueKey } from './hues'
 
 /* The palette, the display face and the amber trio all live in tokens.ts now, and are re-exported
  * here so the 37 files already importing them from this module keep working. One place to change a
@@ -42,11 +43,11 @@ export function MvpDetailHeader({ title, subtitle, backHref = '/dashboard/more' 
   )
 }
 
-export function MvpGroup({ title, children }: { title?: string; children: React.ReactNode }) {
+export function MvpGroup({ title, children, hue }: { title?: string; children: React.ReactNode; /** portal redesign: a colour dot before the group title */ hue?: HueKey }) {
   const items = React.Children.toArray(children)
   return (
     <div style={{ marginBottom: 22 }}>
-      {title && <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, padding: '0 6px 7px' }}>{title}</div>}
+      {title && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: hue ? 15.5 : 13, fontWeight: 600, color: hue ? C.ink : C.mute, letterSpacing: hue ? '-.01em' : undefined, padding: '0 6px 8px' }}>{hue && <span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(hue) }} />}{title}</div>}
       <div style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
         {items.map((child, i) => (
           <React.Fragment key={i}>
@@ -59,10 +60,14 @@ export function MvpGroup({ title, children }: { title?: string; children: React.
   )
 }
 
-export function MvpRow({ icon, label, sub, href, onClick, right, danger, external }: { icon?: React.ReactNode; label: string; sub?: string; href?: string; onClick?: () => void; right?: React.ReactNode; danger?: boolean; external?: boolean }) {
+export function MvpRow({ icon, label, sub, href, onClick, right, danger, external, hue, mark }: { icon?: React.ReactNode; label: string; sub?: string; href?: string; onClick?: () => void; right?: React.ReactNode; danger?: boolean; external?: boolean; /** portal redesign: the row's colour → a gradient glyph tile */ hue?: HueKey; /** a network's real mark leads instead of the icon (already rendered) */ mark?: React.ReactNode }) {
   const inner = (
     <>
-      {icon && <span style={{ width: 34, height: 34, borderRadius: 9, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>}
+      {mark
+        ? <span style={{ width: 40, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 34, height: 34, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{mark}</span></span>
+        : icon && (hue && !danger
+          ? <span style={{ width: 40, height: 40, borderRadius: 12, background: gradOf(hue), boxShadow: glow(hue, 0.28), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
+          : <span style={{ width: 34, height: 34, borderRadius: 9, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>)}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: danger ? C.coral : C.ink, lineHeight: 1.25 }}>{label}</span>
         {sub && <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>}

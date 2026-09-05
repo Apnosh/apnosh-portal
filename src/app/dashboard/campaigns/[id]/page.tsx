@@ -10,6 +10,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import TopRow from '@/components/mvp/top-row'
+import { campaignHue, gradOf, hueOf } from '@/components/mvp/hues'
+import { Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Share2, Sparkles, Clock as ClockIcon, AlertCircle, Users as UsersIcon, FileText as FileTextIcon } from 'lucide-react'
 import { ChevronLeft, ChevronRight, Loader2, Trash2, Rocket, Check, CalendarDays, Users, FileText, Ban } from 'lucide-react'
 import { playsFrom } from '@/lib/campaigns/plays'
 import { summarize, type LineItem, type OptOutReason } from '@/lib/campaigns/types'
@@ -376,24 +378,31 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
   ) : null
   return (
     <div>
-      {/* Header pill: the state, named before anything else renders. Draft style unchanged. */}
-      {!shipped ? (
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: C.bg, color: C.mute, borderRadius: 99, padding: '4px 10px', fontWeight: 700, fontSize: 11, marginBottom: 12 }}>
-          <span style={{ width: 6, height: 6, borderRadius: 99, background: C.faint }} />{inReview ? 'In review' : 'Draft'}
-        </div>
-      ) : st && (() => {
-        const pal = st.phase === 'setup' ? { bg: C.amberBg, fg: C.amberFg, dot: C.amberDot }
-          : st.phase === 'production' ? { bg: '#eef0ef', fg: C.mute, dot: C.faint }
-          : { bg: C.greenSoft, fg: C.greenDk, dot: C.green }
+      {/* The header wears the campaign's goal (portal redesign 2026-09-04): a gradient card in its
+          hue with the goal glyph, the name and the state as a pill. The timeline card below owns the phases. */}
+      {(() => {
+        const hue = campaignHue({ goalKey: camp.draft.goalKey, templateId: camp.draft.sourceCatalogId, name: camp.draft.name })
+        const [, h2] = hueOf(hue)
+        const GL: Record<string, React.ComponentType<{ size?: number }>> = { mint: Sparkles, announce: Megaphone, event: Ticket, deal: Tag, nights: Moon, newfaces: MapPin, regulars: Heart, reviews: Star, online: ShoppingCart, catering: UsersIcon, brand: Share2, amber: ClockIcon, grey: FileTextIcon, red: AlertCircle }
+        const Glyph = GL[hue] ?? Sparkles
+        const stateLabel = !shipped ? (inReview ? 'In review' : 'Draft') : stopped ? 'Stopped' : (st?.label ?? '')
         return (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: pal.bg, color: pal.fg, borderRadius: 99, padding: '4px 10px', fontWeight: 700, fontSize: 11, marginBottom: 12 }}>
-            {st.phase === 'done' ? <Check size={11} strokeWidth={3} /> : <span className={st.phase === 'live' ? 'cw-ping' : undefined} style={{ width: 6, height: 6, borderRadius: 99, background: pal.dot }} />}{st.label}
+          <div style={{ position: 'relative', overflow: 'hidden', borderRadius: 20, padding: '16px 16px 14px', color: '#fff', background: gradOf(hue), boxShadow: `0 12px 30px ${h2}55`, marginBottom: 16 }}>
+            <span aria-hidden style={{ position: 'absolute', right: '-18%', top: '-45%', width: '65%', aspectRatio: '1', borderRadius: '50%', background: 'rgba(255,255,255,.14)' }} />
+            <div style={{ position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ width: 40, height: 40, borderRadius: 13, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Glyph size={20} /></span>
+                <span style={{ flex: 1 }} />
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,.22)', color: '#fff', borderRadius: 99, padding: '4px 10px', fontWeight: 700, fontSize: 11 }}>
+                  {st?.phase === 'done' ? <Check size={11} strokeWidth={3} /> : stopped ? <Ban size={11} /> : <span className={st?.phase === 'live' ? 'cw-ping' : undefined} style={{ width: 6, height: 6, borderRadius: 99, background: '#fff' }} />}{stateLabel}
+                </span>
+              </div>
+              <h1 style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, margin: '12px 0 2px', lineHeight: 1.15, letterSpacing: '-.02em', color: '#fff' }}>{camp.draft.name}</h1>
+              {brief && <p style={{ fontSize: 13, opacity: .92, margin: 0, lineHeight: 1.4 }}>{brief.objective}{!shipped && brief.projected ? ` · ${brief.projected}` : ''}</p>}
+            </div>
           </div>
         )
       })()}
-      <h1 style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 24, margin: '0 0 4px', lineHeight: 1.15, letterSpacing: '-.02em' }}>{camp.draft.name}</h1>
-      {brief && <p style={{ fontSize: 13.5, color: C.mute, margin: '0 0 20px' }}>{brief.objective}{!shipped && brief.projected ? ` · ${brief.projected}` : ''}</p>}
-
       {/* path/lifecycle banner (strategist draft awaiting the owner's OK) */}
       {inReview && camp.draft.path === 'strategist' && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: C.greenSoft, color: C.greenDk, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>

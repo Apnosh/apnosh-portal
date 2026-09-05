@@ -25,23 +25,23 @@ const AMBER_DK = '#8a5a0c'
 const BLUE = '#3a6ea5'
 
 type Cat = 'social' | 'google' | 'reviews' | 'pos'
-interface CatalogItem { id: string; label: string; authPath: string; category: Cat; Icon: typeof Camera; description: string }
+interface CatalogItem { id: string; label: string; authPath: string; category: Cat; Icon: typeof Camera; description: string; /** what connecting this lane lights up (portal redesign 2026-09-04) */ unlocks?: string }
 
 const CATALOG: CatalogItem[] = [
   /* Socials go through the active social vendor (zernio/ayrshare bake-off): each
    * platform is its own login on the vendor's hosted page, all landing on the ONE
    * vendor connection row (metadata.platforms). The nightly sync pulls the numbers. */
-  { id: 'instagram', label: 'Instagram', authPath: '/api/channels/social/start?platform=instagram', category: 'social', Icon: Camera, description: 'Log in with your Instagram' },
-  { id: 'facebook', label: 'Facebook', authPath: '/api/channels/social/start?platform=facebook', category: 'social', Icon: ThumbsUp, description: 'Log in with your Facebook page' },
-  { id: 'tiktok', label: 'TikTok', authPath: '/api/channels/social/start?platform=tiktok', category: 'social', Icon: Music2, description: 'Log in with your TikTok' },
-  { id: 'linkedin', label: 'LinkedIn', authPath: '/api/channels/social/start?platform=linkedin', category: 'social', Icon: Briefcase, description: 'Log in with your LinkedIn page' },
-  { id: 'youtube', label: 'YouTube', authPath: '/api/channels/social/start?platform=youtube', category: 'social', Icon: Play, description: 'Log in with your YouTube channel' },
-  { id: 'google_analytics', label: 'Google Analytics', authPath: '/api/auth/google', category: 'google', Icon: BarChart3, description: 'Website visitors and traffic' },
-  { id: 'google_search_console', label: 'Google Search Console', authPath: '/api/auth/google-search-console', category: 'google', Icon: Search, description: 'What people search to find you' },
-  { id: 'google_business_profile', label: 'Google Business Profile', authPath: '/api/auth/google-business', category: 'google', Icon: MapPin, description: 'Calls, directions, search views' },
-  { id: 'yelp', label: 'Yelp', authPath: '/dashboard/connected-accounts/yelp', category: 'reviews', Icon: Star, description: 'Your Yelp rating and reviews' },
-  { id: 'square', label: 'Square', authPath: '/api/channels/square/start', category: 'pos', Icon: CreditCard, description: 'Daily sales from your register' },
-  { id: 'clover', label: 'Clover', authPath: '/api/channels/clover/start', category: 'pos', Icon: Store, description: 'Daily sales from your register' },
+  { id: 'instagram', unlocks: 'Reach, followers and post results on Insights', label: 'Instagram', authPath: '/api/channels/social/start?platform=instagram', category: 'social', Icon: Camera, description: 'Log in with your Instagram' },
+  { id: 'facebook', unlocks: 'Page reach and post results on Insights', label: 'Facebook', authPath: '/api/channels/social/start?platform=facebook', category: 'social', Icon: ThumbsUp, description: 'Log in with your Facebook page' },
+  { id: 'tiktok', unlocks: 'Views and followers on Insights', label: 'TikTok', authPath: '/api/channels/social/start?platform=tiktok', category: 'social', Icon: Music2, description: 'Log in with your TikTok' },
+  { id: 'linkedin', unlocks: 'Page followers on Insights', label: 'LinkedIn', authPath: '/api/channels/social/start?platform=linkedin', category: 'social', Icon: Briefcase, description: 'Log in with your LinkedIn page' },
+  { id: 'youtube', unlocks: 'Channel views on Insights', label: 'YouTube', authPath: '/api/channels/social/start?platform=youtube', category: 'social', Icon: Play, description: 'Log in with your YouTube channel' },
+  { id: 'google_analytics', unlocks: 'Website visitors on Insights', label: 'Google Analytics', authPath: '/api/auth/google', category: 'google', Icon: BarChart3, description: 'Website visitors and traffic' },
+  { id: 'google_search_console', unlocks: 'What people search to find you', label: 'Google Search Console', authPath: '/api/auth/google-search-console', category: 'google', Icon: Search, description: 'What people search to find you' },
+  { id: 'google_business_profile', unlocks: 'Calls, directions and Maps views on Home', label: 'Google Business Profile', authPath: '/api/auth/google-business', category: 'google', Icon: MapPin, description: 'Calls, directions, search views' },
+  { id: 'yelp', unlocks: 'Your Yelp rating and reviews on Insights', label: 'Yelp', authPath: '/dashboard/connected-accounts/yelp', category: 'reviews', Icon: Star, description: 'Your Yelp rating and reviews' },
+  { id: 'square', unlocks: 'Real orders on the Orders stage', label: 'Square', authPath: '/api/channels/square/start', category: 'pos', Icon: CreditCard, description: 'Daily sales from your register' },
+  { id: 'clover', unlocks: 'Real orders on the Orders stage', label: 'Clover', authPath: '/api/channels/clover/start', category: 'pos', Icon: Store, description: 'Daily sales from your register' },
 ]
 const CAT_LABEL: Record<Cat, string> = { social: 'Social media', google: 'Google', reviews: 'Reviews', pos: 'Point of sale' }
 const CAT_ORDER: Cat[] = ['pos', 'social', 'google', 'reviews']
@@ -249,8 +249,9 @@ export default function ConnectedAccountsPage() {
                               <span style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
                                 <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</span>
+                                {p.unlocks && <span style={{ display: 'block', fontSize: 11.5, color: '#2e9a78', fontWeight: 600, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Unlocks: {p.unlocks}</span>}
                               </span>
-                              <Plus size={18} color={C.greenDk} style={{ flexShrink: 0 }} />
+                              <span style={{ width: 30, height: 30, borderRadius: 99, background: 'linear-gradient(135deg,#4abd98,#2e9a78)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 4px 10px rgba(46,154,120,.3)' }}><Plus size={16} /></span>
                             </a>
                           ) : (
                             /* the server says this lane's keys are not set — an honest
