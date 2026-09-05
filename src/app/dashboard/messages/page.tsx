@@ -13,9 +13,10 @@ import MvpMessages from '@/components/mvp/mvp-messages'
 
 export default function MessagesPage() {
   const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
   return (
-    <MvpShell active="messages" middle={<TopSearch value={query} onChange={setQuery} placeholder="Search inbox" />}>
-      <MvpMessages query={query} />
+    <MvpShell active="messages" noHeader={open} middle={<TopSearch value={query} onChange={setQuery} placeholder="Search inbox" />}>
+      <MvpMessages query={query} onActiveChange={setOpen} />
     </MvpShell>
   )
 }

@@ -91,7 +91,7 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
         {queryProp == null && searchOpen && (
           <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notifications…" style={{ width: '100%', marginBottom: 12, border: 'none', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 12, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit' }} />
         )}
-        <Segmented items={FILTERS.map((f) => [f.key, f.label] as [typeof f.key, string])} value={filter} onChange={setFilter} counts={Object.fromEntries(FILTERS.filter((f) => COUNTED.has(f.key)).map((f) => [f.key, countFor(f.key)]))} />
+        <Segmented items={FILTERS.map((f) => [f.key, f.label] as [typeof f.key, string])} value={filter} onChange={setFilter} counts={Object.fromEntries(FILTERS.filter((f) => COUNTED.has(f.key)).map((f) => [f.key, countFor(f.key)]))} hot={['needsyou']} />
       </div>
 
       <ListView filter={filter} items={items} wins={data.wins} q={q} onDismiss={onDismiss} />

@@ -26,7 +26,7 @@ import { HUES, STAGE_HUES } from './hues'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Bell, MessageCircle, CalendarDays } from 'lucide-react'
-import { useInboxUnread } from './use-inbox-unread'
+import { useInboxCounts } from './use-inbox-unread'
 import { useClient } from '@/lib/client-context'
 import { useRouter } from 'next/navigation'
 import { useMvpTheme } from './mvp-theme'
@@ -347,7 +347,9 @@ export default function HomeFunnel({
   loading = false,
 }: HomeFunnelProps) {
   const { client: bellClient } = useClient()
-  const bellAuto = useInboxUnread(bellClient?.id)
+  const bellCounts = useInboxCounts(bellClient?.id)
+  const bellAuto = bellCounts ? bellCounts.unread : null
+  const bellHot = (bellCounts?.needsYou ?? 0) > 0
   const bellN = bellAuto ?? (bar?.unread ?? 0)
 
   const { C, theme } = useMvpTheme() // the active skin (light / dark) — drives the whole hero
@@ -1188,7 +1190,7 @@ export default function HomeFunnel({
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Link href="/dashboard/inbox" aria-label={bellN ? `Alerts (${bellN})` : 'Alerts'} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
               <Bell size={19} />
-              {(bellN) > 0 && <span style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{bellN > 99 ? '99+' : bellN}</span>}
+              {(bellN) > 0 && <span style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: bellHot ? '#d99a1e' : C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{bellN > 99 ? '99+' : bellN}</span>}
             </Link>
           </div>
         )}

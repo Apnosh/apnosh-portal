@@ -59,6 +59,15 @@ interface Msg { id: string; from: 'owner' | 'team'; senderName: string; text: st
 /** draft pre-fills the composer (deep links pass who/what the note is about). */
 interface Active { threadId: string | null; contact: Contact | null; subject: string; draft?: string }
 
+const dayKey = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` }
+function dayLabel(key: string): string {
+  const [y, m, d] = key.split('-').map(Number); const dt = new Date(y, m, d); const now = new Date()
+  const diff = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - dt.getTime()) / 86400000)
+  if (diff === 0) return 'Today'
+  if (diff === 1) return 'Yesterday'
+  return dt.toLocaleDateString('en-US', diff < 7 ? { weekday: 'long' } : { month: 'short', day: 'numeric' })
+}
+const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
 function timeAgo(iso?: string | null): string {
   if (!iso) return ''
   const ms = Date.now() - new Date(iso).getTime()
@@ -72,7 +81,7 @@ function timeAgo(iso?: string | null): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export default function MvpMessages({ query: queryProp }: { query?: string } = {}) {
+export default function MvpMessages({ query: queryProp, onActiveChange }: { query?: string; /** tells the page a conversation is open, so the shell drops its top row and the thread's own header leads */ onActiveChange?: (open: boolean) => void } = {}) {
   const supabase = createClient()
   const [userId, setUserId] = useState<string | null>(null)
   const [businessId, setBusinessId] = useState<string | null>(null)
@@ -83,6 +92,7 @@ export default function MvpMessages({ query: queryProp }: { query?: string } = {
   const [searchOpen, setSearchOpen] = useState(false)
   const [active, setActive] = useState<Active | null>(null)
   const deepLinked = useRef(false)
+  useEffect(() => { onActiveChange?.(!!active) }, [active, onActiveChange])
 
   // Resolve the signed-in user + the business (messaging is owner ↔ team). The business
   // comes from the SELECTED client, like every other screen, so a team member or an admin
@@ -187,16 +197,21 @@ export default function MvpMessages({ query: queryProp }: { query?: string } = {
           <Empty title="No business linked yet" sub="Finish setting up your restaurant to start messaging your team." />
         ) : (
           <>
+            {/* one card per group, rows on hairlines (owner 2026-09-04: too much space between chats) */}
             {convos.length > 0 && (
               <>
-                <SectionLabel>Conversations</SectionLabel>
-                {convos.map((t) => <ThreadRowView key={t.id} t={t} onOpen={() => openThread(t)} />)}
+                <SectionLabel hue="mint">Conversations</SectionLabel>
+                <div style={{ background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden', marginBottom: 6 }}>
+                  {convos.map((t, i) => <ThreadRowView key={t.id} t={t} first={i === 0} onOpen={() => openThread(t)} />)}
+                </div>
               </>
             )}
             {reachable.length > 0 && (
               <>
-                <SectionLabel>{convos.length ? 'Reach someone else' : 'Reach the right person'}</SectionLabel>
-                {reachable.map((c) => <ContactRowView key={c.key} c={c} onOpen={() => openContact(c)} />)}
+                <SectionLabel hue="catering">{convos.length ? 'Reach someone else' : 'Reach the right person'}</SectionLabel>
+                <div style={{ background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
+                  {reachable.map((c, i) => <ContactRowView key={c.key} c={c} first={i === 0} onOpen={() => openContact(c)} />)}
+                </div>
               </>
             )}
             {convos.length === 0 && reachable.length === 0 && (
@@ -210,8 +225,8 @@ export default function MvpMessages({ query: queryProp }: { query?: string } = {
   )
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, margin: '8px 2px 10px' }}>{children}</div>
+function SectionLabel({ children, hue = 'mint' }: { children: React.ReactNode; hue?: HueKey }) {
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, margin: '10px 4px 8px' }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(hue) }} />{children}</div>
 }
 
 function Avatar({ c, size = 46 }: { c: Contact | null; size?: number }) {
@@ -222,33 +237,36 @@ function Avatar({ c, size = 46 }: { c: Contact | null; size?: number }) {
   )
 }
 
-function ThreadRowView({ t, onOpen }: { t: ThreadRow; onOpen: () => void }) {
+function ThreadRowView({ t, onOpen, first = true }: { t: ThreadRow; onOpen: () => void; first?: boolean }) {
   const c = contactForSubject(t.subject)
   const name = c?.name ?? t.subject
   return (
-    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: 12, marginBottom: 9, cursor: 'pointer', textAlign: 'left' }}>
-      <Avatar c={c} />
+    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderTop: first ? 'none' : `0.5px solid ${C.line}`, padding: '11px 14px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+      <Avatar c={c} size={42} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          {t.unread && <span style={{ width: 7, height: 7, borderRadius: 99, background: C.green, flexShrink: 0 }} />}
-          <span style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: C.faint, flexShrink: 0 }}>{timeAgo(t.lastAt)}</span>
+          <span style={{ fontWeight: t.unread ? 700 : 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
+          {c?.key === 'strategist' && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 7px', flexShrink: 0 }}>replies within the hour</span>}
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: t.unread ? C.greenDk : C.faint, fontWeight: t.unread ? 700 : 400, flexShrink: 0 }}>{timeAgo(t.lastAt)}</span>
         </div>
-        <div style={{ fontSize: 12.5, color: t.unread ? C.ink2 : C.faint, fontWeight: t.unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>{t.lastMessage ?? 'No messages yet'}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: t.unread ? C.ink2 : C.mute, fontWeight: t.unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.lastMessage ?? 'No messages yet'}</span>
+          {t.unread && <span style={{ width: 8, height: 8, borderRadius: 99, background: C.green, flexShrink: 0 }} />}
+        </div>
       </div>
     </button>
   )
 }
 
-function ContactRowView({ c, onOpen }: { c: Contact; onOpen: () => void }) {
+function ContactRowView({ c, onOpen, first = true }: { c: Contact; onOpen: () => void; first?: boolean }) {
   return (
-    <button onClick={onOpen} className="mrise" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: 12, marginBottom: 9, cursor: 'pointer', textAlign: 'left' }}>
-      <Avatar c={c} />
+    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderTop: first ? 'none' : `0.5px solid ${C.line}`, padding: '10px 14px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+      <Avatar c={c} size={38} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-        <div style={{ fontSize: 12.5, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{c.blurb}</div>
+        <div style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{c.blurb}</div>
       </div>
-      <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4, background: gradOf(c.hue), color: '#fff', borderRadius: 99, padding: '7px 12px', fontFamily: DISPLAY, fontWeight: 600, fontSize: 12.5, boxShadow: glow(c.hue, 0.3) }}><Plus size={13} /> Message</span>
+      <span style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 99, background: gradOf(c.hue), boxShadow: glow(c.hue, 0.3), color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={15} /></span>
     </button>
   )
 }
@@ -337,20 +355,34 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
   }
 
   const title = c?.name ?? active.subject
+  const hue: HueKey = c?.hue ?? 'mint'
+  /* Modern chat layout (owner 2026-09-04): messages group by sender and by day, consecutive
+     bubbles sit 3px apart with one tail per group, one avatar per group, one time per group. */
+  const groups: { from: Msg['from']; day: string; msgs: Msg[] }[] = []
+  for (const m of msgs) {
+    const day = dayKey(m.createdAt)
+    const last = groups[groups.length - 1]
+    if (last && last.from === m.from && last.day === day && Date.parse(m.createdAt) - Date.parse(last.msgs[last.msgs.length - 1].createdAt) < 5 * 60_000) last.msgs.push(m)
+    else groups.push({ from: m.from, day, msgs: [m] })
+  }
+  const lastOwn = [...msgs].reverse().find((m) => m.from === 'owner')
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
-      {/* conversation header */}
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '12px 12px 12px 6px', borderBottom: `0.5px solid ${C.line}` }}>
-        <button onClick={onBack} aria-label="Back" style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'none', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><ChevronLeft size={24} /></button>
-        <Avatar c={c} size={38} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: 15, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-          <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 7, height: 7, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />Apnosh team · usually replies within a few hours</div>
+      {/* conversation header: glass back circle, avatar, name, status */}
+      <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) 40px', alignItems: 'center', gap: 10, padding: 'calc(10px + env(safe-area-inset-top)) 16px 10px' }}>
+        <button onClick={onBack} aria-label="Back" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.75)', background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><ChevronLeft size={22} /></button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, minWidth: 0 }}>
+          <Avatar c={c} size={36} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.15 }}>{title}</div>
+            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{c?.key === 'strategist' ? 'Replies within the hour' : 'Apnosh team'}</div>
+          </div>
         </div>
+        <span />
       </div>
 
       {/* messages */}
-      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 16px 8px', background: '#fbfcfb' }}>
+      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 14px 10px', background: '#fff' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> Loading…</div>
         ) : msgs.length === 0 ? (
@@ -359,25 +391,39 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>Message {title}</div>
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.55 }}>{c?.blurb ? `${c.blurb}. ` : ''}Say what you need — a real person picks it up.</div>
           </div>
-        ) : msgs.map((m) => m.from === 'owner' ? (
-          <div key={m.id} className="mrise" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
-            <div style={{ maxWidth: '82%', background: GRAD, color: '#fff', borderRadius: '16px 16px 4px 16px', padding: '10px 14px', fontSize: 14, lineHeight: 1.42 }}>{m.text}</div>
-          </div>
-        ) : (
-          <div key={m.id} className="mrise" style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <Avatar c={c} size={26} />
-            <div style={{ maxWidth: '78%' }}>
-              <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: '16px 16px 16px 4px', padding: '10px 14px', fontSize: 14, lineHeight: 1.45, color: C.ink }}>{m.text}</div>
-              <div style={{ fontSize: 10.5, color: C.faint, marginTop: 3, marginLeft: 4 }}>{m.senderName} · {timeAgo(m.createdAt)}</div>
+        ) : groups.map((g, gi) => {
+          const showDay = gi === 0 || groups[gi - 1].day !== g.day
+          const own = g.from === 'owner'
+          const lastMsg = g.msgs[g.msgs.length - 1]
+          return (
+            <div key={g.msgs[0].id}>
+              {showDay && <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: C.faint, padding: '10px 0 8px' }}>{dayLabel(g.day)}</div>}
+              <div className="mrise" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', justifyContent: own ? 'flex-end' : 'flex-start', marginTop: gi > 0 && !showDay ? 10 : 0 }}>
+                {!own && <Avatar c={c} size={26} />}
+                <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', alignItems: own ? 'flex-end' : 'flex-start', gap: 3 }}>
+                  {g.msgs.map((m, mi) => {
+                    const isLast = mi === g.msgs.length - 1
+                    const r = own ? `18px 18px ${isLast ? 4 : 18}px 18px` : `18px 18px 18px ${isLast ? 4 : 18}px`
+                    return own
+                      ? <div key={m.id} style={{ background: gradOf(hue), color: '#fff', borderRadius: r, padding: '9px 13px', fontSize: 14.5, lineHeight: 1.4, boxShadow: glow(hue, 0.18), whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
+                      : <div key={m.id} style={{ background: '#f0f0f2', color: C.ink, borderRadius: r, padding: '9px 13px', fontSize: 14.5, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
+                  })}
+                  <div style={{ fontSize: 10.5, color: C.faint, margin: '1px 4px 0' }}>
+                    {own ? (lastMsg.id === lastOwn?.id ? (lastMsg.id.startsWith('tmp-') ? 'Sending…' : `Sent · ${clock(lastMsg.createdAt)}`) : clock(lastMsg.createdAt)) : `${lastMsg.senderName} · ${clock(lastMsg.createdAt)}`}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
-      {/* composer */}
-      <div style={{ flexShrink: 0, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))', borderTop: `0.5px solid ${C.line}`, display: 'flex', gap: 9, alignItems: 'center', background: '#fff' }}>
-        <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={`Message ${title}…`} style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, borderRadius: 999, padding: '12px 16px', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} />
-        <button onClick={send} disabled={!input.trim() || sending} style={{ width: 44, height: 44, flexShrink: 0, borderRadius: '50%', border: 'none', background: input.trim() ? C.green : '#e3e9e6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default' }}>{sending ? <Loader2 size={17} className="animate-spin" /> : <Send size={18} />}</button>
+      {/* composer: a glass pill with the send button inside it */}
+      <div style={{ flexShrink: 0, padding: '8px 14px calc(96px + env(safe-area-inset-bottom))', background: '#fff' }}>{/* clears the floating bottom nav */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 48, borderRadius: 24, padding: '0 5px 0 16px', background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={`Message ${title}…`} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14.5, color: C.ink, fontFamily: 'inherit', outline: 'none', padding: 0 }} />
+          <button onClick={send} disabled={!input.trim() || sending} aria-label="Send" style={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', border: 'none', background: input.trim() ? gradOf(hue) : '#e3e6e5', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', boxShadow: input.trim() ? glow(hue, 0.35) : 'none', transition: 'background .15s' }}>{sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}</button>
+        </div>
       </div>
       <style>{`@keyframes mrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.mrise{animation:mrise .26s ease both}`}</style>
     </div>

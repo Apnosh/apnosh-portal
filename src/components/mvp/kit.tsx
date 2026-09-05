@@ -44,16 +44,18 @@ export function SectionTitle({ children, sub, action, style }: { children: React
 }
 
 /** One segmented control for every filter and range: a soft track, a white active pill. */
-export function Segmented<K extends string>({ items, value, onChange, counts }: { items: [K, string][]; value: K; onChange: (k: K) => void; counts?: Partial<Record<K, number>> }) {
+export function Segmented<K extends string>({ items, value, onChange, counts, hot }: { items: [K, string][]; value: K; onChange: (k: K) => void; counts?: Partial<Record<K, number>>; /** keys whose count reads amber (needs attention) */ hot?: K[] }) {
   return (
     <div style={{ display: 'flex', gap: 2, borderRadius: 999, padding: 3, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
       {items.map(([k, label]) => {
         const on = value === k
         const n = counts?.[k]
         return (
-          <button key={k} type="button" onClick={() => onChange(k)} style={{ flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, whiteSpace: 'nowrap', overflow: 'hidden', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 6px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }}>
+          <button key={k} type="button" onClick={() => onChange(k)} style={{ flex: '1 1 auto', minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5, whiteSpace: 'nowrap', overflow: 'hidden', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 6px', fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
-            {n != null && n > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: on ? C.greenDk : C.faint }}>{n}</span>}
+            {n != null && n > 0 && (hot?.includes(k)
+              ? <span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: '#d99a1e', color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
+              : <span style={{ fontSize: 11, fontWeight: 700, color: on ? C.greenDk : C.faint }}>{n}</span>)}
           </button>
         )
       })}
