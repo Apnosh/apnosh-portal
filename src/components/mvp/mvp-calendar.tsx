@@ -21,6 +21,7 @@ import type { SavedCampaign } from '@/lib/campaigns/view'
 import { upcomingOccasions } from '@/lib/design/occasions'
 import { BrandOrMark } from './mvp-insights'
 import { C } from './mvp-detail'
+import { HUES, KIND_HUE, gradOf, glow, type HueKey } from './hues'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)'
@@ -31,15 +32,16 @@ const DAY_MS = 86400000
 type Kind = CalendarEventKind | 'launch' | 'occasion'
 type Item = { id: string; kind: Kind; title: string; detail?: string; day: string; time?: string; allDay: boolean; status?: string; needsYou: boolean; href?: string; platform?: string }
 
-/* one colour per kind — the dots on the grid, the tiles in the lists */
+/* one colour per kind — the dots on the grid, the tiles in the lists (the shared hue table) */
+const kh = (k: Kind): HueKey => KIND_HUE[k] ?? 'mint'
 const KIND: Record<Kind, { label: string; color: string; soft: string }> = {
-  post: { label: 'Post', color: '#2e9a78', soft: '#e4f5ee' },
-  email: { label: 'Email', color: '#3d8ed8', soft: '#e6f1fb' },
-  shoot: { label: 'Shoot', color: '#7a5fd6', soft: '#eeeafb' },
-  content: { label: 'Content', color: '#1fa39a', soft: '#dff4f2' },
-  task: { label: 'To-do', color: '#dd9a1c', soft: '#fbf1da' },
-  launch: { label: 'Launch', color: '#2e9a78', soft: '#e4f5ee' },
-  occasion: { label: 'Occasion', color: '#c2751a', soft: '#fdf3e3' },
+  post: { label: 'Post', color: HUES[kh('post')][1], soft: HUES[kh('post')][0] + '29' },
+  email: { label: 'Email', color: HUES[kh('email')][1], soft: HUES[kh('email')][0] + '29' },
+  shoot: { label: 'Shoot', color: HUES[kh('shoot')][1], soft: HUES[kh('shoot')][0] + '29' },
+  content: { label: 'Content', color: HUES[kh('content')][1], soft: HUES[kh('content')][0] + '29' },
+  task: { label: 'To-do', color: HUES[kh('task')][1], soft: HUES[kh('task')][0] + '29' },
+  launch: { label: 'Launch', color: HUES[kh('launch')][1], soft: HUES[kh('launch')][0] + '29' },
+  occasion: { label: 'Occasion', color: HUES[kh('occasion')][1], soft: HUES[kh('occasion')][0] + '29' },
 }
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 const parse = (s: string) => new Date(s.length <= 10 ? `${s}T00:00:00` : s)
@@ -55,10 +57,11 @@ function KindMark({ item }: { item: Item }) {
     return <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><BrandOrMark provider={item.platform} size={20} /></span>
   }
   const icon = item.kind === 'shoot' ? <Camera size={17} /> : item.kind === 'email' ? <Mail size={17} /> : item.kind === 'task' ? <CheckSquare size={17} /> : item.kind === 'launch' ? <Rocket size={17} /> : item.kind === 'occasion' ? <PartyPopper size={17} /> : <FileText size={17} />
-  return <span style={{ width: 36, height: 36, borderRadius: 11, background: k.soft, color: k.color, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
+  return <span style={{ width: 40, height: 40, borderRadius: 12, background: gradOf(kh(item.kind)), boxShadow: glow(kh(item.kind), 0.28), color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
 }
 
 function Row({ item, first }: { item: Item; first: boolean }) {
+  const k = KIND[item.kind]
   const inner = (
     <>
       <KindMark item={item} />
@@ -68,6 +71,7 @@ function Row({ item, first }: { item: Item; first: boolean }) {
           {KIND[item.kind].label}{item.time ? ` · ${item.time}` : ''}{item.detail ? ` · ${item.detail}` : ''}
         </span>
       </span>
+      {!item.status && <span style={{ fontSize: 11, fontWeight: 600, color: k.color, background: k.soft, borderRadius: 99, padding: '3px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>{k.label}</span>}
       {item.status && <span style={{ fontSize: 11, fontWeight: 700, color: item.needsYou ? '#a8720c' : C.mute, background: item.needsYou ? '#fbf1da' : C.bg, borderRadius: 99, padding: '3px 8px', flexShrink: 0, whiteSpace: 'nowrap' }}>{item.status}</span>}
       {item.href && <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />}
     </>
@@ -144,7 +148,7 @@ export default function MvpCalendar({ clientId, campaigns }: { clientId?: string
             return (
               <button key={i} type="button" onClick={() => setSel(day)} aria-pressed={isSel} aria-label={day} style={{ aspectRatio: '1', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, background: isSel ? C.greenSoft : 'transparent', boxShadow: isToday && !isSel ? `inset 0 0 0 1.5px ${C.green}` : 'none', transition: 'background .15s' }}>
                 <span style={{ fontSize: 12.5, fontWeight: isToday || isSel ? 700 : 500, color: isSel || isToday ? C.greenDk : C.ink }}>{d}</span>
-                <span style={{ display: 'flex', gap: 2, height: 4 }}>{dots.map((k) => <span key={k} style={{ width: 4, height: 4, borderRadius: 99, background: KIND[k].color }} />)}</span>
+                <span style={{ display: 'flex', gap: 2, height: 6 }}>{dots.map((k) => <span key={k} style={{ width: 6, height: 6, borderRadius: 99, background: KIND[k].color }} />)}</span>
               </button>
             )
           })}
@@ -157,14 +161,14 @@ export default function MvpCalendar({ clientId, campaigns }: { clientId?: string
       {/* needs you */}
       {needs.length > 0 && (
         <div style={CARD}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={H2}>Needs you</span><span style={{ fontSize: 12.5, color: C.faint }}>next 30 days</span></div>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={{ ...H2, display: 'inline-flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf('amber') }} />Needs you</span><span style={{ fontSize: 12.5, color: C.faint }}>next 30 days</span></div>
           {needs.slice(0, 6).map((it, i) => <Row key={it.id} item={it} first={i === 0} />)}
         </div>
       )}
 
       {/* coming up, from the tapped day */}
       <div style={CARD}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={H2}>Coming up</span><span style={{ fontSize: 12.5, color: C.faint }}>from {dayLabel(sel, today).toLowerCase()}, two weeks</span></div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={{ ...H2, display: 'inline-flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf('mint') }} />Coming up</span><span style={{ fontSize: 12.5, color: C.faint }}>from {dayLabel(sel, today).toLowerCase()}, two weeks</span></div>
         {loading && items.length === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.faint, fontSize: 13, padding: '14px 0' }}><Clock size={15} /> Getting your calendar…</div>
         ) : fromSel.length === 0 ? (

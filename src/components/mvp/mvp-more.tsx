@@ -12,8 +12,10 @@
  */
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { BrandOrMark } from './mvp-insights'
 import { CARD_SHADOW } from './kit'
+import { gradOf, glow, type HueKey } from './hues'
 import { TrendingUp, ChevronRight, CreditCard, FileText, Headset, HelpCircle, Image as ImageIcon, LineChart, LogOut, MapPin, Palette, Plug, Settings, ShoppingBag, Star, Store, Target, Users, Share2 } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 
@@ -30,16 +32,19 @@ const MORE_CSS = `
 @media (hover:hover){.mvp-row:hover{background:#f7faf9}}
 `
 
-type Row = { label: string; sub: string; href: string; Icon: typeof Store; /** a network this row is about — its real mark leads instead of the icon */ brand?: string | string[] }
+/* Every row wears one colour that names what it is about (portal redesign 2026-09-04):
+   a network's own mark where a platform is the subject, a gradient glyph elsewhere. */
+type Row = { label: string; sub: string; href: string; Icon: typeof Store; /** a network this row is about — its real mark leads instead of the icon */ brand?: string | string[]; hue?: HueKey }
 
-const GROUPS: { title: string; rows: Row[] }[] = [
+const GROUPS: { title: string; hue: HueKey; rows: Row[] }[] = [
   {
     title: 'Your business',
+    hue: 'newfaces',
     rows: [
-      { label: 'Results', sub: 'Proof from your weeks', href: '/dashboard/results', Icon: TrendingUp },
-      { label: 'Business info & hours', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store },
-      { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette },
-      { label: 'Connected accounts', sub: 'Instagram, Google, Yelp', href: '/dashboard/connected-accounts', Icon: Plug , brand: ['google', 'instagram'] },
+      { label: 'Results', sub: 'Proof from your weeks', href: '/dashboard/results', Icon: TrendingUp, hue: 'mint' },
+      { label: 'Business info & hours', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store, hue: 'newfaces' },
+      { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette, hue: 'brand' },
+      { label: 'Connected accounts', sub: 'Instagram, Google, Yelp', href: '/dashboard/connected-accounts', Icon: Plug, hue: 'nights' },
       // Google Business Profile: an always-on entry to the in-portal viewer/editor
       // (no campaignId → 'view' lane; Pro owners edit here and it writes back to Google).
       // It is also still reachable as a campaign deliverable via ?campaignId=.
@@ -48,30 +53,49 @@ const GROUPS: { title: string; rows: Row[] }[] = [
       { label: 'Reply to reviews', sub: 'The ones still waiting, worst first', href: '/dashboard/review-replies', Icon: Star , brand: 'google' },
       { label: 'Your other listings', sub: 'Yelp, Apple Maps and the rest, matching Google', href: '/dashboard/listings', Icon: MapPin , brand: 'yelp' },
       { label: 'Your social profiles', sub: 'Five platforms, complete and matching', href: '/dashboard/social-profiles', Icon: Share2 , brand: ['instagram', 'tiktok'] },
-      { label: 'Get measurable', sub: 'Search Console and Analytics, so you can see what works', href: '/dashboard/measure', Icon: LineChart },
-      { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon },
-      { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target },
-    ],
-  },
-  {
-    title: 'Help',
-    rows: [
-      { label: 'Contact support', sub: 'Talk to your team', href: '/dashboard/messages', Icon: Headset },
-      { label: 'Help & FAQ', sub: 'Quick answers', href: '/dashboard/help', Icon: HelpCircle },
+      { label: 'Get measurable', sub: 'Search Console and Analytics, so you can see what works', href: '/dashboard/measure', Icon: LineChart, hue: 'nights' },
+      { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon, hue: 'catering' },
+      { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target, hue: 'event' },
     ],
   },
   {
     title: 'Plan & account',
+    hue: 'nights',
     rows: [
-      { label: 'Plan & billing', sub: 'Plan, invoices, card', href: '/dashboard/billing', Icon: CreditCard },
-      { label: 'Agreements', sub: 'Read & sign', href: '/dashboard/agreements', Icon: FileText },
-      { label: 'Settings', sub: 'Login, password, alerts, dark mode', href: '/dashboard/settings', Icon: Settings },
+      { label: 'Plan & billing', sub: 'Plan, invoices, card', href: '/dashboard/billing', Icon: CreditCard, hue: 'nights' },
+      { label: 'Your team', sub: 'Strategist, photographer, designer', href: '/dashboard/team', Icon: Users, hue: 'catering' },
+      { label: 'Agreements', sub: 'Read & sign', href: '/dashboard/agreements', Icon: FileText, hue: 'grey' },
+      { label: 'Settings', sub: 'Login, password, alerts, dark mode', href: '/dashboard/settings', Icon: Settings, hue: 'grey' },
+    ],
+  },
+  {
+    title: 'Help',
+    hue: 'mint',
+    rows: [
+      { label: 'Contact support', sub: 'Talk to your team', href: '/dashboard/messages', Icon: Headset, hue: 'mint' },
+      { label: 'Help & FAQ', sub: 'Quick answers', href: '/dashboard/help', Icon: HelpCircle, hue: 'mint' },
     ],
   },
 ]
 
-export default function MvpMore({ name, location, tier, query = '' }: { name: string; location?: string | null; tier?: string | null; /** the top row's search — filters every row by name or description */ query?: string }) {
+/* the three numbers under the profile card, from the badge-count endpoint */
+function useMoreStats(clientId?: string | null) {
+  const [st, setSt] = useState<{ connected: number; liveCampaigns: number; rating: number | null } | null>(null)
+  useEffect(() => {
+    if (!clientId) return
+    let live = true
+    fetch(`/api/dashboard/counts?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (!live || !j?.counts) return
+      setSt({ connected: j.counts.connected ?? 0, liveCampaigns: j.counts.liveCampaigns ?? 0, rating: typeof j.counts.rating === 'number' ? j.counts.rating : null })
+    }).catch(() => {})
+    return () => { live = false }
+  }, [clientId])
+  return st
+}
+
+export default function MvpMore({ name, location, tier, query = '', clientId }: { name: string; location?: string | null; tier?: string | null; /** the top row's search — filters every row by name or description */ query?: string; clientId?: string | null }) {
   const q = query.trim().toLowerCase()
+  const stats = useMoreStats(clientId)
   const groups = q ? GROUPS.map((g) => ({ ...g, rows: g.rows.filter((r) => `${r.label} ${r.sub}`.toLowerCase().includes(q)) })).filter((g) => g.rows.length > 0) : GROUPS
   const initials = name.trim().split(/\s+/).slice(0, 2).map(w => w[0]?.toUpperCase() ?? '').join('') || 'A'
   const planLabel = tier && tier !== 'Internal' ? `${tier} plan` : null
@@ -80,11 +104,9 @@ export default function MvpMore({ name, location, tier, query = '' }: { name: st
     <div style={{ background: '#fff', minHeight: '100%', padding: '14px 18px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{MORE_CSS}</style>
 
-      {/* the business, as a profile card: the same mint→gold ring the app uses for its avatar */}
-      <Link href="/dashboard/business-info" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, padding: 14, textDecoration: 'none', color: 'inherit', marginBottom: 18 }}>
-        <span style={{ display: 'block', width: 54, height: 54, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.08)', boxSizing: 'border-box', flexShrink: 0 }}>
-          <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: '#fff', fontSize: 19, fontWeight: 800, letterSpacing: '-.02em', color: C.greenDk, fontFamily: DISPLAY }}>{initials}</span>
-        </span>
+      {/* the business, as a profile card with a gradient avatar (portal redesign 2026-09-04) */}
+      <Link href="/dashboard/business-info" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, padding: 14, textDecoration: 'none', color: 'inherit', marginBottom: 12 }}>
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 54, height: 54, borderRadius: '50%', background: 'linear-gradient(135deg, #4abd98, #2e73b6)', boxShadow: '0 8px 18px rgba(46,115,182,.3)', fontSize: 18, fontWeight: 600, letterSpacing: '-.01em', color: '#fff', fontFamily: DISPLAY, flexShrink: 0 }}>{initials}</span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 19, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -96,18 +118,33 @@ export default function MvpMore({ name, location, tier, query = '' }: { name: st
         <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0 }} />
       </Link>
 
+      {!q && (
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+          {([
+            [stats ? String(stats.connected) : '–', stats?.connected === 1 ? 'connected' : 'connected', '/dashboard/connected-accounts'],
+            [stats ? String(stats.liveCampaigns) : '–', stats?.liveCampaigns === 1 ? 'live campaign' : 'live campaigns', '/dashboard/campaigns'],
+            [stats ? (stats.rating != null ? `${stats.rating.toFixed(1)}★` : '–') : '–', 'Google rating', '/dashboard/review-replies'],
+          ] as const).map(([n, l, href]) => (
+            <Link key={l} href={href} className="mvp-row" style={{ flex: 1, background: '#fff', borderRadius: 14, boxShadow: CARD_SHADOW, padding: '10px 6px', textAlign: 'center', textDecoration: 'none', color: 'inherit' }}>
+              <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal', lineHeight: 1.1 }}>{n}</span>
+              <span style={{ display: 'block', fontSize: 11, color: C.mute, marginTop: 3 }}>{l}</span>
+            </Link>
+          ))}
+        </div>
+      )}
+
       {q && groups.length === 0 && <div style={{ padding: '30px 18px', textAlign: 'center', color: '#6e6e73', fontSize: 13.5 }}>Nothing matches &ldquo;{query.trim()}&rdquo;.</div>}
       {groups.map(group => (
         <div key={group.title} style={{ marginBottom: 22 }}>
-          <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '0 6px 8px' }}>{group.title}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '0 6px 8px' }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(group.hue) }} />{group.title}</div>
           <div style={{ background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
             {group.rows.map((r, i) => (
               <div key={r.href}>
-                {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 61 }} />}
+                {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 67 }} />}
                 <Link href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 14px', textDecoration: 'none', color: 'inherit' }}>
                   {r.brand
-                    ? <span style={{ width: 36, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{(Array.isArray(r.brand) ? r.brand : [r.brand]).map((b, k) => <span key={b} style={{ width: 30, height: 30, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: k ? -10 : 0 }}><BrandOrMark provider={b} size={16} /></span>)}</span>
-                    : <span style={{ width: 36, height: 36, borderRadius: 11, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><r.Icon size={18} color={C.greenDk} /></span>}
+                    ? <span style={{ width: 40, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{(Array.isArray(r.brand) ? r.brand : [r.brand]).map((b, k) => <span key={b} style={{ width: 32, height: 32, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: k ? -10 : 0, position: 'relative', zIndex: 2 - k }}><BrandOrMark provider={b} size={17} /></span>)}</span>
+                    : <span style={{ width: 40, height: 40, borderRadius: 12, background: gradOf(r.hue ?? 'mint'), boxShadow: glow(r.hue ?? 'mint', 0.28), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><r.Icon size={19} color="#fff" /></span>}
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.25 }}>{r.label}</span>
                     <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>{r.sub}</span>

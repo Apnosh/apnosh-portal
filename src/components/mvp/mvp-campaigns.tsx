@@ -20,6 +20,15 @@ import {
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { upcomingOccasions } from '@/lib/design/occasions'
 import { RATE_CARD } from '@/lib/design/rate-card'
+import { campaignHue, gradOf, glow, hueOf, tint, type HueKey } from './hues'
+import { Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Sparkles, FileText, AlertCircle } from 'lucide-react'
+
+/* one glyph per goal hue; the campaign card's tile */
+const GLYPH: Record<HueKey, typeof Megaphone> = {
+  mint: Sparkles, announce: Megaphone, event: Ticket, deal: Tag, nights: Moon, newfaces: MapPin, regulars: Heart,
+  reviews: Star, online: ShoppingCart, catering: Users, brand: Share2, amber: Clock, grey: FileText, red: AlertCircle,
+}
+type HuedCard = CampCard & { hue: HueKey }
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -60,10 +69,11 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
   }, [client?.id])
 
   // Drafts (unshipped plans) live on the Orders tab now — Campaigns shows only shipped/live/done.
-  const cards: CampCard[] = (saved ?? []).map((c) => {
+  const cards: HuedCard[] = (saved ?? []).map((c) => {
     const o = outcomes[c.draft.id]
     const line = o ? outcomeLine(o) : null
-    return campaignCardVM(c, progress[c.draft.id], line ? { ...line, spark: o.spark } : null)
+    const vm = campaignCardVM(c, progress[c.draft.id], line ? { ...line, spark: o.spark } : null)
+    return { ...vm, hue: campaignHue({ goalKey: c.draft.goalKey, templateId: c.draft.sourceCatalogId, name: c.draft.name }) }
   }).filter((c) => c.kind !== 'draft')
   const counts: Record<Tab, number> = {
     all: cards.length,
@@ -98,7 +108,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
 
         {/* Orders moved in here from its own tab (owner 2026-09-04): one row through to receipts */}
         <Link href="/dashboard/orders" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', marginBottom: 14, borderRadius: 16, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', textDecoration: 'none', color: 'inherit' }}>
-          <span style={{ width: 34, height: 34, borderRadius: 10, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={17} /></span>
+          <span style={{ width: 38, height: 38, borderRadius: 12, background: gradOf('mint'), boxShadow: glow('mint', 0.28), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={18} /></span>
           <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Orders</span>
           <ChevronRight size={17} color={C.faint} />
         </Link>
@@ -140,7 +150,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
 function EmptyState() {
   return (
     <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 18, padding: '34px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 48, height: 48, borderRadius: 14, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} color={C.greenDk} /></div>
+      <div style={{ width: 48, height: 48, borderRadius: 14, background: gradOf('mint'), boxShadow: glow('mint'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} color="#fff" /></div>
       <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>No campaigns yet</div>
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Start one and your strategist runs it — you just approve. Pick a goal and we build the plan.</div>
       <Link href="/dashboard/campaigns/new" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 12, padding: '11px 18px', fontWeight: 700, fontSize: 14 }}><Plus size={16} strokeWidth={2.5} /> New campaign</Link>
@@ -156,54 +166,68 @@ function Spark({ values, color }: { values: number[]; color: string }) {
   return <svg width={w} height={h} style={{ display: 'block' }}><polyline points={pts} fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" /></svg>
 }
 
-function CampaignCard({ c }: { c: CampCard }) {
+function CampaignCard({ c }: { c: HuedCard }) {
+  /* A campaign looks like its goal (portal redesign 2026-09-04): a colour band and a goal
+     glyph per card, status as a pill, the since-launch numbers in a strip, one action. */
   const needsYou = c.kind !== 'draft' && c.review   // shipped but waiting on the owner's setup
-  const tone = c.kind === 'draft'
-    ? { bar: '#cfd4d1', dot: '#aeb4b0', pillBg: '#eef0ef', pillC: C.mute }
-    : needsYou
-      ? { bar: '#e0a13a', dot: '#e0a13a', pillBg: '#FEF4E4', pillC: '#8A5A12' }   // amber: waiting on you
-      : { bar: C.green, dot: C.green, pillBg: C.greenSoft, pillC: C.greenDk }
-  const ts = (t: 'up' | 'down' | 'flat') => t === 'up' ? { c: C.green, bg: C.greenSoft, I: TrendingUp } : t === 'down' ? { c: C.red, bg: C.redBg, I: TrendingDown } : { c: C.mute, bg: '#f0f0ee', I: Minus }
+  const [h1, h2] = hueOf(c.hue)
+  const Glyph = GLYPH[c.hue] ?? Sparkles
+  const pill = c.kind === 'done'
+    ? { bg: '#eef0ef', fg: C.mute }
+    : needsYou || c.pill === 'In production'
+      ? { bg: '#FEF4E4', fg: '#8A5A12' }
+      : { bg: C.greenSoft, fg: C.greenDk }
+  const ts = (t: 'up' | 'down' | 'flat') => t === 'up' ? { c: C.greenDk, I: TrendingUp } : t === 'down' ? { c: C.red, I: TrendingDown } : { c: C.mute, I: Minus }
+  const strip: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, margin: '10px 0 0', padding: '8px 10px', borderRadius: 12, background: '#f5f5f7' }
+  const big: React.CSSProperties = { display: 'block', fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal', lineHeight: 1.1 }
+  const small: React.CSSProperties = { fontSize: 11, color: C.mute }
 
   return (
-    <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit', position: 'relative', overflow: 'hidden', background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '11px 13px 10px', marginBottom: 9, }}>
-      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: tone.bar }} />
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: tone.pillBg, color: tone.pillC, borderRadius: 99, padding: '2px 8px', fontWeight: 700, fontSize: 11 }}>
-            {c.pillIcon === 'check' ? <Check size={11} strokeWidth={3} /> : c.pillIcon === 'calendar' ? <CalendarDays size={11} /> : <span style={{ width: 6, height: 6, borderRadius: 99, background: tone.dot, display: 'inline-block' }} />}{c.pill}
+    <Link href={c.href} style={{ display: 'flex', textDecoration: 'none', color: 'inherit', overflow: 'hidden', background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, marginBottom: 10 }}>
+      <div style={{ width: 6, flexShrink: 0, background: `linear-gradient(${h1}, ${h2})` }} />
+      <div style={{ flex: 1, minWidth: 0, padding: '12px 14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ width: 38, height: 38, borderRadius: 12, background: gradOf(c.hue), boxShadow: glow(c.hue, 0.3), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Glyph size={18} /></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15.5, color: C.ink, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
+            <div style={{ fontSize: 12, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.when ?? c.blurb}</div>
+          </div>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: pill.bg, color: pill.fg, borderRadius: 99, padding: '3px 8px', fontWeight: 600, fontSize: 11, flexShrink: 0, whiteSpace: 'nowrap' }}>
+            {c.pillIcon === 'check' ? <Check size={11} strokeWidth={3} /> : c.pillIcon === 'calendar' ? <CalendarDays size={11} /> : null}{c.pill}
           </span>
         </div>
-        {/* No dollars here on purpose — cost + billed-so-far live on the Orders tab. */}
-      </div>
 
-      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, lineHeight: 1.15, marginBottom: 2 }}>{c.title}</div>
-      <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.35, marginBottom: 8 }}>{c.blurb}</div>
-
-      {c.perf?.type === 'trend' && (() => { const s = ts(c.perf.trend); return (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: s.bg, color: s.c, borderRadius: 7, padding: '3px 8px', fontWeight: 700, fontSize: 11.5 }}><s.I size={12} /> {c.perf.metric}{c.perf.note ? ` ${c.perf.note}` : ''}</span>
-          <Spark values={c.perf.spark} color={s.c} />
-        </div>
-      ) })()}
-      {c.perf?.type === 'progress' && (() => { const pct = c.perf.total ? c.perf.live / c.perf.total : 0; return (
-        <div style={{ marginBottom: 8 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4 }}>
-            <span style={{ fontSize: 11.5, fontWeight: 600, color: C.ink }}>{c.perf.live} of {c.perf.total} parts live</span>
-            <span style={{ fontSize: 10.5, color: C.faint }}>{Math.round(pct * 100)}%</span>
+        {c.perf?.type === 'trend' && (() => { const s = ts(c.perf.trend); return (
+          <div style={strip}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ ...big, color: s.c, display: 'flex', alignItems: 'center', gap: 5 }}><s.I size={14} /> {c.perf.metric}</span>
+              <span style={small}>{c.perf.note ? c.perf.note : 'On Google since launch'}</span>
+            </div>
+            <Spark values={c.perf.spark} color={s.c} />
           </div>
-          <div style={{ height: 5, borderRadius: 99, background: '#eef0ef', overflow: 'hidden' }}><div style={{ width: `${Math.max(5, pct * 100)}%`, height: '100%', background: C.green, borderRadius: 99 }} /></div>
-        </div>
-      ) })()}
-      {c.perf?.type === 'ready' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 8 }}>
-          <Clock size={14} color={C.mute} />
-          <span style={{ fontSize: 12.5 }}><b style={{ fontWeight: 700 }}>{c.perf.ready} parts ready</b> <span style={{ color: C.faint }}>· waiting to go live</span></span>
-        </div>
-      )}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-        <span style={{ fontSize: 12, color: C.faint }}>{c.when ?? ''}</span>
-        {c.action && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: needsYou ? '#8A5A12' : C.greenDk, fontWeight: 700, fontSize: 12.5 }}>{c.action} <ArrowRight size={14} /></span>}
+        ) })()}
+        {c.perf?.type === 'progress' && (() => { const pct = c.perf.total ? c.perf.live / c.perf.total : 0; return (
+          <div style={strip}>
+            <div><span style={big}>{c.perf.live} of {c.perf.total}</span><span style={small}>parts live</span></div>
+            <div style={{ flex: 1, height: 6, borderRadius: 99, background: '#e6e6ea', overflow: 'hidden' }}><div style={{ width: `${Math.max(5, pct * 100)}%`, height: '100%', background: gradOf(c.hue, 90), borderRadius: 99 }} /></div>
+            <span style={{ ...small, fontWeight: 700, color: h2 }}>{Math.round(pct * 100)}%</span>
+          </div>
+        ) })()}
+        {c.perf?.type === 'ready' && (
+          <div style={strip}>
+            <div><span style={big}>{c.perf.ready}</span><span style={small}>parts ready</span></div>
+            <span style={{ ...small, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={13} /> waiting to go live</span>
+          </div>
+        )}
+        {c.perf == null && c.blurb && c.when && (
+          <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.35, marginTop: 8 }}>{c.blurb}</div>
+        )}
+
+        {c.action && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 14px', borderRadius: 16, fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: needsYou ? '#fff' : C.ink, background: needsYou ? gradOf(c.hue) : '#f0f0f2', boxShadow: needsYou ? `0 6px 16px ${tint(c.hue, 0.4, 1)}` : 'none' }}>{c.action} <ArrowRight size={14} /></span>
+          </div>
+        )}
       </div>
     </Link>
   )

@@ -22,7 +22,7 @@ export default function MorePage() {
       {loading ? (
         <Centered>Loading…</Centered>
       ) : client ? (
-        <MvpMore name={client.name || 'Your restaurant'} location={client.location} tier={client.tier} query={query} />
+        <MvpMore name={client.name || 'Your restaurant'} location={client.location} tier={client.tier} query={query} clientId={client.id} />
       ) : (
         <Centered>
           <div>

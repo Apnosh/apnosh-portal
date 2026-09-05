@@ -12,7 +12,8 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useClient } from '@/lib/client-context'
-import { ChevronLeft, Search, Send, Loader2, Plus, MessageCircle } from 'lucide-react'
+import { ChevronLeft, Search, Send, Loader2, Plus, MessageCircle, Compass, Video, Camera, Image as ImageIcon, CreditCard, HelpCircle } from 'lucide-react'
+import { gradOf, glow, type HueKey } from './hues'
 import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
@@ -26,14 +27,15 @@ const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
 
 /* ── The people an owner can reach. Each is its own conversation; the thread
  *  subject carries the role so the Apnosh team knows who it's for. ─────────── */
-interface Contact { key: string; name: string; blurb: string; emoji: string; color: string; subject: string }
+/* each role gets a colour and a glyph instead of an emoji (portal redesign 2026-09-04) */
+interface Contact { key: string; name: string; blurb: string; hue: HueKey; Icon: typeof Compass; color: string; subject: string }
 const CONTACTS: Contact[] = [
-  { key: 'strategist',   name: 'Your strategist',   blurb: 'Plans, priorities, anything',  emoji: '🧭', color: '#4abd98', subject: 'Your strategist' },
-  { key: 'videographer', name: 'Videographer',      blurb: 'Films your content',           emoji: '🎥', color: '#6366f1', subject: 'Videographer' },
-  { key: 'photographer', name: 'Photographer',      blurb: 'Photos of your food & space',  emoji: '📸', color: '#ec4899', subject: 'Photographer' },
-  { key: 'designer',     name: 'Designer',          blurb: 'Graphics, menus, flyers',      emoji: '🎨', color: '#f59e0b', subject: 'Designer' },
-  { key: 'account',      name: 'Account & billing', blurb: 'Plans, invoices, payments',    emoji: '💳', color: '#0ea5e9', subject: 'Account & billing' },
-  { key: 'support',      name: 'Support',           blurb: 'Anything else',                emoji: '💬', color: '#8b5cf6', subject: 'Support' },
+  { key: 'strategist',   name: 'Your strategist',   blurb: 'Plans, priorities, anything',  hue: 'mint',     Icon: Compass,    color: '#2e9a78', subject: 'Your strategist' },
+  { key: 'videographer', name: 'Videographer',      blurb: 'Films your content',           hue: 'event',    Icon: Video,      color: '#2e73b6', subject: 'Videographer' },
+  { key: 'photographer', name: 'Photographer',      blurb: 'Photos of your food & space',  hue: 'catering', Icon: Camera,     color: '#9c3a6a', subject: 'Photographer' },
+  { key: 'designer',     name: 'Designer',          blurb: 'Graphics, menus, flyers',      hue: 'announce', Icon: ImageIcon,  color: '#ee4c2c', subject: 'Designer' },
+  { key: 'account',      name: 'Account & billing', blurb: 'Plans, invoices, payments',    hue: 'nights',   Icon: CreditCard, color: '#3b6fd4', subject: 'Account & billing' },
+  { key: 'support',      name: 'Support',           blurb: 'Anything else',                hue: 'mint',     Icon: HelpCircle, color: '#2e9a78', subject: 'Support' },
 ]
 function hasWord(haystack: string, word: string): boolean {
   return new RegExp(`\\b${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(haystack)
@@ -213,11 +215,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 }
 
 function Avatar({ c, size = 46 }: { c: Contact | null; size?: number }) {
-  if (!c) return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: '#eef0ef', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.42, flexShrink: 0 }}>💬</div>
-  )
+  const hue: HueKey = c?.hue ?? 'grey'
+  const Icon = c?.Icon ?? MessageCircle
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: `${c.color}1f`, border: `1px solid ${c.color}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.42, flexShrink: 0 }}>{c.emoji}</div>
+    <div style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), background: gradOf(hue), boxShadow: glow(hue, 0.28), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={Math.round(size * 0.42)} /></div>
   )
 }
 
@@ -247,7 +248,7 @@ function ContactRowView({ c, onOpen }: { c: Contact; onOpen: () => void }) {
         <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
         <div style={{ fontSize: 12.5, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{c.blurb}</div>
       </div>
-      <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4, background: C.greenSoft, color: C.greenDk, borderRadius: 99, padding: '7px 12px', fontWeight: 700, fontSize: 12.5 }}><Plus size={13} /> Message</span>
+      <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4, background: gradOf(c.hue), color: '#fff', borderRadius: 99, padding: '7px 12px', fontFamily: DISPLAY, fontWeight: 600, fontSize: 12.5, boxShadow: glow(c.hue, 0.3) }}><Plus size={13} /> Message</span>
     </button>
   )
 }
@@ -354,7 +355,7 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> Loading…</div>
         ) : msgs.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: 22, padding: '0 24px' }}>
-            <div style={{ width: 56, height: 56, borderRadius: '50%', margin: '0 auto 12px', background: c ? `${c.color}1f` : C.greenSoft, border: c ? `1px solid ${c.color}33` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>{c?.emoji ?? '💬'}</div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><Avatar c={c} size={56} /></div>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>Message {title}</div>
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.55 }}>{c?.blurb ? `${c.blurb}. ` : ''}Say what you need — a real person picks it up.</div>
           </div>
