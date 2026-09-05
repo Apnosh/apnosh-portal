@@ -169,16 +169,36 @@ const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3)
    two quadratic curves + a round head, one solid fill and no highlight. Drawn directly
    each frame (cheap), tinted per-particle. Called with u = 3.5 (≈4.5×7.4px). */
 const PERSON_U = 5.2 // larger than the mockup's 3.5 so the figures read clearly
-function drawPerson(ctx: CanvasRenderingContext2D, x: number, y: number, u: number, color: string, alpha: number) {
+/* a colour string ('#hex' or 'rgb(r,g,b)') mixed toward white — the head's lighter stop
+   when a figure has no two-stop hue of its own */
+function lighten(col: string, amt = 0.32): string {
+  let r = 0, g = 0, b = 0
+  if (col.startsWith('#')) { r = parseInt(col.slice(1, 3), 16); g = parseInt(col.slice(3, 5), 16); b = parseInt(col.slice(5, 7), 16) }
+  else { const m = col.match(/\d+/g); if (!m) return col; [r, g, b] = m.slice(0, 3).map(Number) }
+  const mix = (v: number) => Math.round(v + (255 - v) * amt)
+  return `rgb(${mix(r)},${mix(g)},${mix(b)})`
+}
+/* The person, refined to the portal's finish (owner 2026-09-04: "make it fit our design"):
+   the same bell torso + round head silhouette, but two-tone — torso in the deep stop, head
+   in the light stop, the way every gradient tile on the app runs — with softer shoulders
+   and, on the light theme, a hairline white halo so the figure lifts off the ring's tint
+   the way the cards lift off the page. Still one cheap path per figure per frame. */
+function drawPerson(ctx: CanvasRenderingContext2D, x: number, y: number, u: number, color: string, alpha: number, head?: string, halo = false) {
   ctx.globalAlpha = alpha
+  // torso: softer shoulders (control points pulled in and down a touch)
+  ctx.beginPath()
+  ctx.moveTo(x - u * 0.60, y + u * 0.92)
+  ctx.quadraticCurveTo(x - u * 0.70, y + u * 0.02, x, y - u * 0.16)
+  ctx.quadraticCurveTo(x + u * 0.70, y + u * 0.02, x + u * 0.60, y + u * 0.92)
+  ctx.closePath()
+  if (halo) { ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.6; ctx.lineJoin = 'round'; ctx.stroke() }
   ctx.fillStyle = color
+  ctx.fill()
+  // head: the light stop
   ctx.beginPath()
-  ctx.moveTo(x - u * 0.64, y + u * 0.92)
-  ctx.quadraticCurveTo(x - u * 0.74, y - u * 0.05, x, y - u * 0.20)
-  ctx.quadraticCurveTo(x + u * 0.74, y - u * 0.05, x + u * 0.64, y + u * 0.92)
-  ctx.closePath(); ctx.fill()
-  ctx.beginPath()
-  ctx.arc(x, y - u * 0.74, u * 0.46, 0, 7) // head
+  ctx.arc(x, y - u * 0.74, u * 0.46, 0, 7)
+  if (halo) { ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.6; ctx.stroke() }
+  ctx.fillStyle = head ?? lighten(color)
   ctx.fill()
 }
 /* the mockup's exact people palette: wander grey-green, escape terracotta, and the
@@ -650,15 +670,22 @@ export default function HomeFunnel({
       const b = trend[i]
       return b ? `rgb(${dirCol(i, b).join(',')})` : zoneCol(stages[i].count === 0 ? 'locked' : stages[i].zone)
     }
+    // the head's light stop: the stage hue's first stop (red's when the stage is down)
+    const stageHead = (i: number): string | undefined => {
+      if (i < 0) return undefined
+      const b = trend[i]
+      if (!b) return undefined
+      return b === 'veryLow' ? HUES.red[0] : HUES[STAGE_HUES[Math.max(0, Math.min(4, i))]][0]
+    }
     for (const tr of particlesRef.current) {
-      let px: number, py: number, col: string, a = 1
+      let px: number, py: number, col: string, a = 1, head: string | undefined
       if (tr.state === 'orbit') {
         // residents MILL inside a ring → that stage's colour (position is tr.x/tr.y)
-        px = tr.x; py = tr.y; col = stageCol(tr.orb)
+        px = tr.x; py = tr.y; col = stageCol(tr.orb); head = stageHead(tr.orb)
       } else if (tr.state === 'travel') {
-        px = tr.x; py = tr.y; col = tr.colorOrb >= 0 ? stageCol(tr.colorOrb) : CC.wander // carry the stage it LEFT; neutral until it first reaches one
+        px = tr.x; py = tr.y; col = tr.colorOrb >= 0 ? stageCol(tr.colorOrb) : CC.wander; head = stageHead(tr.colorOrb) // carry the stage it LEFT; neutral until it first reaches one
       } else if (tr.state === 'die') {
-        px = tr.x; py = tr.y; col = tr.colorOrb >= 0 ? stageCol(tr.colorOrb) : CC.wander; a = Math.max(0, tr.alpha) // keeps its last stage's colour as it dies off
+        px = tr.x; py = tr.y; col = tr.colorOrb >= 0 ? stageCol(tr.colorOrb) : CC.wander; head = stageHead(tr.colorOrb); a = Math.max(0, tr.alpha) // keeps its last stage's colour as it dies off
       } else { // leak — walked out → terracotta, fading
         px = tr.x; py = tr.y; col = CC.escape; a = Math.max(0, tr.alpha)
       }
@@ -667,7 +694,7 @@ export default function HomeFunnel({
       const reveal = clamp01((curtainY - py) / 44)
       a *= reveal
       if (a <= 0.01) continue
-      drawPerson(ctx, px + fx, py + fy, PERSON_U * tr.sz, col, a) // per-person size + float → distinct, floating individuals
+      drawPerson(ctx, px + fx, py + fy, PERSON_U * tr.sz, col, a, head, !dark) // per-person size + float → distinct, floating individuals
     }
     ctx.globalAlpha = 1
 
