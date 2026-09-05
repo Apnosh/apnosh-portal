@@ -43,20 +43,22 @@ const CREATE_CSS = `
 /* the goal rail: orbs */
 .cr .rail{display:flex;gap:6px;overflow-x:auto;padding:6px 12px 8px;scrollbar-width:none}
 .cr .orb{flex:none;width:66px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:#6e6e73;text-align:center;line-height:1.15;background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
-.cr .orb i{width:48px;height:48px;border-radius:24px;display:grid;place-items:center;background:var(--t1);color:var(--c2);transition:transform .15s,box-shadow .15s}
-.cr .orb i svg{width:21px;height:21px}
+.cr .orb i{width:48px;height:36px;display:grid;place-items:center;color:var(--c2);transition:transform .15s}
+.cr .orb i svg{width:24px;height:24px}
+.cr .orb::after{content:"";width:22px;height:3px;border-radius:2px;background:transparent;margin-top:2px}
+.cr .orb.on::after{background:linear-gradient(135deg,var(--c1),var(--c2))}
 .cr .orb.on{color:var(--c2)}
-.cr .orb.on i{background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;box-shadow:0 8px 18px var(--sh);transform:scale(1.06)}
+.cr .orb.on i{transform:scale(1.1)}
 /* the describe box */
 .cr .say{margin:8px 16px 0;padding:2px;border-radius:22px;background:linear-gradient(135deg,#4abd98,#5ba8e8 45%,#9a5bf0);box-shadow:0 10px 30px rgba(74,189,152,.18)}
 .cr .say .in{background:#fff;border-radius:20px;padding:14px 14px 12px}
 .cr .eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#6e6e73}
 .cr .eyebrow svg{width:13px;height:13px;color:#2e9a78}
 .cr .aur{background:linear-gradient(90deg,#2e9a78,#3b6fd4,#6a39de);-webkit-background-clip:text;background-clip:text;color:transparent}
-.cr .say .ta{display:block;width:100%;min-height:54px;margin-top:8px;border:0;outline:0;resize:none;background:none;font-family:'Cal Sans','Inter',sans-serif;font-size:19px;line-height:1.35;color:#1d1d1f;padding:0;box-sizing:border-box}
+.cr .say .ta{display:block;width:100%;min-height:84px;margin-top:8px;border:0;outline:0;resize:none;background:none;font-family:'Cal Sans','Inter',sans-serif;font-size:19px;line-height:1.35;color:#1d1d1f;padding:0;box-sizing:border-box}
 .cr .say .ta::placeholder{color:#aeaeb2}
-.cr .say .ex{display:flex;gap:6px;overflow-x:auto;margin-top:6px;scrollbar-width:none;padding-bottom:2px}
-.cr .say .ex button{flex:none;font-size:12px;font-weight:600;border:0;border-radius:999px;padding:6px 10px;cursor:pointer;white-space:nowrap;font-family:inherit}
+.cr .ex{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.cr .ex button{flex:none;font-size:12px;font-weight:600;border:0;border-radius:999px;padding:6px 10px;cursor:pointer;white-space:nowrap;font-family:inherit}
 .cr .say .foot{display:flex;align-items:center;gap:8px;margin-top:8px}
 .cr .say .hint{flex:1;font-size:12px;color:#aeaeb2}
 /* buttons */
@@ -75,16 +77,18 @@ const CREATE_CSS = `
 .cr .facts{display:flex;gap:0;margin-top:2px}
 .cr .facts div{flex:1;min-width:0}
 .cr .facts div:first-child{flex:1.6}
+.cr .facts div:first-child b{white-space:normal;line-height:1.15}
 .cr .facts b{display:block;font-size:12px;font-weight:600;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:normal}
 .cr .facts span{font-size:10.5px;color:#aeaeb2}
-.cr .facts div+div{border-left:1px solid #e6e6ea;padding-left:8px;margin-left:8px}
+.cr .facts div+div{border-left:1px solid #e6e6ea;padding-left:7px;margin-left:7px}
+.cr .facts div:last-child{flex:1.2}
 .cr .press{transition:transform .15s}
 .cr .press:active{transform:scale(.97)}
 .cr .card{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05);border:0;padding:0;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;overflow:hidden;display:flex;flex-direction:column;position:relative}
 .cr .card.dim{opacity:.72}
 .cr .tile{background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;position:relative;overflow:hidden}
 .cr .tile::after{content:"";position:absolute;right:-25%;bottom:-60%;width:80%;aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.12)}
-.cr .glass{width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.2);display:grid;place-items:center;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);position:relative}
+.cr .glass{width:48px;height:48px;display:grid;place-items:center;color:#fff;position:relative}
 .cr .pill-w{font-size:10px;font-weight:700;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--c2);display:inline-flex;align-items:center;gap:4px;position:relative;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
 .cr .pill-w svg{width:10px;height:10px;flex:none}
 .cr .pill-w.amber{color:#8a5a0c}
@@ -92,17 +96,18 @@ const CREATE_CSS = `
 /* mini */
 .cr .mini{flex:none;width:112px;border-radius:16px}
 .cr .mini .tile{height:62px;display:grid;place-items:center}
-.cr .mini .tile svg{width:22px;height:22px;position:relative}
+.cr .mini .tile svg{width:26px;height:26px;position:relative}
 .cr .mini .body{padding:8px 10px 10px}
 .cr .mini .t{font-family:'Cal Sans','Inter',sans-serif;font-size:12.5px;line-height:1.2;font-weight:600}
 .cr .mini .p{font-size:11.5px;color:#2e9a78;font-weight:600;margin-top:4px;font-variant-numeric:normal}
 .cr .mini .p span{color:#aeaeb2;font-weight:500}
 /* standard */
 .cr .pc{flex:none;width:212px;border-radius:18px}
-.cr .pc .tile{height:100px;display:grid;place-items:center}
-.cr .pc .tile svg{width:24px;height:24px}
+.cr .pc .tile{height:100px;display:block}
+.cr .pc .tile .glass{position:absolute;top:8px;left:6px}
+.cr .pc .tile svg{width:30px;height:30px}
 .cr .pc .tile .mv{position:absolute;left:10px;bottom:8px}
-.cr .pc .tile .badge{position:absolute;top:8px;left:8px;right:8px;display:flex}
+.cr .pc .tile .badge{position:absolute;top:8px;left:60px;right:8px;display:flex;justify-content:flex-end}
 .cr .pc .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
 .cr .pc .t{font-family:'Cal Sans','Inter',sans-serif;font-size:15px;line-height:1.2;font-weight:600}
 .cr .pc .s{font-size:12px;color:#6e6e73;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -112,8 +117,8 @@ const CREATE_CSS = `
 .cr .big{margin:0 16px 12px;border-radius:20px;width:calc(100% - 32px)}
 .cr .big .tile{height:118px;display:flex;align-items:flex-end;padding:12px 14px}
 .cr .big .tile::after{right:-10%;top:-60%;bottom:auto;width:60%}
-.cr .big .tile .glass{position:absolute;top:12px;left:14px;width:44px;height:44px;border-radius:13px}
-.cr .big .tile .glass svg{width:22px;height:22px}
+.cr .big .tile .glass{position:absolute;top:12px;left:10px;width:44px;height:44px}
+.cr .big .tile .glass svg{width:28px;height:28px}
 .cr .big .tile .badge{position:absolute;top:14px;right:14px}
 .cr .big .tile .t{font-family:'Cal Sans','Inter',sans-serif;font-size:19px;font-weight:600;position:relative;text-shadow:0 1px 8px rgba(0,0,0,.15)}
 .cr .big .body{padding:12px 14px 14px}
@@ -165,8 +170,8 @@ const CREATE_CSS = `
 .cr .path li{display:flex;gap:12px;align-items:flex-start;position:relative;padding-bottom:12px}
 .cr .path li::before{content:"";position:absolute;left:13px;top:28px;bottom:0;width:2px;background:#e6e6ea}
 .cr .path li:last-child::before{display:none}
-.cr .path li .b{width:28px;height:28px;border-radius:14px;display:grid;place-items:center;color:#fff;flex:none;background:linear-gradient(135deg,var(--c1),var(--c2))}
-.cr .path li .b svg{width:14px;height:14px}
+.cr .path li .b{width:28px;height:28px;display:grid;place-items:center;color:var(--c2);flex:none;background:#fff;position:relative}
+.cr .path li .b svg{width:18px;height:18px}
 .cr .path li .tx{flex:1;padding-top:3px}
 .cr .path li .t{font-weight:600;font-size:14px}
 .cr .path li .n{font-size:12px;font-weight:600;color:var(--c2);margin-top:2px}
@@ -174,8 +179,8 @@ const CREATE_CSS = `
 /* product */
 .cr .pp-hero{margin:4px 16px 0;height:170px;border-radius:22px;position:relative;overflow:hidden;color:#fff;display:flex;align-items:flex-end;padding:16px;background:linear-gradient(135deg,var(--c1),var(--c2))}
 .cr .pp-hero::after{content:"";position:absolute;right:-10%;top:-50%;width:70%;aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.12)}
-.cr .pp-hero .glass{position:absolute;top:16px;left:16px;width:52px;height:52px;border-radius:16px}
-.cr .pp-hero .glass svg{width:26px;height:26px}
+.cr .pp-hero .glass{position:absolute;top:14px;left:12px;width:52px;height:52px}
+.cr .pp-hero .glass svg{width:32px;height:32px}
 .cr .pp-hero .mv{position:absolute;top:18px;right:16px}
 .cr .pp-hero .mv svg{width:12px;height:12px}
 .cr .pp-hero h1{margin:0;font-family:'Cal Sans','Inter',sans-serif;font-weight:600;font-size:26px;position:relative;text-shadow:0 1px 10px rgba(0,0,0,.15);line-height:1.1}
@@ -189,8 +194,8 @@ const CREATE_CSS = `
 .cr .pp-sec p{margin:0;font-size:14px;color:#1d1d1f;line-height:1.5}
 .cr .get{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
 .cr .get li{display:flex;gap:10px;font-size:13.5px;color:#1d1d1f;align-items:flex-start}
-.cr .get li i{width:18px;height:18px;border-radius:9px;background:var(--t1);color:var(--c2);flex:none;display:grid;place-items:center;margin-top:1px}
-.cr .get li i svg{width:11px;height:11px}
+.cr .get li i{width:18px;height:18px;color:var(--c2);flex:none;display:grid;place-items:center;margin-top:1px}
+.cr .get li i svg{width:14px;height:14px}
 .cr .tl{margin:10px 0 0;padding:0;list-style:none}
 .cr .tl li{display:flex;gap:12px;position:relative;padding-bottom:12px}
 .cr .tl li::before{content:"";position:absolute;left:5px;top:18px;bottom:0;width:2px;background:#e6e6ea}
@@ -368,12 +373,8 @@ export default function CreatePage() {
   const SayBox = () => (
     <div className="say">
       <div className="in">
-        <div className="eyebrow"><Sparkles /><span className="aur">Built around your restaurant</span></div>
-        <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={2} placeholder="Say it in a sentence. A date, a dish, a slow night…" />
-        <div className="ex cc-scroll">
-          {EXAMPLES.map(([g, t]) => { const k: HueKey = g === 'foryou' ? 'mint' : g
-            return <button key={t} type="button" onClick={() => { setAsk(t); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{t}</button> })}
-        </div>
+        <div className="eyebrow"><Sparkles /><span className="aur">Describe what you want to do</span></div>
+        <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder="Say it in a sentence. A date, a dish, a slow night…" />
         <div className="foot">
           <span className="hint">We read it and suggest a plan. You can change anything.</span>
           <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? 'Reading' : 'Plan it'}</button>
@@ -386,7 +387,7 @@ export default function CreatePage() {
               const GI = GOAL_ICON[g]
               return (
                 <div style={hv(g)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span className="glass" style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(135deg, ${hueOf(g)[0]}, ${hueOf(g)[1]})`, boxShadow: 'none' }}><GI size={17} /></span><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink }}>{GOALS.find((x) => x.id === g)?.label}</div>{read.summary && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{read.summary}</div>}</div></div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Mark hue={g} size={36}><GI size={20} /></Mark><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink }}>{GOALS.find((x) => x.id === g)?.label}</div>{read.summary && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{read.summary}</div>}</div></div>
                   {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>We do not do {read.unsupported.join(', ')} yet. Everything else is below.</div>}
                   <div style={{ marginTop: 6 }}>{picks.map((c) => { const I = iconFor(c); return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '7px 2px' }}><Mark hue={c.goal} size={30}><I size={16} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{c.price}</b></span><ChevronRight size={15} color={C.faint} /></button> })}</div>
                   {picks[0] && <button type="button" className="btn hue block" style={{ marginTop: 6 }} onClick={() => order(picks[0])}>Build this <ArrowRight size={15} /></button>}
@@ -405,6 +406,12 @@ export default function CreatePage() {
     </div>
   )
 
+  const Examples = () => (
+    <div className="ex cc-scroll" style={{ margin: '10px 16px 0' }}>
+      {EXAMPLES.map(([g, t]) => { const k: HueKey = g === 'foryou' ? 'mint' : g
+        return <button key={t} type="button" onClick={() => { setAsk(t); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{t}</button> })}
+    </div>
+  )
   const AskBox = () => (
     <div className="ask">
       <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>Not seeing it? Ask for anything</div>
@@ -440,6 +447,7 @@ export default function CreatePage() {
     return (
       <>
         <SayBox />
+        <Examples />
         {!forYou ? (
           <>
             <Sec t={goalMeta.label} s="The best ways, in order" hue={goal} />
@@ -461,7 +469,7 @@ export default function CreatePage() {
         )}
         <div style={{ margin: '18px 16px 0' }}>
           <button type="button" onClick={() => go({ name: 'guide' })} className="press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 18, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-            <span className="glass" style={{ width: 38, height: 38, borderRadius: 12, background: gradOf('mint'), boxShadow: 'none' }}><Compass size={20} /></span>
+            <Mark hue="mint" size={38}><Compass size={22} /></Mark>
             <span style={{ flex: 1 }}><span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>Not sure? Guide me</span><span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>Three questions, then three picks</span></span>
             <ChevronRight size={17} color={C.faint} />
           </button>
