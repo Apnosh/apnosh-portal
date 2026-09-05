@@ -716,7 +716,6 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
   const offLabel = off.map(({ g }, k) => (k === 0 ? g.label : g.label.charAt(0).toLowerCase() + g.label.slice(1))).join(', ')
   return (
     <Section title="Breakdown by source" sub={sub}>
-      <div style={{ fontSize: 12, color: C.faint, margin: '-8px 0 6px', lineHeight: 1.4 }}>Each bar is that source next to your biggest one.</div>
       <div>
         {items.map((it, k) => <SourceItemRow key={it.x.id} s={it.x} groupLabel={it.g.label} first={k === 0} top={top} accent={A} />)}
         {off.length > 0 && <ConnectRow label={offLabel} sources={off.flatMap(({ srcs }) => srcs)} first={items.length === 0} />}
@@ -1330,7 +1329,6 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
       <div style={{ ...LIST, padding: '0 8px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}>
           <span style={H3}>All stages</span>
-          <span style={{ fontSize: 12.5, color: C.faint }}>tap one to open it</span>
         </div>
         {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
       </div>
@@ -1538,7 +1536,7 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
     <div style={CARD}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
         <span style={H2}>{title}</span>
-        <span style={{ fontSize: 12.5, color: C.faint }}>{isCustom ? `${fmtPinDate(startMs)} – ${fmtPinDate(endMs)}` : range === 'all' ? 'all time' : `this ${TREND_LABEL[range].toLowerCase()}`}</span>
+        {isCustom && <span style={{ fontSize: 12.5, color: C.faint }}>{`${fmtPinDate(startMs)} – ${fmtPinDate(endMs)}`}</span>}
       </div>
       {/* the read, in one line: where the line is heading, and what was launched into it */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -1550,7 +1548,6 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
             {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
           </span>
         )}
-        <span style={{ fontSize: 12.5, color: C.faint }}>· {marks.length === 0 ? 'nothing launched in this window' : marks.length === 1 ? '1 launch pinned below' : `${marks.length} launches pinned below`}</span>
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', touchAction: 'pan-y' }} role="img" aria-label="Stage trend: every day, the 7-day average, the prior period, and campaign go-live markers"
         onPointerDown={(e) => { const r = e.currentTarget.getBoundingClientRect(); const x = ((e.clientX - r.left) / r.width) * W; setPick(Math.max(0, Math.min(n - 1, Math.round((x - padL) / slot - 0.5)))) }}
@@ -1675,7 +1672,7 @@ function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: 
   const wrap: React.CSSProperties = bare ? { marginTop: 16 } : CARD
   return (
     <div style={wrap}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}><span style={H2}>Campaigns</span>{hasPins && <span style={{ fontSize: 12.5, color: C.faint }}>tap a number to find it above</span>}</div>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}><span style={H2}>Campaigns</span></div>
       {shown.length > 0 ? (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {shown.map(({ c, count }) => {
@@ -1684,10 +1681,10 @@ function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: 
             const stateWord = c.state === 'done' ? 'Finished' : c.state === 'production' ? 'In production' : 'Live'
             const stateCol = c.state === 'done' ? C.mute : c.state === 'production' ? '#a8720c' : A.dark
             return (
-              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 0', borderTop: `0.5px solid ${C.line}` }}>
+              <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 0' }}>
                 {n != null
                   ? <button type="button" onClick={() => onLight?.(isLit ? null : n)} aria-pressed={isLit} aria-label={`Find pin ${n} on the chart`} style={{ width: 34, height: 34, borderRadius: 99, background: isLit ? A.dark : '#fff', border: `1.8px solid ${isLit ? A.dark : A.main}`, color: isLit ? '#fff' : A.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit', padding: 0, transition: 'background .15s' }}>{n}</button>
-                  : <div style={{ width: 34, height: 34, borderRadius: 9, background: c.state === 'production' ? '#fbf1da' : A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={c.state === 'production' ? '#a8720c' : A.dark} /></div>}
+                  : <div style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={18} color={c.state === 'production' ? '#a8720c' : A.dark} /></div>}
                 <Link href={count > 1 ? '/dashboard/campaigns' : (c.href ?? `/dashboard/campaigns/${c.id}`)} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', color: 'inherit' }}>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
@@ -1704,7 +1701,7 @@ function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: 
         </div>
       ) : (
         <Link href="/dashboard/campaigns/new" style={{ display: 'flex', alignItems: 'center', gap: 11, ...TILE, padding: 14, textDecoration: 'none', color: 'inherit', marginTop: 8 }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: A.soft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={16} color={A.dark} /></div>
+          <div style={{ width: 34, height: 34, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Megaphone size={18} color={A.dark} /></div>
           <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>No campaign on this yet. <span style={{ color: A.dark, fontWeight: 600 }}>Start one →</span></div>
         </Link>
       )}
@@ -1719,23 +1716,46 @@ function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days:
   const win = raw.slice(-Math.max(days, 14))
   const hits = deriveStandouts(win, 4, win_n).filter((h) => Math.abs(h.vsWeekPct) >= 30)
   const noun = mv.unit ?? ''
+  /* tap a day's number to see it against its own week (owner 2026-09-04): the day and the
+     N-day average as two bars, the words gone from the resting row */
+  const [open, setOpen] = useState<string | null>(null)
   return (
     <div style={LIST}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
         <span style={H3}>Highlights</span>
-        <span style={{ fontSize: 12.5, color: C.faint }}>days far from their own {win_n}-day average</span>
       </div>
       {hits.length === 0 ? (
         <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>No day stood out from its week for {label.toLowerCase()} in this window.</div>
-      ) : hits.map((h, i) => (
-        <div key={h.date} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
-          <span style={{ width: 34, height: 34, borderRadius: 99, background: h.vsWeekPct > 0 ? C.greenSoft : C.coralBg, color: h.vsWeekPct > 0 ? C.greenDk : C.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{h.vsWeekPct > 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}</span>
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtPinDate(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>
-            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{h.value.toLocaleString()} {noun} · <b style={{ color: h.vsWeekPct > 0 ? C.greenDk : C.coral, fontWeight: 700 }}>{h.vsWeekPct > 0 ? '▲' : '▼'}{Math.abs(h.vsWeekPct)}%</b> {h.vsWeekPct > 0 ? 'above' : 'below'} its {win_n}-day average</span>
-          </span>
-        </div>
-      ))}
+      ) : hits.map((h) => {
+        const up = h.vsWeekPct > 0
+        const col = up ? C.greenDk : C.coral
+        const avg = Math.round(h.value / (1 + h.vsWeekPct / 100))
+        const isOpen = open === h.date
+        const max = Math.max(h.value, avg, 1)
+        return (
+          <button key={h.date} type="button" onClick={() => setOpen(isOpen ? null : h.date)} aria-expanded={isOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 2px', background: 'none', border: 'none', textAlign: 'left', font: 'inherit', cursor: 'pointer', borderRadius: 12 }}>
+            <span style={{ width: 34, height: 34, color: col, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{up ? <TrendingUp size={18} /> : <TrendingDown size={18} />}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtPinDate(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 13.5, fontWeight: 700, color: col, fontFamily: DISPLAY, fontVariantNumeric: 'normal' }}>{h.value.toLocaleString()}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: col }}>{up ? '▲' : '▼'}{Math.abs(h.vsWeekPct)}%</span>
+              </span>
+              {isOpen && (
+                <span style={{ display: 'block', marginTop: 8 }}>
+                  {([[`This day`, h.value, col], [`${win_n}-day average`, avg, C.faint]] as [string, number, string][]).map(([k, v, c]) => (
+                    <span key={k} style={{ display: 'grid', gridTemplateColumns: '92px 1fr 56px', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                      <span style={{ fontSize: 11.5, color: C.mute }}>{k}</span>
+                      <span style={{ height: 6, borderRadius: 99, background: '#f0f0f2', overflow: 'hidden' }}><span style={{ display: 'block', width: `${Math.max(4, (v / max) * 100)}%`, height: '100%', background: c, borderRadius: 99 }} /></span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: C.ink, textAlign: 'right', fontVariantNumeric: 'normal' }}>{v.toLocaleString()}{noun ? '' : ''}</span>
+                    </span>
+                  ))}
+                </span>
+              )}
+            </span>
+          </button>
+        )
+      })}
     </div>
   )
 }
