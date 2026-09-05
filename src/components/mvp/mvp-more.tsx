@@ -102,7 +102,7 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
   const planLabel = tier && tier !== 'Internal' ? `${tier} plan` : null
 
   return (
-    <div style={{ background: '#fff', minHeight: '100%', padding: '10px 12px 24px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+    <div style={{ background: '#fff', minHeight: '100%', padding: '10px 16px 24px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{MORE_CSS}</style>
 
       {/* the business, as a profile card with a gradient avatar (portal redesign 2026-09-04) */}
@@ -136,14 +136,14 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
 
       {q && groups.length === 0 && <div style={{ padding: '30px 18px', textAlign: 'center', color: '#6e6e73', fontSize: 13.5 }}>Nothing matches &ldquo;{query.trim()}&rdquo;.</div>}
       {groups.map(group => (
-        <div key={group.title} style={{ marginBottom: 16 }}>
+        <div key={group.title} style={{ marginBottom: 14 }}>
           {/* density pass (owner 2026-09-04): one word per row, no sub text, no hairlines — the fixed
               mark column and the aligned labels say what belongs together */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 8px 6px' }}><span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf(group.hue) }} />{group.title}</div>
-          <div style={{ background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, overflow: 'hidden', padding: '4px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 4px 4px' }}><span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf(group.hue) }} />{group.title}</div>
+          <div>
             {group.rows.map((r) => (
               <div key={r.href}>
-                <Link href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 10px', minHeight: 46, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit' }}>
+                <Link href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', borderRadius: 12 }}>
                   {r.brand
                     ? <span style={{ width: 36, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{(Array.isArray(r.brand) ? r.brand : [r.brand]).map((b, k) => <span key={b} style={{ width: 32, height: 32, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: k ? -12 : 0, position: 'relative', zIndex: 2 - k }}><BrandOrMark provider={b} size={17} /></span>)}</span>
                     : <Mark hue={r.hue ?? 'mint'} size={36} bare><r.Icon size={18} /></Mark>}
@@ -156,8 +156,8 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
         </div>
       ))}
 
-      <div style={{ background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, overflow: 'hidden', marginBottom: 8, padding: '4px 0' }}>
-        <button type="button" onClick={() => { void signOut() }} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 10px', minHeight: 46, boxSizing: 'border-box', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+      <div style={{ marginBottom: 8 }}>
+        <button type="button" onClick={() => { void signOut() }} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, boxSizing: 'border-box', borderRadius: 12, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
           <Mark hue="red" size={36} bare><LogOut size={18} /></Mark>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: C.coral }}>Sign out</span>
         </button>

@@ -48,9 +48,10 @@ export function MvpGroup({ title, children, hue }: { title?: string; children: R
   /* Density pass (owner 2026-09-04): no hairlines between rows — the fixed mark column and the
      aligned labels say what belongs together; the group title and the gap say where a group ends. */
   return (
-    <div style={{ marginBottom: 18 }}>
-      {title && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 8px 6px' }}>{hue && <span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf(hue) }} />}{title}</div>}
-      <div style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '4px 0' }}>
+    <div style={{ marginBottom: 14 }}>
+      {/* no card behind a plain list (owner 2026-09-04: use the whole screen) — the rows sit on the page */}
+      {title && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 4px 4px' }}>{hue && <span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf(hue) }} />}{title}</div>}
+      <div>
         {children}
       </div>
     </div>
@@ -73,7 +74,7 @@ export function MvpRow({ icon, label, sub, href, onClick, right, danger, externa
       {(href || onClick) && <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0 }} />}
     </>
   )
-  const base: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '7px 12px 7px 10px', minHeight: 48, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', width: '100%' }
+  const base: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px 6px 2px', minHeight: 46, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', width: '100%', borderRadius: 12 }
   if (href && external) return <a href={href} target="_blank" rel="noopener noreferrer" className="mvp-row" style={base}>{inner}</a>
   if (href) return <Link href={href} className="mvp-row" style={base}>{inner}</Link>
   if (onClick) return <button type="button" onClick={onClick} className="mvp-row" style={{ ...base, background: 'none', border: 'none', textAlign: 'left', font: 'inherit', cursor: 'pointer' }}>{inner}</button>

@@ -238,14 +238,14 @@ export default function ConnectedAccountsPage() {
 
               {unconnected.length > 0 && (
                 <>
-                  <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '8px 6px 8px' }}>Add a connection</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '6px 4px 4px' }}>Add a connection</div>
                   {CAT_ORDER.filter(cat => unByCat[cat]?.length).map(cat => (
-                    <div key={cat} style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden', marginBottom: 12 }}>
+                    <div key={cat} style={{ marginBottom: 12 }}>
                       {unByCat[cat].map((p, i) => (
                         <div key={p.id}>
                           
                           {isAvailable(p) ? (
-                            <a href={connectHref(p.authPath)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', textDecoration: 'none', color: 'inherit' }}>
+                            <a href={connectHref(p.authPath)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 2px', borderRadius: 12, textDecoration: 'none', color: 'inherit' }}>
                               <LaneMark platform={p.id} Icon={p.Icon} />
                               <span style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
@@ -257,7 +257,7 @@ export default function ConnectedAccountsPage() {
                           ) : (
                             /* the server says this lane's keys are not set — an honest
                                non-link beats a connect that dead-ends on a JSON error */
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', opacity: 0.55 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 2px', opacity: 0.55 }}>
                               <LaneMark platform={p.id} Icon={p.Icon} dim />
                               <span style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
@@ -285,9 +285,9 @@ export default function ConnectedAccountsPage() {
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ marginBottom: 18 }}>
-      <div style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '0 6px 8px' }}>{title}</div>
-      <div style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>{children}</div>
+    <div style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 4px 4px' }}>{title}</div>
+      <div>{children}</div>
     </div>
   )
 }
@@ -305,7 +305,7 @@ function LaneMark({ platform, Icon, dim }: { platform: string; Icon: React.Compo
 function ConnRow({ conn, onTap }: { conn: UnifiedConnection; onTap: () => void }) {
   const Icon = iconFor(conn.platform)
   return (
-    <button type="button" onClick={onTap} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
+    <button type="button" onClick={onTap} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '7px 2px', borderRadius: 12, width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
       <span style={{ position: 'relative', flexShrink: 0 }}>
         <LaneMark platform={conn.platform} Icon={Icon} />
         <span style={{ position: 'absolute', right: -1, top: -1, width: 11, height: 11, borderRadius: 99, background: dotColor(conn.status), border: '2px solid #fff' }} />

@@ -232,7 +232,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
             {peopleHits.length > 0 && (
               <>
                 <SectionLabel hue="mint">People</SectionLabel>
-                <div style={{ margin: '0 16px', background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden', marginBottom: 6 }}>
+                <div style={{ margin: '0 12px 6px' }}>
                   {peopleHits.map((c, i) => <PersonRow key={c.key} c={c} person={personFor(c, people)} first={i === 0} onOpen={() => openContact(c)} />)}
                 </div>
               </>
@@ -240,7 +240,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
             {convos.length > 0 && (
               <>
                 <SectionLabel hue="nights">Messages</SectionLabel>
-                <div style={{ margin: '0 16px', background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
+                <div style={{ margin: '0 12px' }}>
                   {convos.map((t, i) => <ThreadRowView key={t.id} t={t} person={personFor(contactForSubject(t.subject), people)} first={i === 0} onOpen={() => openThread(t)} />)}
                 </div>
               </>
@@ -271,7 +271,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
             {/* the inbox: only real conversations */}
             <SectionLabel hue="mint">Messages</SectionLabel>
             {convos.length === 0 ? EMPTY : (
-              <div style={{ margin: '0 16px', background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
+              <div style={{ margin: '0 12px' }}>
                 {convos.map((t, i) => <ThreadRowView key={t.id} t={t} person={personFor(contactForSubject(t.subject), people)} first={i === 0} onOpen={() => openThread(t)} />)}
               </div>
             )}
@@ -302,7 +302,7 @@ function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOp
   const name = person ? person.name : (c?.name ?? t.subject)
   const role = person ? (c?.name ?? t.subject) : null
   return (
-    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '9px 12px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '8px 6px', borderRadius: 14, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
       <Avatar c={c} person={person} size={46} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
@@ -321,7 +321,7 @@ function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOp
 
 function PersonRow({ c, person, onOpen, first = true }: { c: Contact; person?: Person; onOpen: () => void; first?: boolean }) {
   return (
-    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '8px 12px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '8px 6px', borderRadius: 14, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
       <Avatar c={c} person={person} size={40} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person ? person.name : c.name}</div>
