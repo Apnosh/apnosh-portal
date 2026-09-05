@@ -146,7 +146,7 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
                 <Link href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 10px', minHeight: 46, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit' }}>
                   {r.brand
                     ? <span style={{ width: 36, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{(Array.isArray(r.brand) ? r.brand : [r.brand]).map((b, k) => <span key={b} style={{ width: 32, height: 32, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: k ? -12 : 0, position: 'relative', zIndex: 2 - k }}><BrandOrMark provider={b} size={17} /></span>)}</span>
-                    : <Mark hue={r.hue ?? 'mint'} size={36}><r.Icon size={18} /></Mark>}
+                    : <Mark hue={r.hue ?? 'mint'} size={36} bare><r.Icon size={18} /></Mark>}
                   <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
                   <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
                 </Link>
@@ -158,7 +158,7 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
 
       <div style={{ background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, overflow: 'hidden', marginBottom: 8, padding: '4px 0' }}>
         <button type="button" onClick={() => { void signOut() }} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 10px', minHeight: 46, boxSizing: 'border-box', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-          <Mark hue="red" size={36}><LogOut size={18} /></Mark>
+          <Mark hue="red" size={36} bare><LogOut size={18} /></Mark>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: C.coral }}>Sign out</span>
         </button>
       </div>

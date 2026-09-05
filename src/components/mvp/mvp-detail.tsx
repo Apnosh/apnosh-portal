@@ -63,7 +63,7 @@ export function MvpRow({ icon, label, sub, href, onClick, right, danger, externa
       {mark
         ? <span style={{ width: 36, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 34, height: 34, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{mark}</span></span>
         : icon && (hue && !danger
-          ? <Mark hue={hue} size={36}>{icon}</Mark>
+          ? <Mark hue={hue} size={36} bare>{icon}</Mark>
           : <span style={{ width: 34, height: 34, borderRadius: 9, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>)}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 15, fontWeight: 500, color: danger ? C.coral : C.ink, lineHeight: 1.25 }}>{label}</span>

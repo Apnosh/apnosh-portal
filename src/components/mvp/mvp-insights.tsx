@@ -2198,7 +2198,7 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
         /* the way through to every post reads as one more row of the list (owner 2026-09-04:
            the full-width glass slab looked ugly on the white card) */
         <Link href="/dashboard/insights/posts" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2, padding: '12px 0 4px', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: C.ink }}>
-          <Mark hue="mint" size={36}><ImageIcon size={17} /></Mark>
+          <Mark hue="mint" size={36} bare><ImageIcon size={17} /></Mark>
           <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600 }}>View all</span>
           <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
         </Link>
