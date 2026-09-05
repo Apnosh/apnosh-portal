@@ -82,7 +82,7 @@ function resolveInitialItem(template?: string): string | undefined {
 // set so a garbled param falls back to the full browse instead of an empty grid.
 const LENS_IDS = new Set(['aware', 'interest', 'actions', 'orders', 'back', 'programs', 'content'])
 
-export default function CampaignBuilderEntry({ template, lens }: { template?: string; lens?: string }) {
+export default function CampaignBuilderEntry({ template, lens, view }: { template?: string; lens?: string; /** 'build' opens the item's questions directly, past the builder's own product page (the new Create shelf already showed it) */ view?: 'build' }) {
   const router = useRouter()
   const { client } = useClient()
   const [menu, setMenu] = useState<MenuOpt[] | undefined>(undefined)
@@ -485,7 +485,7 @@ export default function CampaignBuilderEntry({ template, lens }: { template?: st
       <ApnoshCampaign
         restaurant={client?.name || 'your restaurant'}
         menu={menu}
-        initialItem={initialItem}
+        initialItem={initialItem} initialView={view === 'build' && initialItem ? 'build' : undefined}
         recommended={recommended}
         recsLoading={recsLoading}
         /* The store's hero is the from-scratch builder: four questions, then a plan composed for

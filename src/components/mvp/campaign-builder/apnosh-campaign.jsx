@@ -5529,7 +5529,7 @@ export default function ApnoshCampaign({ restaurant = "Yellowbee Market & Cafe",
   // add-ons; see applyDbCards). The wrapper already registered their shape/content/price.
   applyDbCards(dbCampaigns);
   // Deep links (Home suggestions, ?template=) land on the PRODUCT PAGE too, never the bare madlib.
-  const [route, setRoute] = useState(() => (initialItem ? { name: "pdp", itemId: buildIdFor(initialItem) } : initialView === "plan" ? { name: "plan" } : { name: "browse" }));
+  const [route, setRoute] = useState(() => (initialItem ? (initialView === "build" ? { name: "build", itemId: buildIdFor(initialItem), fromPdp: false } : { name: "pdp", itemId: buildIdFor(initialItem) }) : initialView === "plan" ? { name: "plan" } : { name: "browse" }));
 
   // Desktop mouse drag-to-scroll for every horizontal shelf row (.apnosh-row). Touch and
   // trackpads already scroll natively; this delegates pointer events so a mouse can grab

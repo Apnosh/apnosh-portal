@@ -1,21 +1,16 @@
 /**
- * /dashboard/campaigns/new — the campaign builder.
- *
- * Now renders the new catalog-driven builder (the ported design, wired to real
- * menu + business name + persistence via the builder adapter). The legacy
- * pick/spec/path/review builder is replaced. Honors ?template=<id> deep-links
- * from the discovery/preview pages + Home suggestions, mapped onto the new
- * catalog inside the wrapper.
+ * /dashboard/campaigns/new — Create (owner 2026-09-05): the round-4 shelf. Browse by goal, describe
+ * it in a sentence, search in plain words, or be guided. Ordering hands off to the builder at
+ * /campaigns/new/build (?template=<id> deep-links still work and go straight there).
  */
-import CampaignBuilderEntry from '@/components/mvp/campaign-builder/builder-entry'
+import { redirect } from 'next/navigation'
+import { Suspense } from 'react'
+import CreatePage from '@/components/mvp/create/create-page'
 
 export const dynamic = 'force-dynamic'
 
-export default async function NewCampaignPage({ searchParams }: { searchParams: Promise<{ template?: string | string[]; lens?: string | string[] }> }) {
-  const sp = await searchParams
-  const template = typeof sp.template === 'string' ? sp.template : undefined
-  // ?lens=<stage> opens the browse pre-filtered to one funnel-stage shelf — the
-  // Home funnel's weak-leg tap lands here (aware/interest/actions/orders/back).
-  const lens = typeof sp.lens === 'string' ? sp.lens : undefined
-  return <CampaignBuilderEntry template={template} lens={lens} />
+export default async function NewCampaignPage({ searchParams }: { searchParams: Promise<{ template?: string; lens?: string }> }) {
+  const { template } = await searchParams
+  if (template) redirect(`/dashboard/campaigns/new/build?template=${encodeURIComponent(template)}`)
+  return <Suspense fallback={null}><CreatePage /></Suspense>
 }
