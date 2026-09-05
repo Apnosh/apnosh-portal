@@ -2198,7 +2198,7 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
            the full-width glass slab looked ugly on the white card) */
         <Link href="/dashboard/insights/posts" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2, padding: '12px 0 4px', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: C.ink }}>
           <span style={{ width: 34, height: 34, borderRadius: 11, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ImageIcon size={17} /></span>
-          <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600 }}>View all {total} posts</span>
+          <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600 }}>View all</span>
           <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
         </Link>
       )}
