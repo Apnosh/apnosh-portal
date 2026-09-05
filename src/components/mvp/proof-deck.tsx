@@ -32,6 +32,29 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
   const [loaded, setLoaded] = useState(false)
   const [step, setStep] = useState(0)
   const readMarked = useRef<Set<string>>(new Set())
+  /* swipe (owner 2026-09-04: "make results card swipable"): drag the front card sideways;
+     past the threshold it flies off and the next one comes up (left = next, right = back).
+     A vertical drag scrolls the page as usual; taps inside the card still work. */
+  const [dx, setDx] = useState(0)
+  const [flying, setFlying] = useState<0 | -1 | 1>(0)
+  const drag = useRef<{ x: number; y: number; horiz: boolean | null } | null>(null)
+  const onTouchStart = (e: React.TouchEvent) => { const t = e.touches[0]; drag.current = { x: t.clientX, y: t.clientY, horiz: null }; setFlying(0) }
+  const onTouchMove = (e: React.TouchEvent) => {
+    const d = drag.current; if (!d) return
+    const t = e.touches[0]; const mx = t.clientX - d.x, my = t.clientY - d.y
+    if (d.horiz === null && (Math.abs(mx) > 8 || Math.abs(my) > 8)) d.horiz = Math.abs(mx) > Math.abs(my)
+    if (d.horiz) setDx(mx)
+  }
+  const onTouchEnd = () => {
+    const d = drag.current; drag.current = null
+    if (!d || !d.horiz) { setDx(0); return }
+    const n = cards.length
+    if (n > 1 && Math.abs(dx) > 64) {
+      const dir: -1 | 1 = dx < 0 ? -1 : 1
+      setFlying(dir)
+      window.setTimeout(() => { setStep((p) => (dir < 0 ? (p + 1) % n : (p - 1 + n) % n)); setFlying(0); setDx(0) }, 220)
+    } else setDx(0)
+  }
 
   useEffect(() => {
     /* ?demo=proof shows the four sample cards (labeled) so the placement can
@@ -127,9 +150,10 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
           <Link href="/dashboard/results" style={{ fontSize: 11.5, fontWeight: 700, color: '#0f6e56', textDecoration: 'none' }}>All</Link>
         </span>
       </div>
-      <div style={{ position: 'relative', paddingBottom: deck.length > 1 ? 9 : 0 }}>
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} style={{ position: 'relative', paddingBottom: deck.length > 1 ? 9 : 0, touchAction: 'pan-y' }}>
         {deck.map((c, pos) => (
-          <div key={c.id} style={{ ...deckDepth(pos), transformOrigin: 'top center', transition: 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s', height: pos === 0 ? undefined : '100%' }}>
+          <div key={c.id} style={{ ...deckDepth(pos), transformOrigin: 'top center', transition: drag.current && pos === 0 ? 'none' : 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s', height: pos === 0 ? undefined : '100%',
+            ...(pos === 0 && (dx !== 0 || flying !== 0) ? { transform: flying !== 0 ? `translateX(${flying * 120}%) rotate(${flying * 8}deg)` : `translateX(${dx}px) rotate(${dx / 22}deg)`, opacity: flying !== 0 ? 0 : 1, transition: flying !== 0 ? 'transform .22s ease-in, opacity .22s ease-in' : 'none' } : {}) }}>
             {pos === 0 ? (
               <ProofCard
                 card={c}

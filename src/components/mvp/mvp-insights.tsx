@@ -33,8 +33,7 @@ import {
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
   Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight, FileText,
 } from 'lucide-react'
-import { Lightbulb, DoorOpen } from 'lucide-react'
-import { HUES, STAGE_HUES, gradOf, glow, type HueKey } from './hues'
+import { HUES, STAGE_HUES, type HueKey } from './hues'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
 import { isProTier } from '@/lib/entitlements'
@@ -397,16 +396,9 @@ type Accent = { main: string; soft: string; dark: string }
 /* the five stage colours come from the shared hue table (portal redesign 2026-09-04), so
    Home's rings, Insights and Trends all paint a stage the same way */
 const STAGE_HUE: Record<string, HueKey> = { shown: STAGE_HUES[0], engaged: STAGE_HUES[1], moved: STAGE_HUES[2], camein: STAGE_HUES[3], back: STAGE_HUES[4] }
-const STAGE_GLYPH: Record<string, React.ComponentType<{ size?: number; color?: string }>> = { shown: Eye, engaged: Lightbulb, moved: MousePointerClick, camein: DoorOpen, back: Repeat }
 const accentOf = (k: HueKey): Accent => ({ main: HUES[k][1], soft: HUES[k][0] + '29', dark: HUES[k][1] })
 const STAGE_ACCENT: Record<string, Accent> = {
   shown: accentOf(STAGE_HUE.shown), engaged: accentOf(STAGE_HUE.engaged), moved: accentOf(STAGE_HUE.moved), camein: accentOf(STAGE_HUE.camein), back: accentOf(STAGE_HUE.back),
-}
-/* the stage's gradient glyph tile — the hero's and the Trends rows' */
-function StageGlyph({ stageKey, size = 38 }: { stageKey: string; size?: number }) {
-  const hue = STAGE_HUE[stageKey] ?? 'mint'
-  const Icon = STAGE_GLYPH[stageKey] ?? Eye
-  return <span aria-hidden style={{ width: size, height: size, borderRadius: Math.round(size * 0.32), background: gradOf(hue), boxShadow: glow(hue, 0.3), color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={Math.round(size * 0.5)} color="#fff" /></span>
 }
 /* what each stage counts — behind the ⓘ next to the stage name, so the row stays
    one line ("Awareness" + "Times you showed up" was two, owner 2026-09-04) */
@@ -541,8 +533,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
           return (
             <div key={s.key} style={{ flex: '0 0 100%', minWidth: 0, scrollSnapAlign: 'center', padding: '0 18px' }}>
               {/* stage name + ⓘ (tap: what this counts); the tools sit to the right */}
-              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 10px', maxWidth: 'calc(100% - 88px)', minHeight: 40, margin: '2px 0 0' }}>
-              <StageGlyph stageKey={s.key} />
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 10px', maxWidth: 'calc(100% - 88px)', minHeight: 36, margin: '2px 0 0' }}>
               <button type="button" onClick={() => setExplain((v) => !v)} aria-expanded={explain} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: C.ink, maxWidth: '100%', height: 36 }}>
                 <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
                 <Info size={16} color={explain ? STAGE_ACCENT[s.key].dark : C.faint} style={{ flexShrink: 0 }} />
@@ -1336,7 +1327,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
           <span style={H2}>All stages</span>
           <span style={{ fontSize: 12.5, color: C.faint }}>tap one to open it</span>
         </div>
-        {rows.map((r, i) => <StageTrendRow key={r.st.key} stageKey={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
+        {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
       </div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && !cur.locked
@@ -1348,7 +1339,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
   )
 }
 
-function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range, smooth = 7, stageKey }: { stageKey: string; smooth?: number; label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
+function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range, smooth = 7 }: { smooth?: number; label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
   // the row's total is the SAME by-source headline the Insights tab shows for this window
   // (the series' own sum can differ by definition); the % stays the series' read
   const { stage: rs } = useRangeStage(cs, stageNumber, clientId, range)
@@ -1368,8 +1359,8 @@ function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaign
   const dn = (sm?.deltaPct ?? 0) < 0
   return (
     <button type="button" onClick={onPick} aria-pressed={on} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 8px', margin: '0 -8px', boxSizing: 'content-box', borderTop: first ? 'none' : `0.5px solid ${C.line}`, background: on ? accent.soft : 'none', borderRadius: on ? 12 : 0, border: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s' }}>
-      <StageGlyph stageKey={stageKey} size={30} />
-      <span style={{ width: 84, flexShrink: 0 }}>
+      <span style={{ width: 9, height: 9, borderRadius: 99, background: accent.main, flexShrink: 0 }} />
+      <span style={{ width: 92, flexShrink: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{label}</span>
         <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 2, whiteSpace: 'nowrap' }}>{locked ? 'not measured' : launches === 0 ? 'no launches' : launches === 1 ? '1 launch' : `${launches} launches`}</span>
       </span>
