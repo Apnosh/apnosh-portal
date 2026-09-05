@@ -10,7 +10,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, KeyRound, LifeBuoy, Sparkles, LogOut } from 'lucide-react'
+import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, LogOut } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 import { gradOf, hueOf, type HueKey } from './hues'
 import { Mark } from './mark'
@@ -85,24 +85,22 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
   const initials = shownName.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || 'A'
   const line = [p?.cuisine, p?.city].filter(Boolean).join(' · ')
   const open = useMemo(() => openLine(p?.hours), [p?.hours])
-  const planWord = (p?.tier ?? tier) && (p?.tier ?? tier) !== 'Internal' ? `${p?.tier ?? tier} plan` : 'Your plan'
   const toRate = data?.toRate.length ?? 0
   const favs = data?.settings.favorites.length ?? 0
 
   const rows: { label: string; sub?: string; href: string; Icon: typeof Store; hue: HueKey; pill?: { text: string; tone: 'amber' | 'good' | 'plain' } }[] = [
-    { label: 'Your settings', sub: data ? (data.settings.approveFirst ? 'You approve first · alerts · look' : 'We post for you · alerts · look') : 'Approvals, alerts, look', href: '/dashboard/preferences', Icon: SlidersHorizontal, hue: 'mint' },
-    { label: 'People you have worked with', sub: favs ? `${favs} favorite${favs === 1 ? '' : 's'}` : 'Favorites and ratings', href: '/dashboard/people', Icon: Heart, hue: 'catering', pill: toRate ? { text: `${toRate} to rate`, tone: 'amber' } : undefined },
-    { label: 'Plan and billing', sub: planWord, href: '/dashboard/billing', Icon: CreditCard, hue: 'nights' },
-    { label: 'Connected accounts', sub: 'Google, Instagram, and more', href: '/dashboard/connected-accounts', Icon: Plug, hue: 'nights' },
-    { label: 'Login and password', href: '/dashboard/settings', Icon: KeyRound, hue: 'grey' },
-    { label: 'Get help', sub: 'Message us, questions, feedback', href: '/dashboard/get-help', Icon: LifeBuoy, hue: 'mint' },
-    { label: "What's new", sub: 'The latest changes', href: '/dashboard/whats-new', Icon: Sparkles, hue: 'brand' },
+    { label: 'Your settings', href: '/dashboard/preferences', Icon: SlidersHorizontal, hue: 'mint' },
+    { label: 'People you have worked with', href: '/dashboard/people', Icon: Heart, hue: 'catering', pill: toRate ? { text: `${toRate} to rate`, tone: 'amber' } : favs ? { text: `${favs}`, tone: 'plain' } : undefined },
+    { label: 'Plan and billing', href: '/dashboard/billing', Icon: CreditCard, hue: 'nights' },
+    { label: 'Connected accounts', href: '/dashboard/connected-accounts', Icon: Plug, hue: 'nights' },
+    { label: 'Get help', href: '/dashboard/get-help', Icon: LifeBuoy, hue: 'mint' },
+    { label: "What's new", href: '/dashboard/whats-new', Icon: Sparkles, hue: 'brand' },
   ]
   const q = query.trim().toLowerCase()
-  const shown = q ? rows.filter((r) => `${r.label} ${r.sub ?? ''}`.toLowerCase().includes(q)) : rows
+  const shown = q ? rows.filter((r) => r.label.toLowerCase().includes(q)) : rows
   const groups: { title: string; hue: HueKey; keys: string[] }[] = [
     { title: 'You', hue: 'mint', keys: ['Your settings', 'People you have worked with'] },
-    { title: 'Account', hue: 'nights', keys: ['Plan and billing', 'Connected accounts', 'Login and password'] },
+    { title: 'Account', hue: 'nights', keys: ['Plan and billing', 'Connected accounts'] },
     { title: 'Help', hue: 'grey', keys: ['Get help', "What's new"] },
   ]
   const quick: { label: string; href: string; Icon: typeof Store; hue: HueKey }[] = [
@@ -120,29 +118,33 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
 
       {!q && (
         <>
-          {/* the profile: their place, at a glance */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '6px 2px 0' }}>
-            <Link href="/dashboard/assets" aria-label="Change your logo" style={{ width: 64, height: 64, borderRadius: 18, overflow: 'hidden', background: '#eaf7f3', color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, flexShrink: 0, textDecoration: 'none' }}>
+          {/* the profile: their place, at a glance — one soft panel, one tap opens the account
+              (name, phone, email, password) (owner 2026-09-05) */}
+          <Link href="/dashboard/settings" className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 14px', borderRadius: 20, background: 'linear-gradient(135deg, #eaf7f3, #f2f9f6 60%, #f5f5f7)', textDecoration: 'none', color: 'inherit', marginTop: 4 }}>
+            <span style={{ width: 62, height: 62, borderRadius: 18, overflow: 'hidden', background: '#fff', color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.06)' }}>
               {p?.logoUrl ? <img src={p.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials}
-            </Link>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, color: C.ink, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shownName}</div>
-              {line && <div style={{ fontSize: 13, color: C.mute, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line}</div>}
-              {open && <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: open.open ? C.greenDk : C.mute, marginTop: 5 }}><span style={{ width: 7, height: 7, borderRadius: 4, background: open.open ? C.greenDk : C.faint }} />{open.text}</div>}
-            </div>
-          </div>
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, color: C.ink, lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shownName}</span>
+              {line && <span style={{ display: 'block', fontSize: 13, color: C.mute, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line}</span>}
+              {open
+                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: open.open ? C.greenDk : C.mute, marginTop: 5 }}><span style={{ width: 7, height: 7, borderRadius: 4, background: open.open ? C.greenDk : C.faint }} />{open.text}</span>
+                : <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 4 }}>Your profile</span>}
+            </span>
+            <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0 }} />
+          </Link>
 
           {/* their goals, in each goal's colour; a nudge when none are set */}
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12, padding: '0 2px' }}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 12, padding: '0 4px' }}>
             {(p?.goals?.length ? p.goals : []).map((g) => { const hue = GOAL_HUE[g.slug] ?? 'mint'; return <Link key={g.slug} href="/dashboard/goals" style={{ fontSize: 11.5, fontWeight: 600, padding: '5px 10px', borderRadius: 99, background: hueTint(hue), color: hueInk(hue), textDecoration: 'none' }}>{g.name}</Link> })}
             {p && p.goals.length === 0 && <Link href="/dashboard/goals" style={{ fontSize: 11.5, fontWeight: 600, padding: '5px 10px', borderRadius: 99, background: '#eaf7f3', color: C.greenDk, textDecoration: 'none' }}>Pick your goals</Link>}
           </div>
 
           {/* the five things owners touch most */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 14, padding: '0 6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginTop: 12 }}>
             {quick.map((qk) => (
-              <Link key={qk.label} href={qk.href} className="mvp-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600, color: C.ink, textDecoration: 'none' }}>
-                <Mark hue={qk.hue} size={40}><qk.Icon size={22} /></Mark>{qk.label}
+              <Link key={qk.label} href={qk.href} className="mvp-press" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: '10px 0 8px', borderRadius: 14, background: hueTint(qk.hue).slice(0, 7) + '14', fontSize: 11.5, fontWeight: 600, color: C.ink, textDecoration: 'none' }}>
+                <Mark hue={qk.hue} size={30}><qk.Icon size={21} /></Mark>{qk.label}
               </Link>
             ))}
           </div>
@@ -157,12 +159,9 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
           <div key={g.title} style={{ marginTop: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 4px 4px' }}><span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf(g.hue) }} />{g.title}</div>
             {list.map((r) => (
-              <Link key={r.href} href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 48, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', borderRadius: 12 }}>
+              <Link key={r.href} href={r.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 8px', minHeight: 50, marginBottom: 6, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', borderRadius: 14, background: '#f5f5f7' }}>
                 <Mark hue={r.hue} size={36}><r.Icon size={18} /></Mark>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
-                  {r.sub && <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.sub}</span>}
-                </span>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
                 {r.pill && <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '3px 8px', flexShrink: 0, ...pillStyle(r.pill.tone) }}>{r.pill.text}</span>}
                 <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
               </Link>
@@ -172,7 +171,7 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
       })}
 
       {!q && (
-        <button type="button" onClick={() => { void signOut() }} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 48, marginTop: 18, boxSizing: 'border-box', borderRadius: 12, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+        <button type="button" onClick={() => { void signOut() }} className="mvp-press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 8px', minHeight: 50, marginTop: 12, boxSizing: 'border-box', borderRadius: 14, background: '#fbeaea', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
           <Mark hue="red" size={36}><LogOut size={18} /></Mark>
           <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: C.coral }}>Sign out</span>
         </button>

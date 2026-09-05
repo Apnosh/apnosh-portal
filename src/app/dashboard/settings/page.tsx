@@ -27,6 +27,7 @@ export default function SettingsPage() {
 
   // Profile
   const [fullName, setFullName] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [initials, setInitials] = useState('U')
   const [profileSaving, setProfileSaving] = useState(false)
@@ -50,9 +51,10 @@ export default function SettingsPage() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
 
-      const { data: profile } = await supabase.from('profiles').select('full_name, email').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('full_name, email, phone').eq('id', user.id).single()
       const name = profile?.full_name || ''
       setFullName(name)
+      setPhone(((profile as { phone?: string | null } | null)?.phone ?? '') as string)
       setEmail(profile?.email || user.email || '')
       setInitials(name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'U')
 
@@ -66,7 +68,7 @@ export default function SettingsPage() {
     const supabase = createClient()
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setProfileSaving(false); return }
-    const { error } = await supabase.from('profiles').update({ full_name: fullName }).eq('id', user.id)
+    const { error } = await supabase.from('profiles').update({ full_name: fullName, phone: phone.trim() || null }).eq('id', user.id)
     if (error) setProfileMsg({ ok: false, text: error.message })
     else { setProfileMsg({ ok: true, text: 'Saved.' }); setInitials(fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'U') }
     setProfileSaving(false)
@@ -91,7 +93,7 @@ export default function SettingsPage() {
   const btn = (busy: boolean): React.CSSProperties => ({ width: '100%', height: 44, marginTop: 14, borderRadius: 12, border: 'none', background: busy ? '#bfe7da' : C.green, color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 })
 
   return (
-    <MvpShell active="more" header={<MvpDetailHeader title="Login and password" subtitle="Your name, email and password" />}>
+    <MvpShell active="more" header={<MvpDetailHeader title="Your profile" subtitle="Your name, phone, email and password" />}>
       <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {loading ? (
           <div style={{ marginTop: 4 }}>
@@ -101,13 +103,14 @@ export default function SettingsPage() {
         ) : (
           <>
             {/* Profile */}
-            <MvpGroup title="Profile">
+            <MvpGroup title="About you" hue="mint">
               <div style={{ padding: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginBottom: 16 }}>
                   <span style={{ width: 52, height: 52, borderRadius: '50%', background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{initials}</span>
                   <span style={{ fontSize: 12.5, color: C.faint }}>Avatar comes from your login.</span>
                 </div>
-                <EditorField label="Full name" value={fullName} onChange={setFullName} placeholder="Your name" />
+                <EditorField label="Your name" value={fullName} onChange={setFullName} placeholder="Your name" />
+                <EditorField label="Phone" value={phone} onChange={setPhone} placeholder="(206) 555-0100" />
                 <div style={{ marginBottom: 4 }}>
                   <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.mute, marginBottom: 6 }}>Email</label>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#f5f5f7', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px' }}>
@@ -123,7 +126,7 @@ export default function SettingsPage() {
             </MvpGroup>
 
             {/* Security */}
-            <MvpGroup title="Security">
+            <MvpGroup title="Password" hue="grey">
               <div style={{ padding: 14 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, marginBottom: 12 }}>Change password</div>
                 <PwField label="Current password" value={currentPw} onChange={setCurrentPw} show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} placeholder="Current password" />
