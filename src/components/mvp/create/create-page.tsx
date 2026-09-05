@@ -36,6 +36,181 @@ const KIND_ICON: Record<string, typeof Store> = { design: ImageIcon, 'creative-g
 const iconFor = (c: ShelfCard) => KIND_ICON[c.id] ?? GOAL_ICON[c.goal]
 const YOU_ICON: Record<string, typeof Check> = { Nothing: Check, Approve: Eye, 'Show up': Users }
 
+
+const CREATE_CSS = `
+.cr .cc-scroll::-webkit-scrollbar{display:none}
+.cr .g{--c1:#4abd98;--c2:#2e9a78}
+/* the goal rail: orbs */
+.cr .rail{display:flex;gap:6px;overflow-x:auto;padding:6px 12px 8px;scrollbar-width:none}
+.cr .orb{flex:none;width:66px;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:10.5px;font-weight:600;color:#6e6e73;text-align:center;line-height:1.15;background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
+.cr .orb i{width:48px;height:48px;border-radius:24px;display:grid;place-items:center;background:var(--t1);color:var(--c2);transition:transform .15s,box-shadow .15s}
+.cr .orb i svg{width:21px;height:21px}
+.cr .orb.on{color:var(--c2)}
+.cr .orb.on i{background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;box-shadow:0 8px 18px var(--sh);transform:scale(1.06)}
+/* the describe box */
+.cr .say{margin:8px 16px 0;padding:2px;border-radius:22px;background:linear-gradient(135deg,#4abd98,#5ba8e8 45%,#9a5bf0);box-shadow:0 10px 30px rgba(74,189,152,.18)}
+.cr .say .in{background:#fff;border-radius:20px;padding:14px 14px 12px}
+.cr .eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#6e6e73}
+.cr .eyebrow svg{width:13px;height:13px;color:#2e9a78}
+.cr .aur{background:linear-gradient(90deg,#2e9a78,#3b6fd4,#6a39de);-webkit-background-clip:text;background-clip:text;color:transparent}
+.cr .say .ta{display:block;width:100%;min-height:54px;margin-top:8px;border:0;outline:0;resize:none;background:none;font-family:'Cal Sans','Inter',sans-serif;font-size:19px;line-height:1.35;color:#1d1d1f;padding:0;box-sizing:border-box}
+.cr .say .ta::placeholder{color:#aeaeb2}
+.cr .say .ex{display:flex;gap:6px;overflow-x:auto;margin-top:6px;scrollbar-width:none;padding-bottom:2px}
+.cr .say .ex button{flex:none;font-size:12px;font-weight:600;border:0;border-radius:999px;padding:6px 10px;cursor:pointer;white-space:nowrap;font-family:inherit}
+.cr .say .foot{display:flex;align-items:center;gap:8px;margin-top:8px}
+.cr .say .hint{flex:1;font-size:12px;color:#aeaeb2}
+/* buttons */
+.cr .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:38px;padding:0 16px;border-radius:19px;border:0;font-family:'Cal Sans','Inter',sans-serif;font-size:14px;font-weight:600;color:#fff;background:linear-gradient(135deg,#4abd98,#2e9a78);box-shadow:0 6px 16px rgba(46,154,120,.4);cursor:pointer;white-space:nowrap}
+.cr .btn.hue{background:linear-gradient(135deg,var(--c1),var(--c2));box-shadow:0 6px 16px var(--sh)}
+.cr .btn.ghost{background:#f5f5f7;color:#1d1d1f;box-shadow:none}
+.cr .btn.block{width:100%;height:46px}
+.cr .btn:disabled{background:#e3e6e5;box-shadow:none;cursor:default}
+/* sections + shelves */
+.cr .sec{display:flex;align-items:flex-end;justify-content:space-between;padding:22px 16px 12px}
+.cr .sec h2{margin:0;font-family:'Cal Sans','Inter',sans-serif;font-weight:600;font-size:19px;color:#1d1d1f;letter-spacing:-.01em}
+.cr .sec h2 .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:linear-gradient(135deg,var(--c1),var(--c2));margin:0 8px 2px 0;vertical-align:middle}
+.cr .sec .sub{font-size:13px;color:#6e6e73;margin-top:2px}
+.cr .sec .more{color:#aeaeb2;display:flex;align-items:center;padding-bottom:4px;background:none;border:0;cursor:pointer}
+.cr .shelf{display:flex;gap:12px;overflow-x:auto;padding:2px 16px 8px;scrollbar-width:none}
+.cr .facts{display:flex;gap:0;margin-top:2px}
+.cr .facts div{flex:1;min-width:0}
+.cr .facts div:first-child{flex:1.6}
+.cr .facts b{display:block;font-size:12px;font-weight:600;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:normal}
+.cr .facts span{font-size:10.5px;color:#aeaeb2}
+.cr .facts div+div{border-left:1px solid #e6e6ea;padding-left:8px;margin-left:8px}
+.cr .press{transition:transform .15s}
+.cr .press:active{transform:scale(.97)}
+.cr .card{background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05);border:0;padding:0;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;overflow:hidden;display:flex;flex-direction:column;position:relative}
+.cr .card.dim{opacity:.72}
+.cr .tile{background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;position:relative;overflow:hidden}
+.cr .tile::after{content:"";position:absolute;right:-25%;bottom:-60%;width:80%;aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.12)}
+.cr .glass{width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.2);display:grid;place-items:center;color:#fff;box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);position:relative}
+.cr .pill-w{font-size:10px;font-weight:700;padding:3px 7px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--c2);display:inline-flex;align-items:center;gap:4px;position:relative;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.cr .pill-w svg{width:10px;height:10px;flex:none}
+.cr .pill-w.amber{color:#8a5a0c}
+.cr .pill-w.grey{color:#6e6e73}
+/* mini */
+.cr .mini{flex:none;width:112px;border-radius:16px}
+.cr .mini .tile{height:62px;display:grid;place-items:center}
+.cr .mini .tile svg{width:22px;height:22px;position:relative}
+.cr .mini .body{padding:8px 10px 10px}
+.cr .mini .t{font-family:'Cal Sans','Inter',sans-serif;font-size:12.5px;line-height:1.2;font-weight:600}
+.cr .mini .p{font-size:11.5px;color:#2e9a78;font-weight:600;margin-top:4px;font-variant-numeric:normal}
+.cr .mini .p span{color:#aeaeb2;font-weight:500}
+/* standard */
+.cr .pc{flex:none;width:212px;border-radius:18px}
+.cr .pc .tile{height:100px;display:grid;place-items:center}
+.cr .pc .tile svg{width:24px;height:24px}
+.cr .pc .tile .mv{position:absolute;left:10px;bottom:8px}
+.cr .pc .tile .badge{position:absolute;top:8px;left:8px;right:8px;display:flex}
+.cr .pc .body{padding:10px 12px 12px;display:flex;flex-direction:column;gap:6px;flex:1}
+.cr .pc .t{font-family:'Cal Sans','Inter',sans-serif;font-size:15px;line-height:1.2;font-weight:600}
+.cr .pc .s{font-size:12px;color:#6e6e73;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cr .pc .proof{font-size:11px;color:#aeaeb2;display:flex;align-items:center;gap:5px;margin-top:auto;padding-top:4px}
+.cr .pc .proof svg{width:11px;height:11px;color:var(--c2)}
+/* big */
+.cr .big{margin:0 16px 12px;border-radius:20px;width:calc(100% - 32px)}
+.cr .big .tile{height:118px;display:flex;align-items:flex-end;padding:12px 14px}
+.cr .big .tile::after{right:-10%;top:-60%;bottom:auto;width:60%}
+.cr .big .tile .glass{position:absolute;top:12px;left:14px;width:44px;height:44px;border-radius:13px}
+.cr .big .tile .glass svg{width:22px;height:22px}
+.cr .big .tile .badge{position:absolute;top:14px;right:14px}
+.cr .big .tile .t{font-family:'Cal Sans','Inter',sans-serif;font-size:19px;font-weight:600;position:relative;text-shadow:0 1px 8px rgba(0,0,0,.15)}
+.cr .big .body{padding:12px 14px 14px}
+.cr .big .s{font-size:13px;color:#6e6e73;line-height:1.4}
+.cr .big .facts{margin-top:10px}
+.cr .big .facts b{font-size:14px}
+.cr .big .month{margin-top:12px;padding-top:10px;border-top:1px solid #e6e6ea}
+.cr .big .month .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#aeaeb2;margin-bottom:6px}
+.cr .big .month ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px}
+.cr .big .month li{display:flex;gap:8px;font-size:12.5px;color:#1d1d1f}
+.cr .big .month li::before{content:"";width:6px;height:6px;border-radius:3px;background:linear-gradient(135deg,var(--c1),var(--c2));flex:none;margin-top:6px}
+/* rows */
+.cr .row{display:flex;align-items:center;gap:12px;padding:8px 4px;width:100%;background:none;border:0;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;border-radius:12px}
+.cr .row .st{width:22px;height:22px;border-radius:11px;border:1.5px solid #e6e6ea;flex:none;display:grid;place-items:center;color:#fff}
+.cr .row .st.done{background:#2e9a78;border-color:#2e9a78}
+.cr .row .tx{flex:1;min-width:0}
+.cr .row .t{font-size:15px;font-weight:500}
+.cr .row .s{font-size:12px;color:#6e6e73;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cr .row .s.why{color:#8a5a0c}
+.cr .row .r{flex:none;text-align:right}
+.cr .row .r b{display:block;font-family:'Cal Sans','Inter',sans-serif;font-size:14px;font-weight:600;font-variant-numeric:normal}
+.cr .row .r span{font-size:11px;color:#aeaeb2}
+/* filters */
+.cr .filters{display:flex;gap:6px;overflow-x:auto;padding:4px 16px 8px;scrollbar-width:none}
+.cr .fch{flex:none;height:34px;padding:0 12px;border-radius:17px;background:#f5f5f7;font-size:12.5px;font-weight:600;color:#1d1d1f;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border:0;cursor:pointer;font-family:inherit}
+.cr .fch svg{width:13px;height:13px}
+.cr .fch.on{background:#1d1d1f;color:#fff}
+.cr .hintbar{margin:0 16px;padding:10px 12px;border-radius:12px;background:#eaf7f3;color:#2e9a78;font-size:12.5px;display:flex;gap:8px;align-items:center}
+.cr .hintbar svg{width:14px;height:14px;flex:none}
+.cr .ask{margin:18px 16px 0;padding:14px;border-radius:18px;border:1.5px dashed #d9d9de}
+/* guide */
+.cr .guide{margin:8px 16px 0;padding:16px;border-radius:20px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05)}
+.cr .prog{display:flex;gap:4px;margin-bottom:12px}
+.cr .prog i{flex:1;height:4px;border-radius:2px;background:#e6e6ea}
+.cr .prog i.on{background:linear-gradient(135deg,#4abd98,#2e9a78)}
+.cr .q{font-family:'Cal Sans','Inter',sans-serif;font-size:20px;line-height:1.2;font-weight:600}
+.cr .qs{font-size:13px;color:#6e6e73;margin-top:4px}
+.cr .opts{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.cr .opt{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:#f5f5f7;width:100%;border:0;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f}
+.cr .opt .rr{width:20px;height:20px;border-radius:10px;border:2px solid #d9d9de;flex:none;display:grid;place-items:center}
+.cr .opt.on{background:#eaf7f3;box-shadow:inset 0 0 0 1.5px #4abd98}
+.cr .opt.on .rr{background:#2e9a78;border-color:#2e9a78}
+.cr .opt.on .rr::after{content:"";width:8px;height:8px;border-radius:4px;background:#fff}
+.cr .opt .t{font-weight:600;font-size:14px}
+.cr .opt .s{font-size:12px;color:#6e6e73}
+.cr .path{margin:14px 16px 0;padding:14px;border-radius:20px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.04),0 6px 20px rgba(0,0,0,.05)}
+.cr .path .k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#aeaeb2}
+.cr .path ol{margin:10px 0 0;padding:0;list-style:none;display:flex;flex-direction:column}
+.cr .path li{display:flex;gap:12px;align-items:flex-start;position:relative;padding-bottom:12px}
+.cr .path li::before{content:"";position:absolute;left:13px;top:28px;bottom:0;width:2px;background:#e6e6ea}
+.cr .path li:last-child::before{display:none}
+.cr .path li .b{width:28px;height:28px;border-radius:14px;display:grid;place-items:center;color:#fff;flex:none;background:linear-gradient(135deg,var(--c1),var(--c2))}
+.cr .path li .b svg{width:14px;height:14px}
+.cr .path li .tx{flex:1;padding-top:3px}
+.cr .path li .t{font-weight:600;font-size:14px}
+.cr .path li .n{font-size:12px;font-weight:600;color:var(--c2);margin-top:2px}
+.cr .path li.weak .t::after{content:"weakest";font-size:10px;font-weight:700;padding:2px 6px;border-radius:999px;background:#fbeaea;color:#c92d32;margin-left:8px;vertical-align:middle}
+/* product */
+.cr .pp-hero{margin:4px 16px 0;height:170px;border-radius:22px;position:relative;overflow:hidden;color:#fff;display:flex;align-items:flex-end;padding:16px;background:linear-gradient(135deg,var(--c1),var(--c2))}
+.cr .pp-hero::after{content:"";position:absolute;right:-10%;top:-50%;width:70%;aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.12)}
+.cr .pp-hero .glass{position:absolute;top:16px;left:16px;width:52px;height:52px;border-radius:16px}
+.cr .pp-hero .glass svg{width:26px;height:26px}
+.cr .pp-hero .mv{position:absolute;top:18px;right:16px}
+.cr .pp-hero .mv svg{width:12px;height:12px}
+.cr .pp-hero h1{margin:0;font-family:'Cal Sans','Inter',sans-serif;font-weight:600;font-size:26px;position:relative;text-shadow:0 1px 10px rgba(0,0,0,.15);line-height:1.1}
+.cr .pp-hero .why{position:relative;font-size:13px;opacity:.95;margin-top:4px}
+.cr .pp-facts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 16px 0}
+.cr .pp-facts div{background:#f5f5f7;border-radius:14px;padding:10px 8px;text-align:center;min-width:0}
+.cr .pp-facts b{display:block;font-family:'Cal Sans','Inter',sans-serif;font-weight:600;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:normal}
+.cr .pp-facts span{font-size:10.5px;color:#6e6e73}
+.cr .pp-sec{padding:20px 16px 0}
+.cr .pp-sec h2{margin:0 0 6px;font-family:'Cal Sans','Inter',sans-serif;font-weight:600;font-size:17px;letter-spacing:-.01em}
+.cr .pp-sec p{margin:0;font-size:14px;color:#1d1d1f;line-height:1.5}
+.cr .get{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px}
+.cr .get li{display:flex;gap:10px;font-size:13.5px;color:#1d1d1f;align-items:flex-start}
+.cr .get li i{width:18px;height:18px;border-radius:9px;background:var(--t1);color:var(--c2);flex:none;display:grid;place-items:center;margin-top:1px}
+.cr .get li i svg{width:11px;height:11px}
+.cr .tl{margin:10px 0 0;padding:0;list-style:none}
+.cr .tl li{display:flex;gap:12px;position:relative;padding-bottom:12px}
+.cr .tl li::before{content:"";position:absolute;left:5px;top:18px;bottom:0;width:2px;background:#e6e6ea}
+.cr .tl li:last-child::before{display:none}
+.cr .tl li i{width:12px;height:12px;border-radius:6px;background:linear-gradient(135deg,var(--c1),var(--c2));flex:none;margin-top:4px;box-shadow:0 0 0 3px var(--t1)}
+.cr .tl li i.you{background:#d99a1e;box-shadow:0 0 0 3px #fbf3e4}
+.cr .tl .d{font-size:11px;font-weight:700;color:#aeaeb2;width:56px;flex:none;padding-top:2px}
+.cr .tl .t{font-size:13.5px;color:#1d1d1f}
+.cr .tl .t b{font-weight:600}
+.cr .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.cr .chips span{font-size:12px;font-weight:600;color:#1d1d1f;background:#f5f5f7;border-radius:999px;padding:5px 10px}
+.cr .sticky{position:fixed;left:0;right:0;bottom:calc(82px + env(safe-area-inset-bottom));display:flex;justify-content:center;pointer-events:none;z-index:5}
+.cr .sticky .in{pointer-events:auto;width:calc(100% - 32px);max-width:448px;display:flex;align-items:center;gap:12px;padding:12px 16px 12px;border-radius:24px;background:rgba(255,255,255,.86);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);box-shadow:0 10px 30px rgba(0,0,0,.12);border:1px solid rgba(255,255,255,.75)}
+.cr .sticky .p{font-family:'Cal Sans','Inter',sans-serif;font-size:20px;font-weight:600;flex:1;min-width:0;font-variant-numeric:normal}
+.cr .sticky .p span{display:block;font-family:Inter,system-ui,sans-serif;font-size:11.5px;color:#6e6e73;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cr .sticky .btn{height:46px;padding:0 20px}
+`
+/* a card's colour, as CSS variables the classes read */
+const hv = (k: HueKey): React.CSSProperties => ({ ['--c1' as string]: hueOf(k)[0], ['--c2' as string]: hueOf(k)[1], ['--t1' as string]: tint(k, 0.16), ['--sh' as string]: tint(k, 0.4, 1) } as React.CSSProperties)
+
 type View = { name: 'browse' } | { name: 'search' } | { name: 'guide' } | { name: 'product'; id: string }
 
 interface Signals { views30d?: number; actions30d?: { directions: number; calls: number; websiteClicks: number }; rating?: number; ratingCount?: number; unrepliedReviews?: number; listingGaps?: string[] }
@@ -105,97 +280,72 @@ export default function CreatePage() {
   }
 
   /* ── pieces ── */
-  const Coming = () => <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: C.mute, background: C.fill, borderRadius: 99, padding: '3px 7px' }}>Coming soon</span>
-  const Facts = ({ c, compact }: { c: ShelfCard; compact?: boolean }) => (
-    <div style={{ display: 'flex', gap: compact ? 10 : 14, marginTop: 8 }}>
-      {([[c.price, 'price'], [c.ready, 'ready in'], [c.you, 'you do']] as [string, string][]).map(([v, l], i) => (
-        <div key={l} style={{ minWidth: 0, flex: i === 0 ? '1 1 auto' : '0 0 auto' }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: compact ? 12.5 : 14.5, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
-          <div style={{ fontSize: 10.5, color: C.faint }}>{l}</div>
-        </div>
-      ))}
+  const Coming = () => <span className="pill-w grey">Coming soon</span>
+  const Facts = ({ c }: { c: ShelfCard }) => (
+    <div className="facts">
+      <div><b>{c.price}</b><span>price</span></div>
+      <div><b>{c.ready}</b><span>ready in</span></div>
+      <div><b>{c.you}</b><span>you do</span></div>
     </div>
   )
-
   /* small: a quick ask */
-  const Mini = ({ c }: { c: ShelfCard }) => {
-    const [h1, h2] = hueOf(c.goal); const Icon = iconFor(c); const buy = isBuyable(c)
+  const Mini = ({ c }: { c: ShelfCard }) => { const Icon = iconFor(c); const buy = isBuyable(c)
     return (
-      <button type="button" onClick={() => open(c)} className="mvp-press" style={{ flex: '0 0 auto', width: 150, textAlign: 'left', background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: 0, border: 'none', cursor: 'pointer', overflow: 'hidden', font: 'inherit', opacity: buy ? 1 : 0.72 }}>
-        <div style={{ height: 66, background: `linear-gradient(135deg, ${h1}, ${h2})`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', position: 'relative' }}>
-          <Icon size={26} />
-          {!buy && <span style={{ position: 'absolute', top: 7, left: 8 }}><Coming /></span>}
-        </div>
-        <div style={{ padding: '9px 11px 11px' }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.title}</div>
-          <div style={{ fontSize: 12, color: C.mute, marginTop: 3, fontVariantNumeric: 'normal' }}><b style={{ color: C.ink, fontFamily: DISPLAY, fontWeight: 600 }}>{c.price}</b> · {c.ready}</div>
-        </div>
+      <button type="button" onClick={() => open(c)} className={`card mini press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
+        <div className="tile"><Icon />{!buy && <span style={{ position: 'absolute', top: 6, left: 6 }}><Coming /></span>}</div>
+        <div className="body"><div className="t">{c.title}</div><div className="p">{c.price} <span>· {c.ready}</span></div></div>
       </button>
     )
   }
   /* standard: a campaign */
-  const Std = ({ c, badge }: { c: ShelfCard; badge?: string | null }) => {
-    const [h1, h2] = hueOf(c.goal); const Icon = iconFor(c); const SI = STAGE_ICON[c.stage]; const buy = isBuyable(c)
+  const Std = ({ c, badge }: { c: ShelfCard; badge?: string | null }) => { const Icon = iconFor(c); const SI = STAGE_ICON[c.stage]; const buy = isBuyable(c)
     return (
-      <button type="button" onClick={() => open(c)} className="mvp-press" style={{ flex: '0 0 auto', width: 236, textAlign: 'left', background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, padding: 0, border: 'none', cursor: 'pointer', overflow: 'hidden', font: 'inherit', opacity: buy ? 1 : 0.72 }}>
-        <div style={{ height: 104, background: `linear-gradient(135deg, ${h1}, ${h2})`, position: 'relative', color: '#fff' }}>
-          {(badge || !buy) && <span style={{ position: 'absolute', top: 9, left: 10, right: 10, display: 'flex' }}>{buy ? <span style={{ fontSize: 10.5, fontWeight: 700, background: 'rgba(255,255,255,.22)', borderRadius: 99, padding: '3px 8px', maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{badge}</span> : <Coming />}</span>}
-          <span style={{ position: 'absolute', left: 12, bottom: 10, display: 'flex' }}><Icon size={30} /></span>
-          <span title={`Moves ${c.stage}`} style={{ position: 'absolute', right: 10, bottom: 10, width: 28, height: 28, borderRadius: 99, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><SI size={15} /></span>
+      <button type="button" onClick={() => open(c)} className={`card pc press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
+        <div className="tile">
+          {(badge || !buy) && <span className="badge">{buy ? <span className="pill-w amber">{badge}</span> : <Coming />}</span>}
+          <span className="glass"><Icon /></span>
+          <span className="pill-w mv"><SI /> Moves {c.stage}</span>
         </div>
-        <div style={{ padding: '10px 12px 12px' }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink, lineHeight: 1.15 }}>{c.title}</div>
-          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{c.sub || c.plain}</div>
-          <Facts c={c} compact />
-        </div>
-      </button>
-    )
-  }
-  /* big: a program we run monthly */
-  const Big = ({ c }: { c: ShelfCard }) => {
-    const [h1, h2] = hueOf(c.goal); const buy = isBuyable(c)
-    return (
-      <button type="button" onClick={() => open(c)} className="mvp-press" style={{ display: 'block', width: '100%', textAlign: 'left', background: '#fff', borderRadius: 20, boxShadow: CARD_SHADOW, padding: 0, border: 'none', cursor: 'pointer', overflow: 'hidden', font: 'inherit', marginBottom: 12, opacity: buy ? 1 : 0.78 }}>
-        <div style={{ padding: '18px 16px 16px', background: `linear-gradient(135deg, ${h1}, ${h2})`, color: '#fff', position: 'relative' }}>
-          <span style={{ fontSize: 10.5, fontWeight: 700, background: 'rgba(255,255,255,.22)', borderRadius: 99, padding: '3px 8px' }}>{buy ? 'We run it monthly' : 'Coming soon'}</span>
-          <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, marginTop: 10, lineHeight: 1.1 }}>{c.title}</div>
-          <div style={{ fontSize: 13, opacity: .92, marginTop: 4, maxWidth: 300 }}>{c.plain.split('.')[0]}.</div>
-        </div>
-        <div style={{ padding: '12px 16px 14px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 12px' }}>
-            {c.get.slice(0, 4).map((g) => <div key={g} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', fontSize: 12.5, color: C.ink, lineHeight: 1.3 }}><span style={{ color: h2, marginTop: 2, flexShrink: 0 }}><Check size={13} strokeWidth={3} /></span>{g}</div>)}
-          </div>
+        <div className="body">
+          <div className="t">{c.title}</div>
+          <div className="s">{c.sub || c.plain}</div>
           <Facts c={c} />
         </div>
       </button>
     )
   }
-  /* row: a setup */
-  const SetupRow = ({ c }: { c: ShelfCard }) => {
-    const Icon = iconFor(c); const isDone = done.has(c.id); const buy = isBuyable(c); const why = whyNow(c)
+  /* big: a program we run monthly */
+  const Big = ({ c }: { c: ShelfCard }) => { const Icon = iconFor(c); const buy = isBuyable(c)
     return (
-      <button type="button" onClick={() => open(c)} className="mvp-press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 4px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', borderRadius: 12, opacity: buy ? 1 : 0.72 }}>
-        <span style={{ width: 22, height: 22, borderRadius: 99, border: `1.5px solid ${isDone ? C.mintDk : C.line}`, background: isDone ? C.mintDk : 'transparent', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{isDone && <Check size={13} strokeWidth={3} />}</span>
+      <button type="button" onClick={() => open(c)} className={`card big press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
+        <div className="tile"><span className="glass"><Icon /></span><span className={`pill-w badge${buy ? '' : ' grey'}`}>{buy ? 'We run it monthly' : 'Coming soon'}</span><div className="t">{c.title}</div></div>
+        <div className="body">
+          <div className="s">{c.plain.split('.')[0]}.</div>
+          <Facts c={c} />
+          <div className="month"><div className="k">Every month</div><ul>{c.get.slice(0, 4).map((g) => <li key={g}>{g}</li>)}</ul></div>
+        </div>
+      </button>
+    )
+  }
+  /* row: a setup */
+  const SetupRow = ({ c }: { c: ShelfCard }) => { const Icon = iconFor(c); const isDone = done.has(c.id); const buy = isBuyable(c); const why = whyNow(c)
+    return (
+      <button type="button" onClick={() => open(c)} className={`row press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
+        <span className={`st${isDone ? ' done' : ''}`}>{isDone && <Check size={13} strokeWidth={3} />}</span>
         <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 15, fontWeight: 500, color: C.ink, textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>
-          {(why || !buy) && <span style={{ display: 'block', fontSize: 12, color: why && buy ? C.amberInk : C.mute, marginTop: 1 }}>{buy ? why : 'Coming soon'}</span>}
-        </span>
-        <span style={{ fontFamily: DISPLAY, fontSize: 13.5, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal', flexShrink: 0 }}>{isDone ? 'Done' : c.price}</span>
+        <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : 'Coming soon'}</span>}</span>
+        <span className="r"><b>{isDone ? 'Done' : c.price}</b></span>
         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
       </button>
     )
   }
   const Sec = ({ t, s, hue, more }: { t: string; s?: string; hue: HueKey; more?: () => void }) => (
-    <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', padding: '20px 16px 10px' }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(hue) }} />{t}</div>
-        {s && <div style={{ fontSize: 13, color: C.mute, marginTop: 2 }}>{s}</div>}
-      </div>
-      {more && <button type="button" onClick={more} aria-label="See all" style={{ width: 32, height: 32, border: 'none', background: 'none', color: C.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ChevronRight size={18} /></button>}
+    <div className="sec" style={hv(hue)}>
+      <div><h2><span className="dot" />{t}</h2>{s && <div className="sub">{s}</div>}</div>
+      {more && <button type="button" onClick={more} className="more" aria-label="See all"><ChevronRight size={18} /></button>}
     </div>
   )
-  const Shelf = ({ children }: { children: React.ReactNode }) => <div className="cc-scroll" style={{ display: 'flex', gap: 10, overflowX: 'auto', padding: '2px 16px 8px', scrollbarWidth: 'none' }}>{children}</div>
+  const Shelf = ({ children }: { children: React.ReactNode }) => <div className="shelf cc-scroll">{children}</div>
 
   /* ── the describe-it box ── */
   const [ask, setAsk] = useState('')
@@ -216,54 +366,57 @@ export default function CreatePage() {
   }
   const EXAMPLES: [ShelfGoal, string][] = [['event', 'Halloween party Oct 31, want it packed'], ['announce', 'New fall menu lands Sep 18'], ['nights', 'Tuesdays are dead, fill them'], ['catering', 'Get office lunch orders']]
   const SayBox = () => (
-    <div style={{ margin: '4px 16px 0', padding: 14, borderRadius: 20, background: 'linear-gradient(135deg, #eaf7f3, #f2f9f6 60%, #f5f5f7)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: C.mintDk }}><Sparkles size={13} /> Built around your restaurant</div>
-      <textarea ref={askRef} value={ask} onChange={(e) => setAsk(e.target.value)} rows={2} placeholder="Say it in a sentence. A date, a dish, a slow night…" style={{ width: '100%', boxSizing: 'border-box', marginTop: 8, border: 'none', background: '#fff', borderRadius: 14, padding: '11px 12px', fontSize: 15, color: C.ink, fontFamily: 'inherit', resize: 'none', outline: 'none', boxShadow: '0 1px 2px rgba(0,0,0,.04)' }} />
-      <div className="cc-scroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', marginTop: 8, scrollbarWidth: 'none' }}>
-        {EXAMPLES.map(([g, t]) => <button key={t} type="button" onClick={() => { setAsk(t); askRef.current?.focus() }} style={{ flex: '0 0 auto', fontSize: 12, fontWeight: 600, color: hueOf(g === 'foryou' ? 'mint' : g)[1], background: tint(g === 'foryou' ? 'mint' : g, 0.16), border: 'none', borderRadius: 99, padding: '6px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{t}</button>)}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-        <span style={{ flex: 1, fontSize: 12, color: C.mute }}>We read it and suggest a plan. You can change anything.</span>
-        <button type="button" onClick={describe} disabled={!ask.trim() || reading} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 38, padding: '0 16px', borderRadius: 19, border: 'none', background: ask.trim() ? gradOf('mint') : '#e3e6e5', color: '#fff', fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, cursor: ask.trim() ? 'pointer' : 'default', boxShadow: ask.trim() ? '0 6px 16px rgba(46,154,120,.35)' : 'none' }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? 'Reading' : 'Plan it'}</button>
-      </div>
-      {read && (
-        <div style={{ marginTop: 12, background: '#fff', borderRadius: 16, padding: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04)' }}>
-          {read.ok && read.situation ? (() => {
-            const g = SITUATION_GOAL[read.situation] ?? 'announce'
-            const picks = GOAL_CARDS[g].map((id) => shelfCard(id)).filter((c): c is ShelfCard => !!c).filter(isBuyable).slice(0, 3)
-            const GI = GOAL_ICON[g]
-            return (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><Mark hue={g} size={32}><GI size={17} /></Mark><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink }}>{GOALS.find((x) => x.id === g)?.label}</div>{read.summary && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{read.summary}</div>}</div></div>
-                {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>We do not do {read.unsupported.join(', ')} yet. Everything else is below.</div>}
-                <div style={{ marginTop: 8 }}>{picks.map((c) => <button key={c.id} type="button" onClick={() => open(c)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '7px 2px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}><Mark hue={c.goal} size={30}>{(() => { const I = iconFor(c); return <I size={16} /> })()}</Mark><span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: C.ink }}>{c.title}</span><span style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal' }}>{c.price}</span><ChevronRight size={15} color={C.faint} /></button>)}</div>
-                {picks[0] && <button type="button" onClick={() => order(picks[0])} style={{ width: '100%', height: 44, marginTop: 6, borderRadius: 22, border: 'none', background: gradOf(g), color: '#fff', fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, cursor: 'pointer', boxShadow: `0 6px 16px ${tint(g, 0.4, 1)}`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>Build this <ArrowRight size={15} /></button>}
-              </>
-            )
-          })() : (
-            <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>We could not read that one.</div>
-              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>Pick a goal above and we show the best ways, or send your words to your strategist and a person reads them.</div>
-              <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(ask)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 13, fontWeight: 700, color: C.mintDk, textDecoration: 'none' }}>Send it to Sam <ArrowRight size={14} /></Link>
-            </div>
-          )}
+    <div className="say">
+      <div className="in">
+        <div className="eyebrow"><Sparkles /><span className="aur">Built around your restaurant</span></div>
+        <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={2} placeholder="Say it in a sentence. A date, a dish, a slow night…" />
+        <div className="ex cc-scroll">
+          {EXAMPLES.map(([g, t]) => { const k: HueKey = g === 'foryou' ? 'mint' : g
+            return <button key={t} type="button" onClick={() => { setAsk(t); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{t}</button> })}
         </div>
-      )}
+        <div className="foot">
+          <span className="hint">We read it and suggest a plan. You can change anything.</span>
+          <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? 'Reading' : 'Plan it'}</button>
+        </div>
+        {read && (
+          <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
+            {read.ok && read.situation ? (() => {
+              const g = SITUATION_GOAL[read.situation] ?? 'announce'
+              const picks = GOAL_CARDS[g].map((id) => shelfCard(id)).filter((c): c is ShelfCard => !!c).filter(isBuyable).slice(0, 3)
+              const GI = GOAL_ICON[g]
+              return (
+                <div style={hv(g)}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span className="glass" style={{ width: 36, height: 36, borderRadius: 11, background: `linear-gradient(135deg, ${hueOf(g)[0]}, ${hueOf(g)[1]})`, boxShadow: 'none' }}><GI size={17} /></span><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink }}>{GOALS.find((x) => x.id === g)?.label}</div>{read.summary && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{read.summary}</div>}</div></div>
+                  {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>We do not do {read.unsupported.join(', ')} yet. Everything else is below.</div>}
+                  <div style={{ marginTop: 6 }}>{picks.map((c) => { const I = iconFor(c); return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '7px 2px' }}><Mark hue={c.goal} size={30}><I size={16} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{c.price}</b></span><ChevronRight size={15} color={C.faint} /></button> })}</div>
+                  {picks[0] && <button type="button" className="btn hue block" style={{ marginTop: 6 }} onClick={() => order(picks[0])}>Build this <ArrowRight size={15} /></button>}
+                </div>
+              )
+            })() : (
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>We could not read that one.</div>
+                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>Pick a goal above and we show the best ways, or send your words to your strategist and a person reads them.</div>
+                <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(ask)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 13, fontWeight: 700, color: C.mintDk, textDecoration: 'none' }}>Send it to your strategist <ArrowRight size={14} /></Link>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 
   const AskBox = () => (
-    <div style={{ margin: '18px 16px 0', padding: 14, borderRadius: 18, border: `1.5px dashed ${C.line}` }}>
+    <div className="ask">
       <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>Not seeing it? Ask for anything</div>
       <Link href="/dashboard/requests?type=other" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.faint, fontSize: 14 }}>Tell us what you need<span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span></Link>
     </div>
   )
 
-  /* ── the goal rail ── */
+  /* ── the goal rail: orbs ── */
   const Rail = () => (
-    <div className="cc-scroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 16px 8px', scrollbarWidth: 'none' }}>
+    <div className="rail cc-scroll">
       {GOALS.map((g) => { const on = goal === g.id; const GI = GOAL_ICON[g.id]; const hue: HueKey = g.id === 'foryou' ? 'mint' : g.id
-        return <button key={g.id} type="button" onClick={() => setGoal(g.id)} style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 12px 0 8px', borderRadius: 17, border: 'none', background: on ? gradOf(hue) : C.fill, color: on ? '#fff' : C.ink, fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on ? `0 6px 14px ${tint(hue, 0.35, 1)}` : 'none', whiteSpace: 'nowrap' }}><GI size={14} color={on ? '#fff' : hueOf(hue)[1]} />{g.short}</button> })}
+        return <button key={g.id} type="button" onClick={() => setGoal(g.id)} className={`orb${on ? ' on' : ''}`} style={hv(hue)}><i><GI /></i>{g.short}</button> })}
     </div>
   )
 
@@ -307,8 +460,8 @@ export default function CreatePage() {
           </>
         )}
         <div style={{ margin: '18px 16px 0' }}>
-          <button type="button" onClick={() => go({ name: 'guide' })} className="mvp-press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 18, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-            <Mark hue="mint" size={38}><Compass size={20} /></Mark>
+          <button type="button" onClick={() => go({ name: 'guide' })} className="press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 18, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+            <span className="glass" style={{ width: 38, height: 38, borderRadius: 12, background: gradOf('mint'), boxShadow: 'none' }}><Compass size={20} /></span>
             <span style={{ flex: 1 }}><span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>Not sure? Guide me</span><span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>Three questions, then three picks</span></span>
             <ChevronRight size={17} color={C.faint} />
           </button>
@@ -324,25 +477,22 @@ export default function CreatePage() {
     const active = (Object.keys(FILTERS) as FilterKey[]).filter((k) => filters[k] !== 'any')
     return (
       <>
-        <div className="cc-scroll" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '4px 16px 8px', scrollbarWidth: 'none' }}>
+        <div className="filters cc-scroll">
           {(Object.keys(FILTERS) as FilterKey[]).map((k) => { const on = filters[k] !== 'any'; const lab = on ? FILTERS[k].opts.find((o) => o[0] === filters[k])![1] : FILTERS[k].label
-            return <button key={k} type="button" onClick={() => setSheet(k)} style={{ flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', gap: 4, height: 32, padding: '0 10px 0 12px', borderRadius: 16, border: 'none', background: on ? C.ink : C.fill, color: on ? '#fff' : C.ink, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>{lab}<ChevronDown size={13} /></button> })}
-          {active.length > 0 && <button type="button" onClick={() => setFilters({ budget: 'any', you: 'any', speed: 'any', kind: 'any' })} style={{ flex: '0 0 auto', height: 32, padding: '0 12px', borderRadius: 16, border: 'none', background: C.fill, color: C.mute, fontSize: 12.5, fontWeight: 600, cursor: 'pointer' }}>Clear {active.length}</button>}
+            return <button key={k} type="button" onClick={() => setSheet(k)} className={`fch${on ? ' on' : ''}`}>{lab}<ChevronDown /></button> })}
+          {active.length > 0 && <button type="button" onClick={() => setFilters({ budget: 'any', you: 'any', speed: 'any', kind: 'any' })} className="fch" style={{ color: C.mute }}>Clear {active.length}</button>}
         </div>
-        {!q && <div style={{ margin: '4px 16px 0', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: C.mute }}><Lightbulb size={14} color={C.amberInk} />Plain words work: try flyer, menu photos, TikTok, Yelp, coupons</div>}
+        {!q && <div className="hintbar"><Lightbulb />Plain words work: try flyer, menu photos, TikTok, Yelp, coupons</div>}
         <div style={{ padding: '16px 16px 6px', fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{hits.length} {hits.length === 1 ? 'result' : 'results'}{q ? ` for “${q}”` : ''}</div>
         {hits.length === 0 ? (
           <div style={{ padding: '20px 16px', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>Nothing matches yet.</b> Loosen a filter, or just tell us what you need.</div>
         ) : (
           <div style={{ padding: '0 12px' }}>
             {hits.map((c) => { const Icon = iconFor(c); const mw = matchWord(c, q); const buy = isBuyable(c)
-              return <button key={c.id} type="button" onClick={() => open(c)} className="mvp-press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '8px 4px', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', borderRadius: 12, opacity: buy ? 1 : 0.72 }}>
+              return <button key={c.id} type="button" onClick={() => open(c)} className={`row press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
                 <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: 15, fontWeight: 500, color: C.ink }}>{c.title}</span>
-                  <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{!buy ? 'Coming soon' : mw ? `matches “${mw}”` : c.sub || c.plain}</span>
-                </span>
-                <span style={{ textAlign: 'right', flexShrink: 0 }}><span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal' }}>{c.price}</span><span style={{ display: 'block', fontSize: 11, color: C.faint }}>{c.ready}</span></span>
+                <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? 'Coming soon' : mw ? `matches “${mw}”` : c.sub || c.plain}</span></span>
+                <span className="r"><b>{c.price}</b><span>{c.ready}</span></span>
               </button> })}
           </div>
         )}
@@ -362,21 +512,21 @@ export default function CreatePage() {
       ['slow', 'Come in', DoorOpen, s?.actions30d ? `${s.actions30d.directions} asked for directions` : 'Who actually comes', 'amber'],
       ['back', 'Come back', Repeat, 'Who comes twice', 'brand'],
     ]
+    const weak = answers[0] ?? null
+    const Path = ({ k }: { k: string }) => (
+      <div className="path"><div className="k">{k}</div><ol>{path.map(([id, t, I, n, hue]) => <li key={id} className={weak === id ? 'weak' : ''} style={hv(hue)}><span className="b"><I /></span><div className="tx"><div className="t">{t}</div><div className="n">{n}</div></div></li>)}</ol></div>
+    )
     if (step < GUIDE_QS.length) {
       const qq = GUIDE_QS[step]
       return (
-        <div style={{ padding: '6px 16px 24px' }}>
-          <div style={{ display: 'flex', gap: 4, marginBottom: 14 }}>{GUIDE_QS.map((_, i) => <span key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i <= step ? C.mintDk : C.line }} />)}</div>
-          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, lineHeight: 1.1 }}>{qq.q}</div>
-          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>{qq.s}</div>
-          <div style={{ marginTop: 14 }}>{qq.opts.map(([v, t, sub]) => <button key={v} type="button" onClick={() => setAnswers((a) => [...a, v])} className="mvp-press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', marginBottom: 8, borderRadius: 16, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}><span style={{ flex: 1 }}><span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{t}</span>{sub && <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>{sub}</span>}</span><ChevronRight size={16} color={C.faint} /></button>)}</div>
-          {step > 0 && <button type="button" onClick={() => setAnswers((a) => a.slice(0, -1))} style={{ marginTop: 6, border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Back a step</button>}
-          {step === 0 && (
-            <div style={{ marginTop: 22 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, padding: '0 4px 6px' }}>How a guest reaches you</div>
-              {path.map(([id, t, I, n, hue]) => <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 4px' }}><Mark hue={hue} size={34}><I size={18} /></Mark><span style={{ flex: 1 }}><span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: C.ink }}>{t}</span><span style={{ display: 'block', fontSize: 12, color: C.mute }}>{n}</span></span></div>)}
-            </div>
-          )}
+        <div style={{ paddingBottom: 24 }}>
+          <div className="guide">
+            <div className="prog">{GUIDE_QS.map((_, i) => <i key={i} className={i <= step ? 'on' : ''} />)}</div>
+            <div className="q">{qq.q}</div><div className="qs">{qq.s}</div>
+            <div className="opts">{qq.opts.map(([v, t, sub]) => <button key={v} type="button" onClick={() => setAnswers((a) => [...a, v])} className="opt press"><span className="rr" /><span style={{ flex: 1 }}><span className="t" style={{ display: 'block' }}>{t}</span>{sub && <span className="s" style={{ display: 'block' }}>{sub}</span>}</span></button>)}</div>
+            {step > 0 && <button type="button" onClick={() => setAnswers((a) => a.slice(0, -1))} style={{ marginTop: 12, border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Back a step</button>}
+          </div>
+          <Path k="How a guest reaches you" />
         </div>
       )
     }
@@ -385,14 +535,19 @@ export default function CreatePage() {
     const stage = path.find((p) => p[0] === hurt) ?? path[0]
     const total = picks.reduce((t, c) => t + c.priceN, 0)
     return (
-      <div style={{ padding: '6px 16px 24px' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: hueOf(stage[4])[1], background: tint(stage[4], 0.16), borderRadius: 99, padding: '5px 10px' }}>Where it sits: {stage[1]} · {stage[3]}</div>
-        <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, marginTop: 8, lineHeight: 1.1 }}>Your starter shelf</div>
-        <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>Three picks that fit what you said. About {total ? `$${total.toLocaleString()}` : 'a quote'} to start.</div>
-        <div style={{ marginTop: 12 }}>{picks.map((c) => { const Icon = iconFor(c); const why = whyNow(c) ?? c.plain.split('.')[0]
-          return <button key={c.id} type="button" onClick={() => open(c)} className="mvp-press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', marginBottom: 8, borderRadius: 16, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}><Mark hue={c.goal} size={36}><Icon size={18} /></Mark><span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{c.title}</span><span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, lineHeight: 1.35 }}>{why}</span></span><span style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal', flexShrink: 0 }}>{c.price}</span></button> })}</div>
-        {picks[0] && <button type="button" onClick={() => order(picks[0])} style={{ width: '100%', height: 48, marginTop: 4, borderRadius: 24, border: 'none', background: gradOf('mint'), color: '#fff', fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 6px 16px rgba(46,154,120,.35)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>Start with the first one <ArrowRight size={15} /></button>}
-        <button type="button" onClick={() => setAnswers([])} style={{ display: 'block', margin: '12px auto 0', border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Start over</button>
+      <div style={{ paddingBottom: 24 }}>
+        <div style={{ padding: '10px 16px 0' }}>
+          <div className="eyebrow" style={{ ...hv(stage[4]), color: hueOf(stage[4])[1], background: tint(stage[4], 0.16), borderRadius: 999, padding: '5px 10px' }}>Where it sits: {stage[1]} · {stage[3]}</div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, marginTop: 8, lineHeight: 1.1 }}>Your starter shelf</div>
+          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>Three picks that fit what you said. About {total ? `$${total.toLocaleString()}` : 'a quote'} to start.</div>
+        </div>
+        <div style={{ padding: '12px 12px 0' }}>{picks.map((c) => { const Icon = iconFor(c); const why = whyNow(c) ?? c.plain.split('.')[0]
+          return <button key={c.id} type="button" onClick={() => open(c)} className="row press" style={hv(c.goal)}><Mark hue={c.goal} size={36}><Icon size={18} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span><span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{why}</span></span><span className="r"><b>{c.price}</b></span></button> })}</div>
+        <div style={{ padding: '10px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {picks[0] && <button type="button" className="btn block" onClick={() => order(picks[0])}>Start with the first one <ArrowRight size={15} /></button>}
+          <button type="button" onClick={() => setAnswers([])} style={{ border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Start over</button>
+        </div>
+        <Path k="Why these three" />
       </div>
     )
   }
@@ -400,7 +555,7 @@ export default function CreatePage() {
   const product = (id: string) => {
     const c = cards[id]
     if (!c) return <div style={{ padding: 30, textAlign: 'center', color: C.mute }}>That one is not on the shelf. <button type="button" onClick={() => go({ name: 'browse' })} style={{ border: 'none', background: 'none', color: C.mintDk, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>Back to Create</button></div>
-    const [h1, h2] = hueOf(c.goal); const Icon = iconFor(c); const SI = STAGE_ICON[c.stage]; const buy = isBuyable(c); const YI = YOU_ICON[c.you] ?? Check
+    const Icon = iconFor(c); const SI = STAGE_ICON[c.stage]; const buy = isBuyable(c); const YI = YOU_ICON[c.you] ?? Check
     const TL: [string, string, boolean][] = c.kind === 'setup'
       ? [['Day 0', 'You order. We read what you already have.', false], ['Day 1', 'We start the work and send you anything we need.', false], ['Day 3', 'You check the result. One tap, or a note.', true], [c.ready, 'Done, and on your Home.', false]]
       : c.kind === 'program'
@@ -409,47 +564,29 @@ export default function CreatePage() {
     const goesWith = GOAL_CARDS[c.goal].filter((x) => x !== c.id).map((x) => cards[x]).filter((x): x is ShelfCard => !!x).slice(0, 4)
     const why = whyNow(c)
     return (
-      <div style={{ paddingBottom: 90 }}>
-        <div style={{ margin: '4px 16px 0', borderRadius: 22, padding: '18px 16px 16px', background: `linear-gradient(135deg, ${h1}, ${h2})`, color: '#fff', position: 'relative', overflow: 'hidden' }}>
-          <span aria-hidden style={{ position: 'absolute', right: '-18%', top: '-45%', width: '65%', aspectRatio: '1', borderRadius: '50%', background: 'rgba(255,255,255,.14)' }} />
-          <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={22} /></span>
-            <span style={{ flex: 1 }} />
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, background: 'rgba(255,255,255,.22)', borderRadius: 99, padding: '4px 10px' }}><SI size={13} /> Moves {c.stage}</span>
-          </div>
-          <div style={{ position: 'relative', fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, marginTop: 14, lineHeight: 1.05 }}>{c.title}</div>
-          {why && buy && <div style={{ position: 'relative', fontSize: 13, opacity: .95, marginTop: 6 }}>{why}</div>}
-          {!buy && <div style={{ position: 'relative', marginTop: 8 }}><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', background: 'rgba(255,255,255,.25)', borderRadius: 99, padding: '4px 9px' }}>Coming soon</span></div>}
+      <div style={{ ...hv(c.goal), paddingBottom: 100 }}>
+        <div className="pp-hero">
+          <span className="glass"><Icon /></span>
+          <span className="pill-w mv"><SI /> Moves {c.stage}</span>
+          <div style={{ position: 'relative' }}><h1>{c.title}</h1>{why && buy && <div className="why">{why}</div>}{!buy && <div className="why"><span className="pill-w grey">Coming soon</span></div>}</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, margin: '12px 16px 0' }}>
-          {([[c.price, 'price'], [c.ready, 'ready in'], [c.you, 'you do'], [String(c.channels.length), c.channels.length === 1 ? 'channel' : 'channels']] as [string, string][]).map(([v, l]) => <div key={l} style={{ textAlign: 'center', padding: '10px 4px', borderRadius: 14, background: C.fill }}><div style={{ fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div><div style={{ fontSize: 10.5, color: C.faint, marginTop: 2 }}>{l}</div></div>)}
+        <div className="pp-facts">
+          <div><b>{c.price}</b><span>price</span></div><div><b>{c.ready}</b><span>ready in</span></div><div><b>{c.you}</b><span>you do</span></div><div><b>{c.channels.length}</b><span>{c.channels.length === 1 ? 'channel' : 'channels'}</span></div>
         </div>
-        <div style={{ padding: '18px 16px 0' }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink }}>In plain words</div>
-          <div style={{ fontSize: 14.5, color: C.ink, lineHeight: 1.5, marginTop: 4 }}>{c.plain}</div>
+        <div className="pp-sec"><h2>In plain words</h2><p>{c.plain}</p></div>
+        <div className="pp-sec"><h2>What you get</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>
+        <div className="pp-sec"><h2>What happens after you order</h2>
+          <ul className="tl">{TL.map(([d, t, you], i) => <li key={i}><i className={you ? 'you' : ''} /><span className="d">{d}</span><span className="t">{you ? <b>{t}</b> : t}</span></li>)}</ul>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute }}><YI size={14} color="#d99a1e" /> Amber is you. Everything else is us.</div>
         </div>
-        <div style={{ padding: '18px 16px 0' }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink }}>What you get</div>
-          {c.get.map((g) => <div key={g} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 14, color: C.ink, lineHeight: 1.4, marginTop: 6 }}><span style={{ color: h2, marginTop: 2, flexShrink: 0 }}><Check size={15} strokeWidth={3} /></span>{g}</div>)}
-        </div>
-        <div style={{ padding: '18px 16px 0' }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink }}>What happens after you order</div>
-          {TL.map(([d, t, you], i) => <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginTop: 8 }}><span style={{ width: 10, height: 10, borderRadius: 5, marginTop: 5, background: you ? gradOf(c.goal) : C.line, flexShrink: 0 }} /><span style={{ width: 68, flexShrink: 0, fontSize: 12, fontWeight: 700, color: you ? h2 : C.mute, marginTop: 1 }}>{d}</span><span style={{ flex: 1, fontSize: 13.5, color: C.ink, lineHeight: 1.4 }}>{you ? <b>{t}</b> : t}</span></div>)}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute, marginTop: 10 }}><YI size={14} color={h2} /> The coloured dots are you. Everything else is us.</div>
-        </div>
-        <div style={{ padding: '18px 16px 0' }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink }}>Where it shows up</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>{c.channels.map((x) => <span key={x} style={{ fontSize: 12, fontWeight: 600, color: C.ink, background: C.fill, borderRadius: 99, padding: '5px 10px' }}>{x}</span>)}</div>
-        </div>
+        <div className="pp-sec"><h2>Where it shows up</h2><div className="chips">{c.channels.map((x) => <span key={x}>{x}</span>)}</div></div>
         {goesWith.length > 0 && (<><Sec t="Goes well with" hue={c.goal} /><Shelf>{goesWith.map((x) => <Mini key={x.id} c={x} />)}</Shelf></>)}
-        <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(84px + env(safe-area-inset-bottom))', display: 'flex', justifyContent: 'center', pointerEvents: 'none', zIndex: 5 }}>
-          <div style={{ ...GLASS, pointerEvents: 'auto', width: 'calc(100% - 32px)', maxWidth: 448, borderRadius: 24, padding: '8px 8px 8px 16px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 10px 30px rgba(0,0,0,.12)' }}>
-            <span style={{ flex: 1, minWidth: 0 }}><span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal' }}>{c.price}</span><span style={{ display: 'block', fontSize: 11.5, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.cadence} · {c.you.toLowerCase()} · {c.ready}</span></span>
-            {buy
-              ? <button type="button" onClick={() => order(c)} style={{ height: 44, padding: '0 18px', borderRadius: 22, border: 'none', background: gradOf(c.goal), color: '#fff', fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: `0 6px 16px ${tint(c.goal, 0.4, 1)}`, display: 'inline-flex', alignItems: 'center', gap: 6 }}>{c.handoff.kind === 'request' ? 'Ask for a quote' : 'Order'} <ArrowRight size={15} /></button>
-              : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} style={{ height: 44, padding: '0 16px', borderRadius: 22, background: C.fill, color: C.ink, fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>Tell me when</Link>}
-          </div>
-        </div>
+        <div className="sticky"><div className="in">
+          <div className="p">{c.price}<span>{c.cadence} · {c.you.toLowerCase()} · {c.ready}</span></div>
+          {buy
+            ? <button type="button" className="btn hue" onClick={() => order(c)}>{c.handoff.kind === 'request' ? 'Ask for a quote' : 'Order'} <ArrowRight size={15} /></button>
+            : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>Tell me when</Link>}
+        </div></div>
       </div>
     )
   }
@@ -475,11 +612,11 @@ export default function CreatePage() {
     <MvpShell active="create" header={
       <div style={{ flexShrink: 0, background: '#fff' }}>
         <div style={{ padding: '0 0 2px' }}><TopRow back={backTo} middle={view.name === 'search' ? <SearchBar live /> : view.name === 'browse' ? <SearchBar /> : <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', textAlign: 'center' }}>{title}</span>} /></div>
-        {view.name === 'browse' && <Rail />}
+        {view.name === 'browse' && <div className="cr"><style>{CREATE_CSS}</style><Rail /></div>}
       </div>
     }>
-      <div style={{ background: '#fff', minHeight: '100%', fontFamily: "'Inter',system-ui,sans-serif" }}>
-        <style>{`.cc-scroll::-webkit-scrollbar{display:none}`}</style>
+      <div className="cr" style={{ background: '#fff', minHeight: '100%', fontFamily: "'Inter',system-ui,sans-serif" }}>
+        <style>{CREATE_CSS}</style>
         {view.name === 'browse' && browse()}
         {view.name === 'search' && search()}
         {view.name === 'guide' && guide()}
