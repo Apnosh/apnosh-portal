@@ -12,6 +12,7 @@
  * proof; a later pass can move them to the portal's Tailwind tokens.
  */
 
+import { gradOf, glow, hueOf, type HueKey } from './hues'
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown, Minus,
   ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
@@ -406,6 +407,8 @@ const ACCENT: Record<string, { bg: string; border: string; fg: string }> = {
   coral: { bg: '#f8efe9', border: '#ecd4c8', fg: '#a85c3c' },
   violet: { bg: '#f1edfb', border: '#ddd2f3', fg: '#6b4fd0' },
 }
+/* a suggestion's accent → the shared hue it wears on the redesigned card */
+const SUG_HUE: Record<string, HueKey> = { amber: 'amber', green: 'mint', blue: 'nights', coral: 'announce', violet: 'newfaces' }
 const SUG_ICON: Record<string, React.ComponentType<{ size?: number; color?: string }>> = {
   plug: Plug, star: Star, sparkles: Sparkles, message: MessageCircle, bell: Bell,
   calendar: CalendarDays, plus: Plus, trendingDown: TrendingDown, trendingUp: TrendingUp, mapPin: MapPin,
@@ -545,21 +548,24 @@ function deckDepth(pos: number): React.CSSProperties {
 
 function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }: { s: Suggestion; pos: number; isFront: boolean; onAdvance: () => void; onClose: () => void; canClose?: boolean }) {
   const a = ACCENT[s.accent] ?? ACCENT.amber
+  const hue = SUG_HUE[s.accent] ?? 'amber'
+  const [h1, h2] = hueOf(hue)
   const Icon = SUG_ICON[s.icon] ?? Sparkles
-  // The card sits on a bright pastel accent in BOTH skins, so its own text stays
-  // dark-on-pastel regardless of theme (a colour chip that pops on the dark home).
-  const INK = '#1d1d1f', MUTE = '#6e6e73', FAINT = '#aeaeb2'
+  // Portal redesign (owner 2026-09-04): a white card with a colour band and a gradient glyph
+  // in the suggestion's hue, so the deck reads like the campaign cards. Dark-on-white in both
+  // skins (the deck is a colour chip that pops on the dark home).
+  const INK = '#1d1d1f', MUTE = '#6e6e73'
   // Cards behind take the deck's full height (= front + peek) so their bottom
-  // strip is always empty colored card, never clipped content.
+  // strip is always empty card, never clipped content.
   const style: React.CSSProperties = {
     ...deckDepth(pos),
     height: isFront ? undefined : '100%',
     transformOrigin: 'top center',
     transition: 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s',
-    background: a.bg, border: `0.5px solid ${a.border}`, borderRadius: 18,
-    padding: '12px 15px', boxSizing: 'border-box', overflow: 'hidden',
+    background: '#fff', borderRadius: 18,
+    padding: '12px 15px 12px 19px', boxSizing: 'border-box', overflow: 'hidden',
     textDecoration: 'none', display: 'block', color: 'inherit', cursor: 'pointer',
-    boxShadow: pos === 0 ? '0 6px 16px rgba(0,0,0,0.13)' : '0 2px 7px rgba(0,0,0,0.08)',
+    boxShadow: pos === 0 ? '0 1px 2px rgba(0,0,0,.04), 0 10px 26px rgba(0,0,0,0.12)' : '0 2px 7px rgba(0,0,0,0.08)',
   }
   return (
     <Link
@@ -570,18 +576,20 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
       onClick={(e) => { if (!isFront) { e.preventDefault(); onAdvance() } else if (!s.href) e.preventDefault() }}
       style={style}
     >
+      <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 6, background: `linear-gradient(${h1}, ${h2})` }} />
       {isFront && canClose && (
-        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose() }} aria-label={s.obligation ? 'Next' : 'Dismiss'} style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,0.05)', color: FAINT, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, zIndex: 2 }}><X size={14} /></button>
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose() }} aria-label={s.obligation ? 'Next' : 'Dismiss'} style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: '#f0f0f2', color: MUTE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 11, background: '#fff', border: `0.5px solid ${a.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color={a.fg} /></div>
-        <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: a.fg }}>{s.eyebrow}</span>
+        <div style={{ width: 38, height: 38, borderRadius: 12, background: gradOf(hue), boxShadow: glow(hue, 0.3), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color="#fff" /></div>
+        <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: h2 }}>{s.eyebrow}</span>
       </div>
       <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.22, color: INK, marginBottom: 5, paddingRight: 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.title}</div>
       <div style={{ fontSize: 12.5, color: MUTE, lineHeight: 1.45, marginBottom: s.cta ? 13 : 0, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.body}</div>
       {s.cta && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: a.fg, color: '#fff', borderRadius: 99, padding: '9px 15px', fontWeight: 700, fontSize: 12.5 }}>{s.cta} <ChevronRight size={14} /></span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: gradOf(hue), color: '#fff', borderRadius: 99, padding: '9px 15px', fontFamily: DISPLAY, fontWeight: 600, fontSize: 12.5, boxShadow: glow(hue, 0.35) }}>{s.cta} <ChevronRight size={14} /></span>
       )}
+      <span hidden>{a.fg}</span>
     </Link>
   )
 }

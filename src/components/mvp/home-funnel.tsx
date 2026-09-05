@@ -22,6 +22,7 @@
  * locked, Cal Sans). Self-contained canvas on rAF; honors prefers-reduced-motion.
  */
 
+import { HUES, STAGE_HUES } from './hues'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Bell, MessageCircle, CalendarDays } from 'lucide-react'
@@ -514,6 +515,12 @@ export default function HomeFunnel({
     })
     const dark = theme === 'dark'
     const bandCol = (b: HealthBand): [number, number, number] => (dark ? BAND_RGB[b] : BAND_INK[b])
+    // Portal redesign (owner 2026-09-04): a ring wears its STAGE's colour (the same five hues as
+    // Insights) unless the stage is down on the period before, which stays red. The number keeps
+    // the direction rule (red when down, ink otherwise).
+    const hexRgb = (h: string): [number, number, number] => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]
+    const stageRgb = (i: number): [number, number, number] => hexRgb(HUES[STAGE_HUES[Math.max(0, Math.min(4, i))]][dark ? 0 : 1])
+    const dirCol = (i: number, b: HealthBand): [number, number, number] => (b === 'veryLow' ? bandCol(b) : stageRgb(i))
     // Ring, number and glow colour = DIRECTION vs the prior period (owner 2026-09-04): down → red,
     // otherwise green (a stage that used to read black now reads green). The conversion bands
     // (`health`) colour ONLY the step chips between stages, which is where the disconnect shows.
@@ -567,7 +574,7 @@ export default function HomeFunnel({
       const effZone: Zone = s.count === 0 ? 'locked' : s.zone
       const bd = s.count === 0 ? null : trend[i] // the stage's direction tints the inner glow (grey when empty)
       const eIn = easeOutCubic(clamp01((entrance - i * 0.09) / 0.5))
-      const rgb = bd ? bandCol(bd).join(',') : TONE[effZone].rgb
+      const rgb = bd ? dirCol(i, bd).join(',') : TONE[effZone].rgb
       const peak = (effZone === 'estimate' ? 0.20 : effZone === 'measured' ? 0.15 : 0.05) * (bd === 'veryLow' ? 1.2 : bd === 'low' ? 1.1 : 1)
       // light: a white disc with a soft green-grey shadow, painted BEFORE the crowd so the people sit on it
       if (!dark) {
@@ -601,7 +608,7 @@ export default function HomeFunnel({
       const band = trend[i]
       if (band == null) continue // no-data leg → no pulse (the ring reads grey)
       const isEst = s.zone === 'estimate'
-      const rgb = bandCol(band).join(',')
+      const rgb = dirCol(i, band).join(',')
 
       if (band === 'veryLow') {
         // very low → steady red ring + urgent red pulse
@@ -641,7 +648,7 @@ export default function HomeFunnel({
     const stageCol = (i: number) => {
       if (i < 0) return CC.wander
       const b = trend[i]
-      return b ? `rgb(${bandCol(b).join(',')})` : zoneCol(stages[i].count === 0 ? 'locked' : stages[i].zone)
+      return b ? `rgb(${dirCol(i, b).join(',')})` : zoneCol(stages[i].count === 0 ? 'locked' : stages[i].zone)
     }
     for (const tr of particlesRef.current) {
       let px: number, py: number, col: string, a = 1
@@ -674,7 +681,7 @@ export default function HomeFunnel({
       const pr = pressAmtRef.current[i] ?? 0 // press "settle" amount for this row
       const effZone: Zone = s.count === 0 ? 'locked' : s.zone // a 0 reads as empty → grey it like a no-data ring
       // the ring IS its band colour (red→green); a no-data / empty ring falls back to its grey zone hue.
-      const rc: number[] = band ? bandCol(band) : TONE[effZone].rgb.split(',').map(Number)
+      const rc: number[] = band ? dirCol(i, band) : TONE[effZone].rgb.split(',').map(Number)
       const ringStr = `${Math.round(rc[0])},${Math.round(rc[1])},${Math.round(rc[2])}`
       const baseRowStr = TONE[effZone].rgb // the row's OWN zone hue → press tint + chevron wake
       const baseA = !dark ? (effZone === 'locked' ? 0.35 : 0.95) : effZone === 'measured' ? 0.82 : effZone === 'estimate' ? 0.52 : 0.32
