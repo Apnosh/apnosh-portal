@@ -12,12 +12,13 @@ import ReportView from '@/components/report/report-view'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ImpactPage({ searchParams }: { searchParams: Promise<{ m?: string }> }) {
-  const { user, clientId } = await resolveCurrentClient(null)
+export default async function ImpactPage({ searchParams }: { searchParams: Promise<{ m?: string; clientId?: string }> }) {
+  const { m, clientId: clientIdParam } = await searchParams
+  /* the shared resolver: an owner gets their business, an admin the client picked in the switcher */
+  const { user, clientId } = await resolveCurrentClient(clientIdParam ?? null)
   if (!user) redirect('/login')
   if (!clientId) redirect('/dashboard')
 
-  const { m } = await searchParams
   const now = new Date()
   let year = now.getUTCFullYear()
   let month = now.getUTCMonth() + 1
