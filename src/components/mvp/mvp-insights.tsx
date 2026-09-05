@@ -1734,7 +1734,7 @@ function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days:
         const max = Math.max(h.value, avg, 1)
         return (
           <button key={h.date} type="button" onClick={() => setOpen(isOpen ? null : h.date)} aria-expanded={isOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 2px', background: 'none', border: 'none', textAlign: 'left', font: 'inherit', cursor: 'pointer', borderRadius: 12 }}>
-            <span style={{ width: 34, height: 34, color: col, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{up ? <TrendingUp size={18} /> : <TrendingDown size={18} />}</span>
+            <span style={{ width: 34, height: 20, color: col, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{up ? <TrendingUp size={18} /> : <TrendingDown size={18} />}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                 <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtPinDate(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>

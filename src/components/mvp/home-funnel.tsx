@@ -764,7 +764,13 @@ export default function HomeFunnel({
 
       const disp = numDispRef.current[i] != null ? numDispRef.current[i] : (s.count ?? 0)
       const compact = (v: number) => v >= 10_000_000 ? `${(v / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : v.toLocaleString()
-      const num = s.count == null ? '—' : (s.zone === 'estimate' ? '~' : '') + compact(Math.round(disp))
+      const num = loading ? '' : s.count == null ? '—' : (s.zone === 'estimate' ? '~' : '') + compact(Math.round(disp))
+      if (loading) {
+        // the numbers are still on their way: a soft bar holds the number's place, same spot, same size
+        const bw = Math.min(104, roomOut), bh = 30
+        roundRectP(numLeft ? anchorX : anchorX - bw, oy - bh / 2, bw, bh, 9)
+        ctx.fillStyle = dark ? 'rgba(255,255,255,0.08)' : '#ececef'; ctx.fill()
+      }
       // the number wears its direction: red when down, green otherwise (owner 2026-09-04: "black should still be green").
       // red when down; otherwise plain ink — big green digits were hard to read (owner 2026-09-04)
       ctx.fillStyle = s.count == null ? C.faint : band === 'veryLow' ? `rgb(${bandCol(band).join(',')})` : s.zone === 'estimate' ? C.amberDk : C.ink
@@ -776,13 +782,13 @@ export default function HomeFunnel({
       while (numPx > 24 && ctx.measureText(num).width > roomOut) { numPx -= 2; ctx.font = `600 ${numPx}px ${DISPLAY}` }
       const numBase = oy + numPx * 0.34
       ctx.fillText(num, anchorX, numBase, roomOut)
-      const drawnNumW = Math.min(ctx.measureText(num).width, roomOut) // width actually drawn (maxWidth may compress it)
+      const drawnNumW = loading ? Math.min(104, roomOut) : Math.min(ctx.measureText(num).width, roomOut) // width actually drawn (maxWidth may compress it)
       setLS('0px')
       // YoY % — sits BESIDE the number (on its inner side, toward the centre), vertically centred on the
       // row. The glyph carries direction, |percent| the magnitude: ▲ up=green, ▼ down=coral, – flat=mute.
       let tickW = 0 // the tick's width, so the connector starts after it
       const dy = s.deltaAbs != null ? s.deltaAbs : s.deltaYoY
-      if (dy != null && s.count != null) {
+      if (!loading && dy != null && s.count != null) {
         const tickIn = clamp01((entrance - (i * 0.09 + 0.5)) / 0.35) // resolves just after the count-up
         if (tickIn > 0.01) {
           const r0 = Math.round(dy)
@@ -868,7 +874,7 @@ export default function HomeFunnel({
       ctx.globalAlpha = 1
     }
     ctx.textAlign = 'left'
-  }, [C, theme, layout, stages, effH, rAt, flowTop, flowBot])
+  }, [C, theme, layout, stages, effH, rAt, flowTop, flowBot, loading])
 
   const resize = useCallback(() => {
     const cv = canvasRef.current
@@ -885,6 +891,11 @@ export default function HomeFunnel({
 
   useEffect(() => {
     const n = layout.length
+    // A data refresh (the quiet sync after first paint, or a range change) keeps the crowd it has:
+    // the loop already lets each ring drift to its new target, so nothing re-cascades and the
+    // numbers cross-fade in place (owner 2026-09-05: "it glitches and updates"). Only the first
+    // paint, or a change in the number of stages, seeds people from scratch.
+    if (particlesRef.current.length > 0 && particlesRef.current.every((tr) => tr.orb < n)) return
     // the REAL rendered width — geom.W may still hold its 400 default until resize() runs (this
     // effect is defined before the animation effect, so it'd otherwise seed everyone off a wrong centre).
     const cvW = canvasRef.current?.clientWidth || geom.current.W
@@ -1373,8 +1384,10 @@ export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
   )
 }
 
+type FunnelData = { views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null; yoyAbs: FunnelYoYAbs | null }
+
 export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar, tickFor }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void; bar?: HomeFunnelProps['bar']; /* the +/- ticks from the SAME daily series Insights charts (2026-09-04), so the two screens agree by construction; a null field keeps the route's own read */ tickFor?: (r: FunnelRange) => Partial<FunnelYoY> | null }) {
-  const [data, setData] = useState<{ views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null; yoyAbs: FunnelYoYAbs | null } | null>(null)
+  const [data, setData] = useState<FunnelData | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   /* custom-range bounds — default to the last 14 days ending today */
   const [cStart, setCStart] = useState(() => { const t = new Date(); return localYmdOf(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) })
@@ -1386,6 +1399,18 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar, tick
   /* starts TRUE: the very first render (before the effect fires) must already
    * paint the skeleton, never a frame of nothing */
   const [loading, setLoading] = useState(true)
+  /* the last numbers this phone saw for this client + range: painted at once on the next visit,
+     then the fresh load cross-fades over them (owner 2026-09-05: "the home page loading in the numbers") */
+  const cacheKey = clientId ? `hf-last:${clientId}:${range}${range === 'custom' ? `:${cStart}:${cEnd}` : ''}` : null
+  useEffect(() => {
+    if (!cacheKey) return
+    try {
+      const raw = sessionStorage.getItem(cacheKey)
+      if (!raw) return
+      const c = JSON.parse(raw) as FunnelData
+      if (c?.views && c?.actions) { setData(c); if ((c.views.total ?? 0) > 0) everShown.current = true }
+    } catch { /* no cache, the loading funnel shows */ }
+  }, [cacheKey])
   useEffect(() => {
     // No client, or no Google data: tell the parent, so Home can render its
     // Day-0 body in place of the funnel — never a blank screen.
@@ -1424,6 +1449,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar, tick
         })
         const shown = !!(views && actions && views.total > 0)
         if (shown) everShown.current = true
+        if (shown && cacheKey) { try { sessionStorage.setItem(cacheKey, JSON.stringify({ views, actions, counts: derived?.counts, asOf: d.asOf ?? null, windowStart: d.windowStart ?? null, windowEnd: d.windowEnd ?? null, audience: d.audience ?? null, yoy: d.yoy ?? null, yoyAbs: d.yoyAbs ?? null })) } catch { /* storage full or off */ } }
         onVisibility?.(shown || everShown.current ? 'shown' : 'empty')
       })
       .catch(() => { if (alive) onVisibility?.('empty') /* Home stays lean if this fails */ })
@@ -1438,7 +1464,9 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar, tick
     // First load still in flight: paint the funnel's shape right away so Home
     // is never blank. Once the load settles empty, this yields to Home's
     // connect card (onVisibility fired 'empty' above).
-    if (clientId && loading) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelSkeleton height={height} /></div>
+    // The loading state IS the home page, with the numbers on their way: the same top row, the
+    // same five rows and rings, grey bars where the numbers land (owner 2026-09-05: no zigzag).
+    if (clientId && loading) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={{ total: 0, maps: 0, search: 0 }} actions={{ directions: 0, calls: 0, websiteClicks: 0 }} loading height={height} fill={fill} bar={bar} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} /></div>
     // Settled empty: the dashboard stays a dashboard, with the connect prompt
     // sitting where the numbers will land (owner call 2026-09-02).
     return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>

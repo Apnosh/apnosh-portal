@@ -38,6 +38,17 @@ async function main() {
   await send('Network.setCookies', { cookies: Object.entries(jar).map(([name, value]) => ({ name, value, domain: 'localhost', path: '/' })) })
   for (const p of PATHS) {
     await send('Page.navigate', { url: `http://localhost:3111${p}` })
+    if (process.env.SHOT_TIMES) {
+      // a time series of the same page: screenshots at each offset (ms) after navigation
+      let last = 0
+      for (const t of process.env.SHOT_TIMES.split(',').map(Number)) {
+        await sleep(Math.max(0, t - last)); last = t
+        const shot = await send('Page.captureScreenshot', { format: 'png' })
+        const name = p.replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '') + `_t${t}`
+        writeFileSync(`${OUT}/${name}.png`, Buffer.from(shot.data, "base64"))
+        console.log('saved', name)
+      }
+    }
     await sleep(Number(process.env.WAIT_MS || 14000))
     // optional: type into the first textarea and press the Continue button, then wait for the result
     if (process.env.TYPE_TEXT) {

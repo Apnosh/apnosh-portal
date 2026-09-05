@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react'
 import { useClient } from '@/lib/client-context'
 import MvpHome, { type MvpHomeData } from '@/components/mvp/mvp-home'
 import { transformHome } from '@/components/mvp/home-transform'
-import { HomeFunnelSkeleton } from '@/components/mvp/home-funnel'
+import HomeFunnel from '@/components/mvp/home-funnel'
 import MvpShell from '@/components/mvp/mvp-shell'
 import type { Suggestion } from '@/lib/dashboard/suggestions'
 
@@ -80,7 +80,7 @@ export default function DashboardHomePage() {
       {clientLoading ? (
         /* client context still resolving — show the funnel's shape, not a bare
            line of text, so the seconds right after onboarding never look broken */
-        <HomeFunnelSkeleton message="Setting up your dashboard" />
+        <HomeFunnel views={{ total: 0, maps: 0, search: 0 }} actions={{ directions: 0, calls: 0, websiteClicks: 0 }} loading height={620} fill bar={{ initial: '·' }} />
       ) : error && !data ? (
         <Centered>Couldn&apos;t load: {error}</Centered>
       ) : client ? (
