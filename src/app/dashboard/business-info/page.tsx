@@ -46,8 +46,8 @@ function socialHint(info: BusinessInfo | undefined): string {
 /* the two syncs, as status tiles that wear the network's own mark (portal redesign 2026-09-04) */
 function StatusPill({ label, on, provider }: { label: string; on: boolean; provider: 'google_business_profile' | 'website' }) {
   return (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 16, padding: '10px 12px', opacity: on ? 1 : 0.8 }}>
-      <span style={{ position: 'relative', width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, filter: on ? 'none' : 'grayscale(1)' }}>
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, padding: '6px 4px', opacity: on ? 1 : 0.8 }}>
+      <span style={{ position: 'relative', width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, filter: on ? 'none' : 'grayscale(1)' }}>
         <BrandOrMark provider={provider} size={19} />
         <span style={{ position: 'absolute', right: -1, top: -1, width: 11, height: 11, borderRadius: 99, background: on ? T.green : T.faint, border: '2px solid #fff' }} />
       </span>

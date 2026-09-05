@@ -181,8 +181,8 @@ const BRAND_SOURCES = new Set(['google', 'google_business_profile', 'gbp', 'goog
 function IconAvatar({ emoji, source, danger }: { emoji: string; source?: string; danger?: boolean }) {
   if (source && BRAND_SOURCES.has(source)) {
     return (
-      <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fff', boxShadow: danger ? `0 0 0 2px ${C.coral}, 0 3px 10px rgba(0,0,0,.09)` : '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
-        <BrandOrMark provider={source} size={24} />
+      <div style={{ width: 44, height: 44, borderRadius: '50%', boxShadow: danger ? `0 0 0 2px ${C.coral}` : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
+        <BrandOrMark provider={source} size={26} />
         {danger && <span aria-hidden style={{ position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: '50%', background: C.coral, border: '2px solid #fff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plug size={10} /></span>}
       </div>
     )
@@ -283,7 +283,7 @@ function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) =>
   const provider = r.source === 'instagram' ? 'instagram' : r.source === 'yelp' ? 'yelp' : r.source === 'facebook' ? 'facebook' : r.source === 'tiktok' ? 'tiktok' : 'google'
   const avatar = (
     <div style={{ position: 'relative', width: 44, height: 44, flexShrink: 0 }}>
-      <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={provider} size={24} /></div>
+      <div style={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={provider} size={26} /></div>
       {r.avatar
         ? <img src={r.avatar} alt="" referrerPolicy="no-referrer" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', border: '2px solid #fff', background: '#eef0ef' }} />
         : <span style={{ position: 'absolute', right: -3, bottom: -3, width: 20, height: 20, borderRadius: '50%', background: '#eef0ef', border: '2px solid #fff', color: C.mute, fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{r.author.charAt(0).toUpperCase()}</span>}

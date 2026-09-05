@@ -15,7 +15,7 @@ import type { TeamRequest } from '@/lib/dashboard/get-team-requests'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, C, DISPLAY } from '@/components/mvp/mvp-detail'
 import { gradOf, glow, hueOf, tint, type HueKey } from '@/components/mvp/hues'
-import { Mark, MARK_SHADOW } from '@/components/mvp/mark'
+import { Mark } from '@/components/mvp/mark'
 import { AskPrompt, SwapModal, messageHref } from './team-view'
 
 const ROLE_HUE: Record<string, HueKey> = {
@@ -34,7 +34,7 @@ const ACTIVITY_RECENCY_MS = 30 * 24 * 60 * 60 * 1000
 function Avatar({ m, size, hue }: { m: TeamMember; size: number; hue: HueKey }) {
   const initials = m.displayName.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
   if (m.avatarUrl) return <img src={m.avatarUrl} alt={m.displayName} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, boxShadow: glow(hue, 0.3) }} />
-  return <span style={{ width: size, height: size, borderRadius: '50%', background: '#fff', boxShadow: MARK_SHADOW, color: hueOf(hue)[1], fontFamily: DISPLAY, fontSize: Math.round(size * 0.34), fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
+  return <span style={{ width: size, height: size, borderRadius: '50%', color: hueOf(hue)[1], fontFamily: DISPLAY, fontSize: Math.round(size * 0.34), fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
 }
 
 const AVAIL: Record<TeamMember['availability'], { label: string; color: string }> = {

@@ -298,7 +298,7 @@ const MARKED = new Set(['google', 'google_business_profile', 'gbp', 'google_anal
 function LaneMark({ platform, Icon, dim }: { platform: string; Icon: React.ComponentType<{ size?: number }>; dim?: boolean }) {
   const key = String(platform || '').toLowerCase()
   const marked = MARKED.has(key) || key.startsWith('google')
-  if (marked) return <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: dim ? 0.55 : 1, filter: dim ? 'grayscale(.5)' : undefined }}><BrandOrMark provider={key.startsWith('google') ? 'google' : key} size={20} /></span>
+  if (marked) return <span style={{ width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: dim ? 0.55 : 1, filter: dim ? 'grayscale(.5)' : undefined }}><BrandOrMark provider={key.startsWith('google') ? 'google' : key} size={20} /></span>
   return <Mark hue="mint" size={36} dim={dim}><Icon size={18} /></Mark>
 }
 

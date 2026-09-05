@@ -26,7 +26,8 @@ import { Mark } from './mark'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)'
-const CARD: React.CSSProperties = { background: '#fff', borderRadius: 18, padding: '16px 16px 18px', boxShadow: CARD_SHADOW, marginTop: 14 }
+/* the month grid sits on the page too (owner 2026-09-04) */
+const CARD: React.CSSProperties = { padding: '4px 4px 8px', marginTop: 14 }
 const H2: React.CSSProperties = { fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }
 /* a plain list sits on the page, no card (owner 2026-09-04); the month grid keeps its card */
 const LIST: React.CSSProperties = { marginTop: 16, padding: '0 4px' }
@@ -57,7 +58,7 @@ const dayLabel = (day: string, today: string) => {
 function KindMark({ item }: { item: Item }) {
   const k = KIND[item.kind]
   if (item.kind === 'post' && item.platform) {
-    return <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><BrandOrMark provider={item.platform} size={20} /></span>
+    return <span style={{ width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><BrandOrMark provider={item.platform} size={20} /></span>
   }
   const icon = item.kind === 'shoot' ? <Camera size={17} /> : item.kind === 'email' ? <Mail size={17} /> : item.kind === 'task' ? <CheckSquare size={17} /> : item.kind === 'launch' ? <Rocket size={17} /> : item.kind === 'occasion' ? <PartyPopper size={17} /> : <FileText size={17} />
   return <Mark hue={kh(item.kind)} size={40}>{icon}</Mark>
@@ -133,7 +134,7 @@ export default function MvpCalendar({ clientId, campaigns }: { clientId?: string
   return (
     <div>
       {/* the month */}
-      <div style={{ ...CARD, marginTop: 0, padding: '14px 14px 16px' }}>
+      <div style={{ ...CARD, marginTop: 0, padding: '4px 4px 10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <button type="button" aria-label="Previous month" onClick={() => setCur((c) => ({ y: c.m === 0 ? c.y - 1 : c.y, m: c.m === 0 ? 11 : c.m - 1 }))} style={{ width: 34, height: 34, borderRadius: 99, border: 'none', background: C.bg, color: C.ink, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ChevronLeft size={18} /></button>
           <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16 }}>{monthLabel}</span>

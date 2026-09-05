@@ -384,7 +384,8 @@ function AnalystButton() {
 /* the page's card + heading kit: white cards on the soft ground, sentence-case headings,
    no hairline borders (the ground does the separating) */
 const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.045)'
-const CARD: React.CSSProperties = { marginTop: 14, background: '#fff', borderRadius: 18, padding: '16px 16px 18px', boxShadow: CARD_SHADOW }
+/* charts sit on the page too now (owner 2026-09-04): CARD is a spacer, not a card */
+const CARD: React.CSSProperties = { marginTop: 18, padding: '0 2px' }
 const H2: React.CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }
 /* a plain list sits on the page, no card (owner 2026-09-04); charts keep CARD */
 const LIST: React.CSSProperties = { marginTop: 16, padding: '0 2px' }
@@ -521,8 +522,8 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
   if (tab === 'trends') return <TrendsTab detail={detail} campaigns={campaigns} byKey={byKey} initial={focus.stageKey} clientId={clientId} />
   return (
     <div style={{ padding: '0 0 8px' }}>
-      {/* the hero is a card like everything else: one soft ground, no seam between the graph and the rest */}
-      <div onTouchStart={onCardTouchStart} onTouchMove={onCardTouchMove} onTouchEnd={onCardTouchEnd} onTouchCancel={onCardTouchEnd} style={{ margin: '12px 18px 0', background: '#fff', borderRadius: 18, padding: '14px 0 4px', boxShadow: CARD_SHADOW, overflow: 'hidden', position: 'relative', touchAction: 'pan-y' }}>
+      {/* the hero sits on the page like everything else (owner 2026-09-04: no card behind the graph) */}
+      <div onTouchStart={onCardTouchStart} onTouchMove={onCardTouchMove} onTouchEnd={onCardTouchEnd} onTouchCancel={onCardTouchEnd} style={{ margin: '8px 0 0', padding: '10px 0 4px', overflow: 'hidden', position: 'relative', touchAction: 'pan-y' }}>
       {/* the page's two tools ride the stage row, top right, over every slide */}
       <div style={{ position: 'absolute', top: 12, right: 14, display: 'flex', gap: 8, zIndex: 2 }}>
         <AnalystButton />
@@ -737,8 +738,8 @@ function SourceItemRow({ s, groupLabel, first, top, accent }: { s: StageSourceVi
   return (
     <div style={{ padding: '9px 0 10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          <BrandOrMark provider={provider} size={20} />
+        <span style={{ width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <BrandOrMark provider={provider} size={22} />
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
@@ -1639,7 +1640,7 @@ function ConnectRow({ label, sources, first = false }: { label: string; sources:
     <Link href="/dashboard/connected-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', padding: '10px 0 4px' }}>
       <span style={{ display: 'inline-flex', flexShrink: 0, width: 36, justifyContent: 'center' }}>
         {(provs.length ? provs.slice(0, 3) : ['website']).map((p, i) => (
-          <span key={p} style={{ width: 28, height: 28, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: i ? -10 : 0, opacity: 0.55, filter: 'grayscale(.4)' }}>
+          <span key={p} style={{ width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: i ? -8 : 0, opacity: 0.55, filter: 'grayscale(.4)' }}>
             <BrandOrMark provider={p} size={15} />
           </span>
         ))}
@@ -2537,7 +2538,7 @@ function Stars({ n }: { n: number }) {
 function InsightsGhost() {
   const bone = (w: number | string, h: number, r = 8): React.CSSProperties => ({ width: w, height: h, borderRadius: r, background: 'linear-gradient(90deg, #f0f0f3 0%, #f7f7f9 45%, #f0f0f3 90%)', backgroundSize: '200% 100%', animation: 'mvpGhost 1.6s ease-in-out infinite' })
   return (
-    <div style={{ margin: '12px 18px 0', background: '#fff', borderRadius: 18, padding: '14px 18px 18px', boxShadow: CARD_SHADOW }} aria-busy>
+    <div style={{ margin: '12px 18px 0', padding: '14px 0 18px' }} aria-busy>
       <style>{`@keyframes mvpGhost{0%{background-position:100% 0}100%{background-position:-100% 0}}@media (prefers-reduced-motion:reduce){[aria-busy] *{animation:none!important}}`}</style>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={bone(150, 26, 8)} />

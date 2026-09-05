@@ -150,7 +150,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
 
 function EmptyState() {
   return (
-    <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 18, padding: '34px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+    <div style={{ padding: '34px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
       <Mark hue="mint" size={48}><Plus size={24} /></Mark>
       <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>No campaigns yet</div>
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Start one and your strategist runs it — you just approve. Pick a goal and we build the plan.</div>
@@ -184,9 +184,9 @@ function CampaignCard({ c }: { c: HuedCard }) {
   const small: React.CSSProperties = { fontSize: 11, color: C.mute }
 
   return (
-    <Link href={c.href} style={{ display: 'flex', textDecoration: 'none', color: 'inherit', overflow: 'hidden', background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, marginBottom: 10 }}>
-      <div style={{ width: 6, flexShrink: 0, background: `linear-gradient(${h1}, ${h2})` }} />
-      <div style={{ flex: 1, minWidth: 0, padding: '12px 14px' }}>
+    <Link href={c.href} className="mvp-row" style={{ display: 'flex', textDecoration: 'none', color: 'inherit', borderRadius: 14, marginBottom: 14 }}>
+      <div style={{ width: 4, flexShrink: 0, borderRadius: 2, background: `linear-gradient(${h1}, ${h2})` }} />
+      <div style={{ flex: 1, minWidth: 0, padding: '2px 4px 2px 12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Mark hue={c.hue} size={38}><Glyph size={18} /></Mark>
           <div style={{ flex: 1, minWidth: 0 }}>
