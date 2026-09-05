@@ -13,7 +13,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useClient } from '@/lib/client-context'
 import { ChevronLeft, Search, Send, Loader2, Plus, MessageCircle, Compass, Video, Camera, Image as ImageIcon, CreditCard, HelpCircle } from 'lucide-react'
-import { gradOf, glow, type HueKey } from './hues'
+import { gradOf, glow, hueOf, type HueKey } from './hues'
 import { Mark } from './mark'
 import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
@@ -56,6 +56,18 @@ function contactForSubject(subject: string): Contact | null {
 }
 
 interface ThreadRow { id: string; subject: string; lastAt: string; lastMessage: string | null; unread: boolean }
+/** a real person on the account, matched to a contact by role (photo + name lead when we have them) */
+interface Person { id: string; name: string; avatarUrl: string | null; roles: string[]; primary: boolean; availability: 'available' | 'limited' | 'full' }
+const ROLE_OF_CONTACT: Record<string, string[]> = { strategist: ['strategist'], videographer: ['videographer'], photographer: ['photographer'], designer: ['designer'] }
+function personFor(c: Contact | null, people: Person[]): Person | undefined {
+  if (!c) return undefined
+  if (c.key === 'strategist') return people.find((p) => p.primary) ?? people.find((p) => p.roles.includes('strategist'))
+  const roles = ROLE_OF_CONTACT[c.key] ?? []
+  return people.find((p) => p.roles.some((r) => roles.includes(r)))
+}
+/* the one-word labels under the avatar row */
+const SHORT: Record<string, string> = { strategist: 'Strategist', videographer: 'Video', photographer: 'Photos', designer: 'Design', account: 'Billing', support: 'Support' }
+const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n
 interface Msg { id: string; from: 'owner' | 'team'; senderName: string; text: string; createdAt: string }
 /** draft pre-fills the composer (deep links pass who/what the note is about). */
 interface Active { threadId: string | null; contact: Contact | null; subject: string; draft?: string }
@@ -92,6 +104,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const [active, setActive] = useState<Active | null>(null)
+  const [people, setPeople] = useState<Person[]>([])
   const deepLinked = useRef(false)
   useEffect(() => { onActiveChange?.(!!active) }, [active, onActiveChange])
 
@@ -122,6 +135,14 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
     })()
     return () => { live = false }
   }, [supabase, selClient?.id, clientLoading])
+
+  // the real people on the account, for the avatar row and the thread rows
+  useEffect(() => {
+    if (!selClient?.id) return
+    let live = true
+    fetch(`/api/dashboard/team?clientId=${selClient.id}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.people)) setPeople(j.people as Person[]) }).catch(() => {})
+    return () => { live = false }
+  }, [selClient?.id])
 
   const loadThreads = useCallback(async () => {
     if (!businessId || !userId) return
@@ -172,51 +193,87 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
   const onThreadCreated = () => { loadThreads() }
 
   if (active) {
-    return <Conversation key={active.threadId ?? active.subject} active={active} userId={userId} onBack={onBack} onThreadCreated={onThreadCreated} />
+    return <Conversation key={active.threadId ?? active.subject} active={active} person={personFor(active.contact, people)} userId={userId} onBack={onBack} onThreadCreated={onThreadCreated} />
   }
 
   const q = (queryProp ?? query).trim().toLowerCase()
+  const nameOf = (c: Contact | null, subject: string) => { const p = personFor(c, people); return p ? `${firstName(p.name)} · ${c?.name ?? subject}` : (c?.name ?? subject) }
   const convos = threads.filter((t) => {
     if (!q) return true
-    const name = contactForSubject(t.subject)?.name ?? t.subject
-    return `${name} ${t.subject} ${t.lastMessage ?? ''}`.toLowerCase().includes(q)
+    const c = contactForSubject(t.subject)
+    return `${nameOf(c, t.subject)} ${t.subject} ${t.lastMessage ?? ''}`.toLowerCase().includes(q)
   })
   const activeKeys = new Set(threads.map((t) => contactForSubject(t.subject)?.key).filter(Boolean) as string[])
-  const reachable = CONTACTS.filter((c) => !activeKeys.has(c.key) && (!q || `${c.name} ${c.blurb}`.toLowerCase().includes(q)))
-  const totalUnread = threads.filter((t) => t.unread).length
+  // the avatar row: everyone you can message, the strategist first, then people you have not
+  // written to yet, then the rest — like a DM app's suggestions (owner 2026-09-04)
+  const suggested = [...CONTACTS].sort((x, y) => (x.key === 'strategist' ? -1 : y.key === 'strategist' ? 1 : Number(activeKeys.has(x.key)) - Number(activeKeys.has(y.key))))
+  const peopleHits = q ? CONTACTS.filter((c) => { const p = personFor(c, people); return `${c.name} ${c.blurb} ${p?.name ?? ''}`.toLowerCase().includes(q) }) : []
+  const EMPTY = (
+    <div className="mrise" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '44px 40px 24px' }}>
+      <Mark hue="mint" size={56}><MessageCircle size={24} /></Mark>
+      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, marginTop: 14, marginBottom: 5 }}>No messages yet</div>
+      <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>Tap someone above to say hello. A real person on your team answers.</div>
+    </div>
+  )
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {/* the top row IS the header now (owner 2026-09-04); the old title / "Reach your Apnosh team" block is gone */}
       {queryProp == null && searchOpen && (
-        <div style={{ padding: '12px 16px 0' }}><input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search messages…" style={{ width: '100%', borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', border: 'none', padding: '10px 12px', fontSize: 14, fontFamily: 'inherit' }} /></div>
+        <div style={{ padding: '12px 16px 0' }}><input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search people and messages…" style={{ width: '100%', borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', border: 'none', padding: '11px 14px', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} /></div>
       )}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 16px 28px' }}>
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 28px' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13.5, padding: 30 }}><Loader2 size={16} className="animate-spin" /> Loading…</div>
         ) : noBusiness ? (
           <Empty title="No business linked yet" sub="Finish setting up your restaurant to start messaging your team." />
-        ) : (
+        ) : q ? (
           <>
-            {/* one card per group, rows on hairlines (owner 2026-09-04: too much space between chats) */}
+            {/* search: people first (to start a conversation), then matching messages */}
+            {peopleHits.length > 0 && (
+              <>
+                <SectionLabel hue="mint">People</SectionLabel>
+                <div style={{ margin: '0 16px', background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden', marginBottom: 6 }}>
+                  {peopleHits.map((c, i) => <PersonRow key={c.key} c={c} person={personFor(c, people)} first={i === 0} onOpen={() => openContact(c)} />)}
+                </div>
+              </>
+            )}
             {convos.length > 0 && (
               <>
-                <SectionLabel hue="mint">Conversations</SectionLabel>
-                <div style={{ background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden', marginBottom: 6 }}>
-                  {convos.map((t, i) => <ThreadRowView key={t.id} t={t} first={i === 0} onOpen={() => openThread(t)} />)}
+                <SectionLabel hue="nights">Messages</SectionLabel>
+                <div style={{ margin: '0 16px', background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
+                  {convos.map((t, i) => <ThreadRowView key={t.id} t={t} person={personFor(contactForSubject(t.subject), people)} first={i === 0} onOpen={() => openThread(t)} />)}
                 </div>
               </>
             )}
-            {reachable.length > 0 && (
-              <>
-                <SectionLabel hue="catering">{convos.length ? 'Reach someone else' : 'Reach the right person'}</SectionLabel>
-                <div style={{ background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
-                  {reachable.map((c, i) => <ContactRowView key={c.key} c={c} first={i === 0} onOpen={() => openContact(c)} />)}
-                </div>
-              </>
-            )}
-            {convos.length === 0 && reachable.length === 0 && (
-              <Empty title="No matches" sub="No conversations or contacts match that search." />
+            {peopleHits.length === 0 && convos.length === 0 && <Empty title="No matches" sub="No people or messages match that search." />}
+          </>
+        ) : (
+          <>
+            {/* the avatar row: who you can message, like a DM app's suggestions */}
+            <div className="cc-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '8px 16px 4px', scrollbarWidth: 'none' }}>
+              {suggested.map((c) => {
+                const p = personFor(c, people)
+                const has = activeKeys.has(c.key)
+                return (
+                  <button key={c.key} type="button" onClick={() => openContact(c)} className="mvp-press" style={{ flex: '0 0 auto', width: 66, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}>
+                    <span style={{ position: 'relative' }}>
+                      <span style={{ display: 'inline-flex', padding: 2, borderRadius: '50%', background: has ? 'transparent' : gradOf(c.hue) }}>
+                        <span style={{ display: 'inline-flex', padding: 2, borderRadius: '50%', background: '#fff' }}><Avatar c={c} person={p} size={54} /></span>
+                      </span>
+                      {!has && <span style={{ position: 'absolute', right: 0, bottom: 2, width: 20, height: 20, borderRadius: '50%', background: gradOf(c.hue), color: '#fff', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={12} strokeWidth={3} /></span>}
+                    </span>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 66 }}>{p ? firstName(p.name) : SHORT[c.key] ?? c.name}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* the inbox: only real conversations */}
+            <SectionLabel hue="mint">Messages</SectionLabel>
+            {convos.length === 0 ? EMPTY : (
+              <div style={{ margin: '0 16px', background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
+                {convos.map((t, i) => <ThreadRowView key={t.id} t={t} person={personFor(contactForSubject(t.subject), people)} first={i === 0} onOpen={() => openThread(t)} />)}
+              </div>
             )}
           </>
         )}
@@ -227,31 +284,34 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
 }
 
 function SectionLabel({ children, hue = 'mint' }: { children: React.ReactNode; hue?: HueKey }) {
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, margin: '10px 4px 8px' }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(hue) }} />{children}</div>
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, margin: '12px 20px 8px' }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(hue) }} />{children}</div>
 }
 
-function Avatar({ c, size = 46 }: { c: Contact | null; size?: number }) {
+/* a person's photo when we have one, their initials in the role colour when we know the name,
+   the role's glyph mark otherwise */
+function Avatar({ c, person, size = 46 }: { c: Contact | null; person?: Person; size?: number }) {
   const hue: HueKey = c?.hue ?? 'grey'
   const Icon = c?.Icon ?? MessageCircle
-  return (
-    <Mark hue={hue} size={size}><Icon size={Math.round(size * 0.42)} /></Mark>
-  )
+  if (person?.avatarUrl) return <img src={person.avatarUrl} alt={person.name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)' }} />
+  if (person) return <Mark hue={hue} size={size} style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: Math.round(size * 0.36) }}>{person.name.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('')}</Mark>
+  return <Mark hue={hue} size={size}><Icon size={Math.round(size * 0.42)} /></Mark>
 }
 
-function ThreadRowView({ t, onOpen, first = true }: { t: ThreadRow; onOpen: () => void; first?: boolean }) {
+function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOpen: () => void; first?: boolean; person?: Person }) {
   const c = contactForSubject(t.subject)
-  const name = c?.name ?? t.subject
+  const name = person ? person.name : (c?.name ?? t.subject)
+  const role = person ? (c?.name ?? t.subject) : null
   return (
     <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderTop: first ? 'none' : `0.5px solid ${C.line}`, padding: '11px 14px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-      <Avatar c={c} size={42} />
+      <Avatar c={c} person={person} size={46} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
           <span style={{ fontWeight: t.unread ? 700 : 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
-          {c?.key === 'strategist' && <span style={{ fontSize: 10.5, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 7px', flexShrink: 0 }}>replies within the hour</span>}
+          {role && <span style={{ fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap', flexShrink: 0 }}>{role}</span>}
           <span style={{ marginLeft: 'auto', fontSize: 11, color: t.unread ? C.greenDk : C.faint, fontWeight: t.unread ? 700 : 400, flexShrink: 0 }}>{timeAgo(t.lastAt)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: t.unread ? C.ink2 : C.mute, fontWeight: t.unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.lastMessage ?? 'No messages yet'}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.unread ? C.ink2 : C.mute, fontWeight: t.unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.lastMessage ?? 'No messages yet'}</span>
           {t.unread && <span style={{ width: 8, height: 8, borderRadius: 99, background: C.green, flexShrink: 0 }} />}
         </div>
       </div>
@@ -259,18 +319,19 @@ function ThreadRowView({ t, onOpen, first = true }: { t: ThreadRow; onOpen: () =
   )
 }
 
-function ContactRowView({ c, onOpen, first = true }: { c: Contact; onOpen: () => void; first?: boolean }) {
+function PersonRow({ c, person, onOpen, first = true }: { c: Contact; person?: Person; onOpen: () => void; first?: boolean }) {
   return (
     <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderTop: first ? 'none' : `0.5px solid ${C.line}`, padding: '10px 14px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-      <Avatar c={c} size={38} />
+      <Avatar c={c} person={person} size={40} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</div>
-        <div style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{c.blurb}</div>
+        <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person ? person.name : c.name}</div>
+        <div style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{person ? `${c.name} · ${c.blurb}` : c.blurb}</div>
       </div>
-      <span style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 99, background: gradOf(c.hue), boxShadow: glow(c.hue, 0.3), color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={15} /></span>
+      <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: hueOfKey(c.hue) }}>Message</span>
     </button>
   )
 }
+const hueOfKey = (k: HueKey) => hueOf(k)[1]
 
 function Empty({ title, sub }: { title: string; sub: string }) {
   return (
@@ -283,7 +344,7 @@ function Empty({ title, sub }: { title: string; sub: string }) {
 }
 
 /* ── A single conversation (owner ↔ a specific Apnosh person) ──────────────── */
-function Conversation({ active, userId, onBack, onThreadCreated }: { active: Active; userId: string | null; onBack: () => void; onThreadCreated: () => void }) {
+function Conversation({ active, person, userId, onBack, onThreadCreated }: { active: Active; person?: Person; userId: string | null; onBack: () => void; onThreadCreated: () => void }) {
   const supabase = createClient()
   const [threadId, setThreadId] = useState<string | null>(active.threadId)
   const [msgs, setMsgs] = useState<Msg[]>([])
@@ -355,7 +416,7 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
     setSending(false)
   }
 
-  const title = c?.name ?? active.subject
+  const title = person ? person.name : (c?.name ?? active.subject)
   const hue: HueKey = c?.hue ?? 'mint'
   /* Modern chat layout (owner 2026-09-04): messages group by sender and by day, consecutive
      bubbles sit 3px apart with one tail per group, one avatar per group, one time per group. */
@@ -373,10 +434,10 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
       <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) 40px', alignItems: 'center', gap: 10, padding: 'calc(10px + env(safe-area-inset-top)) 16px 10px' }}>
         <button onClick={onBack} aria-label="Back" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.75)', background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><ChevronLeft size={22} /></button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, minWidth: 0 }}>
-          <Avatar c={c} size={36} />
+          <Avatar c={c} person={person} size={36} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.15 }}>{title}</div>
-            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{c?.key === 'strategist' ? 'Replies within the hour' : 'Apnosh team'}</div>
+            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c?.name ?? 'Apnosh team'} · ${c?.key === 'strategist' ? 'replies within the hour' : 'Apnosh team'}` : c?.key === 'strategist' ? 'Replies within the hour' : 'Apnosh team'}</div>
           </div>
         </div>
         <span />
@@ -388,7 +449,7 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> Loading…</div>
         ) : msgs.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: 22, padding: '0 24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><Avatar c={c} size={56} /></div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><Avatar c={c} person={person} size={56} /></div>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>Message {title}</div>
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.55 }}>{c?.blurb ? `${c.blurb}. ` : ''}Say what you need — a real person picks it up.</div>
           </div>
@@ -400,7 +461,7 @@ function Conversation({ active, userId, onBack, onThreadCreated }: { active: Act
             <div key={g.msgs[0].id}>
               {showDay && <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: C.faint, padding: '10px 0 8px' }}>{dayLabel(g.day)}</div>}
               <div className="mrise" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', justifyContent: own ? 'flex-end' : 'flex-start', marginTop: gi > 0 && !showDay ? 10 : 0 }}>
-                {!own && <Avatar c={c} size={26} />}
+                {!own && <Avatar c={c} person={person} size={26} />}
                 <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', alignItems: own ? 'flex-end' : 'flex-start', gap: 3 }}>
                   {g.msgs.map((m, mi) => {
                     const isLast = mi === g.msgs.length - 1

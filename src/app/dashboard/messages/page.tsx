@@ -15,7 +15,7 @@ export default function MessagesPage() {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   return (
-    <MvpShell active="messages" noHeader={open} middle={<TopSearch value={query} onChange={setQuery} placeholder="Search inbox" />}>
+    <MvpShell active="messages" noHeader={open} middle={<TopSearch value={query} onChange={setQuery} placeholder="Search people and messages" />}>
       <MvpMessages query={query} onActiveChange={setOpen} />
     </MvpShell>
   )
