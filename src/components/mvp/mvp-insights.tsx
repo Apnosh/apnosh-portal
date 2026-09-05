@@ -2194,8 +2194,12 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
         {posts.map((p, i) => <PostRow key={p.id} p={p} first={i === 0} />)}
       </div>
       {more && (
-        <Link href="/dashboard/insights/posts" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 10, padding: '11px 12px', borderRadius: 999, background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', textDecoration: 'none', color: C.greenDk, fontSize: 13, fontWeight: 600 }}>
-          View all {total} posts <ChevronRight size={15} />
+        /* the way through to every post reads as one more row of the list (owner 2026-09-04:
+           the full-width glass slab looked ugly on the white card) */
+        <Link href="/dashboard/insights/posts" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2, padding: '12px 0 4px', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: C.ink }}>
+          <span style={{ width: 34, height: 34, borderRadius: 11, background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ImageIcon size={17} /></span>
+          <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600 }}>View all {total} posts</span>
+          <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
         </Link>
       )}
       <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>{POSTS_FOOTNOTE}</div>
