@@ -62,7 +62,7 @@ export const GOAL_CARDS: Record<Exclude<ShelfGoal, 'foryou'>, string[]> = {
   event: ['promoevent', 'ticket', 'creative-graphic', 'story', 'creative-print', 'creator'],
   deal: ['launch', 'slowoffer', 'giftcard', 'winback', 'gpost', 'creative-graphic'],
   nights: ['nights', 'slowoffer', 'promoevent', 'ticket', 'winback', 'story'],
-  newfaces: ['firstvisit', 'gbp', 'localseo', 'listings', 'reach', 'gpost', 'creator', 'measure'],
+  newfaces: ['gbp', 'listings', 'promoevent', 'creator', 'firstvisit', 'localseo', 'reach', 'gpost', 'measure'],
   regulars: ['regulars', 'winback', 'birthday', 'news', 'welcome', 'earlyaccess', 'loyalty', 'emaildeliver'],
   reviews: ['reviewsplan', 'reviewsreply', 'gbp'],
   online: ['friction', 'direct', 'deliverymenu', 'website', 'pos'],
@@ -225,5 +225,5 @@ export function starterPicks(hurt: string, you: string, bud: string): ShelfCard[
 
 /* the describe read-back: a situation from /api/campaigns/describe → the goal tab it belongs to */
 export const SITUATION_GOAL: Record<string, Exclude<ShelfGoal, 'foryou'>> = {
-  opening: 'announce', event: 'event', 'new-thing': 'announce', quiet: 'newfaces', 'slow-shifts': 'nights', reviews: 'reviews', checks: 'deal', catering: 'catering', takeout: 'online', known: 'brand', return: 'regulars',
+  opening: 'newfaces', event: 'event', 'new-thing': 'announce', quiet: 'newfaces', 'slow-shifts': 'nights', reviews: 'reviews', checks: 'deal', catering: 'catering', takeout: 'online', known: 'brand', return: 'regulars',
 }
