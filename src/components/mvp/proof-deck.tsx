@@ -9,6 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { ChevronRight } from 'lucide-react'
 import ProofCard, { type ProofCardData } from './proof-card'
 
 function deckDepth(pos: number): React.CSSProperties {
@@ -133,21 +134,23 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
   if (!loaded || !front) return null
   return (
     <div style={{ padding: '0 18px', marginBottom: 18, isolation: 'isolate' }}>{/* the stacked cards' z-indexes stay inside this box, under the floating top bar */}
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: '#1d1d1f' }}>
           {examples ? 'Examples' : 'Results'}{examples && <span style={{ fontSize: 12.5, fontWeight: 400, color: mute }}> · your results land here</span>}
         </span>
-        <span style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+        <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {/* the pager: one dot per card, the front one long — tap to advance (owner 2026-09-04: the old "2 of 5 ›" text looked ugly) */}
           {cards.length > 1 && (
             <button
               type="button"
+              aria-label={`Card ${safeStep + 1} of ${cards.length}. Next card`}
               onClick={() => setStep((p) => (p + 1) % cards.length)}
-              style={{ fontSize: 11.5, fontWeight: 700, color: mute, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              style={{ display: 'inline-flex', gap: 4, alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px' }}
             >
-              {safeStep + 1} of {cards.length} ›
+              {cards.map((c, i) => <span key={c.id} style={{ width: i === safeStep ? 16 : 6, height: 6, borderRadius: 99, background: i === safeStep ? '#2e9a78' : '#d9d9de', transition: 'width .2s, background .2s' }} />)}
             </button>
           )}
-          <Link href="/dashboard/results" style={{ fontSize: 11.5, fontWeight: 700, color: '#0f6e56', textDecoration: 'none' }}>All</Link>
+          <Link href="/dashboard/results" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 28, padding: '0 10px 0 12px', borderRadius: 99, background: '#f0f0f2', color: '#1d1d1f', fontSize: 12.5, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>See all <ChevronRight size={14} color="#6e6e73" /></Link>
         </span>
       </div>
       <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} style={{ position: 'relative', paddingBottom: deck.length > 1 ? 9 : 0, touchAction: 'pan-y' }}>
