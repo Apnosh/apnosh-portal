@@ -25,6 +25,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Bell, MessageCircle, CalendarDays } from 'lucide-react'
+import { useInboxUnread } from './use-inbox-unread'
+import { useClient } from '@/lib/client-context'
 import { useRouter } from 'next/navigation'
 import { useMvpTheme } from './mvp-theme'
 
@@ -240,6 +242,7 @@ function drawEmblem(ctx: CanvasRenderingContext2D, ox: number, oy: number, r: nu
 export interface StageCounts { interest?: number; actions?: number; retention?: number }
 
 export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts, yoyAbs?: FunnelYoYAbs | null) {
+
   const total = Math.max(0, views.total)
   // Awareness folds SOCIAL reach into the Google views (top of funnel = "people who saw you").
   // When social is 0/undefined the labels stay exactly as before (Google-only accounts see no
@@ -322,6 +325,10 @@ export default function HomeFunnel({
   onCEnd,
   loading = false,
 }: HomeFunnelProps) {
+  const { client: bellClient } = useClient()
+  const bellAuto = useInboxUnread(bellClient?.id)
+  const bellN = bellAuto ?? (bar?.unread ?? 0)
+
   const { C, theme } = useMvpTheme() // the active skin (light / dark) — drives the whole hero
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
@@ -1145,9 +1152,9 @@ export default function HomeFunnel({
         </div>
         {bar && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <Link href="/dashboard/inbox" aria-label={bar.unread ? `Alerts (${bar.unread})` : 'Alerts'} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
+            <Link href="/dashboard/inbox" aria-label={bellN ? `Alerts (${bellN})` : 'Alerts'} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
               <Bell size={19} />
-              {(bar.unread ?? 0) > 0 && <span style={{ position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{(bar.unread ?? 0) > 9 ? '9+' : bar.unread}</span>}
+              {(bellN) > 0 && <span style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{bellN > 99 ? '99+' : bellN}</span>}
             </Link>
           </div>
         )}

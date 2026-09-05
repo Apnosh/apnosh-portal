@@ -7,6 +7,7 @@
  * columns either side, so the middle really is the middle. Floats over the scroll as glass.
  */
 import { useState } from 'react'
+import { useInboxUnread } from './use-inbox-unread'
 import Link from 'next/link'
 import { Bell, Check, ChevronLeft, Search, X } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
@@ -22,7 +23,9 @@ export default function TopRow({ middle, title, count, back, right }: { middle?:
   const [open, setOpen] = useState(false)
   const locations = availableClients.length ? availableClients : (client?.id ? [{ id: client.id, name }] : [])
   const multi = locations.length > 1
-  const n = count ?? 0
+  /* The bell counts for itself when the page did not hand it a number. */
+  const auto = useInboxUnread(client?.id, count === undefined)
+  const n = count ?? auto ?? 0
   const avatar = (
     <span style={{ display: 'block', width: 40, height: 40, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.08)', boxSizing: 'border-box' }}>
       <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: 'rgba(255,255,255,0.86)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: C.greenDk, fontFamily: DISPLAY }}>{initial}</span>
@@ -40,7 +43,7 @@ export default function TopRow({ middle, title, count, back, right }: { middle?:
       </div>
       {right !== undefined ? <div style={{ width: 40, display: 'flex', justifyContent: 'flex-end' }}>{right}</div> : <Link href="/dashboard/inbox" aria-label={n > 0 ? `Notifications (${n})` : 'Notifications'} style={{ ...GLASS, position: 'relative', width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', boxSizing: 'border-box' }}>
         <Bell size={19} />
-        {n > 0 && <span className="mvp-pop" style={{ position: 'absolute', top: 1, right: 1, minWidth: 16, height: 16, padding: '0 4px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff' }}>{n > 99 ? '99+' : n}</span>}
+        {n > 0 && <span className="mvp-pop" style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10.5, fontWeight: 800, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,.12)' }}>{n > 99 ? '99+' : n}</span>}
       </Link>}
       {open && (
         <>

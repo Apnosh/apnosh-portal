@@ -48,6 +48,33 @@ const ICON: Record<string, string> = { approval: '🎨', post_review: '📝', ca
 const CHIP_BY_KIND: Record<string, Chip> = { approval: 'approvals', post_review: 'approvals', campaign: 'approvals', review: 'reviews', connection: 'fix', task: 'todos' }
 // Owner-relevant notification types for the quiet "good to know" lane.
 const WIN_TYPES = new Set(['draft_published', 'draft_approved', 'client_signoff', 'payment', 'holiday_hours_reminder', 'traffic_anomaly', 'site_audit', 'awaiting_you_digest', 'campaign_wrapped'])
+/* Which platform a good-to-know row is about, so its avatar can wear that platform's mark
+ * (owner 2026-09-04: "Google for Google Business Profile"). Everything else is Apnosh's own. */
+const WIN_SOURCE: Record<string, string> = { holiday_hours_reminder: 'google', traffic_anomaly: 'google', site_audit: 'website', draft_published: 'apnosh', draft_approved: 'apnosh', client_signoff: 'apnosh', payment: 'apnosh', awaiting_you_digest: 'apnosh', campaign_wrapped: 'apnosh' }
+/* Routes that exist on the owner side today. A stored notification link that points anywhere
+ * else (retired pages like /dashboard/local-seo, or admin and creator pages) is replaced by the
+ * right home for its type, so a tap never lands on a 404. */
+const OWNER_ROUTES = ['/dashboard/insights', '/dashboard/campaigns', '/dashboard/approvals', '/dashboard/connected-accounts', '/dashboard/reviews', '/dashboard/inbox', '/dashboard/calendar', '/dashboard/results', '/dashboard/preview', '/dashboard/billing', '/dashboard/google-profile', '/dashboard/more', '/dashboard/orders', '/dashboard/bookings', '/dashboard/requests', '/dashboard/goals', '/dashboard/business-info', '/dashboard/review-replies', '/dashboard/messages']
+const FALLBACK_LINK: Record<string, string> = { holiday_hours_reminder: '/dashboard/google-profile', traffic_anomaly: '/dashboard/insights', site_audit: '/dashboard/insights', draft_published: '/dashboard/campaigns', draft_approved: '/dashboard/approvals', client_signoff: '/dashboard/approvals', payment: '/dashboard/billing', awaiting_you_digest: '/dashboard/inbox', campaign_wrapped: '/dashboard/campaigns' }
+/* A task or approval about a platform names it in its title ("Google Business Profile setup
+ * needs 1 thing from you"); when the generator only knows 'apnosh' or 'system', read the
+ * platform off the words so the row can wear the right mark. */
+function sourceFromWords(source: string | undefined, text: string): string | undefined {
+  if (source && source !== 'apnosh' && source !== 'system') return source
+  const t = text.toLowerCase()
+  if (/google business|google profile|gbp|google listing|google maps|on google/.test(t)) return 'google'
+  if (/instagram|reel/.test(t)) return 'instagram'
+  if (/tiktok/.test(t)) return 'tiktok'
+  if (/facebook/.test(t)) return 'facebook'
+  if (/yelp/.test(t)) return 'yelp'
+  if (/youtube/.test(t)) return 'youtube'
+  return source
+}
+function safeLink(type: string, link: string | null | undefined): string {
+  const l = typeof link === 'string' ? link.trim() : ''
+  if (l === '/dashboard' || OWNER_ROUTES.some((r) => l === r || l.startsWith(r + '/') || l.startsWith(r + '?'))) return l
+  return FALLBACK_LINK[type] ?? '/dashboard/inbox'
+}
 const WIN_ICON: Record<string, string> = { draft_published: '🎬', draft_approved: '✅', client_signoff: '👍', payment: '💳', holiday_hours_reminder: '🗓️', traffic_anomaly: '📈', site_audit: '🔍', awaiting_you_digest: '⏳', campaign_wrapped: '🏁' }
 
 export async function GET(req: NextRequest) {
@@ -66,7 +93,7 @@ export async function GET(req: NextRequest) {
     admin.from('content_drafts').select('id, idea, client_signed_off_at').eq('client_id', clientId).not('client_signed_off_at', 'is', null).order('client_signed_off_at', { ascending: false }).limit(15),
   ])
 
-  type Row = { id: string; kind: string; chip: Chip; band: Band; icon: string; title: string; subtitle: string; time: string; whenIso: string; href: string; status?: string; unread: boolean; review?: { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string ; avatar?: string | null } }
+  type Row = { id: string; kind: string; chip: Chip; band: Band; icon: string; source?: string; title: string; subtitle: string; time: string; whenIso: string; href: string; status?: string; unread: boolean; review?: { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string ; avatar?: string | null } }
   const items: Row[] = []
 
   // getInbox action items (skip 'review' — built richly below from the reviews table)
@@ -75,7 +102,7 @@ export async function GET(req: NextRequest) {
     items.push({
       id: i.id, kind: i.kind, chip: CHIP_BY_KIND[i.kind] ?? 'todos',
       band: i.urgency === 'high' ? 'today' : 'week',
-      icon: ICON[i.kind] ?? '•', title: i.title, subtitle: i.detail ?? (i.senderName ?? ''),
+      icon: ICON[i.kind] ?? '•', source: sourceFromWords(i.source, `${i.title} ${i.detail ?? ''}`), title: i.title, subtitle: i.detail ?? (i.senderName ?? ''),
       time: timeAgo(i.whenIso), whenIso: i.whenIso, href: i.href, status: i.status, unread: i.unread ?? true,
     })
   }
@@ -85,7 +112,7 @@ export async function GET(req: NextRequest) {
     if (c.status !== 'shipped' && c.phase === 'review') {
       items.push({
         id: `campaign-${c.draft.id}`, kind: 'campaign', chip: 'approvals', band: 'today',
-        icon: ICON.campaign, title: c.draft.name, subtitle: 'Apnosh built your plan — approve to ship it',
+        icon: ICON.campaign, source: 'apnosh', title: c.draft.name, subtitle: 'Apnosh built your plan. Approve to ship it',
         time: timeAgo(c.updatedAt), whenIso: c.updatedAt, href: `/dashboard/campaigns/${c.draft.id}`, status: 'Ready for your OK', unread: true,
       })
     }
@@ -103,7 +130,7 @@ export async function GET(req: NextRequest) {
     if (!replied) {
       items.push({
         id: `review-${r.id}`, kind: 'review', chip: 'reviews', band: rating <= 3 ? 'today' : 'week',
-        icon: ICON.review, title: `${author} · ${rating}★`, subtitle: (r.review_text as string)?.slice(0, 90) || 'No comment left',
+        icon: ICON.review, source: (r.source as string) || 'google', title: `${author} · ${rating}★`, subtitle: (r.review_text as string)?.slice(0, 90) || 'No comment left',
         time: timeAgo(r.posted_at as string), whenIso: r.posted_at as string, href: `/dashboard/reviews/${r.id}`, status: `${rating}★`, unread: true,
         review: {
           reviewId: r.id as string, rating, author, source, text: (r.review_text as string) ?? '',
@@ -130,7 +157,7 @@ export async function GET(req: NextRequest) {
   // Wins — the calm "good to know" lane (no red badges; not counted as needs-you).
   const wins = (notifs ?? [])
     .filter((n) => WIN_TYPES.has(n.type))
-    .map((n) => ({ id: n.id, icon: WIN_ICON[n.type] ?? '🎉', title: n.title, body: n.body ?? '', time: timeAgo(n.created_at), link: n.link, read: !!n.read_at }))
+    .map((n) => ({ id: n.id, icon: WIN_ICON[n.type] ?? '🎉', source: sourceFromWords(WIN_SOURCE[n.type] ?? 'apnosh', `${n.title} ${n.body ?? ''}`), type: n.type, title: n.title, body: n.body ?? '', time: timeAgo(n.created_at), link: safeLink(n.type, n.link), read: !!n.read_at }))
 
   // Strategist thread.
   let thread: { threadId: string | null; messages: { id: string; from: 'owner' | 'team'; text: string; createdAt: string }[] } = { threadId: null, messages: [] }
@@ -163,6 +190,6 @@ export async function GET(req: NextRequest) {
   const unreadThread = thread.messages.some((m) => m.from === 'team') // simple: any team message → show chat dot
   return NextResponse.json({
     items, wins, history, thread,
-    counts: { needsYou: items.length, today: items.filter((i) => i.band === 'today').length, chatUnread: unreadThread && thread.messages.length > 0 },
+    counts: { needsYou: items.length, today: items.filter((i) => i.band === 'today').length, chatUnread: unreadThread && thread.messages.length > 0, unread: items.filter((i) => i.unread).length + wins.filter((w) => !w.read).length },
   })
 }

@@ -135,3 +135,23 @@ export async function markAllInboxRead(itemIds: string[]): Promise<{ ok: boolean
   revalidatePath('/dashboard/inbox')
   return { ok: true, count: rows.length }
 }
+
+/**
+ * markWinRead — a "good to know" row is a notifications row, so its read state lives on
+ * notifications.read_at (not user_inbox_read). Only the row's own user can flip it.
+ */
+export async function markWinRead(notificationId: string): Promise<{ ok: boolean; error?: string }> {
+  if (!notificationId) return { ok: false, error: 'Missing id' }
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { ok: false, error: 'Not authenticated' }
+  const admin = createAdminClient()
+  const { error } = await admin
+    .from('notifications')
+    .update({ read_at: new Date().toISOString() })
+    .eq('id', notificationId)
+    .eq('user_id', user.id)
+    .is('read_at', null)
+  if (error) return { ok: false, error: error.message }
+  return { ok: true }
+}

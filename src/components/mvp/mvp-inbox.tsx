@@ -16,7 +16,7 @@ import { useEffect, useState } from 'react'
 import { CARD_SHADOW, Segmented } from './kit'
 import Link from 'next/link'
 import { Bell, CalendarDays, Check, Clapperboard, CreditCard, FileText, Flag, Hourglass, Loader2, MoreHorizontal, Palette, PartyPopper, Plug, Rocket, Search, Star, ThumbsUp, TrendingUp } from 'lucide-react'
-import { markInboxRead } from '@/app/dashboard/inbox/actions'
+import { markInboxRead, markWinRead } from '@/app/dashboard/inbox/actions'
 import { BrandOrMark } from './mvp-insights'
 
 const C = {
@@ -28,8 +28,8 @@ const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 type Chip = 'approvals' | 'reviews' | 'todos' | 'fix'
 interface Review { reviewId: string; rating: number; author: string; source: string; text: string; suggestedReply: string; avatar?: string | null }
-interface Item { id: string; kind: string; chip: Chip; band: 'today' | 'week'; icon: string; title: string; subtitle: string; time: string; href: string; status?: string; unread: boolean; review?: Review }
-interface Win { id: string; icon: string; title: string; body: string; time: string; link: string | null; read: boolean }
+interface Item { id: string; kind: string; chip: Chip; band: 'today' | 'week'; icon: string; source?: string; title: string; subtitle: string; time: string; href: string; status?: string; unread: boolean; review?: Review }
+interface Win { id: string; source?: string; icon: string; title: string; body: string; time: string; link: string | null; read: boolean }
 interface InboxData { items: Item[]; wins: Win[]; counts: { needsYou: number; today: number } }
 
 // Single LinkedIn-style pill row (active = filled).
@@ -171,11 +171,29 @@ function ApnoshMark({ size = 44 }: { size?: number }) {
     </span>
   )
 }
-function IconAvatar({ emoji, danger }: { emoji: string; danger?: boolean }) {
-  // a broken connection is the one row that is not Apnosh talking — it wears the plug, in coral
+/* Platforms the brand mark can draw. Anything else is Apnosh's own work. */
+const BRAND_SOURCES = new Set(['google', 'google_business_profile', 'gbp', 'google_analytics', 'google_search_console', 'instagram', 'facebook', 'tiktok', 'youtube', 'yelp', 'linkedin'])
+/* The avatar says WHAT the row is about before a word is read (owner 2026-09-04: "Google
+ * shows the Google symbol, TikTok TikTok"). A row about a platform wears that platform's
+ * mark in a white circle; a broken connection gets a coral ring around it. A row about
+ * something Apnosh made wears the kind's glyph in a soft mint tile, never the logo, so ten
+ * rows never look like ten copies of the same thing. */
+function IconAvatar({ emoji, source, danger }: { emoji: string; source?: string; danger?: boolean }) {
+  if (source && BRAND_SOURCES.has(source)) {
+    return (
+      <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#fff', boxShadow: danger ? `0 0 0 2px ${C.coral}, 0 3px 10px rgba(0,0,0,.09)` : '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
+        <BrandOrMark provider={source} size={24} />
+        {danger && <span aria-hidden style={{ position: 'absolute', right: -3, bottom: -3, width: 18, height: 18, borderRadius: '50%', background: C.coral, border: '2px solid #fff', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plug size={10} /></span>}
+      </div>
+    )
+  }
   if (danger || emoji === '🔌') return <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.coralSoft, color: C.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Plug size={19} /></div>
+  const glyph = EMOJI_ICON[emoji]
+  if (glyph) return <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{glyph}</div>
   return <ApnoshMark />
 }
+/* Tell the top row's bell that the count moved. */
+const inboxChanged = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('apnosh:inbox-changed')) }
 const clampStyle = (lines: number): React.CSSProperties => ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' })
 
 function Lead({ bold, rest, lines = 2 }: { bold: string; rest?: string; lines?: number }) {
@@ -240,7 +258,7 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
 
 function WinLink({ w }: { w: Win }) {
   return (
-    <NotifRow href={w.link ?? undefined} unread={!w.read} time={w.time} avatar={<IconAvatar emoji={w.icon} />}>
+    <NotifRow href={w.link ?? undefined} unread={!w.read} time={w.time} onNav={() => { if (!w.read) { void markWinRead(w.id); inboxChanged() } }} avatar={<IconAvatar emoji={w.icon} source={w.source} />}>
       <Lead bold={w.title} rest={w.body || undefined} />
     </NotifRow>
   )
@@ -252,7 +270,7 @@ function Row({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void 
   if (item.review) return <ReviewRow item={item} onDismiss={onDismiss} />
   const isFix = item.kind === 'connection'
   return (
-    <NotifRow href={item.href} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id) }} avatar={<IconAvatar emoji={item.icon} danger={isFix} />}>
+    <NotifRow href={item.href} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id); inboxChanged() }} avatar={<IconAvatar emoji={item.icon} source={item.source} danger={isFix} />}>
       <Lead bold={item.title} rest={item.subtitle || undefined} />
     </NotifRow>
   )
@@ -272,7 +290,7 @@ function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) =>
     </div>
   )
   return (
-    <NotifRow href={`/dashboard/reviews/${r.reviewId}`} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id) }} avatar={avatar}>
+    <NotifRow href={`/dashboard/reviews/${r.reviewId}`} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id); inboxChanged() }} avatar={avatar}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', fontSize: 14, lineHeight: 1.3, color: C.ink }}>
         <b style={{ fontWeight: 700 }}>{r.author}</b>
         <Stars n={r.rating} />
