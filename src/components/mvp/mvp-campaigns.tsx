@@ -20,7 +20,8 @@ import {
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { upcomingOccasions } from '@/lib/design/occasions'
 import { RATE_CARD } from '@/lib/design/rate-card'
-import { campaignHue, gradOf, glow, hueOf, tint, type HueKey } from './hues'
+import { campaignHue, gradOf, hueOf, tint, type HueKey } from './hues'
+import { Mark } from './mark'
 import { Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Sparkles, FileText, AlertCircle } from 'lucide-react'
 
 /* one glyph per goal hue; the campaign card's tile */
@@ -108,7 +109,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
 
         {/* Orders moved in here from its own tab (owner 2026-09-04): one row through to receipts */}
         <Link href="/dashboard/orders" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', marginBottom: 14, borderRadius: 16, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', textDecoration: 'none', color: 'inherit' }}>
-          <span style={{ width: 38, height: 38, borderRadius: 12, background: gradOf('mint'), boxShadow: glow('mint', 0.28), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><ShoppingBag size={18} /></span>
+          <Mark hue="mint" size={38}><ShoppingBag size={18} /></Mark>
           <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Orders</span>
           <ChevronRight size={17} color={C.faint} />
         </Link>
@@ -150,7 +151,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
 function EmptyState() {
   return (
     <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 18, padding: '34px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-      <div style={{ width: 48, height: 48, borderRadius: 14, background: gradOf('mint'), boxShadow: glow('mint'), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} color="#fff" /></div>
+      <Mark hue="mint" size={48}><Plus size={24} /></Mark>
       <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>No campaigns yet</div>
       <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Start one and your strategist runs it — you just approve. Pick a goal and we build the plan.</div>
       <Link href="/dashboard/campaigns/new" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 12, padding: '11px 18px', fontWeight: 700, fontSize: 14 }}><Plus size={16} strokeWidth={2.5} /> New campaign</Link>
@@ -187,7 +188,7 @@ function CampaignCard({ c }: { c: HuedCard }) {
       <div style={{ width: 6, flexShrink: 0, background: `linear-gradient(${h1}, ${h2})` }} />
       <div style={{ flex: 1, minWidth: 0, padding: '12px 14px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ width: 38, height: 38, borderRadius: 12, background: gradOf(c.hue), boxShadow: glow(c.hue, 0.3), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Glyph size={18} /></span>
+          <Mark hue={c.hue} size={38}><Glyph size={18} /></Mark>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 15.5, color: C.ink, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title}</div>
             <div style={{ fontSize: 12, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.when ?? c.blurb}</div>

@@ -20,6 +20,7 @@ import { setClientGoal, closeGoal } from '@/lib/goals/mutations'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpSaveBar, C } from '@/components/mvp/mvp-detail'
 import { gradOf, glow, hueOf, tint, type HueKey } from '@/components/mvp/hues'
+import { Mark } from '@/components/mvp/mark'
 
 /* every goal wears the same hue on every screen (the builder's goal colours) */
 const GOAL_HUE: Record<GoalSlug, HueKey> = {
@@ -229,7 +230,7 @@ function GoalTile({ icon, title, sub, picked, disabled, onClick, hue }: { icon: 
   return (
     <button type="button" onClick={onClick} disabled={disabled} aria-pressed={picked} className="mvp-press" style={{ position: 'relative', textAlign: 'left', padding: 12, borderRadius: 18, border: 'none', background: '#fff', boxShadow: picked ? `inset 0 0 0 2px ${h2}, 0 12px 30px ${tint(hue, 0.28, 1)}` : '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', minHeight: 108, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden', cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, font: 'inherit' }}>
       <span aria-hidden style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${h1}2e, ${h2}0f)` }} />
-      <span style={{ position: 'relative', width: 34, height: 34, borderRadius: 11, background: gradOf(hue), boxShadow: glow(hue, 0.35), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</span>
+      <Mark hue={hue} size={34} style={{ position: 'relative' }}>{icon}</Mark>
       <span style={{ position: 'relative', fontFamily: DISPLAY, fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.15, marginTop: 'auto' }}>{title}</span>
       <span style={{ position: 'relative', fontSize: 11, color: C.mute, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{sub}</span>
       {picked && <span style={{ position: 'absolute', top: 8, right: 8, width: 20, height: 20, borderRadius: 10, background: h2, color: '#fff', display: 'grid', placeItems: 'center' }}><CheckCircle2 size={13} /></span>}

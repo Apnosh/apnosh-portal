@@ -21,7 +21,8 @@ import type { SavedCampaign } from '@/lib/campaigns/view'
 import { upcomingOccasions } from '@/lib/design/occasions'
 import { BrandOrMark } from './mvp-insights'
 import { C } from './mvp-detail'
-import { HUES, KIND_HUE, gradOf, glow, type HueKey } from './hues'
+import { HUES, KIND_HUE, gradOf, type HueKey } from './hues'
+import { Mark } from './mark'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)'
@@ -57,7 +58,7 @@ function KindMark({ item }: { item: Item }) {
     return <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><BrandOrMark provider={item.platform} size={20} /></span>
   }
   const icon = item.kind === 'shoot' ? <Camera size={17} /> : item.kind === 'email' ? <Mail size={17} /> : item.kind === 'task' ? <CheckSquare size={17} /> : item.kind === 'launch' ? <Rocket size={17} /> : item.kind === 'occasion' ? <PartyPopper size={17} /> : <FileText size={17} />
-  return <span style={{ width: 40, height: 40, borderRadius: 12, background: gradOf(kh(item.kind)), boxShadow: glow(kh(item.kind), 0.28), color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
+  return <Mark hue={kh(item.kind)} size={40}>{icon}</Mark>
 }
 
 function Row({ item, first }: { item: Item; first: boolean }) {

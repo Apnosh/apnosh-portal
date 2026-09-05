@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useClient } from '@/lib/client-context'
 import { ChevronLeft, Search, Send, Loader2, Plus, MessageCircle, Compass, Video, Camera, Image as ImageIcon, CreditCard, HelpCircle } from 'lucide-react'
 import { gradOf, glow, type HueKey } from './hues'
+import { Mark } from './mark'
 import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
@@ -233,7 +234,7 @@ function Avatar({ c, size = 46 }: { c: Contact | null; size?: number }) {
   const hue: HueKey = c?.hue ?? 'grey'
   const Icon = c?.Icon ?? MessageCircle
   return (
-    <div style={{ width: size, height: size, borderRadius: Math.round(size * 0.3), background: gradOf(hue), boxShadow: glow(hue, 0.28), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={Math.round(size * 0.42)} /></div>
+    <Mark hue={hue} size={size}><Icon size={Math.round(size * 0.42)} /></Mark>
   )
 }
 

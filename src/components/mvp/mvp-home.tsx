@@ -13,6 +13,7 @@
  */
 
 import { gradOf, glow, hueOf, type HueKey } from './hues'
+import { Mark } from './mark'
 import {
   Bell, Sparkles, Check, Plus, TrendingUp, TrendingDown, Minus,
   ChevronRight, ChevronLeft, Receipt, X, Navigation, Phone, MousePointerClick, CalendarDays,
@@ -581,7 +582,7 @@ function SuggestionCard({ s, pos, isFront, onAdvance, onClose, canClose = true }
         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose() }} aria-label={s.obligation ? 'Next' : 'Dismiss'} style={{ position: 'absolute', top: 10, right: 10, width: 24, height: 24, borderRadius: 99, border: 'none', background: '#f0f0f2', color: MUTE, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 9 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 12, background: gradOf(hue), boxShadow: glow(hue, 0.3), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} color="#fff" /></div>
+        <Mark hue={hue} size={38}><Icon size={18} /></Mark>
         <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.07em', color: h2 }}>{s.eyebrow}</span>
       </div>
       <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, lineHeight: 1.22, color: INK, marginBottom: 5, paddingRight: 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{s.title}</div>

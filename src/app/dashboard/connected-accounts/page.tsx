@@ -9,6 +9,7 @@
  */
 
 import { BrandOrMark } from '@/components/mvp/mvp-insights'
+import { Mark } from '@/components/mvp/mark'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Camera, Globe, Tv, Briefcase, BarChart3, Search, MapPin, Star,
@@ -298,7 +299,7 @@ function LaneMark({ platform, Icon, dim }: { platform: string; Icon: React.Compo
   const key = String(platform || '').toLowerCase()
   const marked = MARKED.has(key) || key.startsWith('google')
   if (marked) return <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, opacity: dim ? 0.55 : 1, filter: dim ? 'grayscale(.5)' : undefined }}><BrandOrMark provider={key.startsWith('google') ? 'google' : key} size={20} /></span>
-  return <span style={{ width: 36, height: 36, borderRadius: 11, background: dim ? '#f0f0f3' : C.greenSoft, color: dim ? C.mute : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Icon size={18} /></span>
+  return <Mark hue="mint" size={36} dim={dim}><Icon size={18} /></Mark>
 }
 
 function ConnRow({ conn, onTap }: { conn: UnifiedConnection; onTap: () => void }) {

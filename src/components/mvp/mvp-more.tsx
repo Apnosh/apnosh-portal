@@ -15,7 +15,8 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { BrandOrMark } from './mvp-insights'
 import { CARD_SHADOW } from './kit'
-import { gradOf, glow, type HueKey } from './hues'
+import { gradOf, type HueKey } from './hues'
+import { Mark, MARK_SHADOW } from './mark'
 import { TrendingUp, ChevronRight, CreditCard, FileText, Headset, HelpCircle, Image as ImageIcon, LineChart, LogOut, MapPin, Palette, Plug, Settings, ShoppingBag, Star, Store, Target, Users, Share2 } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 
@@ -106,7 +107,7 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
 
       {/* the business, as a profile card with a gradient avatar (portal redesign 2026-09-04) */}
       <Link href="/dashboard/business-info" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, padding: 14, textDecoration: 'none', color: 'inherit', marginBottom: 12 }}>
-        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 54, height: 54, borderRadius: '50%', background: 'linear-gradient(135deg, #4abd98, #2e73b6)', boxShadow: '0 8px 18px rgba(46,115,182,.3)', fontSize: 18, fontWeight: 600, letterSpacing: '-.01em', color: '#fff', fontFamily: DISPLAY, flexShrink: 0 }}>{initials}</span>
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 54, height: 54, borderRadius: '50%', background: '#fff', boxShadow: MARK_SHADOW, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em', color: C.greenDk, fontFamily: DISPLAY, flexShrink: 0 }}>{initials}</span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 19, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
@@ -144,7 +145,7 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
                 <Link href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 14px', textDecoration: 'none', color: 'inherit' }}>
                   {r.brand
                     ? <span style={{ width: 40, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{(Array.isArray(r.brand) ? r.brand : [r.brand]).map((b, k) => <span key={b} style={{ width: 32, height: 32, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: k ? -10 : 0, position: 'relative', zIndex: 2 - k }}><BrandOrMark provider={b} size={17} /></span>)}</span>
-                    : <span style={{ width: 40, height: 40, borderRadius: 12, background: gradOf(r.hue ?? 'mint'), boxShadow: glow(r.hue ?? 'mint', 0.28), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><r.Icon size={19} color="#fff" /></span>}
+                    : <Mark hue={r.hue ?? 'mint'} size={40}><r.Icon size={19} /></Mark>}
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.25 }}>{r.label}</span>
                     <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>{r.sub}</span>

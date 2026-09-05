@@ -18,7 +18,8 @@ import React from 'react'
 import Link from 'next/link'
 import TopRow from './top-row'
 import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react'
-import { gradOf, glow, type HueKey } from './hues'
+import { gradOf, type HueKey } from './hues'
+import { Mark } from './mark'
 
 /* The palette, the display face and the amber trio all live in tokens.ts now, and are re-exported
  * here so the 37 files already importing them from this module keep working. One place to change a
@@ -66,7 +67,7 @@ export function MvpRow({ icon, label, sub, href, onClick, right, danger, externa
       {mark
         ? <span style={{ width: 40, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 34, height: 34, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{mark}</span></span>
         : icon && (hue && !danger
-          ? <span style={{ width: 40, height: 40, borderRadius: 12, background: gradOf(hue), boxShadow: glow(hue, 0.28), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
+          ? <Mark hue={hue} size={40}>{icon}</Mark>
           : <span style={{ width: 34, height: 34, borderRadius: 9, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>)}
       <span style={{ flex: 1, minWidth: 0 }}>
         <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: danger ? C.coral : C.ink, lineHeight: 1.25 }}>{label}</span>

@@ -15,6 +15,7 @@ import type { TeamRequest } from '@/lib/dashboard/get-team-requests'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, C, DISPLAY } from '@/components/mvp/mvp-detail'
 import { gradOf, glow, hueOf, tint, type HueKey } from '@/components/mvp/hues'
+import { Mark, MARK_SHADOW } from '@/components/mvp/mark'
 import { AskPrompt, SwapModal, messageHref } from './team-view'
 
 const ROLE_HUE: Record<string, HueKey> = {
@@ -33,7 +34,7 @@ const ACTIVITY_RECENCY_MS = 30 * 24 * 60 * 60 * 1000
 function Avatar({ m, size, hue }: { m: TeamMember; size: number; hue: HueKey }) {
   const initials = m.displayName.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '?'
   if (m.avatarUrl) return <img src={m.avatarUrl} alt={m.displayName} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, boxShadow: glow(hue, 0.3) }} />
-  return <span style={{ width: size, height: size, borderRadius: '50%', background: gradOf(hue), boxShadow: glow(hue, 0.3), color: '#fff', fontFamily: DISPLAY, fontSize: Math.round(size * 0.34), fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
+  return <span style={{ width: size, height: size, borderRadius: '50%', background: '#fff', boxShadow: MARK_SHADOW, color: hueOf(hue)[1], fontFamily: DISPLAY, fontSize: Math.round(size * 0.34), fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</span>
 }
 
 const AVAIL: Record<TeamMember['availability'], { label: string; color: string }> = {
@@ -60,7 +61,7 @@ export default function TeamMvp({ clientId, team, openRequests }: { clientId: st
       <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {team.length === 0 && (
           <div style={{ background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '26px 18px', textAlign: 'center' }}>
-            <span style={{ display: 'inline-flex', width: 48, height: 48, borderRadius: 14, background: gradOf('mint'), boxShadow: glow('mint'), color: '#fff', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}><Users size={22} /></span>
+            <Mark hue="mint" size={48} style={{ marginBottom: 10 }}><Users size={22} /></Mark>
             <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 600, color: C.ink }}>Your team is being set up</div>
             <div style={{ fontSize: 13, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>Your strategist shows up here first. Say hello in Messages any time.</div>
           </div>
@@ -101,7 +102,7 @@ export default function TeamMvp({ clientId, team, openRequests }: { clientId: st
                   <div key={m.personId} style={{ position: 'relative', borderRadius: 18, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: 12, minHeight: 112, display: 'flex', flexDirection: 'column', gap: 8, overflow: 'hidden' }}>
                     <span aria-hidden style={{ position: 'absolute', inset: 0, background: `linear-gradient(135deg, ${h1}2e, ${h2}0f)` }} />
                     <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <span style={{ width: 34, height: 34, borderRadius: 11, background: gradOf(hue), boxShadow: glow(hue, 0.35), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon size={17} /></span>
+                      <Mark hue={hue} size={34}><Icon size={17} /></Mark>
                       <button type="button" onClick={() => setSwapTarget({ personId: m.personId, role, personName: m.displayName })} aria-label={`Request a different ${m.roleLabels[0] ?? 'person'}`} style={{ width: 28, height: 28, borderRadius: 14, border: 'none', background: 'rgba(255,255,255,.7)', color: C.mute, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><ArrowLeftRight size={13} /></button>
                     </div>
                     <div style={{ position: 'relative', marginTop: 'auto' }}>
@@ -122,7 +123,7 @@ export default function TeamMvp({ clientId, team, openRequests }: { clientId: st
             <div style={{ background: '#fff', borderRadius: 18, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden' }}>
               {openRequests.map((r, i) => (
                 <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderTop: i ? `0.5px solid ${C.line}` : 'none' }}>
-                  <span style={{ width: 40, height: 40, borderRadius: 12, background: gradOf('amber'), boxShadow: glow('amber', 0.28), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Clock size={18} /></span>
+                  <Mark hue="amber" size={40}><Clock size={18} /></Mark>
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 14.5, fontWeight: 600, color: C.ink }}>{r.title}</span>
                     {r.preview && <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.preview}</span>}
