@@ -386,6 +386,9 @@ function AnalystButton() {
 const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.045)'
 const CARD: React.CSSProperties = { marginTop: 14, background: '#fff', borderRadius: 18, padding: '16px 16px 18px', boxShadow: CARD_SHADOW }
 const H2: React.CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }
+/* a plain list sits on the page, no card (owner 2026-09-04); charts keep CARD */
+const LIST: React.CSSProperties = { marginTop: 16, padding: '0 2px' }
+const H3: React.CSSProperties = { fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }
 const TILE: React.CSSProperties = { background: '#f5f5f7', borderRadius: 14 }
 /* a 36px frosted round button — the page's tools on the stage row */
 const GLASS_CIRCLE: React.CSSProperties = { width: 36, height: 36, borderRadius: 999, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.06)', color: C.ink, textDecoration: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0, flexShrink: 0 }
@@ -732,7 +735,7 @@ function SourceItemRow({ s, groupLabel, first, top, accent }: { s: StageSourceVi
   const label = s.shortLabel || s.displayName
   const subText = err ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : s.context || (asOf ? `as of ${asOf}` : (label.toLowerCase().includes(groupLabel.toLowerCase()) ? '' : groupLabel))
   return (
-    <div style={{ padding: '10px 0 11px', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
+    <div style={{ padding: '9px 0 10px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ width: 36, height: 36, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <BrandOrMark provider={provider} size={20} />
@@ -1323,9 +1326,9 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
         </div>
       )}
       {/* every stage on one screen: its 7-day average as a sparkline, its total, its change, its launches */}
-      <div style={{ ...CARD, padding: '14px 16px 6px' }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
-          <span style={H2}>All stages</span>
+      <div style={{ ...LIST, padding: '0 8px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}>
+          <span style={H3}>All stages</span>
           <span style={{ fontSize: 12.5, color: C.faint }}>tap one to open it</span>
         </div>
         {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
@@ -1359,7 +1362,7 @@ function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaign
   const pins = campaigns.map((c) => (c.shippedAt ? trendDayMs(c.shippedAt) : NaN)).filter((ms) => Number.isFinite(ms) && ms >= t0 && ms <= t1)
   const dn = (sm?.deltaPct ?? 0) < 0
   return (
-    <button type="button" onClick={onPick} aria-pressed={on} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 8px', margin: '0 -8px', boxSizing: 'content-box', borderTop: first ? 'none' : `0.5px solid ${C.line}`, background: on ? accent.soft : 'none', borderRadius: on ? 12 : 0, border: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s' }}>
+    <button type="button" onClick={onPick} aria-pressed={on} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', margin: '0 -8px', boxSizing: 'content-box', background: on ? accent.soft : 'none', borderRadius: on ? 12 : 0, border: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s' }}>
       <span style={{ width: 9, height: 9, borderRadius: 99, background: accent.main, flexShrink: 0 }} />
       <span style={{ width: 92, flexShrink: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{label}</span>
@@ -1633,7 +1636,7 @@ function ConnectRow({ label, sources, first = false }: { label: string; sources:
   const names = provs.map((p) => PROVIDER_NAMES[p] ?? p)
   const list = names.length <= 2 ? names.join(' or ') : `${names.slice(0, 2).join(', ')} or ${names.length - 2} more`
   return (
-    <Link href="/dashboard/connected-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', padding: '11px 0 4px', borderTop: first ? 'none' : `0.5px solid ${C.line}` }}>
+    <Link href="/dashboard/connected-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', padding: '10px 0 4px' }}>
       <span style={{ display: 'inline-flex', flexShrink: 0, width: 36, justifyContent: 'center' }}>
         {(provs.length ? provs.slice(0, 3) : ['website']).map((p, i) => (
           <span key={p} style={{ width: 28, height: 28, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: i ? -10 : 0, opacity: 0.55, filter: 'grayscale(.4)' }}>
@@ -1716,15 +1719,15 @@ function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days:
   const hits = deriveStandouts(win, 4, win_n).filter((h) => Math.abs(h.vsWeekPct) >= 30)
   const noun = mv.unit ?? ''
   return (
-    <div style={CARD}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={H2}>Highlights</span>
+    <div style={LIST}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
+        <span style={H3}>Highlights</span>
         <span style={{ fontSize: 12.5, color: C.faint }}>days far from their own {win_n}-day average</span>
       </div>
       {hits.length === 0 ? (
         <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>No day stood out from its week for {label.toLowerCase()} in this window.</div>
       ) : hits.map((h, i) => (
-        <div key={h.date} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i === 0 ? 'none' : `0.5px solid ${C.line}` }}>
+        <div key={h.date} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
           <span style={{ width: 34, height: 34, borderRadius: 99, background: h.vsWeekPct > 0 ? C.greenSoft : C.coralBg, color: h.vsWeekPct > 0 ? C.greenDk : C.coral, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{h.vsWeekPct > 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}</span>
           <span style={{ flex: 1, minWidth: 0 }}>
             <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{fmtPinDate(trendDayMs(h.date))} · {h.holiday ?? h.weekday}</span>
@@ -2178,7 +2181,7 @@ export function PostRow({ p, first = true }: { p: InsightsPost; first?: boolean 
       {p.permalink && <ArrowUpRight size={16} color={C.faint} style={{ flexShrink: 0 }} />}
     </>
   )
-  const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 13, alignItems: 'center', padding: '10px 0', borderTop: first ? 'none' : `0.5px solid ${C.line}` }
+  const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 13, alignItems: 'center', padding: '8px 0' }
   return p.permalink
     ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
     : <div style={box}>{inner}</div>
@@ -2197,7 +2200,7 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
       {more && (
         /* the way through to every post reads as one more row of the list (owner 2026-09-04:
            the full-width glass slab looked ugly on the white card) */
-        <Link href="/dashboard/insights/posts" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2, padding: '12px 0 4px', borderTop: `0.5px solid ${C.line}`, textDecoration: 'none', color: C.ink }}>
+        <Link href="/dashboard/insights/posts" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2, padding: '8px 0 4px', textDecoration: 'none', color: C.ink }}>
           <Mark hue="mint" size={36} bare><ImageIcon size={17} /></Mark>
           <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600 }}>View all</span>
           <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
@@ -2210,10 +2213,10 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
 
 function Section({ title, sub, action, children }: { title: string; sub?: string; action?: { label: string; href: string }; children: React.ReactNode }) {
   return (
-    <div style={CARD}>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 14 }}>
-        <span style={H2}>{title}</span>
-        {sub && <span style={{ fontSize: 12.5, color: C.faint }}>{sub}</span>}
+    <div style={LIST}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, padding: '0 2px' }}>
+        <span style={H3}>{title}</span>
+        {sub && <span style={{ fontSize: 12, color: C.faint }}>{sub}</span>}
         {action && <Link href={action.href} style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>{action.label} <ChevronRight size={13} /></Link>}
       </div>
       {children}

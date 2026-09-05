@@ -27,7 +27,9 @@ import { Mark } from './mark'
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)'
 const CARD: React.CSSProperties = { background: '#fff', borderRadius: 18, padding: '16px 16px 18px', boxShadow: CARD_SHADOW, marginTop: 14 }
-const H2: React.CSSProperties = { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }
+const H2: React.CSSProperties = { fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }
+/* a plain list sits on the page, no card (owner 2026-09-04); the month grid keeps its card */
+const LIST: React.CSSProperties = { marginTop: 16, padding: '0 4px' }
 const DAY_MS = 86400000
 
 type Kind = CalendarEventKind | 'launch' | 'occasion'
@@ -161,15 +163,15 @@ export default function MvpCalendar({ clientId, campaigns }: { clientId?: string
 
       {/* needs you */}
       {needs.length > 0 && (
-        <div style={CARD}>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={{ ...H2, display: 'inline-flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf('amber') }} />Needs you</span><span style={{ fontSize: 12.5, color: C.faint }}>next 30 days</span></div>
+        <div style={LIST}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={{ ...H2, display: 'inline-flex', alignItems: 'center', gap: 8 }}><span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf('amber') }} />Needs you</span><span style={{ fontSize: 12.5, color: C.faint }}>next 30 days</span></div>
           {needs.slice(0, 6).map((it, i) => <Row key={it.id} item={it} first={i === 0} />)}
         </div>
       )}
 
       {/* coming up, from the tapped day */}
-      <div style={CARD}>
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={{ ...H2, display: 'inline-flex', alignItems: 'center', gap: 8 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf('mint') }} />Coming up</span><span style={{ fontSize: 12.5, color: C.faint }}>from {dayLabel(sel, today).toLowerCase()}, two weeks</span></div>
+      <div style={LIST}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 6 }}><span style={{ ...H2, display: 'inline-flex', alignItems: 'center', gap: 8 }}><span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf('mint') }} />Coming up</span><span style={{ fontSize: 12.5, color: C.faint }}>from {dayLabel(sel, today).toLowerCase()}, two weeks</span></div>
         {loading && items.length === 0 ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: C.faint, fontSize: 13, padding: '14px 0' }}><Clock size={15} /> Getting your calendar…</div>
         ) : fromSel.length === 0 ? (

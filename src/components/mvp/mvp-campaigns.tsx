@@ -108,9 +108,9 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
         )}
 
         {/* Orders moved in here from its own tab (owner 2026-09-04): one row through to receipts */}
-        <Link href="/dashboard/orders" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', marginBottom: 14, borderRadius: 16, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', textDecoration: 'none', color: 'inherit' }}>
-          <Mark hue="mint" size={38}><ShoppingBag size={18} /></Mark>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: C.ink }}>Orders</span>
+        <Link href="/dashboard/orders" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, marginBottom: 10, borderRadius: 12, textDecoration: 'none', color: 'inherit' }}>
+          <Mark hue="mint" size={36} bare><ShoppingBag size={18} /></Mark>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink }}>Orders</span>
           <ChevronRight size={17} color={C.faint} />
         </Link>
 
@@ -220,9 +220,7 @@ function CampaignCard({ c }: { c: HuedCard }) {
             <span style={{ ...small, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={13} /> waiting to go live</span>
           </div>
         )}
-        {c.perf == null && c.blurb && c.when && (
-          <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.35, marginTop: 8 }}>{c.blurb}</div>
-        )}
+        {/* no descriptive line under the header (owner 2026-09-04): the pill and the launch date carry the state */}
 
         {c.action && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10 }}>

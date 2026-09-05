@@ -131,7 +131,7 @@ function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { 
   // Unread = a soft green wash across the whole row + a green dot/timestamp.
   const frame: React.CSSProperties = {
     display: 'flex', gap: 12, alignItems: 'flex-start',
-    padding: '13px 14px', borderTop: `0.5px solid ${C.line}`,
+    padding: '10px 14px',
     background: 'transparent',
   }
   const inner = (
