@@ -180,9 +180,9 @@ function lighten(col: string, amt = 0.32): string {
 }
 /* The person, refined to the portal's finish (owner 2026-09-04: "make it fit our design"):
    the same bell torso + round head silhouette, but two-tone — torso in the deep stop, head
-   in the light stop, the way every gradient tile on the app runs — with softer shoulders
-   and, on the light theme, a hairline white halo so the figure lifts off the ring's tint
-   the way the cards lift off the page. Still one cheap path per figure per frame. */
+   in the light stop, the way every gradient tile on the app runs — with softer shoulders.
+   The halo option stays for later, but is OFF: the owner found the white outline made the
+   people stand out too much (2026-09-04). Still one cheap path per figure per frame. */
 function drawPerson(ctx: CanvasRenderingContext2D, x: number, y: number, u: number, color: string, alpha: number, head?: string, halo = false) {
   ctx.globalAlpha = alpha
   // torso: softer shoulders (control points pulled in and down a touch)
@@ -694,7 +694,7 @@ export default function HomeFunnel({
       const reveal = clamp01((curtainY - py) / 44)
       a *= reveal
       if (a <= 0.01) continue
-      drawPerson(ctx, px + fx, py + fy, PERSON_U * tr.sz, col, a, head, !dark) // per-person size + float → distinct, floating individuals
+      drawPerson(ctx, px + fx, py + fy, PERSON_U * tr.sz, col, a, head, false) // per-person size + float → distinct, floating individuals
     }
     ctx.globalAlpha = 1
 
