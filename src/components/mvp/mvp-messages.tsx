@@ -302,7 +302,7 @@ function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOp
   const name = person ? person.name : (c?.name ?? t.subject)
   const role = person ? (c?.name ?? t.subject) : null
   return (
-    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderTop: first ? 'none' : `0.5px solid ${C.line}`, padding: '11px 14px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '9px 12px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
       <Avatar c={c} person={person} size={46} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
@@ -321,7 +321,7 @@ function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOp
 
 function PersonRow({ c, person, onOpen, first = true }: { c: Contact; person?: Person; onOpen: () => void; first?: boolean }) {
   return (
-    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderTop: first ? 'none' : `0.5px solid ${C.line}`, padding: '10px 14px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+    <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '8px 12px', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
       <Avatar c={c} person={person} size={40} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person ? person.name : c.name}</div>

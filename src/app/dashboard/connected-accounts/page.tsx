@@ -243,9 +243,9 @@ export default function ConnectedAccountsPage() {
                     <div key={cat} style={{ background: '#fff', borderRadius: 16, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', overflow: 'hidden', marginBottom: 12 }}>
                       {unByCat[cat].map((p, i) => (
                         <div key={p.id}>
-                          {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 61 }} />}
+                          
                           {isAvailable(p) ? (
-                            <a href={connectHref(p.authPath)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', textDecoration: 'none', color: 'inherit' }}>
+                            <a href={connectHref(p.authPath)} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', textDecoration: 'none', color: 'inherit' }}>
                               <LaneMark platform={p.id} Icon={p.Icon} />
                               <span style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
@@ -257,7 +257,7 @@ export default function ConnectedAccountsPage() {
                           ) : (
                             /* the server says this lane's keys are not set — an honest
                                non-link beats a connect that dead-ends on a JSON error */
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', opacity: 0.55 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', opacity: 0.55 }}>
                               <LaneMark platform={p.id} Icon={p.Icon} dim />
                               <span style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink }}>{p.label}</span>
@@ -305,7 +305,7 @@ function LaneMark({ platform, Icon, dim }: { platform: string; Icon: React.Compo
 function ConnRow({ conn, onTap }: { conn: UnifiedConnection; onTap: () => void }) {
   const Icon = iconFor(conn.platform)
   return (
-    <button type="button" onClick={onTap} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
+    <button type="button" onClick={onTap} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer' }}>
       <span style={{ position: 'relative', flexShrink: 0 }}>
         <LaneMark platform={conn.platform} Icon={Icon} />
         <span style={{ position: 'absolute', right: -1, top: -1, width: 11, height: 11, borderRadius: 99, background: dotColor(conn.status), border: '2px solid #fff' }} />

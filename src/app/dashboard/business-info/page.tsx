@@ -76,7 +76,7 @@ export default async function BusinessInfoPage() {
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title="Business info" subtitle={subtitle} />}>
-      <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+      <div style={{ background: '#fff', minHeight: '100%', padding: '10px 12px 24px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           <StatusPill label="Google" on={loaded.gbpConnected} provider="google_business_profile" />
@@ -84,27 +84,27 @@ export default async function BusinessInfoPage() {
         </div>
 
         <MvpGroup title="Hours & contact" hue="newfaces">
-          <MvpRow icon={<Clock size={18} />} label="Weekly hours" hue="newfaces" sub={hoursSummary(info?.hours)} href="/dashboard/business-info/hours" />
-          <MvpRow icon={<CalendarDays size={18} />} label="Special hours" hue="newfaces" sub={specialCount > 0 ? `${specialCount} date${specialCount > 1 ? 's' : ''} set` : 'Holidays and closures'} href="/dashboard/business-info/special-hours" />
-          <MvpRow icon={<Phone size={18} />} label="Contact details" hue="newfaces" sub={info?.phone || 'Name, phone, website'} href="/dashboard/business-info/contact" />
-          <MvpRow icon={<MapPin size={18} />} label="Address" hue="newfaces" sub={info?.address?.line1 ? [info.address.line1, info.address.city].filter(Boolean).join(', ') : 'Add your address'} href="/dashboard/business-info/address" />
-          <MvpRow icon={<MapPin size={18} />} label="Locations" hue="newfaces" sub="Each spot, with its own info" href="/dashboard/business-info/locations" />
+          <MvpRow icon={<Clock size={18} />} label="Hours" hue="newfaces" sub={info?.hours ? hoursSummary(info.hours) : undefined} href="/dashboard/business-info/hours" />
+          <MvpRow icon={<CalendarDays size={18} />} label="Special hours" hue="newfaces" sub={specialCount > 0 ? `${specialCount} date${specialCount > 1 ? 's' : ''} set` : undefined} href="/dashboard/business-info/special-hours" />
+          <MvpRow icon={<Phone size={18} />} label="Contact" hue="newfaces" sub={info?.phone || undefined} href="/dashboard/business-info/contact" />
+          <MvpRow icon={<MapPin size={18} />} label="Address" hue="newfaces" sub={info?.address?.line1 ? [info.address.line1, info.address.city].filter(Boolean).join(', ') : undefined} href="/dashboard/business-info/address" />
+          <MvpRow icon={<MapPin size={18} />} label="Locations" hue="newfaces" href="/dashboard/business-info/locations" />
         </MvpGroup>
 
         <MvpGroup title="Menu & photos" hue="catering">
-          <MvpRow icon={<UtensilsCrossed size={18} />} label="Menu" hue="catering" sub="Dishes, prices, descriptions" href="/dashboard/business-info/menu" />
-          <MvpRow icon={<ImageIcon size={18} />} label="Photos" hue="catering" sub="Logo and gallery" href="/dashboard/assets" />
+          <MvpRow icon={<UtensilsCrossed size={18} />} label="Menu" hue="catering" href="/dashboard/business-info/menu" />
+          <MvpRow icon={<ImageIcon size={18} />} label="Photos" hue="catering" href="/dashboard/assets" />
         </MvpGroup>
 
         <MvpGroup title="Order & social" hue="online">
-          <MvpRow icon={<ShoppingBag size={18} />} label="Order & reserve" hue="online" sub={orderReserveHint(info)} href="/dashboard/business-info/links" />
-          <MvpRow icon={<Share2 size={18} />} label="Social links" hue="brand" sub={socialHint(info)} href="/dashboard/business-info/links" />
+          <MvpRow icon={<ShoppingBag size={18} />} label="Order & reserve" hue="online" sub={(info?.links?.ordering?.length ?? 0) + (info?.links?.reservations?.length ?? 0) > 0 ? orderReserveHint(info) : undefined} href="/dashboard/business-info/links" />
+          <MvpRow icon={<Share2 size={18} />} label="Social links" hue="brand" sub={Object.values(info?.links?.social ?? {}).filter(Boolean).length > 0 ? socialHint(info) : undefined} href="/dashboard/business-info/links" />
         </MvpGroup>
 
         <MvpGroup title="Listing & website" hue="nights">
-          <MvpRow icon={<Tag size={18} />} label="Cuisine & category" hue="nights" sub="What you're found for on Google" href="/dashboard/business-info/category" />
-          <MvpRow icon={<ListChecks size={18} />} label="Service & amenities" hue="nights" sub="Dine-in, takeout, delivery, more" href="/dashboard/business-info/service-options" />
-          <MvpRow icon={<Globe size={18} />} label="Your website" hue="nights" sub={websiteConn.connected ? (websiteConn.siteUrl ?? 'Connected, auto-publishes') : 'Connect to auto-publish'} href="/dashboard/business-info/connect-website" />
+          <MvpRow icon={<Tag size={18} />} label="Cuisine & category" hue="nights" href="/dashboard/business-info/category" />
+          <MvpRow icon={<ListChecks size={18} />} label="Service & amenities" hue="nights" href="/dashboard/business-info/service-options" />
+          <MvpRow icon={<Globe size={18} />} label="Website" hue="nights" sub={websiteConn.connected ? (websiteConn.siteUrl ?? 'Connected') : undefined} href="/dashboard/business-info/connect-website" />
         </MvpGroup>
 
         {loaded.gbpConnected && (

@@ -43,28 +43,28 @@ const GROUPS: { title: string; hue: HueKey; rows: Row[] }[] = [
     hue: 'newfaces',
     rows: [
       { label: 'Results', sub: 'Proof from your weeks', href: '/dashboard/results', Icon: TrendingUp, hue: 'mint' },
-      { label: 'Business info & hours', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store, hue: 'newfaces' },
-      { label: 'Brand & audience', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette, hue: 'brand' },
+      { label: 'Business info', sub: 'Hours, menu, photos', href: '/dashboard/business-info', Icon: Store, hue: 'newfaces' },
+      { label: 'Brand', sub: 'Voice, audience, competitors', href: '/dashboard/business-info/brand', Icon: Palette, hue: 'brand' },
       { label: 'Connected accounts', sub: 'Instagram, Google, Yelp', href: '/dashboard/connected-accounts', Icon: Plug, hue: 'nights' },
       // Google Business Profile: an always-on entry to the in-portal viewer/editor
       // (no campaignId → 'view' lane; Pro owners edit here and it writes back to Google).
       // It is also still reachable as a campaign deliverable via ?campaignId=.
-      { label: 'Google Business Profile', sub: 'See and fix what Google shows', href: '/dashboard/google-profile', Icon: MapPin , brand: 'google' },
-      { label: 'Google order buttons', sub: 'Where Order and Reserve send people', href: '/dashboard/order-buttons', Icon: ShoppingBag , brand: 'google' },
-      { label: 'Reply to reviews', sub: 'The ones still waiting, worst first', href: '/dashboard/review-replies', Icon: Star , brand: 'google' },
-      { label: 'Your other listings', sub: 'Yelp, Apple Maps and the rest, matching Google', href: '/dashboard/listings', Icon: MapPin , brand: 'yelp' },
-      { label: 'Your social profiles', sub: 'Five platforms, complete and matching', href: '/dashboard/social-profiles', Icon: Share2 , brand: ['instagram', 'tiktok'] },
-      { label: 'Get measurable', sub: 'Search Console and Analytics, so you can see what works', href: '/dashboard/measure', Icon: LineChart, hue: 'nights' },
-      { label: 'Photos & files', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon, hue: 'catering' },
-      { label: 'Your goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target, hue: 'event' },
+      { label: 'Google profile', sub: 'See and fix what Google shows', href: '/dashboard/google-profile', Icon: MapPin , brand: 'google' },
+      { label: 'Order buttons', sub: 'Where Order and Reserve send people', href: '/dashboard/order-buttons', Icon: ShoppingBag , brand: 'google' },
+      { label: 'Reviews', sub: 'The ones still waiting, worst first', href: '/dashboard/review-replies', Icon: Star , brand: 'google' },
+      { label: 'Other listings', sub: 'Yelp, Apple Maps and the rest, matching Google', href: '/dashboard/listings', Icon: MapPin , brand: 'yelp' },
+      { label: 'Social profiles', sub: 'Five platforms, complete and matching', href: '/dashboard/social-profiles', Icon: Share2 , brand: ['instagram', 'tiktok'] },
+      { label: 'Measure', sub: 'Search Console and Analytics, so you can see what works', href: '/dashboard/measure', Icon: LineChart, hue: 'nights' },
+      { label: 'Photos', sub: 'Logo, photos, videos', href: '/dashboard/assets', Icon: ImageIcon, hue: 'catering' },
+      { label: 'Goals', sub: 'What to focus on', href: '/dashboard/goals', Icon: Target, hue: 'event' },
     ],
   },
   {
     title: 'Plan & account',
     hue: 'nights',
     rows: [
-      { label: 'Plan & billing', sub: 'Plan, invoices, card', href: '/dashboard/billing', Icon: CreditCard, hue: 'nights' },
-      { label: 'Your team', sub: 'Strategist, photographer, designer', href: '/dashboard/team', Icon: Users, hue: 'catering' },
+      { label: 'Billing', sub: 'Plan, invoices, card', href: '/dashboard/billing', Icon: CreditCard, hue: 'nights' },
+      { label: 'Team', sub: 'Strategist, photographer, designer', href: '/dashboard/team', Icon: Users, hue: 'catering' },
       { label: 'Agreements', sub: 'Read & sign', href: '/dashboard/agreements', Icon: FileText, hue: 'grey' },
       { label: 'Settings', sub: 'Login, password, alerts, dark mode', href: '/dashboard/settings', Icon: Settings, hue: 'grey' },
     ],
@@ -73,8 +73,8 @@ const GROUPS: { title: string; hue: HueKey; rows: Row[] }[] = [
     title: 'Help',
     hue: 'mint',
     rows: [
-      { label: 'Contact support', sub: 'Talk to your team', href: '/dashboard/messages', Icon: Headset, hue: 'mint' },
-      { label: 'Help & FAQ', sub: 'Quick answers', href: '/dashboard/help', Icon: HelpCircle, hue: 'mint' },
+      { label: 'Support', sub: 'Talk to your team', href: '/dashboard/messages', Icon: Headset, hue: 'mint' },
+      { label: 'Help', sub: 'Quick answers', href: '/dashboard/help', Icon: HelpCircle, hue: 'mint' },
     ],
   },
 ]
@@ -102,25 +102,25 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
   const planLabel = tier && tier !== 'Internal' ? `${tier} plan` : null
 
   return (
-    <div style={{ background: '#fff', minHeight: '100%', padding: '14px 18px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
+    <div style={{ background: '#fff', minHeight: '100%', padding: '10px 12px 24px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
       <style>{MORE_CSS}</style>
 
       {/* the business, as a profile card with a gradient avatar (portal redesign 2026-09-04) */}
-      <Link href="/dashboard/business-info" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, padding: 14, textDecoration: 'none', color: 'inherit', marginBottom: 12 }}>
-        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 54, height: 54, borderRadius: '50%', background: '#fff', boxShadow: MARK_SHADOW, fontSize: 18, fontWeight: 600, letterSpacing: '-.01em', color: C.greenDk, fontFamily: DISPLAY, flexShrink: 0 }}>{initials}</span>
+      <Link href="/dashboard/business-info" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, padding: '10px 12px', textDecoration: 'none', color: 'inherit', marginBottom: 10 }}>
+        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 46, height: 46, borderRadius: '50%', background: '#fff', boxShadow: MARK_SHADOW, fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: C.greenDk, fontFamily: DISPLAY, flexShrink: 0 }}>{initials}</span>
         <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: 'block', fontSize: 19, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+          <span style={{ display: 'block', fontSize: 17, fontWeight: 600, color: C.ink, fontFamily: DISPLAY, lineHeight: 1.2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
             {planLabel && <span style={{ fontSize: 11, fontWeight: 700, color: C.greenDk, background: C.greenSoft, borderRadius: 99, padding: '2px 8px' }}>{planLabel}</span>}
             {location && <span style={{ fontSize: 12.5, color: C.mute }}>{location}</span>}
-            {!planLabel && !location && <span style={{ fontSize: 12.5, color: C.mute }}>Manage your business</span>}
+
           </span>
         </span>
         <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0 }} />
       </Link>
 
       {!q && (
-        <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           {([
             [stats ? String(stats.connected) : '–', stats?.connected === 1 ? 'connected' : 'connected', '/dashboard/connected-accounts'],
             [stats ? String(stats.liveCampaigns) : '–', stats?.liveCampaigns === 1 ? 'live campaign' : 'live campaigns', '/dashboard/campaigns'],
@@ -136,21 +136,19 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
 
       {q && groups.length === 0 && <div style={{ padding: '30px 18px', textAlign: 'center', color: '#6e6e73', fontSize: 13.5 }}>Nothing matches &ldquo;{query.trim()}&rdquo;.</div>}
       {groups.map(group => (
-        <div key={group.title} style={{ marginBottom: 22 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: C.ink, padding: '0 6px 8px' }}><span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(group.hue) }} />{group.title}</div>
-          <div style={{ background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
-            {group.rows.map((r, i) => (
+        <div key={group.title} style={{ marginBottom: 16 }}>
+          {/* density pass (owner 2026-09-04): one word per row, no sub text, no hairlines — the fixed
+              mark column and the aligned labels say what belongs together */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 8px 6px' }}><span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf(group.hue) }} />{group.title}</div>
+          <div style={{ background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, overflow: 'hidden', padding: '4px 0' }}>
+            {group.rows.map((r) => (
               <div key={r.href}>
-                {i > 0 && <div style={{ height: '0.5px', background: C.line, marginLeft: 67 }} />}
-                <Link href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 14px', textDecoration: 'none', color: 'inherit' }}>
+                <Link href={r.href} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 10px', minHeight: 46, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit' }}>
                   {r.brand
-                    ? <span style={{ width: 40, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{(Array.isArray(r.brand) ? r.brand : [r.brand]).map((b, k) => <span key={b} style={{ width: 32, height: 32, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: k ? -10 : 0, position: 'relative', zIndex: 2 - k }}><BrandOrMark provider={b} size={17} /></span>)}</span>
-                    : <Mark hue={r.hue ?? 'mint'} size={40}><r.Icon size={19} /></Mark>}
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.25 }}>{r.label}</span>
-                    <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>{r.sub}</span>
-                  </span>
-                  <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0 }} />
+                    ? <span style={{ width: 36, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}>{(Array.isArray(r.brand) ? r.brand : [r.brand]).map((b, k) => <span key={b} style={{ width: 32, height: 32, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: k ? -12 : 0, position: 'relative', zIndex: 2 - k }}><BrandOrMark provider={b} size={17} /></span>)}</span>
+                    : <Mark hue={r.hue ?? 'mint'} size={36}><r.Icon size={18} /></Mark>}
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
+                  <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
                 </Link>
               </div>
             ))}
@@ -158,14 +156,13 @@ export default function MvpMore({ name, location, tier, query = '', clientId }: 
         </div>
       ))}
 
-      <div style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, overflow: 'hidden', marginBottom: 14 }}>
-        <button type="button" onClick={() => { void signOut() }} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 13, padding: '13px 14px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-          <span style={{ width: 34, height: 34, borderRadius: 9, background: C.coralSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><LogOut size={18} color={C.coral} /></span>
-          <span style={{ flex: 1, fontSize: 15, fontWeight: 600, color: C.coral }}>Sign out</span>
+      <div style={{ background: '#fff', borderRadius: 18, boxShadow: CARD_SHADOW, overflow: 'hidden', marginBottom: 8, padding: '4px 0' }}>
+        <button type="button" onClick={() => { void signOut() }} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 10px', minHeight: 46, boxSizing: 'border-box', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+          <Mark hue="red" size={36}><LogOut size={18} /></Mark>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: C.coral }}>Sign out</span>
         </button>
       </div>
 
-      <div style={{ textAlign: 'center', fontSize: 12, color: C.faint, padding: '8px 0 4px' }}>Apnosh</div>
     </div>
   )
 }

@@ -77,7 +77,7 @@ function Row({ item, first }: { item: Item; first: boolean }) {
       {item.href && <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />}
     </>
   )
-  const style: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: first ? 'none' : `0.5px solid ${C.line}`, textDecoration: 'none', color: 'inherit' }
+  const style: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', textDecoration: 'none', color: 'inherit' }
   return item.href ? <Link href={item.href} className="mvp-row" style={style}>{inner}</Link> : <div style={style}>{inner}</div>
 }
 

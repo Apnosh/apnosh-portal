@@ -44,18 +44,14 @@ export function MvpDetailHeader({ title, subtitle, backHref = '/dashboard/more' 
   )
 }
 
-export function MvpGroup({ title, children, hue }: { title?: string; children: React.ReactNode; /** portal redesign: a colour dot before the group title */ hue?: HueKey }) {
-  const items = React.Children.toArray(children)
+export function MvpGroup({ title, children, hue }: { title?: string; children: React.ReactNode; /** a colour dot before the group title */ hue?: HueKey }) {
+  /* Density pass (owner 2026-09-04): no hairlines between rows — the fixed mark column and the
+     aligned labels say what belongs together; the group title and the gap say where a group ends. */
   return (
-    <div style={{ marginBottom: 22 }}>
-      {title && <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: hue ? 15.5 : 13, fontWeight: 600, color: hue ? C.ink : C.mute, letterSpacing: hue ? '-.01em' : undefined, padding: '0 6px 8px' }}>{hue && <span style={{ width: 8, height: 8, borderRadius: 4, background: gradOf(hue) }} />}{title}</div>}
-      <div style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
-        {items.map((child, i) => (
-          <React.Fragment key={i}>
-            {i > 0 && <div style={{ height: '0.5px', background: 'rgba(0,0,0,.07)', marginLeft: 61 }} />}
-            {child}
-          </React.Fragment>
-        ))}
+    <div style={{ marginBottom: 18 }}>
+      {title && <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute, padding: '0 8px 6px' }}>{hue && <span style={{ width: 7, height: 7, borderRadius: 4, background: gradOf(hue) }} />}{title}</div>}
+      <div style={{ background: '#fff', borderRadius: 18, overflow: 'hidden', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '4px 0' }}>
+        {children}
       </div>
     </div>
   )
@@ -65,19 +61,19 @@ export function MvpRow({ icon, label, sub, href, onClick, right, danger, externa
   const inner = (
     <>
       {mark
-        ? <span style={{ width: 40, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 34, height: 34, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{mark}</span></span>
+        ? <span style={{ width: 36, display: 'inline-flex', justifyContent: 'center', flexShrink: 0 }}><span style={{ width: 34, height: 34, borderRadius: 99, background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{mark}</span></span>
         : icon && (hue && !danger
-          ? <Mark hue={hue} size={40}>{icon}</Mark>
+          ? <Mark hue={hue} size={36}>{icon}</Mark>
           : <span style={{ width: 34, height: 34, borderRadius: 9, background: danger ? C.coralSoft : C.greenSoft, color: danger ? C.coral : C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>)}
       <span style={{ flex: 1, minWidth: 0 }}>
-        <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: danger ? C.coral : C.ink, lineHeight: 1.25 }}>{label}</span>
+        <span style={{ display: 'block', fontSize: 15, fontWeight: 500, color: danger ? C.coral : C.ink, lineHeight: 1.25 }}>{label}</span>
         {sub && <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</span>}
       </span>
       {right}
       {(href || onClick) && <ChevronRight size={18} color={C.faint} style={{ flexShrink: 0 }} />}
     </>
   )
-  const base: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 13, padding: '12px 14px', textDecoration: 'none', color: 'inherit', width: '100%' }
+  const base: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 12, padding: '7px 12px 7px 10px', minHeight: 48, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', width: '100%' }
   if (href && external) return <a href={href} target="_blank" rel="noopener noreferrer" className="mvp-row" style={base}>{inner}</a>
   if (href) return <Link href={href} className="mvp-row" style={base}>{inner}</Link>
   if (onClick) return <button type="button" onClick={onClick} className="mvp-row" style={{ ...base, background: 'none', border: 'none', textAlign: 'left', font: 'inherit', cursor: 'pointer' }}>{inner}</button>
