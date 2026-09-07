@@ -6,6 +6,11 @@
  */
 import 'server-only'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { COLLECTED_STATUSES } from './refund-math'
+
+// The status sets live in refund-math (pure, no server-only) so a script can prove them without a
+// database. Re-exported here because this is where every money READ reaches for them.
+export { COLLECTED_STATUSES, SETTLED_STATUSES } from './refund-math'
 
 export interface CampaignPaymentInfo {
   totalCents: number
@@ -29,14 +34,16 @@ function toInfo(row: Record<string, unknown>): CampaignPaymentInfo {
   }
 }
 
-/** The upfront payment for one campaign (latest paid row), or null. */
+/** The upfront payment for one campaign (latest COLLECTED row), or null. This is the RECEIPT: a
+ *  partly refunded or disputed order still has one, and hiding it is how an owner loses the record
+ *  of a charge that is still on their card. */
 export async function getCampaignPayment(campaignId: string): Promise<CampaignPaymentInfo | null> {
   try {
     const { data, error } = await admin()
       .from('campaign_payments')
       .select('total_cents, subtotal_cents, service_fee_cents, tax_cents, paid_at')
       .eq('campaign_id', campaignId)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .order('paid_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -48,7 +55,7 @@ export async function getCampaignPayment(campaignId: string): Promise<CampaignPa
 }
 
 /**
- * True when this campaign was paid IN FULL at checkout (a 'paid' campaign_payments row exists).
+ * True when this campaign's checkout money was COLLECTED (see COLLECTED_STATUSES).
  * The G1 gate: when true, the per-piece accrual records its charge as 'covered_by_checkout'
  * instead of 'accrued', so the invoicing path can never bill the same work a second time.
  * Degrades to FALSE on any failure (missing table pre-215, no env) — a read hiccup must never
@@ -61,7 +68,7 @@ export async function isCampaignCheckoutPaid(campaignId: string): Promise<boolea
       .from('campaign_payments')
       .select('id')
       .eq('campaign_id', campaignId)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .limit(1)
     if (error || !data) return false
     return data.length > 0
@@ -70,7 +77,7 @@ export async function isCampaignCheckoutPaid(campaignId: string): Promise<boolea
   }
 }
 
-/** Upfront payments for many campaigns → { campaignId: info } (paid rows only; latest wins). */
+/** Upfront payments for many campaigns → { campaignId: info } (collected rows only; latest wins). */
 export async function getCampaignPaymentsBatch(campaignIds: string[]): Promise<Record<string, CampaignPaymentInfo>> {
   const ids = campaignIds.filter(Boolean)
   if (!ids.length) return {}
@@ -79,7 +86,7 @@ export async function getCampaignPaymentsBatch(campaignIds: string[]): Promise<R
       .from('campaign_payments')
       .select('campaign_id, total_cents, subtotal_cents, service_fee_cents, tax_cents, paid_at')
       .in('campaign_id', ids)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .order('paid_at', { ascending: false })
     if (error || !data) return {}
     const map: Record<string, CampaignPaymentInfo> = {}

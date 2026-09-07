@@ -21,7 +21,7 @@ import {
 } from '@/components/campaigns/desk/ui'
 import RequestBoard from '@/components/requests/request-boards'
 import { requestTypeById, questionsFor, type RequestAnswers } from '@/lib/requests/catalog'
-import { priceCreativeRequest, fmtCents, CREATIVE_LEVELS, VALVE_LINE, REVISION_LINE } from '@/lib/requests/pricing'
+import { priceCreativeRequest, fmtCents, fmtTotal, CREATIVE_LEVELS, VALVE_LINE, REVISION_LINE } from '@/lib/requests/pricing'
 import { flowFor, bucketForDate, type FlowControl, type TicketOption } from '@/lib/requests/flows'
 
 const fmtDay = (s: string) => new Date(`${s}T12:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
@@ -241,7 +241,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           <ReceiptFrame>
             {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
             <ReceiptRule />
-            <ReceiptTotal label="Total" big={fmtCents(price.totalCents)} />
+            <ReceiptTotal label="Total" big={fmtTotal(price)} />
           </ReceiptFrame>
         )}
         <div style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '12px 14px', margin: '12px 0' }}>
@@ -255,7 +255,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           </div>
         )}
         <ConfirmButton
-          label={sending ? 'Placing your order...' : `Confirm order${price ? ` · ${price.startsAt ? 'from ' : ''}${fmtCents(price.totalCents)}` : ''}`}
+          label={sending ? 'Placing your order...' : `Confirm order${price ? ` · ${price.startsAt ? 'from ' : ''}${fmtTotal(price)}` : ''}`}
           sub="Goes on your Apnosh bill. Nothing else to do."
           disabled={sending}
           onClick={() => { void send() }}
@@ -475,14 +475,14 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
                     on={!isWorks}
                     name={<span>Standard <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>most owners pick this</span></span>}
                     sub={CREATIVE_LEVELS[type.id].standard}
-                    price={std ? fmtCents(std.totalCents) : undefined}
+                    price={std ? fmtTotal(std) : undefined}
                     onClick={() => setA('level', 'Standard')}
                   />
                   <Ticket
                     on={isWorks}
                     name="The works"
                     sub={CREATIVE_LEVELS[type.id].works}
-                    price={wrk ? fmtCents(wrk.totalCents) : undefined}
+                    price={wrk ? fmtTotal(wrk) : undefined}
                     onClick={() => setA('level', 'The works')}
                   />
                 </div>
@@ -539,7 +539,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
                 <ReceiptFrame>
                   {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
                   <ReceiptRule />
-                  <ReceiptTotal label={price.startsAt ? 'Starts at' : 'Total'} big={fmtCents(price.totalCents)} />
+                  <ReceiptTotal label={price.startsAt ? 'Starts at' : 'Total'} big={fmtTotal(price)} />
                 </ReceiptFrame>
                 {price.startsAt && (
                   <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 8, lineHeight: 1.5 }}>
@@ -557,7 +557,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           )}
           <div style={{ marginTop: 16 }}>
             <ConfirmButton
-              label={`Add to cart${priceCreativeRequest(type.id, answers) ? ` · ${fmtCents(priceCreativeRequest(type.id, answers)!.totalCents)}` : ''}`}
+              label={`Add to cart${priceCreativeRequest(type.id, answers) ? ` · ${fmtTotal(priceCreativeRequest(type.id, answers)!)}` : ''}`}
               onClick={() => { setSendError(null); setCart(true) }}
             />
           </div>

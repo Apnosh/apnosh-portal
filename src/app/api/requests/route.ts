@@ -110,6 +110,11 @@ export async function POST(req: Request) {
    * client bought is on the record even after prices or specs change. */
   const isOrder = body.order === true
   let orderCents: number | null = null
+  /* 'monthly' when the price sheet priced this by the month. NOTHING bills a second month today —
+   * the desk stores one quote and mints one work order — so the screen says "for the first month"
+   * and this column is only the record. When the desk goes through the till, it is what says which
+   * orders were meant to repeat instead of guessing from the answers. */
+  let cadence: 'once' | 'monthly' = 'once'
   let brief: Record<string, unknown> = v.clean
   /* P1 TAG SPINE: the graphic TYPE rides the brief as queryable data
    * (registry-validated), so "what does what" is a query later — never
@@ -132,7 +137,9 @@ export async function POST(req: Request) {
         brief = { ...brief, _source: { draftId: fd } }
       }
     } else {
-      orderCents = priceCreativeRequest(v.type.id, v.clean)?.totalCents ?? null
+      const priced = priceCreativeRequest(v.type.id, v.clean)
+      orderCents = priced?.totalCents ?? null
+      if (priced?.monthly) cadence = 'monthly'
     }
     if (orderCents == null) {
       return NextResponse.json({ error: 'Could not price this order. Send it as a request instead.' }, { status: 400 })
@@ -150,9 +157,18 @@ export async function POST(req: Request) {
   const orderCols = isOrder ? { quote_cents: orderCents, accepted_at: new Date().toISOString() } : {}
   let { data: row, error } = await admin
     .from('creative_requests')
-    .insert({ ...baseRow, attachments, due_date: dueDate, ...orderCols })
+    .insert({ ...baseRow, attachments, due_date: dueDate, ...orderCols, cadence })
     .select('id, type, status, created_at')
     .single()
+  /* Migration 255 not applied yet: drop ONLY cadence and keep everything 236 gave us — a request
+   * must not lose its price to a column that is only a record. */
+  if (error && (error as { code?: string }).code === '42703') {
+    ;({ data: row, error } = await admin
+      .from('creative_requests')
+      .insert({ ...baseRow, attachments, due_date: dueDate, ...orderCols })
+      .select('id, type, status, created_at')
+      .single())
+  }
   /* Migration 236 not applied yet (42703 unknown column): the request still
    * lands, just without the new columns. Never lose an owner's ask to a schema lag. */
   if (error && (error as { code?: string }).code === '42703') {

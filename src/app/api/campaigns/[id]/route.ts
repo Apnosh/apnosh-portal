@@ -150,7 +150,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // ── G7 (hardened for the ONE pay-first model, owner decision B): payment-aware ship.
   // Every billable campaign ships through the upfront checkout, which threads the paid PaymentIntent
   // into this PATCH. shipBillingGate decides:
-  //   'allow'  → free/DIY $0 order, or a genuinely legacy pre-checkout campaign (dated carve-out)
+  //   'allow'  → free/DIY $0 order, or the invoice lane (there is no legacy carve-out any more)
   //   'verify' → a PaymentIntent was presented → confirm the charge succeeded + covers the bill, or 402
   //   'refuse' → a billable, non-legacy ship with NO payment → block (it must go through checkout)
   // THE INVOICE LANE. While card checkout is shut, a billable order used to die at prepare with a
@@ -162,11 +162,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const invoiceLane = wantsShip && body.billing === 'invoice' && !campaignCheckoutEnabled()
   let invoiceBill: { preTaxCents: number; perMonthCents: number } | null = null
   if (wantsShip) {
-    const { preTaxCents, perMonthCents } = checkoutBill({ items: campaign.draft.items })
+    // Bill the items this ship will ACTUALLY leave behind. body.items replaces the whole line-item
+    // set (replaceLineItems, below), so gating on campaign.draft.items priced the plan as it was
+    // before the request — a ship that adds paid pieces in the same call would have been gated on
+    // the cheaper old cart. Same merge the allocation record uses further down.
+    const shipItems = (Array.isArray(body.items) ? (body.items as LineItem[]) : campaign.draft.items)
+    const { preTaxCents, perMonthCents } = checkoutBill({ items: shipItems })
     const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
-    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt, invoiceLane })
+    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, invoiceLane })
     if (invoiceLane && gate === 'allow' && (preTaxCents > 0 || perMonthCents > 0)) invoiceBill = { preTaxCents, perMonthCents }
-    if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT }, { status: 402 })
+    // A machine-readable code, not just the sentence: the legacy ship buttons (the campaign detail
+    // page, the Content Menu) used to show this as a plain error with a "Try again" that could never
+    // succeed. They read the code and send the owner to checkout instead.
+    if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT, code: 'SHIP_NEEDS_PAYMENT' }, { status: 402 })
     if (gate === 'verify') {
       const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId: paymentIntentId!, clientId: campaign.clientId, campaignId: id, preTaxCents })
       if (!verified.ok) return NextResponse.json({ error: verified.reason }, { status: 402 })

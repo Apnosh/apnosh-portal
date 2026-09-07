@@ -285,8 +285,35 @@ export async function startCampaignSubscription(opts: {
       campaign_id: opts.campaignId,
       kind: 'campaign_subscription',
     },
+    // TAX, the same way the one-time half does it. Checkout already runs Stripe Tax
+    // (tax.calculations at /api/checkout/prepare, a committed transaction at /complete), so a
+    // monthly invoice that collected NO tax was the odd one out — the same services, taxed on
+    // day one and untaxed every month after.
+    automatic_tax: { enabled: true },
   }
-  return await stripe.subscriptions.create(params, { idempotencyKey: opts.idempotencyKey })
+  try {
+    return await stripe.subscriptions.create(params, { idempotencyKey: opts.idempotencyKey })
+  } catch (e) {
+    // Automatic tax needs a customer Stripe can locate (an address or a tax ID). A customer
+    // without one must not lose their subscription over it: start it untaxed, loudly, so the
+    // recurring revenue is never dropped for a tax-setup problem.
+    //
+    // Keyed on Stripe's own CODE first. Matching /tax/i on the message was a wide net: any error
+    // whose text happened to contain "tax" (a card decline naming a tax line, a translated
+    // message) silently dropped tax off a subscription that could have collected it. The message
+    // match stays only as a secondary, and the log says which one fired so a wrong catch is
+    // visible instead of invisible.
+    const msg = e instanceof Error ? e.message : ''
+    const code = (e as { code?: string } | null)?.code
+    const byCode = code === 'customer_tax_location_invalid'
+    const byMessage = !byCode && /tax/i.test(msg)
+    if (!byCode && !byMessage) throw e
+    console.warn(`[stripe] automatic tax off for campaign ${opts.campaignId} (matched ${byCode ? `code ${code}` : 'the message, not a tax code'}): ${msg}`)
+    return await stripe.subscriptions.create(
+      { ...params, automatic_tax: { enabled: false } },
+      { idempotencyKey: `${opts.idempotencyKey}_notax` },
+    )
+  }
 }
 
 /**

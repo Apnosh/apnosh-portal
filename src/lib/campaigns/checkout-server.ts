@@ -105,6 +105,57 @@ export async function computeTaxCents(opts: {
   }
 }
 
+/**
+ * A TAX ESTIMATE for the monthly half of the bill, in cents, or null when we cannot work one out.
+ *
+ * The subscription charges automatic_tax (src/lib/stripe.ts), so the monthly line the owner agrees
+ * to at checkout is not the whole monthly charge. This runs the SAME Stripe Tax calculation the
+ * one-time half runs (computeTaxCents), against the monthly amount, so the consent can say the real
+ * number instead of a number we know is short.
+ *
+ * NEVER COMMITTED. It is a quote for the screen; the invoice does its own tax at billing time, and
+ * rates can change between now and next month.
+ *
+ * null (not 0) when there is no answer — no address on the customer, Tax not enabled, Stripe
+ * unreachable. 0 means Stripe really said "no tax here". The screen says "plus tax" for null and
+ * nothing extra for 0, so we never print a number we did not get.
+ */
+export async function estimateMonthlyTaxCents(opts: {
+  perMonthCents: number
+  customerId?: string
+  address?: BillingAddress
+}): Promise<number | null> {
+  if (opts.perMonthCents <= 0) return null
+  const hasAddr = !!(opts.address && (opts.address.postal_code || opts.address.state))
+  if (!hasAddr && !opts.customerId) return null
+  try {
+    const calc = await stripe.tax.calculations.create({
+      currency: 'usd',
+      line_items: [{ amount: opts.perMonthCents, reference: 'apnosh-campaign-monthly', tax_behavior: 'exclusive' }],
+      ...(hasAddr
+        ? {
+            customer_details: {
+              address: {
+                line1: opts.address!.line1,
+                line2: opts.address!.line2,
+                city: opts.address!.city,
+                state: opts.address!.state,
+                postal_code: opts.address!.postal_code,
+                country: opts.address!.country ?? 'US',
+              },
+              address_source: 'billing',
+            },
+          }
+        : { customer: opts.customerId! }),
+    })
+    return calc.tax_amount_exclusive ?? 0
+  } catch {
+    // No tax location on the customer is the common case here, and it is not an error worth
+    // failing checkout over — the screen just says "plus tax".
+    return null
+  }
+}
+
 /** The customer's card on file (default payment method, else the most recent card), or null.
  *  Reads Stripe directly so it never depends on webhook-mirror timing. */
 export async function getSavedCard(customerId: string): Promise<{ id: string; brand: string; last4: string } | null> {

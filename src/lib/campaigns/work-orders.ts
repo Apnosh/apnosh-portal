@@ -949,6 +949,76 @@ export async function accrueChargeForPublishedDraft(draftId: string): Promise<bo
 }
 
 /**
+ * Money-in, SERVICE lane: when a service work order is DELIVERED (with proof — the route's own
+ * guard), accrue the owner charge for the line they bought.
+ *
+ * Services minted real work and had a real "done", but wrote NO money row at all. Only creator
+ * pieces and team-published drafts ever reached campaign_charges. That hole is why a stopped
+ * prepaid campaign told the owner "Nothing is owed" while we held their money: the ledger could
+ * not see a single delivered service. This is the third writer into campaign_charges, anchored on
+ * the purchased line (line_item_id) instead of a piece.
+ *
+ * The price is the price on the line the owner bought (campaign_line_items.price, in dollars),
+ * never re-derived from the catalog. MONTHLY lines are skipped on purpose: those bill on the
+ * campaign's Stripe subscription, so a charge row for one would bill it twice.
+ *
+ * Idempotent via the (campaign_id, line_item_id) unique index from migration 254. Best-effort:
+ * degrades to a logged no-op until 254 is applied, and never blocks the delivery.
+ */
+export async function accrueChargeForDeliveredService(serviceOrderId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  const { data: o, error } = await admin
+    .from('service_work_orders')
+    .select('id, campaign_id, client_id, line_item_id, status, title')
+    .eq('id', serviceOrderId)
+    .maybeSingle()
+  if (error || !o) return false
+  if (o.status !== 'delivered') return false
+  const campaignId = (o.campaign_id as string | null) ?? null
+  const lineItemId = (o.line_item_id as string | null) ?? null
+  if (!campaignId || !lineItemId) return false   // an unanchored order has no price to bill
+
+  // select('*') so a column added by a later migration (producer, owner_mode) can't error the read.
+  const { data: line } = await admin.from('campaign_line_items').select('*').eq('id', lineItemId).maybeSingle()
+  if (!line) return false                        // the line was rewritten by a post-ship edit
+  const cadence = (line.cadence ?? {}) as { kind?: string; every?: string }
+  // Monthly services bill on the subscription — a charge row here would bill them a second time.
+  if (cadence.kind === 'recurring' && cadence.every === 'monthly') return false
+  if (line.producer === 'diy' || line.opt_out) return false   // the owner does it; there is nothing to bill
+  const qty = cadence.kind === 'per-occurrence' ? Math.max(1, Number(line.qty) || 1) : 1
+  const amountCents = Math.max(0, Math.round((Number(line.price) || 0) * 100)) * qty
+  if (amountCents <= 0) return false             // free/DIY by design → nothing to bill, no dead-letter
+
+  // G1 double-billing gate, same as the creator + team lanes: a checkout-paid campaign's work is
+  // already covered, so the row is a LEDGER record ('covered_by_checkout'), never invoiceable.
+  const covered = await isCampaignCheckoutPaid(campaignId)
+  const { error: insErr } = await admin.from('campaign_charges').insert({
+    client_id: o.client_id as string,
+    campaign_id: campaignId,
+    line_item_id: lineItemId,
+    source: 'service',
+    amount_cents: amountCents,
+    status: covered ? 'covered_by_checkout' : 'accrued',
+  })
+  if (!insErr) return true
+  if (insErr.code === '23505') return true       // already accrued (idempotent)
+  // Pre-migration 254: the 'service' source or the line_item_id column is not there yet. Log and
+  // skip — the delivery still lands, and the row can be backfilled once the SQL is run.
+  if (insErr.code === '23514' || insErr.code === '42703' || insErr.code === 'PGRST204' || insErr.code === '42P01') {
+    console.warn(`accrueChargeForDeliveredService: skipped service charge row (apply migration 254) order=${serviceOrderId} (${insErr.message})`)
+    return false
+  }
+  // A real failure must never silently lose money — dead-letter it for a human.
+  await notifyStaffForClient(o.client_id as string, ['strategist'], {
+    kind: 'client_signoff',
+    title: 'Service charge failed to record',
+    body: `Delivering "${(o.title as string) || 'a service'}" didn't record its $${Math.round(amountCents / 100)} charge (${insErr.message}). Record it by hand.`,
+    link: `/work/today?focus=${campaignId}`,
+  }).catch(() => ({ notified: 0 }))
+  return false
+}
+
+/**
  * Stop a campaign's production, terminally. A dedicated sweep — NOT the
  * empty-plan reconcile trick: that would stamp PLAN_REMOVED_NOTE (whose voids a
  * later reconcile auto-REVIVES) and send the wrong staff copy. Guards mirror the

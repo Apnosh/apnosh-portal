@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
 import { checkoutBill } from '@/lib/campaigns/checkout-bill'
-import { ensureCheckoutCustomer, computeTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
+import { ensureCheckoutCustomer, computeTaxCents, estimateMonthlyTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
 import { resolveGatesForDraft } from '@/lib/campaigns/gates/config-server'
 import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
 import { getContentOverrides } from '@/lib/campaigns/content-overrides-server'
@@ -75,6 +75,7 @@ export async function POST(req: NextRequest) {
       free: true,
       breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
       monthlyCents: 0,
+      monthlyTaxCents: null,
       gates,
       ...(vault ? { vault } : {}),
     })
@@ -101,6 +102,7 @@ export async function POST(req: NextRequest) {
       checkoutClosed: true,
       breakdown: { subtotalCents: bill.subtotalCents, serviceFeeCents: bill.serviceFeeCents, taxCents: 0, totalCents: bill.preTaxCents },
       monthlyCents: bill.perMonthCents,
+      monthlyTaxCents: null,          // the invoice does its own tax; we do not quote it here
       gates,
       ...(vault ? { vault } : {}),
     })
@@ -135,6 +137,10 @@ export async function POST(req: NextRequest) {
         await stripe.setupIntents.cancel(si.id).catch(() => {})
         return NextResponse.json({ error: 'Checkout is not set up yet (payments table missing). Apply migration 215 and try again.' }, { status: 500 })
       }
+      // THE MONTHLY HALF IS TAXED TOO. The subscription runs automatic_tax, so a screen that says
+      // "$X/mo" and nothing else is short by the tax. Estimate it the same way the one-time half
+      // does; null when the customer has no tax location, and the screen says "plus tax".
+      const monthlyTaxCents = await estimateMonthlyTaxCents({ perMonthCents: bill.perMonthCents, customerId: cust.customerId })
       const savedCard = await getSavedCard(cust.customerId)
       return NextResponse.json({
         setupOnly: true,
@@ -143,6 +149,7 @@ export async function POST(req: NextRequest) {
         publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
         breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
         monthlyCents: bill.perMonthCents,
+        monthlyTaxCents,
         savedCard,
         gates,
         ...(vault ? { vault } : {}),
@@ -155,6 +162,9 @@ export async function POST(req: NextRequest) {
   try {
     const tax = await computeTaxCents({ preTaxCents: bill.preTaxCents, customerId: cust.customerId })
     const totalCents = bill.preTaxCents + tax.taxCents
+    // Same calculation, run on the monthly line, because the subscription is taxed too (stripe.ts
+    // sets automatic_tax on it). Estimate only — never committed, never charged from here.
+    const monthlyTaxCents = await estimateMonthlyTaxCents({ perMonthCents: bill.perMonthCents, customerId: cust.customerId })
 
     const pi = await stripe.paymentIntents.create({
       amount: totalCents,
@@ -206,6 +216,7 @@ export async function POST(req: NextRequest) {
         totalCents,
       },
       monthlyCents: bill.perMonthCents,
+      monthlyTaxCents,
       savedCard,
       gates,
     })

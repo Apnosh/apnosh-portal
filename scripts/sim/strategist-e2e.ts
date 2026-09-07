@@ -89,11 +89,11 @@ async function main() {
       draft.items = draft.items.filter((it) => it.producer === 'diy' || it.serviceable === false)
       const bill = checkoutBill(draft)
       s.check(`the diy cart is genuinely $0 (${bill.preTaxCents}¢ + ${bill.perMonthCents}¢/mo)`, bill.preTaxCents === 0 && bill.perMonthCents === 0)
-      s.check('a $0 cart may ship without Stripe', shipBillingGate({ preTaxCents: 0, perMonthCents: 0, hasPaymentIntent: false, createdAtISO: '2026-07-28' }) === 'allow')
+      s.check('a $0 cart may ship without Stripe', shipBillingGate({ preTaxCents: 0, perMonthCents: 0, hasPaymentIntent: false }) === 'allow')
       s.check('an unpaid billable cart is REFUSED headlessly (the money honesty)',
-        shipBillingGate({ preTaxCents: 50_000, perMonthCents: 0, hasPaymentIntent: false, createdAtISO: '2026-07-28' }) === 'refuse')
+        shipBillingGate({ preTaxCents: 50_000, perMonthCents: 0, hasPaymentIntent: false }) === 'refuse')
       s.check('the same cart with a PaymentIntent goes to verify, never straight through',
-        shipBillingGate({ preTaxCents: 50_000, perMonthCents: 0, hasPaymentIntent: true, createdAtISO: '2026-07-28' }) === 'verify')
+        shipBillingGate({ preTaxCents: 50_000, perMonthCents: 0, hasPaymentIntent: true }) === 'verify')
     }
 
     /* ── 4. CREATE: the campaign + the allocation record's compose half ────────────────── */

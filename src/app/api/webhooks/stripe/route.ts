@@ -1,9 +1,24 @@
 /**
  * Stripe webhook -- Apnosh billing v2.
  *
- * Handles the 11 events the spec requires plus 2 legacy events
+ * Handles the 14 events the spec requires plus 2 legacy events
  * (checkout.session.completed, invoice.payment_succeeded) needed by the
  * existing /dashboard/orders self-serve flow.
+ *
+ * REQUIRED EVENTS ON THE STRIPE ENDPOINT. Three of these are money going BACKWARDS, and if the
+ * endpoint is not subscribed to them nothing here ever runs: the campaign keeps its 'paid' row, the
+ * work keeps minting, the subscription keeps billing, and nobody is told. Add all three in the
+ * Stripe dashboard (Developers -> Webhooks -> this endpoint -> Select events):
+ *
+ *   charge.refunded         a refund, ours or one taken by hand in the dashboard
+ *   charge.dispute.created  a chargeback opened
+ *   charge.dispute.closed   the bank decided (won -> restore the status; lost -> settle as a
+ *                           full refund, without calling Stripe refunds)
+ *
+ * The rest: customer.subscription.created/updated/deleted, invoice.created, invoice.finalized,
+ * invoice.paid, invoice.payment_failed, invoice.voided, invoice.marked_uncollectible,
+ * customer.updated, payment_method.attached, payment_intent.succeeded,
+ * payment_intent.payment_failed, payment_intent.processing.
  *
  * Every event is:
  *   1. Verified via STRIPE_WEBHOOK_SECRET
@@ -158,6 +173,14 @@ async function dispatch(event: Stripe.Event, supabase: AdminClient) {
       return handleCampaignPaymentFailed(supabase, event.data.object as Stripe.PaymentIntent)
     case 'payment_intent.processing':
       return handleInvoicePaymentProcessing(supabase, event.data.object as Stripe.PaymentIntent)
+
+    // --- Money going BACKWARDS (refunds + chargebacks) ---
+    case 'charge.refunded':
+      return handleChargeRefunded(supabase, event.data.object as Stripe.Charge)
+    case 'charge.dispute.created':
+      return handleDisputeCreated(supabase, event.data.object as Stripe.Dispute)
+    case 'charge.dispute.closed':
+      return handleDisputeClosed(supabase, event.data.object as Stripe.Dispute)
 
     // --- Legacy (orders self-serve flow) ---
     case 'checkout.session.completed':
@@ -739,7 +762,7 @@ async function handleCampaignPaymentSucceeded(
   if (row && !row.campaign_id) {
     try {
       const { getAdminUserIds } = await import('@/lib/notify')
-      const { createNotification } = await import('@/lib/notifications')
+      const { createNotification } = await import('@/lib/notify')
       const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
       const name = ((client as { name?: string } | null)?.name) ?? 'A client'
       for (const adminId of await getAdminUserIds(supabase)) {
@@ -747,6 +770,266 @@ async function handleCampaignPaymentSucceeded(
       }
     } catch (e) { console.warn('[stripe] orphan-payment page failed', (e as Error)?.message) }
   }
+}
+
+// ============================================================
+// Money going BACKWARDS: refunds + chargebacks
+// ============================================================
+// A refund taken in the Stripe dashboard used to write NOTHING back here: the campaign_payments
+// row stayed 'paid' forever, so isCampaignCheckoutPaid kept saying the campaign was covered, every
+// piece delivered afterwards was stamped 'covered_by_checkout', and none of it could ever be
+// invoiced. These two handlers make Stripe the source of truth for money that goes back.
+
+/**
+ * charge.refunded — sync what Stripe has actually refunded onto the payment row.
+ *
+ * Idempotent by amount: Stripe sends amount_refunded as a RUNNING TOTAL, so a replayed event, or
+ * an event that lands after our own refunds-server already stamped the row, is a no-op. Only a
+ * genuinely larger total is written.
+ */
+async function handleChargeRefunded(supabase: AdminClient, charge: Stripe.Charge) {
+  const piId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
+  if (!piId) return
+
+  // select('*') so the refund columns being absent (pre-migration 254) cannot error the read.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: row } = await (supabase as any)
+    .from('campaign_payments')
+    .select('*')
+    .eq('stripe_payment_intent_id', piId)
+    .maybeSingle()
+  if (!row) return                                   // not a campaign checkout charge
+
+  const refunded = charge.amount_refunded || 0
+  const known = Number(row.refunded_cents) || 0
+  if (refunded <= known) return                      // already recorded (or a replay)
+
+  const total = Number(row.total_cents) || 0
+  const status = refunded >= total && total > 0 ? 'refunded' : refunded > 0 ? 'partially_refunded' : row.status
+  const isFull = total > 0 && refunded >= total
+  const campaignId = String(row.campaign_id ?? '')
+  const clientId = String(row.client_id ?? '')
+  // Did OUR refund path send this? It stamps stripe_refund_id, so a match means the settlement has
+  // already run and this event is only the echo. Pre-254 that column does not exist, so we cannot
+  // tell — and then we treat it as external (settle it) but check whether the owner has already
+  // been told, so they never read "We sent back $X" twice for one refund.
+  const weStartedIt = !!row.stripe_refund_id
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('campaign_payments')
+    .update({ status, refunded_cents: refunded, refunded_at: new Date().toISOString() })
+    .eq('stripe_payment_intent_id', piId)
+  if (error) {
+    // Pre-254 the columns are missing. The STATUS is the part that matters — without it a fully
+    // refunded order still counts as paid — so write it on its own.
+    console.warn('[stripe] refund columns missing, writing status only (apply migration 254):', error.message)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('campaign_payments').update({ status }).eq('stripe_payment_intent_id', piId)
+  }
+
+  const dollars = `$${(refunded / 100).toFixed(2)}`
+  try {
+    const { getAdminUserIds, createNotification } = await import('@/lib/notify')
+    for (const adminId of await getAdminUserIds(supabase)) {
+      await createNotification({ supabase, userId: adminId, type: 'payment', title: 'Refund recorded', body: `${dollars} was refunded on a campaign charge (${piId}). The order is now ${status.replace('_', ' ')}.`, link: '/admin/campaign-orders' })
+    }
+  } catch (e) { console.warn('[stripe] refund notify failed', (e as Error)?.message) }
+
+  // A refund we did not make is a refund all the same: someone in the Stripe dashboard just took
+  // money back on a campaign that is still running. Flipping a status column and stopping there
+  // left the work minted, the subscription billing, the ledger rows standing and the tax
+  // transaction reported. So it gets the SAME settlement our own path runs.
+  if (weStartedIt) return
+  await settleExternalRefund({ campaignId, clientId, piId, refundedNow: refunded - known, isFull })
+}
+
+/**
+ * The settlement for a refund that did not come from refundCampaignPayment: taken by hand in the
+ * Stripe dashboard, or the bank's own pull on a lost dispute.
+ *
+ * FULL → the campaign is over: void the undelivered charge rows, stop production, cancel the
+ * subscription, reverse the tax, tell everyone.
+ * PARTIAL → a credit for one piece. The row is already stamped above; this only tells the people,
+ * because stopping a campaign the owner is still paying for would be the wrong repair.
+ */
+async function settleExternalRefund(opts: {
+  campaignId: string
+  clientId: string
+  piId: string
+  refundedNow: number
+  isFull: boolean
+}) {
+  try {
+    const { getChargeByPaymentIntent, settleRefund, staleChargeIds, refundAlreadyAnnounced } =
+      await import('@/lib/campaigns/refunds-server')
+    const paid = await getChargeByPaymentIntent(opts.piId)
+    if (!paid) return
+    // Pre-254 we cannot prove this was not our own refund, so we check the owner's own inbox
+    // rather than risk saying "We sent back $X" a second time for one event.
+    const notifyOwner = !(await refundAlreadyAnnounced(opts.campaignId))
+    await settleRefund({
+      paid,
+      refundedNowCents: opts.refundedNow,
+      isFull: opts.isFull,
+      refundId: null,
+      reason: 'A refund was made on this order.',
+      // Only a FULL refund voids work: on a partial, the rest of the order stands.
+      staleIds: opts.isFull ? await staleChargeIds(opts.campaignId) : [],
+      notifyOwner,
+    })
+  } catch (e) { console.warn('[stripe] external refund settlement failed', (e as Error)?.message) }
+}
+
+/**
+ * charge.dispute.created — a chargeback. The bank has taken the money back and is asking us to
+ * justify the charge.
+ *
+ * What this does today, honestly: it marks the payment row 'disputed' with the amount and the
+ * time, and pages EVERY admin with the campaign and the number, so a person stops the work and
+ * gathers the proof within the bank's window.
+ *
+ * What it does NOT do: it does not automatically pause production. Pausing for real needs a state
+ * the whole execution spine reads — the creator lane (work-orders), the team lane (content_drafts
+ * publish path) and the service lane (service_work_orders) each mint and advance on their own, and
+ * a flag none of them check would be a promise the code does not keep. The honest version is this
+ * page plus disputed_at; a later move can add a campaign-level hold that all three lanes read
+ * before they start anything new.
+ */
+async function handleDisputeCreated(supabase: AdminClient, dispute: Stripe.Dispute) {
+  const piId = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id
+  if (!piId) return
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: row } = await (supabase as any)
+    .from('campaign_payments')
+    .select('*')
+    .eq('stripe_payment_intent_id', piId)
+    .maybeSingle()
+  if (!row) return
+  if (row.disputed_at) return                        // already recorded (replay)
+
+  const amount = dispute.amount || 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('campaign_payments')
+    .update({ status: 'disputed', disputed_at: new Date().toISOString(), dispute_cents: amount })
+    .eq('stripe_payment_intent_id', piId)
+  if (error) {
+    console.warn('[stripe] dispute columns missing, writing status only (apply migration 254):', error.message)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('campaign_payments').update({ status: 'disputed' }).eq('stripe_payment_intent_id', piId)
+  }
+
+  // Nobody may find out about a chargeback late. Page every admin, with the number and the campaign.
+  try {
+    const { getAdminUserIds } = await import('@/lib/notify')
+    const { createNotification } = await import('@/lib/notify')
+    const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
+    const name = ((client as { name?: string } | null)?.name) ?? 'A client'
+    const campaignId = (row.campaign_id as string | null) ?? null
+    for (const adminId of await getAdminUserIds(supabase)) {
+      await createNotification({
+        supabase,
+        userId: adminId,
+        type: 'payment',
+        title: `Chargeback: $${(amount / 100).toFixed(2)}`,
+        body: `${name}'s bank pulled back $${(amount / 100).toFixed(2)} on campaign ${campaignId ?? '(unlinked)'}. Stop new work on it and send Stripe the proof before the deadline.`,
+        link: campaignId ? `/admin/campaign-orders?focus=${campaignId}` : '/admin/campaign-orders',
+      })
+    }
+  } catch (e) { console.warn('[stripe] dispute page failed', (e as Error)?.message) }
+}
+
+/**
+ * charge.dispute.closed — the bank decided.
+ *
+ * WON: the money stays with us. The row was parked on 'disputed', which reads as "contested" on
+ * every money surface, so it goes back to the collected status the refund history says it should
+ * be — 'paid' when nothing was ever refunded, 'partially_refunded' when something was — and
+ * disputed_at is cleared. dispute_cents is KEPT: it happened, and the history should say so.
+ *
+ * LOST: the bank has taken the money. That is a full refund in everything but name, so it gets the
+ * same settlement — void the undelivered charge rows, stop production, cancel the subscription,
+ * reverse the tax, tell everyone — WITHOUT calling Stripe refunds, because refunding a charge the
+ * bank already pulled would send the same money twice.
+ */
+async function handleDisputeClosed(supabase: AdminClient, dispute: Stripe.Dispute) {
+  const piId = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id
+  if (!piId) return
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: row } = await (supabase as any)
+    .from('campaign_payments')
+    .select('*')
+    .eq('stripe_payment_intent_id', piId)
+    .maybeSingle()
+  if (!row) return
+  if (dispute.status !== 'won' && dispute.status !== 'lost') return   // warning_closed and friends
+
+  const total = Number(row.total_cents) || 0
+  const refunded = Number(row.refunded_cents) || 0
+  const amount = dispute.amount || 0
+  const campaignId = String(row.campaign_id ?? '')
+  const clientId = String(row.client_id ?? '')
+
+  if (dispute.status === 'won') {
+    // Back to what the refund history says, not blindly to 'paid' (the row may have been partly
+    // refunded before the dispute was opened, and winning does not un-refund that).
+    const { statusAfterDisputeWon } = await import('@/lib/campaigns/refund-math')
+    const restored = statusAfterDisputeWon(total, refunded)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
+      .from('campaign_payments')
+      .update({ status: restored, disputed_at: null })
+      .eq('stripe_payment_intent_id', piId)
+    if (error) {
+      console.warn('[stripe] dispute columns missing, writing status only (apply migration 254):', error.message)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('campaign_payments').update({ status: restored }).eq('stripe_payment_intent_id', piId)
+    }
+    try {
+      const { pageAdmins } = await import('@/lib/campaigns/refunds-server')
+      await pageAdmins(clientId, `Chargeback won: $${(amount / 100).toFixed(2)}`, `The bank decided in our favour on campaign ${campaignId || '(unlinked)'}. The order reads ${restored.replace('_', ' ')} again.`, campaignId ? `/admin/campaign-orders?focus=${campaignId}` : '/admin/campaign-orders')
+    } catch (e) { console.warn('[stripe] dispute-won page failed', (e as Error)?.message) }
+    return
+  }
+
+  // LOST. The money is gone; settle the campaign as if we had refunded it in full.
+  //
+  // refunded_cents is stamped too, not just the status. The money reports read that column, so a
+  // chargeback that only flipped the status showed as a $0 reversal — a full charge still counted
+  // as revenue we kept. It is the whole charge minus anything we had already sent back by hand
+  // (the bank pulls what is left), never more than the total. dispute_cents is untouched: the two
+  // numbers answer different questions and the history should keep both.
+  const bankTookCents = Math.max(0, total - refunded)          // the bank pulls what is left
+  const totalBackCents = Math.min(total, refunded + bankTookCents)   // everything that has gone back
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: lostErr } = await (supabase as any)
+    .from('campaign_payments')
+    .update({ status: 'refunded', refunded_cents: totalBackCents, refunded_at: new Date().toISOString() })
+    .eq('stripe_payment_intent_id', piId)
+  if (lostErr) {
+    // Pre-254 the refund columns are absent. The status flip is the part that MATTERS (it stops the
+    // order reading as covered), so it goes on its own rather than being lost with them.
+    console.warn('[stripe] refund columns missing, writing status only (apply migration 254):', lostErr.message)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('campaign_payments').update({ status: 'refunded' }).eq('stripe_payment_intent_id', piId)
+  }
+  try {
+    const { getChargeByPaymentIntent, settleRefund, staleChargeIds } = await import('@/lib/campaigns/refunds-server')
+    const paid = await getChargeByPaymentIntent(piId)
+    if (!paid) return
+    await settleRefund({
+      paid,
+      refundedNowCents: amount,
+      isFull: true,
+      refundId: null,                     // no refund object exists; the bank did this
+      reason: 'Your bank reversed this charge, so we stopped the campaign.',
+      staleIds: await staleChargeIds(campaignId),
+      notifyOwner: true,
+    })
+  } catch (e) { console.warn('[stripe] dispute-lost settlement failed', (e as Error)?.message) }
 }
 
 async function handleCampaignPaymentFailed(
