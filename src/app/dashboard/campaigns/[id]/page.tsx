@@ -165,9 +165,12 @@ export default function CampaignDetailPage() {
   async function stop() {
     if (!camp) return
     const monthly = summarize(camp.draft.items).perMonth
+    // The money half is said up front: a prepaid owner gets back what they paid for work we have
+    // not delivered. The exact number comes back with the settlement (the server does the math).
+    const moneyBack = ' If you paid upfront for work we have not delivered, we send that money back.'
     const confirmMsg = monthly > 0
-      ? `Stop this campaign? Nothing new will start or post. Your $${Math.round(monthly)}/mo billing is canceled right away. Work already being made finishes and bills as normal. This cannot be undone.`
-      : 'Stop this campaign? Nothing new will start or post. Work already being made finishes and bills as normal. This cannot be undone.'
+      ? `Stop this campaign? Nothing new will start or post. Your $${Math.round(monthly)}/mo billing is canceled right away. Work already being made finishes and bills as normal.${moneyBack} This cannot be undone.`
+      : `Stop this campaign? Nothing new will start or post. Work already being made finishes and bills as normal.${moneyBack} This cannot be undone.`
     if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) return
     setBusy(true)
     const r = await fetch(`/api/campaigns/${id}/stop`, { method: 'POST' }).catch(() => null)
@@ -176,8 +179,10 @@ export default function CampaignDetailPage() {
       // Show the server's own settlement — including "Monthly billing is canceled." — instead of
       // discarding it. subscriptionCancelFailed surfaces honestly (staff finishes it by hand).
       const j = await r.json().catch(() => null)
-      const s = j?.settlement as { summary?: string; subscriptionCancelFailed?: number } | undefined
-      if (s?.summary) setStopNote({ summary: s.summary, cancelFailed: (s.subscriptionCancelFailed ?? 0) > 0 })
+      const s = j?.settlement as { summary?: string; subscriptionCancelFailed?: number; refundFailed?: boolean } | undefined
+      // A refund we owe but could not send reads amber too — the owner should see that a person
+      // is finishing it, not a calm green "all done".
+      if (s?.summary) setStopNote({ summary: s.summary, cancelFailed: (s.subscriptionCancelFailed ?? 0) > 0 || s.refundFailed === true })
       void load()
     }
     else if (typeof window !== 'undefined') window.alert('Could not stop the campaign. Try again.')

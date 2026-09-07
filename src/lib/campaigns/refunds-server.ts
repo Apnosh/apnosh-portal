@@ -180,11 +180,14 @@ export async function owedRefundCents(campaignId: string): Promise<{ owedCents: 
  * @param campaignId  the campaign whose upfront charge is reversed
  * @param amountCents how much to send back; omitted = everything still refundable
  * @param reason      plain words, stored on the Stripe refund and said to the owner
+ * @param notifyOwner default true. The stop route sets it false because its own settlement
+ *                    message already carries the number — one event, one message.
  */
 export async function refundCampaignPayment(opts: {
   campaignId: string
   amountCents?: number
   reason: string
+  notifyOwner?: boolean
 }): Promise<RefundResult> {
   const { campaignId, reason } = opts
   if (!campaignId) return NOTHING('no campaign')
@@ -287,12 +290,14 @@ export async function refundCampaignPayment(opts: {
 
   // 8. THE PEOPLE. Plain words, real numbers.
   const dollars = `$${(refundedNow / 100).toFixed(2)}`
-  await notifyClientOwners(paid.clientId, {
-    kind: 'payment',
-    title: `We sent back ${dollars}`,
-    body: `${reason} It lands on your card in 5 to 10 days.`,
-    link: `/dashboard/campaigns/${campaignId}`,
-  }).catch(() => ({ notified: 0 }))
+  if (opts.notifyOwner !== false) {
+    await notifyClientOwners(paid.clientId, {
+      kind: 'payment',
+      title: `We sent back ${dollars}`,
+      body: `${reason} It lands on your card in 5 to 10 days.`,
+      link: `/dashboard/campaigns/${campaignId}`,
+    }).catch(() => ({ notified: 0 }))
+  }
   await pageAdmins(paid.clientId, `Refund sent: ${dollars}`, `${reason} Campaign ${campaignId}. Refund ${refundId}.${isFull ? ' The campaign was stopped and its monthly billing canceled.' : ''}`)
 
   return { ok: true, refundedCents: refundedNow, totalRefundedCents: totalRefunded, refundId }

@@ -22,6 +22,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCampaign } from '@/lib/campaigns/server'
 import { stopCampaign, getCampaignCharges } from '@/lib/campaigns/work-orders'
 import { cancelCampaignSubscriptions } from '@/lib/campaigns/campaign-subscription-server'
+import { owedRefundCents, refundCampaignPayment } from '@/lib/campaigns/refunds-server'
 import { summarize } from '@/lib/campaigns/types'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 
@@ -62,16 +63,50 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // errors the stop; a real cancel failure pages staff and the settlement says so honestly.
   const subs = await cancelCampaignSubscriptions(id).catch(() => ({ canceled: 0, alreadyCanceled: 0, failed: 0 }))
 
+  // THE MONEY BACK. A campaign paid upfront that stops with work undelivered is owed a refund. The
+  // old settlement said "Nothing is owed" here — while we were holding their money for work that
+  // was just voided one line above. Now the ledger is asked what actually landed (creator pieces,
+  // team posts AND services, since services finally write a money row), and the rest goes back.
+  // Runs AFTER the sweep on purpose: the sweep is what makes cancelled work stale, so the delivered
+  // total is measured against the campaign's final state.
+  const money = await owedRefundCents(id).catch(() => ({ owedCents: 0, deliveredCents: 0, paid: null }))
+  let refundedCents = 0
+  let refundOwedCents_ = 0
+  if (money.paid && money.owedCents > 0) {
+    refundOwedCents_ = money.owedCents
+    const r = await refundCampaignPayment({
+      campaignId: id,
+      amountCents: money.owedCents,
+      reason: 'You stopped this campaign, so we sent back what you paid for work we had not delivered.',
+      notifyOwner: false,          // the settlement below says it once, with the number
+    }).catch(() => null)
+    refundedCents = r?.refundedCents ?? 0
+  }
+  const refundFailed = refundOwedCents_ > 0 && refundedCents <= 0
+
   const name = campaign.draft.name || 'Your campaign'
   const stoppedCount = sweep.voidedOrders + sweep.rejectedDrafts + sweep.cancelledServices
   const monthlyLine = monthlyStopped <= 0 ? null
     : subs.failed > 0
       ? `We are turning off your monthly billing ($${Math.round(monthlyStopped)}/mo) now. Our team is finishing it by hand.`
       : 'Monthly billing is canceled. Nothing else charges this card for this campaign.'
+  // The money line, in the owner's words. A prepaid campaign talks about the refund; a
+  // pay-on-delivery campaign talks about the invoice. "Nothing is owed" is now only ever said when
+  // nothing was prepaid AND nothing was delivered — the one case where it is true.
+  const moneyLine = money.paid
+    ? refundedCents > 0
+      ? `We refund $${(refundedCents / 100).toFixed(2)} for work not delivered. It lands on your card in 5 to 10 days.`
+      : refundFailed
+        ? `We owe you $${(refundOwedCents_ / 100).toFixed(2)} back for work we did not deliver. Our team is sending it by hand today.`
+        : 'Everything you ordered was delivered, so there is nothing to send back.'
+    : charges.accruedCents > 0
+      ? `Owed for delivered work so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done; it arrives on one invoice.`
+      : 'Nothing is owed.'
+
   const settlementLines = [
     stoppedCount > 0 ? `${stoppedCount} unstarted piece${stoppedCount === 1 ? '' : 's'} of work stopped.` : 'Nothing was left to stop.',
     sweep.inFlight > 0 ? `${sweep.inFlight} piece${sweep.inFlight === 1 ? ' is' : 's are'} already being made — they finish and bill as normal.` : null,
-    charges.accruedCents > 0 ? `Owed for delivered work so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done; it arrives on one invoice.` : 'Nothing is owed.',
+    moneyLine,
     monthlyLine,
   ].filter((l): l is string => !!l)
 
@@ -84,6 +119,16 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       : 'Everything unstarted was voided.',
     link: `/work/today?focus=${id}`,
   }).catch(() => ({ notified: 0 }))
+
+  // A refund we promised and did not send is the worst outcome here, so it is never silent.
+  if (refundFailed) {
+    await notifyStaffForClient(campaign.clientId, ['strategist'], {
+      kind: 'payment',
+      title: 'Refund owed on a stopped campaign',
+      body: `"${name}" stopped owing the owner $${(refundOwedCents_ / 100).toFixed(2)} back and the automatic refund did not go through. Refund it in Stripe today.`,
+      link: `/admin/campaign-orders?focus=${id}`,
+    }).catch(() => ({ notified: 0 }))
+  }
 
   await notifyClientOwners(campaign.clientId, {
     kind: 'client_signoff',
@@ -101,6 +146,10 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       cancelledServices: sweep.cancelledServices,
       inFlight: sweep.inFlight,
       billedCents: charges.accruedCents,
+      deliveredCents: money.deliveredCents,
+      refundedCents,
+      refundOwedCents: refundOwedCents_,
+      refundFailed,
       monthlyStopped,
       subscriptionsCanceled: subs.canceled + subs.alreadyCanceled,
       subscriptionCancelFailed: subs.failed,
