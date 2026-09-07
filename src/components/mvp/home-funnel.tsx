@@ -278,7 +278,7 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const social = Math.max(0, views.social ?? 0)
   const google = Math.max(0, views.google ?? total) // fall back to total when no split was sent
   const hasSocial = social > 0
-  const awareTag = hasSocial ? 'Real · Google + Social' : 'Real · Google'
+  const awareTag = t(hasSocial ? 'Real · Google + Social' : 'Real · Google', lang)
   const awareSub = hasSocial ? 'times you showed up on Google and social' : 'times you showed up on Google'
   const awareSplit = hasSocial ? `Google ${google.toLocaleString()} · Social ${social.toLocaleString()}` : undefined
   const { directions, calls, websiteClicks } = actions
@@ -306,17 +306,17 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const L = (k: Parameters<typeof stageLabelFor>[0], w: string) => t(stageLabelFor(k, shape, w), lang)
   const S = (k: Parameters<typeof stageSubFor>[0], w: string) => t(stageSubFor(k, shape, w), lang)
   const stages: HStage[] = [
-    { key: 'shown', label: L('shown', 'Awareness'), sub: S('shown', awareSub), count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, deltaAbs: yoyAbs?.awareness ?? null, insightsStage: 'discovery' },
-    { key: 'engaged', label: L('engaged', 'Interest'), sub: S('engaged', 'website visits & clicks'), count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
-    { key: 'moved', label: L('moved', 'Actions'), sub: S('moved', 'directions & calls'), count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
-    { key: 'camein', label: L('camein', 'Orders'), sub: S('camein', 'walk-in orders from Google'), count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, deltaAbs: yoyAbs?.orders != null ? Math.round(yoyAbs.orders * walkInRate) : null, insightsStage: 'conversion' },
-    { key: 'back', label: L('back', 'Retention'), sub: S('back', 'came back for more'), count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
+    { key: 'shown', label: L('shown', 'Awareness'), sub: S('shown', awareSub), count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: t('{n} in 100 engaged', lang, { n: pct(engaged, total) }), emblem: 'eye', deltaYoY: yoy?.awareness ?? null, deltaAbs: yoyAbs?.awareness ?? null, insightsStage: 'discovery' },
+    { key: 'engaged', label: L('engaged', 'Interest'), sub: S('engaged', 'website visits & clicks'), count: engaged, zone: 'measured', tag: t('Real · Google', lang), conv: t('{n}% took a step', lang, { n: pct(acted, engaged) }), emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
+    { key: 'moved', label: L('moved', 'Actions'), sub: S('moved', 'directions & calls'), count: acted, zone: 'measured', tag: t('Real · Google', lang), conv: t('~{n}% of directions ordered', lang, { n: ratePct }), emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
+    { key: 'camein', label: L('camein', 'Orders'), sub: S('camein', 'walk-in orders from Google'), count: cameIn, zone: 'estimate', tag: t('~ about · your math', lang), emblem: 'door', deltaYoY: yoy?.orders ?? null, deltaAbs: yoyAbs?.orders != null ? Math.round(yoyAbs.orders * walkInRate) : null, insightsStage: 'conversion' },
+    { key: 'back', label: L('back', 'Retention'), sub: S('back', 'came back for more'), count: retention, zone: 'measured', tag: t('Repeat visits', lang), emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
   ]
   const stats = [
-    { value: total.toLocaleString(), label: 'Awareness' },
-    { value: engaged.toLocaleString(), label: 'Engaged' },
-    { value: '~' + cameIn.toLocaleString(), label: 'Orders' },
-    { value: revenue != null ? '~' + money(revenue, cur) : '—', label: 'Revenue' },
+    { value: total.toLocaleString(), label: t('Awareness', lang) },
+    { value: engaged.toLocaleString(), label: t('Engaged', lang) },
+    { value: '~' + cameIn.toLocaleString(), label: t('Orders', lang) },
+    { value: revenue != null ? '~' + money(revenue, cur) : '—', label: t('Revenue', lang) },
   ]
   return { stages, stats, revenue, cameIn, ratePct, engaged, total }
 }
@@ -440,22 +440,22 @@ export default function HomeFunnel({
     return () => ro.disconnect()
   }, [])
 
+  const { lang, T } = useLang()
   /* "the 30 days before" / "the year before" — from the real window when known, else the tab */
   const compareLabel = useMemo(() => {
-    if (curRange === '12m') return 'the year before'
+    if (curRange === '12m') return T('the year before')
     let days: number | null = null
     if (windowStart && windowEnd) {
       const d = Math.round((new Date(windowEnd + 'T00:00:00').getTime() - new Date(windowStart + 'T00:00:00').getTime()) / 86400000) + 1
       if (d > 0) days = d
     }
     if (days == null) days = curRange === '7d' ? 7 : curRange === '90d' ? 90 : 30
-    return `the ${days} days before`
-  }, [curRange, windowStart, windowEnd])
+    return T('the {n} days before', { n: days })
+  }, [curRange, windowStart, windowEnd, T])
   /* The shape of the business, off the client this screen already resolved for the bell. It
    * only bends the stage WORDS (shape-words.ts); nothing about the layout or the numbers reads
    * it. A client with no shape yet is a storefront, which is the copy that was always here. */
   const shape: ShelfShape | null = isShelfShape(bellClient?.shape) ? bellClient.shape : null
-  const { lang, T } = useLang()
   const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts, yoyAbs, shape, lang), [views, actions, walkInRate, avgTicket, currency, yoy, counts, yoyAbs, shape, lang])
 
   const geom = useRef({ W: 400 })
@@ -1202,7 +1202,7 @@ export default function HomeFunnel({
       {/* time-range tabs (scrollable) at the very top + the light/dark switch pinned to the TOP-RIGHT */}
       <div style={bar ? { display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) 40px', alignItems: 'center', gap: 10, padding: '10px 12px 4px' } : { display: 'flex', alignItems: 'center', gap: 8, padding: '14px 16px 6px' }}>
         {bar && (
-          <Link href="/dashboard/more" aria-label="Your business" style={{ flexShrink: 0, width: 40, height: 40, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: theme === 'dark' ? '0 0 0 1px rgba(255,255,255,0.08)' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(46,154,120,.18)', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
+          <Link href="/dashboard/more" aria-label={T('Your business')} style={{ flexShrink: 0, width: 40, height: 40, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: theme === 'dark' ? '0 0 0 1px rgba(255,255,255,0.08)' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(46,154,120,.18)', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
             <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', position: 'relative', overflow: 'hidden', fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: theme === 'dark' ? '#eef3f0' : C.greenDk, background: theme === 'dark' ? 'rgba(13,21,18,0.85)' : 'rgba(255,255,255,0.82)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)' }}>
               {bar.initial ?? '·'}
               {bar.image && <img src={bar.image} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
@@ -1219,7 +1219,7 @@ export default function HomeFunnel({
         </div>
         {bar && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <Link href="/dashboard/inbox" aria-label={bellN ? `Alerts (${bellN})` : 'Alerts'} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
+            <Link href="/dashboard/inbox" aria-label={bellN ? T('Alerts ({n})', { n: bellN }) : T('Alerts')} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
               <Bell size={19} />
               {(bellN) > 0 && <span style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: bellHot ? '#d99a1e' : C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{bellN > 99 ? '99+' : bellN}</span>}
             </Link>
@@ -1242,7 +1242,7 @@ export default function HomeFunnel({
             onChange={(e) => e.currentTarget.value && onCStart(e.currentTarget.value)}
             style={{ flex: 1, minWidth: 0, border: `1px solid ${C.line}`, background: C.card, color: C.ink, borderRadius: 10, padding: '6px 9px', fontSize: 12.5, fontFamily: 'inherit', colorScheme: theme === 'dark' ? 'dark' : 'light' }}
           />
-          <span style={{ fontSize: 12, color: C.faint, flexShrink: 0 }}>to</span>
+          <span style={{ fontSize: 12, color: C.faint, flexShrink: 0 }}>{T('to')}</span>
           <input
             type="date"
             value={cEnd ?? ''}
@@ -1259,7 +1259,7 @@ export default function HomeFunnel({
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6, padding: '2px 16px 8px', whiteSpace: 'nowrap', overflow: 'hidden', textAlign: 'center' }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
           {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
-          <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· change vs ${compareLabel}` : '· platforms report a few days behind'}</span>
+          <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· ${T('change vs {when}', { when: compareLabel })}` : `· ${T('platforms report a few days behind')}`}</span>
         </div>
       )}
       </div>
@@ -1272,7 +1272,7 @@ export default function HomeFunnel({
         onPointerCancel={clearPress}
         onPointerLeave={clearPress}
         style={{ display: 'block', position: 'absolute', top: 0, left: 0, zIndex: 0, width: '100%', height: effH, cursor: 'pointer', opacity: loading ? 0.5 : 1, transition: 'opacity .2s' }}
-        aria-label="Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects."
+        aria-label={T('Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects.')}
       />
     </div>
   )
@@ -1332,8 +1332,10 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
  * instead of a blank page, so the wait reads as "working on it", not broken.
  * Also used by /dashboard while the client context itself resolves.
  */
-export function HomeFunnelSkeleton({ height = 620, message = 'Getting your numbers' }: { height?: number; message?: string }) {
+export function HomeFunnelSkeleton({ height = 620, message }: { height?: number; message?: string }) {
   const { C } = useMvpTheme()
+  const { T } = useLang()
+  const line = message ?? T('Getting your numbers')
   /* 2026-09-04 (owner: "simple, but the design we are going for"): a quiet GHOST of the
    * funnel itself — five hairline rings on the same zig-zag the real page draws, joined by
    * the dashed path, with one soft light sweeping down through them — and one plain line
@@ -1346,7 +1348,7 @@ export function HomeFunnelSkeleton({ height = 620, message = 'Getting your numbe
   const pts = rings.map((k) => ({ x: k.cx * W, y: k.cy * H, r: k.r }))
   const path = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')
   return (
-    <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px 0 0', boxSizing: 'border-box', overflow: 'hidden' }} aria-busy aria-label={message}>
+    <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px 0 0', boxSizing: 'border-box', overflow: 'hidden' }} aria-busy aria-label={line}>
       <style>{`
 @keyframes hfGhostIn{from{opacity:0}to{opacity:1}}
 @keyframes hfGhostSweep{0%{transform:translateY(-30%)}100%{transform:translateY(130%)}}
@@ -1374,7 +1376,7 @@ export function HomeFunnelSkeleton({ height = 620, message = 'Getting your numbe
           </g>
         </svg>
       </div>
-      <div style={{ fontSize: 14, fontWeight: 500, color: C.mute, padding: '6px 0 14px', letterSpacing: '.01em' }}>{message}</div>
+      <div style={{ fontSize: 14, fontWeight: 500, color: C.mute, padding: '6px 0 14px', letterSpacing: '.01em' }}>{line}</div>
     </div>
   )
 }

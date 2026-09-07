@@ -18,6 +18,8 @@
  *
  *   npx tsx scripts/verify-i18n.ts
  */
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { ES } from '../src/lib/i18n/es'
 import { SCREEN_KEYS, allScreenKeys } from '../src/lib/i18n/keys'
 import { t, localeOf, money, num, DEFAULT_LANG, isLang, LANGS } from '../src/lib/i18n/t'
@@ -95,7 +97,68 @@ console.log('\n2. The translated screens')
   }
 }
 
-console.log('\n3. The t() fallback')
+console.log('\n3. Nothing English left on a screen we call Spanish')
+{
+  /**
+   * The manifest check above can only see the strings somebody LISTED. It cannot see a literal
+   * the screen actually draws that nobody listed, which is exactly how Home passed while
+   * rendering 'Real · Google', '3 in 100 engaged', 'Getting your numbers' and 'Repeat visits'
+   * in the middle of a Spanish page.
+   *
+   * So this reads the SOURCE of the screens. Every JSX text node and every label / sub / title
+   * / tag / placeholder / aria-label string in these files has to be a key the manifest carries
+   * — and every t('…') key in them has to be listed too, because a key that is not in the
+   * dictionary renders its English and nothing would have said so.
+   *
+   * It is a regex pass, not a parser: it will miss text glued together out of expressions, and
+   * it is meant to be tightened when it does. Missing something is fine; passing a screen with
+   * plain English literals on it is not.
+   */
+  const SCREEN_FILES: Record<string, readonly string[]> = {
+    home: ['src/components/mvp/home-funnel.tsx', 'src/components/mvp/people-row.tsx', 'src/components/mvp/counted-strip.tsx'],
+    messages: ['src/components/mvp/mvp-messages.tsx'],
+    getHelp: ['src/app/dashboard/get-help/page.tsx'],
+    create: ['src/components/mvp/create/create-page.tsx'],
+    onboarding: [
+      'src/app/(auth)/onboarding/full/step-renderer.tsx',
+      'src/app/(auth)/onboarding/full/steps/step-goals.tsx',
+      'src/app/(auth)/onboarding/full/steps/step-shape.tsx',
+      'src/app/(auth)/onboarding/full/steps/step-budget.tsx',
+    ],
+    // `reply` and `chips` are data, not a screen, and `settings` is a page whose language row is
+    // the only part this move translated — its file is listed here the day the rest of it is.
+  }
+
+  /** Not owner copy: a proper noun, a symbol, or a word that is the same in both languages. */
+  const NOT_COPY = new Set(['Google', 'Apnosh', 'TikTok', 'Yelp', 'Instagram', 'Facebook', 'Free'])
+  const isCopy = (v: string) => /[A-Za-z]{2}/.test(v) && !NOT_COPY.has(v)
+
+  const listed = new Set([...allScreenKeys(), ...allShapeWords()])
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n')
+  // a template literal is checked with its holes emptied: `${n} took a step` is English copy,
+  // `${a} · ${b}` is two values with a dot between them and nothing to translate.
+  const holes = (v: string) => v.replace(/\$\{[^}]*\}/g, '')
+  const CODEY = /[(){}=;]/
+  const PROP = /\b(label|sub|title|tag|conv|message|placeholder|aria-label|alt|blurb|subtitle|hint)\s*[:=]\s*(?:\{\s*)?(['"`])([^'"`]*)\2/g
+  const TEXT = />([^<>{}\n]{1,400})<\//g
+  const TKEY = /\b[tT]\(\s*'([^']+)'/g
+
+  for (const [screen, files] of Object.entries(SCREEN_FILES)) {
+    const loose: string[] = []
+    for (const rel of files) {
+      let src = ''
+      try { src = strip(readFileSync(join(process.cwd(), rel), 'utf8')) } catch { loose.push(`${rel}: cannot read`); continue }
+      const seen = new Set<string>()
+      for (const m of src.matchAll(TEXT)) { const v = m[1].trim(); if (!CODEY.test(v) && isCopy(v)) seen.add(v) }
+      for (const m of src.matchAll(PROP)) { const v = holes(m[3]).trim(); if (isCopy(v)) seen.add(m[3].trim()) }
+      for (const m of src.matchAll(TKEY)) seen.add(m[1])
+      for (const v of seen) if (!listed.has(v)) loose.push(`${rel.split('/').pop()}: "${v}"`)
+    }
+    check(`  ${screen}: every string it draws is in the manifest`, loose.length === 0, loose.join('  |  '))
+  }
+}
+
+console.log('\n4. The t() fallback')
 {
   check('an unknown key renders its English', t('This has no translation yet', 'es') === 'This has no translation yet')
   check('English never looks anything up', t('Get help', 'en') === 'Get help')
@@ -110,7 +173,7 @@ console.log('\n3. The t() fallback')
   check('numbers group in both', num(13700, 'es') === '13,700' && num(13700, 'en') === '13,700')
 }
 
-console.log('\n4. The reply clock')
+console.log('\n5. The reply clock')
 {
   const tue = new Date('2026-09-08T15:10:00')
   const line = replyLine({ askedAt: tue.toISOString(), answeredAt: null })

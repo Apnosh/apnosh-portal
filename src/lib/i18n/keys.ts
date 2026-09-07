@@ -31,6 +31,16 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Before and after on your whole listing. It shows what happened, not proof of cause.',
     'The people on your work', 'Get help', 'A real person replies within one business day.',
     '{n} pieces of work',
+    // the tags on each stage, the conversion line under it, and the four stat labels
+    'Real · Google', 'Real · Google + Social', '~ about · your math', 'Repeat visits',
+    '{n} in 100 engaged', '{n}% took a step', '~{n}% of directions ordered',
+    'Engaged', 'Revenue',
+    // the chrome around the funnel: the compare line, the date pickers, the two icon buttons
+    'the year before', 'the {n} days before', 'change vs {when}',
+    'platforms report a few days behind', 'to', 'Your business', 'Alerts', 'Alerts ({n})',
+    'Getting your numbers',
+    // the whole funnel, read out loud to a screen reader
+    'Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects.',
   ],
 
   /* the promise and its clock — the thread header and Get help both draw these */
@@ -73,6 +83,19 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Everything we could do for it is below, with the reason it is not ready.',
     'What feels right to start?', 'You can change it any time. Nothing is charged now.',
     'No cap set. Everything shows.',
+    // the product page, the guide flow and the search box on the same screen
+    'Coming soon', 'Not on sale yet', 'We will tell you the day it opens',
+    'Describe what you want to do', 'Say it in a sentence. A date, a dish, a slow night…',
+    'We read it and suggest a plan. You can change anything.', 'We could not read that one.',
+    'Pick a goal above and we show the best ways, or send your words to your strategist and a person reads them.',
+    'Not seeing it? Ask for anything', 'Search campaigns', 'Clear', 'See all', 'Back',
+    ', or free, you do it', 'Not sure? Guide me', 'Three questions, then three picks',
+    'Plain words work: try flyer, menu photos, TikTok, Yelp, coupons',
+    'Nothing matches yet.', 'Loosen a filter, or just tell us what you need.', 'matches “{word}”',
+    'Back a step', 'Your starter shelf', 'Start over', 'That one is not on the shelf.',
+    'Back to Create', 'price', 'ready in', 'you do', 'channel', 'channels',
+    'In plain words', 'What you get', 'What happens after you order',
+    'Amber is you. Everything else is us.', 'Where it shows up',
     // the shape chip on the goal rail draws SHAPE_LABEL's title (also listed under onboarding)
     'A place people come to', 'A truck or a pop-up', 'Delivery only',
     'Two or more places', 'Mostly catering', 'Open for a season',
@@ -94,6 +117,9 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
      and the budget question. The chip VALUES are listed under `chips` (they are stored). */
   onboarding: [
     'Continue', 'Saving...', 'Back', 'Finish later', 'Exit',
+    'Setup progress: screen {n} of {total}',
+    'Save your answers and finish setup later from the dashboard.',
+    'Leave setup. Your progress is saved.',
     'What matters most right now?', 'Pick up to three.',
     'Fill the quiet nights', 'More people through the door', 'Be known nearby',
     'A dish, a service, a night', 'More people following along',

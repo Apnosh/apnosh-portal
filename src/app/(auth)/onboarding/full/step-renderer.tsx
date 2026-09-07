@@ -186,7 +186,7 @@ export function OnboardingFrame({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={pct}
-          aria-label={`Setup progress: screen ${step} of ${totalSteps}`}
+          aria-label={T('Setup progress: screen {n} of {total}', { n: step, total: totalSteps })}
           style={{ flex: 1, height: 4, borderRadius: 2, overflow: 'hidden', background: '#ededec' }}
         >
           <div
@@ -218,7 +218,7 @@ export function OnboardingFrame({
             onClick={onSkipForNow}
             disabled={saving}
             style={quietTextButton}
-            title="Save your answers and finish setup later from the dashboard."
+            title={T('Save your answers and finish setup later from the dashboard.')}
           >
             {T('Finish later')}
           </button>
@@ -228,7 +228,7 @@ export function OnboardingFrame({
             onClick={onExit}
             disabled={saving}
             style={quietTextButton}
-            title="Leave setup. Your progress is saved."
+            title={T('Leave setup. Your progress is saved.')}
           >
             {T('Exit')}
           </button>
