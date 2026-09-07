@@ -15,7 +15,8 @@ import { feeCentsOn, SERVICE_FEE_RATE, monthlyPhrase, fmtMoney } from '@/lib/cam
 import { priceCreativeRequest, fmtTotal, type CreativePrice } from '@/lib/requests/pricing'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 import { refundOwedCents } from '@/lib/campaigns/refund-math'
-import { deskPaymentMatchesOrder } from '@/lib/requests/desk-guards'
+import { deskPaymentMatchesOrder, deskPaymentDue, AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
+import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
 import { Suite } from './lib'
 
 /** Every desk type the price sheet can price, with a plausible answer set. */
@@ -136,6 +137,21 @@ function main() {
   s.check('a pre-258 row with no request_id pays for nothing', !deskPaymentMatchesOrder({ ...good, rowRequestId: null }, REQ))
   s.check('an intent with no metadata pays for nothing', !deskPaymentMatchesOrder({ rowRequestId: REQ, rowCampaignId: null }, REQ))
   s.check('and no order id at all is never a match', !deskPaymentMatchesOrder(good, ''))
+
+  s.group('Free work: an order the owner placed can never be started by saying yes to it')
+  s.check('an order waiting for the card owes money', deskPaymentDue({ status: AWAITING_PAYMENT }))
+  s.check('and stops owing it the moment the card clears', !deskPaymentDue({ status: AWAITING_PAYMENT, paidAt: '2026-09-07T10:00:00Z' }))
+  s.check('a person\'s quote owes nothing — the yes is what starts it', !deskPaymentDue({ status: 'quoted' }))
+  s.check('but a quoted row with a charge nobody collected is the same unpaid order', deskPaymentDue({ status: 'quoted', unpaidTillRow: true }))
+  s.check('a paid one is never asked twice, whatever its status says', !deskPaymentDue({ status: 'quoted', unpaidTillRow: true, paidAt: '2026-09-07T10:00:00Z' }))
+  s.check('a plain request owes nothing', !deskPaymentDue({ status: 'requested' }))
+  s.check('and neither does work already under way', !deskPaymentDue({ status: 'in_progress' }))
+  s.eq('the till writes one status and the screen keys on it', AWAITING_PAYMENT, 'awaiting_payment')
+  s.check('a person may set every status EXCEPT the till\'s own', !ADMIN_SETTABLE_STATUSES.includes(AWAITING_PAYMENT as RequestStatus))
+  s.eq('every other status stays settable by hand', ADMIN_SETTABLE_STATUSES.length, REQUEST_STATUSES.length - 1)
+  for (const st of REQUEST_STATUSES) {
+    s.check(`"${st}" has words for the owner to read`, Boolean(STATUS_LABEL[st] && STATUS_OWNER_LINE[st]))
+  }
 
   const ok = s.report('The desk through the till — one fee, one card form, one shut switch')
   process.exit(ok ? 0 : 1)

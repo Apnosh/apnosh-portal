@@ -12,7 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { REQUEST_STATUSES, STATUS_LABEL, requestTypeById, type RequestStatus } from '@/lib/requests/catalog'
+import { ADMIN_SETTABLE_STATUSES, STATUS_LABEL, requestTypeById, type RequestStatus } from '@/lib/requests/catalog'
 import { notifyClientOwners } from '@/lib/notifications'
 import { markHandover, handoverGuard, handoverFor, handoverProgress } from '@/lib/campaigns/handover'
 
@@ -43,7 +43,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.status !== undefined) {
-    if (!REQUEST_STATUSES.includes(body.status as RequestStatus)) {
+    /* 'awaiting_payment' is missing from this list on purpose: it is the till's, and a person
+     * moving a request into it by hand would say "not paid" about an order nobody is charging. */
+    if (!ADMIN_SETTABLE_STATUSES.includes(body.status as RequestStatus)) {
       return NextResponse.json({ error: `Bad status: ${body.status}` }, { status: 400 })
     }
     update.status = body.status

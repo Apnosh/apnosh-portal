@@ -7,6 +7,12 @@
  * the hardened spine instead of beside it. Only the request's own client can
  * accept, and only from 'quoted' — there is nothing to say yes to before a
  * price exists.
+ *
+ * IT IS NOT THE TILL. An order the owner placed themselves is priced by the
+ * server and pays by card first ('awaiting_payment'); it must never be turned
+ * into work by tapping yes to a price the owner set in motion. That order used
+ * to land in 'quoted' too, so this route minted it for nothing. Now it refuses,
+ * with the code the screen turns into "Pay to start".
  */
 
 import { NextResponse } from 'next/server'
@@ -14,6 +20,8 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requestTypeById, summaryLine, type RequestAnswers } from '@/lib/requests/catalog'
 import { mintRequestWorkOrder } from '@/lib/requests/bridge'
+import { deskPaymentDue, DESK_NEEDS_PAYMENT } from '@/lib/requests/desk-guards'
+import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 import { notifyStaffForClient } from '@/lib/notifications'
 
 export const runtime = 'nodejs'
@@ -37,27 +45,46 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   if (!clientId) return NextResponse.json({ error: 'No client context' }, { status: 403 })
 
   const admin = createAdminClient()
-  const { data: row } = await admin
+  // select('*') so paid_at being absent (pre-258) reads as "not paid", never as an error.
+  const { data: rowRaw } = await admin
     .from('creative_requests')
-    .select('id, client_id, type, brief, status, team_note, attachments, due_date, quote_cents')
+    .select('*')
     .eq('id', id)
     .maybeSingle()
+  const row = rowRaw as Record<string, unknown> | null
   if (!row || row.client_id !== clientId) {
     return NextResponse.json({ error: 'Request not found' }, { status: 404 })
   }
+
+  /* MONEY BEFORE WORK. Two things can make this order the till's rather than a person's quote: its
+   * own status, or a charge that was started for it and never collected. Either one, and the answer
+   * is the card, not a yes. */
+  const paymentDue = deskPaymentDue({
+    status: String(row.status ?? ''),
+    paidAt: (row.paid_at as string | null) ?? null,
+    unpaidTillRow: row.status === 'quoted' ? await hasUncollectedTillRow(id) : false,
+  })
+  if (paymentDue) {
+    return NextResponse.json({
+      error: 'This order is not paid yet. Pay for it and your team starts.',
+      code: DESK_NEEDS_PAYMENT,
+      requestId: id,
+    }, { status: 402 })
+  }
+
   if (row.status !== 'quoted') {
     return NextResponse.json({ error: 'This request has no quote to accept yet.' }, { status: 409 })
   }
 
   const workOrderId = await mintRequestWorkOrder({
-    id: row.id,
-    client_id: row.client_id,
-    type: row.type,
+    id: String(row.id),
+    client_id: String(row.client_id),
+    type: String(row.type),
     brief: (row.brief ?? {}) as RequestAnswers,
-    attachments: row.attachments ?? null,
-    due_date: row.due_date ?? null,
-    quote_cents: row.quote_cents ?? null,
-    team_note: row.team_note ?? null,
+    attachments: (row.attachments as { url: string; name: string }[] | null) ?? null,
+    due_date: (row.due_date as string | null) ?? null,
+    quote_cents: (row.quote_cents as number | null) ?? null,
+    team_note: (row.team_note as string | null) ?? null,
   })
 
   const { data: updated, error } = await admin
@@ -78,11 +105,12 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   /* Staff hear the yes immediately — this is the moment work starts. */
   try {
-    const type = requestTypeById(row.type)
+    const type = requestTypeById(String(row.type))
+    const cents = Number(row.quote_cents) || 0
     await notifyStaffForClient(clientId, ['strategist', 'designer'], {
       kind: 'client_signoff',
-      title: `Accepted: ${summaryLine(row.type, (row.brief ?? {}) as RequestAnswers)}`,
-      body: `The owner said yes${row.quote_cents ? ` at $${(row.quote_cents / 100).toFixed(0)}` : ''}. ${type?.label ?? 'The work'} is now in progress.`,
+      title: `Accepted: ${summaryLine(String(row.type), (row.brief ?? {}) as RequestAnswers)}`,
+      body: `The owner said yes${cents ? ` at $${(cents / 100).toFixed(0)}` : ''}. ${type?.label ?? 'The work'} is now in progress.`,
       link: '/admin/requests',
     })
   } catch (e) {
@@ -90,4 +118,31 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   }
 
   return NextResponse.json({ ok: true, request: updated, work_order_id: workOrderId })
+}
+
+/**
+ * Is there a charge started for this order that never collected?
+ *
+ * The belt on top of the braces: a 'quoted' row with a payment row on it is the same unpaid owner
+ * order under an older status — an order placed before this move landed, or one whose status write
+ * fell back pre-258.
+ *
+ * FALSE on an unreadable read, and that is right here rather than fail-closed: pre-258 there is no
+ * request_id column, so the read errors — and pre-258 the till cannot take a card at all, so there
+ * is no charge to be waiting for. The status check above is what stops the new lane.
+ */
+async function hasUncollectedTillRow(requestId: string): Promise<boolean> {
+  try {
+    const { data, error } = await createAdminClient()
+      .from('campaign_payments')
+      .select('status')
+      .eq('request_id', requestId)
+      .limit(20)
+    if (error || !Array.isArray(data) || data.length === 0) return false
+    const collected = (data as { status?: string }[])
+      .some((r) => (COLLECTED_STATUSES as readonly string[]).includes(String(r.status ?? '')))
+    return !collected
+  } catch {
+    return false
+  }
 }

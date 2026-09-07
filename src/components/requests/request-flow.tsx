@@ -20,6 +20,8 @@ import {
   type RequestType, type RequestAnswers, type RequestStatus,
 } from '@/lib/requests/catalog'
 import CreativeFlow from '@/components/requests/creative-flow'
+import DeskCheckout from '@/components/requests/desk-checkout'
+import { useClient } from '@/lib/client-context'
 
 interface RequestNote {
   id: string
@@ -56,6 +58,7 @@ const STATUS_TONE: Record<RequestStatus, { fg: string; bg: string }> = {
   requested: { fg: DESK.ink2, bg: '#EFEDE6' },
   in_review: { fg: DESK.ink2, bg: '#EFEDE6' },
   quoted: { fg: DESK.mintDeep, bg: DESK.mintWash },
+  awaiting_payment: { fg: DESK.amber, bg: DESK.amberWash },
   in_progress: { fg: DESK.mintDeep, bg: DESK.mintWash },
   delivered: { fg: DESK.mintDeep, bg: DESK.mintWash },
   closed: { fg: DESK.mute, bg: '#EFEDE6' },
@@ -73,6 +76,9 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
   const [reply, setReply] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [actErr, setActErr] = useState<string | null>(null)
+  /* The order the owner is paying for right now. The till is the ONE card form (desk-checkout). */
+  const [payFor, setPayFor] = useState<{ id: string; label: string } | null>(null)
+  const { client } = useClient()
 
   const loadMine = useCallback(async () => {
     try {
@@ -109,6 +115,14 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
             body: JSON.stringify({ body: reply.trim() }),
           })
       const d = await r.json().catch(() => ({}))
+      /* The order was placed, not quoted: money comes before work. Open the till rather than
+       * printing a refusal at somebody who only wants to get started. */
+      if (r.status === 402 && d.code === 'DESK_NEEDS_PAYMENT') {
+        const row = mine.find((m) => m.id === id)
+        setPayFor({ id, label: requestTypeById(row?.type ?? '')?.label ?? 'Order' })
+        setBusy(null)
+        return
+      }
       if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
       if (kind === 'note') setReply('')
       await loadMine()
@@ -119,6 +133,19 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
   }
 
   const label = { fontFamily: DESK.mono, fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: DESK.mute }
+
+  /* ── the till: an order placed and not paid for is finished here ─────────────────── */
+  if (payFor && client?.id) {
+    return (
+      <DeskCheckout
+        clientId={client.id}
+        requestId={payFor.id}
+        label={payFor.label}
+        onDone={() => { setPayFor(null); loadMine() }}
+        onCancel={() => setPayFor(null)}
+      />
+    )
+  }
 
   /* ── a creative's own Drafting Table flow ─────────────────────────────────────────── */
   if (type) {
@@ -147,7 +174,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
         Your requests
       </h1>
       <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, margin: '0 0 14px', lineHeight: 1.5 }}>
-        We answer each one with a plan and a price. Nothing is charged until you say yes.
+        We answer each one with a plan and a price. Nothing is charged until you tap pay.
       </p>
 
       <Ticket
@@ -204,7 +231,8 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                         {r.team_note}
                       </div>
                     )}
-                    {/* the yes: quoted -> in the works, one tap */}
+                    {/* the yes: a PERSON'S quote goes to work on one tap, and the work is
+                        reviewed before anything is billed — which is true of this lane only. */}
                     {r.status === 'quoted' && (
                       <div style={{ marginTop: 10 }}>
                         <button
@@ -222,6 +250,30 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                         </button>
                         <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.mute, marginTop: 6, textAlign: 'center', lineHeight: 1.45 }}>
                           You review the finished work before paying.
+                        </div>
+                      </div>
+                    )}
+                    {/* an order the OWNER placed: the till priced it, so the card is what starts
+                        it. No "you review before paying" here — that would be the old lie. */}
+                    {r.status === 'awaiting_payment' && (
+                      <div style={{ marginTop: 10 }}>
+                        <button
+                          type="button"
+                          disabled={!client?.id}
+                          onClick={() => setPayFor({ id: r.id, label: t?.label ?? 'Order' })}
+                          style={{
+                            width: '100%', height: 44, borderRadius: 22, border: 'none',
+                            background: client?.id ? DESK.grad : '#E7E4DB', color: client?.id ? '#fff' : DESK.mute,
+                            fontFamily: DESK.disp, fontSize: 15, fontWeight: 700, cursor: client?.id ? 'pointer' : 'default',
+                            boxShadow: client?.id ? '0 8px 20px rgba(46,154,120,0.3)' : 'none',
+                          }}
+                        >
+                          Pay to start
+                        </button>
+                        <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.mute, marginTop: 6, textAlign: 'center', lineHeight: 1.45 }}>
+                          {r.quote_cents != null && r.quote_cents > 0
+                            ? `$${(r.quote_cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} on your card. Your team starts the same day.`
+                            : 'Your team starts the same day.'}
                         </div>
                       </div>
                     )}

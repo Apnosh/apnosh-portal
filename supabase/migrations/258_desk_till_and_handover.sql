@@ -48,6 +48,19 @@ comment on column public.creative_requests.paid_at is
 comment on column public.creative_requests.payment_id is
   'campaign_payments.id for the charge that paid this order.';
 
+-- ── 2b. an owner-placed order says it is waiting for the card ────────────────
+-- A priced order the OWNER placed used to land in 'quoted', the same status a person's quote
+-- lands in — and POST /api/requests/[id]/accept mints work from any 'quoted' row with no payment
+-- check at all. So an owner could place a $600 order and then say yes to their own price and have
+-- it made for nothing. 'awaiting_payment' is the till's own status: nobody but the till writes it,
+-- and the accept path refuses it.
+--
+-- Pre-258 the CHECK rejects the value (23514) and the route falls back to 'requested' — never
+-- 'quoted' — so the free-work path stays shut even before this SQL runs.
+alter table public.creative_requests drop constraint if exists creative_requests_status_check;
+alter table public.creative_requests add constraint creative_requests_status_check
+  check (status in ('requested', 'in_review', 'quoted', 'awaiting_payment', 'in_progress', 'delivered', 'closed', 'declined'));
+
 -- ── 3. the handover checklist, on the work order that delivers it ────────────
 -- Shape: { "items": [ { "id": "domain", "done": true, "doneAt": "…", "note": "…" } ] }.
 -- Read and written through src/lib/campaigns/handover.ts, which owns the item list; nothing here

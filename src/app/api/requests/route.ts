@@ -17,6 +17,7 @@ import { validateRequestPayload, summaryLine, validateAttachments, validateDueDa
 import { jobSpec } from '@/lib/design/job-registry'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { mintRequestWorkOrder } from '@/lib/requests/bridge'
+import { AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
 import { priceDesignOrder, type DesignOrderAnswers } from '@/lib/design/design-pricing'
 import { DESTINATIONS, type DestinationId } from '@/lib/design/destinations'
 import type { RateCard } from '@/lib/design/rate-card'
@@ -158,15 +159,18 @@ export async function POST(req: Request) {
   const paysFirst = isOrder && !payAtPlacement
 
   const admin = createAdminClient()
-  const baseRow = {
+  const baseRow: Record<string, unknown> = {
     client_id: clientId,
     type: v.type.id,
     brief,
-    // A priced order is 'quoted' until the card clears. It used to land 'in_progress' with an
+    // A priced order waits for the card in its OWN status. It used to land 'in_progress' with an
     // accepted_at stamp and a work order already on a designer's queue, before anyone had paid a
     // cent — which is how the desk ran for months with no bill behind "Goes on your Apnosh bill".
+    // Then it landed 'quoted', which is a person's quote, and the accept route mints work from any
+    // quoted row: the owner could say yes to their own price and get it made for nothing.
+    // 'awaiting_payment' is the till's own status and the accept route refuses it.
     // accepted_at is stamped by finalizePaidDeskOrder, on the far side of a verified payment.
-    status: paysFirst ? 'quoted' : isOrder ? 'in_progress' : 'requested',
+    status: paysFirst ? AWAITING_PAYMENT : isOrder ? 'in_progress' : 'requested',
     created_by: user.id,
   }
   const orderCols = isOrder ? { quote_cents: orderCents, ...(payAtPlacement ? { accepted_at: new Date().toISOString() } : {}) } : {}
@@ -175,6 +179,18 @@ export async function POST(req: Request) {
     .insert({ ...baseRow, attachments, due_date: dueDate, ...orderCols, cadence })
     .select('id, type, status, created_at')
     .single()
+  /* Migration 258 not applied yet: the status CHECK does not know 'awaiting_payment' (23514). Fall
+   * back to 'requested' — NEVER 'quoted' — so the accept route cannot mint free work from it. The
+   * owner sees "Sent"; the till still prices and charges the order from its own row. */
+  if (error && (error as { code?: string }).code === '23514' && baseRow.status === AWAITING_PAYMENT) {
+    console.warn('[requests] awaiting_payment is not in the status CHECK yet (apply migration 258); saved as requested')
+    baseRow.status = 'requested'
+    ;({ data: row, error } = await admin
+      .from('creative_requests')
+      .insert({ ...baseRow, attachments, due_date: dueDate, ...orderCols, cadence })
+      .select('id, type, status, created_at')
+      .single())
+  }
   /* Migration 255 not applied yet: drop ONLY cadence and keep everything 236 gave us — a request
    * must not lose its price to a column that is only a record. */
   if (error && (error as { code?: string }).code === '42703') {

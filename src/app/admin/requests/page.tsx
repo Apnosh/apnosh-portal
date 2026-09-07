@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Inbox, Loader2, Paperclip } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  REQUEST_TYPES, REQUEST_STATUSES, STATUS_LABEL, requestTypeById, questionsFor,
+  REQUEST_TYPES, ADMIN_SETTABLE_STATUSES, STATUS_LABEL, requestTypeById, questionsFor,
   type RequestStatus,
 } from '@/lib/requests/catalog'
 
@@ -53,13 +53,14 @@ const STATUS_CLASS: Record<RequestStatus, string> = {
   requested: 'bg-amber-50 text-amber-700',
   in_review: 'bg-blue-50 text-blue-700',
   quoted: 'bg-violet-50 text-violet-700',
+  awaiting_payment: 'bg-amber-50 text-amber-700',
   in_progress: 'bg-emerald-50 text-emerald-700',
   delivered: 'bg-emerald-50 text-emerald-700',
   closed: 'bg-gray-50 text-gray-500',
   declined: 'bg-red-50 text-red-600',
 }
 
-const OPEN_STATUSES: RequestStatus[] = ['requested', 'in_review', 'quoted', 'in_progress', 'delivered']
+const OPEN_STATUSES: RequestStatus[] = ['requested', 'in_review', 'quoted', 'awaiting_payment', 'in_progress', 'delivered']
 
 const V2_SELECT = 'id, client_id, type, brief, status, team_note, created_at, updated_at, due_date, attachments, quote_cents, assigned_to, assigned_name, accepted_at, work_order_id, notes:creative_request_notes(id, author_role, body, created_at), clients(name)'
 const V1_SELECT = 'id, client_id, type, brief, status, team_note, created_at, updated_at, clients(name)'
@@ -357,7 +358,9 @@ export default function AdminRequestsPage() {
                           )}
                         </>
                       )}
-                      {REQUEST_STATUSES.filter((s) => s !== row.status).map((s) => (
+                      {/* awaiting_payment is the till's own status: a person never sets it by
+                          hand, because the only thing that clears it is the card. */}
+                      {ADMIN_SETTABLE_STATUSES.filter((s) => s !== row.status).map((s) => (
                         <button
                           key={s}
                           type="button"
