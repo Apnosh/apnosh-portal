@@ -538,4 +538,9 @@ export const ES: Record<string, string> = {
   'What worked: {n} posts went out.': 'Lo que funcionó: salieron {n} publicaciones.',
   'Not counted yet. When the numbers come in, they show up here.':
     'Todavía no se cuenta. Cuando lleguen los números, aparecen aquí.',
+
+  // Polish 2
+  /* the reply clock's third state: the day we owed ran out and nobody answered */
+  'we owed you a reply by': 'te debíamos respuesta el',
+  'we missed it.': 'no cumplimos.',
 }

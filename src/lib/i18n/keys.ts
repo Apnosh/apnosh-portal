@@ -46,7 +46,11 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   ],
 
   /* the promise and its clock — the thread header and Get help both draw these */
-  reply: ['within one business day', 'Sent', 'we reply', 'due', 'Answered in'],
+  reply: [
+    'within one business day', 'Sent', 'we reply', 'due', 'Answered in',
+    // the third state: past due, nobody answered
+    'we owed you a reply by', 'we missed it.', 'Get help',
+  ],
 
   /* /dashboard/messages — the strip of people on live orders, the inbox, one conversation */
   messages: [

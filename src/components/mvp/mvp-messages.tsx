@@ -19,12 +19,15 @@ import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
 import { REPLY_PROMISE } from '@/lib/reply-promise'
-import { askFrom, replyLine } from '@/lib/team/reply-line'
+import Link from 'next/link'
+import { askFrom, replyClock } from '@/lib/team/reply-line'
 import { useLang } from './mvp-language'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
   ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
+  /* the kit's red (hues.ts), for the one line that says we broke a promise */
+  red: '#c92d32',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
@@ -490,9 +493,16 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
      answered, so a nudge cannot move the due date, and the answered line when a person has
      replied since. Nothing shows until they have actually asked. */
   const ask = askFrom(msgs.filter((m) => !m.id.startsWith('tmp-')).map((m) => ({ sender: m.from, createdAt: m.createdAt })))
-  const promiseClock = replyLine(
+  const promiseClock = replyClock(
     { askedAt: ask?.askedAt ?? null, answeredAt: ask?.answeredAt ?? null },
-    { promise: T(REPLY_PROMISE), locale, words: { sent: T('Sent'), weAnswer: T('we reply'), due: T('due'), answeredIn: T('Answered in') } },
+    {
+      promise: T(REPLY_PROMISE),
+      locale,
+      words: {
+        sent: T('Sent'), weReply: T('we reply'), due: T('due'), answeredIn: T('Answered in'),
+        owedBy: T('we owed you a reply by'), missed: T('we missed it.'), getHelp: T('Get help'),
+      },
+    },
   )
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
@@ -508,8 +518,15 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
         </div>
         <span />
       </div>
-      {/* the promise, with a clock: when they asked, when the answer is owed, or how long it took */}
-      {promiseClock && <div style={{ flexShrink: 0, textAlign: 'center', fontSize: 11, color: C.faint, padding: '0 16px 8px' }}>{promiseClock}</div>}
+      {/* The promise, with a clock: when they asked, when the answer is owed, or how long it took —
+          and, when the day we owed has run out, that we missed it, in the kit's red with a door out.
+          A broken promise drawn in the same calm grey as a kept one is the bug this replaces. */}
+      {promiseClock && (
+        <div style={{ flexShrink: 0, textAlign: 'center', fontSize: 11, color: promiseClock.state === 'late' ? C.red : C.mute, padding: '0 16px 8px' }}>
+          {promiseClock.text}
+          {promiseClock.help && <>{' '}<Link href={promiseClock.help.href} style={{ color: C.red, fontWeight: 700 }}>{promiseClock.help.label}</Link></>}
+        </div>
+      )}
 
       {/* messages */}
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 14px 10px', background: '#fff' }}>

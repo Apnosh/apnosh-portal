@@ -25,7 +25,7 @@ import { SCREEN_KEYS, allScreenKeys } from '../src/lib/i18n/keys'
 import { t, localeOf, money, num, DEFAULT_LANG, isLang, LANGS } from '../src/lib/i18n/t'
 import { allShapeWords, stageSubFor, stageLabelFor, emptyLineFor, EMPTY_LINE_DEFAULT } from '../src/lib/clients/shape-words'
 import { SHELF_SHAPES } from '../src/lib/clients/shape'
-import { replyLine, oneBusinessDayAfter, waitLabel, askFrom } from '../src/lib/team/reply-line'
+import { replyClock, oneBusinessDayAfter, waitLabel, askFrom, dayDate } from '../src/lib/team/reply-line'
 import { resolveLang } from '../src/lib/i18n/resolve-lang'
 import { looseStringsIn } from '../src/lib/i18n/scan-screen'
 
@@ -195,11 +195,49 @@ console.log('\n4. The t() fallback')
 console.log('\n5. The reply clock')
 {
   const tue = new Date('2026-09-08T15:10:00')
-  const line = replyLine({ askedAt: tue.toISOString(), answeredAt: null })
-  check('the promise carries a sent time and a due time', !!line && line.includes('Sent') && line.includes('due'), line ?? 'null')
-  check('an answered thread says how long it took',
-    replyLine({ askedAt: tue.toISOString(), answeredAt: new Date(tue.getTime() + (2 * 60 + 14) * 60_000).toISOString() }) === 'Answered in 2h 14m')
-  check('nobody has asked yet means no clock', replyLine({ askedAt: null, answeredAt: null }) === null)
+  // Standing an hour after they asked: the day we owe has not run out.
+  const soon = tue.getTime() + 60 * 60_000
+  const line = replyClock({ askedAt: tue.toISOString(), answeredAt: null }, { now: soon })
+  check('the promise carries a sent time and a due time',
+    line?.state === 'waiting' && line.text.includes('Sent') && line.text.includes('due'), line?.text ?? 'null')
+  check('a waiting line has no door on it', line?.help === null)
+  check('an answered thread says how long it took', () => {
+    const a = replyClock({ askedAt: tue.toISOString(), answeredAt: new Date(tue.getTime() + (2 * 60 + 14) * 60_000).toISOString() }, { now: soon })
+    return a?.state === 'answered' && a.text === 'Answered in 2h 14m'
+  })
+  check('an answer that came in LATE still reads as answered, not missed', () => {
+    // asked Tuesday, answered the following Monday: the wait is the story, not the miss
+    const a = replyClock({ askedAt: tue.toISOString(), answeredAt: new Date('2026-09-14T09:00:00').toISOString() }, { now: Date.parse('2026-09-20T09:00:00') })
+    return a?.state === 'answered' && a.help === null
+  })
+  check('nobody has asked yet means no clock', replyClock({ askedAt: null, answeredAt: null }) === null)
+
+  /* THE THIRD STATE. The line this is here for: a July 2 question, unanswered, read on September 7
+   * as "Sent Thu 4:17 pm · due Fri 4:17 pm" in calm grey. Both things were wrong — the weekday
+   * named the wrong week, and nothing said we had missed it. */
+  const jul2 = new Date('2026-07-02T16:17:00')
+  const sep7 = Date.parse('2026-09-07T09:00:00')
+  const late = replyClock({ askedAt: jul2.toISOString(), answeredAt: null }, { now: sep7 })
+  check('past due and unanswered is its own state', late?.state === 'late', late?.text ?? 'null')
+  check('a late line prints the DATE, not a weekday two months out of date',
+    !!late && late.text.startsWith('Sent Jul 2') && !/Thu|Fri/.test(late.text), late?.text ?? 'null')
+  check('a late line says we missed it, and hands them a door',
+    !!late && late.text.includes('we owed you a reply by Jul 3') && late.text.includes('we missed it.')
+      && late.help?.href === '/dashboard/get-help', late?.text ?? 'null')
+  check('one minute past due is already late', () => {
+    const a = replyClock({ askedAt: tue.toISOString(), answeredAt: null }, { now: Date.parse('2026-09-09T15:11:00') })
+    return a?.state === 'late'
+  })
+  check('one minute BEFORE due is still waiting', () => {
+    const a = replyClock({ askedAt: tue.toISOString(), answeredAt: null }, { now: Date.parse('2026-09-09T15:09:00') })
+    return a?.state === 'waiting'
+  })
+  check('inside the week the stamp is still the weekday and the clock', () => {
+    const a = replyClock({ askedAt: tue.toISOString(), answeredAt: null }, { now: soon })
+    return !!a && /Sent Tue \d/.test(a.text)
+  })
+  check('the date stamp is the owner\'s, in both languages',
+    dayDate(jul2, 'en-US') === 'Jul 2' && dayDate(jul2, 'es-US').includes('2'))
   check('a Friday question is owed Monday', oneBusinessDayAfter(new Date('2026-09-11T15:10:00')).getDay() === 1)
   check('a Saturday question is owed Monday', oneBusinessDayAfter(new Date('2026-09-12T09:00:00')).getDay() === 1)
   check('a Sunday question is owed Monday', oneBusinessDayAfter(new Date('2026-09-13T09:00:00')).getDay() === 1)
@@ -219,10 +257,15 @@ console.log('\n5. The reply clock')
   })
   check('a thread with no owner line has no clock', askFrom([team(9)]) === null)
   check('the Spanish clock is one sentence, not two languages',
-    (replyLine({ askedAt: tue.toISOString(), answeredAt: null }, {
-      locale: 'es-US', promise: 'en un día hábil',
-      words: { sent: 'Enviado', weAnswer: 'contestamos', due: 'para el', answeredIn: 'Contestado en' },
-    }) ?? '').startsWith('Enviado'))
+    (replyClock({ askedAt: tue.toISOString(), answeredAt: null }, {
+      locale: 'es-US', promise: 'en un día hábil', now: soon,
+      words: { sent: 'Enviado', weReply: 'contestamos', due: 'para el', answeredIn: 'Contestado en' },
+    })?.text ?? '').startsWith('Enviado'))
+  check('and so is the missed one',
+    (replyClock({ askedAt: jul2.toISOString(), answeredAt: null }, {
+      locale: 'es-US', now: sep7,
+      words: { sent: 'Enviado', owedBy: 'te debíamos respuesta el', missed: 'no cumplimos.' },
+    })?.text ?? '').includes('no cumplimos.'))
 }
 
 console.log('\n6. Which language a screen draws, and what gets written')

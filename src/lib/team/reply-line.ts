@@ -7,7 +7,14 @@
  * answer is due. Once it is answered, how long it actually took.
  *
  *   Sent Tue 3:10 pm · we reply within one business day · due Wed 3:10 pm
+ *   Sent Jul 2 · we owed you a reply by Jul 3 · we missed it.   (+ a Get help door)
  *   Answered in 2h 14m
+ *
+ * THE THIRD STATE is the one that was missing. A question from July 2 with nobody on it read
+ * "Sent Thu 4:17 pm · due Fri 4:17 pm" in calm grey sixty-six days later: the weekday said the
+ * wrong week, and the calm said nothing was wrong. Past due and unanswered now says so in the
+ * kit's warning ink and hands them a door. Anything older than six days prints the DATE, because
+ * a weekday only names a day inside the week you are in.
  *
  * PURE on purpose (no server-only, no database): the thread header already has the messages
  * loaded, so it can render this without asking the server anything, and a script can check the
@@ -47,6 +54,16 @@ export function dayClock(iso: string | Date, locale = 'en-US'): string {
   // es-US writes "3:10 p. m.", which is already lowercase and passes through untouched.
   return `${day} ${time}`.replace(/[\u202f\u00a0]/g, ' ').replace(/\b(AM|PM)\b/, (m) => m.toLowerCase())
 }
+
+/** "Jul 2" — the date, no clock, for anything a weekday can no longer place. */
+export function dayDate(iso: string | Date, locale = 'en-US'): string {
+  const d = iso instanceof Date ? iso : new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+}
+
+/** A week is as far as "Thu" can carry a day. Past that the stamp is a date. */
+const WEEKDAY_GOOD_FOR_MS = 6 * MS_DAY
 
 /** "14m", "2h 14m", "1d 3h". Rounded down, because an owner counts the hours they waited. */
 export function waitLabel(ms: number): string {
@@ -114,22 +131,67 @@ export interface ReplyLineInput {
  * The line, in the owner's words. Null when nobody has asked anything yet — there is no clock
  * to show, and a promise with no question attached is the marketing sentence we already have.
  *
+ * It returns a SHAPE, not a string, because the late state is not just different words: it is
+ * drawn in the kit's warning ink and it carries a door to Get help. A surface that only had a
+ * string would have to sniff the words to know that, which is how a late line ends up calm grey.
+ *
  * `promise` is passed in rather than imported so the one place the words live stays
  * src/lib/reply-promise.ts and the Spanish screen can hand its own.
  */
-export function replyLine(
+export type ReplyClockState =
+  /** asked, not answered, and the day we owe has not run out */
+  | 'waiting'
+  /** asked, not answered, and the day we owe is behind us */
+  | 'late'
+  /** a person replied; the line is how long it took */
+  | 'answered'
+
+export interface ReplyClock {
+  state: ReplyClockState
+  /** the whole line, ready to draw */
+  text: string
+  /** the words of the door at the end of a LATE line, and where it goes. Null on the other two. */
+  help: { label: string; href: string } | null
+}
+
+/** Every joining word the line is built from, so a Spanish screen hands its own set rather than
+ *  this file growing a second copy of the sentence. */
+export interface ReplyClockWords {
+  sent?: string
+  weReply?: string
+  due?: string
+  answeredIn?: string
+  owedBy?: string
+  missed?: string
+  getHelp?: string
+}
+
+const DEFAULT_WORDS: Required<ReplyClockWords> = {
+  sent: 'Sent',
+  weReply: 'we reply',
+  due: 'due',
+  answeredIn: 'Answered in',
+  owedBy: 'we owed you a reply by',
+  missed: 'we missed it.',
+  getHelp: 'Get help',
+}
+
+/** The one door an owner who was let down should be handed. */
+export const GET_HELP_HREF = '/dashboard/get-help'
+
+export function replyClock(
   input: ReplyLineInput,
   opts?: {
     promise?: string
     locale?: string
-    /** The four joining words, so the Spanish screen hands its own instead of this file
-     *  growing a second copy of the sentence. */
-    words?: { sent?: string; weAnswer?: string; due?: string; answeredIn?: string }
+    words?: ReplyClockWords
+    /** now, so a test can stand anywhere in time. Defaults to the real clock. */
+    now?: number
   },
-): string | null {
+): ReplyClock | null {
   const locale = opts?.locale ?? 'en-US'
   const promise = opts?.promise ?? 'within one business day'
-  const w = { sent: 'Sent', weAnswer: 'we reply', due: 'due', answeredIn: 'Answered in', ...(opts?.words ?? {}) }
+  const w = { ...DEFAULT_WORDS, ...(opts?.words ?? {}) }
   if (!input.askedAt) return null
   const asked = new Date(input.askedAt)
   if (Number.isNaN(asked.getTime())) return null
@@ -137,9 +199,22 @@ export function replyLine(
   if (input.answeredAt) {
     const answered = new Date(input.answeredAt)
     if (!Number.isNaN(answered.getTime()) && answered.getTime() >= asked.getTime()) {
-      return `${w.answeredIn} ${waitLabel(answered.getTime() - asked.getTime())}`
+      return { state: 'answered', text: `${w.answeredIn} ${waitLabel(answered.getTime() - asked.getTime())}`, help: null }
     }
   }
+
+  const now = opts?.now ?? Date.now()
   const due = oneBusinessDayAfter(asked)
-  return `${w.sent} ${dayClock(asked, locale)} · ${w.weAnswer} ${promise} · ${w.due} ${dayClock(due, locale)}`
+  // Both halves of the line wear the same stamp, so it never reads "Sent Jul 2 · due Fri".
+  const old = now - asked.getTime() > WEEKDAY_GOOD_FOR_MS
+  const stamp = (d: Date) => (old ? dayDate(d, locale) : dayClock(d, locale))
+
+  if (now > due.getTime()) {
+    return {
+      state: 'late',
+      text: `${w.sent} ${stamp(asked)} · ${w.owedBy} ${stamp(due)} · ${w.missed}`,
+      help: { label: w.getHelp, href: GET_HELP_HREF },
+    }
+  }
+  return { state: 'waiting', text: `${w.sent} ${stamp(asked)} · ${w.weReply} ${promise} · ${w.due} ${stamp(due)}`, help: null }
 }
