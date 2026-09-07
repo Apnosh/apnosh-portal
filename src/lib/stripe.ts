@@ -285,8 +285,26 @@ export async function startCampaignSubscription(opts: {
       campaign_id: opts.campaignId,
       kind: 'campaign_subscription',
     },
+    // TAX, the same way the one-time half does it. Checkout already runs Stripe Tax
+    // (tax.calculations at /api/checkout/prepare, a committed transaction at /complete), so a
+    // monthly invoice that collected NO tax was the odd one out — the same services, taxed on
+    // day one and untaxed every month after.
+    automatic_tax: { enabled: true },
   }
-  return await stripe.subscriptions.create(params, { idempotencyKey: opts.idempotencyKey })
+  try {
+    return await stripe.subscriptions.create(params, { idempotencyKey: opts.idempotencyKey })
+  } catch (e) {
+    // Automatic tax needs a customer Stripe can locate (an address or a tax ID). A customer
+    // without one must not lose their subscription over it: start it untaxed, loudly, so the
+    // recurring revenue is never dropped for a tax-setup problem.
+    const msg = e instanceof Error ? e.message : ''
+    if (!/tax/i.test(msg)) throw e
+    console.warn(`[stripe] automatic tax off for campaign ${opts.campaignId}: ${msg}`)
+    return await stripe.subscriptions.create(
+      { ...params, automatic_tax: { enabled: false } },
+      { idempotencyKey: `${opts.idempotencyKey}_notax` },
+    )
+  }
 }
 
 /**
