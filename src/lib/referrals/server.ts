@@ -246,8 +246,11 @@ export async function newnessFor(clientId: string, atIso: string): Promise<Newne
       admin.from('clients').select('created_at').eq('id', clientId).maybeSingle(),
     ])
     if (paid.error) return null
-    // A desk table without paid_at (pre-258) cannot have a paid desk order on it, so an error
-    // there is "no desk order", not "unknown".
+    // A desk table without the paid_at COLUMN (pre-258) cannot have a paid desk order on it, so
+    // that one error is "no desk order". Every other error is "we do not know" — a timeout, a
+    // permission, a table that is not there — and reading those as "no desk order" turned an
+    // unreadable account into a brand new one, which is the answer that pays $100.
+    if (desk.error && desk.error.code !== '42703') return null
     const hasPaidBefore = (paid.data?.length ?? 0) > 0 || (!desk.error && (desk.data?.length ?? 0) > 0)
     const born = Date.parse((client.data?.created_at as string) || '')
     const ageDays = Number.isFinite(born) ? Math.max(0, Math.floor((Date.parse(asOf) - born) / 86_400_000)) : 0
