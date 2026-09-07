@@ -159,6 +159,12 @@ async function dispatch(event: Stripe.Event, supabase: AdminClient) {
     case 'payment_intent.processing':
       return handleInvoicePaymentProcessing(supabase, event.data.object as Stripe.PaymentIntent)
 
+    // --- Money going BACKWARDS (refunds + chargebacks) ---
+    case 'charge.refunded':
+      return handleChargeRefunded(supabase, event.data.object as Stripe.Charge)
+    case 'charge.dispute.created':
+      return handleDisputeCreated(supabase, event.data.object as Stripe.Dispute)
+
     // --- Legacy (orders self-serve flow) ---
     case 'checkout.session.completed':
       return handleCheckoutComplete(supabase, event.data.object as Stripe.Checkout.Session)
@@ -739,7 +745,7 @@ async function handleCampaignPaymentSucceeded(
   if (row && !row.campaign_id) {
     try {
       const { getAdminUserIds } = await import('@/lib/notify')
-      const { createNotification } = await import('@/lib/notifications')
+      const { createNotification } = await import('@/lib/notify')
       const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
       const name = ((client as { name?: string } | null)?.name) ?? 'A client'
       for (const adminId of await getAdminUserIds(supabase)) {
@@ -747,6 +753,136 @@ async function handleCampaignPaymentSucceeded(
       }
     } catch (e) { console.warn('[stripe] orphan-payment page failed', (e as Error)?.message) }
   }
+}
+
+// ============================================================
+// Money going BACKWARDS: refunds + chargebacks
+// ============================================================
+// A refund taken in the Stripe dashboard used to write NOTHING back here: the campaign_payments
+// row stayed 'paid' forever, so isCampaignCheckoutPaid kept saying the campaign was covered, every
+// piece delivered afterwards was stamped 'covered_by_checkout', and none of it could ever be
+// invoiced. These two handlers make Stripe the source of truth for money that goes back.
+
+/**
+ * charge.refunded — sync what Stripe has actually refunded onto the payment row.
+ *
+ * Idempotent by amount: Stripe sends amount_refunded as a RUNNING TOTAL, so a replayed event, or
+ * an event that lands after our own refunds-server already stamped the row, is a no-op. Only a
+ * genuinely larger total is written.
+ */
+async function handleChargeRefunded(supabase: AdminClient, charge: Stripe.Charge) {
+  const piId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id
+  if (!piId) return
+
+  // select('*') so the refund columns being absent (pre-migration 254) cannot error the read.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: row } = await (supabase as any)
+    .from('campaign_payments')
+    .select('*')
+    .eq('stripe_payment_intent_id', piId)
+    .maybeSingle()
+  if (!row) return                                   // not a campaign checkout charge
+
+  const refunded = charge.amount_refunded || 0
+  const known = Number(row.refunded_cents) || 0
+  if (refunded <= known) return                      // already recorded (or a replay)
+
+  const total = Number(row.total_cents) || 0
+  const status = refunded >= total && total > 0 ? 'refunded' : refunded > 0 ? 'partially_refunded' : row.status
+  const weStartedIt = !!row.stripe_refund_id         // our own refunds-server already told the owner
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('campaign_payments')
+    .update({ status, refunded_cents: refunded, refunded_at: new Date().toISOString() })
+    .eq('stripe_payment_intent_id', piId)
+  if (error) {
+    // Pre-254 the columns are missing. The STATUS is the part that matters — without it a fully
+    // refunded order still counts as paid — so write it on its own.
+    console.warn('[stripe] refund columns missing, writing status only (apply migration 254):', error.message)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('campaign_payments').update({ status }).eq('stripe_payment_intent_id', piId)
+  }
+
+  const dollars = `$${(refunded / 100).toFixed(2)}`
+  const clientId = String(row.client_id ?? '')
+  try {
+    const { getAdminUserIds, createNotification } = await import('@/lib/notify')
+    const { notifyClientOwners } = await import('@/lib/notifications')
+    for (const adminId of await getAdminUserIds(supabase)) {
+      await createNotification({ supabase, userId: adminId, type: 'payment', title: 'Refund recorded', body: `${dollars} was refunded on a campaign charge (${piId}). The order is now ${status.replace('_', ' ')}.`, link: '/admin/campaign-orders' })
+    }
+    // A refund done by hand in the Stripe dashboard is the owner's news too. Skipped when our own
+    // refund path started it, because that path already told them.
+    if (!weStartedIt && clientId) {
+      await notifyClientOwners(clientId, {
+        kind: 'payment',
+        title: `We sent back ${dollars}`,
+        body: 'It lands on your card in 5 to 10 days.',
+        link: row.campaign_id ? `/dashboard/campaigns/${row.campaign_id}` : '/dashboard/campaigns',
+      })
+    }
+  } catch (e) { console.warn('[stripe] refund notify failed', (e as Error)?.message) }
+}
+
+/**
+ * charge.dispute.created — a chargeback. The bank has taken the money back and is asking us to
+ * justify the charge.
+ *
+ * What this does today, honestly: it marks the payment row 'disputed' with the amount and the
+ * time, and pages EVERY admin with the campaign and the number, so a person stops the work and
+ * gathers the proof within the bank's window.
+ *
+ * What it does NOT do: it does not automatically pause production. Pausing for real needs a state
+ * the whole execution spine reads — the creator lane (work-orders), the team lane (content_drafts
+ * publish path) and the service lane (service_work_orders) each mint and advance on their own, and
+ * a flag none of them check would be a promise the code does not keep. The honest version is this
+ * page plus disputed_at; a later move can add a campaign-level hold that all three lanes read
+ * before they start anything new.
+ */
+async function handleDisputeCreated(supabase: AdminClient, dispute: Stripe.Dispute) {
+  const piId = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id
+  if (!piId) return
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: row } = await (supabase as any)
+    .from('campaign_payments')
+    .select('*')
+    .eq('stripe_payment_intent_id', piId)
+    .maybeSingle()
+  if (!row) return
+  if (row.disputed_at) return                        // already recorded (replay)
+
+  const amount = dispute.amount || 0
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase as any)
+    .from('campaign_payments')
+    .update({ status: 'disputed', disputed_at: new Date().toISOString(), dispute_cents: amount })
+    .eq('stripe_payment_intent_id', piId)
+  if (error) {
+    console.warn('[stripe] dispute columns missing, writing status only (apply migration 254):', error.message)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('campaign_payments').update({ status: 'disputed' }).eq('stripe_payment_intent_id', piId)
+  }
+
+  // Nobody may find out about a chargeback late. Page every admin, with the number and the campaign.
+  try {
+    const { getAdminUserIds } = await import('@/lib/notify')
+    const { createNotification } = await import('@/lib/notify')
+    const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
+    const name = ((client as { name?: string } | null)?.name) ?? 'A client'
+    const campaignId = (row.campaign_id as string | null) ?? null
+    for (const adminId of await getAdminUserIds(supabase)) {
+      await createNotification({
+        supabase,
+        userId: adminId,
+        type: 'payment',
+        title: `Chargeback: $${(amount / 100).toFixed(2)}`,
+        body: `${name}'s bank pulled back $${(amount / 100).toFixed(2)} on campaign ${campaignId ?? '(unlinked)'}. Stop new work on it and send Stripe the proof before the deadline.`,
+        link: campaignId ? `/admin/campaign-orders?focus=${campaignId}` : '/admin/campaign-orders',
+      })
+    }
+  } catch (e) { console.warn('[stripe] dispute page failed', (e as Error)?.message) }
 }
 
 async function handleCampaignPaymentFailed(

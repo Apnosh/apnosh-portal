@@ -137,16 +137,18 @@ export async function getDeliveredCharges(campaignId: string): Promise<{ deliver
   }
   if (!rows.length) return empty
 
-  // Three lookups, one per lane, all scoped to this campaign.
+  // Three lookups, one per lane, all scoped to this campaign. A lane that cannot be read returns
+  // nothing, which marks its rows stale — the safe direction: we refund more, never less.
   const [orders, drafts, services] = await Promise.all([
-    admin.from('creator_work_orders').select('id, status').eq('campaign_id', campaignId).then((r) => r.data ?? []).catch(() => []),
-    admin.from('content_drafts').select('id, status, published_at').eq('campaign_id', campaignId).then((r) => r.data ?? []).catch(() => []),
-    admin.from('service_work_orders').select('line_item_id, status').eq('campaign_id', campaignId).then((r) => r.data ?? []).catch(() => []),
+    admin.from('creator_work_orders').select('id, status').eq('campaign_id', campaignId),
+    admin.from('content_drafts').select('id, status, published_at').eq('campaign_id', campaignId),
+    admin.from('service_work_orders').select('line_item_id, status').eq('campaign_id', campaignId),
   ])
-  const orderOk = new Set((orders as { id: string; status: string }[]).filter((o) => o.status === 'approved').map((o) => o.id))
-  const draftOk = new Set((drafts as { id: string; status: string; published_at: string | null }[])
+  const orderOk = new Set(((orders.data ?? []) as { id: string; status: string }[])
+    .filter((o) => o.status === 'approved').map((o) => o.id))
+  const draftOk = new Set(((drafts.data ?? []) as { id: string; status: string; published_at: string | null }[])
     .filter((d) => d.status === 'published' || !!d.published_at).map((d) => d.id))
-  const serviceOk = new Set((services as { line_item_id: string | null; status: string }[])
+  const serviceOk = new Set(((services.data ?? []) as { line_item_id: string | null; status: string }[])
     .filter((s) => s.status === 'delivered' && s.line_item_id).map((s) => s.line_item_id as string))
 
   let deliveredCents = 0
