@@ -130,7 +130,9 @@ export function ProductionGuide({ items, onOpenItem }: { items: DetailItem[]; on
                 <CheckCircle2 size={15} color={C.green} style={{ flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>{it.name}</div>
-                  {it.does && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.does}</div>}
+                  {/* Wrapped and clamped at a LINE, never mid-word: this used to end
+                      "hours, menu lin…" on one nowrap line, which reads as a broken page. */}
+                  {it.does && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.does}</div>}
                 </div>
                 <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
               </button>

@@ -21,7 +21,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getCampaign } from '@/lib/campaigns/server'
+import { getCampaign, updateCampaignFields } from '@/lib/campaigns/server'
 import { stopCampaign, getCampaignCharges } from '@/lib/campaigns/work-orders'
 import { cancelCampaignSubscriptions } from '@/lib/campaigns/campaign-subscription-server'
 import { owedRefundCents, refundCampaignPayment, hasOpenDispute, pageAdmins, REFUND_UNCONFIRMED, DISPUTE_OPEN } from '@/lib/campaigns/refunds-server'
@@ -152,6 +152,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     moneyLine,
     monthlyLine,
   ].filter((l): l is string => !!l)
+
+  // KEEP THE SETTLEMENT ON THE PAGE. It used to live only in the response, so the refund sentence
+  // was on screen once, in the session where the owner pressed Stop, and gone on the next load —
+  // the one page about their money went quiet about it. Written to the campaign's execution jsonb
+  // (an existing column, no migration), best-effort: a write that fails must never fail the stop,
+  // and the same words are already in the inbox notice below.
+  await updateCampaignFields(id, { execution: { stopSummary: settlementLines.join(' ') } })
+    .catch((e) => { console.warn('[stop] could not save the settlement line', e); return false })
 
   // Staff must know immediately — especially when in-flight work continues.
   await notifyStaffForClient(campaign.clientId, ['strategist', 'community_mgr'], {
