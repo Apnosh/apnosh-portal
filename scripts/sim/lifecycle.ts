@@ -1063,7 +1063,11 @@ s.group('Coming-soon cards live in ONE section, never inside a category')
   s.eq('a shelf with any live card survives, an all-dark shelf drops', JSON.stringify(liveRows.map((r) => r.id)), JSON.stringify(wantLive))
   s.check('the all-dark shelf really did drop', !liveRows.some((r) => r.id === 'back'))
   // The crux: a MIXED shelf keeps only what can be bought. Its unbuyable card moves to the bottom.
-  s.check('a mixed shelf shows only buyable cards', liveRows[0].ids.every((id) => isBuyable(id)), JSON.stringify(liveRows[0].ids))
+  // The length is asked FIRST: if the allowlist ever tightens until every card is dark, liveRows
+  // is empty and reading liveRows[0].ids would throw the harness instead of failing this check.
+  s.check('a mixed shelf shows only buyable cards',
+    liveRows.length > 0 && liveRows[0].ids.every((id) => isBuyable(id)),
+    JSON.stringify(liveRows[0]?.ids ?? []))
   s.check("the mixed shelf's coming-soon card moved to the soon section", soonIds.includes('creator'))
   s.eq('every unbuyable card across all shelves is gathered, deduped', soonIds.length, wantSoon.length)
   s.check('every gathered id is unbuyable (nothing live gets buried)', soonIds.every((id) => !isBuyable(id)))

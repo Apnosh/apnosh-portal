@@ -143,6 +143,25 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
     }
     check(`  ${screen}: every string it draws is in the manifest`, loose.length === 0, loose.join('  |  '))
   }
+
+  /* And the scanner is pointed at English it has never seen, so a pass above means the check ran
+   * rather than that the regexes quietly stopped biting. The one-word Record case is here because
+   * it is the one that got through: 'low' and 'high' sat on a Spanish funnel next to 'very low'
+   * only because they had no space in them. */
+  const BAIT = `
+    const BAND = { veryLow: 'very low', low: 'low', average: 'average', high: 'high' }
+    const KEYS = { strategist: 'strategist', name: 'Your strategist' }
+    const IDS = { a: 'gbp', b: 'reel' }
+    export function X() { return <span title="Tell me when">Nothing fit. Ask us.</span> }
+  `
+  const bit = new Set(looseStringsIn(BAIT, new Set<string>()))
+  check('  the scanner still catches a one-word value in a Record of words', bit.has('low') && bit.has('high') && bit.has('average'))
+  check('  and still catches the phrases beside them', bit.has('very low'))
+  check('  a key that repeats its own name is not copy', !bit.has('strategist'))
+  check('  a map of ids says nothing, because nothing in it is a phrase', !bit.has('gbp') && !bit.has('reel'))
+  check('  an attribute and a text node are still read', bit.has('Tell me when') && bit.has('Nothing fit. Ask us.'))
+  check('  and a listed string is never reported',
+    looseStringsIn(BAIT, new Set(['low', 'high', 'average', 'very low', 'Your strategist', 'Tell me when', 'Nothing fit. Ask us.'])).length === 0)
 }
 
 console.log('\n4. The t() fallback')
