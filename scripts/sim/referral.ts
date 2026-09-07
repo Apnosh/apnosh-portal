@@ -14,6 +14,7 @@ import {
   CODE_CHARSET, CODE_BANNED, CODE_LENGTH, makeCode, normalizeCode, isCodeShape, referralLink,
   REFERRAL_CREDIT_CENTS, NEW_CLIENT_DAYS, creditWords, nextStatus, readyToCredit, referralBlock, normalizePhone,
   creditAvailableCents, liveHoldCents, CREDIT_HOLD_MS, STATUS_WORD, friendWord, REFUND_VOID_REASON,
+  isRealIntentId, priorIntentVerdict,
   type ReferralStatus, type ReferralEvent, type CreditRowState,
 } from '@/lib/referrals/model'
 import { checkoutBill, applyFriendCredit, feeCentsOn, preTaxFromRow, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
@@ -210,6 +211,39 @@ function main() {
   s.check('a credit can never be worth more than it says', creditAvailableCents(credit({ settledCents: -9_999 })) <= 5_000)
   s.eq('a refunded order gives the credit back: it is not in the ledger and it holds nothing',
     creditAvailableCents(credit({ settledCents: 0, heldCents: 5_000, hold: 'dropped' })), 5_000)
+
+  /* ── 3c-ii. the checkout that declined is still payable ──────────────── */
+  s.group('a declined checkout is still payable at Stripe, so it is cancelled before the credit moves')
+  // THE BUG THIS CLOSES, in the order it happened:
+  //   1. prepare claims the $50 and makes PI_a for $495
+  //   2. the card declines. Our row says 'failed', so every sum above hands the $50 back
+  //   3. the owner tries again: prepare claims the $50 AGAIN and makes PI_b for $495
+  //   4. they pay PI_b, then go back to the first tab and pay PI_a — which nobody cancelled
+  // One $50 credit, two discounted orders, and the ledger said both were fine.
+  const declined = credit({ settledCents: 0, heldCents: 5_000, hold: 'dropped', heldAtMs: T0, nowMs: T0 + hour })
+  s.eq('step 2: our own ledger really does hand the money back after a decline',
+    creditAvailableCents(declined), 5_000)
+  s.eq('so the ONLY thing standing between step 2 and step 4 is the cancel',
+    priorIntentVerdict('requires_payment_method'), 'cancel')
+  s.check('a hold: key is not a Stripe intent, so nothing is cancelled for it',
+    !isRealIntentId('hold:9d1c-4f') && isRealIntentId('pi_3Q'))
+  s.check('a SetupIntent takes no money, so nothing is cancelled for it either', !isRealIntentId('seti_1A'))
+  s.check('and neither is a blank', !isRealIntentId('') && !isRealIntentId(null) && !isRealIntentId(undefined))
+
+  s.group('which old checkouts may be cancelled, and which are the credit saying no')
+  s.eq('a declined card can be cancelled', priorIntentVerdict('requires_payment_method'), 'cancel')
+  s.eq('a checkout nobody confirmed can be cancelled', priorIntentVerdict('requires_confirmation'), 'cancel')
+  s.eq('a checkout waiting on the bank screen can be cancelled', priorIntentVerdict('requires_action'), 'cancel')
+  s.eq('one Stripe already cancelled is simply gone', priorIntentVerdict('canceled'), 'gone')
+  s.eq('MONEY IN FLIGHT IS NOT TOUCHED: processing', priorIntentVerdict('processing'), 'live')
+  s.eq('MONEY ALREADY TAKEN IS NOT TOUCHED: succeeded', priorIntentVerdict('succeeded'), 'live')
+  s.eq('an authorized card waiting to be captured is money too', priorIntentVerdict('requires_capture'), 'live')
+  s.eq('a word we do not know blocks', priorIntentVerdict('something_new'), 'unknown')
+  s.eq('a status Stripe would not give us blocks', priorIntentVerdict(null), 'unknown')
+  s.eq('and an empty one blocks', priorIntentVerdict(''), 'unknown')
+  s.check('every verdict that is not a plain cancel-or-gone refuses the credit',
+    (['processing', 'succeeded', 'requires_capture', '', null, undefined, 'weird'] as const)
+      .every((st) => { const v = priorIntentVerdict(st); return v !== 'cancel' && v !== 'gone' }))
 
   /* ── 3d. the receipt adds up ─────────────────────────────────────────── */
   s.group('the lines on the receipt add up to the number on the card')

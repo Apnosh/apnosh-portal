@@ -56,10 +56,16 @@ export default function AdminReferralsPage() {
     if (!reason || !reason.trim()) return
     setBusy(id)
     try {
-      await fetch('/api/referrals/admin', {
+      const res = await fetch('/api/referrals/admin', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ referralId: id, reason: reason.trim() }),
       })
+      // A credit whose checkout is still open at Stripe survives the void on purpose (the intent
+      // already has the discount inside its amount). Say so, or staff think it worked.
+      const out = await res.json().catch(() => null) as { creditsStuck?: number } | null
+      if (out?.creditsStuck) {
+        window.alert(`${out.creditsStuck} credit(s) are still live: their checkout is open at Stripe and could not be cancelled. Void again once it settles.`)
+      }
       await load()
     } finally { setBusy('') }
   }

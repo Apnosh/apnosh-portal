@@ -22,7 +22,7 @@ import { getPromiseRows } from '@/lib/promises/read'
 import { notifyClientOwners } from '@/lib/notifications'
 import { getClientLanguage } from '@/lib/i18n/language'
 import { t } from '@/lib/i18n/t'
-import { newnessFor } from './server'
+import { newnessFor, retirePriorCheckout } from './server'
 import { REFERRAL_CREDIT_CENTS, REFUND_VOID_REASON, creditWords, nextStatus, readyToCredit, referralBlock, type ReferralStatus } from './model'
 
 const warn = (where: string, e: unknown) =>
@@ -46,7 +46,7 @@ interface Row {
   created_at: string
 }
 
-interface Order { id: string; status: string; campaign_id: string | null; created_at: string; paid_at: string | null; client_credit_id?: string | null }
+interface Order { id: string; status: string; campaign_id: string | null; created_at: string; paid_at: string | null; client_credit_id?: string | null; stripe_payment_intent_id?: string | null }
 
 /**
  * The referred client's first order PAID AFTER THE REFERRAL WAS MADE, or null while there is none.
@@ -63,7 +63,7 @@ async function firstPaidOrder(clientId: string, afterIso: string) {
   const admin = createAdminClient()
   const { data } = await admin
     .from('campaign_payments')
-    .select('id, status, campaign_id, created_at, paid_at, client_credit_id')
+    .select('id, status, campaign_id, created_at, paid_at, client_credit_id, stripe_payment_intent_id')
     .eq('client_id', clientId)
     // SETTLED, not COLLECTED. A disputed charge is money the bank is holding while it decides,
     // and paying a referrer $50 off it is giving away real money on a charge that may be about to
@@ -139,13 +139,32 @@ async function facts(clientId: string) {
  * Hand a credit back after the order that used it was refunded. The hold is cleared and the row's
  * cached consumed_cents is reset; what the credit is really worth is worked out from the payments
  * ledger every time it is claimed (claimFriendCredit), and a refunded payment is not in it.
+ *
+ * IT ONLY CLEARS THE HOLD IT CAME FOR. This used to clear whatever hold was on the row, whoever it
+ * belonged to — so a refund on January's order could drop the hold a checkout the owner has open
+ * RIGHT NOW is sitting on, and the same $50 would come off two bills. Now the write names the
+ * intent it is undoing. When some OTHER checkout holds the row, that checkout is shut at Stripe
+ * first, and if it cannot be shut the hold is left alone: it expires on its own in a day, and
+ * claimFriendCredit asks Stripe the same question before anybody takes it.
  */
-async function reopenCredit(creditId: string): Promise<void> {
+async function reopenCredit(creditId: string, refundedIntentId: string | null): Promise<void> {
   try {
-    await createAdminClient().from('client_credits')
+    const admin = createAdminClient()
+    const { data, error } = await admin.from('client_credits')
+      .select('held_cents, consumed_intent_id').eq('id', creditId).is('voided_at', null).maybeSingle()
+    if (error || !data) { warn('could not read the credit to give back', error); return }
+    const holder = (data.consumed_intent_id as string | null) ?? null
+    if (holder && holder !== refundedIntentId) {
+      // Somebody else's checkout is on this row. Shut it or leave it alone.
+      if (!await retirePriorCheckout(holder)) return
+    }
+    let q = admin.from('client_credits')
       .update({ consumed_cents: 0, held_cents: 0, consumed_at: null, consumed_intent_id: null })
       .eq('id', creditId)
       .is('voided_at', null)
+      .eq('held_cents', (data.held_cents as number) || 0)
+    q = holder ? q.eq('consumed_intent_id', holder) : q.is('consumed_intent_id', null)
+    await q
   } catch (e) { warn('could not give the credit back', e) }
 }
 
@@ -187,7 +206,7 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
     try {
       const order = r.referred_payment_id
         ? await (async () => {
-            const { data } = await admin.from('campaign_payments').select('id, status, campaign_id, created_at, paid_at, client_credit_id').eq('id', r.referred_payment_id as string).maybeSingle()
+            const { data } = await admin.from('campaign_payments').select('id, status, campaign_id, created_at, paid_at, client_credit_id, stripe_payment_intent_id').eq('id', r.referred_payment_id as string).maybeSingle()
             return (data as Order | null) ?? null
           })()
         : await firstPaidOrder(r.referred_client_id, r.created_at)
@@ -219,7 +238,7 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
         // spent on was never really spent: the refunded payment drops out of the ledger sum the
         // checkout claims against, and clearing the stale hold here means the row on their account
         // reads the same way the arithmetic already does.
-        if (!opts.dryRun && order.client_credit_id) await reopenCredit(order.client_credit_id)
+        if (!opts.dryRun && order.client_credit_id) await reopenCredit(order.client_credit_id, order.stripe_payment_intent_id ?? null)
         if (!opts.dryRun && await voidReferral(r.id, REFUND_VOID_REASON)) voided += 1
         else if (opts.dryRun) voided += 1
         continue

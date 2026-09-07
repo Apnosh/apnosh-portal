@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { referralsEnabled } from '@/lib/referral-gate'
-import { settledCentsFor } from '@/lib/referrals/server'
+import { settledCentsFor, retirePriorCheckout } from '@/lib/referrals/server'
 
 /**
  * /api/referrals/admin — the staff view of the loop, and the one way to kill a referral by hand.
@@ -16,6 +16,11 @@ import { settledCentsFor } from '@/lib/referrals/server'
  * fraud ring only had to open checkout to keep its $50. Spent means the payments ledger has a
  * collected order that took the money. Nothing collected, the credit dies. Something collected,
  * only what is LEFT dies: the credit is written down to the amount that really came off a bill.
+ *
+ * AN OPEN CHECKOUT IS SHUT FIRST. The intent behind it already has the discount in its amount, so
+ * a credit voided while its checkout is still payable is a discount off a credit that is gone. The
+ * intent is cancelled at Stripe before the credit dies; a credit whose checkout will not cancel is
+ * left alone and counted in creditsStuck.
  *
  * A SPENT CREDIT IS NEVER TAKEN BACK, here or anywhere. If a referral we should not have paid has
  * already come off a bill the owner paid, that money is theirs; the void stops the rest. Staff who
@@ -80,14 +85,20 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     // Only what is UNSPENT — and the ledger, not the credit row, is what says so.
     const { data: rows } = await admin.from('client_credits')
-      .select('id, cents')
+      .select('id, cents, consumed_intent_id')
       .eq('referral_id', referralId)
       .is('voided_at', null)
-    let creditsVoided = 0, creditsTrimmed = 0
-    for (const c of (rows ?? []) as { id: string; cents: number }[]) {
+    let creditsVoided = 0, creditsTrimmed = 0, creditsStuck = 0
+    for (const c of (rows ?? []) as { id: string; cents: number; consumed_intent_id: string | null }[]) {
       const settled = await settledCentsFor(c.id)
       // Unreadable: leave it alone rather than kill a credit an owner may have already spent.
       if (settled == null) continue
+      // AN OPEN CHECKOUT IS SHUT BEFORE THE CREDIT DIES. The PaymentIntent behind it was created
+      // with this discount already inside its amount, so voiding the credit while that intent is
+      // still payable means the owner pays the discounted number off a credit that no longer
+      // exists. If it cannot be shut — it is processing, already paid, or Stripe would not answer
+      // — this credit is left exactly as it is and the void is reported as incomplete.
+      if (c.consumed_intent_id && !await retirePriorCheckout(c.consumed_intent_id)) { creditsStuck += 1; continue }
       if (settled <= 0) {
         const { data } = await admin.from('client_credits')
           .update({ voided_at: now, void_reason: reason, held_cents: 0, consumed_intent_id: null })
@@ -101,7 +112,9 @@ export async function POST(req: NextRequest) {
         if (data?.length) creditsTrimmed += 1
       }
     }
-    return NextResponse.json({ ok: true, creditsVoided, creditsTrimmed })
+    // creditsStuck is the honest half of the answer: those credits are still live because their
+    // open checkout could not be shut. Try again once it settles.
+    return NextResponse.json({ ok: true, creditsVoided, creditsTrimmed, creditsStuck })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not void it.' }, { status: 500 })
   }

@@ -15,12 +15,14 @@ import 'server-only'
  * so scripts/sim/referral.ts can prove them with nothing running.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
+import { stripe } from '@/lib/stripe'
 import { referralsEnabled } from '@/lib/referral-gate'
 import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 import { getPromiseRows } from '@/lib/promises/read'
 import {
   REFERRAL_CREDIT_CENTS, CODE_LENGTH, makeCode, normalizeCode, isCodeShape,
-  referralBlock, creditAvailableCents, type HoldState, type ReferralStatus,
+  referralBlock, creditAvailableCents, isRealIntentId, priorIntentVerdict,
+  type HoldState, type ReferralStatus,
 } from './model'
 
 const warn = (where: string, e: unknown) =>
@@ -362,6 +364,12 @@ export interface ClaimedCredit { creditId: string; cents: number }
  * The claim is written with the previous holder AND the previous held amount in the WHERE clause,
  * so two checkouts racing for the same credit cannot both win it.
  *
+ * AND THE OLD CHECKOUT IS SHUT AT STRIPE FIRST. A ledger row that says 'failed' is not the same
+ * thing as a PaymentIntent that cannot be paid: a declined intent is still confirmable, with the
+ * discount already inside its amount. So when the last holder was a real intent that never
+ * collected, it is cancelled at Stripe before this credit moves, and if it cannot be cancelled —
+ * because it is processing, already succeeded, or Stripe would not answer — nothing is claimed.
+ *
  * NULL means "no credit on this bill", which is every order in the product until the switch is on.
  */
 export async function claimFriendCredit(clientId: string, intentKey: string, maxCents: number): Promise<ClaimedCredit | null> {
@@ -394,6 +402,17 @@ export async function claimFriendCredit(clientId: string, intentKey: string, max
       })
       const use = Math.min(available, Math.round(maxCents))
       if (use <= 0) continue
+      // THE OLD CHECKOUT HAS TO BE SHUT BEFORE THIS ONE OPENS. Everything above this line is our
+      // own ledger, and our ledger does not know that a declined PaymentIntent is still payable at
+      // Stripe. Asked only when the last holder was a real intent that has NOT collected — a
+      // collected one is already counted in `settled`, so its money cannot come off twice.
+      if (hold !== 'collected' && isRealIntentId(row.consumed_intent_id)) {
+        if (!await retirePriorCheckout(row.consumed_intent_id as string)) {
+          // The old checkout is alive, or Stripe would not say. This credit is spoken for; look at
+          // the next one rather than hand the same $50 to two checkouts.
+          continue
+        }
+      }
       let q = admin.from('client_credits')
         .update({
           consumed_cents: settled + use,
@@ -465,6 +484,59 @@ async function holdStateFor(intentId: string | null): Promise<HoldState | null> 
   } catch {
     return null
   }
+}
+
+/**
+ * The checkout a credit was held against, PUT BEYOND USE. True when the credit may now move.
+ *
+ * WHY THIS EXISTS. Our ledger is not the whole story. A card declines, the webhook writes 'failed',
+ * and every sum in model.ts hands the $50 back — but the PaymentIntent behind that decline is
+ * still sitting at Stripe with the discount already inside its amount, and it can still be
+ * confirmed. Without this, an owner could open a second checkout, get the same $50 off, pay it,
+ * then go back to the first tab and pay that one too: two orders, one credit, both discounted.
+ *
+ * FAILS CLOSED. A status Stripe would not give us, a cancel that would not go through, or a
+ * status that means the money is already moving all answer FALSE, and false means nobody takes
+ * this credit today. Losing an owner a discount for a day is the small mistake.
+ */
+export async function retirePriorCheckout(intentId: string): Promise<boolean> {
+  if (!isRealIntentId(intentId)) return true          // a hold: key or a SetupIntent takes no money
+  let status: string | null = null
+  try {
+    status = (await stripe.paymentIntents.retrieve(intentId)).status ?? null
+  } catch (e) {
+    warn('could not read the old checkout at Stripe', e)
+    return false
+  }
+  const verdict = priorIntentVerdict(status)
+  if (verdict === 'live' || verdict === 'unknown') return false
+  if (verdict === 'cancel') {
+    try {
+      await stripe.paymentIntents.cancel(intentId)
+    } catch (e) {
+      // It may have moved to processing in the moment between the read and the cancel. Either way
+      // we could not shut it, so we do not touch the credit.
+      warn('could not cancel the old checkout', e)
+      return false
+    }
+  }
+  await markCheckoutCancelled(intentId)
+  return true
+}
+
+/**
+ * The ledger row for a checkout we just cancelled, said in the ledger's own words.
+ *
+ * Only a row that never took money is rewritten — 'pending' (nobody paid) or 'failed' (the card
+ * was declined). A collected or refunded row is money that really moved and is never touched here.
+ */
+async function markCheckoutCancelled(intentId: string): Promise<void> {
+  try {
+    await createAdminClient().from('campaign_payments')
+      .update({ status: 'cancelled' })
+      .eq('stripe_payment_intent_id', intentId)
+      .in('status', ['pending', 'failed'])
+  } catch (e) { warn('could not close the old checkout row', e) }
 }
 
 /**

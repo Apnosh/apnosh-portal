@@ -295,3 +295,53 @@ export function creditAvailableCents(r: CreditRowState): number {
   const settled = Math.max(0, Math.round(r.settledCents || 0))
   return Math.min(cents, Math.max(0, cents - settled - liveHoldCents(r)))
 }
+
+/* ── The checkout that had the credit BEFORE us ──────────────────────────────
+   Our own ledger is not the whole story. A card declines, our row says 'failed', and every sum
+   above hands the $50 back — but the PaymentIntent behind that decline is still sitting at Stripe
+   and can still be confirmed. The owner opens a second checkout, gets the same $50 off, pays it,
+   then goes back to the first tab and pays that one too. Two orders, one credit, both discounted.
+
+   So before a credit moves to a new checkout, the OLD checkout has to be put beyond use. These two
+   are the decision half of that; the Stripe call itself is in referrals/server.ts. */
+
+/**
+ * Is this the id of a real Stripe PaymentIntent, or one of our own keys?
+ *
+ * prepare holds a credit under `hold:<uuid>` for the half-second before Stripe answers, and a
+ * monthly-only checkout is keyed to a SetupIntent (`seti_`), which takes no money. Only a `pi_`
+ * can be confirmed later behind our back, so only a `pi_` has to be cancelled.
+ */
+export function isRealIntentId(key: string | null | undefined): boolean {
+  return typeof key === 'string' && key.startsWith('pi_')
+}
+
+/**
+ * What to do about the checkout that is holding this credit.
+ *
+ *   'cancel'  — it can still be paid, so cancel it and then the credit may move
+ *   'gone'    — Stripe already cancelled it; nothing to do and the credit may move
+ *   'live'    — the money is moving or already taken. The credit is spoken for. Take nothing.
+ *   'unknown' — a status we do not know, or a read we could not make. Take nothing.
+ *
+ * FAILS CLOSED, twice. An unreadable status is 'unknown', and 'requires_capture' — an authorized
+ * card waiting to be captured — is 'live', because the money is already promised to that order.
+ */
+export type PriorIntentVerdict = 'cancel' | 'gone' | 'live' | 'unknown'
+
+export function priorIntentVerdict(status: string | null | undefined): PriorIntentVerdict {
+  switch (status) {
+    case 'requires_payment_method':
+    case 'requires_confirmation':
+    case 'requires_action':
+      return 'cancel'
+    case 'canceled':
+      return 'gone'
+    case 'processing':
+    case 'succeeded':
+    case 'requires_capture':
+      return 'live'
+    default:
+      return 'unknown'
+  }
+}
