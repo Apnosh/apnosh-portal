@@ -8,7 +8,7 @@
  *   - Standard is the default; the tier choice is never a required decision
  *   - own-words scope (the Something-else hatch) prices at the tier base, never a guessed
  *     upcharge; anything bigger is agreed in the thread BEFORE work starts
- *   - open scope (new website, Something else) is a STARTS-AT floor with a 1-business-day
+ *   - open scope (new website, Something else) is a STARTS-AT floor with the one reply-promise
  *     answer clock, never silence
  *   - the graphic has its own engine (design-pricing.ts): this sheet returns null for it
  *
@@ -18,6 +18,7 @@
  */
 
 import { splitMulti, type RequestAnswers } from './catalog'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 /** THE SERVICE FEE (owner call 2026-08-10: fees stay). The sim's law: a fee that
  * appears late is a trust crack, so the fee is a VISIBLE LINE inside every total from
@@ -36,7 +37,7 @@ export interface CreativePrice {
   lines: CreativePriceLine[]
   totalCents: number
   /** open scope: this total is the agreed FLOOR; the final number is agreed in the
-   *  thread before work starts, answered within 1 business day */
+   *  thread before work starts, answered within the one reply promise */
   startsAt?: boolean
 }
 
@@ -157,7 +158,7 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
 
     case 'website': {
       if (a.scope === 'Brand new website') {
-        lines.push(line('New website, starting point', 1500, 'The floor for a new build. The final number is agreed in your thread before work starts. We answer within 1 business day.'))
+        lines.push(line('New website, starting point', 1500, `The floor for a new build. The final number is agreed in your thread before work starts. We answer ${REPLY_PROMISE}.`))
         startsAt = true
       } else if (a.scope === 'Redesign my website') {
         lines.push(line('Website redesign', 900, 'Your pages, redesigned end to end, 2 revisions.'))
@@ -188,7 +189,7 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
       break
 
     case 'other':
-      lines.push(line('Open request, starting point', 150, 'The floor to start. Anything bigger is agreed in your thread before work starts. We answer within 1 business day.'))
+      lines.push(line('Open request, starting point', 150, `The floor to start. Anything bigger is agreed in your thread before work starts. We answer ${REPLY_PROMISE}.`))
       startsAt = true
       break
 

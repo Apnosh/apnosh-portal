@@ -18,6 +18,7 @@ import { Mark } from './mark'
 import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
@@ -437,7 +438,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
           <Avatar c={c} person={person} size={36} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.15 }}>{title}</div>
-            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c?.name ?? 'Apnosh team'} · ${c?.key === 'strategist' ? 'replies within the hour' : 'Apnosh team'}` : c?.key === 'strategist' ? 'Replies within the hour' : 'Apnosh team'}</div>
+            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c?.name ?? 'Apnosh team'} · ${c?.key === 'strategist' ? `replies ${REPLY_PROMISE}` : 'Apnosh team'}` : c?.key === 'strategist' ? `Replies ${REPLY_PROMISE}` : 'Apnosh team'}</div>
           </div>
         </div>
         <span />

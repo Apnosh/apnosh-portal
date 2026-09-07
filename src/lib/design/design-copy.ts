@@ -15,6 +15,7 @@
  */
 
 import { WALK_SUBS, fill } from '../campaigns/data/walk-copy'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 export { fill }
 
@@ -266,7 +267,7 @@ export const DESIGN_LINES: Record<string, string> = {
   'sum.when': 'In hand',
   'sum.assigned': 'Assigned to',
   'sum.assigned.who': 'Your Apnosh creative team',
-  'sum.assigned.sub': 'A named designer picks it up within 1 business day. You can follow it in Your requests.',
+  'sum.assigned.sub': `A named designer picks it up ${REPLY_PROMISE}. You can follow it in Your requests.`,
   'tier.title': 'How should it get made?',
   'tier.ai.label': 'AI makes it now',
   'tier.ai.sub': 'A free draft from your brand and photos, in your approvals in about a minute. A designer can finish it later.',
