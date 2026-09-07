@@ -138,6 +138,9 @@ export interface HomeFunnelProps {
   height?: number
   /** full-bleed hero: drop the card chrome and fill the viewport down to the nav */
   fill?: boolean
+  /** px of the screen the rows BELOW the hero need, so `fill` leaves them room instead of
+   *  pushing every one of them a full screen down (Home measures its own rows and passes it) */
+  fillReserve?: number
   /** target-audience label shown at the very top (left of the "as of" date) */
   audience?: string
   /** ISO date (YYYY-MM-DD) of the freshest day any source has data for (reporting lags a few days) */
@@ -346,6 +349,7 @@ export default function HomeFunnel({
   storageKey = 'preview',
   height = 620,
   fill = false,
+  fillReserve = 0,
   audience = 'Your area',
   asOf,
   windowStart,
@@ -416,8 +420,12 @@ export default function HomeFunnel({
       // the canvas now starts at the very TOP of the card (the chrome floats over it); its top is fixed by the
       // account bar above the card and does NOT move when the canvas grows → measuring it here is stable + loop-free
       const cvTop = cv.getBoundingClientRect().top
-      const avail = vh - navH - cvTop
-      setEffH(Math.max(440, Math.round(avail))) // fill exactly to the nav; the next section stays below the fold
+      // ...minus what the rows below the hero need. Without this the hero took the WHOLE viewport
+      // and everything after it started a screen down, which is how the people row ended up under
+      // the nav. The 440 floor still wins when the rows are tall: then the page really does scroll,
+      // and the shell's tail (bottom-nav NAV_RESERVE) is what keeps the last row clear of the nav.
+      const avail = vh - navH - cvTop - Math.max(0, fillReserve)
+      setEffH(Math.max(440, Math.round(avail))) // fill to the nav, less the rows that follow
     }
     compute()
     window.addEventListener('resize', compute)
@@ -426,7 +434,7 @@ export default function HomeFunnel({
       window.removeEventListener('resize', compute)
       window.visualViewport?.removeEventListener('resize', compute)
     }
-  }, [fill, height, headerH])
+  }, [fill, height, headerH, fillReserve])
 
   // measure the OVERLAID chrome (tabs + audience) so the rings can sit just below it — the canvas fills the
   // whole card from the top and this row floats over it, so its height is what the funnel offsets by.
@@ -1420,7 +1428,7 @@ export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
 
 type FunnelData = { views: Views | null; actions: Actions | null; counts: StageCounts | undefined; asOf: string | null; windowStart: string | null; windowEnd: string | null; audience: string | null; yoy: FunnelYoY | null; yoyAbs: FunnelYoYAbs | null }
 
-export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar, tickFor }: { clientId?: string; height?: number; fill?: boolean; onVisibility?: (v: 'shown' | 'empty') => void; bar?: HomeFunnelProps['bar']; /* the +/- ticks from the SAME daily series Insights charts (2026-09-04), so the two screens agree by construction; a null field keeps the route's own read */ tickFor?: (r: FunnelRange) => Partial<FunnelYoY> | null }) {
+export function HomeFunnelLive({ clientId, height, fill, fillReserve, onVisibility, bar, tickFor }: { clientId?: string; height?: number; fill?: boolean; /** px the rows below the hero need; passed straight through to HomeFunnel's fill maths */ fillReserve?: number; onVisibility?: (v: 'shown' | 'empty') => void; bar?: HomeFunnelProps['bar']; /* the +/- ticks from the SAME daily series Insights charts (2026-09-04), so the two screens agree by construction; a null field keeps the route's own read */ tickFor?: (r: FunnelRange) => Partial<FunnelYoY> | null }) {
   const [data, setData] = useState<FunnelData | null>(null)
   const [range, setRange] = useState<FunnelRange>('30d')
   /* custom-range bounds — default to the last 14 days ending today */
@@ -1500,7 +1508,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar, tick
     // connect card (onVisibility fired 'empty' above).
     // The loading state IS the home page, with the numbers on their way: the same top row, the
     // same five rows and rings, grey bars where the numbers land (owner 2026-09-05: no zigzag).
-    if (clientId && loading) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={{ total: 0, maps: 0, search: 0 }} actions={{ directions: 0, calls: 0, websiteClicks: 0 }} loading height={height} fill={fill} bar={bar} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} /></div>
+    if (clientId && loading) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnel views={{ total: 0, maps: 0, search: 0 }} actions={{ directions: 0, calls: 0, websiteClicks: 0 }} loading height={height} fill={fill} fillReserve={fillReserve} bar={bar} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} /></div>
     // Settled empty: the dashboard stays a dashboard, with the connect prompt
     // sitting where the numbers will land (owner call 2026-09-02).
     return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
@@ -1509,7 +1517,7 @@ export function HomeFunnelLive({ clientId, height, fill, onVisibility, bar, tick
   if (data.views.total <= 0 && !everShown.current) return <div style={fill ? undefined : { marginBottom: 14 }}><HomeFunnelEmpty height={height} /></div>
   return (
     <div style={fill ? undefined : { marginBottom: 14 }}>
-      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={(() => { const o = tickFor?.(range); if (!o) return data.yoy; const base = data.yoy ?? { awareness: null, interest: null, actions: null, orders: null }; return { awareness: o.awareness ?? base.awareness, interest: o.interest ?? base.interest, actions: o.actions ?? base.actions, orders: o.orders ?? base.orders } })()} bar={bar} storageKey={clientId ?? 'home'} height={height} fill={fill} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
+      <HomeFunnel views={data.views} actions={data.actions} counts={data.counts} audience={data.audience ?? undefined} asOf={data.asOf ?? undefined} windowStart={data.windowStart ?? undefined} windowEnd={data.windowEnd ?? undefined} yoy={(() => { const o = tickFor?.(range); if (!o) return data.yoy; const base = data.yoy ?? { awareness: null, interest: null, actions: null, orders: null }; return { awareness: o.awareness ?? base.awareness, interest: o.interest ?? base.interest, actions: o.actions ?? base.actions, orders: o.orders ?? base.orders } })()} bar={bar} storageKey={clientId ?? 'home'} height={height} fill={fill} fillReserve={fillReserve} range={range} onRange={setRange} cStart={cStart} cEnd={cEnd} onCStart={setCStart} onCEnd={setCEnd} loading={loading} />
       {/* "Choose your metrics" lives ONLY on the Insights detail screen (owner
           ask 2026-08-18) — the home graph stays clean with nothing below it.
           Toggles saved there still apply here: the funnel refetches every time

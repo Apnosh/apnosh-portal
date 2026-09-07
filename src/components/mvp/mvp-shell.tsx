@@ -9,16 +9,28 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import BottomNav, { type NavKey } from './bottom-nav'
+import BottomNav, { NAV_RESERVE, type NavKey } from './bottom-nav'
 import TopRow from './top-row'
 import { useClient } from '@/lib/client-context'
+
+/* The scroller's tail is the NAV'S OWN footprint, imported from the nav (bottom-nav.tsx), never a
+   number typed here. The short tail said 42px while the nav takes 64, so the last row of Home,
+   the last campaign card and the "Not sure? Guide me" row on Create all sat under the glass and
+   could not be scrolled clear. One reserve now, for both tails:
+
+     NAV_RESERVE = 54 (nav) + 10 (its bottom offset) + 12 (breathing room) = 76px
+                   + env(safe-area-inset-bottom) for a phone with a chin.
+
+   The tall tail keeps its extra room for the floating top row. */
+const TAIL = `calc(${NAV_RESERVE}px + env(safe-area-inset-bottom))`
+const TAIL_TALL = `calc(${NAV_RESERVE + 8}px + env(safe-area-inset-bottom))`
 
 const SHELL_CSS = `
 .mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center;overflow:hidden}
 .mvp-frame{width:100%;max-width:none;background:#fff;display:flex;flex-direction:column;min-height:0;position:relative}
-.mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+.mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:${TAIL_TALL}}
 .mvp-frame-scroll.mvp-under-top{padding-top:58px}
-.mvp-frame-scroll.mvp-short-tail{padding-bottom:calc(42px + env(safe-area-inset-bottom))}
+.mvp-frame-scroll.mvp-short-tail{padding-bottom:${TAIL}}
 .mvp-frame-top{position:absolute;top:0;left:0;right:0;z-index:6;transition:transform .28s cubic-bezier(.32,.72,.35,1),opacity .22s}
 .mvp-frame.mvp-scrolling .mvp-frame-top,.mvp-frame.mvp-scrolling .mvp-home-bar{transform:translateY(-115%);opacity:0;pointer-events:none}
 .mvp-home-bar{transition:transform .28s cubic-bezier(.32,.72,.35,1),opacity .22s}

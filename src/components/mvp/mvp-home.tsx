@@ -214,6 +214,35 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
     useCallback(() => (typeof document === 'undefined' ? null : document.querySelector<HTMLElement>('.mvp-frame-scroll')), []),
     onPullRefresh,
   )
+  /* HOW MUCH SCREEN THE ROWS UNDER THE HERO NEED.
+   *
+   * The funnel is a `fill` hero: it sizes itself to the whole scroll viewport. Every row that
+   * follows it — the weekly sentence, the people row, Counted as promised — therefore started a
+   * full screen below the fold, and with the old short tail the last of them sat under the nav
+   * with no way to scroll it clear. So the hero now gets the viewport MINUS what those rows
+   * actually measure, and they land on the first screen with it.
+   *
+   * Measured off the DOM rather than a wrapper div, so a row added below later is included
+   * without anyone remembering to move it inside something. Loop-free: only the siblings AFTER
+   * the hero are read, so a taller hero can never grow this number. When nothing renders (a new
+   * business with no orders and no week worth a sentence) it is 0 and the funnel is the whole
+   * page again, exactly as before. */
+  const [belowH, setBelowH] = useState(0)
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return
+    const hero = document.getElementById('home-funnel-hero')
+    const stack = hero?.parentElement
+    if (!hero || !stack) return
+    const measure = () => {
+      let h = 0
+      for (let el = hero.nextElementSibling; el; el = el.nextElementSibling) h += el.getBoundingClientRect().height
+      setBelowH((prev) => (Math.abs(prev - h) < 1 ? prev : Math.round(h)))
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(stack)
+    measure()
+    return () => ro.disconnect()
+  }, [])
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const onScroll = () => {
@@ -290,7 +319,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             funnel (Awareness → Interest → Customer actions → Orders → Retention)
             in the glass-vessel view. Renders only when the business has Google data. */}
         <div id="home-funnel-hero" style={{ margin: '-16px -18px 0' }}>
-          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
+          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill fillReserve={belowH} onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
         </div>
         {/* THIS WEEK, IN ONE LINE — the love sentence. Renders nothing when the week has
             nothing true to say. */}
