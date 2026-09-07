@@ -738,8 +738,7 @@ async function handleCampaignPaymentSucceeded(
   const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; campaign_id: string | null; total_cents: number } | undefined : undefined
   if (row && !row.campaign_id) {
     try {
-      const { getAdminUserIds } = await import('@/lib/notify')
-      const { createNotification } = await import('@/lib/notifications')
+      const { getAdminUserIds, createNotification } = await import('@/lib/notify')
       const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
       const name = ((client as { name?: string } | null)?.name) ?? 'A client'
       for (const adminId of await getAdminUserIds(supabase)) {
