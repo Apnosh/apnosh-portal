@@ -1,5 +1,6 @@
 'use client'
 import CountedStrip from './counted-strip'
+import PeopleRow from './people-row'
 
 /**
  * MVP Home — ported from the apnosh-mvp design (yejukim/apnosh-mvp,
@@ -290,6 +291,11 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
         <div id="home-funnel-hero" style={{ margin: '-16px -18px 0' }}>
           <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
         </div>
+        {/* THE PEOPLE ON YOUR WORK — the staff actually assigned to the orders still running,
+            then the one Get help door, in ONE row. Renders just the door when nothing is
+            running; never placeholder faces. */}
+        <PeopleRow clientId={clientId} />
+
         {/* COUNTED, AS PROMISED — one row per order: the count its Create card named, the day it
             started, the number before. Renders nothing when there are no orders, so the funnel
             stays the whole page. Outside the SHOW_HOME_BODY guard on purpose. */}
