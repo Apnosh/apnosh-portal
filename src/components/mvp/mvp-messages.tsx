@@ -61,6 +61,10 @@ function contactForSubject(subject: string): Contact | null {
 interface ThreadRow { id: string; subject: string; lastAt: string; lastMessage: string | null; unread: boolean }
 /** a real person on the account, matched to a contact by role (photo + name lead when we have them) */
 interface Person { id: string; name: string; avatarUrl: string | null; roles: string[]; primary: boolean; availability: 'available' | 'limited' | 'full' }
+/** A person on a LIVE order, straight from /api/dashboard/people (src/lib/team/people.ts).
+ *  threadSubject is one of the CONTACTS subjects above, which is what lets a face open the
+ *  right conversation instead of a new one. */
+interface OrderPerson { id: string; name: string; avatarUrl: string | null; role: string; threadId: string | null; threadSubject: string }
 const ROLE_OF_CONTACT: Record<string, string[]> = { strategist: ['strategist'], videographer: ['videographer'], photographer: ['photographer'], designer: ['designer'] }
 function personFor(c: Contact | null, people: Person[]): Person | undefined {
   if (!c) return undefined
@@ -108,6 +112,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
   const [searchOpen, setSearchOpen] = useState(false)
   const [active, setActive] = useState<Active | null>(null)
   const [people, setPeople] = useState<Person[]>([])
+  const [orderPeople, setOrderPeople] = useState<OrderPerson[]>([])
   const deepLinked = useRef(false)
   useEffect(() => { onActiveChange?.(!!active) }, [active, onActiveChange])
 
@@ -139,11 +144,24 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
     return () => { live = false }
   }, [supabase, selClient?.id, clientLoading])
 
-  // the real people on the account, for the avatar row and the thread rows
+  // the real people on the account, for the thread rows (photo + name on a conversation)
   useEffect(() => {
     if (!selClient?.id) return
     let live = true
     fetch(`/api/dashboard/team?clientId=${selClient.id}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.people)) setPeople(j.people as Person[]) }).catch(() => {})
+    return () => { live = false }
+  }, [selClient?.id])
+
+  // The strip at the top: the people on your LIVE orders. Same endpoint and same rule as Home's
+  // people row (components/mvp/people-row.tsx), so the two screens can never disagree about who
+  // is on your work. Nobody active means nobody in the strip — never a placeholder face.
+  useEffect(() => {
+    if (!selClient?.id) return
+    let live = true
+    fetch(`/api/dashboard/people?clientId=${selClient.id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => { if (live && Array.isArray(j?.people)) setOrderPeople(j.people as OrderPerson[]) })
+      .catch(() => { /* nobody known is a fine answer; the Support door is still there */ })
     return () => { live = false }
   }, [selClient?.id])
 
@@ -207,9 +225,18 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
     return `${nameOf(c, t.subject)} ${t.subject} ${t.lastMessage ?? ''}`.toLowerCase().includes(q)
   })
   const activeKeys = new Set(threads.map((t) => contactForSubject(t.subject)?.key).filter(Boolean) as string[])
-  // the avatar row: everyone you can message, the strategist first, then people you have not
-  // written to yet, then the rest — like a DM app's suggestions (owner 2026-09-04)
-  const suggested = [...CONTACTS].sort((x, y) => (x.key === 'strategist' ? -1 : y.key === 'strategist' ? 1 : Number(activeKeys.has(x.key)) - Number(activeKeys.has(y.key))))
+  // The avatar row (owner 2026-09-07: "the example profiles at the top should show the active
+  // team members on active campaigns"). It used to be the six roles, drawn for every owner
+  // whether or not anyone was working for them. Now it is the people on live orders, from the
+  // same read Home uses, and Support is the last stop so there is always one door.
+  const supportContact = CONTACTS.find((c) => c.key === 'support')!
+  const suggested: { key: string; c: Contact; person?: { name: string; avatarUrl: string | null }; label: string; started: boolean }[] = [
+    ...orderPeople.map((op) => {
+      const c = contactForSubject(op.threadSubject) ?? supportContact
+      return { key: `on-${op.id}`, c, person: { name: op.name, avatarUrl: op.avatarUrl }, label: firstName(op.name), started: !!op.threadId }
+    }),
+    { key: 'support', c: supportContact, label: SHORT.support ?? supportContact.name, started: activeKeys.has('support') },
+  ]
   const peopleHits = q ? CONTACTS.filter((c) => { const p = personFor(c, people); return `${c.name} ${c.blurb} ${p?.name ?? ''}`.toLowerCase().includes(q) }) : []
   const EMPTY = (
     <div className="mrise" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '44px 40px 24px' }}>
@@ -252,20 +279,20 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
           </>
         ) : (
           <>
-            {/* the avatar row: who you can message, like a DM app's suggestions */}
+            {/* the avatar row: the people on your live orders, then the one door */}
             <div className="cc-scroll" style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '8px 16px 4px', scrollbarWidth: 'none' }}>
-              {suggested.map((c) => {
-                const p = personFor(c, people)
-                const has = activeKeys.has(c.key)
+              {suggested.map((s) => {
+                const c = s.c
+                const has = s.started
                 return (
-                  <button key={c.key} type="button" onClick={() => openContact(c)} className="mvp-press" style={{ flex: '0 0 auto', width: 66, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}>
+                  <button key={s.key} type="button" onClick={() => openContact(c)} className="mvp-press" style={{ flex: '0 0 auto', width: 66, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}>
                     <span style={{ position: 'relative' }}>
                       <span style={{ display: 'inline-flex', padding: 2, borderRadius: '50%', background: has ? 'transparent' : gradOf(c.hue) }}>
-                        <span style={{ display: 'inline-flex', padding: 2, borderRadius: '50%', background: '#fff' }}><Avatar c={c} person={p} size={54} /></span>
+                        <span style={{ display: 'inline-flex', padding: 2, borderRadius: '50%', background: '#fff' }}><Avatar c={c} person={s.person} size={54} /></span>
                       </span>
                       {!has && <span style={{ position: 'absolute', right: 0, bottom: 2, width: 20, height: 20, borderRadius: '50%', background: gradOf(c.hue), color: '#fff', border: '2px solid #fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={12} strokeWidth={3} /></span>}
                     </span>
-                    <span style={{ fontSize: 11.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 66 }}>{p ? firstName(p.name) : SHORT[c.key] ?? c.name}</span>
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 66 }}>{s.label}</span>
                   </button>
                 )
               })}
@@ -292,7 +319,7 @@ function SectionLabel({ children, hue = 'mint' }: { children: React.ReactNode; h
 
 /* a person's photo when we have one, their initials in the role colour when we know the name,
    the role's glyph mark otherwise */
-function Avatar({ c, person, size = 46 }: { c: Contact | null; person?: Person; size?: number }) {
+function Avatar({ c, person, size = 46 }: { c: Contact | null; /** a Person from the team read, or an order person from /api/dashboard/people — only the photo and the name are used */ person?: { name: string; avatarUrl: string | null }; size?: number }) {
   const hue: HueKey = c?.hue ?? 'grey'
   const Icon = c?.Icon ?? MessageCircle
   if (person?.avatarUrl) return <img src={person.avatarUrl} alt={person.name} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, boxShadow: '0 1px 2px rgba(0,0,0,.05), 0 3px 10px rgba(0,0,0,.09)' }} />
