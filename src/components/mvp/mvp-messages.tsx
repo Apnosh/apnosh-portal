@@ -79,30 +79,35 @@ interface Msg { id: string; from: 'owner' | 'team'; senderName: string; text: st
 /** draft pre-fills the composer (deep links pass who/what the note is about). */
 interface Active { threadId: string | null; contact: Contact | null; subject: string; draft?: string }
 
+/* The dates and times an owner reads. Every one of them takes the language: a Spanish owner
+   was being shown "Monday" and "Sep 8" beside their own words, because the locale was pinned
+   to en-US. T() covers the two words that are not a date at all. */
+type Tr = (k: string, vars?: Record<string, string | number>) => string
 const dayKey = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}` }
-function dayLabel(key: string): string {
+function dayLabel(key: string, T: Tr, locale: string): string {
   const [y, m, d] = key.split('-').map(Number); const dt = new Date(y, m, d); const now = new Date()
   const diff = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - dt.getTime()) / 86400000)
-  if (diff === 0) return 'Today'
-  if (diff === 1) return 'Yesterday'
-  return dt.toLocaleDateString('en-US', diff < 7 ? { weekday: 'long' } : { month: 'short', day: 'numeric' })
+  if (diff === 0) return T('Today')
+  if (diff === 1) return T('Yesterday')
+  return dt.toLocaleDateString(locale, diff < 7 ? { weekday: 'long' } : { month: 'short', day: 'numeric' })
 }
-const clock = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-function timeAgo(iso?: string | null): string {
+const clock = (iso: string, locale: string) => new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+function timeAgo(iso: string | null | undefined, T: Tr, locale: string): string {
   if (!iso) return ''
   const ms = Date.now() - new Date(iso).getTime()
   const min = Math.floor(ms / 60000)
-  if (min < 1) return 'now'
+  if (min < 1) return T('now')
   if (min < 60) return `${min}m`
   const hr = Math.floor(min / 60)
   if (hr < 24) return `${hr}h`
   const d = Math.floor(hr / 24)
   if (d < 7) return `${d}d`
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return new Date(iso).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
 }
 
 export default function MvpMessages({ query: queryProp, onActiveChange }: { query?: string; /** tells the page a conversation is open, so the shell drops its top row and the thread's own header leads */ onActiveChange?: (open: boolean) => void } = {}) {
   const supabase = createClient()
+  const { T } = useLang()
   const [userId, setUserId] = useState<string | null>(null)
   const [businessId, setBusinessId] = useState<string | null>(null)
   const [threads, setThreads] = useState<ThreadRow[]>([])
@@ -237,31 +242,31 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
     }),
     { key: 'support', c: supportContact, label: SHORT.support ?? supportContact.name, started: activeKeys.has('support') },
   ]
-  const peopleHits = q ? CONTACTS.filter((c) => { const p = personFor(c, people); return `${c.name} ${c.blurb} ${p?.name ?? ''}`.toLowerCase().includes(q) }) : []
+  const peopleHits = q ? CONTACTS.filter((c) => { const p = personFor(c, people); return `${c.name} ${T(c.name)} ${T(c.blurb)} ${p?.name ?? ''}`.toLowerCase().includes(q) }) : []
   const EMPTY = (
     <div className="mrise" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '44px 40px 24px' }}>
       <Mark hue="mint" size={56}><MessageCircle size={24} /></Mark>
-      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, marginTop: 14, marginBottom: 5 }}>No messages yet</div>
-      <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>Tap someone above to say hello. A real person on your team answers.</div>
+      <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 18, marginTop: 14, marginBottom: 5 }}>{T('No messages yet')}</div>
+      <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5 }}>{T('Tap someone above to say hello. A real person on your team answers.')}</div>
     </div>
   )
 
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {queryProp == null && searchOpen && (
-        <div style={{ padding: '12px 16px 0' }}><input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search people and messages…" style={{ width: '100%', borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', border: 'none', padding: '11px 14px', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} /></div>
+        <div style={{ padding: '12px 16px 0' }}><input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder={T('Search people and messages…')} style={{ width: '100%', borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', border: 'none', padding: '11px 14px', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }} /></div>
       )}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 28px' }}>
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13.5, padding: 30 }}><Loader2 size={16} className="animate-spin" /> Loading…</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13.5, padding: 30 }}><Loader2 size={16} className="animate-spin" /> {T('Loading…')}</div>
         ) : noBusiness ? (
-          <Empty title="No business linked yet" sub="Finish setting up your restaurant to start messaging your team." />
+          <Empty title={T('No business linked yet')} sub={T('Finish setting up your restaurant to start messaging your team.')} />
         ) : q ? (
           <>
             {/* search: people first (to start a conversation), then matching messages */}
             {peopleHits.length > 0 && (
               <>
-                <SectionLabel hue="mint">People</SectionLabel>
+                <SectionLabel hue="mint">{T('People')}</SectionLabel>
                 <div style={{ margin: '0 12px 6px' }}>
                   {peopleHits.map((c, i) => <PersonRow key={c.key} c={c} person={personFor(c, people)} first={i === 0} onOpen={() => openContact(c)} />)}
                 </div>
@@ -269,13 +274,13 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
             )}
             {convos.length > 0 && (
               <>
-                <SectionLabel hue="nights">Messages</SectionLabel>
+                <SectionLabel hue="nights">{T('Messages')}</SectionLabel>
                 <div style={{ margin: '0 12px' }}>
                   {convos.map((t, i) => <ThreadRowView key={t.id} t={t} person={personFor(contactForSubject(t.subject), people)} first={i === 0} onOpen={() => openThread(t)} />)}
                 </div>
               </>
             )}
-            {peopleHits.length === 0 && convos.length === 0 && <Empty title="No matches" sub="No people or messages match that search." />}
+            {peopleHits.length === 0 && convos.length === 0 && <Empty title={T('No matches')} sub={T('No people or messages match that search.')} />}
           </>
         ) : (
           <>
@@ -299,7 +304,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
             </div>
 
             {/* the inbox: only real conversations */}
-            <SectionLabel hue="mint">Messages</SectionLabel>
+            <SectionLabel hue="mint">{T('Messages')}</SectionLabel>
             {convos.length === 0 ? EMPTY : (
               <div style={{ margin: '0 12px' }}>
                 {convos.map((t, i) => <ThreadRowView key={t.id} t={t} person={personFor(contactForSubject(t.subject), people)} first={i === 0} onOpen={() => openThread(t)} />)}
@@ -328,9 +333,11 @@ function Avatar({ c, person, size = 46 }: { c: Contact | null; /** a Person from
 }
 
 function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOpen: () => void; first?: boolean; person?: Person }) {
+  const { T, locale } = useLang()
   const c = contactForSubject(t.subject)
-  const name = person ? person.name : (c?.name ?? t.subject)
-  const role = person ? (c?.name ?? t.subject) : null
+  // A person's own name is never translated; the role beside it is ours to say.
+  const name = person ? person.name : (c ? T(c.name) : t.subject)
+  const role = person ? (c ? T(c.name) : t.subject) : null
   return (
     <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '8px 6px', borderRadius: 14, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
       <Avatar c={c} person={person} size={46} />
@@ -338,10 +345,10 @@ function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOp
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
           <span style={{ fontWeight: t.unread ? 700 : 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
           {role && <span style={{ fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap', flexShrink: 0 }}>{role}</span>}
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: t.unread ? C.greenDk : C.faint, fontWeight: t.unread ? 700 : 400, flexShrink: 0 }}>{timeAgo(t.lastAt)}</span>
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: t.unread ? C.greenDk : C.faint, fontWeight: t.unread ? 700 : 400, flexShrink: 0 }}>{timeAgo(t.lastAt, T, locale)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.unread ? C.ink2 : C.mute, fontWeight: t.unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.lastMessage ?? 'No messages yet'}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.unread ? C.ink2 : C.mute, fontWeight: t.unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.lastMessage ?? T('No messages yet')}</span>
           {t.unread && <span style={{ width: 8, height: 8, borderRadius: 99, background: C.green, flexShrink: 0 }} />}
         </div>
       </div>
@@ -350,14 +357,15 @@ function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOp
 }
 
 function PersonRow({ c, person, onOpen, first = true }: { c: Contact; person?: Person; onOpen: () => void; first?: boolean }) {
+  const { T } = useLang()
   return (
     <button onClick={onOpen} className="mvp-row" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '8px 6px', borderRadius: 14, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
       <Avatar c={c} person={person} size={40} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person ? person.name : c.name}</div>
-        <div style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{person ? `${c.name} · ${c.blurb}` : c.blurb}</div>
+        <div style={{ fontWeight: 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{person ? person.name : T(c.name)}</div>
+        <div style={{ fontSize: 12, color: C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>{person ? `${T(c.name)} · ${T(c.blurb)}` : T(c.blurb)}</div>
       </div>
-      <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: hueOfKey(c.hue) }}>Message</span>
+      <span style={{ flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: hueOfKey(c.hue) }}>{T('Message')}</span>
     </button>
   )
 }
@@ -447,7 +455,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
     setSending(false)
   }
 
-  const title = person ? person.name : (c?.name ?? active.subject)
+  const title = person ? person.name : (c ? T(c.name) : active.subject)
   const hue: HueKey = c?.hue ?? 'mint'
   /* Modern chat layout (owner 2026-09-04): messages group by sender and by day, consecutive
      bubbles sit 3px apart with one tail per group, one avatar per group, one time per group. */
@@ -473,7 +481,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
       {/* conversation header: glass back circle, avatar, name, status */}
       <div style={{ flexShrink: 0, display: 'grid', gridTemplateColumns: '40px minmax(0,1fr) 40px', alignItems: 'center', gap: 10, padding: 'calc(10px + env(safe-area-inset-top)) 16px 10px' }}>
-        <button onClick={onBack} aria-label="Back" style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.75)', background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><ChevronLeft size={22} /></button>
+        <button onClick={onBack} aria-label={T('Back')} style={{ width: 40, height: 40, borderRadius: '50%', border: '1px solid rgba(255,255,255,0.75)', background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', color: C.ink, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><ChevronLeft size={22} /></button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, minWidth: 0 }}>
           <Avatar c={c} person={person} size={36} />
           <div style={{ minWidth: 0 }}>
@@ -489,12 +497,12 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
       {/* messages */}
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 14px 10px', background: '#fff' }}>
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> Loading…</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> {T('Loading…')}</div>
         ) : msgs.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: 22, padding: '0 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><Avatar c={c} person={person} size={56} /></div>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>Message {title}</div>
-            <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.55 }}>{c?.blurb ? `${c.blurb}. ` : ''}Say what you need — a real person picks it up.</div>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>{T('Message {name}', { name: title })}</div>
+            <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.55 }}>{c?.blurb ? `${T(c.blurb)}. ` : ''}{T('Say what you need. A real person picks it up.')}</div>
           </div>
         ) : groups.map((g, gi) => {
           const showDay = gi === 0 || groups[gi - 1].day !== g.day
@@ -502,7 +510,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
           const lastMsg = g.msgs[g.msgs.length - 1]
           return (
             <div key={g.msgs[0].id}>
-              {showDay && <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: C.faint, padding: '10px 0 8px' }}>{dayLabel(g.day)}</div>}
+              {showDay && <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: C.faint, padding: '10px 0 8px' }}>{dayLabel(g.day, T, locale)}</div>}
               <div className="mrise" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', justifyContent: own ? 'flex-end' : 'flex-start', marginTop: gi > 0 && !showDay ? 10 : 0 }}>
                 {!own && <Avatar c={c} person={person} size={26} />}
                 <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', alignItems: own ? 'flex-end' : 'flex-start', gap: 3 }}>
@@ -514,7 +522,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
                       : <div key={m.id} style={{ background: '#f0f0f2', color: C.ink, borderRadius: r, padding: '9px 13px', fontSize: 14.5, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
                   })}
                   <div style={{ fontSize: 10.5, color: C.faint, margin: '1px 4px 0' }}>
-                    {own ? (lastMsg.id === lastOwn?.id ? (lastMsg.id.startsWith('tmp-') ? 'Sending…' : `Sent · ${clock(lastMsg.createdAt)}`) : clock(lastMsg.createdAt)) : `${lastMsg.senderName} · ${clock(lastMsg.createdAt)}`}
+                    {own ? (lastMsg.id === lastOwn?.id ? (lastMsg.id.startsWith('tmp-') ? T('Sending…') : T('Sent · {time}', { time: clock(lastMsg.createdAt, locale) })) : clock(lastMsg.createdAt, locale)) : `${lastMsg.senderName} · ${clock(lastMsg.createdAt, locale)}`}
                   </div>
                 </div>
               </div>
@@ -526,8 +534,8 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
       {/* composer: a glass pill with the send button inside it */}
       <div style={{ flexShrink: 0, padding: '8px 14px calc(96px + env(safe-area-inset-bottom))', background: '#fff' }}>{/* clears the floating bottom nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 48, borderRadius: 24, padding: '0 5px 0 16px', background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={`Message ${title}…`} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14.5, color: C.ink, fontFamily: 'inherit', outline: 'none', padding: 0 }} />
-          <button onClick={send} disabled={!input.trim() || sending} aria-label="Send" style={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', border: 'none', background: input.trim() ? gradOf(hue) : '#e3e6e5', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', boxShadow: input.trim() ? glow(hue, 0.35) : 'none', transition: 'background .15s' }}>{sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}</button>
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={T('Message {name}…', { name: title })} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14.5, color: C.ink, fontFamily: 'inherit', outline: 'none', padding: 0 }} />
+          <button onClick={send} disabled={!input.trim() || sending} aria-label={T('Send')} style={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', border: 'none', background: input.trim() ? gradOf(hue) : '#e3e6e5', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', boxShadow: input.trim() ? glow(hue, 0.35) : 'none', transition: 'background .15s' }}>{sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}</button>
         </div>
       </div>
       <style>{`@keyframes mrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.mrise{animation:mrise .26s ease both}`}</style>

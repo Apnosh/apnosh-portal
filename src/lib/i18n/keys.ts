@@ -36,6 +36,20 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* the promise and its clock — the thread header and Get help both draw these */
   reply: ['within one business day', 'Sent', 'we answer', 'due', 'Answered in'],
 
+  /* /dashboard/messages — the strip of people on live orders, the inbox, one conversation */
+  messages: [
+    'Messages', 'People', 'Message', 'Message {name}', 'Message {name}…',
+    'Say what you need. A real person picks it up.',
+    'Search people and messages…', 'No messages yet',
+    'Tap someone above to say hello. A real person on your team answers.',
+    'No matches', 'No people or messages match that search.',
+    'No business linked yet', 'Finish setting up your restaurant to start messaging your team.',
+    'Loading…', 'Back', 'Send', 'Sending…', 'Sent · {time}', 'Today', 'Yesterday', 'now',
+    'Your strategist', 'Videographer', 'Photographer', 'Designer', 'Account & billing', 'Support',
+    'Plans, priorities, anything', 'Films your content', 'Photos of your food & space',
+    'Graphics, menus, flyers', 'Plans, invoices, payments', 'Anything else',
+  ],
+
   /* /dashboard/get-help */
   getHelp: [
     'Get help', 'A real person answers', 'Talk to us', 'Message us',
