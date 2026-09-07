@@ -42,17 +42,30 @@ export function oneBusinessDayAfter(from: Date): Date {
   return new Date(d.getTime() + MS_DAY)
 }
 
+/**
+ * "3:10 pm" — the clock, the way the owner's copy writes it everywhere else.
+ *
+ * Two fixes, in order. First: Node and Chrome put a NARROW NO-BREAK SPACE before am/pm, and it
+ * renders as a gap the owner cannot type or search for, so it becomes an ordinary space. Second:
+ * en-US gives "3:10 PM" and the rest of the app is lowercase. es-US writes "3:10 p. m.", which is
+ * already lowercase and passes through untouched.
+ *
+ * Exported because the thread header and the message bubbles both print times, and they printed
+ * two different ones — "4:17 pm" up top, "4:17 PM" three lines down.
+ */
+export function clockTime(iso: string | Date, locale = 'en-US'): string {
+  const d = iso instanceof Date ? iso : new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+    .replace(/[\u202f\u00a0]/g, ' ')
+    .replace(/\b(AM|PM)\b/, (m) => m.toLowerCase())
+}
+
 /** "Tue 3:10 pm" — the weekday and the clock, nothing else. Locale-aware for es-US. */
 export function dayClock(iso: string | Date, locale = 'en-US'): string {
   const d = iso instanceof Date ? iso : new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  const day = d.toLocaleDateString(locale, { weekday: 'short' })
-  const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
-  // Two fixes, in order. First: Node and Chrome put a NARROW NO-BREAK SPACE before am/pm, and
-  // it renders as a gap the owner cannot type or search for, so it becomes an ordinary space.
-  // Second: en-US gives "3:10 PM" and the owner's copy everywhere else in the app is lowercase.
-  // es-US writes "3:10 p. m.", which is already lowercase and passes through untouched.
-  return `${day} ${time}`.replace(/[\u202f\u00a0]/g, ' ').replace(/\b(AM|PM)\b/, (m) => m.toLowerCase())
+  return `${d.toLocaleDateString(locale, { weekday: 'short' })} ${clockTime(d, locale)}`
 }
 
 /** "Jul 2" — the date, no clock, for anything a weekday can no longer place. */

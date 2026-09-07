@@ -327,7 +327,7 @@ export const ES: Record<string, string> = {
   /* ── Onboarding: the frame every screen sits in ───────────────────────────────────────── */
   'Continue': 'Continuar',
   'Getting your setup ready': 'Preparando todo',
-  'Saving...': 'Guardando...',
+  'Saving…': 'Guardando…',
   'Back': 'Atrás',
   'Finish later': 'Terminar después',
   'Exit': 'Salir',
@@ -540,6 +540,8 @@ export const ES: Record<string, string> = {
     'Todavía no se cuenta. Cuando lleguen los números, aparecen aquí.',
 
   // Polish 2
+  /* the strategist channel, named mid-sentence */
+  'your strategist': 'tu estratega',
   /* onboarding screens 5 (what you serve) and 10 (one last look) */
   /* screen 5 — the three questions */
   'What you serve': 'Qué sirves',

@@ -619,7 +619,9 @@ function SinceLaunch({ o }: { o: CampaignOutcome | null }) {
       <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '13px 15px' }}>
         {/* Left, explicitly. A proof line stretched to both margins reads as a paragraph of
             justified body text and puts holes between the words that carry the number. */}
-        <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums', textAlign: 'left', textWrap: 'pretty' }}>{line.text}</div>
+        {/* No tabular-nums: this is a sentence with a number in it, not a column of figures, and
+            monospaced digits inside Cal Sans put gaps around the very word that carries it. */}
+        <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color, letterSpacing: '-.01em', textAlign: 'left', textWrap: 'pretty' }}>{line.text}</div>
         {o.pct != null && (
           <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4, textAlign: 'left' }}>{o.after.toLocaleString('en-US')} in the two weeks after, against {o.before.toLocaleString('en-US')} the two before.</div>
         )}

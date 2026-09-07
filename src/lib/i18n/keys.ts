@@ -63,6 +63,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Loading…', 'Back', 'Send', 'Sending…', 'Sent · {time}', 'Today', 'Yesterday', 'now',
     /* the line under a person's name in the conversation header */
     'Apnosh team', 'we reply {promise}', 'We reply {promise}',
+    // the same channel name, written to sit inside a sentence ("Message your strategist")
+    'your strategist',
     'Your strategist', 'Videographer', 'Photographer', 'Designer', 'Account & billing', 'Support',
     'Plans, priorities, anything', 'Films your content', 'Photos of your food & space',
     'Graphics, menus, flyers', 'Plans, invoices, payments', 'Anything else',
@@ -193,7 +195,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* /onboarding/full — the frame every screen sits in, the shape question, the goal tiles
      and the budget question. The chip VALUES are listed under `chips` (they are stored). */
   onboarding: [
-    'Continue', 'Getting your setup ready', 'Saving...', 'Back', 'Finish later', 'Exit',
+    'Continue', 'Getting your setup ready', 'Saving…', 'Back', 'Finish later', 'Exit',
     'Setup progress: screen {n} of {total}',
     'Save your answers and finish setup later from the dashboard.',
     'Leave setup. Your progress is saved.',

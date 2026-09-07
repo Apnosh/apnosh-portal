@@ -279,7 +279,7 @@ export function OnboardingFrame({
         >
           <div style={{ maxWidth: 520, margin: '0 auto' }}>
             <PrimaryPill onClick={onNext} disabled={!valid || saving} grow>
-              {saving ? T('Saving...') : continueLabel ? T(continueLabel) : T('Continue')}
+              {saving ? T('Saving…') : continueLabel ? T(continueLabel) : T('Continue')}
             </PrimaryPill>
           </div>
         </div>

@@ -294,7 +294,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                             boxShadow: busy === r.id ? 'none' : '0 8px 20px rgba(46,154,120,0.3)',
                           }}
                         >
-                          {busy === r.id ? 'Starting...' : pays ? `Say yes and pay ${amount}` : 'Say yes and start the work'}
+                          {busy === r.id ? 'Starting…' : pays ? `Say yes and pay ${amount}` : 'Say yes and start the work'}
                         </button>
                         <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.mute, marginTop: 6, textAlign: 'center', lineHeight: 1.45 }}>
                           {acceptPromiseLine(pays, r.quote_cents)}

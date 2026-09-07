@@ -158,7 +158,7 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
 
       {/* Complete button */}
       <PrimaryPill onClick={onComplete} disabled={!data.agreed_terms || saving} grow>
-        {saving ? T('Saving...') : T('Complete setup')}
+        {saving ? T('Saving…') : T('Complete setup')}
       </PrimaryPill>
     </>
   )

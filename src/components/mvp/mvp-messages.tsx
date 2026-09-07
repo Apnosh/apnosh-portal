@@ -20,7 +20,7 @@ import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
 import { REPLY_PROMISE } from '@/lib/reply-promise'
 import Link from 'next/link'
-import { askFrom, replyClock } from '@/lib/team/reply-line'
+import { askFrom, clockTime, replyClock } from '@/lib/team/reply-line'
 import { useLang } from './mvp-language'
 
 const C = {
@@ -35,9 +35,9 @@ const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
 /* ── The people an owner can reach. Each is its own conversation; the thread
  *  subject carries the role so the Apnosh team knows who it's for. ─────────── */
 /* each role gets a colour and a glyph instead of an emoji (portal redesign 2026-09-04) */
-interface Contact { key: string; name: string; blurb: string; hue: HueKey; Icon: typeof Compass; color: string; subject: string }
+interface Contact { key: string; name: string; /** the name written MID-SENTENCE. Only the strategist needs one: "Message Your strategist" put a capital Y in the middle of a line. The rest are role names and read the same either way. */ inline?: string; blurb: string; hue: HueKey; Icon: typeof Compass; color: string; subject: string }
 const CONTACTS: Contact[] = [
-  { key: 'strategist',   name: 'Your strategist',   blurb: 'Plans, priorities, anything',  hue: 'mint',     Icon: Compass,    color: '#2e9a78', subject: 'Your strategist' },
+  { key: 'strategist',   name: 'Your strategist',   inline: 'your strategist', blurb: 'Plans, priorities, anything',  hue: 'mint',     Icon: Compass,    color: '#2e9a78', subject: 'Your strategist' },
   { key: 'videographer', name: 'Videographer',      blurb: 'Films your content',           hue: 'event',    Icon: Video,      color: '#2e73b6', subject: 'Videographer' },
   { key: 'photographer', name: 'Photographer',      blurb: 'Photos of your food & space',  hue: 'catering', Icon: Camera,     color: '#9c3a6a', subject: 'Photographer' },
   { key: 'designer',     name: 'Designer',          blurb: 'Graphics, menus, flyers',      hue: 'announce', Icon: ImageIcon,  color: '#ee4c2c', subject: 'Designer' },
@@ -96,7 +96,9 @@ function dayLabel(key: string, T: Tr, locale: string): string {
   if (diff === 1) return T('Yesterday')
   return dt.toLocaleDateString(locale, diff < 7 ? { weekday: 'long' } : { month: 'short', day: 'numeric' })
 }
-const clock = (iso: string, locale: string) => new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+/* One clock format for the whole screen (reply-line.ts). The header said "4:17 pm" and the
+   bubble under it said "4:17 PM", with a space nobody can type in front of it. */
+const clock = (iso: string, locale: string) => clockTime(iso, locale)
 function timeAgo(iso: string | null | undefined, T: Tr, locale: string): string {
   if (!iso) return ''
   const ms = Date.now() - new Date(iso).getTime()
@@ -476,6 +478,8 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
   }
 
   const title = person ? person.name : (c ? T(c.name) : active.subject)
+  /* the same name, written to sit inside a sentence rather than start one */
+  const inlineTitle = person ? person.name : (c ? T(c.inline ?? c.name) : active.subject)
   const hue: HueKey = c?.hue ?? 'mint'
   /* Modern chat layout (owner 2026-09-04): messages group by sender and by day, consecutive
      bubbles sit 3px apart with one tail per group, one avatar per group, one time per group. */
@@ -535,7 +539,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
         ) : msgs.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: 22, padding: '0 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><Avatar c={c} person={person} size={56} /></div>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>{T('Message {name}', { name: title })}</div>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>{T('Message {name}', { name: inlineTitle })}</div>
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.55 }}>{c?.blurb ? `${T(c.blurb)}. ` : ''}{T('Say what you need. A real person picks it up.')}</div>
           </div>
         ) : groups.map((g, gi) => {
@@ -568,7 +572,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
       {/* composer: a glass pill with the send button inside it */}
       <div style={{ flexShrink: 0, padding: '8px 14px calc(96px + env(safe-area-inset-bottom))', background: '#fff' }}>{/* clears the floating bottom nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 48, borderRadius: 24, padding: '0 5px 0 16px', background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={T('Message {name}…', { name: title })} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14.5, color: C.ink, fontFamily: 'inherit', outline: 'none', padding: 0 }} />
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={T('Message {name}…', { name: inlineTitle })} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14.5, color: C.ink, fontFamily: 'inherit', outline: 'none', padding: 0 }} />
           <button onClick={send} disabled={!input.trim() || sending} aria-label={T('Send')} style={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', border: 'none', background: input.trim() ? gradOf(hue) : '#e3e6e5', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', boxShadow: input.trim() ? glow(hue, 0.35) : 'none', transition: 'background .15s' }}>{sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}</button>
         </div>
       </div>
