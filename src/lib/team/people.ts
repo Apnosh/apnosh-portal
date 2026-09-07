@@ -101,11 +101,21 @@ const ROLE_OF_REQUEST: Record<string, RoleWord> = {
   other: 'Strategist',
 }
 
+/** What the caller actually draws. The people row is the only thing on Home, and the two
+ *  message reads behind `lag` and `ask` are a thousand rows each — nobody should pay for them
+ *  to render five faces. Off unless asked for. */
+export interface PeopleReads {
+  /** the median first-reply wait, for a surface that shows it */
+  lag?: boolean
+  /** the owner's latest question + whether it is answered, for the Get help clock */
+  ask?: boolean
+}
+
 /**
  * Every staff person with live work on this client, once each, with what they are on.
  * Best-effort throughout: a table that is not there yet drops its lane, never the answer.
  */
-export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
+export async function getOrderPeople(clientId: string, reads: PeopleReads = {}): Promise<OrderPeople> {
   const empty: OrderPeople = { people: [], replyLagMinutesMedian: null, latestAsk: null }
   if (!clientId) return empty
   const admin = createAdminClient()
@@ -115,8 +125,8 @@ export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
     admin.from('creator_work_orders').select('id, title, status, due_date, discipline, vendor_id, campaign_id').eq('client_id', clientId).limit(200).then((r) => r.data ?? [], () => []),
     admin.from('creative_requests').select('id, type, status, created_at').eq('client_id', clientId).limit(100).then((r) => r.data ?? [], () => []),
     currentStrategist(admin, clientId).catch(() => null),
-    replyLagMinutesMedian(clientId, 30).catch(() => null),
-    latestAsk(clientId).catch(() => null),
+    reads.lag ? replyLagMinutesMedian(clientId, 30).catch(() => null) : Promise.resolve(null),
+    reads.ask ? latestAsk(clientId).catch(() => null) : Promise.resolve(null),
   ])
 
   // The person on a house-team content piece is recorded on its campaign, not on the order row.

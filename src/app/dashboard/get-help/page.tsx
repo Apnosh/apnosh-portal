@@ -27,7 +27,8 @@ export default function GetHelpPage() {
     const id = client?.id
     if (!id) return
     let alive = true
-    fetch(`/api/dashboard/people?clientId=${id}`)
+    // Only the clock: the people list and the median wait belong to other screens.
+    fetch(`/api/dashboard/people?clientId=${id}&with=ask`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (alive && j?.latestAsk) setAsk(j.latestAsk as { askedAt: string; answeredAt: string | null }) })
       .catch(() => { /* no clock is fine; the promise line below still stands */ })
