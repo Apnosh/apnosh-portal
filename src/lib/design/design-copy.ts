@@ -285,14 +285,19 @@ export const DESIGN_LINES: Record<string, string> = {
   'cart.title': 'Your cart',
   'cart.sub': 'One more look, then confirm. Work starts right away.',
   'cart.confirm': 'Confirm order',
-  'cart.confirm.sub': 'Goes on your Apnosh bill. Nothing else to do.',
+  /* WHAT ACTUALLY HAPPENS, in the order it happens. A graphic order is the one desk order that
+   * still mints on placement and takes no card (the till charges one row per PaymentIntent and
+   * "add another graphic" places several at once). Nothing is charged today; the money row is
+   * written when the owner APPROVES the finished piece (accrueChargeForApprovedOrder), and that
+   * row is what an invoice is made from. So the line says exactly that and nothing more. */
+  'cart.confirm.sub': 'No charge today. We bill it after you approve the work.',
   'cart.change': 'Change something',
   'cart.another': 'Add another graphic',
   'cart.held': 'Also in your cart',
   'cart.remove': 'Remove',
   'cart.pieces': 'graphics in this order',
   'done.title.order': 'Order placed',
-  'done.sub.order': 'Your team has it and work starts now. Follow progress and talk to us in Your requests.',
+  'done.sub.order': 'Your team has it and work starts now. We bill it after you approve the finished work. Follow it in Your requests.',
 
   /* Request mode: the same flow while the rate card is unsigned. No numbers appear
    * anywhere; the seal sends a quote request instead of recording an order. */

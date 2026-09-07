@@ -18,6 +18,7 @@ import { refundOwedCents } from '@/lib/campaigns/refund-math'
 import { deskPaymentMatchesOrder, deskPaymentDue, AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
 import { workStarted } from '@/lib/campaigns/work-orders-core'
+import { DESIGN_LINES } from '@/lib/design/design-copy'
 import { Suite } from './lib'
 
 /** Every desk type the price sheet can price, with a plausible answer set. */
@@ -165,6 +166,21 @@ function main() {
   s.check('and an approved one', workStarted('approved'))
   s.check('a declined order never started', !workStarted('declined'))
   s.check('and neither did nothing at all', !workStarted(null) && !workStarted(undefined) && !workStarted(''))
+
+  s.group('The graphic order says what its money really does')
+  // The graphic lane still mints on placement and takes no card: the charge row is written when the
+  // OWNER APPROVES the finished piece, and an invoice is made from that row. "Goes on your Apnosh
+  // bill. Nothing else to do." was a bill that did not exist yet.
+  const confirmSub = DESIGN_LINES['cart.confirm.sub']
+  const doneSub = DESIGN_LINES['done.sub.order']
+  s.check('the confirm line no longer promises a bill nothing writes', !confirmSub.includes('Goes on your Apnosh bill'))
+  s.check('it says nothing is charged today', confirmSub.toLowerCase().includes('no charge today'))
+  s.check('and names the moment the money is real: approval', confirmSub.toLowerCase().includes('approve'))
+  s.check('the done line says the same thing, in the same words', doneSub.toLowerCase().includes('approve'))
+  s.check('and still says the work starts now, which it does', doneSub.includes('work starts now'))
+  for (const [k, line] of [['cart.confirm.sub', confirmSub], ['done.sub.order', doneSub]] as const) {
+    s.check(`${k}: no em dashes, no marketing`, !line.includes('—'))
+  }
 
   const ok = s.report('The desk through the till — one fee, one card form, one shut switch')
   process.exit(ok ? 0 : 1)
