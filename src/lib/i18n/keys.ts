@@ -170,6 +170,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Your friends', 'A friend', 'Nobody yet. Send your link to one owner you like.',
     // the four states a friend can be in (STATUS_WORD in lib/referrals/model.ts)
     'Signed up', 'First order in', 'You got your credit', 'Closed',
+    // the one void an owner can see the cause of from their own side
+    'Refunded, so no credit',
     'Your page', 'Show my page', 'Other owners see your name and your counted numbers. Nothing else.',
     'See my page',
     'Not yet', 'This opens once one of your orders has its number.',

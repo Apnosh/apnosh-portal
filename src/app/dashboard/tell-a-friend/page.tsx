@@ -16,9 +16,9 @@ import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpRow, MvpEmpty, MvpPill, MvpToggle, C } from '@/components/mvp/mvp-detail'
 import { useClient } from '@/lib/client-context'
 import { useLang } from '@/components/mvp/mvp-language'
-import { creditWords, referralLink, REFERRAL_CREDIT_CENTS, STATUS_WORD, type ReferralStatus } from '@/lib/referrals/model'
+import { creditWords, friendWord, referralLink, REFERRAL_CREDIT_CENTS, type ReferralStatus } from '@/lib/referrals/model'
 
-interface Friend { id: string; name: string; status: ReferralStatus; createdAt: string }
+interface Friend { id: string; name: string; status: ReferralStatus; createdAt: string; voidReason?: string | null }
 interface State {
   enabled: boolean; eligible: boolean; code: string | null
   friends: Friend[]; creditCents: number; featured: boolean; slug: string | null
@@ -141,7 +141,7 @@ export default function TellAFriendPage() {
                   icon={<Users size={18} />}
                   hue="nights"
                   label={f.name || T('A friend')}
-                  right={<MvpPill tone={TONE[f.status]} label={T(STATUS_WORD[f.status])} dot />}
+                  right={<MvpPill tone={TONE[f.status]} label={T(friendWord(f.status, f.voidReason))} dot />}
                 />
               ))}
             </MvpGroup>

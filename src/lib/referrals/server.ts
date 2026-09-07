@@ -104,6 +104,8 @@ export interface FriendRow {
   name: string
   status: ReferralStatus
   createdAt: string
+  /** why it closed, when it did. The page turns a refund into its own honest word. */
+  voidReason?: string | null
 }
 
 export interface ReferralState {
@@ -134,11 +136,11 @@ export async function referralStateFor(clientId: string): Promise<ReferralState>
   try {
     const { data } = await admin
       .from('referrals')
-      .select('id, referred_client_id, status, created_at')
+      .select('id, referred_client_id, status, created_at, void_reason')
       .eq('referrer_client_id', clientId)
       .order('created_at', { ascending: false })
       .limit(100)
-    const rows = (data ?? []) as { id: string; referred_client_id: string; status: string; created_at: string }[]
+    const rows = (data ?? []) as { id: string; referred_client_id: string; status: string; created_at: string; void_reason: string | null }[]
     const names = new Map<string, string>()
     if (rows.length) {
       const { data: cs } = await admin.from('clients').select('id, name').in('id', rows.map((r) => r.referred_client_id))
@@ -151,6 +153,7 @@ export async function referralStateFor(clientId: string): Promise<ReferralState>
       name: (names.get(r.referred_client_id) || '').split(' ')[0] || '',
       status: r.status as ReferralStatus,
       createdAt: r.created_at,
+      voidReason: r.void_reason,
     }))
   } catch (e) { warn('could not read the friends', e) }
   try {

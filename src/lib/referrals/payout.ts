@@ -21,7 +21,7 @@ import { SETTLED_STATUSES } from '@/lib/campaigns/refund-math'
 import { getPromiseRows } from '@/lib/promises/read'
 import { notifyClientOwners } from '@/lib/notifications'
 import { newnessFor } from './server'
-import { REFERRAL_CREDIT_CENTS, creditWords, nextStatus, readyToCredit, referralBlock, type ReferralStatus } from './model'
+import { REFERRAL_CREDIT_CENTS, REFUND_VOID_REASON, creditWords, nextStatus, readyToCredit, referralBlock, type ReferralStatus } from './model'
 
 const warn = (where: string, e: unknown) =>
   console.warn(`[referrals] ${where} (apply migration 261?):`, e instanceof Error ? e.message : e)
@@ -44,7 +44,7 @@ interface Row {
   created_at: string
 }
 
-interface Order { id: string; status: string; campaign_id: string | null; created_at: string; paid_at: string | null }
+interface Order { id: string; status: string; campaign_id: string | null; created_at: string; paid_at: string | null; client_credit_id?: string | null }
 
 /**
  * The referred client's first order PAID AFTER THE REFERRAL WAS MADE, or null while there is none.
@@ -61,7 +61,7 @@ async function firstPaidOrder(clientId: string, afterIso: string) {
   const admin = createAdminClient()
   const { data } = await admin
     .from('campaign_payments')
-    .select('id, status, campaign_id, created_at, paid_at')
+    .select('id, status, campaign_id, created_at, paid_at, client_credit_id')
     .eq('client_id', clientId)
     // SETTLED, not COLLECTED. A disputed charge is money the bank is holding while it decides,
     // and paying a referrer $50 off it is giving away real money on a charge that may be about to
@@ -133,6 +133,20 @@ async function facts(clientId: string) {
   }
 }
 
+/**
+ * Hand a credit back after the order that used it was refunded. The hold is cleared and the row's
+ * cached consumed_cents is reset; what the credit is really worth is worked out from the payments
+ * ledger every time it is claimed (claimFriendCredit), and a refunded payment is not in it.
+ */
+async function reopenCredit(creditId: string): Promise<void> {
+  try {
+    await createAdminClient().from('client_credits')
+      .update({ consumed_cents: 0, held_cents: 0, consumed_at: null, consumed_intent_id: null })
+      .eq('id', creditId)
+      .is('voided_at', null)
+  } catch (e) { warn('could not give the credit back', e) }
+}
+
 async function voidReferral(id: string, reason: string): Promise<boolean> {
   try {
     const { data } = await createAdminClient().from('referrals')
@@ -171,7 +185,7 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
     try {
       const order = r.referred_payment_id
         ? await (async () => {
-            const { data } = await admin.from('campaign_payments').select('id, status, campaign_id, created_at, paid_at').eq('id', r.referred_payment_id as string).maybeSingle()
+            const { data } = await admin.from('campaign_payments').select('id, status, campaign_id, created_at, paid_at, client_credit_id').eq('id', r.referred_payment_id as string).maybeSingle()
             return (data as Order | null) ?? null
           })()
         : await firstPaidOrder(r.referred_client_id, r.created_at)
@@ -199,7 +213,12 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
       const money = await moneyState(order.id)
       if (money === 'held') continue           // disputed: decide nothing today, void nothing
       if (money === 'gone') {
-        if (!opts.dryRun && await voidReferral(r.id, 'the order was refunded in full')) voided += 1
+        // THE FRIEND'S $50 GOES BACK TOO. Their order was sent back in full, so the credit it was
+        // spent on was never really spent: the refunded payment drops out of the ledger sum the
+        // checkout claims against, and clearing the stale hold here means the row on their account
+        // reads the same way the arithmetic already does.
+        if (!opts.dryRun && order.client_credit_id) await reopenCredit(order.client_credit_id)
+        if (!opts.dryRun && await voidReferral(r.id, REFUND_VOID_REASON)) voided += 1
         else if (opts.dryRun) voided += 1
         continue
       }

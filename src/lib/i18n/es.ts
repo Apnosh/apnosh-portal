@@ -374,6 +374,7 @@ export const ES: Record<string, string> = {
   'First order in': 'Ya hizo su primer pedido',
   'You got your credit': 'Ya tienes tu crédito',
   'Closed': 'Cerrado',
+  'Refunded, so no credit': 'Le devolvimos el dinero, así que no hay crédito',
   'Your page': 'Tu página',
   'Show my page': 'Mostrar mi página',
   'Other owners see your name and your counted numbers. Nothing else.':

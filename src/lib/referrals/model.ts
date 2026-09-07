@@ -208,6 +208,25 @@ export const STATUS_WORD: Record<ReferralStatus, string> = {
   void: 'Closed',
 }
 
+/**
+ * The reason a refund writes into referrals.void_reason. A constant because the payout writes it
+ * and the owner's page reads it back to say the honest word — a string typed twice would drift and
+ * an owner would be told "Closed" for an order they watched come back.
+ */
+export const REFUND_VOID_REASON = 'the order was refunded in full, so the credit went back'
+
+/**
+ * The word beside a friend's name. 'Closed' is true of every void but tells an owner nothing; when
+ * we know the order came back, say that instead, because it is the one void an owner can see the
+ * cause of from their own side.
+ */
+export function friendWord(status: ReferralStatus, voidReason?: string | null): string {
+  if (status === 'void' && (voidReason ?? '').startsWith('the order was refunded in full')) {
+    return 'Refunded, so no credit'
+  }
+  return STATUS_WORD[status]
+}
+
 /* ── What is LEFT of a credit ────────────────────────────────────────────────
    The one place that decides how much of a $50 credit a checkout may take, so the checkout, the
    owner's balance and the sim all read the same arithmetic. */

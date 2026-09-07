@@ -13,7 +13,7 @@
 import {
   CODE_CHARSET, CODE_BANNED, CODE_LENGTH, makeCode, normalizeCode, isCodeShape, referralLink,
   REFERRAL_CREDIT_CENTS, NEW_CLIENT_DAYS, creditWords, nextStatus, readyToCredit, referralBlock, normalizePhone,
-  creditAvailableCents, liveHoldCents, CREDIT_HOLD_MS, STATUS_WORD,
+  creditAvailableCents, liveHoldCents, CREDIT_HOLD_MS, STATUS_WORD, friendWord, REFUND_VOID_REASON,
   type ReferralStatus, type ReferralEvent, type CreditRowState,
 } from '@/lib/referrals/model'
 import { checkoutBill, applyFriendCredit, feeCentsOn, preTaxFromRow, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
@@ -87,6 +87,12 @@ function main() {
   s.check('a count on an unpaid signup does not', !readyToCredit({ status: 'signed_up' }, true))
   s.check('every state has a word an owner can read',
     (['signed_up', 'first_order_paid', 'credited', 'void'] as ReferralStatus[]).every((st) => !!STATUS_WORD[st]?.trim()))
+  s.eq('a refund says so, not just "Closed"', friendWord('void', REFUND_VOID_REASON), 'Refunded, so no credit')
+  s.eq('a void for anything else is still Closed', friendWord('void', 'same phone'), 'Closed')
+  s.eq('a void with no reason on it is still Closed', friendWord('void', null), 'Closed')
+  s.eq('the refund word never lands on a live referral', friendWord('first_order_paid', REFUND_VOID_REASON), 'First order in')
+  s.check('the reason the payout writes is the reason the page reads',
+    REFUND_VOID_REASON.startsWith('the order was refunded in full'), REFUND_VOID_REASON)
 
   /* ── 3. the credit on the bill ───────────────────────────────────────── */
   s.group('the credit comes off BEFORE the fee and the tax')
