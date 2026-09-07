@@ -161,6 +161,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const { reanchorPromise } = await import('@/lib/promises/record')
       await reanchorPromise({ campaignId: row.campaign_id as string | null, serviceId: row.service_id as string | null, deliveredISO: update.delivered_at as string })
     })().catch(() => {})
+
+    // MONEY: a delivered service now writes its money row (campaign_charges, source 'service').
+    // Before this, service work was invisible to the ledger — which is why a stopped prepaid
+    // campaign could say "Nothing is owed" while the team had already done the work. Idempotent
+    // and best-effort by contract; a failure here never un-delivers the order.
+    ;(async () => {
+      const { accrueChargeForDeliveredService } = await import('@/lib/campaigns/work-orders')
+      await accrueChargeForDeliveredService(id)
+    })().catch((e) => console.warn('[service-wo] charge accrual failed', (e as Error)?.message))
+
     const { notifyClientOwners } = await import('@/lib/notifications')
     await notifyClientOwners(row.client_id as string, {
       kind: 'client_signoff',
