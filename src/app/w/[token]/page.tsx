@@ -29,7 +29,7 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getClientLanguage } from '@/lib/i18n/language'
 import { t, localeOf } from '@/lib/i18n/t'
-import { isShareToken, isWin, renderCardWords } from '@/lib/love/win'
+import { isShareToken, isWin, metricKeyOf, renderCardWords } from '@/lib/love/win'
 import WinCard from '@/components/mvp/win-card'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +54,7 @@ export default async function PublicWinPage({ params }: { params: Promise<{ toke
         .select('*')
         .eq('share_token', token)
         .maybeSingle()
-      if (row && isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true })) {
+      if (row && isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true, metricKey: metricKeyOf(row.metadata) })) {
         const clientId = String(row.client_id)
         const [{ data: client }, l] = await Promise.all([
           admin.from('clients').select('name').eq('id', clientId).maybeSingle(),

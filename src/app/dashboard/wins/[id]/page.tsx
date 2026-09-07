@@ -21,7 +21,7 @@ import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getClientLanguage } from '@/lib/i18n/language'
 import { t, localeOf } from '@/lib/i18n/t'
-import { isWin, renderCardWords } from '@/lib/love/win'
+import { isWin, metricKeyOf, renderCardWords } from '@/lib/love/win'
 import WinCard from '@/components/mvp/win-card'
 import ShareRow from './share-row'
 
@@ -48,7 +48,7 @@ export default async function WinPage({ params, searchParams }: {
   ])
 
   const T = (k: string) => t(k, lang)
-  const good = !!row && isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true })
+  const good = !!row && isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true, metricKey: metricKeyOf(row.metadata) })
   /* the month the win happened in. A row with no readable fired_at gets no month rather than the
      words "Invalid Date" printed on something the owner is about to send somebody. */
   const fired = row?.fired_at ? new Date(String(row.fired_at)) : null

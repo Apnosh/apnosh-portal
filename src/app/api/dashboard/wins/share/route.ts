@@ -23,7 +23,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { userMayReadClient } from '@/lib/auth/client-access'
-import { isWin, newShareToken } from '@/lib/love/win'
+import { isWin, metricKeyOf, newShareToken } from '@/lib/love/win'
 import { isStaffRole } from '@/lib/auth/roles'
 
 export const dynamic = 'force-dynamic'
@@ -46,7 +46,9 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient()
   const { data: row, error } = await admin
     .from('proof_cards')
-    .select('id, card_key, card_type, big, is_sample, share_token')
+    // select('*') so metadata (pre-262) and share_token (pre-260) being absent cannot error
+    // the read; the metric on it says how to read a rating's line.
+    .select('*')
     .eq('client_id', clientId)
     .eq('card_key', cardKey)
     .maybeSingle()
@@ -61,7 +63,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   if (!row) return NextResponse.json({ error: 'no such card' }, { status: 404 })
-  if (!isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true })) {
+  if (!isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true, metricKey: metricKeyOf(row.metadata) })) {
     return NextResponse.json({ error: 'that card is not a win' }, { status: 400 })
   }
 

@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Trophy, ChevronRight } from 'lucide-react'
 import { presentCardType } from '@/lib/proof/present'
-import { isWin, renderCardWords } from '@/lib/love/win'
+import { isWin, metricKeyOf, renderCardWords } from '@/lib/love/win'
 import { useClient } from '@/lib/client-context'
 import { useLang } from '@/components/mvp/mvp-language'
 import MvpShell from '@/components/mvp/mvp-shell'
@@ -47,6 +47,8 @@ export default function WinsPage() {
             cardType: String(c.card_type ?? ''),
             big: String(c.big ?? ''),
             isSample: c.is_sample === true,
+            // a rating's line is a pair; the metric says to read the half that is true today
+            metricKey: metricKeyOf(c.metadata),
           }))
           .map((c: Record<string, unknown>) => ({
             id: String(c.card_key ?? c.id),

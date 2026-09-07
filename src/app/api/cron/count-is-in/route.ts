@@ -20,7 +20,8 @@
  * nobody could send is not retried every morning for the rest of the year. Pre-258 the column is
  * absent: the stamp fails, nothing is sent, and the run says which SQL to apply.
  *
- * AND THE COUNT BECOMES A CARD. A promise that lands 'counted' with a real number also composes
+ * AND THE COUNT BECOMES A CARD. A promise that lands 'counted' with a real number that went the
+ * right way (the ledger's own tone: up, or flat with nothing before it) also composes
  * one proof card (card_type 'promise_counted', migration 262) — the ONE kind of card the product
  * calls a win, the only kind the wins shelf lists and the only kind that can be given a public
  * link. That is what makes "Counted by Apnosh" on the foot of a shared card true: every win is an
@@ -56,8 +57,8 @@ type StoredPromise = Record<string, unknown>
 /**
  * The card this kept promise makes, written once.
  *
- * Only a 'counted' row with a positive number gets one; a not_counted promise is an honest notice
- * and never a card, because there is nothing on it to show anybody
+ * Only a 'counted' row whose number is positive AND went the right way gets one; a not_counted
+ * promise is an honest notice and never a card, because there is nothing on it to show anybody
  * (src/lib/promises/lines.ts countedCardWords decides, and is proved in scripts/verify-wins.ts).
  *
  * Both forms are stored: the English sentences in label/big/context, so anything reading the row
@@ -75,6 +76,9 @@ async function composeCountedCard(
 ): Promise<'fired' | 'nothing-to-show' | 'blocked'> {
   const words = countedCardWords({
     state: row.state,
+    // The ledger's own reading of which way this number moved. A promise that went DOWN makes no
+    // card at all, so a rating that fell can never become something the owner is told to show.
+    tone: row.tone,
     label: row.label,
     metricKey: String(stored?.metric_key ?? ''),
     metricLabel: String(stored?.metric_label ?? ''),
@@ -97,6 +101,9 @@ async function composeCountedCard(
     metadata: {
       words: { label: words.label, big: words.big, context: words.context },
       promiseId: row.id,
+      // What was counted, so a reader can tell a rating (a pair, "4.5 → 4.7") from a plain count
+      // and read the right half of it. src/lib/love/win.ts winNumber is the reader.
+      metricKey: String(stored?.metric_key ?? ''),
       campaignId: row.campaignId,
       requestId: row.requestId,
     },

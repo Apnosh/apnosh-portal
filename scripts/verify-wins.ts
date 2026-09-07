@@ -8,6 +8,8 @@
  *      "connect Google" state card, a seeded sample and a card whose big line has no number in it
  *      must never get a Show someone button — because the button mints a PUBLIC page that says
  *      "Counted by Apnosh" at the foot, and nobody counted a week that happened on its own.
+ *      Nor is a number that went the WRONG WAY: "4.7 → 4.5" is a rating that fell, and both
+ *      halves of it are positive, so the direction has to be part of the rule at both ends.
  *   2. THE SHARE TOKEN IS AN ADDRESS NOBODY CAN GUESS. Long, from real randomness, and shaped so a
  *      junk URL is rejected before it ever reaches the database.
  *   3. THE REPORT NEVER PRINTS A NUMBER IT DOES NOT HAVE. A chapter with nothing in it gets the
@@ -43,13 +45,14 @@ function check(name: string, ok: boolean | (() => boolean), detail?: string) {
   console.log(`  FAIL ${name}${detail ? `  →  ${detail}` : ''}`)
 }
 
-const win = (over: Partial<{ cardKey: string; cardType: string; big: string; isSample: boolean }> = {}) => ({
+const win = (over: Partial<{ cardKey: string; cardType: string; big: string; isSample: boolean; metricKey: string }> = {}) => ({
   cardKey: 'promise:8f1c', cardType: 'promise_counted', big: '41 taps on your Google card', ...over,
 })
 
 /** A ledger row whose count is in, as countedCardWords reads it. */
 const counted = (over: Partial<Parameters<typeof countedCardWords>[0]> = {}) => ({
   state: 'counted' as const,
+  tone: 'up' as const,
   label: 'Taco Tuesday push',
   metricKey: 'gbp_card_taps',
   metricLabel: 'taps on your Google card',
@@ -73,6 +76,14 @@ console.log('\n1. What counts as a win')
   check('a counted promise with no number is NOT a win', !isWin(win({ big: 'Not counted' })))
   check('a counted promise whose number is zero is NOT a win', !isWin(win({ big: '0 taps on your Google card' })))
   check('a counted promise whose number went backwards is NOT a win', !isWin(win({ big: '-5 taps on your Google card' })))
+  // A rating is a pair and both halves are positive, so the direction is the only thing that
+  // tells a rise from a fall. A card written before the composer learned this is caught here.
+  check('a rating that FELL is NOT a win',
+    !isWin(win({ big: '4.7 → 4.5 your rating since you started', metricKey: 'rating' })))
+  check('a rating that rose IS a win',
+    isWin(win({ big: '4.5 → 4.7 your rating since you started', metricKey: 'rating' })))
+  check('a rating that held IS a win',
+    isWin(win({ big: '4.7 → 4.7 your rating since you started', metricKey: 'rating' })))
 
   check('there is exactly one winning type', isWinType(WIN_TYPE) && !isWinType('gbp_week') && !isWinType('post') && !isWinType('reviews_waiting'))
   check('the winning type is still mint on Home', winTypeIsMint())
@@ -82,6 +93,11 @@ console.log('\n1. What counts as a win')
   check('a minus belongs to the number after it', winNumber('-5 calls') === null && winNumber('−5 calls') === null)
   check('no digits means no number', winNumber('Start your first campaign') === null)
   check('zero is not a number worth showing', winNumber('0 calls') === null)
+  // The composer gates a rating on its LAST number; so does this, or the two disagree about the
+  // same card and one of them mints a public page the other would refuse.
+  check('a rating reads the number it is NOW', winNumber('4.5 → 4.7 average', 'rating') === 4.7)
+  check('a rating that fell has no number to show', winNumber('4.7 → 4.5 average', 'rating') === null)
+  check('a rating with nothing before it reads itself', winNumber('4.7 average', 'rating') === 4.7)
   check('rubbish in is null out', winNumber('') === null && winNumber(undefined as unknown as string) === null)
 }
 
@@ -104,6 +120,25 @@ console.log('\n1b. The card a counted promise makes')
   // A rating reads "4.5 → 4.7"; the number that is true today is the second one.
   check('a rating takes the number it is NOW', countedCardWords(counted({ metricKey: 'rating', value: '4.5 → 4.7' }))?.n === 4.7)
   check('every other metric takes the number it leads with', countedCardWords(counted({ value: '41' }))?.n === 41)
+
+  /* THE DIRECTION IS PART OF THE RULE. Both halves of "4.7 → 4.5" are positive numbers, so
+     until the ledger's tone came in here a rating that FELL composed a card, and the card became a
+     public win that said "Counted by Apnosh". read.ts writes tone 'down' for exactly that row. */
+  check('a rating that FELL makes no card',
+    countedCardWords(counted({ metricKey: 'rating', value: '4.7 → 4.5', tone: 'down' })) === null)
+  check('a rating that ROSE makes a card',
+    countedCardWords(counted({ metricKey: 'rating', value: '4.5 → 4.7', tone: 'up' }))?.n === 4.7)
+  check('a count that came in UNDER what it was before makes no card',
+    countedCardWords(counted({ value: '13', tone: 'down' })) === null)
+  check('a count that held level still makes a card',
+    countedCardWords(counted({ value: '41', tone: 'flat' }))?.n === 41)
+
+  // The composer and the win rules have to agree about the SAME row, or one of them mints a
+  // public page the other would have refused.
+  check('the composer and the win rules agree about a rating that fell', () => {
+    const fell = countedCardWords(counted({ metricKey: 'rating', value: '4.7 → 4.5', tone: 'down' }))
+    return fell === null && !isWin({ cardKey: 'promise:8f1c', cardType: WIN_TYPE, big: '4.7 → 4.5 your rating since you started', metricKey: 'rating' })
+  })
 
   // The card the composer stores, and the card a reader draws from it, are the same card.
   const stored = { words: { label: c!.label, big: c!.big, context: c!.context } }

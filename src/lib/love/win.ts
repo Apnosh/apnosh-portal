@@ -16,8 +16,8 @@
  * Three locks, and all three have to hold:
  *   1. card_type is 'promise_counted' — a promise the owner bought, counted on its own day;
  *   2. it is not a SAMPLE — the seeded demo cards are real rows and must never get a public page;
- *   3. it carries a positive number, because "0 taps" is true and is not something to show a
- *      friend.
+ *   3. it carries a positive number that went the RIGHT WAY, because "0 taps" is true and is not
+ *      something to show a friend, and neither is a rating that fell from 4.7 to 4.5.
  *
  * Pure — no server imports, no clock, no I/O — so the page, the API and scripts/verify-wins.ts all
  * read the same rules.
@@ -39,23 +39,51 @@ export interface WinInput {
   big: string
   /** proof_cards.is_sample — a seeded demo card is never a win */
   isSample?: boolean
+  /** proof_cards.metadata.metricKey — 'rating' reads its line as a pair. See winNumber. */
+  metricKey?: string
+}
+
+/** Every number in a line, in order. A leading minus belongs to the number after it. */
+function numbersIn(big: string): number[] {
+  const out: number[] = []
+  for (const m of String(big ?? '').matchAll(/[-−]?\d[\d,]*(\.\d+)?/g)) {
+    const n = Number(m[0].replace(/,/g, '').replace('−', '-'))
+    if (Number.isFinite(n)) out.push(n)
+  }
+  return out
+}
+
+/** The metric a stored card was counted on, off its metadata. A card written before this has none. */
+export function metricKeyOf(metadata: unknown): string | undefined {
+  const k = (metadata as { metricKey?: unknown } | null)?.metricKey
+  return typeof k === 'string' && k ? k : undefined
 }
 
 /**
- * The first real number in the card's big line, or null when there is not one.
+ * The card's own number, or null when there is not one worth showing.
  *
  * Reads the line the owner reads rather than a separate field, because the big line IS the claim:
  * "2,418 people saw it" is a win, "Start your first campaign" is not, and no column anywhere says
  * which is which. Thousands separators are stripped so 2,418 counts as 2418 and not as 2.
  * A zero is not a win — "0 calls" is a true sentence and a terrible thing to hand a friend.
+ *
+ * A RATING IS A PAIR, AND THE PAIR IS THE WHOLE STORY. "4.7 → 4.5" is a rating that FELL, and both
+ * halves of it are positive, so reading the first number called it a win. The number that is true
+ * today is the SECOND one — the same one src/lib/promises/lines.ts composes the card on — and a
+ * pair that ends lower than it started is not a number to hand anybody, whatever its value. That
+ * closes the door on cards written before the composer learned the same rule.
  */
-export function winNumber(big: string): number | null {
+export function winNumber(big: string, metricKey?: string): number | null {
   // The minus sign belongs to the number after it. Without it "-5 calls" read as 5 and a card
   // that went BACKWARDS was a win.
-  const m = String(big ?? '').match(/[-−]?\d[\d,]*(\.\d+)?/)
-  if (!m) return null
-  const n = Number(m[0].replace(/,/g, '').replace('−', '-'))
-  return Number.isFinite(n) && n > 0 ? n : null
+  const nums = numbersIn(big)
+  if (!nums.length) return null
+  if (metricKey === 'rating') {
+    const last = nums[nums.length - 1]
+    if (last < nums[0]) return null
+    return last > 0 ? last : null
+  }
+  return nums[0] > 0 ? nums[0] : null
 }
 
 /**
@@ -74,7 +102,7 @@ export function isWin(card: WinInput): boolean {
   // Belt and braces: the computed state cards have no row, so they can never carry a token.
   if (typeof card.cardKey === 'string' && card.cardKey.startsWith('state-')) return false
   if (card.isSample) return false
-  return winNumber(card.big) !== null
+  return winNumber(card.big, card.metricKey) !== null
 }
 
 /** Still mint on Home, by the same table the deck reads. Proved in scripts/verify-wins.ts. */
