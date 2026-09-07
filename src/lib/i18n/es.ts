@@ -540,4 +540,50 @@ export const ES: Record<string, string> = {
   'What worked: {n} posts went out.': 'Lo que funcionó: salieron {n} publicaciones.',
   'Not counted yet. When the numbers come in, they show up here.':
     'Todavía no se cuenta. Cuando lleguen los números, aparecen aquí.',
+  /* ── Move 8: tell a friend ────────────────────────────────────────────────────────────── */
+  'Tell a friend': 'Dile a un amigo',
+  'Know an owner who would like this?': '¿Conoces a un dueño al que le serviría esto?',
+  'Give {amount}, get {amount}.': 'Regala {amount}, recibe {amount}.',
+  'Your code': 'Tu código',
+  'Send this link': 'Manda este enlace',
+  'Copied': 'Copiado',
+  'They get {amount} off their first order. You get {amount} when their first order gets its number.':
+    'Ellos reciben {amount} de descuento en su primer pedido. Tú recibes {amount} cuando ese primer pedido ya tiene su número.',
+  'Your credit': 'Tu crédito',
+  '{amount} on your account': '{amount} en tu cuenta',
+  '{amount} of it is on hold in a checkout you left open.': 'Hay {amount} apartado en un pago que dejaste abierto.',
+  'It comes off your next order.': 'Se descuenta de tu próximo pedido.',
+  'Your friends': 'Tus amigos',
+  'A friend': 'Un amigo',
+  'Nobody yet. Send your link to one owner you like.': 'Todavía nadie. Manda tu enlace a un dueño que te caiga bien.',
+  'Signed up': 'Ya se registró',
+  'First order in': 'Ya hizo su primer pedido',
+  'You got your credit': 'Ya tienes tu crédito',
+  'Closed': 'Cerrado',
+  'Refunded, so no credit': 'Le devolvimos el dinero, así que no hay crédito',
+  'Your page': 'Tu página',
+  'Show my page': 'Mostrar mi página',
+  'Other owners see your name and your counted numbers. Nothing else.':
+    'Otros dueños ven tu nombre y tus números contados. Nada más.',
+  'See my page': 'Ver mi página',
+  'Not yet': 'Todavía no',
+  'This opens once one of your orders has its number.': 'Esto se abre cuando uno de tus pedidos ya tiene su número.',
+  'Not open yet': 'Todavía no está abierto',
+  'This is not running yet.': 'Esto todavía no está funcionando.',
+  'Your friend {name} sent you.': 'Te recomendó tu amigo {name}.',
+  'A friend sent you.': 'Te recomendó un amigo.',
+  '{amount} off your first order.': '{amount} de descuento en tu primer pedido.',
+  'An owner on Apnosh': 'Un dueño en Apnosh',
+  'What we counted for them': 'Los números que contamos para ellos',
+  'Real numbers from their account, counted after the work went live.':
+    'Números reales de su cuenta, contados después de que el trabajo salió.',
+  'Start with {amount} off': 'Empieza con {amount} de descuento',
+  'Start with Apnosh': 'Empieza con Apnosh',
+  '{name} sent you. Your first order starts with {amount} off.':
+    '{name} te recomendó Apnosh. Tu primer pedido empieza con {amount} de descuento.',
+  '{name} works with Apnosh.': '{name} trabaja con Apnosh.',
+  // the notice the referrer gets the day their friend's number lands
+  'Your {amount} friend credit is here': 'Tu crédito de {amount} por recomendar ya está aquí',
+  "Your friend's first order got its number, so your {amount} is on your account. It comes off your next order.":
+    'El primer pedido de tu amigo ya tiene su número, así que tus {amount} están en tu cuenta. Se descuentan de tu próximo pedido.',
 }

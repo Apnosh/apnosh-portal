@@ -30,6 +30,7 @@
     "sim:mechanisms": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/mechanisms.ts",
     "sim:money": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/refund-math.ts",
     "sim:ship-guard": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/ship-guard.ts",
+    "sim:referral": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/referral.ts",
     "smoke:plan": "tsx scripts/smoke-render-slow-nights.tsx"
   },
   "dependencies": {

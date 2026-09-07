@@ -9,6 +9,7 @@ import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
 import { deskBill, deskQuoteOrigin } from '@/lib/requests/desk-bill'
 import { deskPaymentMatchesOrder } from '@/lib/requests/desk-guards'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { friendCreditOverApplied } from '@/lib/referrals/server'
 
 function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
@@ -75,6 +76,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not verify payment.' }, { status: 502 })
   }
 
+  // THE CREDIT, PRICED AGAIN AT THE LAST MOMENT. The money is real and is recorded either way —
+  // never lose a payment — but a discount that was already spent on another order must not be
+  // recorded as though it were real, or nothing anywhere says the owner was undercharged. When it
+  // was, the row is written with no credit on it and every admin is paged. Best-effort: a database
+  // without migration 261 has no credit columns, so this is a clean no-op.
+  const overApplied = await friendCreditOverApplied({
+    intentId: paymentIntentId,
+    clientId: row.client_id as string,
+    creditId: (row.client_credit_id as string | null) ?? null,
+    rowCreditCents: (row.friend_credit_cents as number | null) ?? 0,
+  }).catch(() => false)
+
   const nowISO = new Date().toISOString()
   await paymentsTable()
     .update({
@@ -82,6 +95,7 @@ export async function POST(req: NextRequest) {
       campaign_id: campaignId ?? row.campaign_id ?? null,
       paid_at: nowISO,
       ...(campaignId ? { shipped_at: nowISO } : {}),
+      ...(overApplied ? { friend_credit_cents: 0 } : {}),
     })
     .eq('stripe_payment_intent_id', paymentIntentId)
 
@@ -134,6 +148,22 @@ async function completeDeskOrder(paymentIntentId: string, requestId: string, pay
   const clientId = String(payRow.client_id ?? '')
   const taxCalculationId = (payRow.stripe_tax_calculation_id as string | null) ?? null
 
+  // ALREADY DONE — the same short-circuit the cart lane has above. A retry (a double tap, a
+  // refreshed tab, the webhook backstop getting here first) must be a no-op, not a second run
+  // through the money checks on a row that is already paid. The row has to name THIS order and
+  // the order has to be finished, so a paid payment for something else can never be answered here.
+  if (String(payRow.status ?? '') === 'paid' && (payRow.request_id as string | null) === requestId) {
+    const { data: doneRaw } = await createAdminClient()
+      .from('creative_requests')
+      .select('paid_at, work_order_id')
+      .eq('id', requestId)
+      .maybeSingle()
+    const done = doneRaw as { paid_at?: string | null; work_order_id?: string | null } | null
+    if (done?.paid_at && done.work_order_id) {
+      return NextResponse.json({ ok: true, requestId, workOrderId: String(done.work_order_id) })
+    }
+  }
+
   // Stripe's copy of the same fact. The intent was created by our own prepare route with the
   // order's id on it; an intent that does not say so is not this order's, whatever our row says.
   // A read we cannot make is a FAILURE, never a pass — this is the money path.
@@ -161,6 +191,18 @@ async function completeDeskOrder(paymentIntentId: string, requestId: string, pay
   if (!reqRow) return NextResponse.json({ error: 'That order does not exist.' }, { status: 404 })
   // Tenancy: the payment's client and the order's client must be the same account.
   if (String(reqRow.client_id ?? '') !== clientId) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+  // Same last look the cart takes, because a desk order carries a friend credit too. Done BEFORE
+  // the verify that stamps the row paid, and it never blocks the payment — it only stops a spent
+  // discount being recorded as a real one, and pages a person when it happens.
+  if (await friendCreditOverApplied({
+    intentId: paymentIntentId,
+    clientId,
+    creditId: (payRow.client_credit_id as string | null) ?? null,
+    rowCreditCents: (payRow.friend_credit_cents as number | null) ?? 0,
+  }).catch(() => false)) {
+    await paymentsTable().update({ friend_credit_cents: 0 }).eq('stripe_payment_intent_id', paymentIntentId)
+  }
 
   const cadence = reqRow.cadence === 'monthly' ? 'monthly' as const : 'once' as const
   const bill = deskBill(reqRow.quote_cents as number | null, cadence, deskQuoteOrigin(reqRow.brief))

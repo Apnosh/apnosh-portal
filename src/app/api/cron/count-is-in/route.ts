@@ -42,6 +42,7 @@ import { countedCardWords } from '@/lib/promises/lines'
 import { renderCardWords, WIN_TYPE } from '@/lib/love/win'
 import type { PromiseRow } from '@/lib/promises/read'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { runReferralPayouts } from '@/lib/referrals/payout'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -144,8 +145,19 @@ export async function GET(req: Request) {
   const { data, error } = await q
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
+  // MOVE 8, the referral step. It belongs on this cron and nowhere else: a referrer is paid when
+  // the friend's order reaches a counted number, which is the exact thing this run works out.
+  // Behind REFERRALS_ENABLED (it reads and writes nothing with the switch off), idempotent on
+  // referrals.credited_at, and wrapped — a referral that cannot settle must never stop an owner
+  // being told their count is in. It runs on a quiet day too: a count can land on a morning when
+  // there is no notice to send, because the notice for it went out earlier.
+  const settleReferrals = () => runReferralPayouts({ dryRun }).catch((e) => {
+    console.warn('[count-is-in] the referral step did not run:', e instanceof Error ? e.message : e)
+    return null
+  })
+
   const due = ((data ?? []) as Record<string, unknown>[]).filter((r) => !r.counted_notified_at)
-  if (!due.length) return NextResponse.json({ ok: true, dryRun, told: 0, skipped: 0, note: 'nothing due' })
+  if (!due.length) return NextResponse.json({ ok: true, dryRun, told: 0, skipped: 0, referrals: await settleReferrals(), note: 'nothing due' })
 
   // One read per CLIENT, not per promise: getPromiseRows already computes every row for a client,
   // with the same measurements and the same words the owner sees everywhere else.
@@ -235,5 +247,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, dryRun, told, skipped, stampFailed, wins, winsBlocked, outcomes: outcomes.slice(0, 50) })
+  return NextResponse.json({ ok: true, dryRun, told, skipped, stampFailed, wins, winsBlocked, referrals: await settleReferrals(), outcomes: outcomes.slice(0, 50) })
 }

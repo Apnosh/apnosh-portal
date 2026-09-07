@@ -113,6 +113,7 @@ const MVP_EXACT = new Set([
   '/dashboard/preferences', '/dashboard/people', '/dashboard/get-help', '/dashboard/whats-new', // the More tab's pages (owner 2026-09-05)
   '/dashboard/guests', // the guest list (send-rail audience) owns its full-screen chrome
   '/dashboard/wins', // the wins shelf renders its own MvpShell (Move 7b)
+  '/dashboard/tell-a-friend', // the referral page renders its own MvpShell (Move 8)
 ])
 const MVP_PREFIX = [
   '/dashboard/insights', // insights + its sub-routes (e.g. /insights/analyst) own their full-screen chrome

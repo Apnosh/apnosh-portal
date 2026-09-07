@@ -280,6 +280,40 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'What worked: {n} posts went out.',
     'Not counted yet. When the numbers come in, they show up here.',
   ],
+
+  /* MOVE 8 — the Home card, /dashboard/tell-a-friend, and the one line onboarding says on the
+     finish screen when a friend sent them. The public /owners/<slug> page draws these too; it is
+     rendered on the server in the OWNER's language. */
+  referral: [
+    'Tell a friend', 'Know an owner who would like this?', 'Give {amount}, get {amount}.',
+    'Your code', 'Send this link', 'Copied',
+    'They get {amount} off their first order. You get {amount} when their first order gets its number.',
+    'Your credit', '{amount} on your account', 'It comes off your next order.',
+    // said only while a checkout they left open is sitting on part of the balance
+    '{amount} of it is on hold in a checkout you left open.',
+    'Your friends', 'A friend', 'Nobody yet. Send your link to one owner you like.',
+    // the four states a friend can be in (STATUS_WORD in lib/referrals/model.ts)
+    'Signed up', 'First order in', 'You got your credit', 'Closed',
+    // the one void an owner can see the cause of from their own side
+    'Refunded, so no credit',
+    'Your page', 'Show my page', 'Other owners see your name and your counted numbers. Nothing else.',
+    'See my page',
+    'Not yet', 'This opens once one of your orders has its number.',
+    // the OTHER "no": the loop itself is shut, which is not the same thing
+    'Not open yet', 'This is not running yet.',
+    // the finish screen after setup
+    'Your friend {name} sent you.', 'A friend sent you.', '{amount} off your first order.',
+    // the public page
+    'An owner on Apnosh', 'What we counted for them',
+    'Real numbers from their account, counted after the work went live.',
+    'Start with {amount} off', 'Start with Apnosh',
+    '{name} sent you. Your first order starts with {amount} off.', '{name} works with Apnosh.',
+    // the notice the payout cron sends the referrer (src/lib/referrals/payout.ts)
+    'Your {amount} friend credit is here',
+    "Your friend's first order got its number, so your {amount} is on your account. It comes off your next order.",
+    // shared with other screens, drawn here too
+    'Loading…', 'Saved.', 'Could not save. Try again.', 'Saving...',
+  ],
 }
 
 /** Every key across every translated screen, once each. */

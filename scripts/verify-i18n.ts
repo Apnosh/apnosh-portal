@@ -144,6 +144,13 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
       'src/app/w/[token]/not-found.tsx',
     ],
     // `reply`, `chips` and `reportEmail` are data, not a screen.
+    // MOVE 8 — the referral surfaces: the Home card, the owner's page, and the public page a
+    // friend opens. All three draw every string through t(), so all three are read here.
+    referral: [
+      'src/components/mvp/tell-a-friend-card.tsx',
+      'src/app/dashboard/tell-a-friend/page.tsx',
+      'src/app/owners/[slug]/page.tsx',
+    ],
   }
 
   const listed = new Set([...allScreenKeys(), ...allShapeWords()])

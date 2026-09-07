@@ -17,6 +17,7 @@ import { completeOnboardingCRM } from '@/lib/onboarding-actions'
 import { readStoredLang, useLang } from '@/components/mvp/mvp-language'
 import { DEFAULT_LANG, isLang } from '@/lib/i18n/t'
 import { budgetCapForChip, budgetChipForCap } from '@/lib/goals/defaults'
+import { creditWords } from '@/lib/referrals/model'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -30,6 +31,12 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [logoUrl, setLogoUrl] = useState<string>('')
+  /* MOVE 8 — a friend sent them. The code arrives as ?ref= on the link they tapped, and as a
+     cookie set by /r/<code>, because signing up moves them here and a query param does not
+     survive that hop. Both are read; neither is trusted for anything but a lookup. Empty for
+     everybody else, which is everybody while REFERRALS_ENABLED is off. */
+  const [refCode, setRefCode] = useState('')
+  const [friend, setFriend] = useState<{ name: string; cents: number } | null>(null)
 
   // Derived screen info. The wizard groups each phase's questions onto one
   // scrollable screen, so navigation moves screen-by-screen, not step-by-step.
@@ -41,6 +48,16 @@ export default function OnboardingPage() {
   // The review screen carries its own Complete-setup pill (it sits next to the
   // terms checkbox it depends on), so the frame's bottom bar steps aside there.
   const isReviewScreen = !!currentScreen && currentScreen.includes('review')
+
+  /* The code they arrived with, read once. Nothing is looked up here: the finish line is drawn
+     only from the answer to the WRITE below, so a code that turns out not to be real — or a loop
+     that is shut — can never put a promise of $50 on the screen. */
+  useEffect(() => {
+    try {
+      setRefCode(new URLSearchParams(window.location.search).get('ref')
+        || (document.cookie.match(/(?:^|;\s*)apnosh_ref=([^;]+)/)?.[1] ?? ''))
+    } catch { /* no window */ }
+  }, [])
 
   // Load existing data on mount
   useEffect(() => {
@@ -334,6 +351,20 @@ export default function OnboardingPage() {
       preferred_language: isLang(data.preferred_language) ? data.preferred_language : (readStoredLang() ?? DEFAULT_LANG),
     })
 
+    /* MOVE 8 — the referral is written AFTER the client row exists, because it is a row about two
+       clients. Best-effort and awaited only so the finish screen can name the friend: a referral
+       that cannot be saved must never stop somebody finishing setup. */
+    if (refCode) {
+      await fetch('/api/referrals/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: refCode }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (j?.ok) setFriend({ name: (j.fromName as string) || '', cents: (j.creditCents as number) || 0 }) })
+        .catch(() => { /* the switch is off, or the tables are not there yet */ })
+    }
+
     setSaving(false)
     setShowSuccess(true)
   }
@@ -444,6 +475,11 @@ export default function OnboardingPage() {
       {loading ? (
         <OnboardingLoading />
       ) : (
+        <>
+        {/* MOVE 8 — said once, on the finish screen, and ONLY when the credit is really on the
+            account (the write above answered ok). It renders inside the frame so it reads in the
+            owner's own language. */}
+        {showSuccess && friend && <FriendCreditLine name={friend.name} cents={friend.cents} />}
         <StepRenderer
           screen={showSuccess ? 'success' : currentScreen}
           data={data}
@@ -458,8 +494,30 @@ export default function OnboardingPage() {
           businessId={businessId}
           onSaveBeforeRedirect={() => saveData(screenNo)}
         />
+        </>
       )}
     </OnboardingFrame>
+  )
+}
+
+/* The one line a referred owner reads at the end of setup. Kit tokens, no new colours: the mint
+   card the rest of the flow already uses. The amount comes from the write, not from a constant on
+   this screen, so the sentence cannot say $50 while the ledger says something else. */
+function FriendCreditLine({ name, cents }: { name: string; cents: number }) {
+  const { T } = useLang()
+  if (cents <= 0) return null
+  const amount = creditWords(cents)
+  return (
+    <div style={{
+      margin: '0 0 14px', padding: '11px 14px', borderRadius: 14,
+      background: '#eaf7f3', border: '1px solid rgba(74,189,152,0.30)',
+      fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13.5, color: '#1c6b52', lineHeight: 1.45,
+    }}>
+      <strong style={{ fontWeight: 700 }}>
+        {name ? T('Your friend {name} sent you.', { name }) : T('A friend sent you.')}
+      </strong>{' '}
+      {T('{amount} off your first order.', { amount })}
+    </div>
   )
 }
 
