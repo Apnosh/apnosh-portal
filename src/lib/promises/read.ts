@@ -69,6 +69,8 @@ export interface Landing {
   started: boolean
   /** it landed */
   delivered: boolean
+  /** the work is PAUSED waiting on the owner — nobody is making anything until they answer */
+  blocked: boolean
   /** the owner-facing note under the word */
   note: string
   /** the delivered file or page, when there is one to open */
@@ -112,6 +114,7 @@ async function landingsFor(clientId: string): Promise<{ byService: Map<string, L
       assigned: !!row.assignee_id,
       started: !!row.started_at || ['in_progress', 'blocked_client', 'blocked_gate', 'ready_for_client', 'delivered'].includes(row.status),
       delivered,
+      blocked: row.status === 'blocked_client',
       note: delivered ? (row.proof_note || 'Delivered · open it') : row.status === 'blocked_client' ? 'Waiting on you' : 'Being made',
       openUrl: delivered ? row.proof_url : null,
     })
@@ -124,6 +127,8 @@ async function landingsFor(clientId: string): Promise<{ byService: Map<string, L
       assigned: !!row.creator_id,
       started: workStarted(row.status),
       delivered,
+      // A creator order has no "waiting on the owner" status; only the service lane does.
+      blocked: false,
       note: delivered ? 'Delivered · open it' : 'Being made',
       openUrl: delivered ? row.delivered_url : null,
     })
@@ -227,6 +232,20 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
     // was ever meant to make anything (an owner-run line, a card-level row), so the dates decide.
     if (land && !land.delivered) {
       const started = land.started && land.assigned
+      // WAITING ON THE OWNER IS NOT PRODUCTION. A blocked order used to read "In production ·
+      // your team is on it" with "Waiting on you" underneath it — two opposite sentences on one
+      // card, and the one in the big type was the wrong one. Nobody is making anything until the
+      // owner answers, so it reads as ordered, and the line says what is holding it.
+      if (started && land.blocked) {
+        out.push({
+          ...base,
+          sub: `${p.metric_label} · waiting on you`,
+          value: 'Ordered',
+          small: 'waiting on you',
+          tone: 'wait',
+          state: 'ordered',
+        }); continue
+      }
       out.push({
         ...base,
         sub: started ? `${p.metric_label} · your team is on it` : `Ordered ${md(p.ordered_on)} · your team starts it next`,

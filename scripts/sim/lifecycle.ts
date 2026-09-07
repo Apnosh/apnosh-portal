@@ -863,7 +863,10 @@ s.group('Seven states: one pill, one line, one action, from one table')
     s.check(`${st}: has a line, and it is never empty`, lineFor(row(st)).trim().length > 0)
   }
 
-  s.eq('Ordered says the team has not started', lineFor(row('ordered')), 'Ordered · your team starts it next')
+  s.eq('Ordered says the team has not started', lineFor(row('ordered', { small: 'nobody on it yet' })), 'Ordered · your team starts it next')
+  // The other honest "ordered": picked up, and PAUSED waiting on the owner. It must not read as
+  // "your team is on it" with "Waiting on you" underneath — two opposite sentences on one card.
+  s.eq('an order waiting on the owner says so instead', lineFor(row('ordered', { small: 'waiting on you' })), 'Ordered · waiting on you')
   s.eq('In production says somebody is on it', lineFor(row('production')), 'Being made · your team is on it')
   s.eq('Held names the day work starts', lineFor(row('held', { value: 'Jan 20' })), 'Held · work starts Jan 20 · then counted')
   s.eq('Delivered names the day the count starts', lineFor(row('delivered')), 'Delivered · your count starts Sep 12')

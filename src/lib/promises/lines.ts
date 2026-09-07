@@ -70,7 +70,17 @@ export interface LineInput {
   showsOn: string
 }
 
-const md = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+/**
+ * "Sep 12" from a YYYY-MM-DD, or NULL when there is no readable date.
+ *
+ * Null, not "Invalid Date". A promise row with a missing or malformed shows_on used to print
+ * "on Home Invalid Date" straight onto Home and into the email that says the count is in.
+ */
+const md = (ymd: string | null | undefined): string | null => {
+  if (!ymd) return null
+  const d = new Date(`${ymd}T12:00:00Z`)
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
 
 /**
  * The one line a card prints under its pill — the same line Home prints and the same line the
@@ -81,11 +91,25 @@ export function lineFor(r: LineInput): string {
   if (r.state === 'stopped') return `Stopped · ${r.sub.replace(/^Stopped · /, '')}`
   if (r.state === 'not_counted') return `Not counted: ${r.sub.replace(/^Ordered [^·]+· /, '')}`
   if (r.state === 'held') return `Held · work starts ${r.value} · then counted`
-  if (r.state === 'ordered') return 'Ordered · your team starts it next'
+  // 'Ordered' covers two honest situations: nobody has picked it up yet, and it is picked up but
+  // PAUSED waiting on the owner. The small line says which, so the line reads it rather than
+  // printing "your team starts it next" over the top of "waiting on you".
+  if (r.state === 'ordered') return r.small && r.small !== 'nobody on it yet' ? `Ordered · ${r.small}` : 'Ordered · your team starts it next'
   if (r.state === 'production') return 'Being made · your team is on it'
   // A deliverable is finished on delivery and has no number coming; anything else names the day
   // its count begins, which is the day the work landed plus its source lag.
-  if (r.state === 'delivered') return r.value === 'Done' ? `Done · ${r.small}` : `Delivered · your count starts ${r.small.replace(/^counting from /, '')}`
-  if (r.state === 'counting') return r.value === '—' ? `Counted after: ${r.sub.replace(/^Ordered [^·]+· /, '')} · on Home ${md(r.showsOn)}` : `Counting · ${r.value} · on Home ${md(r.showsOn)}`
+  if (r.state === 'delivered') {
+    if (r.value === 'Done') return `Done · ${r.small}`
+    // The day the count begins rides in on `small` as "counting from Sep 12". When it is not there
+    // — a row whose dates could not be worked out — the line said "your count starts " and stopped,
+    // a sentence with a hole in it. Say the plain thing instead.
+    const from = r.small.startsWith('counting from ') ? r.small.slice('counting from '.length).trim() : ''
+    return from ? `Delivered · your count starts ${from}` : 'Delivered · your count starts soon'
+  }
+  if (r.state === 'counting') {
+    const day = md(r.showsOn)
+    const onHome = day ? ` · on Home ${day}` : ''
+    return r.value === '—' ? `Counted after: ${r.sub.replace(/^Ordered [^·]+· /, '')}${onHome}` : `Counting · ${r.value}${onHome}`
+  }
   return `${r.value} · ${r.small}`
 }

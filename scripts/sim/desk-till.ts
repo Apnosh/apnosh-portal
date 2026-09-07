@@ -19,6 +19,7 @@ import { deskPaymentMatchesOrder, deskPaymentDue, deskCancelable, AWAITING_PAYME
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
 import { workStarted } from '@/lib/campaigns/work-orders-core'
 import { DESIGN_LINES } from '@/lib/design/design-copy'
+import { lineFor, type PromiseState } from '@/lib/promises/lines'
 import { Suite } from './lib'
 
 /** Every desk type the price sheet can price, with a plausible answer set. */
@@ -210,6 +211,24 @@ function main() {
   s.eq('everything back reads as refunded', refundStatus(17_820, 17_820), 'refunded')
   s.eq('part of it back is partly refunded, which does NOT stop the work', refundStatus(17_820, 5_000), 'partially_refunded')
   s.eq('nothing back leaves the row paid', refundStatus(17_820, 0), 'paid')
+
+  s.group('No line ever prints "Invalid Date" or stops mid-sentence')
+  const promiseRow = (over: Partial<{ state: PromiseState; sub: string; value: string; small: string; showsOn: string }>) =>
+    ({ state: 'counting' as PromiseState, sub: 'Ordered Sep 1 · taps on your Google card', value: '—', small: 'counting from Sep 12', showsOn: '2026-10-08', ...over })
+  for (const bad of ['', 'not-a-date', '0000-00-00']) {
+    const line = lineFor(promiseRow({ showsOn: bad }))
+    s.check(`a "${bad || 'missing'}" showing day never prints Invalid Date`, !line.includes('Invalid Date'))
+    s.check(`and never leaves a dangling "on Home"`, !line.trimEnd().endsWith('on Home'))
+  }
+  s.eq('a good day still names itself', lineFor(promiseRow({})), 'Counted after: taps on your Google card · on Home Oct 8')
+  const noFrom = lineFor(promiseRow({ state: 'delivered', value: 'Delivered', small: '' }))
+  s.check('a delivered row with no count day never ends on "starts "', !/starts\s*$/.test(noFrom))
+  s.check('it says the plain thing instead', noFrom === 'Delivered · your count starts soon')
+  s.eq('and with a day, it names the day', lineFor(promiseRow({ state: 'delivered', value: 'Delivered' })), 'Delivered · your count starts Sep 12')
+  for (const st of ['ordered', 'production', 'held', 'delivered', 'counting', 'counted', 'stopped', 'not_counted'] as PromiseState[]) {
+    const line = lineFor(promiseRow({ state: st, showsOn: '' }))
+    s.check(`${st}: no "undefined", no "null", no "NaN", even with no dates`, !/undefined|null|NaN|Invalid Date/.test(line))
+  }
 
   const ok = s.report('The desk through the till — one fee, one card form, one shut switch')
   process.exit(ok ? 0 : 1)
