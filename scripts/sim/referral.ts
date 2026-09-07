@@ -18,6 +18,7 @@ import {
 } from '@/lib/referrals/model'
 import { checkoutBill, applyFriendCredit, feeCentsOn, preTaxFromRow, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
 import { refundOwedCents } from '@/lib/campaigns/refund-math'
+import { deskBill } from '@/lib/requests/desk-bill'
 import { referralsEnabled } from '@/lib/referral-gate'
 import type { LineItem } from '@/lib/campaigns/types'
 import { Suite } from './lib'
@@ -152,6 +153,17 @@ function main() {
     preTaxFromRow({ subtotal_cents: NaN as unknown as number, service_fee_cents: 5_000 }), 5_000)
   s.eq('the setup-only row (nothing today) stays nothing',
     preTaxFromRow({ subtotal_cents: 0, service_fee_cents: 0, tax_cents: 0, total_cents: 0 }), 0)
+  // ONE LAW FOR BOTH TILLS. A desk order is priced from a single quote rather than a plan, but the
+  // credit runs through the same two functions, so a friend's $50 is worth the same at either one.
+  const desk = deskBill(55_000, 'once')
+  s.eq('a $550 desk quote is $500 of work and $50 of fee', [desk.subtotalCents, desk.serviceFeeCents], [50_000, 5_000])
+  const deskCredited = applyFriendCredit(desk, REFERRAL_CREDIT_CENTS)
+  s.eq('the desk credit lands on the same number the cart does', deskCredited.preTaxCents, credited.preTaxCents)
+  s.eq('and reads back off its saved row the same way',
+    preTaxFromRow({ subtotal_cents: deskCredited.subtotalCents, service_fee_cents: deskCredited.serviceFeeCents, friend_credit_cents: deskCredited.friendCreditCents ?? 0 }),
+    credited.preTaxCents)
+  s.eq('a monthly-only desk line has nothing to take a credit off',
+    applyFriendCredit(deskBill(9_900, 'monthly'), REFERRAL_CREDIT_CENTS).preTaxCents, 0)
 
 
   /* ── 3c. one credit, spent once ──────────────────────────────────────── */

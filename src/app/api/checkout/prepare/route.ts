@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
 import { randomUUID } from 'crypto'
-import { checkoutBill, applyFriendCredit, preTaxFromRow } from '@/lib/campaigns/checkout-bill'
+import { checkoutBill, applyFriendCredit, preTaxFromRow, type CheckoutBill } from '@/lib/campaigns/checkout-bill'
 import { claimFriendCredit, releaseFriendCredit, stampCreditIntent } from '@/lib/referrals/server'
 import { ensureCheckoutCustomer, computeTaxCents, estimateMonthlyTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
 import { resolveGatesForDraft } from '@/lib/campaigns/gates/config-server'
@@ -363,31 +363,70 @@ async function prepareDeskOrder(clientId: string, requestId: string) {
       })
     }
 
-    const tax = await computeTaxCents({ preTaxCents: bill.preTaxCents, customerId: cust.customerId })
-    const totalCents = bill.preTaxCents + tax.taxCents
-    const pi = await stripe.paymentIntents.create({
-      amount: totalCents,
-      currency: 'usd',
-      customer: cust.customerId,
-      setup_future_usage: 'off_session',
-      automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
-      description: label,
-      metadata: { clientId, requestId, kind: 'desk_checkout' },
-      ...('email' in cust && cust.email ? { receipt_email: cust.email } : {}),
-    })
-    const failed = await insertDeskPayment({ clientId, requestId, intentId: pi.id, customerId: cust.customerId, bill, taxCents: tax.taxCents, calculationId: tax.calculationId })
-    if (failed) { await stripe.paymentIntents.cancel(pi.id).catch(() => {}); return failed }
-    return NextResponse.json({
-      requestId,
-      paymentIntentId: pi.id,
-      clientSecret: pi.client_secret,
-      publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
-      breakdown: { subtotalCents: bill.subtotalCents, serviceFeeCents: bill.serviceFeeCents, taxCents: tax.taxCents, totalCents },
-      monthlyCents: 0,
-      monthlyTaxCents: null,
-      savedCard: await getSavedCard(cust.customerId),
-      gates: { booking: null, custom: [] },
-    })
+    // MOVE 8 — ONE LAW FOR THE CREDIT. A desk order is an order: the page promises "$50 off your
+    // first order", and a friend whose first purchase is a set of photos would otherwise be told
+    // the credit was for some other kind of order. Same claim, same pure applyFriendCredit, same
+    // preTaxFromRow the cart charges through, so the two tills cannot price a credit differently.
+    // Claimed here, on the far side of the kill switch and just before the intent, and only on the
+    // one-time lane — a monthly-only desk line has nothing to take a credit off.
+    const holdKey = `hold:${randomUUID()}`
+    const claim = await claimFriendCredit(clientId, holdKey, bill.subtotalCents)
+    // applyFriendCredit takes a CheckoutBill; a DeskBill is the same four numbers, which is the
+    // point of doing it here rather than writing the desk its own arithmetic.
+    const billed: CheckoutBill = claim ? applyFriendCredit(bill, claim.cents) : bill
+    const storedBill = {
+      subtotal_cents: billed.subtotalCents,
+      service_fee_cents: billed.serviceFeeCents,
+      friend_credit_cents: claim ? claim.cents : 0,
+    }
+    const preTaxCents = preTaxFromRow(storedBill)
+    let creditIntentKey = holdKey
+    try {
+      const tax = await computeTaxCents({ preTaxCents, customerId: cust.customerId })
+      const totalCents = preTaxCents + tax.taxCents
+      const pi = await stripe.paymentIntents.create({
+        amount: totalCents,
+        currency: 'usd',
+        customer: cust.customerId,
+        setup_future_usage: 'off_session',
+        automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+        description: label,
+        metadata: { clientId, requestId, kind: 'desk_checkout' },
+        ...('email' in cust && cust.email ? { receipt_email: cust.email } : {}),
+      })
+      if (claim && await stampCreditIntent(claim.creditId, holdKey, pi.id)) creditIntentKey = pi.id
+      const failed = await insertDeskPayment({
+        clientId, requestId, intentId: pi.id, customerId: cust.customerId,
+        bill: { ...billed, preTaxCents }, taxCents: tax.taxCents, calculationId: tax.calculationId,
+        credit: claim ? { cents: claim.cents, creditId: claim.creditId } : null,
+      })
+      if (failed) {
+        await stripe.paymentIntents.cancel(pi.id).catch(() => {})
+        if (claim) await releaseFriendCredit(claim.creditId, creditIntentKey)
+        return failed
+      }
+      return NextResponse.json({
+        requestId,
+        paymentIntentId: pi.id,
+        clientSecret: pi.client_secret,
+        publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
+        breakdown: {
+          subtotalCents: billed.subtotalCents,
+          serviceFeeCents: billed.serviceFeeCents,
+          taxCents: tax.taxCents,
+          totalCents,
+          ...(billed.friendCreditCents ? { friendCreditCents: billed.friendCreditCents } : {}),
+        },
+        monthlyCents: 0,
+        monthlyTaxCents: null,
+        savedCard: await getSavedCard(cust.customerId),
+        gates: { booking: null, custom: [] },
+      })
+    } catch (e) {
+      // The charge never started, so the credit was never spent. Hand it back.
+      if (claim) await releaseFriendCredit(claim.creditId, creditIntentKey)
+      throw e
+    }
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })
   }
@@ -406,6 +445,9 @@ async function insertDeskPayment(args: {
   clientId: string; requestId: string; intentId: string; customerId: string
   bill: { subtotalCents: number; serviceFeeCents: number; perMonthCents: number; preTaxCents: number }
   taxCents: number; calculationId: string | null
+  /** a friend credit on this desk order, or null. Written only when there is one, so a database
+   *  without migration 261 is never sent a column it does not have. */
+  credit?: { cents: number; creditId: string } | null
 }): Promise<NextResponse | null> {
   const { error } = await paymentsTable().insert({
     client_id: args.clientId,
@@ -418,6 +460,7 @@ async function insertDeskPayment(args: {
     total_cents: args.bill.preTaxCents + args.taxCents,
     status: 'pending',
     stripe_tax_calculation_id: args.calculationId,
+    ...(args.credit ? { friend_credit_cents: args.credit.cents, client_credit_id: args.credit.creditId } : {}),
   })
   if (!error) return null
   const missingColumn = (error as { code?: string }).code === '42703'
