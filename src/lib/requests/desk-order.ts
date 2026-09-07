@@ -79,6 +79,16 @@ export async function finalizePaidDeskOrder(args: { requestId: string; paymentRo
       quote_cents: (row.quote_cents as number | null) ?? null,
     }).catch((e) => { console.warn('[desk-order] mint failed', (e as Error)?.message); return null })
   }
+  // AND WRITE IT ON THE ORDER. Without this the row never learned which work order was made for
+  // it, so the short-circuit at the top of this function could never fire: every replay (a
+  // double-tap, a retry, the webhook backstop) ran the whole thing again and mailed the owner and
+  // the staff a second time. The mint itself was always idempotent; the record of it was not.
+  // It is a second write, not part of the stamp, because the stamp is the money record and must
+  // land whether or not the mint works. Best-effort: a paid order is never thrown back for this.
+  if (workOrderId && workOrderId !== row.work_order_id) {
+    const { error: linkErr } = await admin.from('creative_requests').update({ work_order_id: workOrderId, updated_at: nowISO }).eq('id', args.requestId)
+    if (linkErr) console.warn('[desk-order] could not write work_order_id on the order:', linkErr.message)
+  }
   if (!workOrderId) warnings.push('The work order for this paid order was not created. Make it by hand.')
 
   // 3. THE PROMISE: what this order will be counted by, and when it shows on Home. Idempotent.

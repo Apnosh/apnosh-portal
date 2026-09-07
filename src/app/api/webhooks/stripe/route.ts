@@ -46,6 +46,9 @@ import {
 } from '@/lib/billing-grants'
 
 export const runtime = 'nodejs'
+// Headroom. One handler (settleDeskPayment) waits a few seconds for the happy path to finish
+// before it calls a paid order orphaned; a timeout there would make Stripe retry the whole event.
+export const maxDuration = 60
 
 // Generic SupabaseClient (no generated DB types) -- the billing tables
 // from migration 055 are not in the generated types yet. Once the repo's
@@ -796,7 +799,17 @@ async function handleCampaignPaymentSucceeded(
  *
  * The mint itself is deliberately NOT done here. It is the same idempotent finalize the happy path
  * calls, and a webhook is not the place to start work orders behind a person's back; the page is.
+ *
+ * IT WAITS BEFORE IT PAGES. Stripe fires this a second or two after the card clears, while
+ * /checkout/complete is usually still working — so "no work order yet" was almost always a race,
+ * not an orphan, and every ordinary desk order paged every admin with "Paid, nothing made". So the
+ * work-order read is re-tried for a few seconds first. We do NOT drop the page for anything fresh
+ * instead: Stripe ALWAYS arrives fresh, so an age gate here would mean nobody is ever told, and a
+ * paid order nobody makes is the worse of the two mistakes. A page that turns out to be a lost race
+ * costs an admin one click on /admin/requests, where the work order is already sitting.
  */
+/** Wait a beat. Only used to give the happy path time to finish before we call an order orphaned. */
+const beat = (ms: number) => new Promise((r) => setTimeout(r, ms))
 async function settleDeskPayment(
   supabase: AdminClient,
   row: { id: string; client_id: string; request_id?: string | null; total_cents: number },
@@ -812,8 +825,13 @@ async function settleDeskPayment(
     .eq('id', requestId)
   if (stampErr) console.warn('[stripe webhook] desk paid stamp failed (apply migration 258):', stampErr.message)
 
-  const { data: req } = await supabase.from('creative_requests').select('work_order_id').eq('id', requestId).maybeSingle()
-  if ((req as { work_order_id?: string | null } | null)?.work_order_id) return
+  // Three looks over about six seconds. finalizePaidDeskOrder writes work_order_id on the row the
+  // moment its mint lands, so the first look that finds one ends this quietly.
+  for (let look = 0; look < 3; look++) {
+    if (look > 0) await beat(3000)
+    const { data: req } = await supabase.from('creative_requests').select('work_order_id').eq('id', requestId).maybeSingle()
+    if ((req as { work_order_id?: string | null } | null)?.work_order_id) return
+  }
   try {
     const { getAdminUserIds, createNotification } = await import('@/lib/notify')
     const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
