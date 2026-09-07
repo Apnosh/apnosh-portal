@@ -162,7 +162,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const invoiceLane = wantsShip && body.billing === 'invoice' && !campaignCheckoutEnabled()
   let invoiceBill: { preTaxCents: number; perMonthCents: number } | null = null
   if (wantsShip) {
-    const { preTaxCents, perMonthCents } = checkoutBill({ items: campaign.draft.items })
+    // Bill the items this ship will ACTUALLY leave behind. body.items replaces the whole line-item
+    // set (replaceLineItems, below), so gating on campaign.draft.items priced the plan as it was
+    // before the request — a ship that adds paid pieces in the same call would have been gated on
+    // the cheaper old cart. Same merge the allocation record uses further down.
+    const shipItems = (Array.isArray(body.items) ? (body.items as LineItem[]) : campaign.draft.items)
+    const { preTaxCents, perMonthCents } = checkoutBill({ items: shipItems })
     const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
     const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, invoiceLane })
     if (invoiceLane && gate === 'allow' && (preTaxCents > 0 || perMonthCents > 0)) invoiceBill = { preTaxCents, perMonthCents }

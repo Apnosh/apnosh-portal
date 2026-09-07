@@ -463,11 +463,6 @@ export async function refundAlreadyAnnounced(campaignId: string, minutes = 10): 
   }
 }
 
-/** Write a refund onto the payment row from outside this module (the webhook). Never throws. */
-export async function stampRefundOnRow(paid: PaidCharge, totalRefundedCents: number, refundId: string | null): Promise<void> {
-  await stampRefund(paid, totalRefundedCents, refundId)
-}
-
 // ── the small, boring halves ────────────────────────────────────────────────
 
 /**
