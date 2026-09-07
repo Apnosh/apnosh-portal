@@ -236,9 +236,6 @@ export default function OnboardingPage() {
       can_film: data.can_film,
       can_tag: data.can_tag,
       current_platforms: connectedPlatforms,
-      // The one money answer in setup. The Create shelf draws its "above what you set"
-      // line from this, so it has to be saved on every step, not only at completion.
-      monthly_budget: budgetCapForChip(data.marketing_budget),
       brand_colors: { primary: data.color1, secondary: data.color2 },
       brand_drive: data.brand_drive,
       onboarding_step: screenToStepIndex(data.biz_type, nextScreen),
@@ -254,6 +251,20 @@ export default function OnboardingPage() {
         .select('id')
         .single()
       if (newBiz) { bizId = newBiz.id; setBusinessId(newBiz.id) }
+    }
+
+    /* The one money answer in setup. The Create shelf draws its "above what you set" line from
+       it, so it saves on every screen rather than only at completion.
+
+       WRITTEN ONLY WHEN THEY ACTUALLY PICKED A CHIP. It used to ride the payload above, so an
+       owner who had typed a budget on /dashboard/profile and then walked back through setup had
+       it nulled on the very first screen, before the budget question was even asked. Same guard
+       as onboarding-actions.ts (completeOnboardingCRM): no answer means no write, not a clear.
+       "Not sure yet" is a real answer that asserts no cap, and it leaves the number alone too. */
+    const budgetCap = budgetCapForChip(data.marketing_budget)
+    if (bizId && budgetCap != null) {
+      const { error } = await supabase.from('businesses').update({ monthly_budget: budgetCap }).eq('id', bizId)
+      if (error) console.warn('[onboarding] budget not saved:', error.message)
     }
 
     /* businesses.shape arrives with migration 256. Kept OUT of the payload above and written
