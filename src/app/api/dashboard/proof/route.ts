@@ -17,6 +17,7 @@ import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { userMayReadClient } from '@/lib/auth/client-access'
 import { evalGbpWeek, computeStateCards } from '@/lib/proof/compose'
 import { presentCardType } from '@/lib/proof/present'
+import { isStaffRole } from '@/lib/auth/roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).maybeSingle()
-  const isAdmin = profile && ['admin', 'super_admin'].includes(profile.role)
+  const isAdmin = isStaffRole(profile?.role)
   if (!isAdmin && !(await userMayReadClient(user.id, clientId))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
@@ -129,7 +130,7 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).maybeSingle()
-  const isAdmin = profile && ['admin', 'super_admin'].includes(profile.role)
+  const isAdmin = isStaffRole(profile?.role)
   if (!isAdmin && !(await userMayReadClient(user.id, clientId))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }

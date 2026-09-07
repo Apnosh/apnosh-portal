@@ -24,6 +24,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { userMayReadClient } from '@/lib/auth/client-access'
 import { isWin, newShareToken } from '@/lib/love/win'
+import { isStaffRole } from '@/lib/auth/roles'
 
 export const dynamic = 'force-dynamic'
 
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
-  const isAdmin = !!profile && ['admin', 'super_admin'].includes((profile as { role: string }).role)
+  const isAdmin = isStaffRole((profile as { role?: string } | null)?.role)
   if (!isAdmin && !(await userMayReadClient(user.id, clientId))) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
