@@ -85,11 +85,19 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'monthlyBudget must be a number or null' }, { status: 400 })
   }
 
-  const { error } = await createAdminClient()
+  // .select('id') so we learn how many rows the update actually touched. Without it a client
+  // with no businesses row got {ok:true} and a shelf that redrew at the new cap, then reverted
+  // on the next load with nothing to explain it. A write that matched nothing is a 404.
+  const { data, error } = await createAdminClient()
     .from('businesses')
     .update({ monthly_budget: raw })
     .eq('client_id', clientId)
+    .select('id')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (!data || data.length === 0) {
+    console.warn(`[shelf-context] budget not saved: no businesses row for client ${clientId}`)
+    return NextResponse.json({ error: 'no business to save the budget on' }, { status: 404 })
+  }
 
   return NextResponse.json({ ok: true, monthlyBudget: raw })
 }

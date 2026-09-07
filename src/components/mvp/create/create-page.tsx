@@ -335,14 +335,18 @@ export default function CreatePage() {
 
   const setBudget = async (chipLabel: string | null) => {
     const value = chipLabel ? budgetCapForChip(chipLabel) : null
+    const before = ctx?.monthlyBudget ?? null
     setCtx((c) => (c ? { ...c, monthlyBudget: value } : c))
     setBudgetSheet(false)
     if (!clientId) return
     try {
-      await fetch(`/api/campaigns/shelf-context?clientId=${clientId}`, {
+      const r = await fetch(`/api/campaigns/shelf-context?clientId=${clientId}`, {
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monthlyBudget: value }),
       })
-    } catch { /* the shelf already shows their pick; the save can be retried by picking again */ }
+      // The route now 404s when the update matched no row. Put the old number back rather than
+      // leaving a shelf drawn at a cap that was never saved and reverts on the next load.
+      if (!r.ok) setCtx((c) => (c ? { ...c, monthlyBudget: before } : c))
+    } catch { setCtx((c) => (c ? { ...c, monthlyBudget: before } : c)) }
   }
 
   /* why-now lines from the account's own numbers */
