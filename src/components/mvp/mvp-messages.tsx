@@ -19,7 +19,7 @@ import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
 import { REPLY_PROMISE } from '@/lib/reply-promise'
-import { replyLine } from '@/lib/team/reply-line'
+import { askFrom, replyLine } from '@/lib/team/reply-line'
 import { useLang } from './mvp-language'
 
 const C = {
@@ -459,13 +459,14 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
     else groups.push({ from: m.from, day, msgs: [m] })
   }
   const lastOwn = [...msgs].reverse().find((m) => m.from === 'owner')
-  /* The reply promise with a clock on it. The messages are already loaded, so the owner's last
-     question and the first answer after it are right here — no extra read, and it can never
-     disagree with the bubbles above it. Nothing shows until they have actually asked. */
-  const lastAsk = [...msgs].reverse().find((m) => m.from === 'owner' && !m.id.startsWith('tmp-'))
-  const firstAnswer = lastAsk ? msgs.find((m) => m.from === 'team' && m.createdAt > lastAsk.createdAt) : undefined
+  /* The reply promise with a clock on it. The messages are already loaded, so the exchange it
+     is about is right here — no extra read, and it can never disagree with the bubbles above
+     it. askFrom picks the exchange (reply-line.ts): the first message of the run nobody has
+     answered, so a nudge cannot move the due date, and the answered line when a person has
+     replied since. Nothing shows until they have actually asked. */
+  const ask = askFrom(msgs.filter((m) => !m.id.startsWith('tmp-')).map((m) => ({ sender: m.from, createdAt: m.createdAt })))
   const promiseClock = replyLine(
-    { askedAt: lastAsk?.createdAt ?? null, answeredAt: firstAnswer?.createdAt ?? null },
+    { askedAt: ask?.askedAt ?? null, answeredAt: ask?.answeredAt ?? null },
     { promise: T(REPLY_PROMISE), locale, words: { sent: T('Sent'), weAnswer: T('we answer'), due: T('due'), answeredIn: T('Answered in') } },
   )
   return (

@@ -23,11 +23,11 @@ import { SCREEN_KEYS, allScreenKeys } from '../src/lib/i18n/keys'
 import { t, localeOf, money, num, DEFAULT_LANG, isLang, LANGS } from '../src/lib/i18n/t'
 import { allShapeWords, stageSubFor, stageLabelFor, emptyLineFor, EMPTY_LINE_DEFAULT } from '../src/lib/clients/shape-words'
 import { SHELF_SHAPES } from '../src/lib/clients/shape'
-import { replyLine, oneBusinessDayAfter, waitLabel } from '../src/lib/team/reply-line'
+import { replyLine, oneBusinessDayAfter, waitLabel, askFrom } from '../src/lib/team/reply-line'
 
 let failures = 0
-function check(name: string, ok: boolean, detail?: string) {
-  if (ok) { console.log(`  ok   ${name}`); return }
+function check(name: string, ok: boolean | (() => boolean), detail?: string) {
+  if (typeof ok === 'function' ? ok() : ok) { console.log(`  ok   ${name}`); return }
   failures += 1
   console.log(`  FAIL ${name}${detail ? `  →  ${detail}` : ''}`)
 }
@@ -123,6 +123,19 @@ console.log('\n4. The reply clock')
   check('a Sunday question is owed Monday', oneBusinessDayAfter(new Date('2026-09-13T09:00:00')).getDay() === 1)
   check('a Tuesday question is owed Wednesday', oneBusinessDayAfter(new Date('2026-09-08T09:00:00')).getDay() === 3)
   check('a wait under an hour never reads 0m', waitLabel(20_000) === '1m')
+  // WHICH exchange the clock is on (askFrom). The owner's newest message used to decide, so a
+  // second ask reset the due date and made a late answer look on time.
+  const at = (h: number, m = 0) => new Date(2026, 8, 8, h, m).toISOString()
+  const owner = (h: number, m = 0) => ({ sender: 'owner' as const, createdAt: at(h, m) })
+  const team = (h: number, m = 0) => ({ sender: 'team' as const, createdAt: at(h, m) })
+  check('a nudge does not move the due date', askFrom([owner(9), owner(11)])?.askedAt === at(9))
+  check('an answered exchange reads as answered', askFrom([owner(9), team(11)])?.answeredAt === at(11))
+  check('the wait is measured to the FIRST reply', askFrom([owner(9), team(11), team(14)])?.answeredAt === at(11))
+  check('the wait starts at the first ask, not the last', () => {
+    const a = askFrom([owner(9), owner(10), team(12)])
+    return a?.askedAt === at(9) && a?.answeredAt === at(12)
+  })
+  check('a thread with no owner line has no clock', askFrom([team(9)]) === null)
   check('the Spanish clock is one sentence, not two languages',
     (replyLine({ askedAt: tue.toISOString(), answeredAt: null }, {
       locale: 'es-US', promise: 'en un día hábil',

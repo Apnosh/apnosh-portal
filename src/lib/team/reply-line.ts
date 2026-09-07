@@ -41,9 +41,10 @@ export function dayClock(iso: string | Date, locale = 'en-US'): string {
   if (Number.isNaN(d.getTime())) return ''
   const day = d.toLocaleDateString(locale, { weekday: 'short' })
   const time = d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
-  // Node/Chrome put a NARROW NO-BREAK SPACE before am/pm; it renders as a gap the owner
-  // cannot type or search for, so it becomes an ordinary space.
-  // en-US gives "3:10 PM"; the owner's copy everywhere else in the app is lowercase.
+  // Two fixes, in order. First: Node and Chrome put a NARROW NO-BREAK SPACE before am/pm, and
+  // it renders as a gap the owner cannot type or search for, so it becomes an ordinary space.
+  // Second: en-US gives "3:10 PM" and the owner's copy everywhere else in the app is lowercase.
+  // es-US writes "3:10 p. m.", which is already lowercase and passes through untouched.
   return `${day} ${time}`.replace(/[\u202f\u00a0]/g, ' ').replace(/\b(AM|PM)\b/, (m) => m.toLowerCase())
 }
 
@@ -59,6 +60,47 @@ export function waitLabel(ms: number): string {
   const dys = Math.floor(ms / MS_DAY)
   const h = Math.floor((ms % MS_DAY) / MS_HOUR)
   return h ? `${dys}d ${h}h` : `${dys}d`
+}
+
+/** One message, reduced to the two facts the clock needs. */
+export interface ClockLine {
+  sender: 'owner' | 'team'
+  createdAt: string
+}
+
+/**
+ * WHICH exchange the clock is on. Both surfaces used to take the owner's LAST message, which
+ * got two things wrong:
+ *
+ *   · A nudge reset the promise. Ask Monday, ask again Wednesday because nobody answered, and
+ *     the due date moved to Thursday — the clock made us look on time exactly when we were not.
+ *   · An answered thread the owner wrote in again read as a fresh unanswered question.
+ *
+ * The rule now: the wait starts at the FIRST owner message nobody has answered yet. When every
+ * owner message has an answer after it, there is no open wait and the line is the answered one,
+ * measured from when they first asked to the first reply — the same pair reply-timer's lagFrom
+ * measures, so the number an owner reads and the number we grade ourselves on are one number.
+ *
+ * Null when the owner has never written on this thread.
+ */
+export function askFrom(lines: ClockLine[]): ReplyLineInput | null {
+  const rows = [...lines].filter((l) => !!l.createdAt).sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  if (!rows.some((l) => l.sender === 'owner')) return null
+
+  // Walk back past any trailing staff lines; what is left ends with the owner or is empty.
+  let end = rows.length - 1
+  while (end >= 0 && rows[end].sender === 'team') end -= 1
+  const answeredHere = end < rows.length - 1
+
+  if (end < 0) return null
+  // The start of the owner run that ends at `end` — the moment this wait began.
+  let start = end
+  while (start > 0 && rows[start - 1].sender === 'owner') start -= 1
+  const askedAt = rows[start].createdAt
+  if (!answeredHere) return { askedAt, answeredAt: null }
+  // The FIRST staff line after that run, not the last, so the wait is the first-reply wait.
+  const answered = rows.slice(end + 1).find((l) => l.sender === 'team')
+  return { askedAt, answeredAt: answered?.createdAt ?? null }
 }
 
 export interface ReplyLineInput {
