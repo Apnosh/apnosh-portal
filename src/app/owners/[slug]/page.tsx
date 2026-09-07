@@ -28,6 +28,9 @@ import { referralCodeFor } from '@/lib/referrals/server'
  * that plainly is better than translating half a sentence.
  */
 
+/* Five minutes of cache, because this page is a link an owner hands out and every visit
+   otherwise runs the whole promise read. Turning the page OFF does not wait for it: the opt-in
+   route calls revalidatePath on this path, so a page taken down is down on the tap. */
 export const revalidate = 300
 
 interface PageProps { params: Promise<{ slug: string }> }
