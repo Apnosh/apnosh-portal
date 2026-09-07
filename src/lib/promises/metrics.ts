@@ -21,8 +21,9 @@ export type Gbp = { date: string; location_id?: string | null; directions: numbe
 
 const reported = (r: Gbp) => (r.impressions_total ?? 0) + (r.search_views ?? 0) + (r.directions ?? 0) + (r.calls ?? 0) + (r.website_clicks ?? 0) > 0
 
-/** The reported Google days in [from, to], newest last. Exported because the weekly sentence
- *  (src/lib/love/sentence.ts) has to count the same days this does, or the two disagree. */
+/** The reported Google days in [from, to], newest last. Every location the client has.
+ *  Exported because the weekly sentence (src/lib/love/sentence.ts) counts days by this same
+ *  rule; it then drops the demo location, which the ledger keeps. */
 export async function gbpRows(clientId: string, from: string, to: string): Promise<Gbp[]> {
   const { data } = await createAdminClient()
     .from('gbp_metrics')

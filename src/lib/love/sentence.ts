@@ -5,11 +5,18 @@ import 'server-only'
  * Not a chart, not a percentage: the thing an owner would say out loud. "This week your Google
  * listing got 41 taps. Last week it was 33." It compares the client's last seven REPORTED
  * Google days against the seven before (gbpRows, the same reported-days rule the promises
- * ledger counts by, so the two never disagree). Google delivers days late and writes zero rows
- * for days it has not sent, so counting calendar days would compare a full week against a
- * half-reported one and print a fake drop.
+ * ledger counts by). Google delivers days late and writes zero rows for days it has not sent,
+ * so counting calendar days would compare a full week against a half-reported one and print a
+ * fake drop.
  *
- * No Google, or not enough reported days: the same sentence on social reach, if there are posts.
+ * One difference from the ledger, on purpose: the demo location is dropped here. gbpRows keeps
+ * every location, and a demo row would put made-up taps in a sentence the owner reads as theirs.
+ *
+ * The words say "this week", so the days have to BE this week: the newest reported day within
+ * three days of today, and the fourteen days inside three weeks. Otherwise a listing that went
+ * quiet in July would still be printing July's taps as "this week".
+ *
+ * No Google, or days too old: the same sentence on social reach, if there are posts.
  * Nothing to say: null. This never guesses, and it never says a number is up or down — it puts
  * the two weeks side by side and lets the owner see it.
  */
@@ -32,7 +39,14 @@ export async function weeklySentence(clientId: string): Promise<string | null> {
     const days = rows
       .filter((r) => r.location_id !== 'demo-proof')
       .sort((a, b) => (a.date < b.date ? 1 : -1)) // newest first
-    if (days.length >= 14) {
+    // "This week" has to mean this week: the newest day is no more than three days stale (Google
+    // runs a couple of days behind), and the fourteen days fit in three calendar weeks.
+    const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`)
+    const todayMs = dayMs(today())
+    const fresh = days.length >= 14
+      && todayMs - dayMs(days[0].date) <= 3 * DAY
+      && dayMs(days[0].date) - dayMs(days[13].date) <= 21 * DAY
+    if (fresh) {
       const thisWeek = days.slice(0, 7).reduce((sum, r) => sum + taps(r), 0)
       const lastWeek = days.slice(7, 14).reduce((sum, r) => sum + taps(r), 0)
       if (thisWeek + lastWeek > 0) {
