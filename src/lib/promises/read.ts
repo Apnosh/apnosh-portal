@@ -17,14 +17,14 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { measure, matchedBaseline, today, shiftDays, hasGoogle, hasFoodOrders, locationCount } from './metrics'
 import { TAKEN_BY_WORD, type MetricKey, type TakenBy } from './registry'
-import { lineFor, STATE_RANK, type PromiseState } from './lines'
+import { lineFor, STATE_RANK, type PromiseState, type PromiseTone } from './lines'
 // The one table of "the work has begun" statuses, shared with the work-order spine — there is no
 // started_at on creator_work_orders to read instead.
 import { workStarted } from '@/lib/campaigns/work-orders-core'
 
 // The seven states, and their words, live in ./lines — pure and client-safe, so the card, the
 // "your count is in" cron and a script all read one table instead of three copies of it.
-export { lineFor, PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState } from './lines'
+export { lineFor, PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState, type PromiseTone } from './lines'
 
 export interface PromiseRow {
   id: string
@@ -37,7 +37,8 @@ export interface PromiseRow {
   value: string
   /** the small line under the number */
   small: string
-  tone: 'up' | 'down' | 'flat' | 'wait' | 'done' | 'off'
+  /** which way the number moved. The one decision anything downstream reads; see ./lines. */
+  tone: PromiseTone
   /** Where this order stands. See ./lines for the seven states and the words each one gets. */
   state: PromiseState
   campaignId: string | null

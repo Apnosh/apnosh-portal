@@ -81,7 +81,9 @@ console.log('\n2. The translated screens')
 
   // A translation that is identical to its English key is almost always a forgotten line.
   // The exceptions are the words that really are the same in both languages.
-  const SAME_IN_BOTH = new Set<string>([])
+  // A number and its unit, in that order, in both languages: "41 toques en tu ficha de Google".
+  // The unit is translated on its own (it is a var, and vars go through the dictionary too).
+  const SAME_IN_BOTH = new Set<string>(['{n} {unit}'])
   const identical = Object.entries(ES).filter(([k, v]) => k === v && !SAME_IN_BOTH.has(k)).map(([k]) => k)
   check('no Spanish entry is just its English key', identical.length === 0, identical.join(' | '))
 
@@ -130,7 +132,18 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
     // the product page). Its count line was English on a Spanish page for exactly as long as
     // nobody read this file, so the scanner reads it.
     promises: ['src/lib/promises/registry.ts'],
-    // `reply` and `chips` are data, not a screen.
+    // Move 7b: the weekly sentence, the report and the win card.
+    weekly: ['src/components/mvp/weekly-sentence.tsx'],
+    report: ['src/components/report/report-view.tsx'],
+    wins: [
+      'src/components/mvp/win-card.tsx',
+      'src/app/dashboard/wins/page.tsx',
+      'src/app/dashboard/wins/[id]/page.tsx',
+      'src/app/dashboard/wins/[id]/share-row.tsx',
+      'src/app/w/[token]/page.tsx',
+      'src/app/w/[token]/not-found.tsx',
+    ],
+    // `reply`, `chips` and `reportEmail` are data, not a screen.
   }
 
   const listed = new Set([...allScreenKeys(), ...allShapeWords()])

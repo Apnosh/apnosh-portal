@@ -39,6 +39,9 @@ export type NotificationKind =
   // The count window moved because the work landed later than the order date. One row per
   // re-anchor, written by reanchorPromise (src/lib/promises/record.ts).
   | 'date_moved'
+  // Last month's report is ready and has been pushed to the owner. Written by the monthly-report
+  // cron (and, in-app only, by the older monthly-recap nudge and staff-published reports).
+  | 'report_ready'
 
 /**
  * Which switch on the owner's Notifications page decides whether an email may go out.
@@ -57,7 +60,7 @@ const CATEGORY_COLUMN: Record<EmailCategory, 'notify_billing' | 'notify_content_
 /** When a caller does not say, the kind decides. Callers that email SHOULD say. */
 function categoryForKind(kind: NotificationKind): EmailCategory {
   if (kind === 'payment' || kind === 'invoice_reminder') return 'billing'
-  if (kind === 'date_moved' || kind === 'draft_published' || kind === 'draft_approved' || kind === 'campaign_wrapped') return 'content'
+  if (kind === 'date_moved' || kind === 'draft_published' || kind === 'draft_approved' || kind === 'campaign_wrapped' || kind === 'report_ready') return 'content'
   if (kind === 'request_update' || kind === 'client_request') return 'messages'
   return 'system'
 }

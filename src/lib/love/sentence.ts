@@ -21,18 +21,46 @@ import 'server-only'
  * No Google, or days too old: the same sentence on social reach, if there are posts.
  * Nothing to say: null. This never guesses, and it never says a number is up or down — it puts
  * the two weeks side by side and lets the owner see it.
+ *
+ * IT COMES BACK IN PIECES, NOT AS A FINISHED STRING. Ten of the twenty owners read Spanish, and a
+ * sentence glued together here could only ever be English. So the reader returns the i18n KEY plus
+ * the two raw numbers, and whoever draws it fills the holes in the owner's own language and their
+ * own number grouping (src/components/mvp/weekly-sentence.tsx). weeklySentence() below keeps the
+ * finished English for the places that are English by definition — the staff love table.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { gbpRows, shiftDays, today, type Gbp } from '@/lib/promises/metrics'
-import { weekPair } from '@/lib/love/week-window'
+import { weekPair, WEEKLY_GOOGLE_KEY, WEEKLY_SOCIAL_KEY } from '@/lib/love/week-window'
+import { t } from '@/lib/i18n/t'
 
 const DAY = 86400000
-const n = (v: number) => v.toLocaleString('en-US')
 
 const taps = (r: Gbp) => (r.directions ?? 0) + (r.calls ?? 0) + (r.website_clicks ?? 0)
 
-/** One plain sentence, or null when the client has no data to say it with. */
+/** The sentence before it is written out: which one it is, and the two numbers in it. */
+export interface WeeklyLine {
+  /** the English sentence, which is also the i18n key (src/lib/i18n/t.ts) */
+  key: string
+  /** this week's number and last week's, raw — grouped by whoever draws them */
+  vars: { n: number; prev: number }
+}
+
+/* The two sentences live in week-window.ts, which has no database in it, so a script can check
+   them against keys.ts and es.ts. Re-exported here because this is where they are chosen. */
+export { WEEKLY_GOOGLE_KEY, WEEKLY_SOCIAL_KEY }
+
+/**
+ * The finished English sentence, for the surfaces that are English by definition (the staff love
+ * table). Everything an OWNER reads goes through weeklyLine() and t() instead.
+ */
 export async function weeklySentence(clientId: string): Promise<string | null> {
+  const line = await weeklyLine(clientId)
+  if (!line) return null
+  return t(line.key, 'en', { n: line.vars.n.toLocaleString('en-US'), prev: line.vars.prev.toLocaleString('en-US') })
+}
+
+/** One plain sentence in pieces, or null when the client has no data to say it with. */
+export async function weeklyLine(clientId: string): Promise<WeeklyLine | null> {
   if (!clientId) return null
 
   // Google first: it is the number owners recognise.
@@ -47,7 +75,7 @@ export async function weeklySentence(clientId: string): Promise<string | null> {
       today(),
     )
     if (pair && pair.thisWeek + pair.lastWeek > 0) {
-      return `This week your Google listing got ${n(pair.thisWeek)} taps: calls, directions, and website visits. Last week it was ${n(pair.lastWeek)}.`
+      return { key: WEEKLY_GOOGLE_KEY, vars: { n: pair.thisWeek, prev: pair.lastWeek } }
     }
   } catch (e) {
     console.warn('[love] weekly sentence: google read failed', (e as Error)?.message)
@@ -72,7 +100,7 @@ export async function weeklySentence(clientId: string): Promise<string | null> {
     const thisWeek = sum(cut, null)
     const lastWeek = sum(since, cut)
     if (thisWeek + lastWeek === 0) return null
-    return `This week your posts reached ${n(thisWeek)} people. Last week it was ${n(lastWeek)}.`
+    return { key: WEEKLY_SOCIAL_KEY, vars: { n: thisWeek, prev: lastWeek } }
   } catch (e) {
     console.warn('[love] weekly sentence: social read failed', (e as Error)?.message)
     return null

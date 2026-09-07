@@ -21,7 +21,7 @@ import { getStageCampaigns } from '@/lib/dashboard/get-stage-campaigns'
 
 export interface ProofCardRow {
   card_key: string
-  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'campaign_moved' | 'social_month' | 'site_week' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'google_quiet' | 'approval_waiting' | 'complaint_watch' | 'setup_waiting' | 'connect_social' | 'connect_site' | 'reviews_none' | 'occasion_soon'
+  card_type: 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'campaign_moved' | 'promise_counted' | 'social_month' | 'site_week' | 'steady' | 'coming_up' | 'reviews_waiting' | 'start_campaign' | 'connect_google' | 'google_paused' | 'google_quiet' | 'approval_waiting' | 'complaint_watch' | 'setup_waiting' | 'connect_social' | 'connect_site' | 'reviews_none' | 'occasion_soon'
   label: string
   big: string
   context: string

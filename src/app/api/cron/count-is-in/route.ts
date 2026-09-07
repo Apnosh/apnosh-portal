@@ -20,6 +20,14 @@
  * nobody could send is not retried every morning for the rest of the year. Pre-258 the column is
  * absent: the stamp fails, nothing is sent, and the run says which SQL to apply.
  *
+ * AND THE COUNT BECOMES A CARD. A promise that lands 'counted' with a real number that went the
+ * right way (the ledger's own tone: up, or flat with nothing before it) also composes
+ * one proof card (card_type 'promise_counted', migration 262) — the ONE kind of card the product
+ * calls a win, the only kind the wins shelf lists and the only kind that can be given a public
+ * link. That is what makes "Counted by Apnosh" on the foot of a shared card true: every win is an
+ * order somebody bought, counted on the day they were told. Idempotent on card_key
+ * 'promise:<promise id>', best-effort before 262 (the card is skipped, the notice still goes).
+ *
  * Auth: THE CRON_SECRET, ALWAYS. A query param or a bearer token, and nothing else — the
  * vercel-cron user-agent is a header anyone can send, and this route emails owners, so it is not a
  * door. Vercel sends the secret itself (Authorization: Bearer $CRON_SECRET) on scheduled runs when
@@ -30,6 +38,10 @@ import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getPromiseRows } from '@/lib/promises/read'
 import { notifyClientOwners } from '@/lib/notifications'
+import { countedCardWords } from '@/lib/promises/lines'
+import { renderCardWords, WIN_TYPE } from '@/lib/love/win'
+import type { PromiseRow } from '@/lib/promises/read'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -38,6 +50,70 @@ const CRON_SECRET = process.env.CRON_SECRET
 
 /** The states worth telling somebody about on the day their number was promised. */
 const TELLABLE = new Set(['counted', 'not_counted'])
+
+/** The ledger row behind a promise, as the cron reads it back with select('*'). */
+type StoredPromise = Record<string, unknown>
+
+/**
+ * The card this kept promise makes, written once.
+ *
+ * Only a 'counted' row whose number is positive AND went the right way gets one; a not_counted
+ * promise is an honest notice and never a card, because there is nothing on it to show anybody
+ * (src/lib/promises/lines.ts countedCardWords decides, and is proved in scripts/verify-wins.ts).
+ *
+ * Both forms are stored: the English sentences in label/big/context, so anything reading the row
+ * raw still reads words, and the key plus its numbers in metadata.words, so the owner's page and
+ * the public page can draw it in the owner's own language later.
+ *
+ * Best-effort. Before migration 262 the card_type is refused by the check constraint and metadata
+ * is not a column; the run warns which SQL is missing and the owner still gets told their count.
+ */
+async function composeCountedCard(
+  admin: SupabaseClient,
+  clientId: string,
+  row: PromiseRow,
+  stored: StoredPromise | undefined,
+): Promise<'fired' | 'nothing-to-show' | 'blocked'> {
+  const words = countedCardWords({
+    state: row.state,
+    // The ledger's own reading of which way this number moved. A promise that went DOWN makes no
+    // card at all, so a rating that fell can never become something the owner is told to show.
+    tone: row.tone,
+    label: row.label,
+    metricKey: String(stored?.metric_key ?? ''),
+    metricLabel: String(stored?.metric_label ?? ''),
+    value: row.value,
+    countFrom: String(stored?.count_from ?? ''),
+    showsOn: row.showsOn,
+  })
+  if (!words) return 'nothing-to-show'
+
+  // The same words the reader will draw, drawn once in English for the row's own columns.
+  const en = renderCardWords({ words }, { label: row.label, big: row.value, context: '' }, 'en')
+  const { error } = await admin.from('proof_cards').upsert({
+    client_id: clientId,
+    card_key: `promise:${row.id}`,
+    card_type: WIN_TYPE,
+    label: en.label,
+    big: en.big,
+    context: en.context,
+    is_sample: false,
+    metadata: {
+      words: { label: words.label, big: words.big, context: words.context },
+      promiseId: row.id,
+      // What was counted, so a reader can tell a rating (a pair, "4.5 → 4.7") from a plain count
+      // and read the right half of it. src/lib/love/win.ts winNumber is the reader.
+      metricKey: String(stored?.metric_key ?? ''),
+      campaignId: row.campaignId,
+      requestId: row.requestId,
+    },
+  }, { onConflict: 'client_id,card_key', ignoreDuplicates: true })
+  if (error) {
+    console.warn('[count-is-in] could not compose the win card (apply migration 262):', error.message)
+    return 'blocked'
+  }
+  return 'fired'
+}
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -74,7 +150,11 @@ export async function GET(req: Request) {
   // One read per CLIENT, not per promise: getPromiseRows already computes every row for a client,
   // with the same measurements and the same words the owner sees everywhere else.
   const byClient = new Map<string, Set<string>>()
+  // The stored row too: the card names what was counted (metric_label) and the window it was
+  // counted over, and neither of those is on the computed row.
+  const storedById = new Map<string, Record<string, unknown>>()
   for (const r of due) {
+    storedById.set(String(r.id), r)
     const cid = String(r.client_id ?? '')
     if (!cid) continue
     const set = byClient.get(cid) ?? new Set<string>()
@@ -82,7 +162,7 @@ export async function GET(req: Request) {
     byClient.set(cid, set)
   }
 
-  let told = 0, skipped = 0, stampFailed = 0
+  let told = 0, skipped = 0, stampFailed = 0, wins = 0, winsBlocked = 0
   const outcomes: { clientId: string; promiseId: string; state: string; sent: boolean; why?: string }[] = []
 
   for (const [clientId, ids] of byClient) {
@@ -140,6 +220,14 @@ export async function GET(req: Request) {
         emailCategory: 'content',
       }).catch(() => ({ notified: 0 }))
 
+      // The count is in and it is a real number: that is a win, and a win is a card the owner can
+      // show somebody. Never for not_counted, which has no number on it at all.
+      if (counted) {
+        const made = await composeCountedCard(admin, clientId, row, storedById.get(row.id))
+        if (made === 'fired') wins++
+        else if (made === 'blocked') winsBlocked++
+      }
+
       // The stamp is already down (above). A notice nobody could send is not worth trying again
       // every morning for the rest of the year.
       told++
@@ -147,5 +235,5 @@ export async function GET(req: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, dryRun, told, skipped, stampFailed, outcomes: outcomes.slice(0, 50) })
+  return NextResponse.json({ ok: true, dryRun, told, skipped, stampFailed, wins, winsBlocked, outcomes: outcomes.slice(0, 50) })
 }

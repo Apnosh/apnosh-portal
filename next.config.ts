@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'www.instagram.com' },
     ],
   },
+  // A shared win card is for the person the owner sent it to, never for search. The page also
+  // sets robots meta, but a header is read by things that never parse the HTML, and it covers the
+  // 404 a junk token gets as well.
+  async headers() {
+    return [
+      { source: '/w/:token', headers: [{ key: 'X-Robots-Tag', value: 'noindex, nofollow' }] },
+    ]
+  },
   // The campaign "Needs you" intake consolidated onto /ready; keep old /setup links working.
   // Plus a safety net for legacy links stored in prod notification rows: the old
   // /dashboard/{website,social,local-seo,email-sms}/... channel hubs were folded into

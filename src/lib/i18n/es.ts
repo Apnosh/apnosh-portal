@@ -423,15 +423,15 @@ export const ES: Record<string, string> = {
   'about two weeks': 'como dos semanas',
   'about three weeks': 'como tres semanas',
   'about a month': 'como un mes',
-  'taps on your Google card': 'los toques en tu ficha de Google',
-  'views of your Google card': 'las vistas de tu ficha de Google',
-  'views per post, where they go': 'las vistas de cada publicación, donde salen',
+  'taps on your Google card': 'toques en tu ficha de Google',
+  'views of your Google card': 'vistas de tu ficha de Google',
+  'views per post, where they go': 'vistas de cada publicación, donde salen',
   'the files in your library': 'los archivos de tu biblioteca',
-  'orders placed on Google': 'los pedidos hechos en Google',
-  'replies posted': 'las respuestas publicadas',
-  'your rating since you started': 'tus estrellas desde que empezaste',
-  'new Google reviews': 'las reseñas nuevas en Google',
-  'website visits, daily': 'las visitas a tu sitio web, cada día',
+  'orders placed on Google': 'pedidos hechos en Google',
+  'replies posted': 'respuestas publicadas',
+  'your rating since you started': 'tu calificación desde que empezaste',
+  'new Google reviews': 'reseñas nuevas en Google',
+  'website visits, daily': 'visitas a tu sitio web, cada día',
   'listings you have confirmed, of fifty': 'los directorios que confirmaste, de cincuenta',
   'ad results': 'los resultados de los anuncios',
   'app orders': 'los pedidos de las apps',
@@ -445,4 +445,99 @@ export const ES: Record<string, string> = {
   'The delivery apps give us no way to read your orders.': 'Las apps de entrega no nos dejan leer tus pedidos.',
   'No text or email sending yet.': 'Todavía no enviamos mensajes de texto ni correos.',
   'Repeat visits need your register connected.': 'Las visitas repetidas necesitan tu caja conectada.',
+  /* ── Move 7b: the weekly sentence, the monthly report, the win card ───────────────────── */
+
+  /* the one line under the Home funnel */
+  'This week your Google listing got {n} taps: calls, directions, and website visits. Last week it was {prev}.':
+    'Esta semana tu ficha de Google tuvo {n} toques: llamadas, cómo llegar y visitas al sitio. La semana pasada fueron {prev}.',
+  'This week your posts reached {n} people. Last week it was {prev}.':
+    'Esta semana tus publicaciones llegaron a {n} personas. La semana pasada fueron {prev}.',
+
+  /* the monthly report */
+  'Your month · made from your numbers': 'Tu mes · hecho con tus números',
+  'This month, so far': 'Este mes, hasta ahora',
+  'in {month}': 'en {month}',
+  'people found you in search': 'personas te encontraron en las búsquedas',
+  'people acted on your listing': 'personas hicieron algo en tu ficha',
+  'A quiet month on the wires. Connect Google and publish work, and this page fills with your real numbers.':
+    'Un mes tranquilo. Conecta Google y publica trabajo, y esta página se llena con tus números reales.',
+  'The words that brought them': 'Las palabras que los trajeron',
+  'Up from {n} the month before.': 'Subió desde {n} el mes anterior.',
+  'Down from {n} the month before.': 'Bajó desde {n} el mes anterior.',
+  'What they said': 'Lo que dijeron',
+  '{n} new review · {avg} average': '{n} reseña nueva · {avg} de promedio',
+  '{n} new reviews · {avg} average': '{n} reseñas nuevas · {avg} de promedio',
+  '{n} review the month before': '{n} reseña el mes anterior',
+  '{n} reviews the month before': '{n} reseñas el mes anterior',
+  'Loved lately': 'Lo que más gustó',
+  'Heard more than once': 'Se dijo más de una vez',
+  '{n} mention': '{n} mención',
+  '{n} mentions': '{n} menciones',
+  'The move:': 'Qué hacer:',
+  'What worked': 'Lo que funcionó',
+  '{n} people': '{n} personas',
+  '{n} post': '{n} publicación',
+  '{n} posts': '{n} publicaciones',
+  'saw your best post': 'vieron tu mejor publicación',
+  'saw your best post: {title}': 'vieron tu mejor publicación: {title}',
+  'published this month': 'salieron este mes',
+  'What it moved': 'Lo que movió',
+  'Calls': 'Llamadas',
+  'Directions': 'Cómo llegar',
+  'Site visits': 'Visitas al sitio',
+  'Send this to someone': 'Manda esto a alguien',
+  'Print or save as PDF': 'Imprime o guarda como PDF',
+  'Copy link': 'Copiar enlace',
+  'Link copied': 'Enlace copiado',
+  'Could not copy': 'No se pudo copiar',
+  'The link only opens for people who can already see your business.':
+    'El enlace solo abre para quien ya puede ver tu negocio.',
+  'What happens next': 'Lo que sigue',
+  'Next month builds on this one. Plan the next push in a minute.':
+    'El mes que viene se construye sobre este. Planea el siguiente empujón en un minuto.',
+  'Open the builder': 'Abrir el creador',
+
+  /* the win card and its pages */
+  'Wins': 'Logros',
+  'Proof you can show someone': 'Pruebas que puedes enseñar',
+  'No wins yet': 'Todavía no hay logros',
+  'When an order you paid for gets its count, the card lands here. Then you can show it to someone.':
+    'Cuando un pedido que pagaste recibe su cuenta, la tarjeta cae aquí. Después se la puedes enseñar a alguien.',
+  'The wins shelf is almost on. A small database update turns it on.':
+    'La repisa de logros casi está lista. Una actualización pequeña de la base de datos la enciende.',
+  'Show someone': 'Enséñaselo a alguien',
+  'Counted by Apnosh': 'Contado por Apnosh',
+  'Take this down': 'Quitar esto',
+  'The link is off. Anyone who had it now sees nothing.':
+    'El enlace está apagado. Quien lo tenía ya no ve nada.',
+  'Anyone with the link sees this card and nothing else about your business.':
+    'Quien tenga el enlace ve esta tarjeta y nada más de tu negocio.',
+  'The share link is not on yet. A small database update turns it on.':
+    'El enlace para compartir todavía no está listo. Una actualización pequeña de la base de datos lo enciende.',
+  'Nothing to show here': 'Aquí no hay nada que enseñar',
+  'Only an order we counted is something to show. See the rest on your wins shelf.':
+    'Solo un pedido que contamos se puede enseñar. Mira los demás en tu repisa de logros.',
+  'Made with Apnosh': 'Hecho con Apnosh',
+  'This link does not work': 'Este enlace no funciona',
+  'It may have been cut short, or the card was taken down. Ask for it again.':
+    'Puede que se haya cortado, o que la tarjeta ya no esté. Pídela otra vez.',
+
+  /* the win card's own three lines, and the units the promise ledger counts in */
+  'Counted: {label}': 'Contado: {label}',
+  '{n} {unit}': '{n} {unit}',
+  'Counted {from}–{to}': 'Contado del {from} al {to}',
+
+  /* the monthly report email */
+  'Your {month} is ready': 'Tu {month} ya está listo',
+  'What it moved: {calls} calls, {directions} directions, {clicks} site visits.':
+    'Lo que movió: {calls} llamadas, {directions} veces cómo llegar, {clicks} visitas al sitio.',
+  'What they said: {n} new review, {avg} average.':
+    'Lo que dijeron: {n} reseña nueva, {avg} de promedio.',
+  'What they said: {n} new reviews, {avg} average.':
+    'Lo que dijeron: {n} reseñas nuevas, {avg} de promedio.',
+  'What worked: {n} people saw your best post.':
+    'Lo que funcionó: {n} personas vieron tu mejor publicación.',
+  'What worked: {n} posts went out.': 'Lo que funcionó: salieron {n} publicaciones.',
+  'Not counted yet. When the numbers come in, they show up here.':
+    'Todavía no se cuenta. Cuando lleguen los números, aparecen aquí.',
 }
