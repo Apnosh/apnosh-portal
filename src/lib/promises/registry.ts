@@ -41,7 +41,7 @@ export interface PromiseSpec {
 
 const GOOGLE_TAPS: PromiseSpec = { metric: 'gbp_card_taps', label: 'taps on your Google card', takenBy: 'google', lagDays: 7, windowDays: 14 }
 const GOOGLE_VIEWS: PromiseSpec = { metric: 'gbp_impressions', label: 'views of your Google card', takenBy: 'google', lagDays: 3, windowDays: 14 }
-const POSTS: PromiseSpec = { metric: 'post_reach', label: 'views on the posts, where they go', takenBy: 'social', lagDays: 7, windowDays: 14 }
+const POSTS: PromiseSpec = { metric: 'post_reach', label: 'views per post, where they go', takenBy: 'social', lagDays: 7, windowDays: 14 }
 const FILES: PromiseSpec = { metric: 'delivered_files', label: 'the files in your library', takenBy: 'apnosh', lagDays: 0, windowDays: 0 }
 
 /** By the service line the plan composes to (LineItem.serviceId). */

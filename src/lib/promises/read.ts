@@ -105,6 +105,9 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
       const moved = before != null && now !== before
       out.push({ ...base, sub: `${p.metric_label} · ${who}`, value: before != null ? `${before.toFixed(1)} → ${now.toFixed(1)}` : now.toFixed(1), small: moved ? (now > (before ?? 0) ? `▲ ${(now - (before ?? 0)).toFixed(1)}` : `▼ ${((before ?? 0) - now).toFixed(1)}`) : 'ratings move after about 20 new reviews', tone: moved ? (now > (before ?? 0) ? 'up' : 'down') : 'flat', state: t >= p.shows_on ? 'counted' : 'counting' }); continue
     }
+    if (p.metric_key === 'post_reach' && (cur.value == null || cur.reportedDays === 0)) {
+      out.push({ ...base, sub: `${p.metric_label} · counts once the posts go out through your connected accounts`, value: '—', small: 'no posts out yet', tone: 'wait', state: 'counting' }); continue
+    }
     if (cur.value == null || cur.reportedDays === 0) {
       out.push({ ...base, sub: `${p.metric_label} since ${md(p.count_from)} · ${who}`, value: '0 so far', small: `counting since ${md(p.count_from)}`, tone: 'wait', state: 'counting' }); continue
     }
@@ -117,7 +120,7 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
     }
     const tone: PromiseRow['tone'] = cur.value > before ? 'up' : cur.value < before ? 'down' : 'flat'
     const arrow = tone === 'up' ? '▲' : tone === 'down' ? '▼' : '='
-    const small = p.metric_key === 'post_reach' ? `${arrow} your usual post: ${fmt(before)}` : `${arrow} was ${fmt(before)} in the same ${cur.reportedDays} days before`
+    const small = p.metric_key === 'post_reach' ? `${arrow} your usual post: ${fmt(before)} · ${cur.reportedDays} posts` : `${arrow} was ${fmt(before)} in the same ${cur.reportedDays} days before`
     out.push({ ...base, sub: `${sinceText} · ${who}`, value: fmt(cur.value), small, tone, state: t >= p.shows_on ? 'counted' : 'counting' })
   }
   // Newest first, but a counted row with a number outranks a row that is only waiting.
