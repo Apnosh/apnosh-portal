@@ -6,7 +6,7 @@
  * home (mobile-home) and the /dashboard/mvp-home review surface.
  */
 
-import type { MvpHomeData, MetricView } from './mvp-home'
+import type { MvpHomeData, MetricView, HomeReview } from './mvp-home'
 import { buildCandidates, markLead, type SuggestionFacts } from '@/lib/dashboard/suggestions'
 
 export interface HomeInstance { vals: (number | null)[]; start: string; total: number; breakdown: { label: string; value: string; icon: string }[] }
@@ -180,6 +180,9 @@ export function transformHome(
   avatarText: string,
   greeting = 'Good day',
   comingUp: ComingUpItem[] | null = null,
+  /* "Your August review is ready" — built server-side by getReviewNudge, null when last
+     month has nothing to report. */
+  review: HomeReview | null = null,
 ): MvpHomeData {
   const metrics = homeMetrics?.metrics ?? []
   const views = ORDER
@@ -244,7 +247,7 @@ export function transformHome(
     approvals,
     signal,
     suggestions,
-    review: null,
+    review,
     planner,
   }
 }

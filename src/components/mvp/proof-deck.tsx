@@ -106,7 +106,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
     return () => { alive = false }
   }, [clientId])
 
-  const act = (id: string, action: 'read' | 'dismiss') => {
+  const act = (id: string, action: 'read' | 'open' | 'dismiss') => {
     if (!clientId || id.startsWith('example-')) return
     // State cards are not stored: a dismissal rests on this device for 7 days.
     if (id.startsWith('state-')) {
@@ -161,6 +161,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
               <ProofCard
                 card={c}
                 defaultOpen
+                onOpen={() => act(c.id, 'open')}
                 onDismiss={() => {
                   if (examples) { setStep((p) => (p + 1) % cards.length); return }
                   act(c.id, 'dismiss'); setCards((prev) => prev.filter((x) => x.id !== c.id))

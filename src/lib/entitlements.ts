@@ -4,6 +4,9 @@
  * the google-profile page) from the SAME rule — the client UI is never the only gate.
  *
  * PRO ENTITLEMENT = tier is 'Pro' or 'Internal'. Everything AI-lane keys off this.
+ * On the server it widens: a PAYING client is Pro too. That half needs the database and lives
+ * in ./entitlements-server, so client components importing isProTier never drag a service-role
+ * read into the browser bundle.
  */
 import type { ClientTier } from '@/types/database'
 

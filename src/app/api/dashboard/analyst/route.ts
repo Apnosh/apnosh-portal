@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isProTier } from '@/lib/entitlements'
+import { isProClient } from '@/lib/entitlements-server'
 import { buildAnalystPayload } from '@/lib/insights/analyst-payload'
 import { runAnalyst, funnelFromPayload, ANALYST_MODEL, READ_VERSION } from '@/lib/insights/analyst'
 import type { InsightsWindow } from '@/lib/insights/compute-stages'
@@ -54,15 +54,19 @@ export async function POST(req: NextRequest) {
   }
 
   // Pro gate — enforced here, before any model call (protects the AI spend too).
+  // Paying is Pro: a client whose tier was never switched off 'Standard' but who pays us
+  // (a live subscription, or an order paid in the last 90 days) gets the read too.
   let tier: string | null = null
+  let allowed = false
   try {
     const admin = createAdminClient()
     const { data } = await admin.from('clients').select('tier').eq('id', clientId).maybeSingle()
     tier = (data as { tier?: string | null } | null)?.tier ?? null
+    allowed = await isProClient(clientId, tier, admin)
   } catch {
     /* if we can't read the tier, fail closed (locked) rather than give it away */
   }
-  if (!isProTier(tier)) {
+  if (!allowed) {
     return NextResponse.json({ locked: true }, { status: 200 })
   }
 
