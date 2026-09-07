@@ -11,6 +11,7 @@
  * but we don't depend on them — extra context is encoded in `link`.
  */
 
+import { waitUntil } from '@vercel/functions'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { getAdminUserIds } from '@/lib/notify'
@@ -268,13 +269,22 @@ export async function notifyClientOwners(
   // waits on Resend: two owner lookups plus an HTTPS round trip to a third party sat in front of
   // the ship response, and a slow Resend made the whole order feel broken. Fire and forget, and
   // say so in the log when it fails, since the row the owner will see is already written.
+  //
+  // "Fire and forget" on Vercel means "frozen the moment the response goes out" unless the
+  // platform is told to keep the function alive: waitUntil does that, and falls back to a plain
+  // detached promise anywhere else (local dev, tests).
   if (payload.email) {
-    void emailClientOwners(clientId, {
+    const send = emailClientOwners(clientId, {
       subject: payload.title,
       body: payload.body,
       link: payload.link,
       category: payload.emailCategory ?? categoryForKind(payload.kind),
     }).catch((e) => console.warn('[notifications] owner email failed:', (e as Error)?.message))
+    try {
+      waitUntil(send)
+    } catch {
+      void send
+    }
   }
   return { notified: ids.size }
 }
