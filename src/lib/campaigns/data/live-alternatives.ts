@@ -36,6 +36,19 @@ export function unbundleFor(id: string, overrides?: VisibilityOverrideMap): { id
   return u.ids.every((x) => isBuyable(x, overrides)) ? u : null
 }
 
+/**
+ * The ONE card to offer in place of a coming-soon card on the shelf, or null.
+ *
+ * Only a HAND-PICKED piece of that very card counts. `liveAlternativesFor` falls through to the
+ * same goal, then the same stage, then the staples, so it never comes back empty — which on the
+ * shelf meant every one of the 65 coming-later rows offered something unrelated ("Run local ads"
+ * under a photo shoot). An unrelated card is not a detour, it is a bait swap, so the shelf asks
+ * for a curated piece and otherwise says "Tell me when".
+ */
+export function curatedDetourFor(id: string, overrides?: VisibilityOverrideMap): string | null {
+  return unbundleFor(id, overrides)?.ids.find((x) => isBuyable(x, overrides)) ?? null
+}
+
 const STAPLES = ['dish', 'reel', 'gbp', 'gpost']
 
 /** Live cards to offer INSTEAD of a coming-soon card: its unbundled ready pieces first,

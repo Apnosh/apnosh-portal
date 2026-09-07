@@ -15,6 +15,7 @@ import { GOAL_CHIPS } from '../src/app/(auth)/onboarding/full/data'
 import { sellable, notSellableReason } from '../src/lib/campaigns/data/catalog-availability'
 import { SHELF_SHAPES, type ShelfShape } from '../src/lib/clients/shape'
 import { goalSlugForChip, chipForGoalSlug, legacyGoalSlugForChip, ALL_GOAL_SLUGS } from '../src/lib/goals/defaults'
+import { curatedDetourFor, UNBUNDLED_TODAY } from '../src/lib/campaigns/data/live-alternatives'
 
 let fail = 0
 const ok = (cond: boolean, msg: string) => { console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fail++ }
@@ -143,6 +144,28 @@ for (const chip of chips) {
   if (!back || !CHIP_SHELF[back]) badFallback.push(`${chip} -> ${legacy} -> ${back ?? 'nothing'}`)
 }
 ok(badFallback.length === 0, `every chip's fallback slug reads back to a shelf${badFallback.length ? `\n        ${badFallback.join('\n        ')}` : ''}`)
+
+// 13) The coming-later row's detour. The shelf offers "Order that instead" only where a
+//     hand-picked piece of THAT card is on sale. The broad liveAlternativesFor fallback never
+//     returns empty (goal, then stage, then staples), so wiring the row to it put an unrelated
+//     card under every held one. A detour must be curated AND sellable, or the row says
+//     "Tell me when" instead.
+console.log('\n== the coming-later detour is curated, or there is none ==')
+const laterIds = new Set<string>()
+for (const shape of SHELF_SHAPES as readonly ShelfShape[]) {
+  for (const chip of chips) for (const id of shelfForChip(chip, shape)) if (!sellable(id).ok) laterIds.add(id)
+}
+const badDetour: string[] = []
+let offered = 0
+for (const id of laterIds) {
+  const alt = curatedDetourFor(id)
+  if (!alt) continue
+  offered++
+  if (!(UNBUNDLED_TODAY[id]?.ids ?? []).includes(alt)) badDetour.push(`${id} -> ${alt} is not curated`)
+  else if (!sellable(alt).ok) badDetour.push(`${id} -> ${alt} is not sellable`)
+}
+ok(badDetour.length === 0, `every offered detour is curated and sellable${badDetour.length ? `\n        ${badDetour.join('\n        ')}` : ''}`)
+console.log(`  NOTE  ${offered} of ${laterIds.size} coming-later rows offer a detour; the rest say "Tell me when"`)
 
 console.log('\n====================================================')
 console.log(fail === 0 ? 'RESULT: chip-shelf is clean.' : `RESULT: ${fail} check${fail === 1 ? '' : 's'} failed.`)

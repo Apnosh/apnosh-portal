@@ -26,7 +26,7 @@ import { Mark } from '../mark'
 import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuyable, lanesFor, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
 import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from '@/lib/campaigns/data/chip-shelf'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
-import { liveAlternativesFor } from '@/lib/campaigns/data/live-alternatives'
+import { curatedDetourFor } from '@/lib/campaigns/data/live-alternatives'
 import { REPLY_PROMISE } from '@/lib/reply-promise'
 import { CONTACT_KEY, firstName } from '../people-row'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
@@ -677,11 +677,11 @@ export default function CreatePage() {
               <div style={{ padding: '6px 2px 0' }}>
                 {laterIds.map((id) => {
                   const title = cards[id]?.title ?? shelfTitle(id)
-                  /* Where something LIVE does the same job, the row says so with its price and the
-                     button orders that instead of promising a note one day. liveAlternativesFor
-                     only ever returns ids that pass the same sellable law the shelf reads, so this
-                     detour can never point at another closed door. */
-                  const alt = cards[liveAlternativesFor(id, undefined, 1)[0] ?? '']
+                  /* A detour only where a HAND-PICKED piece of this very card is on sale
+                     (curatedDetourFor reads UNBUNDLED_TODAY). The broad fallback used to answer
+                     here, and it never comes back empty, so all 65 rows offered an unrelated
+                     card: "Run local ads" under a photo shoot. Nothing curated, no swap. */
+                  const alt = cards[curatedDetourFor(id) ?? '']
                   return (
                   <div key={id} className="row" style={{ alignItems: 'flex-start' }}>
                     <span className="tx">
