@@ -12,6 +12,12 @@
  *
  * Note: there is no profiles.phone column, so no phone field here. The business
  * phone lives in Business info -> contact.
+ *
+ * Language (2026-09-07) is the one thing on this page that belongs to the BUSINESS rather than
+ * the login: ten of the twenty owners in the walk speak Spanish at home, and the product only
+ * ever spoke English at them. Saved to clients.preferred_language through the settings PATCH,
+ * and applied to the screen the moment they tap, before the save comes back, because a language
+ * picker that makes you wait to see the language is the wrong picker.
  */
 
 import { useEffect, useState } from 'react'
@@ -20,6 +26,9 @@ import { createClient } from '@/lib/supabase/client'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpPill, C } from '@/components/mvp/mvp-detail'
 import { EditorField } from '../business-info/editor-shell'
+import { useClient } from '@/lib/client-context'
+import { useLang } from '@/components/mvp/mvp-language'
+import { LANGS, LANG_LABEL, t as tRaw, type Lang } from '@/lib/i18n/t'
 
 
 export default function SettingsPage() {
@@ -43,7 +52,29 @@ export default function SettingsPage() {
   const [pwSaving, setPwSaving] = useState(false)
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
-  // Approvals
+  // Language — the business's, not the login's
+  const { client } = useClient()
+  const { lang, setLang, T } = useLang()
+  const [langMsg, setLangMsg] = useState<{ ok: boolean; text: string } | null>(null)
+
+  async function pickLanguage(next: Lang) {
+    if (next === lang) return
+    // The screen switches first. The save is what makes it stick on the next device.
+    setLang(next)
+    setLangMsg(null)
+    if (!client?.id) return
+    try {
+      const r = await fetch('/api/dashboard/more', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id, language: next }),
+      })
+      const j = await r.json().catch(() => ({}))
+      setLangMsg(r.ok && j?.ok ? { ok: true, text: t2(next, 'Saved.') } : { ok: false, text: t2(next, 'Could not save. Try again.') })
+    } catch {
+      setLangMsg({ ok: false, text: t2(next, 'Could not save. Try again.') })
+    }
+  }
 
   useEffect(() => {
     async function run() {
@@ -125,6 +156,33 @@ export default function SettingsPage() {
               </div>
             </MvpGroup>
 
+            {/* Language — the business's language, saved on the client row. Two options, each
+                written in its own language, because that is the only label a reader can be sure
+                of. The honest note under them says the translation is not finished yet. */}
+            <MvpGroup title={T('Language')} hue="nights">
+              <div style={{ padding: 14 }}>
+                <div style={{ fontSize: 13.5, color: C.mute, marginBottom: 12 }}>{T('Pick the language you want to read.')}</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {LANGS.map((l) => {
+                    const on = l === lang
+                    return (
+                      <button
+                        key={l}
+                        type="button"
+                        onClick={() => pickLanguage(l)}
+                        aria-pressed={on}
+                        style={{ flex: 1, height: 46, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink, background: on ? C.green : '#fff', border: `1px solid ${on ? C.green : C.line}` }}
+                      >
+                        {LANG_LABEL[l]}
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ fontSize: 12.5, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>{T('Some screens are still in English. We are working on the rest.')}</div>
+                {langMsg && <Msg msg={langMsg} />}
+              </div>
+            </MvpGroup>
+
             {/* Security */}
             <MvpGroup title="Password" hue="grey">
               <div style={{ padding: 14 }}>
@@ -147,6 +205,9 @@ export default function SettingsPage() {
     </MvpShell>
   )
 }
+
+/** The save message must read in the language they just picked, not the one they just left. */
+function t2(lang: Lang, key: string): string { return tRaw(key, lang) }
 
 function Msg({ msg }: { msg: { ok: boolean; text: string } }) {
   return (

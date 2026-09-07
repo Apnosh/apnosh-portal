@@ -4,6 +4,8 @@ import { type ReactNode } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { type OnboardingData, type StepId } from './data'
 import { PrimaryPill } from './ui'
+import { LanguageProvider, useStandaloneLang } from '@/components/mvp/mvp-language'
+import { LANG_LABEL, type Lang } from '@/lib/i18n/t'
 import StepRole from './steps/step-role'
 import StepBizName from './steps/step-biz-name'
 import StepConfirm from './steps/step-confirm'
@@ -73,6 +75,10 @@ export interface OnboardingFrameProps {
   hideAction?: boolean
   /** Optional slim strip rendered ABOVE the top bar (preview chrome). */
   topSlot?: ReactNode
+  /** Told when the owner switches language in the top bar, so the wizard can carry the answer
+   *  to the client row at the end. Setup has no client row yet, so this is the only way the
+   *  choice survives past the last screen. */
+  onLanguage?: (l: Lang) => void
 }
 
 const quietTextButton: React.CSSProperties = {
@@ -105,10 +111,22 @@ export function OnboardingFrame({
   continueLabel,
   hideAction,
   topSlot,
+  onLanguage,
 }: OnboardingFrameProps) {
   const barHidden = !!isSuccess || !!hideAction
+  /* Setup runs before a client row exists, so there is no clients.preferred_language to read
+     yet. The standalone hook reads the browser's remembered answer, which is what a returning
+     Spanish owner has, and English otherwise. The answer is written to the client row at the
+     end of setup like every other answer.
+
+     ONE copy for the whole flow. The frame builds it and hands it down through LanguageProvider,
+     so the questions, the tiles and this bar all read the same lang and all re-render together
+     when the switch is tapped. Every screen below calls useLang(). */
+  const langCtx = useStandaloneLang()
+  const { T, lang, setLang } = langCtx
 
   return (
+    <LanguageProvider value={langCtx}>
     <div
       className="ob-frame"
       style={{
@@ -139,7 +157,7 @@ export function OnboardingFrame({
         <button
           type="button"
           onClick={onBack}
-          aria-label="Back"
+          aria-label={T('Back')}
           aria-hidden={!showBack}
           tabIndex={showBack ? 0 : -1}
           disabled={saving}
@@ -168,7 +186,7 @@ export function OnboardingFrame({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={pct}
-          aria-label={`Setup progress: screen ${step} of ${totalSteps}`}
+          aria-label={T('Setup progress: screen {n} of {total}', { n: step, total: totalSteps })}
           style={{ flex: 1, height: 4, borderRadius: 2, overflow: 'hidden', background: '#ededec' }}
         >
           <div
@@ -182,15 +200,27 @@ export function OnboardingFrame({
           />
         </div>
 
+        {/* The language switch, in the language it switches TO — the only label a reader who
+            cannot read this screen yet can be sure of. Setup is where a Spanish-speaking owner
+            meets us, so it has to be here and not only in Settings. */}
+        <button
+          type="button"
+          onClick={() => { const next: Lang = lang === 'es' ? 'en' : 'es'; setLang(next); onLanguage?.(next) }}
+          style={quietTextButton}
+          title={LANG_LABEL[lang === 'es' ? 'en' : 'es']}
+        >
+          {LANG_LABEL[lang === 'es' ? 'en' : 'es']}
+        </button>
+
         {canSkip ? (
           <button
             type="button"
             onClick={onSkipForNow}
             disabled={saving}
             style={quietTextButton}
-            title="Save your answers and finish setup later from the dashboard."
+            title={T('Save your answers and finish setup later from the dashboard.')}
           >
-            Finish later
+            {T('Finish later')}
           </button>
         ) : onExit ? (
           <button
@@ -198,9 +228,9 @@ export function OnboardingFrame({
             onClick={onExit}
             disabled={saving}
             style={quietTextButton}
-            title="Leave setup. Your progress is saved."
+            title={T('Leave setup. Your progress is saved.')}
           >
-            Exit
+            {T('Exit')}
           </button>
         ) : null}
       </div>
@@ -240,13 +270,14 @@ export function OnboardingFrame({
         >
           <div style={{ maxWidth: 520, margin: '0 auto' }}>
             <PrimaryPill onClick={onNext} disabled={!valid || saving} grow>
-              {saving ? 'Saving...' : continueLabel || 'Continue'}
+              {saving ? T('Saving...') : continueLabel ? T(continueLabel) : T('Continue')}
             </PrimaryPill>
           </div>
         </div>
       )}
       </div>
     </div>
+    </LanguageProvider>
   )
 }
 
@@ -344,7 +375,7 @@ export default function StepRenderer(props: Props) {
       <ScreenKeyframes />
       {screen === 'success' || !screen ? (
         <div key="success" className="ob-screen">
-          <StepDone bizName={data.biz_name} goals={data.top_goals} />
+          <StepDone bizName={data.biz_name} goals={data.top_goals} shape={data.shape} />
         </div>
       ) : (
         /* Keyed to the screen number so every advance replays the entrance. */

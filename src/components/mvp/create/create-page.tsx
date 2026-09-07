@@ -29,6 +29,7 @@ import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { SHAPE_LABEL, DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
+import { useLang } from '../mvp-language'
 
 const C = { ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', fill: '#f5f5f7', mint: '#4abd98', mintDk: '#2e9a78', mintSoft: '#eaf7f3', amberInk: '#8a5a0c', amberBg: '#fbf3e4' }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
@@ -277,6 +278,7 @@ export default function CreatePage() {
   const router = useRouter()
   const params = useSearchParams()
   const { client } = useClient()
+  const { T } = useLang()
   const clientId = client?.id
   // the view lives in the URL so back works and a product can be shared
   const view: View = useMemo(() => {
@@ -352,13 +354,13 @@ export default function CreatePage() {
   /* why-now lines from the account's own numbers */
   const whyNow = useCallback((c: ShelfCard): string | null => {
     const s = signals; if (!s) return null
-    if ((c.id === 'reviewsreply' || c.id === 'reviewsplan') && s.unrepliedReviews) return `${s.unrepliedReviews} reviews are waiting for a reply`
-    if (c.id === 'reviewsplan' && s.rating != null && s.rating < 4.3) return `You are at ${s.rating.toFixed(1)} stars`
-    if ((c.id === 'gbp' || c.id === 'listings') && s.listingGaps?.length) return `${s.listingGaps.length} thing${s.listingGaps.length === 1 ? '' : 's'} on your listing need fixing`
-    if (c.id === 'gpost' && s.views30d) return `${s.views30d.toLocaleString()} people saw your listing this month`
-    if (c.id === 'friction' && s.actions30d && s.actions30d.directions > 0) return `${s.actions30d.directions} people asked for directions this month`
+    if ((c.id === 'reviewsreply' || c.id === 'reviewsplan') && s.unrepliedReviews) return T('{n} reviews are waiting for a reply', { n: s.unrepliedReviews })
+    if (c.id === 'reviewsplan' && s.rating != null && s.rating < 4.3) return T('You are at {r} stars', { r: s.rating.toFixed(1) })
+    if ((c.id === 'gbp' || c.id === 'listings') && s.listingGaps?.length) return T(s.listingGaps.length === 1 ? '{n} thing on your listing needs fixing' : '{n} things on your listing need fixing', { n: s.listingGaps.length })
+    if (c.id === 'gpost' && s.views30d) return T('{n} people saw your listing this month', { n: s.views30d.toLocaleString() })
+    if (c.id === 'friction' && s.actions30d && s.actions30d.directions > 0) return T('{n} people asked for directions this month', { n: s.actions30d.directions })
     return null
-  }, [signals])
+  }, [signals, T])
 
   const open = (c: ShelfCard) => go({ name: 'product', id: c.id })
   const order = (c: ShelfCard) => {
@@ -369,7 +371,7 @@ export default function CreatePage() {
   }
 
   /* ── pieces ── */
-  const Coming = () => <span className="pill-w grey">Coming soon</span>
+  const Coming = () => <span className="pill-w grey">{T('Coming soon')}</span>
   /* small: a quick ask */
   const Mini = ({ c }: { c: ShelfCard }) => { const Icon = iconFor(c); const buy = isBuyable(c)
     return (
@@ -377,7 +379,7 @@ export default function CreatePage() {
         <div className="tile"><Icon />{!buy && <span style={{ position: 'absolute', top: 6, left: 6 }}><Coming /></span>}</div>
         {/* A held card prints NO price and NO ready time. Both are offers, and there is
             nothing to offer yet. Same rule as the product page's fact strip. */}
-        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{c.price} <span>· {c.ready}</span></> : <span>Not on sale yet</span>}</div></div>
+        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{c.price} <span>· {c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</div></div>
       </button>
     )
   }
@@ -387,8 +389,8 @@ export default function CreatePage() {
       <button type="button" onClick={() => open(c)} className={`row press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
         <span className={`st${isDone ? ' done' : ''}`}>{isDone && <Check size={13} strokeWidth={3} />}</span>
         <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
-        <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : 'Coming soon'}</span>}</span>
-        <span className="r"><b>{isDone ? 'Done' : buy ? c.price : ''}</b></span>
+        <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : T('Coming soon')}</span>}</span>
+        <span className="r"><b>{isDone ? T('Done') : buy ? c.price : ''}</b></span>
         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
       </button>
     )
@@ -396,7 +398,7 @@ export default function CreatePage() {
   const Sec = ({ t, s, hue, more }: { t: string; s?: string; hue: HueKey; more?: () => void }) => (
     <div className="sec" style={hv(hue)}>
       <div><h2><span className="dot" />{t}</h2>{s && <div className="sub">{s}</div>}</div>
-      {more && <button type="button" onClick={more} className="more" aria-label="See all"><ChevronRight size={18} /></button>}
+      {more && <button type="button" onClick={more} className="more" aria-label={T('See all')}><ChevronRight size={18} /></button>}
     </div>
   )
   const Shelf = ({ children }: { children: React.ReactNode }) => <div className="shelf cc-scroll">{children}</div>
@@ -420,15 +422,17 @@ export default function CreatePage() {
     } catch { setRead({ ok: false, reason: 'no answer', situation: null, summary: '', unsupported: [] }) }
     setReading(false)
   }
+  /* The four example sentences. They are TRANSLATED before they are shown and before they are
+     dropped in the box, because what an owner reads has to be what they would send. */
   const EXAMPLES: [ShelfGoal, string][] = [['event', 'Halloween party Oct 31, want it packed'], ['announce', 'New fall menu lands Sep 18'], ['nights', 'Tuesdays are dead, fill them'], ['catering', 'Get office lunch orders']]
   const SayBox = () => (
     <div className="say">
       <div className="in">
-        <div className="eyebrow"><Sparkles /><span className="aur">Describe what you want to do</span></div>
-        <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder="Say it in a sentence. A date, a dish, a slow night…" />
+        <div className="eyebrow"><Sparkles /><span className="aur">{T('Describe what you want to do')}</span></div>
+        <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder={T('Say it in a sentence. A date, a dish, a slow night…')} />
         <div className="foot">
-          <span className="hint">We read it and suggest a plan. You can change anything.</span>
-          <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? 'Reading' : 'Plan it'}</button>
+          <span className="hint">{T('We read it and suggest a plan. You can change anything.')}</span>
+          <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? T('Reading') : T('Plan it')}</button>
         </div>
         {read && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
@@ -439,16 +443,16 @@ export default function CreatePage() {
               return (
                 <div style={hv(g)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Mark hue={g} size={36}><GI size={20} /></Mark><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink }}>{GOALS.find((x) => x.id === g)?.label}</div>{read.summary && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{read.summary}</div>}</div></div>
-                  {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>We do not do {read.unsupported.join(', ')} yet. Everything else is below.</div>}
+                  {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>{T('We do not do {list} yet. Everything else is below.', { list: read.unsupported.join(', ') })}</div>}
                   <div style={{ marginTop: 6 }}>{picks.map((c) => { const I = iconFor(c); return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '7px 2px' }}><Mark hue={c.goal} size={30}><I size={16} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{c.price}</b></span><ChevronRight size={15} color={C.faint} /></button> })}</div>
-                  {picks[0] && <button type="button" className="btn hue block" style={{ marginTop: 6 }} onClick={() => order(picks[0])}>Build this <ArrowRight size={15} /></button>}
+                  {picks[0] && <button type="button" className="btn hue block" style={{ marginTop: 6 }} onClick={() => order(picks[0])}>{T('Build this')} <ArrowRight size={15} /></button>}
                 </div>
               )
             })() : (
               <div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>We could not read that one.</div>
-                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>Pick a goal above and we show the best ways, or send your words to your strategist and a person reads them.</div>
-                <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(ask)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 13, fontWeight: 700, color: C.mintDk, textDecoration: 'none' }}>Send it to your strategist <ArrowRight size={14} /></Link>
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{T('We could not read that one.')}</div>
+                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>{T('Pick a goal above and we show the best ways, or send your words to your strategist and a person reads them.')}</div>
+                <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(ask)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 13, fontWeight: 700, color: C.mintDk, textDecoration: 'none' }}>{T('Send it to your strategist')} <ArrowRight size={14} /></Link>
               </div>
             )}
           </div>
@@ -459,14 +463,14 @@ export default function CreatePage() {
 
   const Examples = () => (
     <div className="ex cc-scroll" style={{ margin: '10px 16px 0' }}>
-      {EXAMPLES.map(([g, t]) => { const k: HueKey = g === 'foryou' ? 'mint' : g
-        return <button key={t} type="button" onClick={() => { setAsk(t); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{t}</button> })}
+      {EXAMPLES.map(([g, t]) => { const k: HueKey = g === 'foryou' ? 'mint' : g; const words = T(t)
+        return <button key={t} type="button" onClick={() => { setAsk(words); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{words}</button> })}
     </div>
   )
   const AskBox = () => (
     <div className="ask">
-      <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>Not seeing it? Ask for anything</div>
-      <Link href="/dashboard/requests?type=other" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.faint, fontSize: 14 }}>Tell us what you need<span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span></Link>
+      <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>{T('Not seeing it? Ask for anything')}</div>
+      <Link href="/dashboard/requests?type=other" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.faint, fontSize: 14 }}>{T('Tell us what you need')}<span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span></Link>
     </div>
   )
 
@@ -484,14 +488,14 @@ export default function CreatePage() {
           {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
               monthly_budget null, and this pill never prints a number the owner did not say. */}
           <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
-            {cap == null ? 'Set a budget' : `Up to ${money(cap)} to start`}
+            {cap == null ? T('Set a budget') : T('Up to {amount} to start', { amount: money(cap) })}
           </button>
-          {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{SHAPE_LABEL[shape].title}</span>}
+          {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{T(SHAPE_LABEL[shape].title)}</span>}
         </div>
         <div className="filters cc-scroll" style={{ paddingTop: 0 }}>
           {ordered.map((c) => {
             const on = c === activeChip
-            return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(false) }} className={`fch${on ? ' on' : ''}`}>{c}</button>
+            return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(false) }} className={`fch${on ? ' on' : ''}`}>{T(c)}</button>
           })}
         </div>
       </>
@@ -503,11 +507,11 @@ export default function CreatePage() {
   const SearchBar = ({ live }: { live?: boolean }) => live ? (
     <div style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 0 14px' }}>
       <Search size={16} color={C.faint} />
-      <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search campaigns" style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none' }} />
-      {q && <button type="button" onClick={() => setQ('')} aria-label="Clear" style={{ width: 26, height: 26, borderRadius: 13, border: 'none', background: '#e3e6e5', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={13} /></button>}
+      <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={T('Search campaigns')} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none' }} />
+      {q && <button type="button" onClick={() => setQ('')} aria-label={T('Clear')} style={{ width: 26, height: 26, borderRadius: 13, border: 'none', background: '#e3e6e5', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={13} /></button>}
     </div>
   ) : (
-    <button type="button" onClick={() => go({ name: 'search' })} style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', width: '100%', color: C.faint, fontSize: 14, cursor: 'text', fontFamily: 'inherit' }}><Search size={16} /> Search campaigns</button>
+    <button type="button" onClick={() => go({ name: 'search' })} style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', width: '100%', color: C.faint, fontSize: 14, cursor: 'text', fontFamily: 'inherit' }}><Search size={16} /> {T('Search campaigns')}</button>
   )
 
   /* One shelf row: the glyph, the title, one reason, one price with one time word, one button.
@@ -525,7 +529,7 @@ export default function CreatePage() {
           <span className="tx">
             <span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span>
             {reason && <span className="s why" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{reason}</span>}
-            <span className="s" style={{ display: 'block' }}>{price}{price !== 'Free' && free ? ', or free, you do it' : ''} · {c.ready}</span>
+            <span className="s" style={{ display: 'block' }}>{price}{price !== 'Free' && free ? T(', or free, you do it') : ''} · {c.ready}</span>
           </span>
         </button>
         {/* The button matches the price. A desk card with a real price is an order, not an ask:
@@ -550,10 +554,10 @@ export default function CreatePage() {
         <SayBox />
         <Examples />
 
-        <Sec t={SHELF_TITLE_FOR_SHAPE[shape]} s={`${ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet'} · ${underCap.length} you can order today`} hue={CHIP_HUE[activeChip] ?? 'mint'} />
+        <Sec t={T(SHELF_TITLE_FOR_SHAPE[shape])} s={`${T(ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet')} · ${T('{n} you can order today', { n: underCap.length })}`} hue={CHIP_HUE[activeChip] ?? 'mint'} />
         {underCap.length === 0 ? (
           <div style={{ padding: '0 16px', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}>
-            <b style={{ color: C.ink }}>Nothing here yet for this one.</b> Everything we could do for it is below, with the reason it is not ready.
+            <b style={{ color: C.ink }}>{T('Nothing here yet for this one.')}</b> {T('Everything we could do for it is below, with the reason it is not ready.')}
           </div>
         ) : (
           <div style={{ padding: '0 12px' }}>{underCap.map((id, i) => <ShelfRow key={id} id={id} reason={reasonFor(id, i)} />)}</div>
@@ -561,7 +565,7 @@ export default function CreatePage() {
 
         {overCap.length > 0 && cap != null && (
           <>
-            <Sec t={`Above ${money(cap)} to start`} s={`${overCap.length} more, once you raise it`} hue="amber" />
+            <Sec t={T('Above {amount} to start', { amount: money(cap) })} s={T('{n} more, once you raise it', { n: overCap.length })} hue="amber" />
             <div style={{ padding: '0 12px' }}>
               {overCap.map((id) => { const c = cards[id]; if (!c) return null
                 return (
@@ -569,7 +573,7 @@ export default function CreatePage() {
                     <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
                       <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{c.price} · {c.ready}</span></span>
                     </button>
-                    <button type="button" className="btn ghost" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => setBudgetSheet(true)}>Raise budget</button>
+                    <button type="button" className="btn ghost" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => setBudgetSheet(true)}>{T('Raise budget')}</button>
                   </div>
                 ) })}
             </div>
@@ -579,7 +583,7 @@ export default function CreatePage() {
         {laterIds.length > 0 && (
           <div style={{ margin: '18px 16px 0' }}>
             <button type="button" onClick={() => setShowLater((v) => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, border: 'none', background: C.fill, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
-              <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: C.ink }}>Coming later for this goal · {laterIds.length}</span>
+              <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: C.ink }}>{T('Coming later for this goal')} · {laterIds.length}</span>
               <ChevronDown size={16} color={C.faint} style={{ transform: showLater ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
             </button>
             {showLater && (
@@ -590,7 +594,7 @@ export default function CreatePage() {
                       <span className="t" style={{ display: 'block', fontSize: 14 }}>{cards[id]?.title ?? shelfTitle(id)}</span>
                       <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>{notSellableReason(id)}</span>
                     </span>
-                    <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${cards[id]?.title ?? shelfTitle(id)} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>Tell me when</Link>
+                    <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${cards[id]?.title ?? shelfTitle(id)} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>{T('Tell me when')}</Link>
                   </div>
                 ))}
               </div>
@@ -598,13 +602,13 @@ export default function CreatePage() {
           </div>
         )}
 
-        <Sec t="Set up once" s="The basics, ticked off as you go" hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
+        <Sec t={T('Set up once')} s={T('The basics, ticked off as you go')} hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
         <div style={{ padding: '0 12px' }}>{setupRows.map((c) => <SetupRow key={c.id} c={c} />)}</div>
 
         <div style={{ margin: '18px 16px 0' }}>
           <button type="button" onClick={() => go({ name: 'guide' })} className="press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 18, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
             <Mark hue="mint" size={38}><Compass size={22} /></Mark>
-            <span style={{ flex: 1 }}><span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>Not sure? Guide me</span><span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>Three questions, then three picks</span></span>
+            <span style={{ flex: 1 }}><span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>{T('Not sure? Guide me')}</span><span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>{T('Three questions, then three picks')}</span></span>
             <ChevronRight size={17} color={C.faint} />
           </button>
         </div>
@@ -624,19 +628,19 @@ export default function CreatePage() {
             return <button key={k} type="button" onClick={() => setSheet(k)} className={`fch${on ? ' on' : ''}`}>{lab}<ChevronDown /></button> })}
           {active.length > 0 && <button type="button" onClick={() => setFilters({ budget: 'any', you: 'any', speed: 'any', kind: 'any' })} className="fch" style={{ color: C.mute }}>Clear {active.length}</button>}
         </div>
-        {!q && <div className="hintbar"><Lightbulb />Plain words work: try flyer, menu photos, TikTok, Yelp, coupons</div>}
-        <div style={{ padding: '16px 16px 6px', fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{hits.length} {hits.length === 1 ? 'result' : 'results'}{q ? ` for “${q}”` : ''}</div>
+        {!q && <div className="hintbar"><Lightbulb />{T('Plain words work: try flyer, menu photos, TikTok, Yelp, coupons')}</div>}
+        <div style={{ padding: '16px 16px 6px', fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{T(hits.length === 1 ? '{n} result' : '{n} results', { n: hits.length })}{q ? ` ${T('for “{q}”', { q })}` : ''}</div>
         {hits.length === 0 ? (
-          <div style={{ padding: '20px 16px', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>Nothing matches yet.</b> Loosen a filter, or just tell us what you need.</div>
+          <div style={{ padding: '20px 16px', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing matches yet.')}</b> {T('Loosen a filter, or just tell us what you need.')}</div>
         ) : (
           <div style={{ padding: '0 12px' }}>
             {hits.map((c) => { const Icon = iconFor(c); const mw = matchWord(c, q); const buy = isBuyable(c)
               return <button key={c.id} type="button" onClick={() => open(c)} className={`row press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
                 <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
-                <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? 'Coming soon' : mw ? `matches “${mw}”` : c.sub || c.plain}</span></span>
+                <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? T('Coming soon') : mw ? T('matches “{word}”', { word: mw }) : c.sub || c.plain}</span></span>
                 {/* No price on a held card, here either. The search row was the last place a
                     coming-soon card still carried one, which read as a thing you could buy. */}
-                <span className="r">{buy ? <><b>{c.price}</b><span>{c.ready}</span></> : <span>Not on sale yet</span>}</span>
+                <span className="r">{buy ? <><b>{c.price}</b><span>{c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</span>
               </button> })}
           </div>
         )}
@@ -651,10 +655,10 @@ export default function CreatePage() {
     const step = answers.length
     const s = signals
     const path: [string, string, typeof Eye, string, HueKey][] = [
-      ['found', 'Found', Eye, s?.views30d ? `${s.views30d.toLocaleString()} saw your listing this month` : 'How many people see you', 'mint'],
-      ['tempt', 'Tempted', Lightbulb, s?.rating ? `${s.rating.toFixed(1)} stars · ${s.ratingCount ?? 0} reviews` : 'What they think when they look', 'nights'],
-      ['slow', 'Come in', DoorOpen, s?.actions30d ? `${s.actions30d.directions} asked for directions` : 'Who actually comes', 'amber'],
-      ['back', 'Come back', Repeat, 'Who comes twice', 'brand'],
+      ['found', T('Found'), Eye, s?.views30d ? T('{n} saw your listing this month', { n: s.views30d.toLocaleString() }) : T('How many people see you'), 'mint'],
+      ['tempt', T('Tempted'), Lightbulb, s?.rating ? T('{r} stars · {n} reviews', { r: s.rating.toFixed(1), n: s.ratingCount ?? 0 }) : T('What they think when they look'), 'nights'],
+      ['slow', T('Come in'), DoorOpen, s?.actions30d ? T('{n} asked for directions', { n: s.actions30d.directions }) : T('Who actually comes'), 'amber'],
+      ['back', T('Come back'), Repeat, T('Who comes twice'), 'brand'],
     ]
     const weak = answers[0] ?? null
     const Path = ({ k }: { k: string }) => (
@@ -668,9 +672,9 @@ export default function CreatePage() {
             <div className="prog">{GUIDE_QS.map((_, i) => <i key={i} className={i <= step ? 'on' : ''} />)}</div>
             <div className="q">{qq.q}</div><div className="qs">{qq.s}</div>
             <div className="opts">{qq.opts.map(([v, t, sub]) => <button key={v} type="button" onClick={() => setAnswers((a) => [...a, v])} className="opt press"><span className="rr" /><span style={{ flex: 1 }}><span className="t" style={{ display: 'block' }}>{t}</span>{sub && <span className="s" style={{ display: 'block' }}>{sub}</span>}</span></button>)}</div>
-            {step > 0 && <button type="button" onClick={() => setAnswers((a) => a.slice(0, -1))} style={{ marginTop: 12, border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>Back a step</button>}
+            {step > 0 && <button type="button" onClick={() => setAnswers((a) => a.slice(0, -1))} style={{ marginTop: 12, border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>{T('Back a step')}</button>}
           </div>
-          <Path k="How a guest reaches you" />
+          <Path k={T('How a guest reaches you')} />
         </div>
       )
     }
@@ -681,30 +685,30 @@ export default function CreatePage() {
     return (
       <div style={{ paddingBottom: 24 }}>
         <div style={{ padding: '10px 16px 0' }}>
-          <div className="eyebrow" style={{ ...hv(stage[4]), color: hueOf(stage[4])[1], background: tint(stage[4], 0.16), borderRadius: 999, padding: '5px 10px' }}>Where it sits: {stage[1]} · {stage[3]}</div>
-          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, marginTop: 8, lineHeight: 1.1 }}>Your starter shelf</div>
-          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>Three picks that fit what you said. About {total ? `$${total.toLocaleString()}` : 'a quote'} to start.</div>
+          <div className="eyebrow" style={{ ...hv(stage[4]), color: hueOf(stage[4])[1], background: tint(stage[4], 0.16), borderRadius: 999, padding: '5px 10px' }}>{T('Where it sits:')} {stage[1]} · {stage[3]}</div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, marginTop: 8, lineHeight: 1.1 }}>{T('Your starter shelf')}</div>
+          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>{T('Three picks that fit what you said. About {amount} to start.', { amount: total ? `$${total.toLocaleString()}` : T('a quote') })}</div>
         </div>
         <div style={{ padding: '12px 12px 0' }}>{picks.map((c) => { const Icon = iconFor(c); const why = whyNow(c) ?? c.plain.split('.')[0]
           return <button key={c.id} type="button" onClick={() => open(c)} className="row press" style={hv(c.goal)}><Mark hue={c.goal} size={36}><Icon size={18} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span><span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{why}</span></span><span className="r"><b>{c.price}</b></span></button> })}</div>
         <div style={{ padding: '10px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {picks[0] && <button type="button" className="btn block" onClick={() => order(picks[0])}>Start with the first one <ArrowRight size={15} /></button>}
-          <button type="button" onClick={() => setAnswers([])} style={{ border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Start over</button>
+          {picks[0] && <button type="button" className="btn block" onClick={() => order(picks[0])}>{T('Start with the first one')} <ArrowRight size={15} /></button>}
+          <button type="button" onClick={() => setAnswers([])} style={{ border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{T('Start over')}</button>
         </div>
-        <Path k="Why these three" />
+        <Path k={T('Why these three')} />
       </div>
     )
   }
 
   const product = (id: string) => {
     const c = cards[id]
-    if (!c) return <div style={{ padding: 30, textAlign: 'center', color: C.mute }}>That one is not on the shelf. <button type="button" onClick={() => go({ name: 'browse' })} style={{ border: 'none', background: 'none', color: C.mintDk, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>Back to Create</button></div>
+    if (!c) return <div style={{ padding: 30, textAlign: 'center', color: C.mute }}>{T('That one is not on the shelf.')} <button type="button" onClick={() => go({ name: 'browse' })} style={{ border: 'none', background: 'none', color: C.mintDk, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>{T('Back to Create')}</button></div>
     const Icon = iconFor(c); const SI = STAGE_ICON[c.stage]; const buy = isBuyable(c); const YI = YOU_ICON[c.you] ?? Check
     const TL: [string, string, boolean][] = c.kind === 'setup'
-      ? [['Day 0', 'You order. We read what you already have.', false], ['Day 1', 'We start the work and send you anything we need.', false], ['Day 3', 'You check the result. One tap, or a note.', true], [c.ready, 'Done, and on your Home.', false]]
+      ? [[T('Day 0'), T('You order. We read what you already have.'), false], [T('Day 1'), T('We start the work and send you anything we need.'), false], [T('Day 3'), T('You check the result. One tap, or a note.'), true], [c.ready, T('Done, and on your Home.'), false]]
       : c.kind === 'program'
-        ? [['Day 0', 'You order. We read your menu, photos and calendar.', false], ['Week 1', 'The first pieces land for your OK.', true], ['Every week', 'New pieces go out on the plan.', false], ['Monthly', 'A read of what moved, on Insights.', false]]
-        : [['Day 0', 'You order. We read your menu, photos and calendar.', false], ['Day 1', 'We draft it.', false], ['Day 2', 'You approve in Inbox. One tap, or a note.', true], [c.ready, 'It goes out.', false]]
+        ? [[T('Day 0'), T('You order. We read your menu, photos and calendar.'), false], [T('Week 1'), T('The first pieces land for your OK.'), true], [T('Every week'), T('New pieces go out on the plan.'), false], [T('Monthly'), T('A read of what moved, on Insights.'), false]]
+        : [[T('Day 0'), T('You order. We read your menu, photos and calendar.'), false], [T('Day 1'), T('We draft it.'), false], [T('Day 2'), T('You approve in Inbox. One tap, or a note.'), true], [c.ready, T('It goes out.'), false]]
     /* What else is on the shelves this card sits on, and only what can be bought: a "goes well
        with" row full of coming-soon cards is a shop window of empty boxes. */
     const goesWith = [...new Set(CHIP_ORDER.filter((ch) => shelfForChip(ch, shape).includes(c.id)).flatMap((ch) => liveForChip(ch, shape)))]
@@ -714,32 +718,32 @@ export default function CreatePage() {
       <div style={{ ...hv(c.goal), paddingBottom: 100 }}>
         <div className="pp-hero">
           <span className="glass"><Icon /></span>
-          <span className="pill-w mv"><SI /> Moves {c.stage}</span>
-          <div style={{ position: 'relative' }}><h1>{c.title}</h1>{why && buy && <div className="why">{why}</div>}{!buy && <div className="why"><span className="pill-w grey">Coming soon</span></div>}</div>
+          <span className="pill-w mv"><SI /> {T('Moves {stage}', { stage: T(c.stage) })}</span>
+          <div style={{ position: 'relative' }}><h1>{c.title}</h1>{why && buy && <div className="why">{why}</div>}{!buy && <div className="why"><span className="pill-w grey">{T('Coming soon')}</span></div>}</div>
         </div>
         {/* A coming-soon card prints NO price. A price is an offer, and there is nothing to
             offer yet; the reason takes its place. */}
         <div className="pp-facts">
-          {buy && <div><b>{c.price}</b><span>price</span></div>}
-          <div><b>{c.ready}</b><span>ready in</span></div><div><b>{c.you}</b><span>you do</span></div><div><b>{c.channels.length}</b><span>{c.channels.length === 1 ? 'channel' : 'channels'}</span></div>
+          {buy && <div><b>{c.price}</b><span>{T('price')}</span></div>}
+          <div><b>{c.ready}</b><span>{T('ready in')}</span></div><div><b>{T(c.you)}</b><span>{T('you do')}</span></div><div><b>{c.channels.length}</b><span>{T(c.channels.length === 1 ? 'channel' : 'channels')}</span></div>
         </div>
         {!buy && <div style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: C.fill, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{notSellableReason(c.id)}</div>}
         {(() => { const ps = buy ? promiseSentence(PROMISE_BY_CARD[c.id] ?? []) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
-        <div className="pp-sec"><h2>In plain words</h2><p>{c.plain}</p></div>
-        <div className="pp-sec"><h2>What you get</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>
-        <div className="pp-sec"><h2>What happens after you order</h2>
+        <div className="pp-sec"><h2>{T('In plain words')}</h2><p>{c.plain}</p></div>
+        <div className="pp-sec"><h2>{T('What you get')}</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>
+        <div className="pp-sec"><h2>{T('What happens after you order')}</h2>
           <ul className="tl">{TL.map(([d, t, you], i) => <li key={i}><i className={you ? 'you' : ''} /><span className="d">{d}</span><span className="t">{you ? <b>{t}</b> : t}</span></li>)}</ul>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute }}><YI size={14} color="#d99a1e" /> Amber is you. Everything else is us.</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute }}><YI size={14} color="#d99a1e" /> {T('Amber is you. Everything else is us.')}</div>
         </div>
-        <div className="pp-sec"><h2>Where it shows up</h2><div className="chips">{c.channels.map((x) => <span key={x}>{x}</span>)}</div></div>
-        {goesWith.length > 0 && (<><Sec t="Goes well with" hue={c.goal} /><Shelf>{goesWith.map((x) => <Mini key={x.id} c={x} />)}</Shelf></>)}
+        <div className="pp-sec"><h2>{T('Where it shows up')}</h2><div className="chips">{c.channels.map((x) => <span key={x}>{x}</span>)}</div></div>
+        {goesWith.length > 0 && (<><Sec t={T('Goes well with')} hue={c.goal} /><Shelf>{goesWith.map((x) => <Mini key={x.id} c={x} />)}</Shelf></>)}
         <div className="sticky"><div className="in">
           {/* No price and no Order on a card that cannot be bought. The bar says what it is
               waiting on and offers the one thing that is real: telling us you want it. */}
-          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? c.price : 'Not on sale yet'}<span>{buy ? `${c.cadence} · ${c.you.toLowerCase()} · ${c.ready}` : 'We will tell you the day it opens'}</span></div>
+          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? c.price : T('Not on sale yet')}<span>{buy ? `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}` : T('We will tell you the day it opens')}</span></div>
           {buy
-            ? <button type="button" className="btn hue" onClick={() => order(c)}>{c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order'} <ArrowRight size={15} /></button>
-            : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>Tell me when</Link>}
+            ? <button type="button" className="btn hue" onClick={() => order(c)}>{T(c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order')} <ArrowRight size={15} /></button>
+            : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>{T('Tell me when')}</Link>}
         </div></div>
       </div>
     )
@@ -754,17 +758,17 @@ export default function CreatePage() {
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
         <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line, margin: '0 auto 12px' }} />
-          <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>What feels right to start?</div>
-          <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>You can change it any time. Nothing is charged now.</div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{T('What feels right to start?')}</div>
+          <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>{T('You can change it any time. Nothing is charged now.')}</div>
           {BUDGET_CHIPS.map((b) => { const on = cap != null && budgetCapForChip(b) === cap
             const noCap = NO_CAP_BUDGET_CHIPS.includes(b)
             return (
               <button key={b} type="button" onClick={() => setBudget(noCap ? null : b)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
                 <span style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? C.mintDk : C.line}`, background: on ? C.mintDk : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{on && <Check size={12} strokeWidth={3} />}</span>
-                <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{b}
+                <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{T(b)}
                   {/* Both of these set no cap, so the row says what happens instead of leaving
                       the owner to guess at a ceiling we would have invented. */}
-                  {noCap && <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.mute, marginTop: 1 }}>No cap set. Everything shows.</span>}
+                  {noCap && <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.mute, marginTop: 1 }}>{T('No cap set. Everything shows.')}</span>}
                 </span>
               </button>
             ) })}
@@ -788,7 +792,7 @@ export default function CreatePage() {
     </>
   ) : null
 
-  const title = view.name === 'guide' ? 'Guide me' : view.name === 'product' ? (cards[view.id]?.title ?? 'Create') : null
+  const title = view.name === 'guide' ? T('Guide me') : view.name === 'product' ? (cards[view.id]?.title ?? 'Create') : null
   const backTo = view.name === 'browse' ? undefined : '/dashboard/campaigns/new'
   return (
     <MvpShell active="create" header={
@@ -807,7 +811,7 @@ export default function CreatePage() {
       <FilterSheet />
       {budgetSheetUI}
       {view.name !== 'browse' && view.name !== 'product' && (
-        <button type="button" onClick={back} aria-label="Back" style={{ display: 'none' }}><ChevronLeft /></button>
+        <button type="button" onClick={back} aria-label={T('Back')} style={{ display: 'none' }}><ChevronLeft /></button>
       )}
     </MvpShell>
   )

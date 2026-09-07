@@ -24,6 +24,7 @@ import { usePathname } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { ToastProvider } from '@/components/ui/toast'
 import { MvpThemeProvider } from '@/components/mvp/mvp-theme'
+import { MvpLanguageProvider } from '@/components/mvp/mvp-language'
 import { RealtimeProvider } from '@/lib/realtime'
 import { ClientProvider, useClient } from '@/lib/client-context'
 import SentryUserContext from '@/components/sentry-user-context'
@@ -44,11 +45,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               so it must sit inside a Suspense boundary. */}
           <Suspense fallback={null}>
             <ClientProvider>
-              <SentryUserContext />
-              <LocationLoader>
-                <DashboardShell>{children}</DashboardShell>
-                <AgentChat />
-              </LocationLoader>
+              {/* Language sits beside the theme, but INSIDE ClientProvider: the owner's answer
+                  rides on the client row the provider already resolved (migration 259), so it
+                  is per business and costs no extra fetch. */}
+              <MvpLanguageProvider>
+                <SentryUserContext />
+                <LocationLoader>
+                  <DashboardShell>{children}</DashboardShell>
+                  <AgentChat />
+                </LocationLoader>
+              </MvpLanguageProvider>
             </ClientProvider>
           </Suspense>
         </RealtimeProvider>

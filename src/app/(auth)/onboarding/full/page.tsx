@@ -14,6 +14,8 @@ import {
 } from './data'
 import StepRenderer, { OnboardingFrame } from './step-renderer'
 import { completeOnboardingCRM } from '@/lib/onboarding-actions'
+import { readStoredLang, useLang } from '@/components/mvp/mvp-language'
+import { DEFAULT_LANG, isLang } from '@/lib/i18n/t'
 import { budgetCapForChip, budgetChipForCap } from '@/lib/goals/defaults'
 
 export default function OnboardingPage() {
@@ -325,6 +327,11 @@ export default function OnboardingPage() {
       avoid_list: data.avoid_list,
       connected: data.connected,
       logo_url: logoUrl,
+      /* The language they actually READ setup in. data.preferred_language only holds an answer
+         when the switch was tapped in THIS session, and a returning Spanish owner has it
+         remembered in the browser instead — they would have finished setup in Spanish and
+         landed on an English dashboard. The browser's answer is the fallback, English last. */
+      preferred_language: isLang(data.preferred_language) ? data.preferred_language : (readStoredLang() ?? DEFAULT_LANG),
     })
 
     setSaving(false)
@@ -429,31 +436,13 @@ export default function OnboardingPage() {
       onExit={!loading && !showSuccess ? handleExit : undefined}
       valid={valid}
       saving={saving}
+      onLanguage={(l) => update('preferred_language', l)}
       onNext={goNext}
       isSuccess={showSuccess}
       hideAction={loading || isReviewScreen}
     >
       {loading ? (
-        /* A small breathing mint orb while the saved draft loads, echoing the
-           portal's loading screen. CSS only; still for reduced motion. The
-           frame's content zone centers it in the viewport. */
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-          <style>{`
-            @media (prefers-reduced-motion: no-preference) {
-              .ob-load-orb { animation: obLoadBreathe 3.2s ease-in-out infinite }
-              @keyframes obLoadBreathe {
-                0%,100% { transform: scale(1); box-shadow: 0 0 26px rgba(74,189,152,.28), 0 0 70px rgba(74,189,152,.12) }
-                50% { transform: scale(1.06); box-shadow: 0 0 38px rgba(74,189,152,.42), 0 0 95px rgba(74,189,152,.18) }
-              }
-            }
-          `}</style>
-          <div aria-hidden className="ob-load-orb" style={{
-            width: 64, height: 64, borderRadius: '50%',
-            border: '1.5px solid rgba(74,189,152,.45)',
-            background: 'radial-gradient(circle at 32% 26%, rgba(255,255,255,.6), rgba(74,189,152,.20) 58%, rgba(74,189,152,.10))',
-          }} />
-          <span style={{ color: '#6e6e73', fontSize: 13 }}>Getting your setup ready</span>
-        </div>
+        <OnboardingLoading />
       ) : (
         <StepRenderer
           screen={showSuccess ? 'success' : currentScreen}
@@ -474,3 +463,28 @@ export default function OnboardingPage() {
   )
 }
 
+/* A small breathing mint orb while the saved draft loads, echoing the portal's loading screen.
+   CSS only; still for reduced motion. It is its own component so it renders INSIDE the frame's
+   language provider — the line under it is the first thing a Spanish owner reads. */
+function OnboardingLoading() {
+  const { T } = useLang()
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+      <style>{`
+        @media (prefers-reduced-motion: no-preference) {
+          .ob-load-orb { animation: obLoadBreathe 3.2s ease-in-out infinite }
+          @keyframes obLoadBreathe {
+            0%,100% { transform: scale(1); box-shadow: 0 0 26px rgba(74,189,152,.28), 0 0 70px rgba(74,189,152,.12) }
+            50% { transform: scale(1.06); box-shadow: 0 0 38px rgba(74,189,152,.42), 0 0 95px rgba(74,189,152,.18) }
+          }
+        }
+      `}</style>
+      <div aria-hidden className="ob-load-orb" style={{
+        width: 64, height: 64, borderRadius: '50%',
+        border: '1.5px solid rgba(74,189,152,.45)',
+        background: 'radial-gradient(circle at 32% 26%, rgba(255,255,255,.6), rgba(74,189,152,.20) 58%, rgba(74,189,152,.10))',
+      }} />
+      <span style={{ color: '#6e6e73', fontSize: 13 }}>{T('Getting your setup ready')}</span>
+    </div>
+  )
+}

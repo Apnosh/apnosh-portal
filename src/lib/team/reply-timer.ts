@@ -11,6 +11,7 @@ import 'server-only'
  * and no staff answer yet has no lag — it is a wait still running, not a zero.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
+import { askFrom, type ClockLine } from './reply-line'
 
 const MS_PER_MIN = 60_000
 
@@ -84,6 +85,56 @@ export async function replyLagMinutesMedian(clientId: string, days = 30): Promis
     return median(lags)
   } catch (e) {
     console.warn('[reply-timer] median failed:', (e as Error)?.message)
+    return null
+  }
+}
+
+/**
+ * The question this client is actually waiting on, and whether it has been answered.
+ *
+ * This is what the Get help page shows back to them: one clock, on the thing they are actually
+ * waiting for. Null when they have never asked anything — a promise with no question attached
+ * is the sentence we already print, not a timer.
+ *
+ * It used to take the owner's newest message on any thread, which meant a nudge reset the due
+ * date and an open question on an older thread was hidden by anything they typed since. Now
+ * each thread is judged on its own (askFrom, the pure rule in reply-line.ts) and the OLDEST
+ * open wait wins, because that is the one we are latest on. With nothing open, the most recent
+ * answered exchange is the line, so the owner reads how long the last one took.
+ *
+ * Best-effort like everything else here: a read that fails means "we do not know", never a
+ * broken page.
+ */
+export async function latestAsk(clientId: string): Promise<{ askedAt: string; answeredAt: string | null } | null> {
+  if (!clientId) return null
+  try {
+    const admin = createAdminClient()
+    const { data: biz } = await admin.from('businesses').select('id').eq('client_id', clientId)
+    const bizIds = ((biz ?? []) as { id: string }[]).map((b) => b.id)
+    if (!bizIds.length) return null
+
+    // Newest first so a busy account's recent months are the 300 rows we get; the rule below
+    // sorts each thread ascending itself.
+    const { data } = await admin
+      .from('messages')
+      .select('thread_id, sender_role, created_at')
+      .in('business_id', bizIds)
+      .order('created_at', { ascending: false })
+      .limit(300)
+    const rows = (data ?? []) as (Line & { thread_id: string })[]
+    const byThread = new Map<string, ClockLine[]>()
+    for (const m of rows) {
+      const arr = byThread.get(m.thread_id) ?? []
+      arr.push({ sender: (m.sender_role ?? 'client') === 'client' ? 'owner' : 'team', createdAt: m.created_at })
+      byThread.set(m.thread_id, arr)
+    }
+    const asks = [...byThread.values()].map(askFrom).filter((a): a is { askedAt: string; answeredAt: string | null } => !!a)
+    if (!asks.length) return null
+    const open = asks.filter((a) => !a.answeredAt).sort((a, b) => a.askedAt.localeCompare(b.askedAt))
+    if (open.length) return open[0]
+    return asks.sort((a, b) => b.askedAt.localeCompare(a.askedAt))[0]
+  } catch (e) {
+    console.warn('[reply-timer] latestAsk failed:', (e as Error)?.message)
     return null
   }
 }

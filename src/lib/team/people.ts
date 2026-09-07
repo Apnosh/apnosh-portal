@@ -6,8 +6,9 @@ import 'server-only'
  * so this is the read that proves it — for every piece of work still running on this client, the
  * staff person who owns it, what they are on, and the thread to reach them in.
  *
- * NO UI in this move. The avatar row is a later move; this endpoint is the thing it will read, and
- * it exists now so the drill can check "every minted order has a name on it" without opening a UI.
+ * Home's people row and the Messages strip both read this, so the two can never disagree about
+ * who is on your work; the drill checks "every minted order has a name on it" through the same
+ * endpoint, without opening a UI.
  *
  * Where the names come from:
  *   service_work_orders.assignee_id  — stamped at mint (service-work-orders.ts)
@@ -21,7 +22,7 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { currentStrategist } from './assign'
-import { replyLagMinutesMedian } from './reply-timer'
+import { replyLagMinutesMedian, latestAsk } from './reply-timer'
 
 /** The role words an owner reads. Kept to the four the plan names plus the ones already on the
  *  Team page, so nothing new is invented here. */
@@ -51,9 +52,11 @@ export interface OrderPerson {
 
 export interface OrderPeople {
   people: OrderPerson[]
-  /** Middle first-reply wait over the last 30 days, in minutes. Null when we do not know yet.
-   *  Dark: nothing owner-facing renders it in this move. */
+  /** Middle first-reply wait over the last 30 days, in minutes. Null when we do not know yet. */
   replyLagMinutesMedian: number | null
+  /** The owner's most recent question and whether it has been answered, so Get help can show
+   *  the clock on the thing they are actually waiting for. Null when they never asked. */
+  latestAsk: { askedAt: string; answeredAt: string | null } | null
 }
 
 /** Work that is still running. A delivered service and an approved piece are finished; nobody is
@@ -99,21 +102,42 @@ const ROLE_OF_REQUEST: Record<string, RoleWord> = {
   other: 'Strategist',
 }
 
+/** What the caller actually draws. The people row is the only thing on Home, and the two
+ *  message reads behind `lag` and `ask` are a thousand rows each — nobody should pay for them
+ *  to render five faces. Off unless asked for. */
+export interface PeopleReads {
+  /** the median first-reply wait, for a surface that shows it */
+  lag?: boolean
+  /** the owner's latest question + whether it is answered, for the Get help clock */
+  ask?: boolean
+}
+
 /**
  * Every staff person with live work on this client, once each, with what they are on.
  * Best-effort throughout: a table that is not there yet drops its lane, never the answer.
  */
-export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
-  const empty: OrderPeople = { people: [], replyLagMinutesMedian: null }
+export async function getOrderPeople(clientId: string, reads: PeopleReads = {}): Promise<OrderPeople> {
+  const empty: OrderPeople = { people: [], replyLagMinutesMedian: null, latestAsk: null }
   if (!clientId) return empty
   const admin = createAdminClient()
 
-  const [svcRes, creatorRes, deskRes, strategistId, lag] = await Promise.all([
-    admin.from('service_work_orders').select('id, title, status, due_date, assignee_id, campaign_id').eq('client_id', clientId).limit(200).then((r) => r.data ?? [], () => []),
-    admin.from('creator_work_orders').select('id, title, status, due_date, discipline, vendor_id, campaign_id').eq('client_id', clientId).limit(200).then((r) => r.data ?? [], () => []),
-    admin.from('creative_requests').select('id, type, status, created_at').eq('client_id', clientId).limit(100).then((r) => r.data ?? [], () => []),
+  // A floor on how old a NEVER-ACCEPTED request can be and still put a face on Home. A quote
+  // nobody ever answered keeps its status forever, and without a floor it would keep a person
+  // on the row for the life of the account. It applies ONLY to that case: a creative_request
+  // still sitting at requested / in_review / quoted. An open work order is real work somebody
+  // is on, however old it is — a shoot waiting on a season, a program running all year — and
+  // cutting those at ninety days took the person off Home while they were still doing the job.
+  const QUOTE_FLOOR = new Date(Date.now() - 90 * 86_400_000).toISOString()
+  /** a desk request nobody has accepted yet — the only place the floor applies */
+  const NEVER_STARTED = new Set(['requested', 'in_review', 'quoted'])
+
+  const [svcRes, creatorRes, deskRes, strategistId, lag, ask] = await Promise.all([
+    admin.from('service_work_orders').select('id, title, status, due_date, assignee_id, campaign_id').eq('client_id', clientId).order('created_at', { ascending: false }).limit(200).then((r) => r.data ?? [], () => []),
+    admin.from('creator_work_orders').select('id, title, status, due_date, discipline, vendor_id, campaign_id').eq('client_id', clientId).order('created_at', { ascending: false }).limit(200).then((r) => r.data ?? [], () => []),
+    admin.from('creative_requests').select('id, type, status, created_at').eq('client_id', clientId).order('created_at', { ascending: false }).limit(100).then((r) => r.data ?? [], () => []),
     currentStrategist(admin, clientId).catch(() => null),
-    replyLagMinutesMedian(clientId, 30).catch(() => null),
+    reads.lag ? replyLagMinutesMedian(clientId, 30).catch(() => null) : Promise.resolve(null),
+    reads.ask ? latestAsk(clientId).catch(() => null) : Promise.resolve(null),
   ])
 
   // The person on a house-team content piece is recorded on its campaign, not on the order row.
@@ -154,10 +178,12 @@ export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
     const { requestTypeById } = await import('@/lib/requests/catalog')
     for (const r of deskRes as { id: string; type: string; status: string; created_at: string }[]) {
       if (DESK_DONE.has(r.status)) continue
+      // the floor, and only here: a quote nobody ever accepted stops being somebody's work
+      if (NEVER_STARTED.has(r.status) && r.created_at < QUOTE_FLOOR) continue
       add(strategistId, { kind: 'desk', id: r.id, title: requestTypeById(r.type)?.label ?? r.type, status: r.status, dueDate: null, campaignId: null }, ROLE_OF_REQUEST[r.type] ?? 'Strategist')
     }
   }
-  if (!orders.size) return { people: [], replyLagMinutesMedian: lag }
+  if (!orders.size) return { people: [], replyLagMinutesMedian: lag, latestAsk: ask }
 
   const personIds = [...orders.keys()]
   const [profilesRes, assignRes, threadRes] = await Promise.all([
@@ -193,7 +219,7 @@ export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
   })
   // Most work first, then a stable name order, so the row does not reshuffle between reads.
   people.sort((a, b) => b.orders.length - a.orders.length || a.name.localeCompare(b.name))
-  return { people, replyLagMinutesMedian: lag }
+  return { people, replyLagMinutesMedian: lag, latestAsk: ask }
 }
 
 /** subject (lowercased) -> thread id, for this client's business threads. */

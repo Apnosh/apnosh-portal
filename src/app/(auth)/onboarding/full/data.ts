@@ -438,6 +438,10 @@ export interface OnboardingData {
   service_styles: string[]
   /** How the business runs (ShelfShape). Decides what the Create shelf may show. */
   shape: string
+  /** The language the owner picked in the top bar ('en' | 'es'), written to
+   *  clients.preferred_language at the end. '' = they never touched it in THIS session, and
+   *  the finish falls back to the language the browser remembers (page.tsx handleComplete). */
+  preferred_language: string
   price_range: string
   signature_items: string[]
   dietary_options: string[]
@@ -502,6 +506,7 @@ export const INITIAL_DATA: OnboardingData = {
   cuisine_other: '',
   service_styles: [],
   shape: '',
+  preferred_language: '',
   price_range: '',
   signature_items: [],
   dietary_options: [],
