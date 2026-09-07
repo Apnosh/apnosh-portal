@@ -416,21 +416,27 @@ export async function claimFriendCredit(clientId: string, intentKey: string, max
       // Unreadable is not "nothing was spent". A credit we cannot account for is a credit nobody
       // may take: losing an owner a discount is recoverable, spending it twice is not.
       if (settled == null || hold == null) { warn('could not account for a credit', row.id); return null }
-      const available = creditAvailableCents({
+      const state = {
         cents: row.cents || 0,
         settledCents: settled,
         heldCents: row.held_cents || 0,
         hold,
         heldAtMs: row.consumed_at ? Date.parse(row.consumed_at) : null,
         nowMs: now,
-      })
+      }
+      const available = creditAvailableCents(state)
       const use = Math.min(available, Math.round(maxCents))
       if (use <= 0) continue
       // THE OLD CHECKOUT HAS TO BE SHUT BEFORE THIS ONE OPENS. Everything above this line is our
       // own ledger, and our ledger does not know that a declined PaymentIntent is still payable at
       // Stripe. Asked only when the last holder was a real intent that has NOT collected — a
       // collected one is already counted in `settled`, so its money cannot come off twice.
-      if (hold !== 'collected' && isRealIntentId(row.consumed_intent_id)) {
+      //
+      // AND ONLY WHEN THE HOLD IS DEAD. A credit can have money left over while a checkout is
+      // still open on part of it (a $20 hold on a $50 credit), and cancelling that intent would
+      // shut a tab the owner may be sitting in front of, mid-3DS at their bank. A live hold means
+      // hands off; a dropped one, or one older than a day, is the credit nobody is using.
+      if (liveHoldCents(state) === 0 && hold !== 'collected' && isRealIntentId(row.consumed_intent_id)) {
         if (!await retirePriorCheckout(row.consumed_intent_id as string)) {
           // The old checkout is alive, or Stripe would not say. This credit is spoken for; look at
           // the next one rather than hand the same $50 to two checkouts.

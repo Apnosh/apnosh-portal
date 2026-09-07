@@ -313,6 +313,24 @@ function main() {
   s.eq('a ledger that will not answer still changes nothing',
     overApplyVerdict({ faceCents: face, settledCents: null, rowCreditCents: 5_000 }), 'unreadable')
 
+  /* ── 3c-v. a checkout the owner is still paying is not retired ───────── */
+  s.group('the tab the owner is in the middle of paying is never cancelled underneath them')
+  // Mirrors the guard in referrals/server.ts (claimFriendCredit): a prior checkout is put beyond
+  // use only when its hold is DEAD. A live hold means an owner may be on the bank's 3DS screen in
+  // another tab with that intent open; cancelling it there loses a payment that was about to land.
+  const mayRetire = (r: CreditRowState, intentId: string | null) =>
+    liveHoldCents(r) === 0 && r.hold !== 'collected' && isRealIntentId(intentId)
+  // A partly-used credit is how this is reached at all: face $50, $20 held by a live checkout,
+  // $30 still available — so a second checkout gets past `use <= 0` and reaches the retire.
+  const partlyHeld = credit({ cents: 5_000, settledCents: 0, heldCents: 2_000, hold: 'waiting', heldAtMs: T0, nowMs: T0 + hour })
+  s.eq('there really is money left, which is why this line is reachable', creditAvailableCents(partlyHeld), 3_000)
+  s.check('a LIVE hold is never retired', !mayRetire(partlyHeld, 'pi_live'))
+  s.check('a dropped checkout is retired', mayRetire({ ...partlyHeld, hold: 'dropped' }, 'pi_dead'))
+  s.check('a hold older than a day is dead, so it is retired',
+    mayRetire({ ...partlyHeld, nowMs: T0 + CREDIT_HOLD_MS + 1 }, 'pi_stale'))
+  s.check('a collected checkout is counted, never cancelled', !mayRetire({ ...partlyHeld, hold: 'collected' }, 'pi_paid'))
+  s.check('and our own hold: key is nothing to cancel', !mayRetire({ ...partlyHeld, hold: 'dropped' }, 'hold:9d1c-4f'))
+
   /* ── 3d. the receipt adds up ─────────────────────────────────────────── */
   s.group('the lines on the receipt add up to the number on the card')
   // What the screen prints, in the order it prints it: Subtotal, Friend credit, Service fee, Tax,
