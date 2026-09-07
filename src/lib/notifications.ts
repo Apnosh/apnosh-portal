@@ -245,13 +245,18 @@ export async function notifyClientOwners(
   // that are worth a phone buzzing also go out by email: the order they placed, the work landing,
   // their count starting, their date moving, and a person answering them. Opt-in per call, never
   // a blanket on every kind, so a digest or a nudge can never become a mailshot.
+  //
+  // The in-app row above is the promise; the email is a courtesy that follows it. Nobody's click
+  // waits on Resend: two owner lookups plus an HTTPS round trip to a third party sat in front of
+  // the ship response, and a slow Resend made the whole order feel broken. Fire and forget, and
+  // say so in the log when it fails, since the row the owner will see is already written.
   if (payload.email) {
-    await emailClientOwners(clientId, {
+    void emailClientOwners(clientId, {
       subject: payload.title,
       body: payload.body,
       link: payload.link,
       category: payload.emailCategory ?? categoryForKind(payload.kind),
-    })
+    }).catch((e) => console.warn('[notifications] owner email failed:', (e as Error)?.message))
   }
   return { notified: ids.size }
 }
