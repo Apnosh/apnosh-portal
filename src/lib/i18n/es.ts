@@ -354,4 +354,90 @@ export const ES: Record<string, string> = {
   'Offices, parties, big orders': 'Oficinas, fiestas, pedidos grandes',
   'Open for a season': 'Abierto por temporada',
   'Busy part of the year, quiet the rest': 'Una temporada fuerte, el resto tranquilo',
+
+  /* ── Move 7b: the weekly sentence, the monthly report, the win card ───────────────────── */
+
+  /* the one line under the Home funnel */
+  'This week your Google listing got {n} taps: calls, directions, and website visits. Last week it was {prev}.':
+    'Esta semana tu ficha de Google tuvo {n} toques: llamadas, cómo llegar y visitas al sitio. La semana pasada fueron {prev}.',
+  'This week your posts reached {n} people. Last week it was {prev}.':
+    'Esta semana tus publicaciones llegaron a {n} personas. La semana pasada fueron {prev}.',
+
+  /* the monthly report */
+  'Your month · made from your numbers': 'Tu mes · hecho con tus números',
+  'This month, so far': 'Este mes, hasta ahora',
+  'in {month}': 'en {month}',
+  'people found you in search': 'personas te encontraron en las búsquedas',
+  'people acted on your listing': 'personas hicieron algo en tu ficha',
+  'A quiet month on the wires. Connect Google and publish work, and this page fills with your real numbers.':
+    'Un mes tranquilo. Conecta Google y publica trabajo, y esta página se llena con tus números reales.',
+  'The words that brought them': 'Las palabras que los trajeron',
+  'Up from {n} the month before.': 'Subió desde {n} el mes anterior.',
+  'Down from {n} the month before.': 'Bajó desde {n} el mes anterior.',
+  'What they said': 'Lo que dijeron',
+  '{n} new review · {avg} average': '{n} reseña nueva · {avg} de promedio',
+  '{n} new reviews · {avg} average': '{n} reseñas nuevas · {avg} de promedio',
+  '{n} the month before': '{n} el mes anterior',
+  'Loved lately': 'Lo que más gustó',
+  'Heard more than once': 'Se dijo más de una vez',
+  '{n} mention': '{n} mención',
+  '{n} mentions': '{n} menciones',
+  'The move:': 'Qué hacer:',
+  'What worked': 'Lo que funcionó',
+  '{n} people': '{n} personas',
+  '{n} post': '{n} publicación',
+  '{n} posts': '{n} publicaciones',
+  'saw your best post': 'vieron tu mejor publicación',
+  'saw your best post: {title}': 'vieron tu mejor publicación: {title}',
+  'published this month': 'salieron este mes',
+  'What it moved': 'Lo que movió',
+  'Calls': 'Llamadas',
+  'Directions': 'Cómo llegar',
+  'Site visits': 'Visitas al sitio',
+  'Send this to someone': 'Manda esto a alguien',
+  'Print or save as PDF': 'Imprime o guarda como PDF',
+  'Copy link': 'Copiar enlace',
+  'Link copied': 'Enlace copiado',
+  'The link only opens for people who can already see your business.':
+    'El enlace solo abre para quien ya puede ver tu negocio.',
+  'What happens next': 'Lo que sigue',
+  'Next month builds on this one. Plan the next push in a minute.':
+    'El mes que viene se construye sobre este. Planea el siguiente empujón en un minuto.',
+  'Open the builder': 'Abrir el creador',
+
+  /* the win card and its pages */
+  'Wins': 'Logros',
+  'Proof you can show someone': 'Pruebas que puedes enseñar',
+  'No wins yet': 'Todavía no hay logros',
+  'When a week beats the one before, or a post beats your usual reach, the card lands here. Then you can show it to someone.':
+    'Cuando una semana gana a la anterior, o una publicación llega a más gente de lo normal, la tarjeta cae aquí. Después se la puedes enseñar a alguien.',
+  'The wins shelf is almost on. A small database update turns it on.':
+    'La repisa de logros casi está lista. Una actualización pequeña de la base de datos la enciende.',
+  'Show someone': 'Enséñaselo a alguien',
+  'Counted by Apnosh': 'Contado por Apnosh',
+  'Anyone with the link sees this card and nothing else about your business.':
+    'Quien tenga el enlace ve esta tarjeta y nada más de tu negocio.',
+  'The share link is not on yet. A small database update turns it on.':
+    'El enlace para compartir todavía no está listo. Una actualización pequeña de la base de datos lo enciende.',
+  'Nothing to show here': 'Aquí no hay nada que enseñar',
+  'Only a card with a real number is something to show. See the rest on your wins shelf.':
+    'Solo una tarjeta con un número real se puede enseñar. Mira las demás en tu repisa de logros.',
+  'Made with Apnosh': 'Hecho con Apnosh',
+  'This link does not work': 'Este enlace no funciona',
+  'It may have been cut short, or the card was taken down. Ask for it again.':
+    'Puede que se haya cortado, o que la tarjeta ya no esté. Pídela otra vez.',
+
+  /* the monthly report email */
+  'Your {month} is ready': 'Tu {month} ya está listo',
+  'What it moved: {calls} calls, {directions} directions, {clicks} site visits.':
+    'Lo que movió: {calls} llamadas, {directions} veces cómo llegar, {clicks} visitas al sitio.',
+  'What they said: {n} new review, {avg} average.':
+    'Lo que dijeron: {n} reseña nueva, {avg} de promedio.',
+  'What they said: {n} new reviews, {avg} average.':
+    'Lo que dijeron: {n} reseñas nuevas, {avg} de promedio.',
+  'What worked: {n} people saw your best post.':
+    'Lo que funcionó: {n} personas vieron tu mejor publicación.',
+  'What worked: {n} posts went out.': 'Lo que funcionó: salieron {n} publicaciones.',
+  'Not counted yet. When the numbers come in, they show up here.':
+    'Todavía no se cuenta. Cuando lleguen los números, aparecen aquí.',
 }

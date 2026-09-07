@@ -9,6 +9,7 @@
     "lint": "eslint",
     "lint:migrations": "tsx scripts/check-migrations.ts",
     "verify:i18n": "tsx scripts/verify-i18n.ts",
+    "verify:wins": "tsx scripts/verify-wins.ts",
     "sim": "tsx scripts/sim/lifecycle.ts",
     "sim:db": "tsx scripts/sim/db-e2e.ts",
     "sim:http": "tsx scripts/sim/http-e2e.ts",

@@ -158,6 +158,66 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Mostly catering', 'Offices, parties, big orders',
     'Open for a season', 'Busy part of the year, quiet the rest',
   ],
+
+  /* ── Move 7b ────────────────────────────────────────────────────────────────────────
+     The weekly sentence, the monthly report, and the win card. */
+
+  /* the one line under the Home funnel (src/components/mvp/weekly-sentence.tsx). The reader
+     returns the KEY, so the two sentences it can pick live here and in love/sentence.ts. */
+  weekly: [
+    'This week your Google listing got {n} taps: calls, directions, and website visits. Last week it was {prev}.',
+    'This week your posts reached {n} people. Last week it was {prev}.',
+  ],
+
+  /* /dashboard/insights/impact — the monthly report. The review THEMES and the move written for
+     each one are free text from the sentiment engine, not keys, so they stay English inside a
+     Spanish page until that engine writes keys. */
+  report: [
+    'Back',
+    'Your month · made from your numbers', 'This month, so far', 'in {month}',
+    'people found you in search', 'people acted on your listing',
+    'A quiet month on the wires. Connect Google and publish work, and this page fills with your real numbers.',
+    'The words that brought them', 'Up from {n} the month before.', 'Down from {n} the month before.',
+    'What they said', '{n} new review · {avg} average', '{n} new reviews · {avg} average',
+    '{n} the month before', 'Loved lately', 'Heard more than once', '{n} mention', '{n} mentions',
+    'The move:',
+    'What worked', '{n} people', '{n} post', '{n} posts',
+    'saw your best post', 'saw your best post: {title}', 'published this month',
+    'What it moved', 'Calls', 'Directions', 'Site visits',
+    'Send this to someone', 'Print or save as PDF', 'Copy link', 'Link copied',
+    'The link only opens for people who can already see your business.',
+    'What happens next', 'Next month builds on this one. Plan the next push in a minute.',
+    'Open the builder',
+  ],
+
+  /* /dashboard/wins, /dashboard/wins/[id] and the public /w/[token] card. The card's own label,
+     number line and comparison are written by the proof composer as free text, not keys, so they
+     stay English; everything the pages themselves say is here. */
+  wins: [
+    'Back', 'Loading…', 'Your business',
+    'Wins', 'Proof you can show someone', 'No wins yet',
+    'When a week beats the one before, or a post beats your usual reach, the card lands here. Then you can show it to someone.',
+    'The wins shelf is almost on. A small database update turns it on.',
+    'Show someone', 'Counted by Apnosh', 'Print or save as PDF', 'Link copied',
+    'Anyone with the link sees this card and nothing else about your business.',
+    'The share link is not on yet. A small database update turns it on.',
+    'Nothing to show here',
+    'Only a card with a real number is something to show. See the rest on your wins shelf.',
+    'Made with Apnosh', 'This link does not work',
+    'It may have been cut short, or the card was taken down. Ask for it again.',
+  ],
+
+  /* the monthly report EMAIL, not a screen — the same way `reply` and `chips` are data. Its
+     lines are built in src/lib/report/report-sent.ts and sent in the owner's own language. */
+  reportEmail: [
+    'Your {month} is ready',
+    'What it moved: {calls} calls, {directions} directions, {clicks} site visits.',
+    'What they said: {n} new review, {avg} average.',
+    'What they said: {n} new reviews, {avg} average.',
+    'What worked: {n} people saw your best post.',
+    'What worked: {n} posts went out.',
+    'Not counted yet. When the numbers come in, they show up here.',
+  ],
 }
 
 /** Every key across every translated screen, once each. */
