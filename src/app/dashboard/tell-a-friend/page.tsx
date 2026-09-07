@@ -168,7 +168,7 @@ export default function TellAFriendPage() {
                 <MvpRow icon={<Share2 size={18} />} hue="grey" label={T('See my page')} href={`/owners/${state.slug}`} external />
               )}
             </MvpGroup>
-            {(saving || saved) && <div style={{ fontSize: 12, color: C.mute, padding: '0 4px' }}>{saving ? T('Saving...') : saved}</div>}
+            {(saving || saved) && <div style={{ fontSize: 12, color: C.mute, padding: '0 4px' }}>{saving ? T('Saving…') : saved}</div>}
           </>
         )}
       </div>

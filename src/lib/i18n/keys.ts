@@ -350,7 +350,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Your {amount} friend credit is here',
     "Your friend's first order got its number, so your {amount} is on your account. It comes off your next order.",
     // shared with other screens, drawn here too
-    'Loading…', 'Saved.', 'Could not save. Try again.', 'Saving...',
+    'Loading…', 'Saved.', 'Could not save. Try again.', 'Saving…',
   ],
 }
 
