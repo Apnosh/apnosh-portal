@@ -32,7 +32,7 @@ const GLYPH: Record<HueKey, typeof Megaphone> = {
   mint: Sparkles, announce: Megaphone, event: Ticket, deal: Tag, nights: Moon, newfaces: MapPin, regulars: Heart,
   reviews: Star, online: ShoppingCart, catering: Users, brand: Share2, amber: Clock, grey: FileText, red: AlertCircle,
 }
-type HuedCard = CampCard & { hue: HueKey; promise?: string | null; openUrl?: string | null }
+type HuedCard = CampCard & { hue: HueKey; promise?: string | null; openUrl?: string | null; /** the seven-state row behind this card, when it has one. The pill, the line, the action AND the tab all read it. */ state?: PromiseState | null }
 /** The seven states an order lives. The words come from the same table the server reads. */
 type OrderState = PromiseState
 type LedgerRow = { id: string; label: string; line: string; state: OrderState; campaignId: string | null; requestId: string | null; showsOn: string; openUrl: string | null }
@@ -55,6 +55,31 @@ const ANIM = `
 `
 
 type Tab = 'all' | 'live' | 'production' | 'done'
+
+/**
+ * WHICH TAB a card belongs on. One function, read by the tab's NUMBER and by the cards behind it,
+ * so the two can never disagree — "Live 1" sat above ten cards that all read Stopped, because the
+ * count asked `kind === 'live'` while the pill asked the seven-state row (lines.ts).
+ *
+ * The states, in the owner's terms:
+ *   Counted, Stopped   history
+ *   Ordered, Held, In production   we are on it, nothing to see yet
+ *   Delivered, Counting   it landed; it is out there working
+ *
+ * A card with no ledger row behind it (an owner-run plan, an order placed before the ledger) falls
+ * back to what the card worked out for itself, which is the old behaviour. A draft is neither Live
+ * nor history and never reaches here — campaignCards filters it — but saying so costs one line.
+ */
+function tabOf(c: HuedCard): Exclude<Tab, 'all'> | null {
+  if (c.kind === 'draft') return null
+  if (c.state) {
+    if (DONE_STATES.has(c.state)) return 'done'
+    if (c.state === 'ordered' || c.state === 'held' || c.state === 'production') return 'production'
+    return 'live'
+  }
+  if (c.pill === 'In production') return 'production'
+  return c.kind === 'done' ? 'done' : 'live'
+}
 
 export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'calendar' } = {}) {
   const { client, loading: clientLoading } = useClient()
@@ -105,13 +130,14 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
     const line = o ? outcomeLine(o) : null
     const vm = campaignCardVM(c, progress[c.draft.id], line ? { ...line, spark: o.spark } : null)
     const pr = promiseByCampaign.get(c.draft.id)
-    const hued: HuedCard = { ...vm, hue: campaignHue({ goalKey: c.draft.goalKey, templateId: c.draft.sourceCatalogId, name: c.draft.name }), promise: pr?.line ?? null, openUrl: pr?.openUrl ?? null }
+    const hued: HuedCard = { ...vm, hue: campaignHue({ goalKey: c.draft.goalKey, templateId: c.draft.sourceCatalogId, name: c.draft.name }), promise: pr?.line ?? null, openUrl: pr?.openUrl ?? null, state: pr?.state ?? null }
     // THE SEVEN STATES. Where a promise row exists it is the truth about where this order stands —
     // one pill, one line, one action, all three from the same row. A card with no ledger row (an
     // owner-run plan, an order placed before the ledger existed) keeps the progress-derived words.
     if (!pr || pr.state === 'not_counted') return hued
     return {
       ...hued,
+      state: pr.state,
       kind: DONE_STATES.has(pr.state) ? 'done' as const : pr.state === 'delivered' ? hued.kind : 'live' as const,
       pill: PILL_FOR[pr.state] ?? hued.pill,
       pillIcon: pr.state === 'held' ? 'calendar' as const : pr.state === 'counted' ? 'check' as const : 'dot' as const,
@@ -136,20 +162,17 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
       href: `/dashboard/requests/${d.id}`,
       action: st ? ACTION_FOR[st] : done ? 'See it' : null,
       when: `Ordered ${new Date(`${d.orderedOn}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${d.dueDate && !done ? ` · due ${new Date(`${d.dueDate}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`,
-      hue: 'mint', promise: d.line, openUrl: d.openUrl,
+      hue: 'mint', promise: d.line, openUrl: d.openUrl, state: st,
     }
   })
   const cards: HuedCard[] = [...campaignCards, ...deskCards]
   const counts: Record<Tab, number> = {
     all: cards.length,
-    live: cards.filter((c) => c.kind === 'live').length,
-    production: cards.filter((c) => c.pill === 'In production').length,
-    done: cards.filter((c) => c.kind === 'done').length,
+    live: cards.filter((c) => tabOf(c) === 'live').length,
+    production: cards.filter((c) => tabOf(c) === 'production').length,
+    done: cards.filter((c) => tabOf(c) === 'done').length,
   }
-  const shown = tab === 'all' ? cards
-    : tab === 'live' ? cards.filter((c) => c.kind === 'live')
-    : tab === 'production' ? cards.filter((c) => c.pill === 'In production')
-    : cards.filter((c) => c.kind === 'done')
+  const shown = tab === 'all' ? cards : cards.filter((c) => tabOf(c) === tab)
 
   const loading = clientLoading || saved === null
   const empty = !loading && cards.length === 0 && !error
