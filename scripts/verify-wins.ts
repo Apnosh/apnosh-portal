@@ -31,6 +31,7 @@
  */
 import { isWin, isWinType, winNumber, newShareToken, isShareToken, winTypeIsMint, renderCardWords, WIN_TYPE } from '../src/lib/love/win'
 import { countedCardWords, COUNTED_LABEL_KEY, COUNTED_BIG_KEY, COUNTED_CONTEXT_KEY } from '../src/lib/promises/lines'
+import { presentCardType } from '../src/lib/proof/present'
 import {
   isReportDay, clientsToProcess, inBatches, monthKey, previousMonth, reportLines, hasSomethingToSay,
   WAITING_KEY, MOVED_KEY, SAID_ONE_KEY, SAID_MANY_KEY, WORKED_KEY, WORKED_POSTS_KEY,
@@ -90,6 +91,19 @@ console.log('\n1. What counts as a win')
 
   check('there is exactly one winning type', isWinType(WIN_TYPE) && !isWinType('gbp_week') && !isWinType('post') && !isWinType('reviews_waiting'))
   check('the winning type is still mint on Home', winTypeIsMint())
+
+  // "See results" goes to the ORDER the number came from, not to the whole list.
+  const ID = '11111111-2222-3333-4444-555555555555'
+  check('a counted campaign opens its campaign',
+    presentCardType(WIN_TYPE, { campaignId: ID }).cta?.href === `/dashboard/campaigns/${ID}`)
+  check('a counted desk order opens its request',
+    presentCardType(WIN_TYPE, { requestId: ID }).cta?.href === `/dashboard/requests/${ID}`)
+  check('a card with no order on it keeps the list',
+    presentCardType(WIN_TYPE).cta?.href === '/dashboard/campaigns'
+      && presentCardType(WIN_TYPE, { campaignId: null, requestId: null }).cta?.href === '/dashboard/campaigns')
+  check('nothing that is not a row id ever reaches the link',
+    presentCardType(WIN_TYPE, { campaignId: '../../admin' }).cta?.href === '/dashboard/campaigns'
+      && presentCardType(WIN_TYPE, { requestId: 42 }).cta?.href === '/dashboard/campaigns')
 
   check('a thousands separator is one number, not two', winNumber('2,418 people saw it') === 2418)
   check('a decimal survives', winNumber('4.7 average') === 4.7)

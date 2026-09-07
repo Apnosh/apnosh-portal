@@ -57,7 +57,7 @@ export default function WinsPage() {
             attribution: (c.attribution as string) ?? undefined,
             spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
             firedOn: c.fired_at ? new Date(String(c.fired_at)).toLocaleDateString(locale, { month: 'long', year: 'numeric' }) : '',
-            ...presentCardType(String(c.card_type)),
+            ...presentCardType(String(c.card_type), c.metadata),
           })) as WinRow[]
         setRows(wins)
       })

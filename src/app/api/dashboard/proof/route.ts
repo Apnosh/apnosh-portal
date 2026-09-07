@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
     const cards = (cardRows ?? []) as unknown as Record<string, unknown>[]
     if (!error) {
       if (wantList) {
-        const stored: Record<string, unknown>[] = (cards ?? []).map((c) => ({ ...c, ...presentCardType(String(c.card_type)) }))
+        const stored: Record<string, unknown>[] = (cards ?? []).map((c) => ({ ...c, ...presentCardType(String(c.card_type), c.metadata) }))
         if (!wantState) return NextResponse.json({ cards: stored }, { headers: { 'Cache-Control': 'no-store' } })
         // The deck is the present tense: events older than 14 days live in the archive only.
         const fresh = stored.filter((c) => new Date(String(c.fired_at)).getTime() > Date.now() - 14 * 86400e3)
@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
           attribution: c.attribution ?? undefined,
           spark: Array.isArray(c.spark) ? c.spark : undefined,
           firedAt: c.fired_at,
-          ...presentCardType(String(c.card_type)),
+          ...presentCardType(String(c.card_type), c.metadata),
         },
       }, { headers: { 'Cache-Control': 'no-store' } })
     }
