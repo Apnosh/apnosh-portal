@@ -29,7 +29,9 @@ const GLYPH: Record<HueKey, typeof Megaphone> = {
   mint: Sparkles, announce: Megaphone, event: Ticket, deal: Tag, nights: Moon, newfaces: MapPin, regulars: Heart,
   reviews: Star, online: ShoppingCart, catering: Users, brand: Share2, amber: Clock, grey: FileText, red: AlertCircle,
 }
-type HuedCard = CampCard & { hue: HueKey }
+type HuedCard = CampCard & { hue: HueKey; promise?: string | null }
+type LedgerRow = { id: string; label: string; line: string; state: string; campaignId: string | null; requestId: string | null; showsOn: string }
+type DeskRow = { id: string; type: string; label: string; orderedOn: string; status: string; dueDate: string | null; workStatus: string | null; line: string | null }
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -57,6 +59,20 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
   const [viewState, setView] = useState<'list' | 'calendar'>('list')
   const view = viewProp ?? viewState // the top row owns List/Calendar now (2026-09-04); the inline control is the fallback
   const [tab, setTab] = useState<Tab>('all')
+  /* THE LEDGER (order_promises): the promise each order made on Create, carried onto its card;
+     plus desk orders (photos, posts, video, print, a website), which have no campaign row and
+     were invisible here. Best-effort: an empty read leaves the list exactly as before. */
+  const [promises, setPromises] = useState<{ rows: LedgerRow[]; desk: DeskRow[] }>({ rows: [], desk: [] })
+
+  useEffect(() => {
+    if (!client?.id) return
+    let live = true
+    fetch(`/api/dashboard/promises?clientId=${client.id}&all=1`)
+      .then((r) => r.json())
+      .then((j) => { if (live) setPromises({ rows: Array.isArray(j?.rows) ? j.rows : [], desk: Array.isArray(j?.desk) ? j.desk : [] }) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [client?.id])
 
   useEffect(() => {
     if (!client?.id) return
@@ -70,12 +86,34 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
   }, [client?.id])
 
   // Drafts (unshipped plans) live on the Orders tab now — Campaigns shows only shipped/live/done.
-  const cards: HuedCard[] = (saved ?? []).map((c) => {
+  const promiseByCampaign = new Map<string, LedgerRow>()
+  for (const r of promises.rows) if (r.campaignId && !promiseByCampaign.has(r.campaignId)) promiseByCampaign.set(r.campaignId, r)
+  const campaignCards: HuedCard[] = (saved ?? []).map((c) => {
     const o = outcomes[c.draft.id]
     const line = o ? outcomeLine(o) : null
     const vm = campaignCardVM(c, progress[c.draft.id], line ? { ...line, spark: o.spark } : null)
-    return { ...vm, hue: campaignHue({ goalKey: c.draft.goalKey, templateId: c.draft.sourceCatalogId, name: c.draft.name }) }
+    const pr = promiseByCampaign.get(c.draft.id)
+    const hued: HuedCard = { ...vm, hue: campaignHue({ goalKey: c.draft.goalKey, templateId: c.draft.sourceCatalogId, name: c.draft.name }), promise: pr?.line ?? null }
+    // A held order (plan-ahead: work starts on a future date) reads Held, not In production.
+    if (pr?.state === 'held') return { ...hued, pill: 'Held', pillIcon: 'calendar' as const, action: null, promise: pr.line }
+    // Done waits for the count: a delivered service whose promise is still counting stays under Live.
+    if (vm.kind === 'done' && pr && pr.state === 'counting') return { ...hued, kind: 'live' as const, pill: 'Counting', pillIcon: 'dot' as const, action: 'See results' }
+    return hued
   }).filter((c) => c.kind !== 'draft')
+  /* Desk orders as cards: one row each, in the Create card's own words, linking to the request. */
+  const deskCards: HuedCard[] = promises.desk.map((d) => {
+    const done = d.workStatus === 'delivered' || d.workStatus === 'approved' || d.status === 'delivered' || d.status === 'closed'
+    const making = d.workStatus === 'in_progress' || d.status === 'in_progress'
+    return {
+      key: `desk:${d.id}`, kind: done ? 'done' : 'live', title: d.label,
+      pill: done ? 'Done' : making ? 'Making' : 'Ordered', pillIcon: done ? 'check' : 'dot',
+      blurb: '', cost: null, recurring: false, perf: null, review: false,
+      href: `/dashboard/requests/${d.id}`, action: done ? 'See it' : null,
+      when: `Ordered ${new Date(`${d.orderedOn}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${d.dueDate && !done ? ` · due ${new Date(`${d.dueDate}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`,
+      hue: 'mint', promise: d.line,
+    }
+  })
+  const cards: HuedCard[] = [...campaignCards, ...deskCards]
   const counts: Record<Tab, number> = {
     all: cards.length,
     live: cards.filter((c) => c.kind === 'live').length,
@@ -152,9 +190,9 @@ function EmptyState() {
   return (
     <div style={{ padding: '34px 20px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
       <Mark hue="mint" size={48}><Plus size={24} /></Mark>
-      <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>No campaigns yet</div>
-      <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Start one and your strategist runs it — you just approve. Pick a goal and we build the plan.</div>
-      <Link href="/dashboard/campaigns/new" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 12, padding: '11px 18px', fontWeight: 700, fontSize: 14 }}><Plus size={16} strokeWidth={2.5} /> New campaign</Link>
+      <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600 }}>No orders yet</div>
+      <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, maxWidth: 280 }}>Everything you order on Create shows here, from the day you order to the day it is counted.</div>
+      <Link href="/dashboard/campaigns/new" style={{ marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 6, background: C.ink, color: '#fff', textDecoration: 'none', borderRadius: 12, padding: '11px 18px', fontWeight: 700, fontSize: 14 }}><Plus size={16} strokeWidth={2.5} /> Open Create</Link>
     </div>
   )
 }
@@ -220,7 +258,11 @@ function CampaignCard({ c }: { c: HuedCard }) {
             <span style={{ ...small, display: 'inline-flex', alignItems: 'center', gap: 5 }}><Clock size={13} /> waiting to go live</span>
           </div>
         )}
-        {/* no descriptive line under the header (owner 2026-09-04): the pill and the launch date carry the state */}
+        {/* THE PROMISE, CARRIED: the same line Create printed under the price and Home prints on
+            the strip, through its life: "Counted after: …" → "Counting · …" → "41 · was 13". */}
+        {c.promise && (
+          <div style={{ marginTop: 8, fontSize: 12, color: c.promise.startsWith('Not counted') ? C.mute : C.greenDk, lineHeight: 1.4 }}>{c.promise}</div>
+        )}
 
         {c.action && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10 }}>

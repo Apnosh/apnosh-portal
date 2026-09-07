@@ -186,6 +186,14 @@ export async function POST(req: Request) {
       return mv ? { vendorId: mv } : undefined
     })())
   }
+  /* The promise, recorded: what this order will be counted by, and when it shows on Home.
+   * Best-effort; a desk order has no campaign row so the ledger anchors on the request id. */
+  if (isOrder) {
+    ;(async () => {
+      const { recordRequestPromise } = await import('@/lib/promises/record')
+      await recordRequestPromise({ clientId, requestId: row.id as string, type: v.type.id, label: v.type.label ?? v.type.id })
+    })().catch(() => {})
+  }
 
   /* Remember the owner's usual (ask-once law): the maker, tier, and brand choice
    * they just ordered with become the next order's defaults. Best-effort and

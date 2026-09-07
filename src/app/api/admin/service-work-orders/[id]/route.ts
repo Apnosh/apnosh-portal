@@ -155,6 +155,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Service deliveries previously notified nobody — the same silent-stall class
   // the creator lane fixed. Best-effort, never blocks the write result.
   if (update.status === 'delivered' && row.status !== 'delivered' && row.client_id) {
+    // THE PROMISE, RE-ANCHORED: the count runs from the day the work landed, not the day it was
+    // ordered, so a week of setup never sits inside the "after" window. Best-effort.
+    ;(async () => {
+      const { reanchorPromise } = await import('@/lib/promises/record')
+      await reanchorPromise({ campaignId: row.campaign_id as string | null, serviceId: row.service_id as string | null, deliveredISO: update.delivered_at as string })
+    })().catch(() => {})
     const { notifyClientOwners } = await import('@/lib/notifications')
     await notifyClientOwners(row.client_id as string, {
       kind: 'client_signoff',
