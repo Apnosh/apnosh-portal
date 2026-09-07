@@ -3,6 +3,7 @@
 import { type ReactNode } from 'react'
 import { Wallet } from 'lucide-react'
 import { type OnboardingData, BUDGET_CHIPS } from '../data'
+import { NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { Question, OptionCard } from '../ui'
 import { useLang } from '@/components/mvp/mvp-language'
 
@@ -31,6 +32,9 @@ export default function StepBudget({ data, update, nav, onAnswered }: Props) {
       <div className="flex flex-col gap-2 mt-5">
         {BUDGET_CHIPS.map((b) => {
           const selected = data.marketing_budget === b
+          // The top chip and "Not sure yet" both save NO cap. The Create sheet says what that
+          // means in those words, and this screen asks the same question, so it says it too.
+          const noCap = NO_CAP_BUDGET_CHIPS.includes(b)
           return (
             <OptionCard
               key={b}
@@ -39,6 +43,7 @@ export default function StepBudget({ data, update, nav, onAnswered }: Props) {
               onClick={() => { update('marketing_budget', b); onAnswered?.() }}
             >
               <div className="text-[15px] font-medium" style={{ color: selected ? '#1c6b52' : '#1d1d1f' }}>{T(b)}</div>
+              {noCap && <div className="text-[12.5px] mt-0.5" style={{ color: '#6e6e73' }}>{T('No cap set. Everything shows.')}</div>}
             </OptionCard>
           )
         })}

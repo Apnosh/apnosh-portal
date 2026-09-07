@@ -42,8 +42,11 @@ export default function StepShape({ data, update, nav }: Props) {
         <div className="flex flex-col gap-2">
           {SHELF_SHAPES.map((s) => {
             const selected = picked === s
+            // The picked ring is MINT. It took the newfaces purple, which is the colour of a goal,
+            // on a screen whose glyph, text and check are all mint: chrome never wears a goal
+            // colour (hues.ts says so in its first paragraph).
             return (
-              <OptionCard key={s} selected={selected} hue="newfaces" onClick={() => update('shape', s)}>
+              <OptionCard key={s} selected={selected} onClick={() => update('shape', s)}>
                 <div className="text-[15px] font-medium" style={{ color: selected ? '#1c6b52' : '#1d1d1f' }}>
                   {T(SHAPE_LABEL[s].title)}
                 </div>

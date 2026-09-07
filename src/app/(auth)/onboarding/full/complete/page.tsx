@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { DISPLAY } from '../ui';
 
 export default function OnboardingCompletePage() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function OnboardingCompletePage() {
         {/* Heading */}
         <h1
           className="text-3xl sm:text-4xl font-bold mb-3"
-          style={{ fontFamily: 'Playfair Display, serif', color: '#1d1d1f' }}
+          style={{ fontFamily: DISPLAY, color: '#1d1d1f' }}
         >
           You&apos;re all set!
         </h1>

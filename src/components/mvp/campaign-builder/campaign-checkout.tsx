@@ -691,11 +691,11 @@ function PayForm({ clientId, draft, desk, restaurant, producerChoices, initialGa
         })
         const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
         if (!res.ok || j.ok === false) {
-          setError(j.error || 'Your card was charged but we could not start the work. Tap Finish to try again — you will not be charged twice.')
+          setError(j.error || 'Your card was charged but we could not start the work. Tap Finish to try again. You will not be charged twice.')
           setBusy(false); setStatus('Finish placing your order'); return
         }
       } catch {
-        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
+        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again. You will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return
       }
       onPlaced(desk.requestId, bill, null)
@@ -706,7 +706,7 @@ function PayForm({ clientId, draft, desk, restaurant, producerChoices, initialGa
       try {
         shippedIdRef.current = await saveAndShip({ clientId, draft, producerChoices, paymentIntentId })
       } catch {
-        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
+        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again. You will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return
       }
       // Record the answered custom gates onto the campaign so the team sees them. Best-effort.

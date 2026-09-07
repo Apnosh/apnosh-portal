@@ -158,8 +158,10 @@ export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: 
     card_type: 'gbp_week',
     label: w.hasDemo ? 'Sample · a week on Google' : 'This week on Google',
     big: parts.join(' · '),
+    // ONE METRIC PER COMPARISON. "Up from 4 calls and 12 taps the week before" makes the reader
+    // hold two numbers against two others in one breath; two short sentences say the same thing.
     context: priorTotal > 0
-      ? `Up from ${plural(w.prior.calls, 'call')} and ${plural(w.prior.directions, 'tap')} the week before.`
+      ? `Up from ${plural(w.prior.calls, 'call')} the week before. Direction taps are up from ${w.prior.directions}.`
       : 'Your first tracked week.',
     attribution: w.hasDemo
       ? 'Demo numbers so you can see the card. Real weeks replace this.'
@@ -193,7 +195,7 @@ export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, n
     label: 'Quieter week on Google',
     big: parts.join(' · '),
     context: w.prior.calls > 0
-      ? `Down from ${plural(w.prior.calls, 'call')} and ${plural(w.prior.directions, 'tap')} the week before. A push this week turns it around.`
+      ? `Down from ${plural(w.prior.calls, 'call')} the week before. Direction taps are down from ${w.prior.directions}. A push this week turns it around.`
       : `Down from ${plural(w.prior.directions, 'tap')} the week before. A push this week turns it around.`,
   }
 }
