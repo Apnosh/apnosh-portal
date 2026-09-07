@@ -11,9 +11,17 @@
  * WHERE THE ANSWER COMES FROM. clients.preferred_language (migration 259) is the record, and it
  * arrives on the client row the whole app already resolves — no extra fetch, and it is per
  * business, so a strategist switching between two clients sees each one's own language. The
- * browser copy in localStorage exists for two reasons: the first paint, before the client row
- * lands (otherwise a Spanish owner reads a flash of English on every load), and ONBOARDING,
- * which happens before a client row exists at all.
+ * browser copy in localStorage exists for two reasons: it is ready before the client row's
+ * round trip is, and ONBOARDING, which happens before a client row exists at all.
+ *
+ * WHAT IT DOES NOT DO. It does not remove the flash of English. The server renders this tree
+ * with no idea who is asking, and localStorage cannot be read until the first effect runs, so
+ * a Spanish owner still sees one frame of English on a cold load — sooner over than waiting
+ * for the client row, but there. Reading it in the browser earlier cannot fix that: React
+ * would hydrate against markup the server wrote in English. The real fix is to render the
+ * language on the SERVER (a cookie or the client row read in the dashboard layout, passed in
+ * as the initial value); it is a follow-up, and until it ships this comment is the honest
+ * description of what an owner sees.
  *
  * `T(...)` is `t(..., lang)` already bound, because a screen that has to pass the language to
  * every single string will eventually forget one.
@@ -71,7 +79,8 @@ export function MvpLanguageProvider({ children }: { children: React.ReactNode })
   /** the client we have already written the browser's answer up for, so it happens once */
   const pushedFor = useRef<string | null>(null)
 
-  // 1. The remembered answer paints first, so a Spanish owner never reads a flash of English.
+  // 1. The remembered answer, as early as the browser allows: the first effect after mount,
+  //     which beats the client row's round trip but not the server's English first paint.
   useEffect(() => {
     const saved = readStoredLang()
     if (saved) setLangState(saved)
