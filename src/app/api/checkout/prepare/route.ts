@@ -10,7 +10,7 @@ import { shapeFor } from '@/lib/campaigns/builder/compose-plan'
 import type { CampaignDraft } from '@/lib/campaigns/types'
 import { campaignCheckoutEnabled } from '@/lib/checkout-gate'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { deskBill } from '@/lib/requests/desk-bill'
+import { deskBill, deskQuoteOrigin } from '@/lib/requests/desk-bill'
 import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 
 /** Plain owner-facing name for a catalog id (falls back to the id itself). */
@@ -268,7 +268,7 @@ async function prepareDeskOrder(clientId: string, requestId: string) {
   }
 
   const cadence = row.cadence === 'monthly' ? 'monthly' as const : 'once' as const
-  const bill = deskBill(row.quote_cents as number | null, cadence)
+  const bill = deskBill(row.quote_cents as number | null, cadence, deskQuoteOrigin(row.brief))
   // FAIL CLOSED on a price we do not have. A desk order with no number is not a free order — it is
   // an order we could not price, and charging $0 for work a person will do is the wrong mistake.
   if (bill.preTaxCents <= 0 && bill.perMonthCents <= 0) {

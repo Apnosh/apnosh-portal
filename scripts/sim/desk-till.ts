@@ -10,7 +10,7 @@
  *
  * Run:  npx tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/desk-till.ts
  */
-import { deskBill } from '@/lib/requests/desk-bill'
+import { deskBill, deskQuoteOrigin } from '@/lib/requests/desk-bill'
 import { feeCentsOn, SERVICE_FEE_RATE, monthlyPhrase, fmtMoney } from '@/lib/campaigns/checkout-bill'
 import { priceCreativeRequest, fmtTotal, type CreativePrice } from '@/lib/requests/pricing'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
@@ -83,6 +83,27 @@ function main() {
     s.eq(`${c.type}: the till's split is the sheet's own lines`, [b.subtotalCents, b.serviceFeeCents], [sheetSubtotal, sheetFee])
     s.eq(`${c.type}: the charge is the price the owner was shown`, b.preTaxCents, p.totalCents)
   }
+
+  s.group('A hand-typed staff quote has no fee inside it to take back out')
+  // The split exists because the SHEET builds its total as s + 10%. A person typing $480 into the
+  // admin board added nothing: booking a $43.64 fee out of it writes money into the ledger that
+  // nobody ever charged, and prorates the refund against a subtotal that was never the price.
+  const staff = deskBill(48_000, 'once', 'staff_quote')
+  s.eq('the whole quote is the work', staff.subtotalCents, 48_000)
+  s.eq('and the fee line is zero, because there was no fee', staff.serviceFeeCents, 0)
+  s.eq('the card is charged the number the person quoted', staff.preTaxCents, 48_000)
+  const sheet = deskBill(48_000, 'once', 'price_sheet')
+  s.check('a price-sheet order still splits, because its fee is really in there', sheet.serviceFeeCents > 0)
+  s.eq('both origins charge exactly the same money', staff.preTaxCents, sheet.preTaxCents)
+  s.eq('a monthly staff quote is still monthly and still fee-free',
+    deskBill(32_000, 'monthly', 'staff_quote').perMonthCents, 32_000)
+  // Which one a row IS, read off its own brief. The order lane stamps _pricing; a quote never does.
+  s.eq('an order the server priced is a price-sheet order', deskQuoteOrigin({ _pricing: { origin: 'price_sheet' } }), 'price_sheet')
+  s.eq('a graphic order stamped with its sheet version counts too', deskQuoteOrigin({ _pricing: { priceSheetVersion: 3, tier: 2 } }), 'price_sheet')
+  s.eq('a brief with no stamp is a person\'s quote', deskQuoteOrigin({ what: 'a menu' }), 'staff_quote')
+  s.eq('and so is an older row with no brief at all', deskQuoteOrigin(null), 'staff_quote')
+  s.eq('the default is what it has always been, so nothing changed under a caller that says nothing',
+    deskBill(48_000, 'once').serviceFeeCents, sheet.serviceFeeCents)
 
   s.group('Fails to zero, never to a guess')
   for (const bad of [0, -1, -99_999, null, undefined, NaN]) {

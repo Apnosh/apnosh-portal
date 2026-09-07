@@ -131,7 +131,7 @@ export async function POST(req: Request) {
       const { card, version } = await getActiveRateCard()
       orderCents = graphicOrderCents(body.design, card)
       const tier = graphicTier(body.design)
-      brief = { ...v.clean, _pricing: { priceSheetVersion: version, tier, spec: TIER_SPECS[tier] } }
+      brief = { ...v.clean, _pricing: { origin: 'price_sheet', priceSheetVersion: version, tier, spec: TIER_SPECS[tier] } }
       /* GD-2: the order remembers the draft it upgrades, so the designer opens
        * the client's existing draft instead of a blank page. */
       const fd = (body.design as Record<string, unknown> | null | undefined)?.fromDraftId
@@ -142,6 +142,9 @@ export async function POST(req: Request) {
       const priced = priceCreativeRequest(v.type.id, v.clean)
       orderCents = priced?.totalCents ?? null
       if (priced?.monthly) cadence = 'monthly'
+      /* The SERVER priced this, from the sheet, so the 10% fee is inside the number and the till
+       * may take it back out. A hand-typed staff quote has no stamp and no fee (desk-bill.ts). */
+      if (orderCents != null) brief = { ...brief, _pricing: { origin: 'price_sheet' } }
     }
     if (orderCents == null) {
       return NextResponse.json({ error: 'Could not price this order. Send it as a request instead.' }, { status: 400 })
