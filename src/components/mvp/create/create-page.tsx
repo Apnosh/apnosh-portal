@@ -23,9 +23,12 @@ import TopRow from '../top-row'
 import { useClient } from '@/lib/client-context'
 import { gradOf, hueOf, tint, type HueKey } from '../hues'
 import { Mark } from '../mark'
-import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuyable, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
+import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuyable, lanesFor, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
 import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from '@/lib/campaigns/data/chip-shelf'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
+import { liveAlternativesFor } from '@/lib/campaigns/data/live-alternatives'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
+import { CONTACT_KEY, firstName } from '../people-row'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { SHAPE_LABEL, DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
@@ -148,6 +151,20 @@ const CREATE_CSS = `
 .cr .row .r{flex:none;text-align:right}
 .cr .row .r b{display:block;font-family:'Cal Sans','Inter',sans-serif;font-size:14px;font-weight:600;font-variant-numeric:normal}
 .cr .row .r span{font-size:11px;color:#aeaeb2}
+/* a shelf card: title, why, what, price + Order, the lane ladder, the count line (v8) */
+.cr .crow{padding:11px 4px}
+.cr .crow + .crow{border-top:1px solid #e6e6ea}
+.cr .crow .top{display:flex;align-items:flex-start;gap:12px}
+.cr .crow .t{display:block;font-size:15px;font-weight:600;line-height:1.25}
+.cr .crow .why{display:block;font-size:12.5px;color:#8a5a0c;line-height:1.35;margin-top:2px}
+.cr .crow .why.none{color:#6e6e73}
+.cr .crow .w{display:block;font-size:12.5px;color:#6e6e73;line-height:1.35;margin-top:3px;-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+.cr .crow .pl{display:block;font-size:12.5px;font-weight:600;color:#1d1d1f;margin-top:5px}
+.cr .crow .pl span{font-weight:500;color:#aeaeb2}
+.cr .lanes{display:flex;flex-direction:column;gap:5px;margin:9px 0 0 50px}
+.cr .lanes div{display:flex;gap:9px;font-size:11.5px;color:#6e6e73;line-height:1.35}
+.cr .lanes b{flex:none;min-width:66px;color:#2e9a78;font-weight:700}
+.cr .count{margin:9px 0 0 50px;padding:7px 9px;border-radius:10px;background:rgba(46,154,120,.08);color:#1c6b52;font-size:11.5px;line-height:1.35}
 /* filters */
 .cr .filters{display:flex;gap:6px;overflow-x:auto;padding:4px 16px 8px;scrollbar-width:none}
 .cr .fch{flex:none;height:34px;padding:0 12px;border-radius:17px;background:#f5f5f7;font-size:12.5px;font-weight:600;color:#1d1d1f;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border:0;cursor:pointer;font-family:inherit}
@@ -301,14 +318,21 @@ export default function CreatePage() {
   const [ctx, setCtx] = useState<ShelfCtx | null>(null)
   /** The chip whose shelf is showing. Null until the client's own goals arrive. */
   const [chip, setChip] = useState<string | null>(null)
-  const [showLater, setShowLater] = useState(false)
+  /* null = the owner has not touched it, so the section opens on its own when the list is short
+     (v8: a five-row roadmap is a roadmap; a fifteen-row one is a wall). Reset to null on every
+     chip change, because the next goal's list is a different length. */
+  const [showLater, setShowLater] = useState<boolean | null>(null)
   const [budgetSheet, setBudgetSheet] = useState(false)
+  /** The people who are on this client's live orders, for the bottom door. Empty is a fine
+   *  answer: the door then says Get help, which is a real place, and never invents a name. */
+  const [people, setPeople] = useState<{ id: string; name: string; role: string }[]>([])
 
   useEffect(() => {
     if (!clientId) return
     let live = true
     fetch(`/api/dashboard/why-signals?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSignals(j as Signals) }).catch(() => {})
     fetch(`/api/campaigns/shelf-context?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setCtx(j as ShelfCtx) }).catch(() => {})
+    fetch(`/api/dashboard/people?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.people)) setPeople(j.people as { id: string; name: string; role: string }[]) }).catch(() => {})
     fetch(`/api/campaigns?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
       if (!live || !Array.isArray(j?.campaigns)) return
       const ids = new Set<string>()
@@ -418,7 +442,7 @@ export default function CreatePage() {
       setRead({ ok: r.ok && j?.ok !== false, reason: j?.reason, situation: res?.situation ?? null, summary: res?.summary ?? '', unsupported: Array.isArray(res?.unsupported) ? res.unsupported : [], when: res?.when ?? null })
       // Steer the chip rail, which is what draws the shelf now.
       const c = res?.situation ? CHIP_FOR_GOAL[SITUATION_GOAL[res.situation]] : null
-      if (c) { setChip(c); setShowLater(false) }
+      if (c) { setChip(c); setShowLater(null) }
     } catch { setRead({ ok: false, reason: 'no answer', situation: null, summary: '', unsupported: [] }) }
     setReading(false)
   }
@@ -467,6 +491,27 @@ export default function CreatePage() {
         return <button key={t} type="button" onClick={() => { setAsk(words); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{words}</button> })}
     </div>
   )
+  /* ── the door at the bottom ──
+   * The rule from Move 6: name a person only when a real person is on this client's live work.
+   * Then the door is that person's own thread. Otherwise it is Get help, with the one promise
+   * the whole product makes. No stock face, no phone number we do not answer. */
+  const Fallback = () => {
+    const p = people[0]
+    const who = p ? firstName(p.name) : null
+    const href = p ? `/dashboard/messages?to=${CONTACT_KEY[p.role] ?? 'strategist'}` : '/dashboard/get-help'
+    return (
+      <div className="ask">
+        <div style={{ fontWeight: 600, color: C.ink, marginBottom: 2 }}>{who ? T('Nothing fit? Ask {name}.', { name: who }) : T('Nothing fit? Ask us.')}</div>
+        <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 8, lineHeight: 1.4 }}>
+          {who ? T('{name} is already on your work. A real person replies {promise}.', { name: who, promise: T(REPLY_PROMISE) }) : T('A real person replies {promise}.', { promise: T(REPLY_PROMISE) })}
+        </div>
+        <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.ink, fontSize: 14, fontWeight: 600 }}>
+          {who ? T('Message {name}', { name: who }) : T('Get help')}
+          <span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span>
+        </Link>
+      </div>
+    )
+  }
   const AskBox = () => (
     <div className="ask">
       <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>{T('Not seeing it? Ask for anything')}</div>
@@ -479,26 +524,26 @@ export default function CreatePage() {
    * ones they picked first. It used to be ten goals keyed in different words entirely, so
    * nothing an owner said in setup could reach this page. Existing filter-chip styling; the
    * budget chip is the same pill with a dashed edge when it has never been answered. */
-  const Rail = () => {
+  const Rail = () => (
+    <div className="filters cc-scroll" style={{ paddingTop: 6, paddingBottom: 4 }}>
+      {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
+          monthly_budget null, and this pill never prints a number the owner did not say. */}
+      <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
+        {cap == null ? T('Set a budget') : T('Up to {amount} to start', { amount: money(cap) })}
+      </button>
+      {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{T(SHAPE_LABEL[shape].title)}</span>}
+    </div>
+  )
+  const GoalRail = () => {
     const mine = ctx?.goals ?? []
     const ordered = [...mine, ...CHIP_ORDER.filter((c) => !mine.includes(c))]
     return (
-      <>
-        <div className="filters cc-scroll" style={{ paddingTop: 6, paddingBottom: 4 }}>
-          {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
-              monthly_budget null, and this pill never prints a number the owner did not say. */}
-          <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
-            {cap == null ? T('Set a budget') : T('Up to {amount} to start', { amount: money(cap) })}
-          </button>
-          {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{T(SHAPE_LABEL[shape].title)}</span>}
-        </div>
-        <div className="filters cc-scroll" style={{ paddingTop: 0 }}>
-          {ordered.map((c) => {
-            const on = c === activeChip
-            return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(false) }} className={`fch${on ? ' on' : ''}`}>{T(c)}</button>
-          })}
-        </div>
-      </>
+      <div className="filters cc-scroll" style={{ paddingTop: 10 }}>
+        {ordered.map((c) => {
+          const on = c === activeChip
+          return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(null) }} className={`fch${on ? ' on' : ''}`}>{T(c)}</button>
+        })}
+      </div>
     )
   }
 
@@ -514,27 +559,49 @@ export default function CreatePage() {
     <button type="button" onClick={() => go({ name: 'search' })} style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', width: '100%', color: C.faint, fontSize: 14, cursor: 'text', fontFamily: 'inherit' }}><Search size={16} /> {T('Search campaigns')}</button>
   )
 
-  /* One shelf row: the glyph, the title, one reason, one price with one time word, one button.
-     The whole row is not the button any more, because the Order button is the point. */
-  const ShelfRow = ({ id, reason }: { id: string; reason?: string | null }) => {
+  /* ONE SHELF CARD, the v8 shape the twenty owners read:
+       glyph · title · why (their own number, when one fired) · what the work is ·
+       the price with its time word · the button, then the lane ladder where a card has
+       three lanes, then the count line from the ledger registry.
+     Nothing here is invented: the why comes from their numbers, the what from the card's own
+     plain words, the ladder from the setup-card engine, the count from PROMISE_BY_CARD. A card
+     with no promise spec prints NO count line rather than a made-up one. */
+  const ShelfRow = ({ id, reason, softReason }: { id: string; reason?: string | null; /** the reason is the no-numbers-yet line, not a finding about them */ softReason?: boolean }) => {
     const c = cards[id]
     if (!c) return null
     const Icon = iconFor(c)
     const free = hasFreeLane(c.id)
-    const price = c.price === 'Quote' && free ? 'Free' : c.price
+    const price = c.price === 'Quote' && free ? T('Free') : c.price
+    // The time word under the price. A monthly card says what monthly means; everything else
+    // says when it is ready. "Fee inside" is true: chargedPriceLabel folds the service fee in.
+    const monthly = c.price.includes('/mo') && !c.price.includes('+')
+    const priceSub = monthly ? T('monthly, cancel any time') : c.price === 'Quote' ? c.ready : `${c.ready} · ${T('fee inside')}`
+    const lanes = lanesFor(c.id)
+    const count = promiseSentence(PROMISE_BY_CARD[c.id] ?? [])
     return (
-      <div className="row" style={hv(c.goal)}>
-        <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-          <Mark hue={c.goal} size={38}><Icon size={19} /></Mark>
-          <span className="tx">
-            <span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span>
-            {reason && <span className="s why" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{reason}</span>}
-            <span className="s" style={{ display: 'block' }}>{price}{price !== 'Free' && free ? T(', or free, you do it') : ''} · {c.ready}</span>
-          </span>
-        </button>
-        {/* The button matches the price. A desk card with a real price is an order, not an ask:
-            only a card that genuinely has no price ('Quote') says Ask. */}
-        <button type="button" className="btn hue" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => order(c)}>{free && c.price === 'Quote' ? 'Start' : c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask' : 'Order'}</button>
+      <div className="crow" style={hv(c.goal)}>
+        <div className="top">
+          <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+            <Mark hue={c.goal} size={38}><Icon size={19} /></Mark>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="t">{c.title}</span>
+              {/* Amber is a finding from their own numbers. The no-numbers-yet line is not one, so it
+                  wears the plain grey instead. */}
+              {reason && <span className={`why${softReason ? ' none' : ''}`}>{reason}</span>}
+              <span className="w">{c.plain || c.get[0]}</span>
+              <span className="pl">{price}{price !== T('Free') && free ? T(', or free, you do it') : ''} <span>· {priceSub}</span></span>
+            </span>
+          </button>
+          {/* The button matches the price. A desk card with a real price is an order, not an ask:
+              only a card that genuinely has no price ('Quote') says Ask. */}
+          <button type="button" className="btn hue" style={{ height: 34, padding: '0 14px', flex: 'none', marginTop: 2 }} onClick={() => order(c)}>{free && c.price === 'Quote' ? T('Start') : c.handoff.kind === 'request' && c.price === 'Quote' ? T('Ask') : T('Order')}</button>
+        </div>
+        {lanes.length > 0 && (
+          <div className="lanes">
+            {lanes.map((l) => <div key={l.kind}><b>{T(l.price)}</b><span>{T(l.what)}</span></div>)}
+          </div>
+        )}
+        {count && <div className="count">{count}</div>}
       </div>
     )
   }
@@ -543,16 +610,17 @@ export default function CreatePage() {
     /* The reason line is their own number where one exists. Where Google has never reported a
        day there is no number to state, so the FIRST card says so plainly instead of a card
        going out with a hollow zero on it. Said once, on the first row, not fourteen times. */
-    const nothingYet = ctx && !ctx.hasGoogle ? "We don't have your Google numbers yet. This is the first step." : null
-    const reasonFor = (id: string, i: number) => {
-      const c = cards[id]
-      return (c ? whyNow(c) : null) ?? (i === 0 ? nothingYet : null)
-    }
+    const nothingYet = ctx && !ctx.hasGoogle ? T('We do not have your Google numbers yet. This is the first step.') : null
     const setupRows = SETUP_IDS.map((id) => cards[id]).filter((c): c is ShelfCard => !!c && isBuyable(c))
     return (
       <>
         <SayBox />
         <Examples />
+        {/* The goal rail sits UNDER the say box and the examples, the v8 order the twenty owners
+            read. It used to be pinned in the header above them, which pushed the first shelf row
+            off a 520px screen. The budget and shape chips stay in the header: they are facts about
+            this account that every price on the page is drawn at, not a choice you scroll to. */}
+        <GoalRail />
 
         <Sec t={T(SHELF_TITLE_FOR_SHAPE[shape])} s={`${T(ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet')} · ${T('{n} you can order today', { n: underCap.length })}`} hue={CHIP_HUE[activeChip] ?? 'mint'} />
         {underCap.length === 0 ? (
@@ -560,7 +628,8 @@ export default function CreatePage() {
             <b style={{ color: C.ink }}>{T('Nothing here yet for this one.')}</b> {T('Everything we could do for it is below, with the reason it is not ready.')}
           </div>
         ) : (
-          <div style={{ padding: '0 12px' }}>{underCap.map((id, i) => <ShelfRow key={id} id={id} reason={reasonFor(id, i)} />)}</div>
+          <div style={{ padding: '0 12px' }}>{underCap.map((id, i) => { const own = cards[id] ? whyNow(cards[id]) : null
+              return <ShelfRow key={id} id={id} reason={own ?? (i === 0 ? nothingYet : null)} softReason={!own} /> })}</div>
         )}
 
         {overCap.length > 0 && cap != null && (
@@ -580,29 +649,45 @@ export default function CreatePage() {
           </>
         )}
 
-        {laterIds.length > 0 && (
+        {laterIds.length > 0 && (() => {
+          const openLater = showLater ?? laterIds.length <= 5
+          return (
           <div style={{ margin: '18px 16px 0' }}>
-            <button type="button" onClick={() => setShowLater((v) => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, border: 'none', background: C.fill, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
+            <button type="button" onClick={() => setShowLater(!openLater)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, border: 'none', background: C.fill, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
               <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: C.ink }}>{T('Coming later for this goal')} · {laterIds.length}</span>
-              <ChevronDown size={16} color={C.faint} style={{ transform: showLater ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
+              <ChevronDown size={16} color={C.faint} style={{ transform: openLater ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
             </button>
-            {showLater && (
+            {openLater && (
               <div style={{ padding: '6px 2px 0' }}>
-                {laterIds.map((id) => (
+                {laterIds.map((id) => {
+                  const title = cards[id]?.title ?? shelfTitle(id)
+                  /* Where something LIVE does the same job, the row says so with its price and the
+                     button orders that instead of promising a note one day. liveAlternativesFor
+                     only ever returns ids that pass the same sellable law the shelf reads, so this
+                     detour can never point at another closed door. */
+                  const alt = cards[liveAlternativesFor(id, undefined, 1)[0] ?? '']
+                  return (
                   <div key={id} className="row" style={{ alignItems: 'flex-start' }}>
                     <span className="tx">
-                      <span className="t" style={{ display: 'block', fontSize: 14 }}>{cards[id]?.title ?? shelfTitle(id)}</span>
-                      <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>{notSellableReason(id)}</span>
+                      <span className="t" style={{ display: 'block', fontSize: 14 }}>{title}</span>
+                      <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>
+                        {notSellableReason(id)}{alt ? ` ${T('{title} is {price} today.', { title: alt.title, price: alt.price })}` : ''}
+                      </span>
                     </span>
-                    <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${cards[id]?.title ?? shelfTitle(id)} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>{T('Tell me when')}</Link>
+                    {alt
+                      ? <button type="button" className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', fontSize: 13 }} onClick={() => order(alt)}>{T('Order that instead')}</button>
+                      : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${title} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>{T('Tell me when')}</Link>}
                   </div>
-                ))}
+                ) })}
               </div>
             )}
           </div>
-        )}
+          )
+        })()}
 
-        <Sec t={T('Set up once')} s={T('The basics, ticked off as you go')} hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
+        {/* "2 of 5", from the same set the tick on each row reads: the setup cards this client has
+            actually ordered (a shipped campaign carrying that card's id). Never a guess. */}
+        <Sec t={T('Set up once')} s={T('{n} of {total} done', { n: setupRows.filter((c) => done.has(c.id)).length, total: setupRows.length })} hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
         <div style={{ padding: '0 12px' }}>{setupRows.map((c) => <SetupRow key={c.id} c={c} />)}</div>
 
         <div style={{ margin: '18px 16px 0' }}>
@@ -612,7 +697,7 @@ export default function CreatePage() {
             <ChevronRight size={17} color={C.faint} />
           </button>
         </div>
-        <AskBox />
+        <Fallback />
         <div style={{ height: 24 }} />
       </>
     )
@@ -756,7 +841,10 @@ export default function CreatePage() {
     <>
       <div onClick={() => setBudgetSheet(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.28)', zIndex: 40 }} />
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
+        {/* Six answers plus their sub-lines run past the bottom of a short phone, so the sheet
+            caps at 80% of the window and scrolls inside itself, keeping the last chip reachable
+            above the home bar. */}
+        <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))', maxHeight: '80vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line, margin: '0 auto 12px' }} />
           <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{T('What feels right to start?')}</div>
           <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>{T('You can change it any time. Nothing is charged now.')}</div>

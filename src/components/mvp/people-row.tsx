@@ -43,7 +43,7 @@ interface OrderPerson {
 
 /** A person's role word → the Messages contact key its deep link uses (mvp-messages CONTACTS).
  *  A writer is covered by the strategist thread today, which is what THREAD_SUBJECT already says. */
-const CONTACT_KEY: Record<string, string> = {
+export const CONTACT_KEY: Record<string, string> = {
   Strategist: 'strategist',
   Designer: 'designer',
   Photographer: 'photographer',
@@ -63,7 +63,7 @@ function hrefFor(p: OrderPerson): string {
 }
 
 /** First name only under the circle, like every other people strip in the app. */
-const firstName = (n: string) => n.trim().split(/\s+/)[0] || n
+export const firstName = (n: string) => n.trim().split(/\s+/)[0] || n
 const initials = (n: string) => n.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '·'
 
 /** What this person is on, in one short line: the order when there is one, else how many.

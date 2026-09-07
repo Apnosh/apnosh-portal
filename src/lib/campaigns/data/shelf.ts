@@ -212,6 +212,35 @@ const FREE_LANE_IDS: ReadonlySet<string> = new Set(
 )
 export const hasFreeLane = (id: string): boolean => FREE_LANE_IDS.has(id)
 
+/** One rung of a setup card's ladder: what it costs and what that buys, in the card's own words. */
+export interface ShelfLane { kind: 'diy' | 'ai' | 'team'; price: string; what: string }
+
+/**
+ * The three lanes a setup card is sold in, cheapest first, for the shelf row.
+ *
+ * Read off the setup-card engine, never written here: the labels are the lane's own `label` and
+ * the prices come from the lane's price, its Pro flag, or (for done-for-you) the card's charged
+ * price. A card with no lanes returns nothing, so the ladder appears only where three real
+ * choices exist. 'Free' and 'In Pro' are words, not numbers, because that is what they are.
+ */
+export function lanesFor(id: string): ShelfLane[] {
+  const card = SETUP_CARDS.find((c) => c.id === id)
+  if (!card) return []
+  const shelf = shelfCards()[id]
+  const out: ShelfLane[] = []
+  for (const kind of ['diy', 'ai', 'team'] as const) {
+    const lane = card.lanes.find((l) => l.kind === kind)
+    if (!lane) continue
+    const price = lane.price
+      ? `$${lane.price.amount.toLocaleString()}${lane.price.kind === 'monthly' ? '/mo' : ''}`
+      : lane.proOnly ? 'In Pro'
+        : kind === 'team' ? (shelf?.price ?? 'Quote')
+          : 'Free'
+    out.push({ kind, price, what: lane.label })
+  }
+  return out
+}
+
 /* the browse sections */
 export const QUICK_IDS = ['design', 'creative-graphic', 'creative-social', 'creative-video', 'creative-photos', 'creative-copy', 'story', 'gpost', 'dish', 'reel']
 export const SEASON_IDS = ['promoevent', 'launch', 'catering', 'ticket', 'giftcard', 'creator']

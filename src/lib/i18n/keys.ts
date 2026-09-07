@@ -120,6 +120,15 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     // the shape chip on the goal rail draws SHAPE_LABEL's title (also listed under onboarding)
     'A place people come to', 'A truck or a pop-up', 'Delivery only',
     'Two or more places', 'Mostly catering', 'Open for a season',
+    /* Move 5b — the v8 shelf card: the price's time word, the lane ladder, the count row's
+       detour, the "set up once" tally and the door at the bottom. */
+    'fee inside', 'monthly, cancel any time', 'Free', 'In Pro', 'Start', 'Ask',
+    'You do it yourself, step by step', 'You do it with Apnosh AI, step by step', 'Done for you by Apnosh',
+    '{n} of {total} done', '{title} is {price} today.', 'Order that instead',
+    'We do not have your Google numbers yet. This is the first step.',
+    'Nothing fit? Ask {name}.', 'Nothing fit? Ask us.',
+    '{name} is already on your work. A real person replies {promise}.',
+    'A real person replies {promise}.',
   ],
 
   /* the fourteen goal chips and the six budget answers — asked in setup, shown on Create.

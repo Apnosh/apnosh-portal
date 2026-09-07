@@ -354,4 +354,23 @@ export const ES: Record<string, string> = {
   'Offices, parties, big orders': 'Oficinas, fiestas, pedidos grandes',
   'Open for a season': 'Abierto por temporada',
   'Busy part of the year, quiet the rest': 'Una temporada fuerte, el resto tranquilo',
+
+  /* ── Move 5b: the Create shelf card, its lane ladder and the door at the bottom ─────────── */
+  'fee inside': 'con todo incluido',
+  'monthly, cancel any time': 'al mes, cancelas cuando quieras',
+  'Free': 'Gratis',
+  'In Pro': 'Con Pro',
+  'Start': 'Empezar',
+  'Ask': 'Preguntar',
+  'You do it yourself, step by step': 'Lo haces tú, paso a paso',
+  'You do it with Apnosh AI, step by step': 'Lo haces con Apnosh AI, paso a paso',
+  'Done for you by Apnosh': 'Apnosh lo hace por ti',
+  '{n} of {total} done': '{n} de {total} listos',
+  '{title} is {price} today.': '{title} cuesta {price} hoy.',
+  'Order that instead': 'Pide eso mejor',
+  'We do not have your Google numbers yet. This is the first step.': 'Todavía no tenemos tus números de Google. Este es el primer paso.',
+  'Nothing fit? Ask {name}.': '¿Nada te sirve? Pregúntale a {name}.',
+  'Nothing fit? Ask us.': '¿Nada te sirve? Pregúntanos.',
+  '{name} is already on your work. A real person replies {promise}.': '{name} ya está en tu trabajo. Una persona real responde {promise}.',
+  'A real person replies {promise}.': 'Una persona real responde {promise}.',
 }
