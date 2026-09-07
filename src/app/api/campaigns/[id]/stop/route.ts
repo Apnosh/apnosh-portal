@@ -12,9 +12,11 @@
  *   - subscription cancel: the campaign's Stripe monthly subscription(s) are canceled
  *     IMMEDIATELY (cancelCampaignSubscriptions) — the settlement says monthly billing
  *     ends now, so it does. Idempotent + degrade-safe; a failure pages staff.
- *   - an honest settlement back to the owner: what stopped, what continues,
- *     what has been billed so far. One-time charges are never touched: they exist only
- *     for approved/published work, which the sweep never voids.
+ *   - THE MONEY BACK: a campaign paid upfront is prorated against what actually landed
+ *     (creator pieces, team posts and services) and the rest is refunded to the card.
+ *     Charges for delivered work stand — that work was really done.
+ *   - an honest settlement back to the owner: what stopped, what continues, what we are
+ *     sending back, and what still bills.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
@@ -71,9 +73,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // total is measured against the campaign's final state.
   const money = await owedRefundCents(id).catch(() => ({ owedCents: 0, deliveredCents: 0, paid: null }))
   let refundedCents = 0
-  let refundOwedCents_ = 0
+  let owedCents = 0
   if (money.paid && money.owedCents > 0) {
-    refundOwedCents_ = money.owedCents
+    owedCents = money.owedCents
     const r = await refundCampaignPayment({
       campaignId: id,
       amountCents: money.owedCents,
@@ -82,7 +84,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     }).catch(() => null)
     refundedCents = r?.refundedCents ?? 0
   }
-  const refundFailed = refundOwedCents_ > 0 && refundedCents <= 0
+  const refundFailed = owedCents > 0 && refundedCents <= 0
 
   const name = campaign.draft.name || 'Your campaign'
   const stoppedCount = sweep.voidedOrders + sweep.rejectedDrafts + sweep.cancelledServices
@@ -97,7 +99,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     ? refundedCents > 0
       ? `We refund $${(refundedCents / 100).toFixed(2)} for work not delivered. It lands on your card in 5 to 10 days.`
       : refundFailed
-        ? `We owe you $${(refundOwedCents_ / 100).toFixed(2)} back for work we did not deliver. Our team is sending it by hand today.`
+        ? `We owe you $${(owedCents / 100).toFixed(2)} back for work we did not deliver. Our team is sending it by hand today.`
         : 'Everything you ordered was delivered, so there is nothing to send back.'
     : charges.accruedCents > 0
       ? `Owed for delivered work so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done; it arrives on one invoice.`
@@ -125,7 +127,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     await notifyStaffForClient(campaign.clientId, ['strategist'], {
       kind: 'payment',
       title: 'Refund owed on a stopped campaign',
-      body: `"${name}" stopped owing the owner $${(refundOwedCents_ / 100).toFixed(2)} back and the automatic refund did not go through. Refund it in Stripe today.`,
+      body: `"${name}" stopped owing the owner $${(owedCents / 100).toFixed(2)} back and the automatic refund did not go through. Refund it in Stripe today.`,
       link: `/admin/campaign-orders?focus=${id}`,
     }).catch(() => ({ notified: 0 }))
   }
@@ -148,7 +150,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       billedCents: charges.accruedCents,
       deliveredCents: money.deliveredCents,
       refundedCents,
-      refundOwedCents: refundOwedCents_,
+      refundOwedCents: owedCents,
       refundFailed,
       monthlyStopped,
       subscriptionsCanceled: subs.canceled + subs.alreadyCanceled,
