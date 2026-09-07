@@ -5,9 +5,13 @@
  * survives a card being re-read or re-fired. The card is read for THIS client only; there is no
  * door here to anybody else's numbers.
  *
- * A card that is not a win (a heads-up, a state card, a card with no number in it) says so plainly
- * rather than rendering an empty square. The rules are in src/lib/love/win.ts, the same ones the
- * share route enforces, so this page and the server can never disagree about what is shareable.
+ * A card that is not a win (a good week nobody bought, a heads-up, a sample, a card with no number
+ * in it) says so plainly rather than rendering an empty square. The rules are in
+ * src/lib/love/win.ts, the same ones the share route enforces, so this page and the server can
+ * never disagree about what is shareable.
+ *
+ * The three lines are drawn in the OWNER's language from what the composer stored on the card, not
+ * from a fresh measurement: a card is what the count said on the day it came in.
  */
 
 import { redirect } from 'next/navigation'
@@ -17,7 +21,7 @@ import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getClientLanguage } from '@/lib/i18n/language'
 import { t, localeOf } from '@/lib/i18n/t'
-import { isWin } from '@/lib/love/win'
+import { isWin, renderCardWords } from '@/lib/love/win'
 import WinCard from '@/components/mvp/win-card'
 import ShareRow from './share-row'
 
@@ -51,6 +55,11 @@ export default async function WinPage({ params, searchParams }: {
   const monthLabel = fired && !Number.isNaN(fired.getTime())
     ? fired.toLocaleDateString(localeOf(lang), { month: 'long', year: 'numeric' })
     : ''
+  /* the card's own three lines, in the owner's language. The composer stored the key and the
+     numbers beside the English, so this is the same card and not a second measurement. */
+  const words = row
+    ? renderCardWords(row.metadata, { label: String(row.label), big: String(row.big), context: String(row.context) }, lang)
+    : { label: '', big: '', context: '' }
 
   return (
     <div style={{ minHeight: '100dvh', background: '#f5f5f7', fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -65,9 +74,9 @@ export default async function WinPage({ params, searchParams }: {
             <WinCard
               lang={lang}
               card={{
-                label: String(row.label),
-                big: String(row.big),
-                context: String(row.context),
+                label: words.label,
+                big: words.big,
+                context: words.context,
                 bizName: (client?.name as string) || T('Your business'),
                 monthLabel,
               }}

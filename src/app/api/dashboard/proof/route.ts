@@ -51,15 +51,26 @@ export async function GET(req: NextRequest) {
   // Table-first: fired cards are the source of truth once migration 249 ran.
   {
     const weekAgo = new Date(); weekAgo.setUTCDate(weekAgo.getUTCDate() - 7)
-    const q = admin0
-      .from('proof_cards')
-      .select('id, card_key, card_type, label, big, context, attribution, spark, is_sample, fired_at, read_at, dismissed_at')
-      .eq('client_id', clientId)
-      .order('fired_at', { ascending: false })
-    const { data: cards, error } = wantList ? await q.limit(60) : await q.is('dismissed_at', null).gte('fired_at', weekAgo.toISOString()).limit(1)
+    const COLS = 'id, card_key, card_type, label, big, context, attribution, spark, is_sample, fired_at, read_at, dismissed_at'
+    // metadata (migration 262) carries the key + numbers a counted card is re-drawn from, so the
+    // shelf can render it in the owner's language. A database without the column must still
+    // answer, so the read is asked again without it rather than falling through to the
+    // computed-on-read card and quietly losing every stored one.
+    const read = (cols: string) => {
+      const q = admin0
+        .from('proof_cards')
+        .select(cols)
+        .eq('client_id', clientId)
+        .order('fired_at', { ascending: false })
+      return wantList ? q.limit(60) : q.is('dismissed_at', null).gte('fired_at', weekAgo.toISOString()).limit(1)
+    }
+    let res = await read(`${COLS}, metadata`)
+    if (res.error?.code === '42703') res = await read(COLS)
+    const { data: cardRows, error } = res
+    const cards = (cardRows ?? []) as unknown as Record<string, unknown>[]
     if (!error) {
       if (wantList) {
-        const stored = (cards ?? []).map((c) => ({ ...c, ...presentCardType(String(c.card_type)) }))
+        const stored: Record<string, unknown>[] = (cards ?? []).map((c) => ({ ...c, ...presentCardType(String(c.card_type)) }))
         if (!wantState) return NextResponse.json({ cards: stored }, { headers: { 'Cache-Control': 'no-store' } })
         // The deck is the present tense: events older than 14 days live in the archive only.
         const fresh = stored.filter((c) => new Date(String(c.fired_at)).getTime() > Date.now() - 14 * 86400e3)

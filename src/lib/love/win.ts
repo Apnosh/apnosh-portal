@@ -98,7 +98,12 @@ function drawLine(line: unknown, fallback: string, lang: Lang): string {
   const vars: Record<string, string | number> = {}
   for (const [k, v] of Object.entries((l.vars ?? {}) as Record<string, unknown>)) {
     // A date is stored plain so it can be written out in the reader's own language.
-    vars[k] = isPlainDate(v) ? shortDate(`${v}T12:00:00Z`, lang) : (v as string | number)
+    if (isPlainDate(v)) { vars[k] = shortDate(`${v}T12:00:00Z`, lang); continue }
+    // A word that came out of the ledger ("taps on your Google card") goes through the same
+    // dictionary as the sentence around it. t() renders an unknown key as itself, so a word
+    // nobody has translated — the owner's own name for their order — stays exactly as they
+    // wrote it, which is the only honest thing to do with it.
+    vars[k] = typeof v === 'string' ? t(v, lang) : (v as string | number)
   }
   return t(l.key, lang, vars)
 }

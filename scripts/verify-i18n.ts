@@ -81,7 +81,9 @@ console.log('\n2. The translated screens')
 
   // A translation that is identical to its English key is almost always a forgotten line.
   // The exceptions are the words that really are the same in both languages.
-  const SAME_IN_BOTH = new Set<string>([])
+  // A number and its unit, in that order, in both languages: "41 toques en tu ficha de Google".
+  // The unit is translated on its own (it is a var, and vars go through the dictionary too).
+  const SAME_IN_BOTH = new Set<string>(['{n} {unit}'])
   const identical = Object.entries(ES).filter(([k, v]) => k === v && !SAME_IN_BOTH.has(k)).map(([k]) => k)
   check('no Spanish entry is just its English key', identical.length === 0, identical.join(' | '))
 

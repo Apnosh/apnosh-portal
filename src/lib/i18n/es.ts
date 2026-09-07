@@ -427,6 +427,19 @@ export const ES: Record<string, string> = {
   'It may have been cut short, or the card was taken down. Ask for it again.':
     'Puede que se haya cortado, o que la tarjeta ya no esté. Pídela otra vez.',
 
+  /* the win card's own three lines, and the units the promise ledger counts in */
+  'Counted: {label}': 'Contado: {label}',
+  '{n} {unit}': '{n} {unit}',
+  'Counted {from}–{to}': 'Contado del {from} al {to}',
+  'taps on your Google card': 'toques en tu ficha de Google',
+  'views of your Google card': 'vistas de tu ficha de Google',
+  'orders placed on Google': 'pedidos hechos en Google',
+  'replies posted': 'respuestas publicadas',
+  'new Google reviews': 'reseñas nuevas de Google',
+  'your rating since you started': 'tu calificación desde que empezaste',
+  'views per post, where they go': 'vistas por publicación, donde salen',
+  'website visits, daily': 'visitas al sitio, por día',
+
   /* the monthly report email */
   'Your {month} is ready': 'Tu {month} ya está listo',
   'What it moved: {calls} calls, {directions} directions, {clicks} site visits.':

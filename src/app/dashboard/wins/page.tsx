@@ -9,14 +9,15 @@
  *
  * Nothing here invents a card. It reads the same archive the deck reads and filters it by the same
  * rules the share route enforces, so a card that has a Show someone button here is a card the
- * server will actually mint a link for.
+ * server will actually mint a link for. The words are drawn in the owner's language from what the
+ * composer stored on each card, never re-measured.
  */
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Trophy, ChevronRight } from 'lucide-react'
 import { presentCardType } from '@/lib/proof/present'
-import { isWin } from '@/lib/love/win'
+import { isWin, renderCardWords } from '@/lib/love/win'
 import { useClient } from '@/lib/client-context'
 import { useLang } from '@/components/mvp/mvp-language'
 import MvpShell from '@/components/mvp/mvp-shell'
@@ -27,7 +28,7 @@ interface WinRow extends ProofCardData { firedOn: string }
 
 export default function WinsPage() {
   const { client } = useClient()
-  const { T, locale } = useLang()
+  const { T, lang, locale } = useLang()
   const clientId = client?.id
   const [rows, setRows] = useState<WinRow[] | null>(null)
   const [pending, setPending] = useState(false)
@@ -49,7 +50,8 @@ export default function WinsPage() {
           }))
           .map((c: Record<string, unknown>) => ({
             id: String(c.card_key ?? c.id),
-            label: String(c.label), big: String(c.big), context: String(c.context),
+            // the card's own words, in this owner's language, from what the composer stored on it
+            ...renderCardWords(c.metadata, { label: String(c.label), big: String(c.big), context: String(c.context) }, lang),
             attribution: (c.attribution as string) ?? undefined,
             spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
             firedOn: c.fired_at ? new Date(String(c.fired_at)).toLocaleDateString(locale, { month: 'long', year: 'numeric' }) : '',
@@ -59,7 +61,7 @@ export default function WinsPage() {
       })
       .catch(() => { if (alive) setRows([]) })
     return () => { alive = false }
-  }, [clientId, locale])
+  }, [clientId, lang, locale])
 
   return (
     <MvpShell active="more" header={<MvpDetailHeader title={T('Wins')} subtitle={T('Proof you can show someone')} />}>

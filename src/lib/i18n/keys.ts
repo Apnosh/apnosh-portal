@@ -207,6 +207,19 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'It may have been cut short, or the card was taken down. Ask for it again.',
   ],
 
+  /* the WIN CARD's own three lines, not a screen — they are stored on the card (proof_cards
+     .metadata, migration 262) as a key plus its numbers and drawn in the reader's language by
+     src/lib/love/win.ts renderCardWords. The keys live in src/lib/promises/lines.ts, beside the
+     seven states, and the units are the promise metrics from src/lib/promises/registry.ts.
+     What stays English: the owner's OWN name for the order ("Taco Tuesday push"), because they
+     wrote it. */
+  promiseCard: [
+    'Counted: {label}', '{n} {unit}', 'Counted {from}–{to}',
+    'taps on your Google card', 'views of your Google card', 'orders placed on Google',
+    'replies posted', 'new Google reviews', 'your rating since you started',
+    'views per post, where they go', 'website visits, daily',
+  ],
+
   /* the monthly report EMAIL, not a screen — the same way `reply` and `chips` are data. Its
      lines are built in src/lib/report/report-sent.ts and sent in the owner's own language. */
   reportEmail: [

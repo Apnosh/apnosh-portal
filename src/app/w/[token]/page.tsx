@@ -21,7 +21,7 @@ import type { Metadata } from 'next'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getClientLanguage } from '@/lib/i18n/language'
 import { t, localeOf } from '@/lib/i18n/t'
-import { isShareToken, isWin } from '@/lib/love/win'
+import { isShareToken, isWin, renderCardWords } from '@/lib/love/win'
 import WinCard from '@/components/mvp/win-card'
 
 export const dynamic = 'force-dynamic'
@@ -56,10 +56,14 @@ export default async function PublicWinPage({ params }: { params: Promise<{ toke
         // A row with no readable fired_at gets no month rather than the words "Invalid Date" on
         // a page a stranger is looking at.
         const fired = row.fired_at ? new Date(String(row.fired_at)) : null
+        // The card's own words, in the OWNER's language, drawn from what the composer stored on
+        // it. Never re-measured: a link somebody was already sent has to keep saying what it said
+        // when it was sent.
+        const words = renderCardWords(row.metadata, { label: String(row.label), big: String(row.big), context: String(row.context) }, l)
         card = {
-          label: String(row.label),
-          big: String(row.big),
-          context: String(row.context),
+          label: words.label,
+          big: words.big,
+          context: words.context,
           bizName: (client?.name as string) || '',
           monthLabel: fired && !Number.isNaN(fired.getTime())
             ? fired.toLocaleDateString(localeOf(l), { month: 'long', year: 'numeric' })
