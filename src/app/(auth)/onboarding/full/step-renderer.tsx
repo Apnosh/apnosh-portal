@@ -21,6 +21,8 @@ import StepStory from './steps/step-story'
 import StepAbout from './steps/step-about'
 import StepAudience from './steps/step-audience'
 import StepGoals from './steps/step-goals'
+import StepBudget from './steps/step-budget'
+import StepShape from './steps/step-shape'
 import StepPromote from './steps/step-promote'
 import StepBrandVoice from './steps/step-brand-voice'
 import StepApproval from './steps/step-approval'
@@ -311,6 +313,7 @@ export default function StepRenderer(props: Props) {
       case 'confirm': return <StepConfirm data={data} update={update} nav={null} />
       case 'biz_type': return <StepBizType data={data} update={update} nav={null} onAnswered={solo ? props.onAutoAdvance : undefined} />
       case 'serve': return <StepServe data={data} update={update} nav={null} />
+      case 'shape': return <StepShape data={data} update={update} nav={null} />
       case 'menu_details': return <StepMenuDetails data={data} update={update} nav={null} />
       case 'ordering': return <StepOrdering data={data} update={update} nav={null} />
       case 'menu': return <StepMenu data={data} update={update} nav={null} />
@@ -322,6 +325,7 @@ export default function StepRenderer(props: Props) {
       case 'story': return <StepStory data={data} update={update} nav={null} />
       case 'audience': return <StepAudience data={data} update={update} nav={null} />
       case 'goals': return <StepGoals data={data} update={update} nav={null} />
+      case 'budget': return <StepBudget data={data} update={update} nav={null} onAnswered={solo ? props.onAutoAdvance : undefined} />
       case 'promote': return <StepPromote data={data} update={update} nav={null} />
       case 'brand_voice': return <StepBrandVoice data={data} update={update} nav={null} />
       case 'discovery': return <StepDiscovery data={data} update={update} nav={null} />

@@ -208,9 +208,9 @@ export function rangesForDay(day: DayHours | undefined): HourRange[] {
 
 // Step IDs in order — food steps are inserted dynamically
 export type StepId =
-  | 'role' | 'biz_name' | 'about' | 'confirm' | 'biz_type' | 'serve'
+  | 'role' | 'biz_name' | 'about' | 'confirm' | 'biz_type' | 'serve' | 'shape'
   | 'menu_details' | 'ordering' | 'menu' | 'specials'
-  | 'location' | 'location_details' | 'rhythm' | 'story' | 'audience' | 'goals'
+  | 'location' | 'location_details' | 'rhythm' | 'story' | 'audience' | 'goals' | 'budget'
   | 'promote' | 'brand_voice' | 'discovery' | 'approval' | 'connect'
   | 'assets' | 'review'
 
@@ -224,9 +224,9 @@ export type PhaseLabel = typeof PHASE_ORDER[number]
 export const STEP_PHASES: Record<StepId, PhaseLabel> = {
   role: 'You',
   biz_name: 'Business', confirm: 'Business', biz_type: 'You', location: 'Business', location_details: 'Business',
-  serve: 'Menu', menu_details: 'Menu',
+  serve: 'Menu', shape: 'Menu', menu_details: 'Menu',
   ordering: 'Menu', menu: 'Menu', specials: 'Menu', rhythm: 'Menu',
-  story: 'Story', audience: 'Story', goals: 'Story', promote: 'Story', about: 'You',
+  story: 'Story', audience: 'Story', goals: 'Story', budget: 'Story', promote: 'Story', about: 'You',
   brand_voice: 'Brand', discovery: 'Brand',
   approval: 'Launch', connect: 'Launch', assets: 'You', review: 'Launch',
 }
@@ -256,7 +256,7 @@ export function getPhaseInfo(stepId: StepId, bizType: string): PhaseInfo {
 
 // Steps that always get their own screen, even inside a shared phase, because
 // they are a focused review/detail page rather than a quick question.
-const SOLO_SCREENS: StepId[] = ['location_details', 'review', 'goals', 'biz_type', 'biz_name']
+const SOLO_SCREENS: StepId[] = ['location_details', 'review', 'goals', 'budget', 'biz_type', 'biz_name']
 
 // Service styles that don't imply a fixed dine-in room. When an owner picks
 // ONLY these, the "how people order" and busy/slow "rhythm" questions do not
@@ -371,7 +371,21 @@ export function getSteps(): StepId[] {
   /* Brand first, locations later (owner call 2026-09-02): who you are, what
    * you are, then the specific place(s). Screens group by phase, so
    * biz_type/about/assets ride the 'You' phase ahead of 'Business'. */
-  return ['role', 'biz_type', 'about', 'assets', 'biz_name', 'goals', 'connect', 'review']
+  /* THE FOUR ANSWERS THE PRODUCT READS AND NEVER ASKED FOR (2026-09-07, the shelf move).
+   *
+   * The store cannot draw an honest shelf without them, and every one was already a field, a
+   * chip list or a whole step file that no screen rendered:
+   *   serve   — service styles. Nothing else says truck, catering, bar or cafe.
+   *   shape   — how it runs. Mostly inferred from serve; delivery-only and seasonal are not.
+   *   rhythm  — which days are slow. "Tuesday specials" is a guess without it.
+   *   budget  — BUDGET_CHIPS existed and no step rendered them, so monthly_budget was always
+   *             null and the store showed a $990 card to an owner with $150.
+   *   voice   — the reply lane and the posts card both promise "in your voice" and nothing
+   *             asked for it.
+   *
+   * Each is one short screen and every one is skippable (canContinue only blocks role and
+   * biz_name). Asking here is the only place it is asked once instead of per order. */
+  return ['role', 'biz_type', 'about', 'assets', 'biz_name', 'serve', 'shape', 'rhythm', 'goals', 'budget', 'brand_voice', 'connect', 'review']
 }
 
 // A single menu row captured during onboarding. Promoted to a
@@ -419,6 +433,8 @@ export interface OnboardingData {
   cuisine: string
   cuisine_other: string
   service_styles: string[]
+  /** How the business runs (ClientShape). Decides what the Create shelf may show. */
+  shape: string
   price_range: string
   signature_items: string[]
   dietary_options: string[]
@@ -482,6 +498,7 @@ export const INITIAL_DATA: OnboardingData = {
   cuisine: '',
   cuisine_other: '',
   service_styles: [],
+  shape: '',
   price_range: '',
   signature_items: [],
   dietary_options: [],

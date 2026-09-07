@@ -422,26 +422,25 @@ export async function completeOnboardingCRM(
     console.error('[completeOnboardingCRM] locations seed threw:', e)
   }
 
-  // 2e. Seed restaurant shape + default goals from onboarding answers so the
-  //     playbook engine has something to match against the moment onboarding
-  //     finishes, instead of leaving /dashboard/restaurant and
-  //     /dashboard/goals blank until the owner fills them in by hand. Both are
-  //     a best guess the owner can adjust on those pages. Idempotent: we never
-  //     overwrite a shape a strategist already captured, and never add goals
-  //     when the client already has active ones.
+  // 2e. Seed the restaurant SHAPE DIMENSIONS (footprint / concept / customer mix / digital
+  //     maturity) from onboarding answers so the playbook engine has something to match
+  //     against the moment onboarding finishes, instead of leaving /dashboard/restaurant
+  //     blank until the owner fills it in by hand. A best guess the owner can adjust there.
+  //     Idempotent: we never overwrite a shape a strategist already captured.
   //
-  //     Restaurant-only: the shape dimensions and goal catalog are tuned for
-  //     food businesses, so seeding a non-restaurant account (e.g. a
-  //     professional-services business dogfooding the platform) would hand it
-  //     nonsensical goals like "more foot traffic". Skip seeding for those —
-  //     they land with shape/goals blank, which is honest, and can set them by
-  //     hand if relevant.
+  //     Restaurant-only: these dimensions are tuned for food businesses, so guessing them for
+  //     a non-restaurant account would be nonsense. Those land blank, which is honest.
+  //
+  //     The owner's GOALS moved out of this block to 2f: they are the owner's own words, not
+  //     a shape guess, and they belong to every business type.
+  /** The shape's own goal picks, used ONLY when the owner named none of their own. */
+  let shapeDefaults: string[] = []
   try {
     const { FOOD_BIZ_TYPES } = await import('@/app/(auth)/onboarding/full/data')
     const isFoodBusiness =
       typeof data.biz_type === 'string' &&
       (FOOD_BIZ_TYPES as readonly string[]).includes(data.biz_type)
-    const { inferShapeFromOnboarding, defaultGoalsForShape, goalSlugForChip } = await import('@/lib/goals/defaults')
+    const { inferShapeFromOnboarding, defaultGoalsForShape } = await import('@/lib/goals/defaults')
     const { data: clientRow } = await supabase
       .from('clients')
       .select('shape_captured_at')
@@ -472,38 +471,102 @@ export async function completeOnboardingCRM(
       if (shapeErr) console.error('[completeOnboardingCRM] shape seed error:', shapeErr.message)
       else console.log(`[completeOnboardingCRM] Seeded shape: ${shape.footprint}/${shape.concept}`)
 
-      // Goals — only when the client has no active goals yet (so a strategist's
-      // picks are never clobbered). The owner's OWN "#1 priority" chip is priority 1
-      // ("This shapes your whole strategy" is finally true); the shape defaults
-      // only fill the remaining slots. Previously the chip was captured and thrown
-      // away, so the recommender ran on a guess from their price range.
-      const { count } = await supabase
-        .from('client_goals')
-        .select('id', { count: 'exact', head: true })
-        .eq('client_id', clientId)
-        .eq('status', 'active')
-      if (!count) {
-        const chipSlug = goalSlugForChip(data.primary_goal as string)
-        const shapeSlugs = defaultGoalsForShape({ footprint: shape.footprint, concept: shape.concept })
-        const slugs = chipSlug
-          ? [chipSlug, ...shapeSlugs.filter((s) => s !== chipSlug)]
-          : shapeSlugs
-        const goalRows = slugs.slice(0, 3).map((slug, i) => ({
+      shapeDefaults = defaultGoalsForShape({ footprint: shape.footprint, concept: shape.concept })
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] shape seed threw:', e)
+  }
+
+  // 2f. The owner's OWN three goals, in the words they tapped.
+  //
+  //     This used to keep ONE chip and throw the other two away, and even that one was
+  //     collapsed: six of the fourteen chips folded into 'be_known_for', so "Better photos of
+  //     my food" and "Reach a younger crowd" saved as the same goal. The Create shelf reads
+  //     these rows, so a collapsed goal is a shelf drawn for somebody else.
+  //
+  //     Now all three picks are saved, in order, each keeping its own slug (migration 256).
+  //     Runs for every business type — a non-restaurant still picked goals — and only when
+  //     the client has no active goals yet, so a strategist's picks are never clobbered.
+  try {
+    const { goalSlugForChip, legacyGoalSlugForChip } = await import('@/lib/goals/defaults')
+    const { count } = await supabase
+      .from('client_goals')
+      .select('id', { count: 'exact', head: true })
+      .eq('client_id', clientId)
+      .eq('status', 'active')
+
+    if (!count) {
+      const picks = Array.isArray(data.top_goals)
+        ? (data.top_goals as string[]).filter((g) => typeof g === 'string' && g.trim())
+        : []
+      const chips = picks.length ? picks : (typeof data.primary_goal === 'string' && data.primary_goal ? [data.primary_goal] : [])
+
+      const rowsFor = (toSlug: (c: string) => string | null) => {
+        const slugs: string[] = []
+        for (const chip of chips) {
+          const s = toSlug(chip)
+          if (s && !slugs.includes(s)) slugs.push(s)
+        }
+        // Only when the owner said nothing do the shape defaults stand in.
+        for (const s of slugs.length ? [] : shapeDefaults) if (!slugs.includes(s)) slugs.push(s)
+        return slugs.slice(0, 3).map((slug, i) => ({
           client_id: clientId,
           goal_slug: slug,
           priority: i + 1,
           status: 'active',
           set_by: null,
         }))
-        if (goalRows.length) {
-          const { error: goalErr } = await supabase.from('client_goals').insert(goalRows)
-          if (goalErr) console.error('[completeOnboardingCRM] goals seed error:', goalErr.message)
-          else console.log(`[completeOnboardingCRM] Seeded ${goalRows.length} default goals`)
+      }
+
+      const goalRows = rowsFor(goalSlugForChip)
+      if (goalRows.length) {
+        const { error: goalErr } = await supabase.from('client_goals').insert(goalRows)
+        if (!goalErr) {
+          console.log(`[completeOnboardingCRM] Saved ${goalRows.length} goals in the owner's words`)
+        } else if (goalErr.code === '23503') {
+          /* The foreign key into goals_catalog rejected a slug, which means migration 256
+             has not been run yet. Retry with the old collapsed slugs so the owner still
+             gets goals; the shelf is duller until the SQL lands, never empty. */
+          console.warn('[completeOnboardingCRM] goals_catalog is missing the new slugs; run migration 256. Falling back.')
+          const legacy = rowsFor(legacyGoalSlugForChip)
+          const { error: legacyErr } = await supabase.from('client_goals').insert(legacy)
+          if (legacyErr) console.error('[completeOnboardingCRM] legacy goals seed error:', legacyErr.message)
+        } else {
+          console.error('[completeOnboardingCRM] goals seed error:', goalErr.message)
         }
       }
     }
   } catch (e) {
-    console.error('[completeOnboardingCRM] shape/goals seed threw:', e)
+    console.error('[completeOnboardingCRM] goals seed threw:', e)
+  }
+
+  // 2g. The shape of the business (migration 256): the one fact that decides what the store
+  //     is allowed to show. The owner picked it on the shape step; when they skipped it we
+  //     infer it from the service styles and the location count, which is right for most of
+  //     them. Best-effort: before the migration runs, the column is missing and the product
+  //     keeps working on the storefront default.
+  try {
+    const { inferClientShape, isClientShape } = await import('@/lib/clients/shape')
+    const picked = data.shape
+    const shapeValue = isClientShape(picked)
+      ? picked
+      : inferClientShape({
+          service_styles: (data.service_styles as string[]) || null,
+          location_count: (data.location_count as string) || null,
+          locations: (data.locations as unknown[]) || null,
+        })
+    const { error: shErr } = await supabase.from('clients').update({ shape: shapeValue }).eq('id', clientId)
+    if (shErr) {
+      if (shErr.code === '42703' || shErr.code === 'PGRST204') {
+        console.warn('[completeOnboardingCRM] clients.shape is missing; run migration 256.')
+      } else {
+        console.error('[completeOnboardingCRM] shape write error:', shErr.message)
+      }
+    } else {
+      console.log(`[completeOnboardingCRM] Client shape: ${shapeValue}`)
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] shape write threw:', e)
   }
 
   // 3. Ensure client_users row links auth user to client

@@ -14,6 +14,7 @@ import {
 } from './data'
 import StepRenderer, { OnboardingFrame } from './step-renderer'
 import { completeOnboardingCRM } from '@/lib/onboarding-actions'
+import { budgetCapForChip, budgetChipForCap } from '@/lib/goals/defaults'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -73,6 +74,9 @@ export default function OnboardingPage() {
           cuisine: biz.cuisine || '',
           cuisine_other: biz.cuisine_other || '',
           service_styles: biz.service_styles || [],
+          // businesses.shape is the draft mirror of clients.shape (migration 256); absent
+          // before it runs, which reads as "not answered yet" and re-suggests from the styles.
+          shape: biz.shape || '',
           price_range: biz.price_range || '',
           signature_items: biz.signature_items || [],
           dietary_options: biz.dietary_options || [],
@@ -110,6 +114,9 @@ export default function OnboardingPage() {
           goal_detail: biz.goal_detail || '',
           success_signs: biz.success_signs || [],
           timeline: biz.timeline || '',
+          /* The budget chip is stored as a number (monthly_budget), so read it back to the
+             chip the owner tapped rather than showing an empty screen on resume. */
+          marketing_budget: budgetChipForCap(biz.monthly_budget),
           main_offerings: biz.main_offerings || '',
           upcoming: biz.upcoming || '',
           tones: Array.isArray(biz.brand_voice_words) ? biz.brand_voice_words as string[] : [],
@@ -229,11 +236,15 @@ export default function OnboardingPage() {
       can_film: data.can_film,
       can_tag: data.can_tag,
       current_platforms: connectedPlatforms,
+      // The one money answer in setup. The Create shelf draws its "above what you set"
+      // line from this, so it has to be saved on every step, not only at completion.
+      monthly_budget: budgetCapForChip(data.marketing_budget),
       brand_colors: { primary: data.color1, secondary: data.color2 },
       brand_drive: data.brand_drive,
       onboarding_step: screenToStepIndex(data.biz_type, nextScreen),
     }
 
+    let bizId = businessId
     if (businessId) {
       await supabase.from('businesses').update(payload).eq('id', businessId)
     } else {
@@ -242,7 +253,15 @@ export default function OnboardingPage() {
         .insert({ ...payload, owner_id: userId })
         .select('id')
         .single()
-      if (newBiz) setBusinessId(newBiz.id)
+      if (newBiz) { bizId = newBiz.id; setBusinessId(newBiz.id) }
+    }
+
+    /* businesses.shape arrives with migration 256. Kept OUT of the payload above and written
+       on its own so that, before the migration runs, a missing column costs one warning
+       instead of throwing away every other answer on the screen. */
+    if (bizId && data.shape) {
+      const { error } = await supabase.from('businesses').update({ shape: data.shape }).eq('id', bizId)
+      if (error) console.warn('[onboarding] shape not saved (run migration 256):', error.message)
     }
     setSaving(false)
   }

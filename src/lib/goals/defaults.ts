@@ -96,11 +96,53 @@ export function inferShapeFromOnboarding(data: {
  * default-goals matrix. Owner can override during onboarding.
  */
 /**
- * The onboarding "#1 priority" chip → a real GoalSlug, so the recommender runs on
- * what the owner actually SAID, not a shape guess. Every GOAL_CHIPS value maps;
- * an unknown/legacy chip returns null (shape defaults then stand).
+ * The onboarding goal chip → a real GoalSlug, ONE TO ONE.
+ *
+ * It used to collapse: fourteen chips folded into seven slugs, six of them into
+ * 'be_known_for'. So an owner who tapped "Better photos of my food" and one who tapped
+ * "Reach a younger crowd" saved the same goal, and the store had no way to draw either of
+ * them their own shelf. Migration 256 adds the eight missing slugs so nothing is lost
+ * between the tap and the row.
+ *
+ * Every GOAL_CHIPS value maps; an unknown/legacy chip returns null (shape defaults then
+ * stand). The reverse map exists so a saved goal row reads back as the owner's own words.
  */
 const CHIP_TO_SLUG: Record<string, GoalSlug> = {
+  'More customers on slow days': 'fill_slow_times',
+  'More foot traffic overall': 'more_foot_traffic',
+  'Build local awareness': 'local_awareness',
+  'Promote a specific offering': 'promote_offering',
+  'Grow social following': 'grow_social',
+  'Improve online reputation': 'better_reputation',
+  'Launch something new': 'launch_something',
+  'Stay top of mind': 'stay_top_of_mind',
+  'Compete with nearby businesses': 'beat_nearby',
+  'More bookings or orders': 'more_online_orders',
+  'Turn first-timers into regulars': 'regulars_more_often',
+  'Grow catering orders': 'grow_catering',
+  'Better photos of my food': 'better_photos',
+  'Reach a younger crowd': 'younger_crowd',
+}
+export function goalSlugForChip(chip: string | null | undefined): GoalSlug | null {
+  if (!chip) return null
+  return CHIP_TO_SLUG[chip.trim()] ?? null
+}
+
+/** slug → the chip the owner tapped, so a saved goal row can be read back in their words. */
+const SLUG_TO_CHIP: Record<string, string> = Object.fromEntries(
+  Object.entries(CHIP_TO_SLUG).map(([chip, slug]) => [slug, chip]),
+)
+export function chipForGoalSlug(slug: string | null | undefined): string | null {
+  if (!slug) return null
+  return SLUG_TO_CHIP[slug.trim()] ?? null
+}
+
+/**
+ * The slugs that existed BEFORE migration 256, for the fallback write. Until the migration
+ * runs, goals_catalog has no row for the eight new slugs and the foreign key rejects them, so
+ * the onboarding writer retries with these and the owner still gets goals.
+ */
+const LEGACY_CHIP_TO_SLUG: Record<string, GoalSlug> = {
   'More customers on slow days': 'fill_slow_times',
   'More foot traffic overall': 'more_foot_traffic',
   'Build local awareness': 'be_known_for',
@@ -116,9 +158,9 @@ const CHIP_TO_SLUG: Record<string, GoalSlug> = {
   'Better photos of my food': 'be_known_for',
   'Reach a younger crowd': 'be_known_for',
 }
-export function goalSlugForChip(chip: string | null | undefined): GoalSlug | null {
+export function legacyGoalSlugForChip(chip: string | null | undefined): GoalSlug | null {
   if (!chip) return null
-  return CHIP_TO_SLUG[chip.trim()] ?? null
+  return LEGACY_CHIP_TO_SLUG[chip.trim()] ?? null
 }
 
 /**
@@ -136,6 +178,12 @@ const BUDGET_TO_CAP: Record<string, number> = {
 export function budgetCapForChip(chip: string | null | undefined): number | null {
   if (!chip) return null
   return BUDGET_TO_CAP[chip.trim()] ?? null
+}
+
+/** The saved cap read back as the chip the owner tapped, so resuming setup relights it. */
+export function budgetChipForCap(cap: number | null | undefined): string {
+  if (cap == null) return ''
+  return Object.keys(BUDGET_TO_CAP).find((k) => BUDGET_TO_CAP[k] === Number(cap)) ?? ''
 }
 
 export function defaultGoalsForShape(shape: {

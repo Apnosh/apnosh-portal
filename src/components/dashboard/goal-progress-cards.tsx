@@ -16,6 +16,7 @@ import Link from 'next/link'
 import {
   ArrowUpRight, ArrowDownRight, Minus,
   MapPin, Users, ShoppingCart, Calendar, Star, Sparkles, Clock, Briefcase,
+  Megaphone, Heart, Rocket, Lightbulb, Trophy, Camera,
   type LucideIcon,
 } from 'lucide-react'
 import type { GoalSlug } from '@/lib/goals/types'
@@ -44,6 +45,15 @@ const GOAL_ICONS: Record<GoalSlug, LucideIcon> = {
   be_known_for: Sparkles,
   fill_slow_times: Clock,
   grow_catering: Briefcase,
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: MapPin,
+  promote_offering: Megaphone,
+  grow_social: Heart,
+  launch_something: Rocket,
+  stay_top_of_mind: Lightbulb,
+  beat_nearby: Trophy,
+  better_photos: Camera,
+  younger_crowd: Sparkles,
 }
 
 /**
