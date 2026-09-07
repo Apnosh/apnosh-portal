@@ -1,6 +1,7 @@
 'use client'
 import CountedStrip from './counted-strip'
 import PeopleRow from './people-row'
+import WeeklySentence from './weekly-sentence'
 
 /**
  * MVP Home — ported from the apnosh-mvp design (yejukim/apnosh-mvp,
@@ -291,6 +292,10 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
         <div id="home-funnel-hero" style={{ margin: '-16px -18px 0' }}>
           <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
         </div>
+        {/* THIS WEEK, IN ONE LINE — the love sentence. Renders nothing when the week has
+            nothing true to say. */}
+        <WeeklySentence clientId={clientId} />
+
         {/* THE PEOPLE ON YOUR WORK — the staff actually assigned to the orders still running,
             then the one Get help door, in ONE row. Renders just the door when nothing is
             running; never placeholder faces. */}

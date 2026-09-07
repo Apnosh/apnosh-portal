@@ -13,6 +13,19 @@
 const DAY = 86400000
 const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`)
 
+/**
+ * The two sentences the weekly line can be, as i18n keys.
+ *
+ * They live HERE, beside the day maths and away from the server-only reader, for the same reason
+ * the maths does: the drawer (src/components/mvp/weekly-sentence.tsx) picks the key at runtime, so
+ * the i18n scanner never sees it on the component, and scripts/verify-wins.ts has to be able to
+ * check these against keys.ts and es.ts without pulling in Supabase.
+ */
+export const WEEKLY_GOOGLE_KEY =
+  'This week your Google listing got {n} taps: calls, directions, and website visits. Last week it was {prev}.'
+export const WEEKLY_SOCIAL_KEY =
+  'This week your posts reached {n} people. Last week it was {prev}.'
+
 export type DayValue = { date: string; value: number }
 
 /**
