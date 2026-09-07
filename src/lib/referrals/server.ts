@@ -227,8 +227,9 @@ async function accountFacts(clientId: string) {
  * question is asked the same way twice and cannot answer differently the second time.
  *
  * Money that has already come to us counts wherever it came from: a campaign order (the payments
- * ledger) or a desk order (creative_requests.paid_at). NULL when either read fails, and the caller
- * treats that as blocked — a referral we cannot check is not a referral we pay.
+ * ledger) or a desk order (creative_requests.paid_at). NULL when ANY of the three facts is
+ * unreadable — the payments, the desk, or the day the account was made — and the caller treats
+ * that as blocked. A referral we cannot check is not a referral we pay.
  */
 export interface NewnessFacts { hasPaidBefore: boolean; accountAgeDays: number }
 
@@ -253,7 +254,11 @@ export async function newnessFor(clientId: string, atIso: string): Promise<Newne
     if (desk.error && desk.error.code !== '42703') return null
     const hasPaidBefore = (paid.data?.length ?? 0) > 0 || (!desk.error && (desk.data?.length ?? 0) > 0)
     const born = Date.parse((client.data?.created_at as string) || '')
-    const ageDays = Number.isFinite(born) ? Math.max(0, Math.floor((Date.parse(asOf) - born) / 86_400_000)) : 0
+    // NO BIRTHDAY, NO REFERRAL. An unreadable created_at used to become age 0, which sails through
+    // the newness floor — the one place a missing fact bought somebody $100. Unknown blocks, the
+    // same as every other unknown here.
+    if (!Number.isFinite(born)) return null
+    const ageDays = Math.max(0, Math.floor((Date.parse(asOf) - born) / 86_400_000))
     return { hasPaidBefore, accountAgeDays: ageDays }
   } catch (e) { warn('could not check whether the account is new', e); return null }
 }
