@@ -28,8 +28,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { stripe } from '@/lib/stripe'
 import { notifyClientOwners, notifyStaffForClient, createNotification } from '@/lib/notifications'
 import { getAdminUserIds } from '@/lib/notify'
-import { refundOwedCents, refundableCents, refundStatus, type PaidBill } from './refund-math'
-import { SETTLED_STATUSES } from './campaign-payments-server'
+import { refundOwedCents, refundableCents, refundStatus, SETTLED_STATUSES, type PaidBill } from './refund-math'
 
 /** The paid charge we are reversing, read off campaign_payments. */
 export interface PaidCharge extends PaidBill {

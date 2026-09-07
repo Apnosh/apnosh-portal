@@ -13,12 +13,30 @@
  */
 import { config } from 'dotenv'
 import { shipBillingGate } from '@/lib/campaigns/ship-guard'
+import { checkoutBill } from '@/lib/campaigns/checkout-bill'
+import type { LineItem } from '@/lib/campaigns/types'
 import { Suite } from './lib'
 
 config({ path: '.env.local' })
 
 const OLD = '2020-01-01T00:00:00Z'      // a draft older than the checkout itself
 const NEW = '2026-09-01T00:00:00Z'
+
+/** A line item at a price, one-time unless said otherwise. */
+function paid(id: string, price: number, kind: 'one-time' | 'monthly' = 'one-time'): LineItem {
+  return {
+    id, position: 0, serviceId: id, name: id, stage: 'foundation', price,
+    cadence: kind === 'monthly' ? { kind: 'recurring', every: 'monthly' } : { kind: 'one-time' },
+    included: true, paused: false, lock: 'editable',
+  } as unknown as LineItem
+}
+const free = (id: string): LineItem => paid(id, 0)
+
+/** The two numbers the gate reads, computed the way the ship route computes them. */
+function billFor(items: LineItem[]): { preTaxCents: number; perMonthCents: number } {
+  const b = checkoutBill({ items })
+  return { preTaxCents: b.preTaxCents, perMonthCents: b.perMonthCents }
+}
 
 function main() {
   const s = new Suite()
@@ -45,6 +63,21 @@ function main() {
   s.group('the invoice lane is the ONE way to ship billable work without a card')
   s.eq('invoice lane, billable, no PI → allow', shipBillingGate({ preTaxCents: 11000, hasPaymentIntent: false, invoiceLane: true }), 'allow')
   s.eq('a presented payment still wins over the lane', shipBillingGate({ preTaxCents: 11000, hasPaymentIntent: true, invoiceLane: true }), 'verify')
+
+  s.group('the gate prices the cart the request is about to WRITE')
+  // The ship PATCH gated on the campaign's items as they were BEFORE the request, while body.items
+  // replaces the whole set a few lines later. So a ship that added paid pieces in the same call was
+  // gated on the cheaper old cart. The route now bills the merged items; this pins the difference.
+  const oldItems = [free('a-free-diy-piece')]
+  const newItems = [free('a-free-diy-piece'), paid('a-paid-video', 900)]
+  s.eq('the OLD cart alone is free → allow (this was the bug)',
+    shipBillingGate({ ...billFor(oldItems), hasPaymentIntent: false }), 'allow')
+  s.eq('the items this PATCH writes cost money → REFUSE',
+    shipBillingGate({ ...billFor(newItems), hasPaymentIntent: false }), 'refuse')
+  s.eq('...and with a payment presented, it verifies',
+    shipBillingGate({ ...billFor(newItems), hasPaymentIntent: true }), 'verify')
+  s.eq('a monthly piece added in the same call is billable too',
+    shipBillingGate({ ...billFor([free('a-free-diy-piece'), paid('monthly-posts', 560, 'monthly')]), hasPaymentIntent: false }), 'refuse')
 
   const ok = s.report('Ship billing gate — pay first, no carve-out')
   process.exit(ok ? 0 : 1)

@@ -8,9 +8,9 @@
  * No server, no Stripe, no DB — the whole point is that the number can be checked with nothing
  * running. Run:  npx tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/refund-math.ts
  */
-import { refundOwedCents, refundableCents, refundStatus } from '@/lib/campaigns/refund-math'
-import { feeCentsOn, checkoutBill } from '@/lib/campaigns/checkout-bill'
-import { priceCreativeRequest } from '@/lib/requests/pricing'
+import { refundOwedCents, refundableCents, refundStatus, statusAfterDisputeWon, COLLECTED_STATUSES, SETTLED_STATUSES } from '@/lib/campaigns/refund-math'
+import { feeCentsOn, checkoutBill, monthlyPhrase } from '@/lib/campaigns/checkout-bill'
+import { priceCreativeRequest, fmtTotal } from '@/lib/requests/pricing'
 import type { LineItem } from '@/lib/campaigns/types'
 import { Suite } from './lib'
 
@@ -57,6 +57,35 @@ function main() {
   s.eq('some back → partially refunded', refundStatus(118_000, 47_200), 'partially_refunded')
   s.eq('all back → refunded', refundStatus(118_000, 118_000), 'refunded')
 
+  s.group('a partly refunded order is STILL a paid order')
+  // A $1 credit used to flip the row to 'partially_refunded', which the money reads treated as
+  // unpaid: the receipt vanished and every piece delivered afterwards accrued as invoiceable — a
+  // second bill for work already paid for. These sets are what stop that coming back.
+  const collected = COLLECTED_STATUSES as readonly string[]
+  const settled = SETTLED_STATUSES as readonly string[]
+  s.check('collected: a plain paid order', collected.includes('paid'))
+  s.check('collected: a partly refunded order (the rest of the work is still covered)', collected.includes('partially_refunded'))
+  s.check('collected: a disputed order (the bank has not decided; do not re-bill the owner)', collected.includes('disputed'))
+  s.check('NOT collected: a fully refunded order (the campaign is stopped)', !collected.includes('refunded'))
+  s.check('NOT collected: a pending checkout', !collected.includes('pending'))
+  s.check('NOT collected: a failed charge', !collected.includes('failed'))
+  s.check('settled = collected minus disputed, so we never refund on top of the bank', !settled.includes('disputed'))
+  s.check('settled still covers a partial refund (there is more to give back)', settled.includes('partially_refunded'))
+
+  s.group('a chargeback we WIN goes back to the truth, not to "paid"')
+  s.eq('nothing was ever refunded → paid', statusAfterDisputeWon(118_000, 0), 'paid')
+  s.eq('a credit had gone out before the dispute → partially refunded', statusAfterDisputeWon(118_000, 47_200), 'partially_refunded')
+  s.eq('it had already been fully refunded → refunded', statusAfterDisputeWon(118_000, 118_000), 'refunded')
+
+  s.group('the monthly line says the tax it really charges')
+  // The subscription runs Stripe Tax, so "$99/mo" alone is short by the tax every month.
+  s.eq('a known estimate is printed', monthlyPhrase(9_900, 812), '$99.00/mo plus $8.12 tax')
+  s.eq('no answer from Stripe → say "plus tax", never a number we did not get', monthlyPhrase(9_900, null), '$99.00/mo plus tax')
+  s.eq('no answer at all (undefined) reads the same', monthlyPhrase(9_900, undefined), '$99.00/mo plus tax')
+  s.eq('Stripe really said no tax → nothing extra', monthlyPhrase(9_900, 0), '$99.00/mo')
+  s.check('a $0 tax is never printed as a tax line', !monthlyPhrase(9_900, 0).includes('$0.00'))
+  s.check('a known tax is never silently dropped', monthlyPhrase(9_900, 1).includes('$0.01 tax'))
+
   s.group('ONE fee: 10% on one-time work, never on monthly')
   s.eq('10% of $1,000', feeCentsOn(100_000), 10_000)
   s.eq('10% of $0 is $0', feeCentsOn(0), 0)
@@ -79,7 +108,11 @@ function main() {
   const monthly = priceCreativeRequest('social', { count: '8 a month' })
   s.check('desk: a monthly order carries NO fee line', !monthly?.lines.some((l) => l.label === 'Service fee'))
   s.eq('desk: the monthly total is exactly the monthly price', monthly?.totalCents, 56_000)
-  s.check('desk: a monthly total is flagged so the screen can say "a month"', monthly?.monthly === true)
+  s.check('desk: a monthly total is flagged so the screen can say what it is', monthly?.monthly === true)
+  // The desk stores one quote and mints one work order; nothing bills a second month. So the words
+  // are "the first month", not "a month" — a promise of a subscription that does not exist.
+  s.eq('desk: a monthly order is billed for the first month, not every month', fmtTotal(monthly!), '$560 for the first month')
+  s.check('desk: a one-time order says no such thing', !fmtTotal(desk!).includes('month'))
 
   const ok = s.report('Money that can go backwards — refund math + one fee')
   process.exit(ok ? 0 : 1)

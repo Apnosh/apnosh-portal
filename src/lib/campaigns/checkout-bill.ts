@@ -43,3 +43,27 @@ export function checkoutBill(draft: Pick<CampaignDraft, 'items'>): CheckoutBill 
   const perMonthCents = Math.round(bill.perMonth * 100)
   return { subtotalCents, serviceFeeCents, perMonthCents, preTaxCents: subtotalCents + serviceFeeCents }
 }
+
+/** "$1,180.00" — the one money format the checkout screens print. */
+export function fmtMoney(cents: number): string {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents || 0) / 100)
+}
+
+/**
+ * The monthly line, said the way the card is really billed.
+ *
+ * The subscription runs Stripe Tax (startCampaignSubscription), so "$99/mo" on its own is short by
+ * the tax every single month — and that short number was on the bill card, in the sentence under it
+ * AND in the consent tick the owner has to agree to. One function writes all three so they cannot
+ * drift apart again.
+ *
+ * `monthlyTaxCents` is an ESTIMATE from Stripe Tax:
+ *   null → no answer (no tax location on the customer, Tax off, Stripe unreachable). Say "plus
+ *          tax": true, and never a number we did not get.
+ *   0    → Stripe really said "no tax here". Say nothing extra.
+ */
+export function monthlyPhrase(monthlyCents: number, monthlyTaxCents: number | null | undefined): string {
+  if (monthlyTaxCents == null) return `${fmtMoney(monthlyCents)}/mo plus tax`
+  if (monthlyTaxCents <= 0) return `${fmtMoney(monthlyCents)}/mo`
+  return `${fmtMoney(monthlyCents)}/mo plus ${fmtMoney(monthlyTaxCents)} tax`
+}

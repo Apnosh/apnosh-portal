@@ -24,6 +24,7 @@ import { passthroughNotesForLines, plainCostNote, passthroughMonthlyMinimumCents
 import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
 import { draftNeedsShoot } from '@/lib/campaigns/gates/derive'
 import { summarize, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
+import { monthlyPhrase } from '@/lib/campaigns/checkout-bill'
 import type { ResolvedGates, CustomGate } from '@/lib/campaigns/gates/config'
 import { DeskKeyframes, Stamp, ConfirmButton, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, paperGround } from '@/components/campaigns/desk/ui'
 
@@ -219,17 +220,6 @@ function ErrorBox({ message, onBack }: { message: string; onBack: () => void }) 
       <button onClick={onBack} style={{ height: 46, borderRadius: 23, border: `1px solid ${LINE}`, background: '#fff', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 14, fontWeight: 600, color: INK }}>Back to cart</button>
     </div>
   )
-}
-
-/**
- * The monthly line, said the way the card is really billed. The subscription runs Stripe Tax
- * (startCampaignSubscription), so "$99/mo" on its own is short by the tax every month. A known
- * estimate is printed; an unknown one is named ("plus tax") rather than left out.
- */
-function monthlyPhrase(monthlyCents: number, monthlyTaxCents: number | null | undefined): string {
-  if (monthlyTaxCents == null) return `${fmt(monthlyCents)}/mo plus tax`
-  if (monthlyTaxCents <= 0) return `${fmt(monthlyCents)}/mo`
-  return `${fmt(monthlyCents)}/mo plus ${fmt(monthlyTaxCents)} tax`
 }
 
 function BillCard({ b, monthlyCents, monthlyTaxCents, taxPending, costNotes, setupOnly, adSpendMinCents = 0 }: { b: Breakdown; monthlyCents: number; monthlyTaxCents?: number | null; taxPending: boolean; costNotes?: string[]; setupOnly?: boolean; adSpendMinCents?: number }) {

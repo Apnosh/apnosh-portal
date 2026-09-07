@@ -974,8 +974,10 @@ async function handleDisputeClosed(supabase: AdminClient, dispute: Stripe.Disput
   const clientId = String(row.client_id ?? '')
 
   if (dispute.status === 'won') {
-    // Back to what the refund history says, not blindly to 'paid'.
-    const restored = refunded > 0 && refunded < total ? 'partially_refunded' : refunded >= total && total > 0 ? 'refunded' : 'paid'
+    // Back to what the refund history says, not blindly to 'paid' (the row may have been partly
+    // refunded before the dispute was opened, and winning does not un-refund that).
+    const { statusAfterDisputeWon } = await import('@/lib/campaigns/refund-math')
+    const restored = statusAfterDisputeWon(total, refunded)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
       .from('campaign_payments')

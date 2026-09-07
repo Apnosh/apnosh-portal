@@ -55,3 +55,37 @@ export function refundStatus(totalCents: number, refundedCents: number): 'paid' 
   if (refundedCents <= 0) return 'paid'
   return refundedCents >= Math.max(0, Math.round(totalCents || 0)) ? 'refunded' : 'partially_refunded'
 }
+
+/**
+ * The statuses that mean MONEY WAS COLLECTED and the campaign is still running.
+ *
+ * 'paid'               — nothing has gone back.
+ * 'partially_refunded' — some went back (one piece credited); the rest of the order stands and the
+ *                        work continues, so the checkout still covers it. Reading only 'paid' meant
+ *                        a $1 credit hid the whole receipt and made every piece delivered afterwards
+ *                        accrue as invoiceable — a second bill for work already paid for.
+ * 'disputed'           — the bank is holding the money while it decides. The charge is real until
+ *                        the dispute closes; a chargeback must not silently re-bill the owner.
+ *
+ * 'refunded' (in full) is deliberately NOT here: a full refund only ever happens with the campaign
+ * stopped, so there is nothing left to cover.
+ */
+export const COLLECTED_STATUSES = ['paid', 'partially_refunded', 'disputed'] as const
+
+/**
+ * Collected money that is also UNCONTESTED: the charge is ours to give back. Used where the
+ * question is "can we still refund against this?" — a disputed charge is excluded because the bank
+ * has already pulled the money and refunding it again would send it twice.
+ */
+export const SETTLED_STATUSES = ['paid', 'partially_refunded'] as const
+
+/**
+ * The status a payment row goes back to when a chargeback is WON.
+ *
+ * Not blindly 'paid': the row may have been partly refunded before the dispute was opened, and
+ * winning the dispute does not un-refund that. It is refundStatus's own answer for what has
+ * actually gone back.
+ */
+export function statusAfterDisputeWon(totalCents: number, refundedCents: number): 'paid' | 'partially_refunded' | 'refunded' {
+  return refundStatus(totalCents, refundedCents)
+}
