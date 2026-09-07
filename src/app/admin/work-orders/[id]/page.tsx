@@ -49,6 +49,7 @@ export default async function WorkOrderInboxPage({ params }: { params: Promise<{
         proofUrl: swo.proofUrl,
         proofNote: swo.proofNote,
         steps: swo.steps as unknown as Record<string, unknown>[],
+        handover: swo.handover ?? null,
       }}
       clientName={(clientRow?.name as string) ?? 'Client'}
       deliverableLabel={deliverable.liveLinkLabel}

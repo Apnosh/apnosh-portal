@@ -36,6 +36,9 @@ export interface ServiceWorkOrder {
   proofNote: string | null
   startedAt: string | null
   deliveredAt: string | null
+  /** The handover checklist, for work that hands an account over (see lib/campaigns/handover.ts).
+   *  Undefined until migration 258 is applied — the shape is owned there, not here. */
+  handover?: unknown
 }
 
 /** A service line is anything the plan sells that is NOT a content piece (those go through the content
@@ -81,6 +84,7 @@ function rowToSWO(r: Record<string, unknown>): ServiceWorkOrder {
     proofNote: (r.proof_note as string | null) ?? null,
     startedAt: (r.started_at as string | null) ?? null,
     deliveredAt: (r.delivered_at as string | null) ?? null,
+    handover: r.handover ?? null,
   }
 }
 

@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { deliverGuard } from '@/lib/campaigns/data/service-playbooks'
+import { markHandover, handoverGuard } from '@/lib/campaigns/handover'
 
 /**
  * PATCH /api/admin/service-work-orders/:id — the operator control for ONE service work order.
@@ -46,7 +47,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // the honesty guarantee against proof that already exists.
   const { data: row, error: readErr } = await svc
     .from('service_work_orders')
-    .select('campaign_id, client_id, service_id, title, steps, status, proof_url, started_at, updated_at')
+    // select('*') so the handover column being absent (pre-258) cannot error the whole read and
+    // take the operator screen down before the SQL is run.
+    .select('*')
     .eq('id', id)
     .maybeSingle()
   if (readErr) return NextResponse.json({ error: readErr.message }, { status: 500 })
@@ -110,6 +113,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     update.steps = mergedSteps
   }
 
+  // THE HANDOVER: a website order ends in a domain the owner holds, so each item that changes
+  // hands is ticked here by the person who moved it. Only the tick and the note are stored — the
+  // authored label and its reason live in handover.ts and cannot be rewritten from a request.
+  let mergedHandover: unknown = row.handover
+  if (body?.handover && typeof body.handover === 'object' && typeof body.handover.id === 'string') {
+    mergedHandover = markHandover(row.handover, {
+      id: body.handover.id,
+      done: body.handover.done === undefined ? undefined : body.handover.done === true,
+      note: typeof body.handover.note === 'string' ? body.handover.note : undefined,
+    }, new Date().toISOString())
+    update.handover = mergedHandover
+  }
+
   // Scalar deliverable fields.
   if (typeof body?.proofUrl === 'string') update.proof_url = body.proofUrl.trim() || null
   if (typeof body?.proofNote === 'string') update.proof_note = body.proofNote.trim() || null
@@ -135,17 +151,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (finalStatus === 'delivered') {
     const guard = deliverGuard(mergedSteps, finalProof, { checkSteps: row.status !== 'delivered' })
     if (!guard.ok) return NextResponse.json({ error: guard.reason }, { status: 400 })
+    // And, where this delivery hands an account over, the owner has to hold it first. Checked on
+    // the TRANSITION only: reopening and re-saving a delivered record must not re-litigate it.
+    if (row.status !== 'delivered') {
+      const handed = handoverGuard(row.service_id as string | null, mergedHandover)
+      if (!handed.ok) return NextResponse.json({ error: handed.reason }, { status: 400 })
+    }
   }
 
   // Optimistic concurrency: three writers (this PATCH, the apply route, the sync) all rewrite the
   // steps jsonb. Guarding on the updated_at we read means a racing write loses loudly (409, the
   // client refreshes and retries) instead of silently reverting someone else's work.
-  const { data: writeRes, error } = await svc
+  let { data: writeRes, error } = await svc
     .from('service_work_orders')
     .update(update)
     .eq('id', id)
     .eq('updated_at', row.updated_at as string)
     .select('id')
+  // Pre-258 the handover column is not there yet. Drop it and write everything else, rather than
+  // lose an operator's whole save to a column that has not been added.
+  if (error && (error as { code?: string }).code === '42703' && 'handover' in update) {
+    console.warn('[service-wo] handover column missing (apply migration 258); saved without it')
+    const { handover: _dropped, ...rest } = update
+    ;({ data: writeRes, error } = await svc
+      .from('service_work_orders')
+      .update(rest)
+      .eq('id', id)
+      .eq('updated_at', row.updated_at as string)
+      .select('id'))
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!writeRes || writeRes.length === 0) {
     return NextResponse.json({ error: 'This order changed while you were working. Refresh and try again.' }, { status: 409 })

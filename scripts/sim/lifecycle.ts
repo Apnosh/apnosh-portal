@@ -32,6 +32,7 @@ import { isBuyable, isHidden, BUILTIN_AVAILABILITY, FULLY_BUILT_LIVE, RETIRED_ID
 import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { fitsBudget, isSellable, filterRecsByFacts, deliveryLedShape } from '@/lib/campaigns/planning/rank-facts'
 import { ITEM_PRICES } from '@/lib/campaigns/builder/item-prices'
+import { handoverFor, handoverProgress, handoverGuard, markHandover, readHandover, WEBSITE_HANDOVER } from '@/lib/campaigns/handover'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -836,10 +837,56 @@ s.group('Intake rail: playbook needsInput keys reach the owner (recurring includ
   s.eq('delivery-opt declares pos-vendor (rendered as delivery logins)', playbookNeedKeys('delivery-opt').includes('pos-vendor'), true)
   s.eq('unknown service → no keys, no fake asks', playbookNeedKeys('nope').length, 0)
   // Drift guard: every needsInput key any playbook declares has a consumer in service-needs.ts.
-  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact', 'truck-schedule'])
+  // 'analytics-access' is here because service-needs.ts really does ask for it — the Google
+  // connect, who runs the website, and the two links that turn a click into a countable result.
+  // The set had simply not been told, so the drift guard reported an orphan that was not one.
+  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact', 'truck-schedule', 'analytics-access'])
   const declared = new Set(Object.keys(SERVICE_PLAYBOOKS).flatMap((id) => playbookNeedKeys(id)))
   const orphans = [...declared].filter((k) => !HANDLED.has(k))
   s.check(`every declared needsInput key has an owner-facing ask (orphans: ${orphans.join(',') || 'none'})`, orphans.length === 0)
+}
+
+// ── Move 4: a website order ends in a domain the owner holds ──
+s.group('Handover: an account that changes hands is a checklist, not a promise')
+{
+  s.eq('a website order has a checklist', handoverFor('request:website').length, WEBSITE_HANDOVER.length)
+  s.eq('so does the site-and-menu service', handoverFor('site-menu').length, WEBSITE_HANDOVER.length)
+  // A photo library hands over too, and it has no domain, no DNS and no hosting login. Four rows
+  // that never apply are rows a person learns to tick without reading.
+  s.eq('a photo library gets NO domain checklist', handoverFor('photo-library').length, 0)
+  s.eq('nor does a Google setup', handoverFor('gbp-setup').length, 0)
+  s.eq('nor does nothing at all', handoverFor(null).length, 0)
+
+  s.check('the domain, the DNS and the hosting login are all required',
+    ['domain', 'dns', 'hosting'].every((id) => WEBSITE_HANDOVER.find((i) => i.id === id)?.required === true))
+  s.check('analytics is NOT, because some owners genuinely have none',
+    WEBSITE_HANDOVER.find((i) => i.id === 'analytics')?.required === false)
+
+  // The guard: delivery is refused until every required row is ticked.
+  s.check('an empty checklist blocks delivery', handoverGuard('request:website', null).ok === false)
+  s.check('and says which rows are open', (handoverGuard('request:website', null) as { reason: string }).reason.includes('domain'))
+  s.check('work that hands nothing over is never blocked', handoverGuard('photo-library', null).ok === true)
+
+  const NOW = '2026-09-07T10:00:00.000Z'
+  let state: unknown = null
+  for (const id of ['domain', 'dns', 'hosting', 'owner']) state = markHandover(state, { id, done: true }, NOW)
+  s.check('every required row ticked → delivery is allowed', handoverGuard('request:website', state).ok === true)
+  s.eq('and the optional row is still honestly open', handoverProgress('request:website', state).doneCount, 4)
+
+  const unticked = markHandover(state, { id: 'domain', done: false }, NOW)
+  s.check('un-ticking a required row blocks it again', handoverGuard('request:website', unticked).ok === false)
+  s.check('and clears the date, because an untrue date is worse than none',
+    readHandover(unticked).find((m) => m.id === 'domain')?.doneAt === undefined)
+
+  const withNote = markHandover(state, { id: 'domain', note: "in Mia's GoDaddy" }, NOW)
+  s.eq('a note says where it went and survives a re-tick', readHandover(withNote).find((m) => m.id === 'domain')?.note, "in Mia's GoDaddy")
+  s.eq('and the day it changed hands is stamped once, not moved', readHandover(withNote).find((m) => m.id === 'domain')?.doneAt, NOW)
+
+  // The stored column is jsonb: it can hold anything, including nothing.
+  for (const junk of [null, undefined, 'nope', 42, {}, { items: 'no' }, { items: [1, 2] }]) {
+    s.eq(`garbage in the column (${JSON.stringify(junk) ?? 'undefined'}) reads as no ticks`, readHandover(junk).length, 0)
+  }
+  s.check('and garbage never accidentally allows a delivery', handoverGuard('request:website', { items: [{ id: 'domain' }] }).ok === false)
 }
 
 // ── Owner-sim fix, Phase 3: pre-checkout asset checks ──

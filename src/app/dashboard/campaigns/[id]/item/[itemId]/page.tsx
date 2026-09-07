@@ -9,7 +9,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ChevronLeft, ChevronRight, Loader2, Check, CalendarClock, TrendingUp, FileText } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Check, CalendarClock, TrendingUp, FileText, Download, Key } from 'lucide-react'
 import { C, DISPLAY, EYEBROW, AMBER_GRAD, cadenceLabel, cadenceSub } from '@/components/campaigns/ui'
 import MotionStyles from '@/components/campaigns/motion-styles'
 import { shippedStatus, ownerSetupComplete, servicesSettingUp, ownerRunWorkDone, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
@@ -19,6 +19,7 @@ import { STAGE_LABEL } from '@/lib/campaigns/tracker/stages'
 import { fmtShort } from '@/components/campaigns/tracker/piece-tracker'
 import type { TrackerPiece } from '@/lib/campaigns/tracker/types'
 import type { ReadinessReport } from '@/lib/campaigns/readiness-types'
+import { handoverProgress } from '@/lib/campaigns/handover'
 
 export default function ItemDetailPage() {
   const { id, itemId } = useParams<{ id: string; itemId: string }>()
@@ -52,6 +53,11 @@ export default function ItemDetailPage() {
   const status = camp && item && st ? itemStatus({ item, camp, phase: st.phase, pieces, readiness, serviceOrders }) : null
   const mine = camp && item ? piecesForItem(item, pieces, camp.draft.brief?.contentBeats) : []
   const isService = !!item && !/^content-/.test(item.serviceId ?? '')
+  /* This item's own work order, so the page can show what landed and what has changed hands. */
+  const order = item
+    ? (serviceOrders ?? []).find((o) => o.lineItemId === item.id) ?? (serviceOrders ?? []).find((o) => !o.lineItemId && o.serviceId === item.serviceId) ?? null
+    : null
+  const handed = item ? handoverProgress(item.serviceId, order?.handover) : { items: [], doneCount: 0, requiredOpen: [] }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: C.bg, display: 'flex', justifyContent: 'center' }}>
@@ -95,6 +101,42 @@ export default function ItemDetailPage() {
                     </span>
                     <span style={{ fontSize: 11.5, opacity: 0.92 }}>{status.openAsks[0].title}{status.openAsks.length > 1 ? ' and more' : ''}</span>
                   </button>
+                )}
+
+                {/* WHAT LANDED. The thing they bought, opened from their own order — not a link
+                    living on an admin screen. It is also in Photos and files. */}
+                {order?.proofUrl && order.status === 'delivered' && (
+                  <Card title="What landed">
+                    <a href={order.proofUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 700, color: C.greenDk, textDecoration: 'none' }}>
+                      <Download size={15} /> Open what your team delivered
+                    </a>
+                    <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>It is saved in Photos and files too, so you keep it.</div>
+                  </Card>
+                )}
+
+                {/* WHAT YOU HOLD. A website order is not finished when the site is live — it is
+                    finished when the domain, the DNS and the logins are in the owner's name. */}
+                {handed.items.length > 0 && (
+                  <Card title="What you hold">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {handed.items.map((h) => (
+                        <div key={h.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
+                          <span style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 9, marginTop: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: h.done ? C.greenSoft : '#f0f0f2' }}>
+                            {h.done ? <Check size={11} strokeWidth={3} color={C.greenDk} /> : <Key size={10} color={C.faint} />}
+                          </span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: h.done ? C.ink : C.mute, lineHeight: 1.35 }}>{h.label}{!h.required && <span style={{ fontSize: 11, fontWeight: 500, color: C.faint }}> · optional</span>}</div>
+                            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 1, lineHeight: 1.45 }}>{h.note || h.why}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>
+                      {handed.requiredOpen.length === 0
+                        ? 'All of it is in your name. If we ever part ways, your site keeps working.'
+                        : `Your team hands the rest over before this is marked done. ${handed.doneCount} of ${handed.items.length} so far.`}
+                    </div>
+                  </Card>
                 )}
 
                 {/* why it matters */}
