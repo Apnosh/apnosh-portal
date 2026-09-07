@@ -10,7 +10,7 @@ import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 import { creatorById, rankCreators, type Disc } from './creators'
 import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
 import { feePercentForCreator, assignVendorsToOrderRows, notifyVendorsOfNewWork, notifyVendorOfWork, bestVendorForDiscipline, creatorNamesByIds } from './vendor-supply'
-import { isCampaignCheckoutPaid } from './campaign-payments-server'
+import { isCampaignCheckoutPaid, isRequestCheckoutPaid } from './campaign-payments-server'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings, CreatorPayoutLine } from './view'
 
 export type { WorkOrderStatus }
@@ -900,7 +900,13 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
   // already covered — record the charge for the ledger but as 'covered_by_checkout', so
   // the invoicing path (which claims only 'accrued' rows) can never bill it a second time.
   const campaignId = (o.campaign_id as string | null) ?? null
-  const covered = campaignId ? await isCampaignCheckoutPaid(campaignId) : false
+  // A DESK order has no campaign row: its checkout money is keyed to the request its piece key
+  // names. Without this the desk paid at the till AND was invoiced again on approval.
+  const pieceKey = String((o.campaign_piece_key as string | null) ?? '')
+  const requestId = pieceKey.startsWith('request:') ? pieceKey.slice('request:'.length) : ''
+  const covered = campaignId
+    ? await isCampaignCheckoutPaid(campaignId)
+    : requestId ? await isRequestCheckoutPaid(requestId) : false
   const row = buildChargeRow({
     id: o.id as string,
     client_id: o.client_id as string,
