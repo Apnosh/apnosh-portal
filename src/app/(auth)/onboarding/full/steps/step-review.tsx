@@ -4,6 +4,10 @@ import { CheckCircle2 } from 'lucide-react'
 import { type OnboardingData, type StepId, ROLES, APPROVAL_TYPES, FOOD_BIZ_TYPES } from '../data'
 import { Question, PrimaryPill, gradOf, DISPLAY, CARD_SHADOW } from '../ui'
 import { SHAPE_LABEL, isShelfShape } from '@/lib/clients/shape'
+import { useLang } from '@/components/mvp/mvp-language'
+
+/** A screen's T, passed down so the cards read in the owner's language. */
+type Tr = (key: string, vars?: Record<string, string | number>) => string
 
 interface Props {
   data: OnboardingData
@@ -13,10 +17,17 @@ interface Props {
   saving: boolean
 }
 
+/* THE LAST SCREEN, IN THE OWNER'S LANGUAGE. Every LABEL goes through T(); the VALUES beside them
+ * do not, because they are the owner's own words (their name, their address, the dishes they
+ * typed). The two that are ours — the role they picked and the approval style — are option titles
+ * from data.ts, so those get T() too. Nothing stored changes. */
 export default function StepReview({ data, update, onGoToStep, onComplete, saving }: Props) {
+  const { T } = useLang()
   const isFood = FOOD_BIZ_TYPES.includes(data.biz_type as typeof FOOD_BIZ_TYPES[number])
-  const roleName = ROLES.find((r) => r.id === data.role)?.title || null
-  const approvalName = APPROVAL_TYPES.find((a) => a.id === data.approval_type)?.title || null
+  const role = ROLES.find((r) => r.id === data.role)?.title
+  const roleName = role ? T(role) : null
+  const approval = APPROVAL_TYPES.find((a) => a.id === data.approval_type)?.title
+  const approvalName = approval ? T(approval) : null
   const loc = [data.city, data.state].filter(Boolean).join(', ') || null
   const mainLoc = data.primary_location_name.trim()
     ? (loc ? `${data.primary_location_name.trim()} (${loc})` : data.primary_location_name.trim())
@@ -44,19 +55,19 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
   // for, with an Edit next to each, rather than meeting both as a surprise on the Create page.
   // Left blank when they skipped the screen: "never answered" is a real state and the shelf
   // treats it as a storefront with no cap, so the review must not invent an answer either.
-  const shapeValue = isShelfShape(data.shape) ? SHAPE_LABEL[data.shape].title : null
+  const shapeValue = isShelfShape(data.shape) ? T(SHAPE_LABEL[data.shape].title) : null
   const locationsValue = extraLocs.length
-    ? `${extraLocs.length + 1} total`
+    ? T('{n} total', { n: extraLocs.length + 1 })
     : (data.location_count || null)
 
   return (
     <>
-      <Question title="One last look" subtitle="Tap Edit to change anything." icon={<CheckCircle2 size={28} strokeWidth={2} />} />
+      <Question title={T('One last look')} subtitle={T('Tap Edit to change anything.')} icon={<CheckCircle2 size={28} strokeWidth={2} />} />
       <div className="mt-5 space-y-2">
-        <ReviewCard title="You" stepId="role" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="You" stepId="role" onEdit={onGoToStep} rows={[
           { label: 'Role', value: roleName },
         ]} />
-        <ReviewCard title="Business" stepId="biz_name" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Business" stepId="biz_name" onEdit={onGoToStep} rows={[
           { label: 'Name', value: data.biz_name || null },
           { label: 'Website', value: data.website || null },
           { label: 'Phone', value: data.phone || null },
@@ -64,63 +75,63 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           { label: 'Locations', value: locationsValue },
           { label: 'Other spots', value: extraLocList },
         ]} />
-        <ReviewCard title="What you are" stepId="biz_type" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="What you are" stepId="biz_type" onEdit={onGoToStep} rows={[
           { label: 'Type', value: (data.biz_type === 'Other' ? data.biz_other : data.biz_type) || null },
           { label: 'Cuisine', value: isFood ? ((data.cuisine === 'Other' ? data.cuisine_other : data.cuisine) || null) : null },
           { label: 'Vibe', value: isFood && data.service_styles.length ? data.service_styles.join(', ') : null },
           { label: 'Mission', value: data.biz_desc || null },
           { label: 'Audience', value: data.customer_types.length ? data.customer_types.join(', ') : null },
         ]} />
-        <ReviewCard title="How it runs" stepId="shape" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="How it runs" stepId="shape" onEdit={onGoToStep} rows={[
           { label: 'Shape', value: shapeValue },
         ]} />
         {isFood && (
-          <ReviewCard title="Menu" stepId="menu" onEdit={onGoToStep} rows={[
+          <ReviewCard T={T} title="Menu" stepId="menu" onEdit={onGoToStep} rows={[
             { label: 'Dishes', value: menuList },
           ]} />
         )}
         {isFood && (
-          <ReviewCard title="Specials" stepId="specials" onEdit={onGoToStep} rows={[
+          <ReviewCard T={T} title="Specials" stepId="specials" onEdit={onGoToStep} rows={[
             { label: 'Recurring', value: specialsList },
           ]} />
         )}
-        <ReviewCard title="Story" stepId="about" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Story" stepId="about" onEdit={onGoToStep} rows={[
           { label: 'Stand out', value: data.unique || null },
           { label: 'Competitors', value: data.competitors || null },
           { label: 'Why you', value: data.why_choose.length ? data.why_choose.join(', ') : null },
         ]} />
-        <ReviewCard title="Goals" stepId="goals" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Goals" stepId="goals" onEdit={onGoToStep} rows={[
           { label: 'Priority', value: data.primary_goal || null },
           { label: 'Success', value: data.success_signs.length ? data.success_signs.join(', ') : null },
           { label: 'Timeline', value: data.timeline || null },
         ]} />
-        <ReviewCard title="Budget" stepId="budget" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Budget" stepId="budget" onEdit={onGoToStep} rows={[
           { label: 'To start', value: data.marketing_budget || null },
         ]} />
-        <ReviewCard title="Promote" stepId="promote" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Promote" stepId="promote" onEdit={onGoToStep} rows={[
           { label: 'Highlights', value: data.main_offerings || null },
           { label: 'Coming up', value: data.upcoming || null },
         ]} />
-        <ReviewCard title="Brand" stepId="brand_voice" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Brand" stepId="brand_voice" onEdit={onGoToStep} rows={[
           { label: 'Tone', value: data.tones.length ? data.tones.join(', ') : null },
           { label: 'Custom tone', value: data.custom_tone || null },
           { label: 'Content', value: data.content_likes.length ? data.content_likes.join(', ') : null },
           { label: 'Avoid', value: data.avoid_list.length ? data.avoid_list.join(', ') : null },
         ]} />
-        <ReviewCard title="Discovery" stepId="discovery" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Discovery" stepId="discovery" onEdit={onGoToStep} rows={[
           { label: 'Hashtags', value: hashtagList },
           { label: 'Keywords', value: keywordList },
         ]} />
-        <ReviewCard title="Workflow" stepId="approval" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Workflow" stepId="approval" onEdit={onGoToStep} rows={[
           { label: 'Style', value: approvalName },
           { label: 'On camera', value: data.can_film.length ? data.can_film.join(', ') : null },
         ]} />
-        <ReviewCard title="Connected" stepId="connect" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Connected" stepId="connect" onEdit={onGoToStep} rows={[
           { label: 'Platforms', value: connectedList.length ? connectedList.join(', ') : null },
         ]} />
-        <ReviewCard title="Assets" stepId="assets" onEdit={onGoToStep} rows={[
+        <ReviewCard T={T} title="Assets" stepId="assets" onEdit={onGoToStep} rows={[
           { label: 'Logo', value: data.logo_name || null },
-          { label: 'Photos', value: data.photo_count ? `${data.photo_count} uploaded` : null },
+          { label: 'Photos', value: data.photo_count ? T('{n} uploaded', { n: data.photo_count }) : null },
           { label: 'Brand folder', value: data.brand_drive || null },
         ]} />
       </div>
@@ -134,18 +145,20 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
             onChange={(e) => update('agreed_terms', e.target.checked)}
             className="mt-0.5 accent-[#4abd98] flex-shrink-0"
           />
+          {/* Four pieces, not one sentence with holes in it: the two link words have to be
+              tappable, so they cannot ride inside a {placeholder}. */}
           <span>
-            I agree to Apnosh's{' '}
-            <a href="/terms" target="_blank" className="underline" style={{ color: '#2e9a78' }}>Terms of Service</a>
-            {' '}and{' '}
-            <a href="/privacy" target="_blank" className="underline" style={{ color: '#2e9a78' }}>Privacy Policy</a>.
+            {T("I agree to Apnosh's")}{' '}
+            <a href="/terms" target="_blank" className="underline" style={{ color: '#2e9a78' }}>{T('Terms of Service')}</a>
+            {' '}{T('and the')}{' '}
+            <a href="/privacy" target="_blank" className="underline" style={{ color: '#2e9a78' }}>{T('Privacy Policy')}</a>.
           </span>
         </label>
       </div>
 
       {/* Complete button */}
       <PrimaryPill onClick={onComplete} disabled={!data.agreed_terms || saving} grow>
-        {saving ? 'Saving...' : 'Complete setup'}
+        {saving ? T('Saving...') : T('Complete setup')}
       </PrimaryPill>
     </>
   )
@@ -165,11 +178,14 @@ function ReviewCard({
   stepId,
   onEdit,
   rows,
+  T,
 }: {
+  /** the English name of the section: the key REVIEW_HUE is keyed on, and the key T looks up */
   title: string
   stepId: StepId
   onEdit: (stepId: StepId) => void
   rows: Array<{ label: string; value: string | null }>
+  T: Tr
 }) {
   /* Only what the owner actually answered. Empty rows do not render, and a
    * section with nothing set does not render at all. */
@@ -180,7 +196,7 @@ function ReviewCard({
       <div className="flex items-center gap-2.5 mb-2">
         <span aria-hidden style={{ width: 10, height: 10, borderRadius: 5, background: gradOf(REVIEW_HUE[title] || 'mint'), flexShrink: 0 }} />
         <span className="text-[15px] flex-1" style={{ fontFamily: DISPLAY, fontWeight: 600, color: '#1d1d1f', letterSpacing: '-0.01em' }}>
-          {title}
+          {T(title)}
         </span>
         <button
           type="button"
@@ -188,12 +204,12 @@ function ReviewCard({
           className="text-[12.5px] font-semibold"
           style={{ color: '#2e9a78' }}
         >
-          Edit
+          {T('Edit')}
         </button>
       </div>
       {setRows.map((r) => (
         <div key={r.label} className="text-[13px] leading-relaxed" style={{ color: '#6e6e73' }}>
-          {r.label}:{' '}
+          {T(r.label)}:{' '}
           <span className="font-medium" style={{ color: '#1d1d1f' }}>{r.value}</span>
         </div>
       ))}

@@ -145,11 +145,15 @@ export function ChipGroup({
   selected,
   onToggle,
   max,
+  label,
 }: {
   options: readonly string[]
   selected: string[]
   onToggle: (val: string) => void
   max?: number
+  /** How to WRITE each option. The value stays English (it is what gets saved); pass a screen's
+   *  T here and the chip reads in the owner's language. Defaults to the value itself. */
+  label?: (val: string) => string
 }) {
   return (
     <div className="flex flex-wrap gap-2 mb-2">
@@ -158,7 +162,7 @@ export function ChipGroup({
         return (
           <Chip
             key={opt}
-            label={opt}
+            label={label ? label(opt) : opt}
             selected={isSel}
             onClick={() => {
               if (isSel) {

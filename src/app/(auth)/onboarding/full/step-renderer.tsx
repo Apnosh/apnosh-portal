@@ -1,7 +1,7 @@
 'use client'
 
 import { type ReactNode } from 'react'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Globe } from 'lucide-react'
 import { type OnboardingData, type StepId } from './data'
 import { PrimaryPill } from './ui'
 import { LanguageProvider, useStandaloneLang } from '@/components/mvp/mvp-language'
@@ -84,7 +84,9 @@ export interface OnboardingFrameProps {
 const quietTextButton: React.CSSProperties = {
   border: 'none',
   background: 'none',
-  color: '#aeaeb2',
+  /* #aeaeb2 is 2.2:1 on this ground: fine for a hairline, not for a word somebody has to read.
+     These are the two words in the top bar (the language switch, Finish later / Exit). */
+  color: '#6e6e73',
   fontSize: 13,
   fontWeight: 500,
   padding: '6px 2px',
@@ -202,13 +204,17 @@ export function OnboardingFrame({
 
         {/* The language switch, in the language it switches TO — the only label a reader who
             cannot read this screen yet can be sure of. Setup is where a Spanish-speaking owner
-            meets us, so it has to be here and not only in Settings. */}
+            meets us, so it has to be here and not only in Settings.
+            The globe is why the word is not read as a heading: on a Spanish screen a bare
+            "English" up in the corner looks like a label for the page, not a door off it. */}
         <button
           type="button"
           onClick={() => { const next: Lang = lang === 'es' ? 'en' : 'es'; setLang(next); onLanguage?.(next) }}
-          style={quietTextButton}
+          style={{ ...quietTextButton, display: 'flex', alignItems: 'center', gap: 4 }}
+          aria-label={LANG_LABEL[lang === 'es' ? 'en' : 'es']}
           title={LANG_LABEL[lang === 'es' ? 'en' : 'es']}
         >
+          <Globe size={14} aria-hidden />
           {LANG_LABEL[lang === 'es' ? 'en' : 'es']}
         </button>
 
@@ -245,7 +251,10 @@ export function OnboardingFrame({
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
-            padding: '12px 20px 24px',
+            /* The pinned Continue bar is ~68px of glass at the bottom of the frame. 24px of tail
+               left the next heading of a long screen (What you serve) sitting right on top of it,
+               so the screen read as if it ended mid-question. */
+            padding: '12px 20px 40px',
             maxWidth: 480,
             width: '100%',
             margin: '0 auto',

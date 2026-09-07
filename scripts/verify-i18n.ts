@@ -124,6 +124,9 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
       'src/app/(auth)/onboarding/full/steps/step-goals.tsx',
       'src/app/(auth)/onboarding/full/steps/step-shape.tsx',
       'src/app/(auth)/onboarding/full/steps/step-budget.tsx',
+      // Polish 2: the two screens that were still English under es
+      'src/app/(auth)/onboarding/full/steps/step-serve.tsx',
+      'src/app/(auth)/onboarding/full/steps/step-review.tsx',
     ],
     // The rest of Settings went through t() in Move 5b, so the file is listed now: the promise
     // was that it would be the day the whole page was translated.

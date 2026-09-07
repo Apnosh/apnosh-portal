@@ -213,6 +213,34 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Two or more places', 'Each one has its own numbers',
     'Mostly catering', 'Offices, parties, big orders',
     'Open for a season', 'Busy part of the year, quiet the rest',
+    /* Polish 2 — screen 5, what you serve. The cuisine and service-style values are the SAVED
+       strings (data.ts), so they stay English in the record and only the tile is translated.
+       'Korean BBQ' is deliberately absent: it is the name of the food in both languages. */
+    'What you serve', 'Primary cuisine', 'Hawaiian poke, Ethiopian…',
+    'Service style (pick all that apply)', 'Price point',
+    'American', 'Asian Fusion', 'Chinese', 'Japanese', 'Korean', 'Vietnamese', 'Thai', 'Indian',
+    'Mexican', 'Italian', 'Mediterranean', 'French', 'Middle Eastern', 'Caribbean',
+    'Soul / Southern', 'Seafood', 'BBQ / Smokehouse', 'Vegan / Vegetarian', 'Bakery / Desserts',
+    'Other',
+    'Fast food', 'Quick service / fast casual', 'Casual dining', 'Family style', 'Fine dining',
+    'Café / coffee shop', 'Bar / lounge', 'Buffet / AYCE', 'Food truck / pop-up', 'Catering',
+    'Bakery / patisserie',
+    'Under $15 a head', '$15 to $30 a head', '$30 to $60 a head', '$60+ a head',
+    /* Polish 2 — screen 10, one last look. Section names, row labels, the terms line and the
+       two answers of ours it plays back (the role, the approval style). */
+    'One last look', 'Tap Edit to change anything.', 'Edit', 'Complete setup',
+    "I agree to Apnosh's", 'Terms of Service', 'and the', 'Privacy Policy',
+    '{n} total', '{n} uploaded',
+    'You', 'Business', 'What you are', 'How it runs', 'Menu', 'Specials', 'Story', 'Goals',
+    'Budget', 'Promote', 'Brand', 'Discovery', 'Workflow', 'Connected', 'Assets',
+    'Role', 'Name', 'Website', 'Phone', 'Location', 'Locations', 'Other spots', 'Type', 'Cuisine',
+    'Vibe', 'Mission', 'Audience', 'Shape', 'Dishes', 'Recurring', 'Stand out', 'Competitors',
+    'Why you', 'Priority', 'Success', 'Timeline', 'To start', 'Highlights', 'Coming up', 'Tone',
+    'Custom tone', 'Content', 'Avoid', 'Hashtags', 'Keywords', 'Style', 'On camera', 'Platforms',
+    'Logo', 'Photos', 'Brand folder',
+    'Business owner', 'Manager', 'Employee', 'Agency / consultant', 'Freelancer',
+    'I want to see everything', 'Just the big stuff', 'I trust the team',
+    "Let's collaborate as we go",
   ],
 
   /* ── Move 7b ────────────────────────────────────────────────────────────────────────
