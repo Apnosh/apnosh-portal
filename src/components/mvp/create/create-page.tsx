@@ -528,7 +528,9 @@ export default function CreatePage() {
             <span className="s" style={{ display: 'block' }}>{price}{price !== 'Free' && free ? ', or free, you do it' : ''} · {c.ready}</span>
           </span>
         </button>
-        <button type="button" className="btn hue" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => order(c)}>{free && c.price === 'Quote' ? 'Start' : c.handoff.kind === 'request' ? 'Ask' : 'Order'}</button>
+        {/* The button matches the price. A desk card with a real price is an order, not an ask:
+            only a card that genuinely has no price ('Quote') says Ask. */}
+        <button type="button" className="btn hue" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => order(c)}>{free && c.price === 'Quote' ? 'Start' : c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask' : 'Order'}</button>
       </div>
     )
   }
@@ -736,7 +738,7 @@ export default function CreatePage() {
               waiting on and offers the one thing that is real: telling us you want it. */}
           <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? c.price : 'Not on sale yet'}<span>{buy ? `${c.cadence} · ${c.you.toLowerCase()} · ${c.ready}` : 'We will tell you the day it opens'}</span></div>
           {buy
-            ? <button type="button" className="btn hue" onClick={() => order(c)}>{c.handoff.kind === 'request' ? 'Ask for a quote' : 'Order'} <ArrowRight size={15} /></button>
+            ? <button type="button" className="btn hue" onClick={() => order(c)}>{c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order'} <ArrowRight size={15} /></button>
             : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>Tell me when</Link>}
         </div></div>
       </div>

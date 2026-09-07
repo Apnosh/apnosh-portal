@@ -171,9 +171,20 @@ function build(): Record<string, ShelfCard> {
        anything, so it prints as a FROM. The graphic keeps its own engine and stays a quote. */
     const base = priceCreativeRequest(t.id, {})
     const priceLabel = base ? `from ${fmtCents(base.totalCents)}` : 'Quote'
+    /* ONE STORY PER CARD. These cards used to print a price AND say "2 days to a quote" AND
+     * offer a button that said Ask, which is three different products on one card. A card with
+     * a real price is an ORDER: it says when the work starts, its first "what you get" line
+     * names the tier that price buys, and the button says Order. Only the graphic has no price
+     * sheet (the design engine owns it), so only the graphic stays a quote and keeps Ask. */
     out[id] = {
       id, title: t.label, sub: (t as { blurb?: string }).blurb ?? '', price: priceLabel, priceN: base ? Math.round(base.totalCents / 100) : 0, cadence: 'One-time',
-      kind: 'quick', goal: cf.g, stage: 'Interest', you: 'Approve', ready: '2 days to a quote', channels: cf.ch, plain: cf.plain, get: ['A quote in two days, no charge to ask', 'Made by a designer or creator we know', 'Two rounds of changes'], syn: cf.syn,
+      kind: 'quick', goal: cf.g, stage: 'Interest', you: 'Approve',
+      ready: base ? 'Starts in 2 days' : '2 days to a quote',
+      channels: cf.ch, plain: cf.plain,
+      get: base
+        ? [`${base.lines[0].label} at ${fmtCents(base.totalCents)}, service fee inside`, 'Made by a designer or creator we know', 'Two rounds of changes', 'Pick a bigger one and we show the new price before you pay']
+        : ['A quote in two days, no charge to ask', 'Made by a designer or creator we know', 'Two rounds of changes'],
+      syn: cf.syn,
       availability: avail, handoff: { kind: 'request', type: t.id },
     }
   }
