@@ -238,7 +238,7 @@ function BillCard({ b, monthlyCents, monthlyTaxCents, taxPending, costNotes, set
           <div key={n} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, padding: '2px 0 4px' }}>Plus {n}</div>
         ))}
         <ReceiptRule />
-        <ReceiptTotal label="Today" big={fmt(monthlyCents + (monthlyTaxCents ?? 0))} small="first month" />
+        <ReceiptTotal label="Today" big={monthlyTaxCents == null ? `${fmt(monthlyCents)} + tax` : fmt(monthlyCents + monthlyTaxCents)} small="first month" />
         <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Your card is billed {monthlyPhrase(monthlyCents, monthlyTaxCents)} each month starting today. Cancel anytime.</div>
         {adTotalLine}
       </ReceiptFrame>
@@ -997,8 +997,9 @@ export function Confirmation({ restaurant, draft, breakdown, monthlyTaxCents, se
           {setupOnly ? (
             <>
               <ReceiptRow label="Monthly services" amount={`${fmt(monthlyCents)}/mo`} />
+              <ReceiptRow label="Tax" amount={monthlyTaxCents == null ? 'Added on your bill' : fmt(monthlyTaxCents)} muted={monthlyTaxCents == null} />
               <ReceiptRule />
-              <ReceiptTotal label="Billed today" big={fmt(monthlyCents)} small="first month" />
+              <ReceiptTotal label="Billed today" big={monthlyTaxCents == null ? `${fmt(monthlyCents)} + tax` : fmt(monthlyCents + monthlyTaxCents)} small="first month" />
             </>
           ) : invoice ? (
             <>
