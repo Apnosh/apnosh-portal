@@ -532,6 +532,17 @@ export async function completeOnboardingCRM(
       })
   }
 
+  // 4. Someone owns this account from day one. Without this row every notification for the
+  //    client falls through to "page all admins" and no minted order carries a name.
+  //    Best-effort: a failure here must never fail an onboarding that otherwise finished.
+  try {
+    const { ensureClientStrategist } = await import('@/lib/team/assign')
+    const strategistId = await ensureClientStrategist(clientId)
+    if (strategistId) console.log(`[completeOnboardingCRM] strategist assigned to client ${clientId}`)
+  } catch (e) {
+    console.error('[completeOnboardingCRM] strategist assign threw:', e)
+  }
+
   return { clientId, error: null }
 }
 

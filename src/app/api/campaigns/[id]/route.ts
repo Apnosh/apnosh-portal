@@ -18,6 +18,7 @@ import { shipBillingGate, SHIP_NEEDS_PAYMENT } from '@/lib/campaigns/ship-guard'
 import { beatsFromLines } from '@/lib/campaigns/catalog'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
+import { ensureClientStrategist } from '@/lib/team/assign'
 import type { LineItem, PieceProducer } from '@/lib/campaigns/types'
 
 async function authorize(id: string) {
@@ -280,6 +281,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    // SOMEONE OWNS THIS ORDER. Written before anything mints, so the work orders below carry a
+    // name and the staff handoff at the end of this block reaches a named person instead of
+    // paging every admin. A client onboarded before this existed gets their strategist here, the
+    // first time they ship. Best-effort; a client with no staff to pick just behaves as before.
+    await ensureClientStrategist(campaign.clientId).catch(() => null)
     // HELD means "work starts later": only when the OWNER picked a date (plan-ahead) and the
     // schedule's first piece lands more than a week out. Captured BEFORE the estimate-mode
     // anchor below stamps a future first-post date onto target_date, which is not a hold.

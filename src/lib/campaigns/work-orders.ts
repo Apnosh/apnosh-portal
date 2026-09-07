@@ -97,6 +97,22 @@ export async function mintWorkOrders(campaign: SavedCampaign, shipISO: string): 
     ;({ error } = await admin.from('creator_work_orders').insert(stripped))
   }
   if (error) return 0
+  // A NAME ON THE HOUSE WORK. A craft with an empty vendor bench stays with the Apnosh team, and
+  // creator_work_orders has no staff-owner column to put a person in — so the person who owns it
+  // is written on the campaign instead, where getOrderPeople reads it to answer "who is on my
+  // order". Best-effort; a failure leaves the order exactly as it mints today.
+  if (rows.some((r) => !(r as { vendor_id?: string }).vendor_id)) {
+    try {
+      const { ensureClientStrategist } = await import('@/lib/team/assign')
+      const strategistId = await ensureClientStrategist(campaign.clientId)
+      if (strategistId && campaign.execution?.strategistId !== strategistId) {
+        const { updateCampaignFields } = await import('./server')
+        await updateCampaignFields(campaign.draft.id, { execution: { strategistId } })
+      }
+    } catch (e) {
+      console.warn('[work-orders] strategist stamp failed:', (e as Error)?.message)
+    }
+  }
   // Real vendors get told there is work waiting (the internal team already has
   // the staff rails); only after the insert actually landed.
   await notifyVendorsOfNewWork(rows, assigned, campaign.draft.name).catch(() => undefined)
