@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react'
 import { Camera, Scissors, Palette, PenTool, Clock, CheckCircle, AlertCircle } from 'lucide-react'
 import { getShareLinkData } from '@/lib/share-link-actions'
+import { DISPLAY } from '@/components/mvp/tokens'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -104,7 +105,7 @@ export default function ProductionSharePage({ params }: { params: Promise<{ toke
           <div>
             <span
               className="text-xl font-semibold"
-              style={{ fontFamily: 'Playfair Display, serif', color: '#2e9a78' }}
+              style={{ fontFamily: DISPLAY, color: '#2e9a78' }}
             >
               Apnosh
             </span>
@@ -120,7 +121,7 @@ export default function ProductionSharePage({ params }: { params: Promise<{ toke
       <main className="max-w-3xl mx-auto px-6 py-8">
         {/* Title */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: 'Playfair Display, serif' }}>
+          <h1 className="text-2xl font-bold text-gray-900" style={{ fontFamily: DISPLAY }}>
             {clientName}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
