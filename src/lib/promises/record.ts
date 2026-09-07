@@ -127,11 +127,21 @@ export async function recordRequestPromise(args: { clientId: string; requestId: 
   })
 }
 
+/** The window that moved, in the words an owner reads: "Sep 12". Null when nothing moved. */
+export interface ReanchoredWindow {
+  label: string
+  countFromDay: string
+  showsOnDay: string
+}
+
 /** When a service work order is delivered, move the count window to start from delivery (plus the
  *  source lag) and recompute the baseline against the days before it. A promise that is already
- *  counting from a later date, or is held/not counted, is left alone. */
-export async function reanchorPromise(args: { campaignId: string | null; serviceId: string | null; deliveredISO: string }): Promise<void> {
-  if (!args.campaignId || !args.serviceId) return
+ *  counting from a later date, or is held/not counted, is left alone.
+ *
+ *  Returns the moved window so the caller — the delivery — can say it in the ONE email it is
+ *  already sending, instead of a second one landing in the same second. */
+export async function reanchorPromise(args: { campaignId: string | null; serviceId: string | null; deliveredISO: string }): Promise<ReanchoredWindow | null> {
+  if (!args.campaignId || !args.serviceId) return null
   const a = createAdminClient()
   const { data } = await a.from('order_promises').select('id, client_id, label, metric_key, count_from, state').eq('campaign_id', args.campaignId).eq('service_id', args.serviceId)
   const deliveredOn = args.deliveredISO.slice(0, 10)
@@ -155,7 +165,9 @@ export async function reanchorPromise(args: { campaignId: string | null; service
       moved = { clientId: row.client_id, label: row.label, countFrom, showsOn }
     }
   }
-  if (moved) await tellOwnerTheDateMoved(moved, deliveredOn)
+  if (!moved) return null
+  await tellOwnerTheDateMoved(moved, deliveredOn)
+  return { label: moved.label, countFromDay: plainDay(moved.countFrom), showsOnDay: plainDay(moved.showsOn) }
 }
 
 /** Plain day, the way an owner says it: "Sep 12". */
@@ -165,7 +177,10 @@ function plainDay(iso: string): string {
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 
-/** One notice per re-anchor. Best-effort: the window still moved if this fails. */
+/** One notice per re-anchor, IN THE APP ONLY. Every re-anchor today comes from a delivery, and
+ *  that delivery is already emailing the owner — two emails in the same second about the same
+ *  event reads like the system is broken. The delivery email carries the new date instead; this
+ *  row is the record they can come back to. Best-effort: the window still moved if this fails. */
 async function tellOwnerTheDateMoved(moved: { clientId: string; label: string; countFrom: string; showsOn: string }, deliveredOn: string): Promise<void> {
   try {
     const { notifyClientOwners } = await import('@/lib/notifications')
@@ -174,7 +189,7 @@ async function tellOwnerTheDateMoved(moved: { clientId: string; label: string; c
       title: 'Your date moved',
       body: `Your ${moved.label} count now starts ${plainDay(moved.countFrom)}, because the work landed ${plainDay(deliveredOn)}. It shows on Home ${plainDay(moved.showsOn)}.`,
       link: '/dashboard',
-      email: true,
+      email: false,
     })
   } catch (e) {
     console.warn('[promises] date-moved notice failed:', (e as Error)?.message)

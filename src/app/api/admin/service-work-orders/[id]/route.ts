@@ -156,16 +156,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // the creator lane fixed. Best-effort, never blocks the write result.
   if (update.status === 'delivered' && row.status !== 'delivered' && row.client_id) {
     // THE PROMISE, RE-ANCHORED: the count runs from the day the work landed, not the day it was
-    // ordered, so a week of setup never sits inside the "after" window. Best-effort.
-    ;(async () => {
-      const { reanchorPromise } = await import('@/lib/promises/record')
-      await reanchorPromise({ campaignId: row.campaign_id as string | null, serviceId: row.service_id as string | null, deliveredISO: update.delivered_at as string })
-    })().catch(() => {})
+    // ordered, so a week of setup never sits inside the "after" window. Awaited, not detached,
+    // because the owner's ONE email about this delivery should carry the new date — two emails a
+    // second apart ("it's done" and "your date moved") read like the system is broken.
+    const { reanchorPromise } = await import('@/lib/promises/record')
+    const moved = await reanchorPromise({
+      campaignId: row.campaign_id as string | null,
+      serviceId: row.service_id as string | null,
+      deliveredISO: update.delivered_at as string,
+    }).catch(() => null)
     const { notifyClientOwners } = await import('@/lib/notifications')
     await notifyClientOwners(row.client_id as string, {
       kind: 'client_signoff',
       title: `${(row.title as string) || 'A service'} is done`,
-      body: 'Your team finished it. The proof is on your campaign page.',
+      body: moved
+        ? `Your team finished it. The proof is on your campaign page. Your count starts ${moved.countFromDay} and shows on Home ${moved.showsOnDay}.`
+        : 'Your team finished it. The proof is on your campaign page.',
       link: row.campaign_id ? `/dashboard/campaigns/${row.campaign_id}` : '/dashboard/campaigns',
       // Worth a phone buzzing: the thing they bought landed.
       email: true,
