@@ -285,7 +285,15 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
   // Delivered work is the OWNER's turn — this transition previously notified nobody,
   // so finished pieces sat invisible until the owner happened to open the campaign
   // (the silent stall). Tell them; the campaign page has Approve / Ask-for-changes.
-  if (patch.status === 'delivered' && cur) {
+  //
+  // ONCE PER DELIVERY, and only on the way IN. Everything in this block has a side effect that
+  // should happen when work lands and not when a delivered row is written again: a library row, a
+  // moved count window, an email. ALLOWED_TRANSITIONS already refuses delivered→delivered, so this
+  // is defence in depth — a future transition, or a hand-written status write, must not replay it.
+  //
+  // revision→delivered DOES run all of it, on purpose: the owner asked for changes, the fixed file
+  // is the one they keep, and the count starts when the working thing actually existed.
+  if (patch.status === 'delivered' && cur && cur.status !== 'delivered') {
     // A DESK order's work order carries 'request:<id>' and no campaign. That is the id its promise
     // is filed under, and the link the owner should follow.
     const requestId = cur.campaign_piece_key?.startsWith('request:') ? cur.campaign_piece_key.slice('request:'.length) : null

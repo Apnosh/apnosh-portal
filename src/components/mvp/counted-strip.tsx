@@ -43,7 +43,11 @@ export default function CountedStrip({ clientId }: { clientId?: string }) {
                   <div style={{ fontSize: 13, color: C.mute, marginTop: 2 }}>{r.sub}</div>
                 </div>
                 <div style={{ textAlign: 'right', lineHeight: 1.05 }}>
-                  <div style={{ fontFamily: "'Cal Sans', Inter, system-ui, sans-serif", fontSize: r.value.length > 9 ? 15 : 20, color: numTone, fontVariantNumeric: 'normal' }}>{r.value}</div>
+                  <div style={{ fontFamily: "'Cal Sans', Inter, system-ui, sans-serif", /* The word, not just a number, sits here: "Delivered" (9), "Not counted" (11),
+                     * "Being made" (10). At > 9 the nine-character words rendered at the number's
+                     * 20px and pushed the card's small line off; > 6 is the first threshold that
+                     * catches every word the seven states can print. */
+                    fontSize: r.value.length > 6 ? 15 : 20, color: numTone, fontVariantNumeric: 'normal' }}>{r.value}</div>
                   <div style={{ fontSize: 11.5, fontWeight: 600, color: r.tone === 'up' ? C.greenDk : r.tone === 'down' ? C.coral : C.mute, marginTop: 3 }}>{r.small}</div>
                 </div>
               </div>

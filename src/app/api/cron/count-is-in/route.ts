@@ -14,13 +14,15 @@
  * were promised it is the whole difference between a system that keeps promises and one that hopes
  * you forget.
  *
- * ONCE PER PROMISE, forever. order_promises.counted_notified_at (migration 258) is the dedupe, and
- * it is stamped whether or not the send worked — a notice nobody can send is not worth sending
- * every morning for the rest of the year. Pre-258 the column is absent: the stamp fails, and rather
- * than repeat itself daily the run stops and says which SQL to apply.
+ * ONCE PER PROMISE, forever. order_promises.counted_notified_at (migration 258) is the dedupe. It
+ * is STAMPED FIRST and only then sent: the update claims the row (`where counted_notified_at is
+ * null`), so two overlapping runs cannot both tell the same owner the same thing, and a notice
+ * nobody could send is not retried every morning for the rest of the year. Pre-258 the column is
+ * absent: the stamp fails, nothing is sent, and the run says which SQL to apply.
  *
- * Auth + shape follow the monthly-recap cron: a Vercel cron header, or the CRON_SECRET as a query
- * param or a bearer token. `dryRun=1` computes who WOULD be told and writes nothing.
+ * Auth: the CRON_SECRET as a query param or a bearer token, or Vercel's own cron user-agent. With
+ * no CRON_SECRET set the route refuses to run at all — the user-agent is a header anyone can send,
+ * and this route emails owners. `dryRun=1` computes who WOULD be told and writes nothing.
  */
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -40,6 +42,14 @@ export async function GET(req: Request) {
   const querySecret = url.searchParams.get('secret')
   const headerSecret = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
   const isVercelCron = req.headers.get('user-agent')?.includes('vercel-cron')
+  // FAIL CLOSED WHEN THERE IS NO SECRET. With CRON_SECRET unset, `querySecret !== CRON_SECRET` is
+  // true for a missing param too, so the only door left was the user-agent — a header anyone can
+  // send. This route emails every owner whose count is in; an open door on it is a mailshot with
+  // somebody else's name on it.
+  if (!CRON_SECRET) {
+    console.error('[count-is-in] CRON_SECRET is not set; refusing to run')
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   if (!isVercelCron && querySecret !== CRON_SECRET && headerSecret !== CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -85,6 +95,35 @@ export async function GET(req: Request) {
       if (!TELLABLE.has(row.state)) { skipped++; outcomes.push({ clientId, promiseId: row.id, state: row.state, sent: false, why: 'still counting' }); continue }
       if (dryRun) { told++; outcomes.push({ clientId, promiseId: row.id, state: row.state, sent: false, why: 'dry run' }); continue }
 
+      // STAMP FIRST, THEN SEND. The stamp used to come after the notify, so two runs overlapping
+      // (a retry, a manual run beside the scheduled one) both read an unstamped row and both told
+      // the same owner the same thing. The update is the claim: `is null` means exactly one run
+      // wins it, and only the winner sends. A row we cannot stamp is never sent, because a notice
+      // with no dedupe behind it is a mailshot.
+      const { data: claimed, error: stampErr } = await admin
+        .from('order_promises')
+        .update({ counted_notified_at: new Date().toISOString() })
+        .eq('id', row.id)
+        .is('counted_notified_at', null)
+        .select('id')
+      if (stampErr) {
+        stampFailed++
+        console.warn('[count-is-in] could not stamp the notice (apply migration 258):', stampErr.message)
+        // Without the stamp there is no dedupe, and a cron with no dedupe tells the same owner the
+        // same thing every day. Stop before the first one rather than become a mailshot.
+        return NextResponse.json({
+          ok: false,
+          told,
+          error: 'counted_notified_at is missing (apply migration 258). Nothing was sent, so nobody is told the same thing twice.',
+        }, { status: 500 })
+      }
+      if (!claimed || claimed.length === 0) {
+        // Another run claimed it a moment ago. Not a failure — the owner is being told once.
+        skipped++
+        outcomes.push({ clientId, promiseId: row.id, state: row.state, sent: false, why: 'already told' })
+        continue
+      }
+
       const counted = row.state === 'counted'
       const link = row.campaignId ? `/dashboard/campaigns/${row.campaignId}` : row.requestId ? `/dashboard/requests/${row.requestId}` : '/dashboard'
       await notifyClientOwners(clientId, {
@@ -100,23 +139,8 @@ export async function GET(req: Request) {
         emailCategory: 'content',
       }).catch(() => ({ notified: 0 }))
 
-      // Stamped even if the notify above failed. A notice nobody can send is not worth trying
-      // again every morning for the rest of the year.
-      const { error: stampErr } = await admin
-        .from('order_promises')
-        .update({ counted_notified_at: new Date().toISOString() })
-        .eq('id', row.id)
-      if (stampErr) {
-        stampFailed++
-        console.warn('[count-is-in] could not stamp the notice (apply migration 258):', stampErr.message)
-        // Without the stamp there is no dedupe, and a cron with no dedupe tells the same owner the
-        // same thing every day. Stop after the first one rather than become a mailshot.
-        return NextResponse.json({
-          ok: false,
-          told,
-          error: 'counted_notified_at is missing (apply migration 258). Stopped after one notice so nobody is told the same thing twice.',
-        }, { status: 500 })
-      }
+      // The stamp is already down (above). A notice nobody could send is not worth trying again
+      // every morning for the rest of the year.
       told++
       outcomes.push({ clientId, promiseId: row.id, state: row.state, sent: true })
     }
