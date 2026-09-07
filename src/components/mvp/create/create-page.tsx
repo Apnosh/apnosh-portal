@@ -696,7 +696,7 @@ export default function CreatePage() {
                     <span className="tx">
                       <span className="t" style={{ display: 'block', fontSize: 14 }}>{title}</span>
                       <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>
-                        {notSellableReason(id)}{alt ? ` ${T('{title} is {price} today.', { title: alt.title, price: alt.price })}` : ''}
+                        {notSellableReason(id)}{alt ? ` ${T('{title} is {price} today.', { title: alt.title, price: priceWord(alt.price) })}` : ''}
                       </span>
                     </span>
                     {alt

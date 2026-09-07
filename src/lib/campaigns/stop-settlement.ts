@@ -15,12 +15,20 @@
  * them back, and scripts/sim/refund-math.ts proves them with nothing running.
  */
 
+/**
+ * One clock for the day words. The stop route writes this line on the server (Vercel runs in
+ * UTC) and the campaign page can derive the same line in the owner's browser; without a fixed
+ * zone a refund sent at 7:30 pm Pacific prints "Sep 9" from one path and "Sep 8" from the other.
+ * Every Apnosh client is on the US West Coast today, so the day is the Pacific day.
+ */
+export const SETTLEMENT_TZ = 'America/Los_Angeles'
+
 /** The day words on a settlement, e.g. "Sep 8". Empty for a stamp we cannot read. */
 export function stopDayWords(iso: string | null | undefined): string | null {
   if (!iso) return null
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: SETTLEMENT_TZ })
 }
 
 const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`
