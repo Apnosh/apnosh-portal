@@ -398,6 +398,7 @@ export const ES: Record<string, string> = {
   'Print or save as PDF': 'Imprime o guarda como PDF',
   'Copy link': 'Copiar enlace',
   'Link copied': 'Enlace copiado',
+  'Could not copy': 'No se pudo copiar',
   'The link only opens for people who can already see your business.':
     'El enlace solo abre para quien ya puede ver tu negocio.',
   'What happens next': 'Lo que sigue',

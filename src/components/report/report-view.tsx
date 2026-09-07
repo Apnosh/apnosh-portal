@@ -27,6 +27,7 @@ import Link from 'next/link'
 import { ChevronLeft, Printer, Link2, Check } from 'lucide-react'
 import type { MonthlyReport } from '@/lib/report/build-month'
 import { t, localeOf, type Lang } from '@/lib/i18n/t'
+import { monthKey } from '@/lib/report/report-sent'
 
 const INK = '#12241d', MUTE = '#48484a', FAINT = '#8e8e93'
 
@@ -63,7 +64,7 @@ export default function ReportView({ report, bizName, backHref, lang = 'en' }: {
   const T = (k: string, vars?: Record<string, string | number>) => t(k, lang, vars)
   const locale = localeOf(lang)
   const n = (v: number) => v.toLocaleString(locale)
-  const [copied, setCopied] = useState(false)
+  const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
 
   const anyChapter = r.found || r.said || r.worked || r.moved
   const heroN = r.found?.total ?? ((r.moved?.directions ?? 0) + (r.moved?.calls ?? 0))
@@ -72,12 +73,27 @@ export default function ReportView({ report, bizName, backHref, lang = 'en' }: {
   const monthLabel = new Date(Date.UTC(r.year, r.month - 1, 1))
     .toLocaleDateString(locale, { month: 'long', timeZone: 'UTC' })
 
-  const copyLink = () => {
+  /**
+   * The link to THIS report, not to the address bar.
+   *
+   * window.location.href copied whatever brought them here: the email's ?src=email (which stamps
+   * an open for whoever they send it to), an admin's ?clientId=, or, on the current month, no
+   * month at all — so a link sent in October opened November's page. The canonical address is the
+   * month being read.
+   *
+   * And it says what happened. The write was fired and forgotten inside a try that a promise
+   * rejection never reaches, so a browser that refused the clipboard (no permission, an insecure
+   * origin) still said "Link copied" over an empty clipboard.
+   */
+  const copyLink = async () => {
+    const url = `${window.location.origin}${window.location.pathname}?m=${monthKey(r.year, r.month)}`
     try {
-      void navigator.clipboard.writeText(window.location.href)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
-    } catch { /* an older browser: the address bar still has it */ }
+      await navigator.clipboard.writeText(url)
+      setCopyState('copied')
+    } catch {
+      setCopyState('failed')
+    }
+    window.setTimeout(() => setCopyState('idle'), 2500)
   }
 
   return (
@@ -235,11 +251,11 @@ export default function ReportView({ report, bizName, backHref, lang = 'en' }: {
                 <Printer size={14} color="#2e9a78" /> {T('Print or save as PDF')}
               </button>
               <button
-                onClick={copyLink}
+                onClick={() => { void copyLink() }}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', borderRadius: 99, border: '1px solid #e6e6ea', background: '#fff', color: '#1d1d1f', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
               >
-                {copied ? <Check size={14} color="#2e9a78" /> : <Link2 size={14} color="#2e9a78" />}
-                {copied ? T('Link copied') : T('Copy link')}
+                {copyState === 'copied' ? <Check size={14} color="#2e9a78" /> : <Link2 size={14} color="#2e9a78" />}
+                {copyState === 'copied' ? T('Link copied') : copyState === 'failed' ? T('Could not copy') : T('Copy link')}
               </button>
             </div>
             <div style={{ fontSize: 11.5, color: FAINT, marginTop: 8, lineHeight: 1.45 }}>

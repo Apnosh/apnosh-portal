@@ -184,7 +184,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'What worked', '{n} people', '{n} post', '{n} posts',
     'saw your best post', 'saw your best post: {title}', 'published this month',
     'What it moved', 'Calls', 'Directions', 'Site visits',
-    'Send this to someone', 'Print or save as PDF', 'Copy link', 'Link copied',
+    'Send this to someone', 'Print or save as PDF', 'Copy link', 'Link copied', 'Could not copy',
     'The link only opens for people who can already see your business.',
     'What happens next', 'Next month builds on this one. Plan the next push in a minute.',
     'Open the builder',
