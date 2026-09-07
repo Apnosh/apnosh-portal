@@ -836,7 +836,7 @@ s.group('Intake rail: playbook needsInput keys reach the owner (recurring includ
   s.eq('delivery-opt declares pos-vendor (rendered as delivery logins)', playbookNeedKeys('delivery-opt').includes('pos-vendor'), true)
   s.eq('unknown service → no keys, no fake asks', playbookNeedKeys('nope').length, 0)
   // Drift guard: every needsInput key any playbook declares has a consumer in service-needs.ts.
-  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact'])
+  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact', 'truck-schedule'])
   const declared = new Set(Object.keys(SERVICE_PLAYBOOKS).flatMap((id) => playbookNeedKeys(id)))
   const orphans = [...declared].filter((k) => !HANDLED.has(k))
   s.check(`every declared needsInput key has an owner-facing ask (orphans: ${orphans.join(',') || 'none'})`, orphans.length === 0)
@@ -879,8 +879,10 @@ s.group('Goal chips: every chip maps to a real goal slug (the #1 priority is fin
   s.check(`every GOAL_CHIP maps to a slug (unmapped: ${unmapped.join(',') || 'none'})`, unmapped.length === 0)
   s.eq('the new regulars chip maps', goalSlugForChip('Turn first-timers into regulars'), 'regulars_more_often')
   s.eq('the new catering chip maps', goalSlugForChip('Grow catering orders'), 'grow_catering')
-  s.eq('the new photos chip maps', goalSlugForChip('Better photos of my food'), 'be_known_for')
-  s.eq('the new younger-crowd chip maps', goalSlugForChip('Reach a younger crowd'), 'be_known_for')
+  // One chip, one slug (migration 256): the six chips that used to collapse into be_known_for
+  // each read back as what the owner actually picked.
+  s.eq('the new photos chip maps', goalSlugForChip('Better photos of my food'), 'better_photos')
+  s.eq('the new younger-crowd chip maps', goalSlugForChip('Reach a younger crowd'), 'younger_crowd')
   s.eq('slow days chip → fill_slow_times', goalSlugForChip('More customers on slow days'), 'fill_slow_times')
   s.eq('an unknown chip maps to null (shape defaults stand)', goalSlugForChip('Something else entirely'), null)
 }
