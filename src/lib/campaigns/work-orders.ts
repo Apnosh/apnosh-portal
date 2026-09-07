@@ -8,7 +8,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 import { creatorById, rankCreators, type Disc } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, billNoticeDue, billNoticeLines, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
 import { feePercentForCreator, assignVendorsToOrderRows, notifyVendorsOfNewWork, notifyVendorOfWork, bestVendorForDiscipline, creatorNamesByIds } from './vendor-supply'
 import { isCampaignCheckoutPaid, isRequestCheckoutPaid } from './campaign-payments-server'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings, CreatorPayoutLine } from './view'
@@ -944,6 +944,28 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
       link: `/work/today?focus=${row.campaign_id ?? ''}`,
     }).catch(() => ({ notified: 0 }))
     return false
+  }
+
+  // KEEP THE PROMISE THE SCREEN MAKES. A graphic order takes no card: the cart says "No charge
+  // today. After you approve the work, we send you the bill." The only thing that turns this
+  // accrued row into a real invoice is an admin button on the client's billing card, and nobody
+  // knew to press it — so the bill was never sent. Now the accrual tells a person, by name and
+  // amount, with the link. Best-effort and once per charge (a re-accrual returns above on 23505).
+  if (billNoticeDue({ requestId, covered, amountCents: row.amount_cents })) {
+    try {
+      const { data: client } = await admin.from('clients').select('name, slug').eq('id', row.client_id).maybeSingle()
+      const name = ((client as { name?: string } | null)?.name) ?? 'A client'
+      const slug = (client as { slug?: string } | null)?.slug ?? ''
+      const words = billNoticeLines(name, String(o.title ?? 'a piece'), row.amount_cents)
+      await notifyStaffForClient(row.client_id, ['strategist', 'designer'], {
+        kind: 'client_signoff',
+        title: words.title,
+        body: words.body,
+        link: slug ? `/admin/clients/${slug}#stripe-billing-card` : '/admin/billing',
+      }, { alsoAdmins: true }).catch(() => ({ notified: 0 }))
+    } catch (e) {
+      console.warn('[accrueCharge] send-the-bill notice failed', (e as Error)?.message)
+    }
   }
   return true
 }

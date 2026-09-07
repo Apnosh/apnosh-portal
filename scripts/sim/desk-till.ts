@@ -17,7 +17,7 @@ import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout
 import { refundOwedCents, refundStatus, COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 import { deskPaymentMatchesOrder, paymentMatchesLane, deskPaymentDue, deskCancelable, AWAITING_PAYMENT, DESK_INTENT_KINDS, CAMPAIGN_INTENT_KINDS } from '@/lib/requests/desk-guards'
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
-import { workStarted } from '@/lib/campaigns/work-orders-core'
+import { workStarted, billNoticeDue, billNoticeLines } from '@/lib/campaigns/work-orders-core'
 import { DESIGN_LINES } from '@/lib/design/design-copy'
 import { lineFor, type PromiseState } from '@/lib/promises/lines'
 import { Suite } from './lib'
@@ -195,6 +195,18 @@ function main() {
   const confirmSub = DESIGN_LINES['cart.confirm.sub']
   const doneSub = DESIGN_LINES['done.sub.order']
   s.check('the confirm line no longer promises a bill nothing writes', !confirmSub.includes('Goes on your Apnosh bill'))
+  // And the bill it DOES promise is one a person really sends: the accrual pages the team.
+  s.check('the line says a person sends the bill', confirmSub.includes('we send you the bill'))
+  s.check('so does the done line', doneSub.includes('we send you the bill'))
+  const GRAPHIC = 'req-3333'
+  s.check('a graphic nobody paid for at the till needs a bill sent', billNoticeDue({ requestId: GRAPHIC, covered: false, amountCents: 4_000 }))
+  s.check('one already paid at the till does not', !billNoticeDue({ requestId: GRAPHIC, covered: true, amountCents: 4_000 }))
+  s.check('a campaign piece does not — its cart or its invoice lane already told somebody', !billNoticeDue({ requestId: '', covered: false, amountCents: 4_000 }))
+  s.check('an unpriced piece does not — that has its own "no price" page', !billNoticeDue({ requestId: GRAPHIC, covered: false, amountCents: 0 }))
+  const words = billNoticeLines('Yellow Bee Market', 'Graphic design · request', 4_000)
+  s.check('the notice names who, what and how much', words.title.includes('Yellow Bee Market') && words.title.includes('Graphic design') && words.body.includes('$40.00'))
+  s.check('and tells the person what to do', words.title.startsWith('Send the bill') && words.body.includes('send the invoice'))
+  s.check('no em dashes in the notice either', !words.title.includes('—') && !words.body.includes('—'))
   s.check('it says nothing is charged today', confirmSub.toLowerCase().includes('no charge today'))
   s.check('and names the moment the money is real: approval', confirmSub.toLowerCase().includes('approve'))
   s.check('the done line says the same thing, in the same words', doneSub.toLowerCase().includes('approve'))

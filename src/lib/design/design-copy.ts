@@ -289,15 +289,20 @@ export const DESIGN_LINES: Record<string, string> = {
    * still mints on placement and takes no card (the till charges one row per PaymentIntent and
    * "add another graphic" places several at once). Nothing is charged today; the money row is
    * written when the owner APPROVES the finished piece (accrueChargeForApprovedOrder), and that
-   * row is what an invoice is made from. So the line says exactly that and nothing more. */
-  'cart.confirm.sub': 'No charge today. We bill it after you approve the work.',
+   * row is what an invoice is made from. So the line says exactly that and nothing more.
+   *
+   * "WE SEND YOU THE BILL", because a PERSON sends it. Nothing in the product turns an accrued row
+   * into an invoice by itself — it is an admin button on the client's billing card. The accrual now
+   * pages the team to press it (billNoticeDue in work-orders-core.ts), so this is a promise the
+   * product actually keeps. "We bill it" said a machine did it, and no machine does. */
+  'cart.confirm.sub': 'No charge today. After you approve the work, we send you the bill.',
   'cart.change': 'Change something',
   'cart.another': 'Add another graphic',
   'cart.held': 'Also in your cart',
   'cart.remove': 'Remove',
   'cart.pieces': 'graphics in this order',
   'done.title.order': 'Order placed',
-  'done.sub.order': 'Your team has it and work starts now. We bill it after you approve the finished work. Follow it in Your requests.',
+  'done.sub.order': 'Your team has it and work starts now. After you approve the finished work, we send you the bill. Follow it in Your requests.',
 
   /* Request mode: the same flow while the rate card is unsigned. No numbers appear
    * anywhere; the seal sends a quote request instead of recording an order. */
