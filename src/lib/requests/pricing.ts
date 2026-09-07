@@ -145,10 +145,11 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
 
     case 'social': {
       // Monthly lines. Marked so the shared fee function never touches them — the cart takes no
-      // fee on monthly, so neither can the desk.
-      if (a.count === '8 a month') lines.push(monthlyLine('Posts, 8 a month', 560, 'You picked 8 posts a month. This is a monthly price.'))
-      else if (a.count === '12 or more') lines.push(monthlyLine('Posts, 12 a month', 780, 'You picked 12 or more posts a month. This is a monthly price.'))
-      else lines.push(monthlyLine('Posts, 4 a month', 320, 'The starter batch: 4 posts a month. This is a monthly price.'))
+      // fee on monthly, so neither can the desk. The desk bills ONE month at a time today (no
+      // subscription), so the wording says the first month, not "every month".
+      if (a.count === '8 a month') lines.push(monthlyLine('Posts, 8 a month', 560, 'You picked 8 posts a month. This price is for one month; we ask again before the next one.'))
+      else if (a.count === '12 or more') lines.push(monthlyLine('Posts, 12 a month', 780, 'You picked 12 or more posts a month. This price is for one month; we ask again before the next one.'))
+      else lines.push(monthlyLine('Posts, 4 a month', 320, 'The starter batch: 4 posts a month. This price is for one month; we ask again before the next one.'))
       break
     }
 
@@ -237,9 +238,17 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
 /** "$250" / "$1,200" for whole-dollar sheet prices. */
 export const fmtCents = (cents: number): string => `$${Math.round(cents / 100).toLocaleString()}`
 
-/** The total, said the way it is billed. A monthly-only order is "$560 a month", never a
- *  one-time-looking "$560" — the owner should never learn the word "monthly" after they pay. */
-export const fmtTotal = (p: CreativePrice): string => `${fmtCents(p.totalCents)}${p.monthly ? ' a month' : ''}`
+/**
+ * The total, said the way it is really billed.
+ *
+ * A monthly line used to print "$560 a month", which promised a subscription the Request Desk does
+ * not have: POST /api/requests stores quote_cents ONCE with no cadence and mints one work order.
+ * Nothing bills a second month. So the desk charges the first month, and says so.
+ *
+ * When the desk goes through the till (recurring billing on a request), this becomes "a month"
+ * again — the cadence now rides on the row, so the change is one line here.
+ */
+export const fmtTotal = (p: CreativePrice): string => `${fmtCents(p.totalCents)}${p.monthly ? ' for the first month' : ''}`
 
 /** The valve, said the way Tony needs to hear it (persona guardrail). */
 export const VALVE_LINE =
