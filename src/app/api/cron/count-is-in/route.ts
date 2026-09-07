@@ -20,9 +20,11 @@
  * nobody could send is not retried every morning for the rest of the year. Pre-258 the column is
  * absent: the stamp fails, nothing is sent, and the run says which SQL to apply.
  *
- * Auth: the CRON_SECRET as a query param or a bearer token, or Vercel's own cron user-agent. With
- * no CRON_SECRET set the route refuses to run at all — the user-agent is a header anyone can send,
- * and this route emails owners. `dryRun=1` computes who WOULD be told and writes nothing.
+ * Auth: THE CRON_SECRET, ALWAYS. A query param or a bearer token, and nothing else — the
+ * vercel-cron user-agent is a header anyone can send, and this route emails owners, so it is not a
+ * door. Vercel sends the secret itself (Authorization: Bearer $CRON_SECRET) on scheduled runs when
+ * CRON_SECRET is set in the project, so the real cron still gets in. With no CRON_SECRET set the
+ * route refuses to run at all. `dryRun=1` computes who WOULD be told and writes nothing.
  */
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -41,16 +43,15 @@ export async function GET(req: Request) {
   const url = new URL(req.url)
   const querySecret = url.searchParams.get('secret')
   const headerSecret = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
-  const isVercelCron = req.headers.get('user-agent')?.includes('vercel-cron')
-  // FAIL CLOSED WHEN THERE IS NO SECRET. With CRON_SECRET unset, `querySecret !== CRON_SECRET` is
-  // true for a missing param too, so the only door left was the user-agent — a header anyone can
-  // send. This route emails every owner whose count is in; an open door on it is a mailshot with
-  // somebody else's name on it.
+  // THE SECRET, ALWAYS. The other crons also open on the vercel-cron user-agent, which is a plain
+  // header anyone can send. On this one that is a mailshot: it emails every owner whose count is
+  // in, in their own name. So the user-agent is not accepted here at all, and with CRON_SECRET
+  // unset the route refuses to run rather than falling open.
   if (!CRON_SECRET) {
     console.error('[count-is-in] CRON_SECRET is not set; refusing to run')
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  if (!isVercelCron && querySecret !== CRON_SECRET && headerSecret !== CRON_SECRET) {
+  if (querySecret !== CRON_SECRET && headerSecret !== CRON_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   const dryRun = url.searchParams.get('dryRun') === '1'
