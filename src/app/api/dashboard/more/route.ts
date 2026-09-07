@@ -7,6 +7,10 @@
  *      two settings. Favorites live in businesses.preferences (jsonb), approve-first in
  *      businesses.approval_preferences.auto_approve (the same flag the old Settings toggle
  *      wrote), so nothing needs a migration.
+ * PATCH /api/dashboard/more            — { clientId, language } saves the one CLIENT-row
+ *      setting the owner controls: clients.preferred_language (migration 259). Its own verb
+ *      because it writes a different table than POST does, and its own whitelist because a
+ *      body key that is not on the list must never reach an update on the clients row.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -14,6 +18,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getActiveClientGoals, getGoalsCatalog } from '@/lib/goals/queries'
 import { getRatingsForOrders } from '@/lib/campaigns/work-ratings'
 import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
+import { DEFAULT_LANG, isLang, type Lang } from '@/lib/i18n/t'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +32,9 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
   const [client, biz, gbp, goals, catalog, orders] = await Promise.all([
-    admin.from('clients').select('name, location, tier').eq('id', clientId).maybeSingle(),
+    // preferred_language is selected by name; before migration 259 the whole select errors, so
+    // it is guarded by readLanguage below rather than by a second round trip.
+    admin.from('clients').select('name, location, tier, preferred_language').eq('id', clientId).maybeSingle(),
     admin.from('businesses').select('logo_url, cuisine, cuisine_other, preferences, approval_preferences').eq('client_id', clientId).maybeSingle(),
     admin.from('gbp_locations').select('hours, address').eq('client_id', clientId).limit(1).maybeSingle(),
     getActiveClientGoals(clientId).catch(() => []),
@@ -67,7 +74,7 @@ export async function GET(req: NextRequest) {
       hours: (gbp.data?.hours as unknown) ?? null,
       goals: (goals as Array<{ goalSlug: string; priority: number }>).sort((a, b) => a.priority - b.priority).map((g) => ({ slug: g.goalSlug, name: (catalog as Array<{ slug: string; displayName: string }>).find((c) => c.slug === g.goalSlug)?.displayName ?? g.goalSlug })),
     },
-    settings: { approveFirst: !(approval.auto_approve === true), favorites },
+    settings: { approveFirst: !(approval.auto_approve === true), favorites, language: readLanguage(client.data) },
     people: [...peopleMap.values()],
     toRate,
   }, { headers: { 'Cache-Control': 'no-store' } })
@@ -88,4 +95,42 @@ export async function POST(req: NextRequest) {
   const { error } = await admin.from('businesses').update(patch).eq('id', biz.id as string)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
+}
+
+/** The saved language, or English. A row read before migration 259 has no such field, and
+ *  English is what that owner is already being shown, so it is the honest fallback. */
+function readLanguage(row: unknown): Lang {
+  const v = (row as { preferred_language?: unknown } | null)?.preferred_language
+  return isLang(v) ? v : DEFAULT_LANG
+}
+
+/**
+ * The owner's language. One key, whitelisted: anything else in the body is ignored rather than
+ * forwarded, so this can never become a way to write an arbitrary column on the clients row.
+ *
+ * Best-effort on a database where migration 259 has not run yet: the column is missing, we warn
+ * and answer ok:false with a reason instead of 500-ing a settings screen. The owner keeps
+ * English, which is what they were reading anyway.
+ */
+export async function PATCH(req: NextRequest) {
+  const body = (await req.json().catch(() => ({}))) as { clientId?: string; language?: unknown }
+  if (!body.clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
+  const access = await checkClientAccess(body.clientId)
+  if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
+
+  // THE WHITELIST. One key, and its value must be one of the two the CHECK allows.
+  if (!isLang(body.language)) return NextResponse.json({ error: "language must be 'en' or 'es'" }, { status: 400 })
+
+  const { error } = await createAdminClient()
+    .from('clients')
+    .update({ preferred_language: body.language })
+    .eq('id', body.clientId)
+  if (error) {
+    if (error.code === '42703' || error.code === 'PGRST204') {
+      console.warn('[more] clients.preferred_language is missing; run migration 259.')
+      return NextResponse.json({ ok: false, reason: 'not_migrated' })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  return NextResponse.json({ ok: true, language: body.language })
 }
