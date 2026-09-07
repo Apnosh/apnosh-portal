@@ -23,7 +23,9 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const CRON_SECRET = process.env.CRON_SECRET
-const IMPACT_LINK = '/dashboard/insights'
+/* the report itself, not the Insights tab: the notification says the recap is ready, so it has
+   to open the recap */
+const IMPACT_LINK = '/dashboard/insights/impact'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)

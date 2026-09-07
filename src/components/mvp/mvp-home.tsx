@@ -96,6 +96,15 @@ export interface MetricView {
   lastDataDate: string      // freshest day with data (data frontier); '' if none
 }
 
+/** The monthly-report nudge: last month has something to report, and this is where it lives. */
+export interface HomeReview {
+  prevMonthLabel: string
+  cycleLabel: string
+  /** whole dollars paid last month; 0 means they paid nothing, and the copy drops the number */
+  budget: number
+  href: string
+}
+
 export interface MvpHomeData {
   greeting: string
   avatarText: string
@@ -106,7 +115,7 @@ export interface MvpHomeData {
   /** Tailored "stack" cards shown at the top of Home (one reads as "Do this next"). */
   suggestions?: Suggestion[]
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
-  review: { prevMonthLabel: string; cycleLabel: string; budget: number } | null
+  review: HomeReview | null
   planner?: { id: string; day: string; mon: string; daysLabel: string; label: string; hook: string; planned: boolean }[]
   /** Recent activity timeline (since-you-last-checked): posts live, reviews, replies, milestones. */
   activity?: TimelineEvent[]
@@ -254,15 +263,21 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 66, height: 66, bottom: -26, left: 40, borderRadius: '50%', border: '2px solid rgba(255,255,255,.18)' }} />
             <i aria-hidden className="mvp-spin" style={{ position: 'absolute', width: 22, height: 22, top: 34, right: 30, borderRadius: 6, background: 'rgba(255,255,255,.12)' }} />
             <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 11, height: 11, bottom: 18, right: 78, borderRadius: '50%', background: 'rgba(255,255,255,.3)' }} />
-            <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11 }}>
+            {/* the whole row opens the report; the X sits above it (zIndex 3) so hiding still works */}
+            <Link href={data.review.href} style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11, color: '#fff', textDecoration: 'none' }}>
               <div className="mvp-floaty" style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} /><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .92 }}>New this month</span></div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>Your {data.review.prevMonthLabel} review is ready</div>
-                <div style={{ fontSize: 12.5, opacity: .9, marginTop: 1 }}>See what last month&apos;s ${data.review.budget} did, then set {data.review.cycleLabel} in one decision.</div>
+                {/* the dollar line only when they actually paid us last month */}
+                <div style={{ fontSize: 12.5, opacity: .9, marginTop: 1 }}>
+                  {data.review.budget > 0
+                    ? `See what last month's $${data.review.budget} did, then plan ${data.review.cycleLabel}.`
+                    : `See what last month did, then plan ${data.review.cycleLabel}.`}
+                </div>
               </div>
               <ChevronRight size={20} />
-            </div>
+            </Link>
             <button onClick={() => setReviewHidden(true)} aria-label="Hide review" style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.22)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
           </div>
         )}

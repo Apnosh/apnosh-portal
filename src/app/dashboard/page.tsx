@@ -41,7 +41,7 @@ export default function DashboardHomePage() {
       })
       .then((json) => {
         if (!live) return
-        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp)
+        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp, json.review ?? null)
         d.activity = json.sinceLastChecked ?? []
         d.upcomingWork = json.upcomingWork ?? []
         setData(d)
