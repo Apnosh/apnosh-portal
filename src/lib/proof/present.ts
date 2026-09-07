@@ -9,12 +9,16 @@ export interface ProofCta { label: string; href: string }
 
 export const STATE_TYPES = ['steady', 'coming_up', 'reviews_waiting', 'approval_waiting', 'complaint_watch', 'start_campaign', 'connect_google', 'google_paused', 'google_quiet', 'setup_waiting', 'connect_social', 'connect_site', 'reviews_none', 'occasion_soon'] as const
 export type StateType = typeof STATE_TYPES[number]
-export type EventType = 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'campaign_moved' | 'social_month' | 'site_week'
+export type EventType = 'gbp_week' | 'post' | 'reviews' | 'gbp_down' | 'campaign_moved' | 'social_month' | 'site_week' | 'promise_counted'
 export type AnyCardType = EventType | StateType
 
 export function presentCardType(type: string): { tone: ProofTone; cta?: ProofCta } {
   switch (type) {
     case 'gbp_week': case 'post': case 'reviews': case 'social_month': case 'site_week': return { tone: 'win' }
+    // The count on an order the owner bought. Mint like the rest, and the ONLY type the wins
+    // shelf and the share link accept (src/lib/love/win.ts). Its action is the order it came
+    // from, which is where the number is explained.
+    case 'promise_counted': return { tone: 'win', cta: { label: 'See results', href: '/dashboard/campaigns' } }
     case 'campaign_moved': return { tone: 'win', cta: { label: 'See the campaign', href: '/dashboard/campaigns' } }
     case 'gbp_down': return { tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } }
     case 'steady': return { tone: 'heads_up' }

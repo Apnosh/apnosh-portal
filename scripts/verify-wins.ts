@@ -3,10 +3,11 @@
  *
  * Four claims, and each one is a way this move could quietly lie to an owner:
  *
- *   1. WHAT COUNTS AS A WIN. Only a stored card that is mint AND carries a real number. A quiet
- *      week, a "connect Google" state card, and a card whose big line has no number in it must
- *      never get a Show someone button — because the button mints a PUBLIC page, and a public page
- *      with no number on it is a claim about a business with nothing behind it.
+ *   1. WHAT COUNTS AS A WIN. A COUNTED PROMISE and nothing else: an order the owner bought, whose
+ *      promised number came in on the day they were told. A good Google week, a quiet week, a
+ *      "connect Google" state card, a seeded sample and a card whose big line has no number in it
+ *      must never get a Show someone button — because the button mints a PUBLIC page that says
+ *      "Counted by Apnosh" at the foot, and nobody counted a week that happened on its own.
  *   2. THE SHARE TOKEN IS AN ADDRESS NOBODY CAN GUESS. Long, from real randomness, and shaped so a
  *      junk URL is rejected before it ever reaches the database.
  *   3. THE REPORT NEVER PRINTS A NUMBER IT DOES NOT HAVE. A chapter with nothing in it gets the
@@ -23,7 +24,8 @@
  *
  *   npx tsx scripts/verify-wins.ts
  */
-import { isWin, isWinType, winNumber, newShareToken, isShareToken } from '../src/lib/love/win'
+import { isWin, isWinType, winNumber, newShareToken, isShareToken, winTypeIsMint, renderCardWords, WIN_TYPE } from '../src/lib/love/win'
+import { countedCardWords, COUNTED_LABEL_KEY, COUNTED_BIG_KEY, COUNTED_CONTEXT_KEY } from '../src/lib/promises/lines'
 import {
   isFirstBusinessDay, monthKey, previousMonth, reportLines, hasSomethingToSay,
   WAITING_KEY, MOVED_KEY, SAID_ONE_KEY, SAID_MANY_KEY, WORKED_KEY, WORKED_POSTS_KEY,
@@ -41,30 +43,77 @@ function check(name: string, ok: boolean | (() => boolean), detail?: string) {
   console.log(`  FAIL ${name}${detail ? `  →  ${detail}` : ''}`)
 }
 
-const win = (over: Partial<{ cardKey: string; cardType: string; big: string }> = {}) => ({
-  cardKey: 'gbp-2026-08-24', cardType: 'gbp_week', big: '9 calls · 31 direction taps', ...over,
+const win = (over: Partial<{ cardKey: string; cardType: string; big: string; isSample: boolean }> = {}) => ({
+  cardKey: 'promise:8f1c', cardType: 'promise_counted', big: '41 taps on your Google card', ...over,
+})
+
+/** A ledger row whose count is in, as countedCardWords reads it. */
+const counted = (over: Partial<Parameters<typeof countedCardWords>[0]> = {}) => ({
+  state: 'counted' as const,
+  label: 'Taco Tuesday push',
+  metricKey: 'gbp_card_taps',
+  metricLabel: 'taps on your Google card',
+  value: '41',
+  countFrom: '2026-08-24',
+  showsOn: '2026-09-07',
+  ...over,
 })
 
 console.log('\n1. What counts as a win')
 {
-  check('a Google week with numbers is a win', isWin(win()))
-  check('a post that reached people is a win', isWin(win({ cardKey: 'post-abc', cardType: 'post', big: '2,418 people saw it' })))
-  check('a review month is a win', isWin(win({ cardKey: 'reviews-2026-08', cardType: 'reviews', big: '6 new reviews · 4.7 average' })))
-  check('a campaign that moved a number is a win', isWin(win({ cardKey: 'campaign-moved-1', cardType: 'campaign_moved', big: '41 taps · was 13' })))
+  check('a counted promise with a number is a win', isWin(win()))
 
+  check('a sample card is NOT a win', !isWin(win({ isSample: true })))
+  check('a good Google week is NOT a win', !isWin(win({ cardKey: 'gbp-2026-08-24', cardType: 'gbp_week', big: '9 calls · 31 direction taps' })))
+  check('a post that did well is NOT a win', !isWin(win({ cardKey: 'post-abc', cardType: 'post', big: '2,418 people saw it' })))
+  check('a review month is NOT a win', !isWin(win({ cardKey: 'reviews-2026-08', cardType: 'reviews', big: '6 new reviews · 4.7 average' })))
   check('a quiet week is NOT a win', !isWin(win({ cardKey: 'gbp-down-2026-08-24', cardType: 'gbp_down', big: '3 calls · 14 direction taps' })))
-  check('a state card is NOT a win, whatever its tone', !isWin(win({ cardKey: 'state-coming-up', cardType: 'gbp_week', big: '3 pieces this week' })))
-  check('a card with no number is NOT a win', !isWin(win({ big: 'Start your first campaign' })))
-  check('a card whose number is zero is NOT a win', !isWin(win({ big: '0 calls · 0 direction taps' })))
+  check('a state card is NOT a win, whatever its tone', !isWin(win({ cardKey: 'state-coming-up' })))
   check('connect Google is NOT a win', !isWin(win({ cardKey: 'state-connect-google', cardType: 'connect_google', big: 'Connect Google' })))
+  check('a counted promise with no number is NOT a win', !isWin(win({ big: 'Not counted' })))
+  check('a counted promise whose number is zero is NOT a win', !isWin(win({ big: '0 taps on your Google card' })))
+  check('a counted promise whose number went backwards is NOT a win', !isWin(win({ big: '-5 taps on your Google card' })))
 
-  check('the tone table is the deck\'s, not a second copy', isWinType('gbp_week') && isWinType('post') && !isWinType('gbp_down') && !isWinType('reviews_waiting'))
+  check('there is exactly one winning type', isWinType(WIN_TYPE) && !isWinType('gbp_week') && !isWinType('post') && !isWinType('reviews_waiting'))
+  check('the winning type is still mint on Home', winTypeIsMint())
 
   check('a thousands separator is one number, not two', winNumber('2,418 people saw it') === 2418)
   check('a decimal survives', winNumber('4.7 average') === 4.7)
+  check('a minus belongs to the number after it', winNumber('-5 calls') === null && winNumber('−5 calls') === null)
   check('no digits means no number', winNumber('Start your first campaign') === null)
   check('zero is not a number worth showing', winNumber('0 calls') === null)
   check('rubbish in is null out', winNumber('') === null && winNumber(undefined as unknown as string) === null)
+}
+
+console.log('\n1b. The card a counted promise makes')
+{
+  const c = countedCardWords(counted())
+  check('a counted promise makes a card', !!c)
+  check('the label names what they ordered', c?.label.key === COUNTED_LABEL_KEY && c?.label.vars.label === 'Taco Tuesday push')
+  check('the big line is the number and its unit', c?.big.key === COUNTED_BIG_KEY && c?.big.vars.n === '41' && c?.big.vars.unit === 'taps on your Google card')
+  check('the context is the window it was counted over',
+    c?.context.key === COUNTED_CONTEXT_KEY && c?.context.vars.from === '2026-08-24' && c?.context.vars.to === '2026-09-07')
+
+  check('a promise still counting makes no card', countedCardWords(counted({ state: 'counting' })) === null)
+  check('a promise the product cannot count makes NO card', countedCardWords(counted({ state: 'not_counted', value: 'Not counted' })) === null)
+  check('a stopped order makes no card', countedCardWords(counted({ state: 'stopped', value: 'Stopped' })) === null)
+  check('a delivered order with no number makes no card', countedCardWords(counted({ state: 'delivered', value: 'Done' })) === null)
+  check('zero makes no card', countedCardWords(counted({ value: '0 so far' })) === null)
+  check('a number that went backwards makes no card', countedCardWords(counted({ value: '-5' })) === null)
+  check('a missing number makes no card', countedCardWords(counted({ value: '—' })) === null)
+  // A rating reads "4.5 → 4.7"; the number that is true today is the second one.
+  check('a rating takes the number it is NOW', countedCardWords(counted({ metricKey: 'rating', value: '4.5 → 4.7' }))?.n === 4.7)
+  check('every other metric takes the number it leads with', countedCardWords(counted({ value: '41' }))?.n === 41)
+
+  // The card the composer stores, and the card a reader draws from it, are the same card.
+  const stored = { words: { label: c!.label, big: c!.big, context: c!.context } }
+  const en = renderCardWords(stored, { label: 'x', big: 'y', context: 'z' }, 'en')
+  check('the English card reads as one sentence per line',
+    en.label === 'Counted: Taco Tuesday push' && en.big === '41 taps on your Google card' && en.context === 'Counted Aug 24–Sep 7',
+    `${en.label} | ${en.big} | ${en.context}`)
+  check('the card a counted promise makes is a win', isWin({ cardKey: 'promise:8f1c', cardType: WIN_TYPE, big: en.big, isSample: false }))
+  check('a card with no stored words falls back to what the row says',
+    renderCardWords(null, { label: 'a', big: 'b', context: 'c' }, 'es').big === 'b')
 }
 
 console.log('\n2. The share token')

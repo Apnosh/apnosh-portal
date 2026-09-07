@@ -113,3 +113,78 @@ export function lineFor(r: LineInput): string {
   }
   return `${r.value} · ${r.small}`
 }
+
+/* ── Move 7b: the card a counted promise makes ────────────────────────────────────────────
+ *
+ * When an order's count comes in, the cron composes ONE proof card from it (card_type
+ * 'promise_counted'), and that card is the only thing the product calls a WIN. Its three lines
+ * are written here, beside the seven states, because a win is a promise kept: the card and the
+ * ledger row it came from must never say different things about the same order.
+ *
+ * They come back as KEYS plus their numbers, not as finished sentences. The card is written once
+ * and read later — on the owner's shelf, on a public page somebody was sent — so its words have
+ * to be re-drawable in the owner's own language (src/lib/i18n/t.ts fills the holes). A date is
+ * handed over as a plain YYYY-MM-DD and written out at render, for the same reason.
+ */
+
+export const COUNTED_LABEL_KEY = 'Counted: {label}'
+export const COUNTED_BIG_KEY = '{n} {unit}'
+export const COUNTED_CONTEXT_KEY = 'Counted {from}–{to}'
+
+/** One line of a card: the key, and the holes filled at render. */
+export interface KeyVars { key: string; vars: Record<string, string | number> }
+
+/** What the ledger row and its computed line give the card. (PromiseRow plus the stored row.) */
+export interface CountedInput {
+  state: PromiseState
+  /** order_promises.label — the owner's name for what they ordered */
+  label: string
+  /** order_promises.metric_key */
+  metricKey: string
+  /** order_promises.metric_label — "taps on your Google card" */
+  metricLabel: string
+  /** the ledger's own number line: "41", "12k", "4.5 → 4.7" */
+  value: string
+  /** order_promises.count_from / shows_on, YYYY-MM-DD */
+  countFrom: string
+  showsOn: string
+}
+
+export interface CountedCard { n: number; label: KeyVars; big: KeyVars; context: KeyVars }
+
+/** Every number in a line, in order. A leading minus belongs to the number after it. */
+function numbersIn(s: string): number[] {
+  const out: number[] = []
+  for (const m of String(s ?? '').matchAll(/[-−]?\d[\d,]*(\.\d+)?/g)) {
+    const n = Number(m[0].replace(/,/g, '').replace('−', '-'))
+    if (Number.isFinite(n)) out.push(n)
+  }
+  return out
+}
+
+/**
+ * The card for a promise whose count is in, or NULL when there is nothing to show.
+ *
+ * Null in three cases, and each one is a card that would have been a lie: the order is not
+ * counted (it is still running, or the product said up front it cannot read this number), the
+ * line carries no number at all, or the number is zero or below. "0 taps" is a true sentence and
+ * a terrible thing to hand a friend.
+ *
+ * A rating reads as a pair, "4.5 → 4.7". The number that is true today is the SECOND one, so a
+ * rating takes the last number on the line and everything else takes the first. `n` is the number
+ * the line LEADS with, not the count itself — the ledger shortens a big one to "12k" — and it is
+ * here to answer one question: is there a real, positive number on this card at all.
+ */
+export function countedCardWords(p: CountedInput): CountedCard | null {
+  if (p.state !== 'counted') return null
+  const nums = numbersIn(p.value)
+  if (!nums.length) return null
+  const n = p.metricKey === 'rating' ? nums[nums.length - 1] : nums[0]
+  if (!Number.isFinite(n) || n <= 0) return null
+  return {
+    n,
+    label: { key: COUNTED_LABEL_KEY, vars: { label: p.label } },
+    big: { key: COUNTED_BIG_KEY, vars: { n: p.value.trim(), unit: p.metricLabel } },
+    context: { key: COUNTED_CONTEXT_KEY, vars: { from: p.countFrom, to: p.showsOn } },
+  }
+}

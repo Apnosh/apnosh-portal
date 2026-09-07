@@ -8,10 +8,11 @@
  * re-reads the winner's token and both get the same link. A link an owner already sent somebody
  * must not stop working because they tapped Share again.
  *
- * ONLY A WIN GETS ONE. The rules live in src/lib/love/win.ts: the card has to be stored, mint by
- * the same table the deck reads, and carrying a real number. A heads-up ("a quieter week") and a
- * state card ("connect Google") have no public page at all — there is no URL to leak, because
- * none is ever made.
+ * ONLY A WIN GETS ONE. The rules live in src/lib/love/win.ts: the card has to be a COUNTED
+ * PROMISE — an order the owner bought, counted on the day they were told — real (not a sample),
+ * and carrying a positive number. A good Google week, a heads-up ("a quieter week") and a state
+ * card ("connect Google") have no public page at all: there is no URL to leak, because none is
+ * ever made.
  *
  * Best-effort before migration 260: a missing share_token column answers { url: null, pending }
  * and the button falls back to what it can do (the owner still has the card on their own screen).
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest) {
   const admin = createAdminClient()
   const { data: row, error } = await admin
     .from('proof_cards')
-    .select('id, card_key, card_type, big, share_token')
+    .select('id, card_key, card_type, big, is_sample, share_token')
     .eq('client_id', clientId)
     .eq('card_key', cardKey)
     .maybeSingle()
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   if (!row) return NextResponse.json({ error: 'no such card' }, { status: 404 })
-  if (!isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big) })) {
+  if (!isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true })) {
     return NextResponse.json({ error: 'that card is not a win' }, { status: 400 })
   }
 

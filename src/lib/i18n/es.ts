@@ -409,8 +409,8 @@ export const ES: Record<string, string> = {
   'Wins': 'Logros',
   'Proof you can show someone': 'Pruebas que puedes enseñar',
   'No wins yet': 'Todavía no hay logros',
-  'When a week beats the one before, or a post beats your usual reach, the card lands here. Then you can show it to someone.':
-    'Cuando una semana gana a la anterior, o una publicación llega a más gente de lo normal, la tarjeta cae aquí. Después se la puedes enseñar a alguien.',
+  'When an order you paid for gets its count, the card lands here. Then you can show it to someone.':
+    'Cuando un pedido que pagaste recibe su cuenta, la tarjeta cae aquí. Después se la puedes enseñar a alguien.',
   'The wins shelf is almost on. A small database update turns it on.':
     'La repisa de logros casi está lista. Una actualización pequeña de la base de datos la enciende.',
   'Show someone': 'Enséñaselo a alguien',
@@ -420,8 +420,8 @@ export const ES: Record<string, string> = {
   'The share link is not on yet. A small database update turns it on.':
     'El enlace para compartir todavía no está listo. Una actualización pequeña de la base de datos lo enciende.',
   'Nothing to show here': 'Aquí no hay nada que enseñar',
-  'Only a card with a real number is something to show. See the rest on your wins shelf.':
-    'Solo una tarjeta con un número real se puede enseñar. Mira las demás en tu repisa de logros.',
+  'Only an order we counted is something to show. See the rest on your wins shelf.':
+    'Solo un pedido que contamos se puede enseñar. Mira los demás en tu repisa de logros.',
   'Made with Apnosh': 'Hecho con Apnosh',
   'This link does not work': 'Este enlace no funciona',
   'It may have been cut short, or the card was taken down. Ask for it again.':

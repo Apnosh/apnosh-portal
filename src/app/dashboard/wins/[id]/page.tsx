@@ -35,15 +35,16 @@ export default async function WinPage({ params, searchParams }: {
 
   const admin = createAdminClient()
   const [{ data: row }, { data: client }, lang] = await Promise.all([
+    // select('*') so a database without metadata (pre-262) or share_token (pre-260) still reads.
     admin.from('proof_cards')
-      .select('card_key, card_type, label, big, context, fired_at')
+      .select('*')
       .eq('client_id', clientId).eq('card_key', decodeURIComponent(id)).maybeSingle(),
     admin.from('clients').select('name').eq('id', clientId).maybeSingle(),
     getClientLanguage(clientId),
   ])
 
   const T = (k: string) => t(k, lang)
-  const good = !!row && isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big) })
+  const good = !!row && isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true })
   /* the month the win happened in. A row with no readable fired_at gets no month rather than the
      words "Invalid Date" printed on something the owner is about to send somebody. */
   const fired = row?.fired_at ? new Date(String(row.fired_at)) : null
@@ -79,7 +80,7 @@ export default async function WinPage({ params, searchParams }: {
           <div style={{ background: '#fff', borderRadius: 18, padding: '30px 20px', textAlign: 'center', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06)' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1d1d1f' }}>{T('Nothing to show here')}</div>
             <div style={{ fontSize: 12.5, color: '#6e6e73', marginTop: 6, lineHeight: 1.5 }}>
-              {T('Only a card with a real number is something to show. See the rest on your wins shelf.')}
+              {T('Only an order we counted is something to show. See the rest on your wins shelf.')}
             </div>
             <Link href="/dashboard/wins" style={{ display: 'inline-block', fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}>
               {T('Wins')} ›

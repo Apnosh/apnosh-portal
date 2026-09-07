@@ -4,8 +4,8 @@
  * /dashboard/wins — the cards worth showing somebody.
  *
  * The Results archive keeps everything that ever fired, heads-ups included. This is the shorter
- * shelf: only the cards that are mint AND carry a real number (src/lib/love/win.ts), because that
- * is the difference between "here is what happened" and "here is something I can send my brother".
+ * shelf: only the counted promises (src/lib/love/win.ts), because that is the difference between
+ * "here is what happened" and "here is an order I paid for and here is what it did".
  *
  * Nothing here invents a card. It reads the same archive the deck reads and filters it by the same
  * rules the share route enforces, so a card that has a Show someone button here is a card the
@@ -45,6 +45,7 @@ export default function WinsPage() {
             cardKey: String(c.card_key ?? c.id ?? ''),
             cardType: String(c.card_type ?? ''),
             big: String(c.big ?? ''),
+            isSample: c.is_sample === true,
           }))
           .map((c: Record<string, unknown>) => ({
             id: String(c.card_key ?? c.id),
@@ -72,7 +73,7 @@ export default function WinsPage() {
             <div style={{ fontSize: 12.5, color: '#6e6e73', maxWidth: 300, lineHeight: 1.5 }}>
               {pending
                 ? T('The wins shelf is almost on. A small database update turns it on.')
-                : T('When a week beats the one before, or a post beats your usual reach, the card lands here. Then you can show it to someone.')}
+                : T('When an order you paid for gets its count, the card lands here. Then you can show it to someone.')}
             </div>
           </div>
         ) : (

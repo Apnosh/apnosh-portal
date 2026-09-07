@@ -42,10 +42,11 @@ export default async function PublicWinPage({ params }: { params: Promise<{ toke
       const admin = createAdminClient()
       const { data: row } = await admin
         .from('proof_cards')
-        .select('client_id, card_key, card_type, label, big, context, fired_at')
+        // select('*') so a database without metadata (pre-262) still answers this read.
+        .select('*')
         .eq('share_token', token)
         .maybeSingle()
-      if (row && isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big) })) {
+      if (row && isWin({ cardKey: String(row.card_key), cardType: String(row.card_type), big: String(row.big), isSample: row.is_sample === true })) {
         const clientId = String(row.client_id)
         const [{ data: client }, l] = await Promise.all([
           admin.from('clients').select('name').eq('id', clientId).maybeSingle(),
