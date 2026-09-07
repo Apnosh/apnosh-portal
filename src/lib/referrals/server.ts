@@ -156,11 +156,17 @@ export async function referralStateFor(clientId: string): Promise<ReferralState>
   try {
     const { data } = await admin
       .from('client_credits')
-      .select('cents, consumed_cents, voided_at')
+      .select('id, cents, voided_at')
       .eq('client_id', clientId)
       .is('voided_at', null)
-    for (const c of (data ?? []) as { cents: number; consumed_cents: number }[]) {
-      creditCents += Math.max(0, (c.cents || 0) - (c.consumed_cents || 0))
+    // WHAT THEY STILL HAVE, not what a row remembers. consumed_cents is stamped when a checkout
+    // HOLDS a credit, so an owner who opened checkout and closed the tab was shown $0 on a $50
+    // they still had. Only money a collected order really took counts as gone — the same ledger
+    // sum the checkout claims against, so the page and the till cannot disagree.
+    for (const c of (data ?? []) as { id: string; cents: number }[]) {
+      const settled = await settledCentsFor(c.id)
+      if (settled == null) continue
+      creditCents += Math.max(0, (c.cents || 0) - settled)
     }
   } catch (e) { warn('could not read the credits', e) }
   try {
