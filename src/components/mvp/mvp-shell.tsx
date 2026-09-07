@@ -71,8 +71,12 @@ export function useHideOnScroll(getEl: () => HTMLElement | null): boolean {
  * The owner session log, written from the one place every owner screen already passes through.
  *
  * Every screen in the app is inside this shell, so a screen change here IS the owner being
- * here. One POST per screen (the ref keeps a remount on the same path from counting twice),
- * fired and forgotten: the log is a nice-to-have and must never slow a screen down or break
+ * here. The log only ever asks "were they here today", so ONE post per client per UTC day is
+ * all it needs — a busy morning was firing a write on every tap of the bottom nav. The day is
+ * remembered in localStorage; when storage is off we fall back to once per screen, which is
+ * the old behaviour and still correct, just chattier.
+ *
+ * Fired and forgotten: the log is a nice-to-have and must never slow a screen down or break
  * one when the table is not there yet.
  */
 function useSeenLog(clientId: string | undefined) {
@@ -80,9 +84,17 @@ function useSeenLog(clientId: string | undefined) {
   const lastLogged = useRef<string>('')
   useEffect(() => {
     if (!clientId || !pathname) return
-    const key = `${clientId}|${pathname}`
-    if (lastLogged.current === key) return
-    lastLogged.current = key
+    const day = new Date().toISOString().slice(0, 10)
+    const dayKey = `apnosh-seen-${clientId}-${day}`
+    try {
+      if (localStorage.getItem(dayKey)) return
+      localStorage.setItem(dayKey, '1')
+    } catch {
+      // storage off (private window): keep the old one-per-screen guard so we still log the day
+      const key = `${clientId}|${pathname}`
+      if (lastLogged.current === key) return
+      lastLogged.current = key
+    }
     void fetch('/api/dashboard/seen', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientId }),

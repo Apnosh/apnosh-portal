@@ -1,9 +1,9 @@
 /**
  * POST /api/dashboard/seen  { clientId }  →  { ok: true }
  *
- * One line in the owner's session log: today's row, or one more screen on it. Called by the
- * shell on every screen change (throttled there to one call per screen), so this is the ONE
- * place the product learns that an owner actually shows up.
+ * One line in the owner's session log: today's row, or one more touch on it. Called by the
+ * shell on a screen change, throttled there to one call per client per UTC day, so this is the
+ * ONE place the product learns that an owner actually shows up.
  *
  * Best-effort by design: pre-migration-257 the function does not exist, the write fails, and
  * this still answers ok — a missing log must never break a screen.
