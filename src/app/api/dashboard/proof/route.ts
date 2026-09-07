@@ -129,9 +129,14 @@ export async function POST(req: NextRequest) {
     .update(patch)
     .eq('client_id', clientId)
     .eq('card_key', cardKey)
-  // Table missing pre-migration (42P01), or opened_at / shared_at missing before 257 (42703):
-  // the client-side localStorage fallback covers dismissal, and a mark is never worth a 500.
-  if (error && error.code !== '42P01' && error.code !== '42703') {
+  // No table yet (42P01, before migration 249) is fine for any mark: the client-side
+  // localStorage fallback covers dismissal, and a mark is never worth a 500.
+  // A missing COLUMN (42703) is only expected for opened_at / shared_at, which arrive with 257.
+  // read_at and dismissed_at have been there since 249, so a 42703 on those is a real fault and
+  // must be seen, not quietly dropped.
+  const newMark = action === 'open' || action === 'share'
+  const expected = error?.code === '42P01' || (newMark && error?.code === '42703')
+  if (error && !expected) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   return NextResponse.json({ ok: true })
