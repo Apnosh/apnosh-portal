@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { type OnboardingData, GOAL_CHIPS } from '../data'
 import { Question, hueOf, gradOf, DISPLAY, CARD_SHADOW } from '../ui'
-import { useStandaloneLang } from '@/components/mvp/mvp-language'
+import { useLang } from '@/components/mvp/mvp-language'
 
 interface Props {
   data: OnboardingData
@@ -48,7 +48,7 @@ const GOAL_META: Record<string, { icon: LucideIcon; hue: string; sub: string }> 
  * counter chip. No alert, no silent swap: changing your mind means un-picking a tile first.
  */
 export default function StepGoals({ data, update, nav }: Props) {
-  const { T } = useStandaloneLang()
+  const { T } = useLang()
   const picked = data.top_goals.length ? data.top_goals : (data.primary_goal ? [data.primary_goal] : [])
   const full = picked.length >= MAX
 

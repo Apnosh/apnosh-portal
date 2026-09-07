@@ -25,7 +25,7 @@ import { useClient } from '@/lib/client-context'
 
 const STORAGE_KEY = 'apnosh:language'
 
-interface LangCtx {
+export interface LangCtx {
   lang: Lang
   /** t() with the language already bound. `vars` fills {name} holes. */
   T: (key: string, vars?: Record<string, string | number>) => string
@@ -88,6 +88,16 @@ export function MvpLanguageProvider({ children }: { children: React.ReactNode })
 
 export function useLang(): LangCtx {
   return useContext(LanguageContext)
+}
+
+/**
+ * Puts a language that was built somewhere else over a subtree. Onboarding needs it: the frame
+ * owns the switch, and every screen inside the frame has to re-render the moment it is tapped.
+ * Four independent copies of useStandaloneLang() (one per component) left the tiles in English
+ * until the next screen, which is the bug this exists to make impossible.
+ */
+export function LanguageProvider({ value, children }: { value: LangCtx; children: React.ReactNode }) {
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
 }
 
 /**

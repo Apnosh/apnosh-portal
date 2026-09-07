@@ -4,7 +4,7 @@ import { type ReactNode } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { type OnboardingData, type StepId } from './data'
 import { PrimaryPill } from './ui'
-import { useStandaloneLang } from '@/components/mvp/mvp-language'
+import { LanguageProvider, useStandaloneLang } from '@/components/mvp/mvp-language'
 import { LANG_LABEL, type Lang } from '@/lib/i18n/t'
 import StepRole from './steps/step-role'
 import StepBizName from './steps/step-biz-name'
@@ -117,10 +117,16 @@ export function OnboardingFrame({
   /* Setup runs before a client row exists, so there is no clients.preferred_language to read
      yet. The standalone hook reads the browser's remembered answer, which is what a returning
      Spanish owner has, and English otherwise. The answer is written to the client row at the
-     end of setup like every other answer. */
-  const { T, lang, setLang } = useStandaloneLang()
+     end of setup like every other answer.
+
+     ONE copy for the whole flow. The frame builds it and hands it down through LanguageProvider,
+     so the questions, the tiles and this bar all read the same lang and all re-render together
+     when the switch is tapped. Every screen below calls useLang(). */
+  const langCtx = useStandaloneLang()
+  const { T, lang, setLang } = langCtx
 
   return (
+    <LanguageProvider value={langCtx}>
     <div
       className="ob-frame"
       style={{
@@ -271,6 +277,7 @@ export function OnboardingFrame({
       )}
       </div>
     </div>
+    </LanguageProvider>
   )
 }
 

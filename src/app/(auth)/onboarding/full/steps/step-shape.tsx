@@ -5,7 +5,7 @@ import { Store } from 'lucide-react'
 import { type OnboardingData } from '../data'
 import { Question, OptionCard, FieldLabel } from '../ui'
 import { SHELF_SHAPES, SHAPE_LABEL, inferShelfShape } from '@/lib/clients/shape'
-import { useStandaloneLang } from '@/components/mvp/mvp-language'
+import { useLang } from '@/components/mvp/mvp-language'
 
 interface Props {
   data: OnboardingData
@@ -20,7 +20,7 @@ interface Props {
  * The answer decides what the store may show them: a truck gets the where-are-you card and no
  * "get directions" promise, a delivery kitchen gets no Reserve button. */
 export default function StepShape({ data, update, nav }: Props) {
-  const { T } = useStandaloneLang()
+  const { T } = useLang()
   const suggested = inferShelfShape({
     service_styles: data.service_styles,
     location_count: data.location_count,
