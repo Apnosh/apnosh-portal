@@ -26,7 +26,7 @@ function admin() {
 }
 
 /** Ensure a Stripe customer exists for the client; returns its id (+ the billing email used). */
-export async function ensureCheckoutCustomer(clientId: string): Promise<{ customerId: string } | { error: string }> {
+export async function ensureCheckoutCustomer(clientId: string): Promise<{ customerId: string; email: string } | { error: string }> {
   const a = admin()
   const { data: client } = await a
     .from('clients')
