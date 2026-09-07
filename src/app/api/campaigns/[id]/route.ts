@@ -405,6 +405,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           body: `${campaign.draft.name}. The owner approved it to go live. Build and run the pieces.`,
           link: `/work/drafts?focus=${id}`,
         },
+        // An order just got placed. Admins stay on this one alongside the strategist, so one
+        // person's day off cannot be the reason a paid campaign sits unseen.
+        { alsoAdmins: true },
       ).catch(() => ({ notified: 0 }))
     } else if (teamWork) {
       // A service-only plan (SEO, listings, ads — the system goals sell mostly services,
@@ -423,6 +426,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           body: `${campaign.draft.name}. ${n} ${n === 1 ? 'service' : 'services'} to set up and run. No content pieces to build.`,
           link: `/work/today?focus=${id}`,
         },
+        { alsoAdmins: true },
       ).catch(() => ({ notified: 0 }))
     }
     // Dead-letter: the campaign had TEAM pieces to produce but made none (the

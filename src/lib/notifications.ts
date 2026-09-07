@@ -145,11 +145,18 @@ export async function createNotification(input: CreateInput): Promise<void> {
  *
  * Capability is checked via `person_capabilities`; assignment via
  * `role_assignments`. Both must be active.
+ *
+ * `alsoAdmins` adds every admin ON TOP of the assignees rather than instead of them. Before a
+ * client had a named strategist this fan-out reached the whole admin pool by falling back; the
+ * day the strategist row lands it narrows to one person, and one person on holiday is how a paid
+ * order goes unseen. Money moving is the event where somebody must always be watching, so the
+ * order-placed handoffs opt in. Every other event stays with the person who owns the account.
  */
 export async function notifyStaffForClient(
   clientId: string,
   capabilities: string[],
   payload: { kind: NotificationKind; title: string; body?: string; link?: string },
+  opts: { alsoAdmins?: boolean } = {},
 ): Promise<{ notified: number; fellBackToAdmins?: boolean }> {
   const admin = createAdminClient()
 
@@ -173,6 +180,11 @@ export async function notifyStaffForClient(
       .in('capability', [...capabilities, 'admin'])
 
     recipients = [...new Set((caps ?? []).map(c => c.person_id))]
+  }
+
+  // Somebody is always watching the money: admins join the assignee, they do not replace them.
+  if (opts.alsoAdmins) {
+    recipients = [...new Set([...recipients, ...(await getAdminUserIds(admin))])]
   }
 
   // Safety net: a client with no capable assignee (new or misconfigured) is

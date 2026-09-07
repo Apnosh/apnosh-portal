@@ -224,7 +224,9 @@ export async function POST(req: Request) {
         : `New request: ${summaryLine(v.type.id, v.clean)}`,
       body: v.clean.notes?.slice(0, 200) || summaryLine(v.type.id, v.clean),
       link: '/admin/requests',
-    })
+    // A desk ORDER is money placed. Admins stay on those beside the assignee; a plain request
+    // is the assignee's to answer.
+    }, { alsoAdmins: isOrder })
   } catch (e) {
     console.error('[requests] staff notify failed (request still saved)', e)
   }
