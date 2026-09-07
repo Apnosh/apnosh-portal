@@ -162,7 +162,10 @@ export async function buildMonthlyReport(
       const caption = typeof p.caption === 'string' ? p.caption.trim() : ''
       const idea = typeof p.idea === 'string' ? p.idea.trim() : ''
       // The report prints this after "saw your best post:", so it has to be one short line.
-      const title = idea || (caption ? (caption.length > 70 ? `${caption.slice(0, 67).trimEnd()}…` : caption) : '')
+      // The caption first, because that is the post the owner saw; idea is our own machine
+      // note ("Campaign piece 2 of 4") and reads like a filing code in the middle of a sentence.
+      const short = (t: string) => (t.length > 70 ? `${t.slice(0, 67).trimEnd()}…` : t)
+      const title = caption ? short(caption) : idea ? short(idea) : ''
       return { title: title || null, reach: Number(o.reach) || 0 }
     })
     if (parsed.length > 0) {
