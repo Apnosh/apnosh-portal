@@ -157,6 +157,27 @@ export async function notifyDeliverableApproved(
   }
 }
 
+/** An order placed on invoice (card checkout shut): the admins must confirm it AND bill it. */
+export async function notifyCampaignOrderInvoice(
+  supabase: SupabaseClient,
+  adminUserIds: string[],
+  clientName: string,
+  campaignName: string,
+  amount: { oneTimeCents: number; monthlyCents: number },
+) {
+  const money = [amount.oneTimeCents > 0 ? `$${Math.round(amount.oneTimeCents / 100).toLocaleString('en-US')}` : null, amount.monthlyCents > 0 ? `$${Math.round(amount.monthlyCents / 100).toLocaleString('en-US')}/mo` : null].filter(Boolean).join(' + ')
+  for (const adminId of adminUserIds) {
+    await createNotification({
+      supabase,
+      userId: adminId,
+      type: 'order_confirmed',
+      title: 'New order on invoice',
+      body: `${clientName} placed "${campaignName}" on invoice (${money || 'no charge'}). Card checkout is shut: confirm it, and bill it when the work lands.`,
+      link: '/admin/campaign-orders',
+    })
+  }
+}
+
 export async function notifyCampaignOrderShipped(
   supabase: SupabaseClient,
   adminUserIds: string[],

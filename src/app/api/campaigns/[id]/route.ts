@@ -153,10 +153,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   //   'allow'  → free/DIY $0 order, or a genuinely legacy pre-checkout campaign (dated carve-out)
   //   'verify' → a PaymentIntent was presented → confirm the charge succeeded + covers the bill, or 402
   //   'refuse' → a billable, non-legacy ship with NO payment → block (it must go through checkout)
+  // THE INVOICE LANE. While card checkout is shut, a billable order used to die at prepare with a
+  // message that said the plan was saved and an invoice would follow, while nothing was saved and
+  // no one was told. Now the client declares `billing: 'invoice'`, the SERVER confirms the checkout
+  // really is shut (so this can never bypass a live checkout), and the order ships: work mints,
+  // delivered pieces accrue as invoiceable charges, and the admins are paged to confirm and bill.
+  const { campaignCheckoutEnabled } = await import('@/lib/checkout-gate')
+  const invoiceLane = wantsShip && body.billing === 'invoice' && !campaignCheckoutEnabled()
+  let invoiceBill: { preTaxCents: number; perMonthCents: number } | null = null
   if (wantsShip) {
     const { preTaxCents, perMonthCents } = checkoutBill({ items: campaign.draft.items })
     const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
-    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt })
+    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt, invoiceLane })
+    if (invoiceLane && gate === 'allow' && (preTaxCents > 0 || perMonthCents > 0)) invoiceBill = { preTaxCents, perMonthCents }
     if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT }, { status: 402 })
     if (gate === 'verify') {
       const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId: paymentIntentId!, clientId: campaign.clientId, campaignId: id, preTaxCents })
@@ -173,6 +182,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'update failed' }, { status: 500 })
+  }
+  if (justShipped && invoiceBill) {
+    // Stamp the lane on the campaign (execution is operational, never fed to the brief AI) and page
+    // the admins with the amount. Both best-effort; the ship stands either way.
+    ;(async () => {
+      const exec = { ...(campaign.execution ?? {}), billingLane: 'invoice' as const, invoiceCents: invoiceBill!.preTaxCents, invoiceMonthlyCents: invoiceBill!.perMonthCents }
+      await updateCampaignFields(id, { execution: exec as Record<string, unknown> }).catch(() => {})
+      campaign.execution = exec
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const { getAdminUserIds, notifyCampaignOrderInvoice } = await import('@/lib/notify')
+      const svc = createAdminClient()
+      const [adminIds, client] = await Promise.all([
+        getAdminUserIds(svc),
+        svc.from('clients').select('name').eq('id', campaign.clientId).maybeSingle().then((r) => r.data),
+      ])
+      if (adminIds.length) await notifyCampaignOrderInvoice(svc, adminIds, (client?.name as string) ?? 'A client', campaign.draft.name, { oneTimeCents: invoiceBill!.preTaxCents, monthlyCents: invoiceBill!.perMonthCents })
+    })().catch(() => {})
   }
 
   // Law 4, the mint half: stamp the finals (and choices) onto the allocation record the create
