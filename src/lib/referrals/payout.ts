@@ -20,6 +20,8 @@ import { referralsEnabled } from '@/lib/referral-gate'
 import { SETTLED_STATUSES } from '@/lib/campaigns/refund-math'
 import { getPromiseRows } from '@/lib/promises/read'
 import { notifyClientOwners } from '@/lib/notifications'
+import { getClientLanguage } from '@/lib/i18n/language'
+import { t } from '@/lib/i18n/t'
 import { newnessFor } from './server'
 import { REFERRAL_CREDIT_CENTS, REFUND_VOID_REASON, creditWords, nextStatus, readyToCredit, referralBlock, type ReferralStatus } from './model'
 
@@ -279,10 +281,14 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
       }
       credited += 1
 
+      // In the owner's own language. This is the one message this loop ever sends them, and it is
+      // about their money — an owner who set the portal to Spanish should not get it in English.
+      const lang = await getClientLanguage(r.referrer_client_id)
+      const amount = creditWords(cents)
       await notifyClientOwners(r.referrer_client_id, {
         kind: 'payment',
-        title: `Your ${creditWords(cents)} friend credit is here`,
-        body: `Your friend's first order got its number, so your ${creditWords(cents)} is on your account. It comes off your next order.`,
+        title: t('Your {amount} friend credit is here', lang, { amount }),
+        body: t("Your friend's first order got its number, so your {amount} is on your account. It comes off your next order.", lang, { amount }),
         link: '/dashboard/tell-a-friend',
         email: true,
         emailCategory: 'billing',

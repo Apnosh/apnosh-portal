@@ -382,16 +382,20 @@ export const ES: Record<string, string> = {
   'See my page': 'Ver mi página',
   'Not yet': 'Todavía no',
   'This opens once one of your orders has its number.': 'Esto se abre cuando uno de tus pedidos ya tiene su número.',
-  'Your friend {name} sent you.': 'Tu amigo {name} te mandó.',
-  'A friend sent you.': 'Un amigo te mandó.',
+  'Your friend {name} sent you.': 'Te recomendó tu amigo {name}.',
+  'A friend sent you.': 'Te recomendó un amigo.',
   '{amount} off your first order.': '{amount} de descuento en tu primer pedido.',
   'An owner on Apnosh': 'Un dueño en Apnosh',
-  'What we counted for them': 'Lo que le contamos',
+  'What we counted for them': 'Los números que contamos para ellos',
   'Real numbers from their account, counted after the work went live.':
     'Números reales de su cuenta, contados después de que el trabajo salió.',
   'Start with {amount} off': 'Empieza con {amount} de descuento',
   'Start with Apnosh': 'Empieza con Apnosh',
   '{name} sent you. Your first order starts with {amount} off.':
-    '{name} te mandó. Tu primer pedido empieza con {amount} de descuento.',
+    '{name} te recomendó Apnosh. Tu primer pedido empieza con {amount} de descuento.',
   '{name} works with Apnosh.': '{name} trabaja con Apnosh.',
+  // the notice the referrer gets the day their friend's number lands
+  'Your {amount} friend credit is here': 'Tu crédito de {amount} por recomendar ya está aquí',
+  "Your friend's first order got its number, so your {amount} is on your account. It comes off your next order.":
+    'El primer pedido de tu amigo ya tiene su número, así que tus {amount} están en tu cuenta. Se descuentan de tu próximo pedido.',
 }

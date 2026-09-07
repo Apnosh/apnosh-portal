@@ -182,6 +182,9 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Real numbers from their account, counted after the work went live.',
     'Start with {amount} off', 'Start with Apnosh',
     '{name} sent you. Your first order starts with {amount} off.', '{name} works with Apnosh.',
+    // the notice the payout cron sends the referrer (src/lib/referrals/payout.ts)
+    'Your {amount} friend credit is here',
+    "Your friend's first order got its number, so your {amount} is on your account. It comes off your next order.",
     // shared with other screens, drawn here too
     'Loading…', 'Saved.', 'Could not save. Try again.', 'Saving...',
   ],
