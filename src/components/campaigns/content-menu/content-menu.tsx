@@ -236,7 +236,7 @@ function CartView(p: {
               </button>
             )}
           </div>
-          <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8 }}>{p.needsPayment ? 'Checkout takes the card and starts the work. Your plan is saved.' : 'A plan that costs money is paid at checkout before your team starts.'}</div>
+          <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8 }}>{p.needsPayment ? 'Rebuild this plan in checkout to pay. This draft stays here.' : 'A plan that costs money is paid at checkout before your team starts.'}</div>
         </div>
       )}
     </>

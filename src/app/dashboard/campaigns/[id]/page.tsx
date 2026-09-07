@@ -257,7 +257,7 @@ export default function CampaignDetailPage() {
                   </button>
                 )}
               </div>
-              <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>{needsPayment ? 'Checkout takes the card and starts the work. Your plan is saved here.' : 'Saved as a draft already. Save to come back later, or approve to hand it to your team.'}</div>
+              <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>{needsPayment ? 'Rebuild this plan in checkout to pay. This draft stays here.' : 'Saved as a draft already. Save to come back later, or approve to hand it to your team.'}</div>
             </div>
           </>
         )}
