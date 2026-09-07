@@ -33,6 +33,30 @@ export interface ProofCardRow {
 const iso = (d: Date) => d.toISOString().slice(0, 10)
 const plural = (n: number, w: string) => `${n.toLocaleString('en-US')} ${w}${n === 1 ? '' : 's'}`
 
+/**
+ * One metric against last week, e.g. "Direction taps: 30, up from 12."
+ *
+ * A direction word ONLY when THAT metric moved that way. Both Google cards fire on the TOTAL of
+ * calls plus direction taps, and a total that rose can hide a metric that fell — so "Direction
+ * taps are up from 12" was a claim the card had never checked. When a metric did not move, it
+ * says so instead of picking a side.
+ */
+function metricLine(label: string, cur: number, prior: number): string {
+  const head = `${label}: ${cur.toLocaleString('en-US')}`
+  if (cur > prior) return `${head}, up from ${prior.toLocaleString('en-US')}.`
+  if (cur < prior) return `${head}, down from ${prior.toLocaleString('en-US')}.`
+  return `${head}, same as the week before.`
+}
+
+/** Both Google metrics, each measured against its own last week. Calls are left out entirely when
+ *  neither week had one, so a listing with no phone does not print a row of zeroes. */
+function weekMetricLines(cur: { directions: number; calls: number }, prior: { directions: number; calls: number }): string {
+  const lines: string[] = []
+  if (cur.calls > 0 || prior.calls > 0) lines.push(metricLine('Calls', cur.calls, prior.calls))
+  lines.push(metricLine('Direction taps', cur.directions, prior.directions))
+  return lines.join(' ')
+}
+
 interface GbpWindows {
   cur: { directions: number; calls: number }
   prior: { directions: number; calls: number }
@@ -158,11 +182,9 @@ export async function evalGbpWeek(admin: SupabaseClient, clientId: string, now: 
     card_type: 'gbp_week',
     label: w.hasDemo ? 'Sample · a week on Google' : 'This week on Google',
     big: parts.join(' · '),
-    // ONE METRIC PER COMPARISON. "Up from 4 calls and 12 taps the week before" makes the reader
-    // hold two numbers against two others in one breath; two short sentences say the same thing.
-    context: priorTotal > 0
-      ? `Up from ${plural(w.prior.calls, 'call')} the week before. Direction taps are up from ${w.prior.directions}.`
-      : 'Your first tracked week.',
+    // ONE METRIC PER COMPARISON, and each one against ITS OWN last week. This card fires on the
+    // total, so "Direction taps are up from 12" was a direction the card had never checked.
+    context: priorTotal > 0 ? weekMetricLines(w.cur, w.prior) : 'Your first tracked week.',
     attribution: w.hasDemo
       ? 'Demo numbers so you can see the card. Real weeks replace this.'
       : attribution,
@@ -194,9 +216,8 @@ export async function evalGbpDownWeek(admin: SupabaseClient, clientId: string, n
     card_type: 'gbp_down',
     label: 'Quieter week on Google',
     big: parts.join(' · '),
-    context: w.prior.calls > 0
-      ? `Down from ${plural(w.prior.calls, 'call')} the week before. Direction taps are down from ${w.prior.directions}. A push this week turns it around.`
-      : `Down from ${plural(w.prior.directions, 'tap')} the week before. A push this week turns it around.`,
+    // Same rule as the win card: the drop is in the TOTAL, so each metric states its own move.
+    context: `${weekMetricLines(w.cur, w.prior)} A push this week turns it around.`,
   }
 }
 
