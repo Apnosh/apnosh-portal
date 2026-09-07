@@ -18,6 +18,14 @@
  *
  * The last-order words come straight from the promises ledger (src/lib/promises/lines.ts), so a
  * strategist reading this row and the owner reading their card are reading the same sentence.
+ *
+ * WHAT THIS PAGE COSTS. Every row is five reads, and two of them are not one query: getPromiseRows
+ * measures each of a client's promises against its own window, and the weekly sentence reads two
+ * more windows on top. Call it a dozen or two round trips per client, so sixty clients at once was
+ * a thousand landing together — enough to exhaust the connection pool and take the page (and
+ * whatever else was reading at that second) down with it. Ten clients at a time, in order: the
+ * page takes a few seconds and costs the database a steady trickle instead of a flood. Nothing
+ * here is on an owner's path, so seconds are the right thing to spend.
  */
 
 import Link from 'next/link'
@@ -55,6 +63,18 @@ async function lastReport(admin: ReturnType<typeof createAdminClient>, clientId:
   return { month: String(data[0].month), opened: !!data[0].opened_at }
 }
 
+/** Run `fn` over the list a few at a time, keeping the answers in the order they came in. */
+async function inBatches<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < items.length; i += size) {
+    out.push(...await Promise.all(items.slice(i, i + size).map(fn)))
+  }
+  return out
+}
+
+/** Ten clients at a time. See the note at the top of the file for why not sixty. */
+const BATCH = 10
+
 export default async function AdminLovePage() {
   await requireAdminUser()
   const admin = createAdminClient()
@@ -66,8 +86,10 @@ export default async function AdminLovePage() {
     .order('name')
     .limit(60)
 
-  const rows: Row[] = await Promise.all(
-    ((clients ?? []) as { id: string; name: string; slug: string | null }[]).map(async (c) => {
+  const rows: Row[] = await inBatches(
+    (clients ?? []) as { id: string; name: string; slug: string | null }[],
+    BATCH,
+    async (c) => {
       const [weeks, wins, sentence, report, promises] = await Promise.all([
         weeksActiveOfLast4(c.id),
         winsOpenedOfLast30(c.id),
@@ -82,7 +104,7 @@ export default async function AdminLovePage() {
         reportMonth: report.month, reportOpened: report.opened,
         lastOrder: p ? `${PILL_FOR[p.state] ?? p.value} · ${p.label}` : null,
       }
-    }),
+    },
   )
 
   const active = rows.filter((r) => r.weeks > 0).length
