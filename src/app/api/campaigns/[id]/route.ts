@@ -175,7 +175,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ;(async () => {
         const { notifyClientOwners } = await import('@/lib/notifications')
         const dollars = `$${(preTaxCents / 100).toFixed(2)}`
-        await notifyClientOwners(campaign.clientId, { kind: 'client_signoff', title: 'Order placed', body: `${dollars}${perMonthCents > 0 ? ` today, then $${(perMonthCents / 100).toFixed(2)}/mo` : ''} charged to your card for "${campaign.draft.name}". A receipt is on its way from Stripe.`, link: `/dashboard/campaigns/${id}`, email: true })
+        await notifyClientOwners(campaign.clientId, { kind: 'client_signoff', title: 'Order placed', body: `${dollars}${perMonthCents > 0 ? ` today, then $${(perMonthCents / 100).toFixed(2)}/mo` : ''} charged to your card for "${campaign.draft.name}". A receipt is on its way from Stripe.`, link: `/dashboard/campaigns/${id}`, email: true, emailCategory: 'billing' })
       })().catch(() => {})
     }
   }

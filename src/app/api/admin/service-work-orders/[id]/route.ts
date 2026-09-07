@@ -169,6 +169,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       link: row.campaign_id ? `/dashboard/campaigns/${row.campaign_id}` : '/dashboard/campaigns',
       // Worth a phone buzzing: the thing they bought landed.
       email: true,
+      emailCategory: 'content',
     }).catch(() => ({ notified: 0 }))
 
     // OWNERSHIP (sim crack #26): a delivered photo/video service lands in the owner's own

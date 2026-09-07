@@ -39,6 +39,66 @@ export type NotificationKind =
   // re-anchor, written by reanchorPromise (src/lib/promises/record.ts).
   | 'date_moved'
 
+/**
+ * Which switch on the owner's Notifications page decides whether an email may go out.
+ * The page (src/app/dashboard/settings/notifications/page.tsx) shows these as
+ * "Content ready", "Billing and invoices", "Messages" and "System updates".
+ */
+export type EmailCategory = 'billing' | 'content' | 'messages' | 'system'
+
+const CATEGORY_COLUMN: Record<EmailCategory, 'notify_billing' | 'notify_content_ready' | 'notify_messages' | 'notify_system'> = {
+  billing: 'notify_billing',
+  content: 'notify_content_ready',
+  messages: 'notify_messages',
+  system: 'notify_system',
+}
+
+/** When a caller does not say, the kind decides. Callers that email SHOULD say. */
+function categoryForKind(kind: NotificationKind): EmailCategory {
+  if (kind === 'payment' || kind === 'invoice_reminder') return 'billing'
+  if (kind === 'date_moved' || kind === 'draft_published' || kind === 'draft_approved' || kind === 'campaign_wrapped') return 'content'
+  if (kind === 'request_update' || kind === 'client_request') return 'messages'
+  return 'system'
+}
+
+/**
+ * Of these owners, who has NOT switched this email off?
+ *
+ * The preferences the owner sets on their Notifications page are real: "Email notifications" off,
+ * frequency "Off", or the category switched off all mean do not write to them. A person with no
+ * preferences row has never touched the page, so they get the table defaults (send).
+ *
+ * 'daily' and 'weekly' still send as they happen, because there is no digest job yet. Saying so
+ * out loud rather than dropping the email: silence would be worse than a mistimed one.
+ */
+async function ownersWhoWantEmail(userIds: string[], category: EmailCategory): Promise<Set<string>> {
+  const keep = new Set(userIds)
+  if (!userIds.length) return keep
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('notification_preferences')
+      .select('user_id, email_enabled, email_digest_frequency, notify_billing, notify_content_ready, notify_messages, notify_system')
+      .in('user_id', userIds)
+    // A read that fails must not silence the product: fall back to the table defaults.
+    if (error) {
+      console.warn('[notifications] preference read failed; emailing as if default:', error.message)
+      return keep
+    }
+    const column = CATEGORY_COLUMN[category]
+    for (const row of (data ?? []) as Record<string, unknown>[]) {
+      const off =
+        row.email_enabled === false ||
+        row.email_digest_frequency === 'off' ||
+        row[column] === false
+      if (off) keep.delete(row.user_id as string)
+    }
+  } catch (e) {
+    console.warn('[notifications] preference read threw; emailing as if default:', (e as Error)?.message)
+  }
+  return keep
+}
+
 export interface NotificationRow {
   id: string
   user_id: string
@@ -150,7 +210,7 @@ export async function notifyStaffForClient(
  */
 export async function notifyClientOwners(
   clientId: string,
-  payload: { kind: NotificationKind; title: string; body?: string; link?: string; email?: boolean },
+  payload: { kind: NotificationKind; title: string; body?: string; link?: string; email?: boolean; emailCategory?: EmailCategory },
 ): Promise<{ notified: number }> {
   const admin = createAdminClient()
 
@@ -186,7 +246,12 @@ export async function notifyClientOwners(
   // their count starting, their date moving, and a person answering them. Opt-in per call, never
   // a blanket on every kind, so a digest or a nudge can never become a mailshot.
   if (payload.email) {
-    await emailClientOwners(clientId, { subject: payload.title, body: payload.body, link: payload.link })
+    await emailClientOwners(clientId, {
+      subject: payload.title,
+      body: payload.body,
+      link: payload.link,
+      category: payload.emailCategory ?? categoryForKind(payload.kind),
+    })
   }
   return { notified: ids.size }
 }
@@ -195,15 +260,25 @@ export async function notifyClientOwners(
  * Email the client's owners the same words the in-app row carries. Best-effort and inert without
  * RESEND_API_KEY (sendEmailIfConfigured logs and returns { sent: false }), so this is safe to wire
  * everywhere today and starts working the day the key lands in Vercel.
+ *
+ * THE SETTINGS PAGE IS REAL: every recipient is checked against their own notification_preferences
+ * row first, per person, so one owner turning email off does not silence their partner and does
+ * not get overridden by the other one leaving it on. `category` says which switch decides.
  */
 export async function emailClientOwners(
   clientId: string,
-  payload: { subject: string; body?: string; link?: string },
+  payload: { subject: string; body?: string; link?: string; category?: EmailCategory },
 ): Promise<{ sent: boolean }> {
   try {
-    const { sendEmailIfConfigured, ownerEmailsForClient } = await import('@/lib/email/send')
-    const to = await ownerEmailsForClient(clientId)
-    if (!to.length) return { sent: false }
+    const { sendEmailIfConfigured, ownerEmailTargetsForClient } = await import('@/lib/email/send')
+    const targets = await ownerEmailTargetsForClient(clientId)
+    if (!targets.length) return { sent: false }
+    const wanted = await ownersWhoWantEmail(targets.map((t) => t.userId), payload.category ?? 'system')
+    const to = targets.filter((t) => wanted.has(t.userId)).map((t) => t.email)
+    if (!to.length) {
+      console.log('[email] every owner has this off; skipped:', payload.subject)
+      return { sent: false }
+    }
     const base = process.env.NEXT_PUBLIC_APP_URL || 'https://portal.apnosh.com'
     const where = payload.link ? `\n\n${base}${payload.link.startsWith('/') ? payload.link : `/${payload.link}`}` : ''
     return await sendEmailIfConfigured({

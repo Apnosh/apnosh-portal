@@ -464,6 +464,7 @@ export async function sendMessage(threadId: string, content: string): Promise<Ac
             subject: `${profile.full_name || 'Your team'} replied`,
             body: `${content.slice(0, 500)}`,
             link: '/dashboard/messages',
+            category: 'messages',
           })
         }
       } catch (e) {

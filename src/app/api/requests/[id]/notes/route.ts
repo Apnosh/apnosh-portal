@@ -95,6 +95,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         link: '/dashboard/requests',
         // A person answered them. That reaches them where they are, not only in the app.
         email: true,
+        emailCategory: 'messages',
       })
     }
   } catch (e) {
