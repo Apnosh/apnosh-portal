@@ -2,9 +2,11 @@
  * GET /api/dashboard/people?clientId=…  →  { people: OrderPerson[], replyLagMinutesMedian }
  *
  * The people on this client's live work: who owns each order, what they are on, and the thread to
- * reach them in. No UI reads this yet (the avatar row is a later move) — it exists so "every
- * minted order has a name on it" is something you can check, and so the reply timer runs dark
- * where it can be watched before it is ever shown to an owner.
+ * reach them in. Home's people row reads this (components/mvp/people-row.tsx), so "every minted
+ * order has a name on it" is now something the owner sees, not only something you can check.
+ *
+ * Also carries `latestAsk` — the owner's most recent question and whether it has been answered
+ * — which is what the Get help page's reply clock reads.
  *
  * Same auth pattern as the promises route: admins pass, an owner only for their own client.
  */
@@ -27,6 +29,6 @@ export async function GET(req: NextRequest) {
   } catch (e) {
     // A missing table or a read hiccup means "nobody known", never a 500 on a read.
     console.warn('[people] read failed', (e as Error)?.message)
-    return NextResponse.json({ people: [], replyLagMinutesMedian: null })
+    return NextResponse.json({ people: [], replyLagMinutesMedian: null, latestAsk: null })
   }
 }

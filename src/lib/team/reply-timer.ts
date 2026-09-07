@@ -88,6 +88,46 @@ export async function replyLagMinutesMedian(clientId: string, days = 30): Promis
   }
 }
 
+/**
+ * The owner's most recent question on this client, and whether it has been answered.
+ *
+ * This is what the Get help page shows back to them: one clock, on the thing they are actually
+ * waiting for. Null when they have never asked anything — a promise with no question attached
+ * is the sentence we already print, not a timer.
+ *
+ * Best-effort like everything else here: a read that fails means "we do not know", never a
+ * broken page.
+ */
+export async function latestAsk(clientId: string): Promise<{ askedAt: string; answeredAt: string | null } | null> {
+  if (!clientId) return null
+  try {
+    const admin = createAdminClient()
+    const { data: biz } = await admin.from('businesses').select('id').eq('client_id', clientId)
+    const bizIds = ((biz ?? []) as { id: string }[]).map((b) => b.id)
+    if (!bizIds.length) return null
+
+    // Newest first, then walk back to the owner's last question and look for the first staff
+    // line after it. 300 rows is several months of a busy account's messages.
+    const { data } = await admin
+      .from('messages')
+      .select('thread_id, sender_role, created_at')
+      .in('business_id', bizIds)
+      .order('created_at', { ascending: false })
+      .limit(300)
+    const rows = (data ?? []) as (Line & { thread_id: string })[]
+    const asked = rows.find((m) => (m.sender_role ?? 'client') === 'client')
+    if (!asked) return null
+    // The first staff line on that same thread after the question.
+    const answered = rows
+      .filter((m) => m.thread_id === asked.thread_id && (m.sender_role ?? 'client') !== 'client' && m.created_at > asked.created_at)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at))[0]
+    return { askedAt: asked.created_at, answeredAt: answered?.created_at ?? null }
+  } catch (e) {
+    console.warn('[reply-timer] latestAsk failed:', (e as Error)?.message)
+    return null
+  }
+}
+
 export function median(values: number[]): number | null {
   if (!values.length) return null
   const s = [...values].sort((a, b) => a - b)

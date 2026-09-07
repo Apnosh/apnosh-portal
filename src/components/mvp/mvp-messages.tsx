@@ -19,6 +19,7 @@ import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
 import { REPLY_PROMISE } from '@/lib/reply-promise'
+import { replyLine } from '@/lib/team/reply-line'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
@@ -429,6 +430,12 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
     else groups.push({ from: m.from, day, msgs: [m] })
   }
   const lastOwn = [...msgs].reverse().find((m) => m.from === 'owner')
+  /* The reply promise with a clock on it. The messages are already loaded, so the owner's last
+     question and the first answer after it are right here — no extra read, and it can never
+     disagree with the bubbles above it. Nothing shows until they have actually asked. */
+  const lastAsk = [...msgs].reverse().find((m) => m.from === 'owner' && !m.id.startsWith('tmp-'))
+  const firstAnswer = lastAsk ? msgs.find((m) => m.from === 'team' && m.createdAt > lastAsk.createdAt) : undefined
+  const promiseClock = replyLine({ askedAt: lastAsk?.createdAt ?? null, answeredAt: firstAnswer?.createdAt ?? null }, { promise: REPLY_PROMISE })
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
       {/* conversation header: glass back circle, avatar, name, status */}
@@ -443,6 +450,8 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
         </div>
         <span />
       </div>
+      {/* the promise, with a clock: when they asked, when the answer is owed, or how long it took */}
+      {promiseClock && <div style={{ flexShrink: 0, textAlign: 'center', fontSize: 11, color: C.faint, padding: '0 16px 8px' }}>{promiseClock}</div>}
 
       {/* messages */}
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 14px 10px', background: '#fff' }}>

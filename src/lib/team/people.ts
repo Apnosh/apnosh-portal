@@ -21,7 +21,7 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { currentStrategist } from './assign'
-import { replyLagMinutesMedian } from './reply-timer'
+import { replyLagMinutesMedian, latestAsk } from './reply-timer'
 
 /** The role words an owner reads. Kept to the four the plan names plus the ones already on the
  *  Team page, so nothing new is invented here. */
@@ -51,9 +51,11 @@ export interface OrderPerson {
 
 export interface OrderPeople {
   people: OrderPerson[]
-  /** Middle first-reply wait over the last 30 days, in minutes. Null when we do not know yet.
-   *  Dark: nothing owner-facing renders it in this move. */
+  /** Middle first-reply wait over the last 30 days, in minutes. Null when we do not know yet. */
   replyLagMinutesMedian: number | null
+  /** The owner's most recent question and whether it has been answered, so Get help can show
+   *  the clock on the thing they are actually waiting for. Null when they never asked. */
+  latestAsk: { askedAt: string; answeredAt: string | null } | null
 }
 
 /** Work that is still running. A delivered service and an approved piece are finished; nobody is
@@ -104,16 +106,17 @@ const ROLE_OF_REQUEST: Record<string, RoleWord> = {
  * Best-effort throughout: a table that is not there yet drops its lane, never the answer.
  */
 export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
-  const empty: OrderPeople = { people: [], replyLagMinutesMedian: null }
+  const empty: OrderPeople = { people: [], replyLagMinutesMedian: null, latestAsk: null }
   if (!clientId) return empty
   const admin = createAdminClient()
 
-  const [svcRes, creatorRes, deskRes, strategistId, lag] = await Promise.all([
+  const [svcRes, creatorRes, deskRes, strategistId, lag, ask] = await Promise.all([
     admin.from('service_work_orders').select('id, title, status, due_date, assignee_id, campaign_id').eq('client_id', clientId).limit(200).then((r) => r.data ?? [], () => []),
     admin.from('creator_work_orders').select('id, title, status, due_date, discipline, vendor_id, campaign_id').eq('client_id', clientId).limit(200).then((r) => r.data ?? [], () => []),
     admin.from('creative_requests').select('id, type, status, created_at').eq('client_id', clientId).limit(100).then((r) => r.data ?? [], () => []),
     currentStrategist(admin, clientId).catch(() => null),
     replyLagMinutesMedian(clientId, 30).catch(() => null),
+    latestAsk(clientId).catch(() => null),
   ])
 
   // The person on a house-team content piece is recorded on its campaign, not on the order row.
@@ -157,7 +160,7 @@ export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
       add(strategistId, { kind: 'desk', id: r.id, title: requestTypeById(r.type)?.label ?? r.type, status: r.status, dueDate: null, campaignId: null }, ROLE_OF_REQUEST[r.type] ?? 'Strategist')
     }
   }
-  if (!orders.size) return { people: [], replyLagMinutesMedian: lag }
+  if (!orders.size) return { people: [], replyLagMinutesMedian: lag, latestAsk: ask }
 
   const personIds = [...orders.keys()]
   const [profilesRes, assignRes, threadRes] = await Promise.all([
@@ -193,7 +196,7 @@ export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
   })
   // Most work first, then a stable name order, so the row does not reshuffle between reads.
   people.sort((a, b) => b.orders.length - a.orders.length || a.name.localeCompare(b.name))
-  return { people, replyLagMinutesMedian: lag }
+  return { people, replyLagMinutesMedian: lag, latestAsk: ask }
 }
 
 /** subject (lowercased) -> thread id, for this client's business threads. */
