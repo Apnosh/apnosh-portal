@@ -134,6 +134,7 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
       'src/app/dashboard/wins/[id]/page.tsx',
       'src/app/dashboard/wins/[id]/share-row.tsx',
       'src/app/w/[token]/page.tsx',
+      'src/app/w/[token]/not-found.tsx',
     ],
     // `reply`, `chips` and `reportEmail` are data, not a screen, and `settings` is a page whose
     // language row is the only part that move translated — its file is listed here the day the

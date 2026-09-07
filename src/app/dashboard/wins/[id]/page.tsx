@@ -82,7 +82,7 @@ export default async function WinPage({ params, searchParams }: {
               }}
             />
             <div style={{ marginTop: 18 }}>
-              <ShareRow clientId={clientId} cardKey={String(row.card_key)} title={String(row.big)} />
+              <ShareRow clientId={clientId} cardKey={String(row.card_key)} title={words.big} shared={!!row.share_token} />
             </div>
           </>
         ) : (

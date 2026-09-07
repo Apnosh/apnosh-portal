@@ -11,13 +11,17 @@
  * where shared_at is stamped. Before migration 260 the server answers with no link; the button
  * then says the honest thing rather than handing out an address that does not exist.
  *
+ * TAKE THIS DOWN is the way back. It shows only once the card HAS a public page, and it sets the
+ * token back to null: the link a stranger was given stops working, and no new card ever gets that
+ * address. An owner who shared a number and thought better of it should not need to ask staff.
+ *
  * PRINT is the image. There is no PNG renderer in this app (no @vercel/og, no satori, and the two
  * fonts have no file in the repo to embed), so the card is real HTML in the real fonts and the
  * browser makes the picture: "save as PDF" on a desktop, the print sheet on a phone.
  */
 
 import { useState } from 'react'
-import { Printer, Share2, Link2, Check } from 'lucide-react'
+import { Printer, Share2, Link2, Check, EyeOff } from 'lucide-react'
 import { useLang } from '@/components/mvp/mvp-language'
 
 const BTN: React.CSSProperties = {
@@ -26,10 +30,17 @@ const BTN: React.CSSProperties = {
   fontSize: 13, fontWeight: 700, cursor: 'pointer',
 }
 
-export default function ShareRow({ clientId, cardKey, title }: { clientId: string; cardKey: string; title: string }) {
+export default function ShareRow({ clientId, cardKey, title, shared = false }: {
+  clientId: string
+  cardKey: string
+  title: string
+  /** the card already has a public page (proof_cards.share_token), read on the server */
+  shared?: boolean
+}) {
   const { T } = useLang()
-  const [state, setState] = useState<'idle' | 'copied' | 'nolink'>('idle')
+  const [state, setState] = useState<'idle' | 'copied' | 'nolink' | 'down'>('idle')
   const [busy, setBusy] = useState(false)
+  const [live, setLive] = useState(shared)
 
   const send = async () => {
     if (busy) return
@@ -42,6 +53,7 @@ export default function ShareRow({ clientId, cardKey, title }: { clientId: strin
       })
       const j = await res.json() as { url?: string | null }
       if (!j?.url) { setState('nolink'); return }
+      setLive(true)
       const url = `${window.location.origin}${j.url}`
       if (navigator.share) {
         await navigator.share({ title, url }).catch(() => { /* they backed out of the sheet */ })
@@ -58,6 +70,26 @@ export default function ShareRow({ clientId, cardKey, title }: { clientId: strin
     }
   }
 
+  const takeDown = async () => {
+    if (busy) return
+    setBusy(true)
+    try {
+      const res = await fetch('/api/dashboard/wins/unshare', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, cardKey }),
+      })
+      const j = await res.json() as { down?: boolean }
+      if (!j?.down) return
+      setLive(false)
+      setState('down')
+    } catch {
+      /* the link is still up; the button stays where it was */
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="rpt-hide">
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -68,12 +100,19 @@ export default function ShareRow({ clientId, cardKey, title }: { clientId: strin
         <button onClick={() => window.print()} style={BTN}>
           <Printer size={15} color="#2e9a78" /> {T('Print or save as PDF')}
         </button>
+        {live && (
+          <button onClick={takeDown} disabled={busy} style={BTN}>
+            <EyeOff size={15} color="#8e8e93" /> {T('Take this down')}
+          </button>
+        )}
       </div>
       <div style={{ fontSize: 11.5, color: '#8e8e93', marginTop: 10, lineHeight: 1.45, display: 'flex', alignItems: 'center', gap: 5 }}>
         <Link2 size={12} color="#aeaeb2" />
         {state === 'nolink'
           ? T('The share link is not on yet. A small database update turns it on.')
-          : T('Anyone with the link sees this card and nothing else about your business.')}
+          : state === 'down'
+            ? T('The link is off. Anyone who had it now sees nothing.')
+            : T('Anyone with the link sees this card and nothing else about your business.')}
       </div>
     </div>
   )

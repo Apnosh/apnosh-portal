@@ -199,6 +199,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'When an order you paid for gets its count, the card lands here. Then you can show it to someone.',
     'The wins shelf is almost on. A small database update turns it on.',
     'Show someone', 'Counted by Apnosh', 'Print or save as PDF', 'Link copied',
+    'Take this down', 'The link is off. Anyone who had it now sees nothing.',
     'Anyone with the link sees this card and nothing else about your business.',
     'The share link is not on yet. A small database update turns it on.',
     'Nothing to show here',

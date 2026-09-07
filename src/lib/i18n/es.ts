@@ -416,6 +416,9 @@ export const ES: Record<string, string> = {
     'La repisa de logros casi está lista. Una actualización pequeña de la base de datos la enciende.',
   'Show someone': 'Enséñaselo a alguien',
   'Counted by Apnosh': 'Contado por Apnosh',
+  'Take this down': 'Quitar esto',
+  'The link is off. Anyone who had it now sees nothing.':
+    'El enlace está apagado. Quien lo tenía ya no ve nada.',
   'Anyone with the link sees this card and nothing else about your business.':
     'Quien tenga el enlace ve esta tarjeta y nada más de tu negocio.',
   'The share link is not on yet. A small database update turns it on.':
