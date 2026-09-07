@@ -55,7 +55,7 @@ export const CHIP_SHELF: Record<string, readonly string[]> = {
     'promoevent', 'creative-social', 'creative-graphic', 'gbp', 'measure',
     // Not yet: the program is being rebuilt, the weekly Google post is held, and every
     // offer-to-your-list card needs a send rail that does not exist.
-    'nights', 'gpost', 'story', 'slowoffer', 'winback', 'ticket',
+    'nights', 'barnights', 'gpost', 'story', 'slowoffer', 'winback', 'ticket',
   ],
   'More foot traffic overall': [
     // measure first when nothing is connected: it is what makes every other count real.
@@ -68,7 +68,7 @@ export const CHIP_SHELF: Record<string, readonly string[]> = {
   ],
   'Promote a specific offering': [
     'launch', 'creative-social', 'creative-graphic', 'creative-print', 'promoevent',
-    'seasonal-cal', 'gpost', 'dish', 'story', 'earlyaccess', 'creator',
+    'seasonplan', 'gpost', 'dish', 'story', 'earlyaccess', 'creator',
   ],
   'Grow social following': [
     // creative-social is the desk's post batch: live, and until now on no shelf at all.
@@ -85,7 +85,7 @@ export const CHIP_SHELF: Record<string, readonly string[]> = {
   ],
   'Stay top of mind': [
     'gbp', 'socialprofiles', 'creative-social', 'listings',
-    'truck-location', 'gbpmgmt', 'gpost', 'news', 'earlyaccess', 'loyalty',
+    'trucklocation', 'gbpmgmt', 'gpost', 'news', 'earlyaccess', 'loyalty',
   ],
   'Compete with nearby businesses': [
     'gbp', 'listings', 'reviewsreply', 'measure', 'reach',
@@ -102,7 +102,7 @@ export const CHIP_SHELF: Record<string, readonly string[]> = {
   ],
   'Grow catering orders': [
     'catering', 'creative-photos', 'creative-menu', 'creative-graphic',
-    'catering-engine', 'ticket', 'creative-email',
+    'cateringengine', 'ticket', 'creative-email',
   ],
   'Better photos of my food': [
     'creative-photos', 'gbp', 'listings', 'creative-video', 'creative-logo', 'socialprofiles',
@@ -126,8 +126,8 @@ export const CHIP_SHELF: Record<string, readonly string[]> = {
 export const SHAPE_OVERRIDES: Partial<Record<ClientShape, { lead?: Record<string, readonly string[]>; drop?: readonly string[] }>> = {
   truck: {
     lead: {
-      'Stay top of mind': ['truck-location'],
-      'Build local awareness': ['truck-location'],
+      'Stay top of mind': ['trucklocation'],
+      'Build local awareness': ['trucklocation'],
     },
     // No fixed pin, so "get listed everywhere" and a local-search program are the wrong first
     // thing to sell; they stay on the list but never lead.
@@ -138,10 +138,10 @@ export const SHAPE_OVERRIDES: Partial<Record<ClientShape, { lead?: Record<string
     drop: ['listings', 'localseo', 'firstvisit', 'promoevent', 'ticket', 'creative-print'],
   },
   catering: {
-    lead: { 'Grow catering orders': ['catering-engine'] },
+    lead: { 'Grow catering orders': ['cateringengine'] },
   },
   seasonal: {
-    lead: { 'Promote a specific offering': ['seasonal-cal'] },
+    lead: { 'Promote a specific offering': ['seasonplan'] },
   },
   two_locations: {
     // Each shop has its own listing and its own numbers, so the listing work leads.

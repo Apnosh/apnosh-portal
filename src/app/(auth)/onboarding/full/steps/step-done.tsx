@@ -4,6 +4,8 @@ import { useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { Ticket, Tag, Store, Star, Heart, Camera, Mail, Truck, Video, ShoppingCart, MapPin, type LucideIcon } from 'lucide-react'
 import { PrimaryPill, IconTile, hueOf, DISPLAY, CARD_SHADOW } from '../ui'
+import { liveForChip } from '@/lib/campaigns/data/chip-shelf'
+import { shelfCard } from '@/lib/campaigns/data/shelf'
 
 interface Props {
   bizName: string
@@ -11,25 +13,31 @@ interface Props {
   goals?: string[]
 }
 
-/* The finish shows a first plan, not a welcome note: one Create card per goal the owner
- * picked, with the plain reason it fits. Keys are GOAL_CHIPS strings; ids are catalog
- * card ids the builder opens with ?template=. Prices are left to the shelf so the two
- * never disagree. */
-const FIRST_PLAN: Record<string, { id: string; title: string; sub: string; why: string; hue: string; icon: LucideIcon }> = {
-  'More customers on slow days': { id: 'slowoffer', title: 'Slow-night offer', sub: 'An email and text to fill quiet days', why: 'The cheapest test you can run on a quiet night', hue: 'nights', icon: Tag },
-  'More foot traffic overall': { id: 'gbp', title: 'Polish your Google profile', sub: 'Photos, hours, menu, info fixed', why: 'The first thing most searchers see', hue: 'newfaces', icon: Store },
-  'Build local awareness': { id: 'localseo', title: 'Show up in local search', sub: 'Be the answer when neighbors search', why: 'Being found nearby is where awareness starts', hue: 'brand', icon: MapPin },
-  'Promote a specific offering': { id: 'launch', title: 'Launch a special', sub: 'A photo, posts, an email, a Google post', why: 'One item, one week, everywhere at once', hue: 'announce', icon: Tag },
-  'Grow social following': { id: 'reel', title: 'A short video reel', sub: 'A reel for Instagram and TikTok', why: 'Reels reach far more people than posts', hue: 'catering', icon: Video },
-  'Improve online reputation': { id: 'reviewsplan', title: 'Boost reviews and rating', sub: 'Review requests set up, plus the first asks', why: 'Asks lift a rating faster than anything', hue: 'reviews', icon: Star },
-  'Launch something new': { id: 'launch', title: 'Launch a special', sub: 'A photo, posts, an email, a Google post', why: 'A launch week that people hear about twice', hue: 'announce', icon: Tag },
-  'Stay top of mind': { id: 'news', title: 'Monthly newsletter', sub: 'One good email a month, written for you', why: 'Keeps you in their head between visits', hue: 'regulars', icon: Mail },
-  'Compete with nearby businesses': { id: 'gbp', title: 'Polish your Google profile', sub: 'Photos, hours, menu, info fixed', why: 'Win the comparison people make on the map', hue: 'newfaces', icon: Store },
-  'More bookings or orders': { id: 'friction', title: 'Smooth out ordering', sub: 'The Order button on Google, working', why: 'Every tap should land on you, not an app', hue: 'online', icon: ShoppingCart },
-  'Turn first-timers into regulars': { id: 'winback', title: 'Win back quiet guests', sub: 'One email and one text to guests gone quiet', why: 'Regulars who drifted come back first', hue: 'regulars', icon: Heart },
-  'Grow catering orders': { id: 'catering', title: 'Promote your catering', sub: 'A styled photo and a post for group orders', why: 'Offices book from a picture', hue: 'catering', icon: Truck },
-  'Better photos of my food': { id: 'dish', title: 'Feature a dish', sub: 'A styled photo of your best plate', why: 'One great plate changes the whole look', hue: 'event', icon: Camera },
-  'Reach a younger crowd': { id: 'reel', title: 'A short video reel', sub: 'A reel for Instagram and TikTok', why: 'Where a younger crowd actually looks', hue: 'brand', icon: Video },
+/* The finish shows a first plan, not a welcome note: one Create card per goal the owner picked.
+ *
+ * It used to be a THIRD hand-written list of its own, and it sent people nowhere: a slow-days
+ * owner to a hidden email card, a social owner to a coming-soon reel, a photo owner to a
+ * coming-soon dish card. Now the card comes from the same chip-to-shelf map the store reads
+ * (liveForChip), so the first thing the owner is offered is a thing they can actually order,
+ * and the title and the words come from the shelf card so the two can never disagree.
+ *
+ * Only the LOOK is authored here: one glyph and one colour per chip, matching the goal tiles
+ * they just tapped and the goal rail on Create. */
+const CHIP_LOOK: Record<string, { hue: string; icon: LucideIcon; why: string }> = {
+  'More customers on slow days': { hue: 'nights', icon: Tag, why: 'The cheapest test you can run on a quiet night' },
+  'More foot traffic overall': { hue: 'newfaces', icon: Store, why: 'The first thing most searchers see' },
+  'Build local awareness': { hue: 'brand', icon: MapPin, why: 'Being found nearby is where awareness starts' },
+  'Promote a specific offering': { hue: 'announce', icon: Tag, why: 'One thing, one week, everywhere at once' },
+  'Grow social following': { hue: 'catering', icon: Video, why: 'Posts reach the people already following you' },
+  'Improve online reputation': { hue: 'reviews', icon: Star, why: 'An answered review is worth more than a new one' },
+  'Launch something new': { hue: 'announce', icon: Tag, why: 'A launch people hear about twice' },
+  'Stay top of mind': { hue: 'regulars', icon: Mail, why: 'Keeps you in their head between visits' },
+  'Compete with nearby businesses': { hue: 'newfaces', icon: Store, why: 'Win the comparison people make on the map' },
+  'More bookings or orders': { hue: 'online', icon: ShoppingCart, why: 'Every tap should land on you, not an app' },
+  'Turn first-timers into regulars': { hue: 'regulars', icon: Heart, why: 'The second visit is the cheapest one to win' },
+  'Grow catering orders': { hue: 'catering', icon: Truck, why: 'Offices book from a picture' },
+  'Better photos of my food': { hue: 'event', icon: Camera, why: 'One great plate changes the whole look' },
+  'Reach a younger crowd': { hue: 'brand', icon: Video, why: 'Where a younger crowd actually looks' },
 }
 const FALLBACK = ['More foot traffic overall', 'Improve online reputation', 'Promote a specific offering']
 
@@ -102,14 +110,20 @@ export default function StepDone({ bizName, goals = [] }: Props) {
     launchConfetti()
   }, [launchConfetti])
 
-  /* Three cards: one per picked goal, de-duplicated by card, filled from the fallback set. */
+  /* Three cards: the first BUYABLE card on each picked goal's shelf, de-duplicated, filled
+     from the fallback goals when they picked fewer than three. A goal whose shelf has nothing
+     live is skipped rather than shown a door that does not open. */
   const seen = new Set<string>()
-  const plan: Array<(typeof FIRST_PLAN)[string]> = []
+  const plan: Array<{ id: string; title: string; sub: string; why: string; hue: string; icon: LucideIcon }> = []
   for (const g of [...goals, ...FALLBACK]) {
-    const c = FIRST_PLAN[g]
-    if (!c || seen.has(c.id)) continue
-    seen.add(c.id)
-    plan.push(c)
+    const look = CHIP_LOOK[g]
+    if (!look) continue
+    const id = liveForChip(g)[0]
+    if (!id || seen.has(id)) continue
+    const card = shelfCard(id)
+    if (!card) continue
+    seen.add(id)
+    plan.push({ id, title: card.title, sub: card.sub || card.plain.split('.')[0], why: look.why, hue: look.hue, icon: look.icon })
     if (plan.length === 3) break
   }
 
