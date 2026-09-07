@@ -74,12 +74,18 @@ export async function buildMonthlyReport(
       .select('date, total_impressions, top_queries')
       .eq('client_id', clientId)
       .gte('date', iso(priorStart)).lt('date', iso(end)),
+    /* posted_at, not created_at: created_at is the day the sync IMPORTED the review, so a
+       backfill would pile a year of reviews into one month. posted_at is when the customer
+       actually left it, which is what the chapter claims. */
     admin.from('reviews')
-      .select('rating, review_text, created_at')
+      .select('rating, review_text, posted_at')
       .eq('client_id', clientId)
-      .gte('created_at', priorStart.toISOString()).lt('created_at', end.toISOString()),
+      .gte('posted_at', priorStart.toISOString()).lt('posted_at', end.toISOString()),
+    /* content_drafts has no `title` column — the select failed, so postRows came back empty
+       and the "What worked" chapter never rendered for anyone. `idea` is the short seed line
+       every draft carries; the caption is the fallback. */
     admin.from('content_drafts')
-      .select('title, published_at, outcome_summary')
+      .select('idea, caption, published_at, outcome_summary')
       .eq('client_id', clientId)
       .not('published_at', 'is', null)
       .gte('published_at', start.toISOString()).lt('published_at', end.toISOString()),
@@ -116,7 +122,7 @@ export async function buildMonthlyReport(
   // ── Chapter 2: said (themes join when the sentiment engine ships) ──
   let said: SaidChapter | null = null
   {
-    const inMonth = (reviewRows.data ?? []).filter((r) => String(r.created_at) >= start.toISOString())
+    const inMonth = (reviewRows.data ?? []).filter((r) => String(r.posted_at) >= start.toISOString())
     const before = (reviewRows.data ?? []).length - inMonth.length
     if (inMonth.length > 0) {
       const avg = inMonth.reduce((a, r) => a + Number(r.rating), 0) / inMonth.length
@@ -153,7 +159,11 @@ export async function buildMonthlyReport(
     type P = { title: string | null; reach: number }
     const parsed: P[] = (postRows.data ?? []).map((p) => {
       const o = (p.outcome_summary ?? {}) as Record<string, unknown>
-      return { title: (p.title as string | null) ?? null, reach: Number(o.reach) || 0 }
+      const caption = typeof p.caption === 'string' ? p.caption.trim() : ''
+      const idea = typeof p.idea === 'string' ? p.idea.trim() : ''
+      // The report prints this after "saw your best post:", so it has to be one short line.
+      const title = idea || (caption ? (caption.length > 70 ? `${caption.slice(0, 67).trimEnd()}…` : caption) : '')
+      return { title: title || null, reach: Number(o.reach) || 0 }
     })
     if (parsed.length > 0) {
       const top = [...parsed].sort((a, b) => b.reach - a.reach)[0]
