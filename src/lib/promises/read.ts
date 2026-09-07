@@ -16,6 +16,8 @@ import { TAKEN_BY_WORD, type MetricKey, type TakenBy } from './registry'
 export interface PromiseRow {
   id: string
   label: string
+  /** the promise carried onto the campaign card through its life: "Counted after: taps on your Google card · on Home Oct 8" → "Counting · 6 of 14 days" → "41 taps · was 13" */
+  line: string
   /** the second line: what is counted, since when, who takes it */
   sub: string
   /** the big number or word on the right */
@@ -56,10 +58,10 @@ async function deliveredState(p: Stored): Promise<{ done: boolean; note: string 
 }
 
 export async function getPromiseRows(clientId: string, limit = 3): Promise<PromiseRow[]> {
-  const { data, error } = await createAdminClient().from('order_promises').select('*').eq('client_id', clientId).order('ordered_on', { ascending: false }).limit(12)
+  const { data, error } = await createAdminClient().from('order_promises').select('*').eq('client_id', clientId).order('ordered_on', { ascending: false }).limit(limit > 0 ? 12 : 60)
   if (error || !data) return []
   const t = today()
-  const out: PromiseRow[] = []
+  const out: Omit<PromiseRow, 'line'>[] = []
   for (const p of data as Stored[]) {
     const who = TAKEN_BY_WORD[p.taken_by] ?? ''
     const base = { id: p.id, label: p.label, campaignId: p.campaign_id, requestId: p.creative_request_id, showsOn: p.shows_on }
@@ -100,7 +102,44 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
   }
   // Newest first, but a counted row with a number outranks a row that is only waiting.
   const rank = (r: PromiseRow) => (r.state === 'counted' ? 0 : r.state === 'done' ? 1 : r.state === 'counting' ? 2 : r.state === 'held' ? 3 : 4)
-  return out.sort((a, b) => rank(a) - rank(b)).slice(0, limit)
+  const withLine = out.map((r) => ({ ...r, line: lineFor(r) }))
+  return (limit > 0 ? withLine.sort((a, b) => rank(a) - rank(b)).slice(0, limit) : withLine)
+}
+
+/** The one line a Campaigns card prints under its pill, from the same row Home prints. */
+function lineFor(r: Omit<PromiseRow, 'line'>): string {
+  if (r.state === 'not_counted') return `Not counted: ${r.sub.replace(/^Ordered [^·]+· /, '')}`
+  if (r.state === 'held') return `Held · work starts ${r.value} · then counted`
+  if (r.state === 'done') return `Done · ${r.small}`
+  if (r.state === 'counting') return r.value === '—' ? `Counted after: ${r.sub.replace(/^Ordered [^·]+· /, '')} · on Home ${md(r.showsOn)}` : `Counting · ${r.value} · on Home ${md(r.showsOn)}`
+  return `${r.value} · ${r.small}`
+}
+
+/** Desk orders (creative_requests placed as orders) for the Campaigns feed: they have no campaign
+ *  row, so the list would otherwise never show them. Joined to their ledger row when one exists. */
+export interface DeskOrderRow {
+  id: string
+  type: string
+  label: string
+  orderedOn: string
+  status: string
+  dueDate: string | null
+  workStatus: string | null
+  line: string | null
+}
+export async function getDeskOrders(clientId: string): Promise<DeskOrderRow[]> {
+  const a = createAdminClient()
+  const { data, error } = await a.from('creative_requests').select('id, type, status, created_at, due_date, accepted_at, quote_cents').eq('client_id', clientId).not('accepted_at', 'is', null).order('created_at', { ascending: false }).limit(30)
+  if (error || !data) return []
+  const ids = (data as { id: string }[]).map((r) => r.id)
+  const { data: wos } = ids.length ? await a.from('creator_work_orders').select('campaign_piece_key, status').in('campaign_piece_key', ids.map((i) => `request:${i}`)) : { data: [] as unknown[] }
+  const woByReq = new Map<string, string>()
+  for (const w of (wos ?? []) as { campaign_piece_key: string; status: string }[]) woByReq.set(w.campaign_piece_key.replace(/^request:/, ''), w.status)
+  const { requestTypeById } = await import('@/lib/requests/catalog')
+  return (data as { id: string; type: string; status: string; created_at: string; due_date: string | null }[]).map((r) => ({
+    id: r.id, type: r.type, label: requestTypeById(r.type)?.label ?? r.type,
+    orderedOn: r.created_at.slice(0, 10), status: r.status, dueDate: r.due_date, workStatus: woByReq.get(r.id) ?? null, line: null,
+  }))
 }
 
 export { shiftDays }

@@ -9,8 +9,9 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import type { SavedCampaign } from '@/lib/campaigns/view'
-import { PROMISE_BY_CARD, PROMISE_BY_REQUEST_TYPE, specsForService, type PromiseSpec } from './registry'
+import { PROMISE_BY_CARD, PROMISE_BY_REQUEST_TYPE, type PromiseSpec } from './registry'
 import { baseline, shiftDays } from './metrics'
+import { specsForService } from './registry'
 
 interface Row {
   client_id: string
@@ -103,4 +104,24 @@ export async function recordRequestPromise(args: { clientId: string; requestId: 
   const { error } = await createAdminClient().from('order_promises').upsert(rows, { onConflict: 'creative_request_id,metric_key', ignoreDuplicates: true })
   if (error) { console.warn('[promises] request write skipped:', error.message); return 0 }
   return rows.length
+}
+
+/** When a service work order is delivered, move the count window to start from delivery (plus the
+ *  source lag) and recompute the baseline against the days before it. A promise that is already
+ *  counting from a later date, or is held/not counted, is left alone. */
+export async function reanchorPromise(args: { campaignId: string | null; serviceId: string | null; deliveredISO: string }): Promise<void> {
+  if (!args.campaignId || !args.serviceId) return
+  const a = createAdminClient()
+  const { data } = await a.from('order_promises').select('id, client_id, metric_key, count_from, state').eq('campaign_id', args.campaignId).eq('service_id', args.serviceId)
+  const deliveredOn = args.deliveredISO.slice(0, 10)
+  for (const row of (data ?? []) as { id: string; client_id: string; metric_key: string; count_from: string; state: string }[]) {
+    if (row.state === 'not_counted' || row.state === 'held') continue
+    const spec = specsForService(args.serviceId).find((sp) => sp.metric === row.metric_key)
+    if (!spec || spec.metric === 'delivered_files') continue
+    const countFrom = shiftDays(deliveredOn, spec.lagDays)
+    if (countFrom <= row.count_from) continue
+    let bv: number | null = null, bd: number | null = null
+    try { const b = await baseline(row.client_id, spec.metric, countFrom, 30); bv = b.value; bd = b.reportedDays } catch { /* keep the mint baseline */ }
+    await a.from('order_promises').update({ count_from: countFrom, shows_on: shiftDays(countFrom, spec.windowDays), baseline_value: bv, baseline_days: bd, updated_at: new Date().toISOString() }).eq('id', row.id)
+  }
 }
