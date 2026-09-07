@@ -158,7 +158,7 @@ const CREATE_CSS = `
 .cr .crow .t{display:block;font-size:15px;font-weight:600;line-height:1.25}
 .cr .crow .why{display:block;font-size:12.5px;color:#8a5a0c;line-height:1.35;margin-top:2px}
 .cr .crow .why.none{color:#6e6e73}
-.cr .crow .w{display:block;font-size:12.5px;color:#6e6e73;line-height:1.35;margin-top:3px;-webkit-line-clamp:2;display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden}
+.cr .crow .w{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;color:#6e6e73;line-height:1.35;margin-top:3px}
 .cr .crow .pl{display:block;font-size:12.5px;font-weight:600;color:#1d1d1f;margin-top:5px}
 .cr .crow .pl span{font-weight:500;color:#aeaeb2}
 .cr .lanes{display:flex;flex-direction:column;gap:5px;margin:9px 0 0 50px}
@@ -603,7 +603,9 @@ export default function CreatePage() {
                   wears the plain grey instead. */}
               {reason && <span className={`why${softReason ? ' none' : ''}`}>{reason}</span>}
               <span className="w">{c.plain || c.get[0]}</span>
-              <span className="pl">{price}{price !== T('Free') && free ? T(', or free, you do it') : ''} <span>· {priceSub}</span></span>
+              {/* The ladder below already spells the free lane out, so the price line only says
+                  "or free, you do it" on a card that has no ladder to say it. */}
+              <span className="pl">{price}{price !== T('Free') && free && lanes.length === 0 ? T(', or free, you do it') : ''} <span>· {priceSub}</span></span>
             </span>
           </button>
           {/* The button matches the price. A desk card with a real price is an order, not an ask:
