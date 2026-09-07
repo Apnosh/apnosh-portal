@@ -5,12 +5,17 @@ import { useRouter } from 'next/navigation'
 import { Ticket, Tag, Store, Star, Heart, Camera, Mail, Truck, Video, ShoppingCart, MapPin, type LucideIcon } from 'lucide-react'
 import { PrimaryPill, IconTile, hueOf, DISPLAY, CARD_SHADOW } from '../ui'
 import { liveForChip } from '@/lib/campaigns/data/chip-shelf'
+import { DEFAULT_SHAPE, isShelfShape, type ShelfShape } from '@/lib/clients/shape'
 import { shelfCard } from '@/lib/campaigns/data/shelf'
 
 interface Props {
   bizName: string
   /** The owner's top goals (GOAL_CHIPS strings), so the finish can show a first plan. */
   goals?: string[]
+  /** How the business runs, as just answered. The finish must offer the same card the store
+   *  will offer, and the store draws its shelf by shape — without this a truck owner finished
+   *  setup looking at a storefront card. Unanswered reads as a storefront, same as everywhere. */
+  shape?: string | null
 }
 
 /* The finish shows a first plan, not a welcome note: one Create card per goal the owner picked.
@@ -41,8 +46,9 @@ const CHIP_LOOK: Record<string, { hue: string; icon: LucideIcon; why: string }> 
 }
 const FALLBACK = ['More foot traffic overall', 'Improve online reputation', 'Promote a specific offering']
 
-export default function StepDone({ bizName, goals = [] }: Props) {
+export default function StepDone({ bizName, goals = [], shape }: Props) {
   const router = useRouter()
+  const shelfShape: ShelfShape = isShelfShape(shape) ? shape : DEFAULT_SHAPE
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   const launchConfetti = useCallback(() => {
@@ -118,7 +124,7 @@ export default function StepDone({ bizName, goals = [] }: Props) {
   for (const g of [...goals, ...FALLBACK]) {
     const look = CHIP_LOOK[g]
     if (!look) continue
-    const id = liveForChip(g)[0]
+    const id = liveForChip(g, shelfShape)[0]
     if (!id || seen.has(id)) continue
     const card = shelfCard(id)
     if (!card) continue

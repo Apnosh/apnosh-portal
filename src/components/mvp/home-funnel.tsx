@@ -30,6 +30,8 @@ import { useInboxCounts } from './use-inbox-unread'
 import { useClient } from '@/lib/client-context'
 import { useRouter } from 'next/navigation'
 import { useMvpTheme } from './mvp-theme'
+import { isShelfShape, type ShelfShape } from '@/lib/clients/shape'
+import { stageLabelFor, stageSubFor, emptyLineFor } from '@/lib/clients/shape-words'
 
 /* the browser's local calendar date — the server must never guess the client's timezone */
 function localYmd(): string {
@@ -262,7 +264,7 @@ function drawEmblem(ctx: CanvasRenderingContext2D, ox: number, oy: number, r: nu
  *  computeHome falls back to deriving them from the raw actions. */
 export interface StageCounts { interest?: number; actions?: number; retention?: number }
 
-export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts, yoyAbs?: FunnelYoYAbs | null) {
+export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts, yoyAbs?: FunnelYoYAbs | null, /** the business's shape, so a truck is not told about its walk-ins. Undefined = storefront words. */ shape?: ShelfShape | null) {
 
   const total = Math.max(0, views.total)
   // Awareness folds SOCIAL reach into the Google views (top of funnel = "people who saw you").
@@ -290,12 +292,17 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   // lock) when no count is provided.
   const retention = counts?.retention ?? 0
 
+  // The stage WORDS route through one map keyed on the shape; the structure, the numbers and
+  // the order below are untouched. A storefront (and a client never asked) reads the fallbacks,
+  // which are the exact words that were here before.
+  const L = (k: Parameters<typeof stageLabelFor>[0], w: string) => stageLabelFor(k, shape, w)
+  const S = (k: Parameters<typeof stageSubFor>[0], w: string) => stageSubFor(k, shape, w)
   const stages: HStage[] = [
-    { key: 'shown', label: 'Awareness', sub: awareSub, count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, deltaAbs: yoyAbs?.awareness ?? null, insightsStage: 'discovery' },
-    { key: 'engaged', label: 'Interest', sub: 'website visits & clicks', count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
-    { key: 'moved', label: 'Actions', sub: 'directions & calls', count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
-    { key: 'camein', label: 'Orders', sub: 'walk-in orders from Google', count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, deltaAbs: yoyAbs?.orders != null ? Math.round(yoyAbs.orders * walkInRate) : null, insightsStage: 'conversion' },
-    { key: 'back', label: 'Retention', sub: 'came back for more', count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
+    { key: 'shown', label: L('shown', 'Awareness'), sub: S('shown', awareSub), count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, deltaAbs: yoyAbs?.awareness ?? null, insightsStage: 'discovery' },
+    { key: 'engaged', label: L('engaged', 'Interest'), sub: S('engaged', 'website visits & clicks'), count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
+    { key: 'moved', label: L('moved', 'Actions'), sub: S('moved', 'directions & calls'), count: acted, zone: 'measured', tag: 'Real · Google', conv: `~${ratePct}% of directions ordered`, emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
+    { key: 'camein', label: L('camein', 'Orders'), sub: S('camein', 'walk-in orders from Google'), count: cameIn, zone: 'estimate', tag: '~ about · your math', emblem: 'door', deltaYoY: yoy?.orders ?? null, deltaAbs: yoyAbs?.orders != null ? Math.round(yoyAbs.orders * walkInRate) : null, insightsStage: 'conversion' },
+    { key: 'back', label: L('back', 'Retention'), sub: S('back', 'came back for more'), count: retention, zone: 'measured', tag: 'Repeat visits', emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
   ]
   const stats = [
     { value: total.toLocaleString(), label: 'Awareness' },
@@ -436,7 +443,11 @@ export default function HomeFunnel({
     if (days == null) days = curRange === '7d' ? 7 : curRange === '90d' ? 90 : 30
     return `the ${days} days before`
   }, [curRange, windowStart, windowEnd])
-  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts, yoyAbs), [views, actions, walkInRate, avgTicket, currency, yoy, counts, yoyAbs])
+  /* The shape of the business, off the client this screen already resolved for the bell. It
+   * only bends the stage WORDS (shape-words.ts); nothing about the layout or the numbers reads
+   * it. A client with no shape yet is a storefront, which is the copy that was always here. */
+  const shape: ShelfShape | null = isShelfShape(bellClient?.shape) ? bellClient.shape : null
+  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts, yoyAbs, shape), [views, actions, walkInRate, avgTicket, currency, yoy, counts, yoyAbs, shape])
 
   const geom = useRef({ W: 400 })
 
@@ -1361,6 +1372,10 @@ export function HomeFunnelSkeleton({ height = 620, message = 'Getting your numbe
 
 export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
   const { C } = useMvpTheme()
+  // What filling this funnel will actually show THIS owner: a delivery kitchen was being
+  // promised "directions", the one thing it has no use for.
+  const { client } = useClient()
+  const emptyLine = emptyLineFor(isShelfShape(client?.shape) ? client.shape : null)
   const spine = [56, 44, 34, 26]
   return (
     <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', boxSizing: 'border-box', overflow: 'hidden', position: 'relative' }}>
@@ -1376,7 +1391,7 @@ export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
       <div style={{ position: 'absolute', left: 18, right: 18, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
         <div style={{ background: C.card, borderRadius: 20, padding: '20px 18px', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.10)', maxWidth: 340 }}>
           <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: C.ink }}>Your numbers show here</div>
-          <div style={{ fontSize: 14, color: C.mute, marginTop: 6, lineHeight: 1.5 }}>Connect your Google Business Profile and this fills with real calls, directions and reviews. Never made-up numbers.</div>
+          <div style={{ fontSize: 14, color: C.mute, marginTop: 6, lineHeight: 1.5 }}>{emptyLine}</div>
           <a href="/dashboard/connected-accounts" style={{ display: 'inline-block', marginTop: 14, padding: '12px 22px', borderRadius: 99, background: 'linear-gradient(135deg, #4abd98, #2e9a78)', color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none', boxShadow: '0 8px 22px rgba(74,189,152,.34)' }}>Connect accounts</a>
         </div>
       </div>

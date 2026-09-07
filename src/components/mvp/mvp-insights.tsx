@@ -37,6 +37,8 @@ import { HUES, STAGE_HUES, type HueKey } from './hues'
 import { Mark } from './mark'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
+import { isShelfShape, type ShelfShape } from '@/lib/clients/shape'
+import { stageLabelFor, stageExplainFor } from '@/lib/clients/shape-words'
 import { isProTier } from '@/lib/entitlements'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, deltaSub, bucketsFor, type MetricView, type ChartRange } from './mvp-home'
 import { TopSegmented } from './top-row'
@@ -469,6 +471,8 @@ function ConvChip({ c, open, onToggle }: { c: { pct: number; band: HealthBand };
     </button>
   )
 }
+/** The funnel keys shape-words is keyed on — the same five this page already uses. */
+type StageWordKey = 'shown' | 'engaged' | 'moved' | 'camein' | 'back'
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },
@@ -485,6 +489,11 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
   // re-render to match. The URL follows (replaceState) so a refresh or share
   // keeps the same stage.
   const [sel, setSel] = useState<string | undefined>(focusKey)
+  /* The shape of the business, so a truck's stage does not say "walk-in". Words only: the five
+   * stages, their order, their dots and their colours are untouched (no icon tiles here — the
+   * stage colour stays the dot). */
+  const { client: shapeClient } = useClient()
+  const shape: ShelfShape | null = isShelfShape(shapeClient?.shape) ? shapeClient.shape : null
   const [explain, setExplain] = useState(false)
   const [convOpen, setConvOpen] = useState(false)
   useEffect(() => { if (focusKey) setSel(focusKey) }, [focusKey])
@@ -561,13 +570,13 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
               {/* stage name + ⓘ (tap: what this counts); the tools sit to the right */}
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 10px', maxWidth: 'calc(100% - 88px)', minHeight: 36, margin: '2px 0 0' }}>
               <button type="button" onClick={() => setExplain((v) => !v)} aria-expanded={explain} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: C.ink, maxWidth: '100%', height: 36 }}>
-                <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+                <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stageLabelFor(s.key as StageWordKey, shape, s.label)}</span>
                 <Info size={16} color={explain ? STAGE_ACCENT[s.key].dark : C.faint} style={{ flexShrink: 0 }} />
                 {refreshing && <span className="mvp-spin" style={{ width: 11, height: 11, border: `2px solid ${C.line}`, borderTopColor: STAGE_ACCENT[s.key].main, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />}
               </button>
               {conv && <ConvChip c={conv} open={convOpen} onToggle={() => setConvOpen((v) => !v)} />}
               </div>
-              {explain && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, margin: '2px 0 4px' }}>{STAGE_EXPLAIN[s.key]}</div>}
+              {explain && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, margin: '2px 0 4px' }}>{stageExplainFor(s.key as StageWordKey, shape, STAGE_EXPLAIN[s.key])}</div>}
               {convOpen && conv && <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.45, margin: '4px 0 6px', padding: '8px 11px', borderRadius: 12, background: conv.band === 'veryLow' || conv.band === 'low' ? C.coralBg : C.bg }}>{convExplain(s.key, conv)}</div>}
               <StageTop stageKey={s.key} detail={detail} mv={smv} clientId={clientId} onRange={rangeFor(s.key)} accent={STAGE_ACCENT[s.key].main} />
             </div>

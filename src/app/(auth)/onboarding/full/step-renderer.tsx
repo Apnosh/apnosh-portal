@@ -344,7 +344,7 @@ export default function StepRenderer(props: Props) {
       <ScreenKeyframes />
       {screen === 'success' || !screen ? (
         <div key="success" className="ob-screen">
-          <StepDone bizName={data.biz_name} goals={data.top_goals} />
+          <StepDone bizName={data.biz_name} goals={data.top_goals} shape={data.shape} />
         </div>
       ) : (
         /* Keyed to the screen number so every advance replays the entrance. */

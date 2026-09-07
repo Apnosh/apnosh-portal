@@ -934,6 +934,11 @@ export interface Client {
   churn_notes: string | null
   // Lifecycle status (migration 043). A "lead" is a client with status 'pending'.
   status: ClientLifecycleStatus
+  // How the business runs (migration 256). Optional because the column may not be applied yet,
+  // and null because most rows were never asked; both read as 'storefront' (lib/clients/shape).
+  shape?: string | null
+  // The language this owner reads the product in (migration 259). Optional/null = English.
+  preferred_language?: string | null
   created_at: string
   updated_at: string
 }
