@@ -5,10 +5,14 @@
  *
  * IT DRAWS NOTHING unless the server says two things are true: the loop is open
  * (REFERRALS_ENABLED) and this owner has had at least one promise reach a counted number. Both
- * answers come from /api/referrals/me, which decides them on the server; this component never
- * works either one out for itself, so a screen cannot start asking because a flag was read in the
- * wrong place. With the switch off the route answers `{ enabled: false }` and Home is exactly the
- * Home it was before Move 8.
+ * answers come from the server; this component never works either one out for itself, so a screen
+ * cannot start asking because a flag was read in the wrong place.
+ *
+ * The FIRST of the two rides in on the /api/dashboard/load payload Home already waits for, as
+ * `on`. With the switch off this card asks nothing at all — no second request per Home visit for a
+ * feature nobody has — and Home is byte for byte the Home it was before Move 8. Only when the loop
+ * really is open does it ask /api/referrals/me the second question, which that route decides on
+ * the server too.
  *
  * It is the proof deck's own card shape (proof-card.tsx): a mint dot, the small uppercase label,
  * one line, a chevron. No new colours, no new component family.
@@ -21,13 +25,13 @@ import { useMvpTheme } from './mvp-theme'
 import { useLang } from './mvp-language'
 import { creditWords, REFERRAL_CREDIT_CENTS } from '@/lib/referrals/model'
 
-export default function TellAFriendCard({ clientId }: { clientId?: string }) {
+export default function TellAFriendCard({ clientId, on }: { clientId?: string; on?: boolean }) {
   const { C } = useMvpTheme()
   const { T } = useLang()
   const [show, setShow] = useState(false)
 
   useEffect(() => {
-    if (!clientId) return
+    if (!clientId || on !== true) return
     let alive = true
     fetch(`/api/referrals/me?clientId=${clientId}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -38,7 +42,7 @@ export default function TellAFriendCard({ clientId }: { clientId?: string }) {
       })
       .catch(() => { /* no card is the right answer to a route that cannot answer */ })
     return () => { alive = false }
-  }, [clientId])
+  }, [clientId, on])
 
   if (!show) return null
   const amount = creditWords(REFERRAL_CREDIT_CENTS)

@@ -175,7 +175,7 @@ const LEGACY_HOME = false
 // new owner with no Google data sees an empty home until the funnel has data.
 const SHOW_HOME_BODY = false
 
-export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
+export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean; referralsOn?: boolean }) {
   // The theme provider now lives in the dashboard layout (the toggle moved to
   // Settings and skins the whole platform); Home just reads it like everyone
   // else. Its palette is genuinely theme-aware, so the root below carries
@@ -184,7 +184,7 @@ export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean
   return <MvpHomeInner {...props} />
 }
 
-function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = true }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
+function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = true, referralsOn = false }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean; referralsOn?: boolean }) {
   const { C } = useMvpTheme()
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
@@ -305,7 +305,7 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
         {/* TELL A FRIEND (Move 8) — a proof-deck card, and the only place Home asks for a
             referral. It draws NOTHING unless the server says the loop is open and this owner has
             had a promise counted, so it sits right under the counted strip it depends on. */}
-        <TellAFriendCard clientId={clientId} />
+        <TellAFriendCard clientId={clientId} on={referralsOn} />
 
         {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
             the owner. Flip the flag to bring back the suggestions, orders, and

@@ -37,6 +37,7 @@ import { getUpcomingWork } from '@/lib/dashboard/get-upcoming-work'
 import { getPrimaryStrategist } from '@/lib/dashboard/get-primary-strategist'
 import { getInboxThreads } from '@/lib/dashboard/get-inbox-threads'
 import { getReviewNudge } from '@/lib/report/review-nudge'
+import { referralsEnabled } from '@/lib/referral-gate'
 
 export const maxDuration = 15
 
@@ -187,6 +188,11 @@ export async function GET(req: NextRequest) {
       model: briefRow.data.model,
       cached: true,
     } : null,
+    // MOVE 8 — whether the referral loop is open at all. It rides on the payload Home already
+    // waits for so the Home card never has to ASK: with the switch off there is no second fetch,
+    // no route hit per visit, and nothing on the page. The server is still the only thing that
+    // decides it (and /api/referrals/me checks it again before it answers anything).
+    referralsOn: referralsEnabled(),
     counts: {
       unansweredReviews: unansweredCountRow.count ?? 0,
       pendingApprovals: approvalsCountRow.count ?? 0,
