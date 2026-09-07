@@ -12,7 +12,7 @@ import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import ProofCard, { type ProofCardData } from './proof-card'
 import { useLang } from './mvp-language'
-import { isWin } from '@/lib/love/win'
+import { isWin, metricKeyOf } from '@/lib/love/win'
 
 function deckDepth(pos: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, opacity: 1 }
@@ -99,6 +99,10 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
             firedAt: (c.fired_at as string) ?? undefined,
             tone: (c.tone as ProofCardData['tone']) ?? 'win',
             cardType: String(c.card_type ?? ''),
+            // both facts the win rules need beyond the big line: a seeded demo card is never a
+            // win, and a rating's line is a pair whose second half is the number that is true now
+            isSample: c.is_sample === true,
+            metricKey: metricKeyOf(c.metadata),
             cta: (c.cta as ProofCardData['cta']) ?? undefined,
           }))
         // a real account never sees samples (owner 2026-09-03): every client has at least one
@@ -165,7 +169,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
               <ProofCard
                 /* a win gets its second door: the page where it becomes something to send
                    somebody. The same rules the share route enforces decide which cards get it. */
-                card={!examples && isWin({ cardKey: c.id, cardType: c.cardType ?? '', big: c.big })
+                card={!examples && isWin({ cardKey: c.id, cardType: c.cardType ?? '', big: c.big, isSample: c.isSample, metricKey: c.metricKey })
                   ? { ...c, share: { label: T('Show someone'), href: `/dashboard/wins/${encodeURIComponent(c.id)}` } }
                   : c}
                 defaultOpen

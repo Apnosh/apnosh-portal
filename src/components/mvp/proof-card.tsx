@@ -34,6 +34,10 @@ export interface ProofCardData {
   tone?: 'win' | 'heads_up'
   /** proof_cards.card_type, kept so a caller can ask whether this card is a WIN (lib/love/win.ts). */
   cardType?: string
+  /** proof_cards.is_sample — a seeded demo card is never a win, and never gets a public page. */
+  isSample?: boolean
+  /** proof_cards.metadata.metricKey — a rating's line is a pair, so the reader needs to know. */
+  metricKey?: string
   /** The move a heads-up card carries. Renders as the card's one action. */
   cta?: { label: string; href: string }
   /** A WIN's second door: the page where it becomes something to send somebody. Same CTA style. */
