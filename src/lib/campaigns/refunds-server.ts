@@ -92,11 +92,25 @@ export async function getPaidCharge(campaignId: string): Promise<PaidCharge | nu
 /** One charge row with the piece it was written for, so we can ask "did this actually land?". */
 interface LedgerRow {
   id: string
+  status: string
   amountCents: number
   workOrderId: string | null
   contentDraftId: string | null
   lineItemId: string | null
 }
+
+/**
+ * The delivered read, as a Result. There is no zero-shaped failure here on purpose: "0 delivered"
+ * and "we could not read what was delivered" mean opposite things to a refund, and collapsing them
+ * into the same shape is how a database hiccup turns into the largest refund we can send.
+ */
+export type DeliveredResult =
+  | { ok: true; deliveredCents: number; staleIds: string[] }
+  | { ok: false; reason: string }
+
+/** What we say to the owner when the ledger cannot be read. Never a number we cannot stand behind. */
+export const REFUND_UNCONFIRMED =
+  'We could not confirm what was delivered, so nothing was refunded yet. Our team will settle this by hand within one business day.'
 
 /**
  * What a campaign has actually DELIVERED, in cents, plus the ledger rows whose work did NOT land.
@@ -110,12 +124,13 @@ interface LedgerRow {
  *   service       → the service order is 'delivered'
  * Anything else is stale, is excluded from the delivered total, and the refund voids it.
  *
- * Degrades to zeros on any read failure — and a read failure must never invent delivered work,
- * because inventing delivered work is how an owner gets refunded too little.
+ * FAILS CLOSED. Every read here — the ledger and all three lanes — must succeed. An unreadable
+ * read returns ok:false and the refund is abandoned, because an unreadable read looks exactly like
+ * "nothing was delivered", which is the biggest refund this module can send. Money never moves on
+ * a number we could not read.
  */
-export async function getDeliveredCharges(campaignId: string): Promise<{ deliveredCents: number; staleIds: string[] }> {
-  const empty = { deliveredCents: 0, staleIds: [] as string[] }
-  if (!campaignId) return empty
+export async function getDeliveredCharges(campaignId: string): Promise<DeliveredResult> {
+  if (!campaignId) return { ok: false, reason: 'no campaign' }
   const admin = createAdminClient()
   let rows: LedgerRow[] = []
   try {
@@ -124,26 +139,33 @@ export async function getDeliveredCharges(campaignId: string): Promise<{ deliver
       .select('*')
       .eq('campaign_id', campaignId)
       .in('status', ['accrued', 'invoiced', 'paid', 'covered_by_checkout'])
-    if (error || !data) return empty
-    rows = (data as Record<string, unknown>[]).map((r) => ({
+    if (error) return { ok: false, reason: `charge ledger unreadable: ${error.message}` }
+    rows = ((data ?? []) as Record<string, unknown>[]).map((r) => ({
       id: String(r.id),
+      status: String(r.status ?? ''),
       amountCents: Number(r.amount_cents) || 0,
       workOrderId: (r.work_order_id as string | null) ?? null,
       contentDraftId: (r.content_draft_id as string | null) ?? null,
       lineItemId: (r.line_item_id as string | null) ?? null,
     }))
-  } catch {
-    return empty
+  } catch (e) {
+    return { ok: false, reason: `charge ledger unreadable: ${(e as Error)?.message ?? 'unknown error'}` }
   }
-  if (!rows.length) return empty
+  // No ledger rows is a real, readable answer: nothing has landed yet.
+  if (!rows.length) return { ok: true, deliveredCents: 0, staleIds: [] }
 
-  // Three lookups, one per lane, all scoped to this campaign. A lane that cannot be read returns
-  // nothing, which marks its rows stale — the safe direction: we refund more, never less.
+  // Three lookups, one per lane, all scoped to this campaign. A lane that cannot be READ is not an
+  // empty lane — it is an unknown lane, and an unknown lane marks every one of its rows stale,
+  // which both under-counts delivered work and voids rows for work that may have really landed.
+  // So a lane error aborts the whole read.
   const [orders, drafts, services] = await Promise.all([
     admin.from('creator_work_orders').select('id, status').eq('campaign_id', campaignId),
     admin.from('content_drafts').select('id, status, published_at').eq('campaign_id', campaignId),
     admin.from('service_work_orders').select('line_item_id, status').eq('campaign_id', campaignId),
   ])
+  const laneError = orders.error?.message ?? drafts.error?.message ?? services.error?.message
+  if (laneError) return { ok: false, reason: `delivery lanes unreadable: ${laneError}` }
+
   const orderOk = new Set(((orders.data ?? []) as { id: string; status: string }[])
     .filter((o) => o.status === 'approved').map((o) => o.id))
   const draftOk = new Set(((drafts.data ?? []) as { id: string; status: string; published_at: string | null }[])
@@ -159,9 +181,12 @@ export async function getDeliveredCharges(campaignId: string): Promise<{ deliver
       : r.lineItemId ? serviceOk.has(r.lineItemId)
       : true   // an unanchored legacy row: trust the ledger, it was written on a delivery
     if (landed) deliveredCents += r.amountCents
-    else staleIds.push(r.id)
+    // A row already INVOICED or PAID is money that has left the ledger and gone onto a bill. Voiding
+    // it would not un-send that bill, it would only make our own books disagree with it, so those
+    // rows are never voided even when the work behind them was later un-landed.
+    else if (r.status !== 'invoiced' && r.status !== 'paid') staleIds.push(r.id)
   }
-  return { deliveredCents, staleIds }
+  return { ok: true, deliveredCents, staleIds }
 }
 
 /**
@@ -169,11 +194,20 @@ export async function getDeliveredCharges(campaignId: string): Promise<{ deliver
  * Pure math (refundOwedCents) over the paid charge and the delivered ledger. 0 when nothing was
  * prepaid, or when everything ordered was delivered.
  */
-export async function owedRefundCents(campaignId: string): Promise<{ owedCents: number; deliveredCents: number; paid: PaidCharge | null }> {
+export async function owedRefundCents(campaignId: string): Promise<{
+  /** False when the ledger could not be read. There is NO number in that case — the caller must
+   *  say so and hand the settlement to a person, never fall back to "nothing was delivered". */
+  ok: boolean
+  owedCents: number
+  deliveredCents: number
+  paid: PaidCharge | null
+  reason?: string
+}> {
   const paid = await getPaidCharge(campaignId)
-  if (!paid) return { owedCents: 0, deliveredCents: 0, paid: null }
-  const { deliveredCents } = await getDeliveredCharges(campaignId)
-  return { owedCents: refundOwedCents(paid, deliveredCents), deliveredCents, paid }
+  if (!paid) return { ok: true, owedCents: 0, deliveredCents: 0, paid: null }
+  const d = await getDeliveredCharges(campaignId)
+  if (!d.ok) return { ok: false, owedCents: 0, deliveredCents: 0, paid, reason: d.reason }
+  return { ok: true, owedCents: refundOwedCents(paid, d.deliveredCents), deliveredCents: d.deliveredCents, paid }
 }
 
 /**
@@ -201,7 +235,17 @@ export async function refundCampaignPayment(opts: {
   if (paid.paymentIntentId.startsWith('seti_')) return NOTHING('Nothing was charged upfront on this order.')
   if (paid.totalCents <= 0) return NOTHING('Nothing was charged upfront on this order.')
 
-  // 2. IDEMPOTENCY, against Stripe rather than our own column: ask Stripe what it has already sent
+  // 2. THE LEDGER, READ ONCE, BEFORE ANY MONEY MOVES. The same read decides two things — what was
+  // delivered and which rows the refund voids — so it happens here, once, and a failure stops the
+  // refund instead of guessing. Guessing here means guessing "nothing was delivered", which is the
+  // largest refund we can send.
+  const delivered = await getDeliveredCharges(campaignId)
+  if (!delivered.ok) {
+    await pageAdmins(paid.clientId, 'A refund was held back', `We could not read what campaign ${campaignId} has delivered (${delivered.reason}), so nothing was sent back. Settle it by hand.`, `/admin/campaign-orders?focus=${campaignId}`)
+    return NOTHING(REFUND_UNCONFIRMED)
+  }
+
+  // 3. IDEMPOTENCY, against Stripe rather than our own column: ask Stripe what it has already sent
   // back on this PaymentIntent. This is what stops a second call refunding the same money twice,
   // and it also picks up a refund an admin did by hand in the dashboard.
   let alreadyCents = paid.refundedCents
@@ -233,7 +277,7 @@ export async function refundCampaignPayment(opts: {
     }
   }
 
-  // 3. THE REFUND. Stripe first — only a confirmed refund is ever written down. The idempotency
+  // 4. THE REFUND. Stripe first — only a confirmed refund is ever written down. The idempotency
   // key makes an identical retry (a double-tap, a re-run) return the SAME refund, not a second one.
   let refundId = ''
   let refundedNow = 0
@@ -263,15 +307,16 @@ export async function refundCampaignPayment(opts: {
   const totalRefunded = alreadyCents + refundedNow
   const isFull = totalRefunded >= paid.totalCents
 
-  // 4. THE PAYMENT ROW. Best-effort: pre-254 the refund columns are absent, so the status flip
+  // 5. THE PAYMENT ROW. Best-effort: pre-254 the refund columns are absent, so the status flip
   // alone still stops isCampaignCheckoutPaid from claiming a fully refunded order is covered.
   await stampRefund(paid, totalRefunded, refundId)
 
-  // 5. THE LEDGER. Void charge rows for work that never landed, so nothing we did not do can be
-  // invoiced later or counted as delivered. Rows for delivered work are left exactly alone.
-  await voidStaleCharges(campaignId)
+  // 6. THE LEDGER. Void the charge rows the read above already identified as work that never
+  // landed, so nothing we did not do can be invoiced later or counted as delivered. Rows for
+  // delivered work — and rows already invoiced or paid — are left exactly alone.
+  await voidStaleCharges(delivered.staleIds)
 
-  // 6. Everything that would keep charging or keep accruing. Only on a FULL refund: a partial
+  // 7. Everything that would keep charging or keep accruing. Only on a FULL refund: a partial
   // refund is a credit for one piece, not the end of the campaign, and must not quietly stop the
   // work the owner is still paying for.
   if (isFull) {
@@ -285,12 +330,12 @@ export async function refundCampaignPayment(opts: {
     } catch (e) { console.warn('[refund] subscription cancel failed', (e as Error)?.message) }
   }
 
-  // 7. THE TAX. A committed Stripe Tax transaction is a reported sale; money going back has to go
+  // 8. THE TAX. A committed Stripe Tax transaction is a reported sale; money going back has to go
   // back in the tax report too. Best-effort + logged: the refund itself already succeeded and must
   // never be undone by a reporting hiccup.
   await reverseTax(paid, refundedNow, isFull, refundId)
 
-  // 8. THE PEOPLE. Plain words, real numbers.
+  // 9. THE PEOPLE. Plain words, real numbers.
   const dollars = `$${(refundedNow / 100).toFixed(2)}`
   if (opts.notifyOwner !== false) {
     await notifyClientOwners(paid.clientId, {
@@ -328,10 +373,15 @@ async function stampRefund(paid: PaidCharge, totalRefundedCents: number, refundI
   if (e2) console.warn('[refund] payment row not updated:', e2.message)
 }
 
-/** Void the ledger rows whose work never landed. Delivered rows are untouched. */
-async function voidStaleCharges(campaignId: string): Promise<number> {
+/**
+ * Void the ledger rows whose work never landed. Delivered rows are untouched, and so are rows
+ * already invoiced or paid (the caller's read excludes them).
+ *
+ * Takes the ids rather than re-reading: a second read could see a different world than the one the
+ * refund amount was computed from, and then we would void rows the owner was never refunded for.
+ */
+async function voidStaleCharges(staleIds: string[]): Promise<number> {
   try {
-    const { staleIds } = await getDeliveredCharges(campaignId)
     if (!staleIds.length) return 0
     const admin = createAdminClient()
     // 'void' already means "never bill this" everywhere in the ledger — no second spelling.
