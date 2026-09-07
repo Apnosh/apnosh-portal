@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { userMayReadClient } from '@/lib/auth/client-access'
 import { evalGbpWeek, computeStateCards } from '@/lib/proof/compose'
 import { presentCardType } from '@/lib/proof/present'
 
@@ -39,11 +40,8 @@ export async function GET(req: NextRequest) {
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).maybeSingle()
   const isAdmin = profile && ['admin', 'super_admin'].includes(profile.role)
-  if (!isAdmin) {
-    const { data: cu } = await adminDb()
-      .from('client_users').select('client_id')
-      .eq('auth_user_id', user.id).eq('client_id', clientId).maybeSingle()
-    if (!cu) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  if (!isAdmin && !(await userMayReadClient(user.id, clientId))) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
   const admin0 = adminDb()
@@ -121,11 +119,8 @@ export async function POST(req: NextRequest) {
   const { data: profile } = await supabase
     .from('profiles').select('role').eq('id', user.id).maybeSingle()
   const isAdmin = profile && ['admin', 'super_admin'].includes(profile.role)
-  if (!isAdmin) {
-    const { data: cu } = await adminDb()
-      .from('client_users').select('client_id')
-      .eq('auth_user_id', user.id).eq('client_id', clientId).maybeSingle()
-    if (!cu) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  if (!isAdmin && !(await userMayReadClient(user.id, clientId))) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
   const patch = { [MARKS[action]]: new Date().toISOString() }

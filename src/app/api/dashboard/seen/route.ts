@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { userMayReadClient } from '@/lib/auth/client-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,10 +25,8 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'unauthenticated' }, { status: 401 })
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle()
   const isAdmin = !!profile && ['admin', 'super_admin'].includes((profile as { role: string }).role)
-  if (!isAdmin) {
-    const admin = createAdminClient()
-    const { data: cu } = await admin.from('client_users').select('client_id').eq('auth_user_id', user.id).eq('client_id', clientId).maybeSingle()
-    if (!cu) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  if (!isAdmin && !(await userMayReadClient(user.id, clientId))) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
   // Staff looking at a client's screens are not that client's owner showing up, so their
   // visits stay out of the log — otherwise every "weeks active" number counts us.
