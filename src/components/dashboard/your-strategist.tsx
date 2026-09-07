@@ -53,7 +53,7 @@ export default function YourStrategist({ strategist }: { strategist: StrategistC
           </p>
           <p className="text-sm text-ink-2 leading-relaxed">
             Your strategist will be assigned {REPLY_PROMISE} of your first goals being set.
-            They'll reach out to introduce themselves.
+            They&apos;ll reach out to introduce themselves.
           </p>
         </div>
       </section>
