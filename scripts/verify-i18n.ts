@@ -26,6 +26,7 @@ import { t, localeOf, money, num, DEFAULT_LANG, isLang, LANGS } from '../src/lib
 import { allShapeWords, stageSubFor, stageLabelFor, emptyLineFor, EMPTY_LINE_DEFAULT } from '../src/lib/clients/shape-words'
 import { SHELF_SHAPES } from '../src/lib/clients/shape'
 import { replyLine, oneBusinessDayAfter, waitLabel, askFrom } from '../src/lib/team/reply-line'
+import { resolveLang } from '../src/lib/i18n/resolve-lang'
 
 let failures = 0
 function check(name: string, ok: boolean | (() => boolean), detail?: string) {
@@ -204,6 +205,55 @@ console.log('\n5. The reply clock')
       locale: 'es-US', promise: 'en un día hábil',
       words: { sent: 'Enviado', weAnswer: 'contestamos', due: 'para el', answeredIn: 'Contestado en' },
     }) ?? '').startsWith('Enviado'))
+}
+
+console.log('\n6. Which language a screen draws, and what gets written')
+{
+  // The rule that decides between the record and the browser. The bug it exists to stop: an
+  // admin (or an owner with two locations) opens a Spanish client, then an English one, and the
+  // second one is drawn in Spanish AND saved as Spanish.
+  const r = (db: unknown, local: 'en' | 'es' | null, isAdmin: boolean) => resolveLang(db, local, isAdmin)
+
+  check('an admin reads the record and writes nothing', () => {
+    const a = r('es', null, true)
+    const b = r('en', 'es', true)   // the Spanish client they had open a moment ago
+    return a.lang === 'es' && a.push === null && a.store === null
+      && b.lang === 'en' && b.push === null && b.store === null
+  })
+  check('an admin with no record reads English', () => {
+    const a = r(null, 'es', true)
+    return a.lang === 'en' && a.push === null && a.store === null
+  })
+  check('the record leads for the owner, and the browser copy follows it', () => {
+    const a = r('es', null, false)
+    const b = r('en', 'en', false)
+    return a.lang === 'es' && a.push === null && a.store === 'es'
+      && b.lang === 'en' && b.push === null && b.store === 'en'
+  })
+  check('a default en loses to a browser that remembers Spanish for THIS client', () => {
+    const a = r('en', 'es', false)
+    return a.lang === 'es' && a.push === 'es' && a.store === 'es'
+  })
+  check('nothing is pushed when the record already says Spanish', () => r('es', 'es', false).push === null)
+  check('no record yet: the owner keeps their browser, nothing is written', () => {
+    const a = r(null, 'es', false)
+    const b = r(undefined, null, false)
+    return a.lang === 'es' && a.push === null && a.store === null
+      && b.lang === 'en' && b.push === null && b.store === null
+  })
+  check('a junk value in the column is not a language', () => r('fr', null, false).lang === 'en' && r('', 'es', false).lang === 'es')
+  // The whole point, said once: one case in eighteen writes to a row, and staff are never it.
+  check('only the owner, only from this client own memory, ever writes to the row', () => {
+    const pushes: string[] = []
+    for (const db of [null, 'en', 'es'] as const) {
+      for (const local of [null, 'en', 'es'] as const) {
+        for (const isAdmin of [true, false]) {
+          if (r(db, local, isAdmin).push) pushes.push(`${db}/${local}/${isAdmin}`)
+        }
+      }
+    }
+    return pushes.length === 1 && pushes[0] === 'en/es/false'
+  })
 }
 
 console.log(failures === 0 ? '\n✓ i18n verified\n' : `\n✗ ${failures} failed\n`)

@@ -14,6 +14,15 @@
  * browser copy in localStorage exists for two reasons: it is ready before the client row's
  * round trip is, and ONBOARDING, which happens before a client row exists at all.
  *
+ * THE BROWSER COPY IS PER CLIENT. localStorage is one bucket for the whole browser, and the
+ * language is not: an admin, or an owner with two locations, looks at more than one business in
+ * the same tab. One shared key meant looking at a Spanish client and then an English one drew
+ * the second one in Spanish AND saved Spanish onto its row. So the remembered answer is keyed
+ * `apnosh:language:<clientId>`, and the plain `apnosh:language` is only the pre-login hint:
+ * onboarding writes it before a client row exists, and the first paint reads it before the
+ * client row has arrived. It never decides what is written to a row. The rule that weighs the
+ * record against the browser lives in lib/i18n/resolve-lang.ts, where it can be proved.
+ *
  * WHAT IT DOES NOT DO. It does not remove the flash of English. The server renders this tree
  * with no idea who is asking, and localStorage cannot be read until the first effect runs, so
  * a Spanish owner still sees one frame of English on a cold load — sooner over than waiting
@@ -29,9 +38,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_LANG, isLang, localeOf, t, type Lang } from '@/lib/i18n/t'
+import { resolveLang } from '@/lib/i18n/resolve-lang'
 import { useClient } from '@/lib/client-context'
 
+/** the pre-login hint: what the last person to use this browser was reading */
 const STORAGE_KEY = 'apnosh:language'
+/** what this browser remembers for ONE business */
+const keyFor = (clientId: string) => `${STORAGE_KEY}:${clientId}`
 
 export interface LangCtx {
   lang: Lang
@@ -49,11 +62,16 @@ const LanguageContext = createContext<LangCtx>({
   setLang: () => {},
 })
 
-/** The remembered answer, for the first paint. Never throws (private windows). */
-export function readStoredLang(): Lang | null {
+/**
+ * The remembered answer. With a client id it is that business's own answer and nothing else —
+ * no falling back to the plain key, because the plain key may belong to a different business
+ * and would then be written onto this one. Without an id it is the pre-login hint, which is
+ * what onboarding and the first paint want. Never throws (private windows).
+ */
+export function readStoredLang(clientId?: string | null): Lang | null {
   if (typeof window === 'undefined') return null
   try {
-    const v = localStorage.getItem(STORAGE_KEY)
+    const v = localStorage.getItem(clientId ? keyFor(clientId) : STORAGE_KEY)
     return isLang(v) ? v : null
   } catch { return null }
 }
@@ -69,13 +87,18 @@ function pushLang(clientId: string, l: Lang): void {
   }).catch(() => { /* the browser copy still decides what they read */ })
 }
 
-function writeStoredLang(l: Lang): void {
-  try { localStorage.setItem(STORAGE_KEY, l) } catch { /* storage off; the client row still decides */ }
+/** Remember it for this business, and as the hint for the next cold load of this browser. The
+ *  hint is only ever a first-paint guess: effect 2 below corrects it against the record. */
+function writeStoredLang(l: Lang, clientId?: string | null): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, l)
+    if (clientId) localStorage.setItem(keyFor(clientId), l)
+  } catch { /* storage off; the client row still decides */ }
 }
 
 export function MvpLanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(DEFAULT_LANG)
-  const { client } = useClient()
+  const { client, isAdmin } = useClient()
   /** the client we have already written the browser's answer up for, so it happens once */
   const pushedFor = useRef<string | null>(null)
 
@@ -86,32 +109,23 @@ export function MvpLanguageProvider({ children }: { children: React.ReactNode })
     if (saved) setLangState(saved)
   }, [])
 
-  // 2. The client row is the record and wins — with ONE exception, because the column's
-  //    default is 'en'. A row that says English cannot be told apart from a row nobody has
-  //    answered for, so an 'en' on the record must never overwrite a browser that remembers
-  //    Spanish: that owner would tap Español in setup and be handed English on every load
-  //    until they found Settings. When they disagree that way we keep Spanish and write it
-  //    up, best-effort, so the record catches up with the owner. Once the record says 'es'
-  //    (or the owner picks English in Settings, which writes 'en' up itself) they agree and
-  //    the record leads from then on.
+  // 2. The record against the browser. resolveLang() holds the whole rule (lib/i18n/resolve-lang.ts)
+  //    so it can be proved without a browser: an admin reads the record and writes nothing, and
+  //    the owner's browser can only correct an 'en' — the column's default, which cannot be told
+  //    apart from a row nobody has answered for — using what it remembers FOR THIS CLIENT.
+  const clientId = client?.id ?? null
   useEffect(() => {
-    const v = client?.preferred_language
-    const id = client?.id
-    if (!isLang(v)) return
-    const saved = readStoredLang()
-    if (v === DEFAULT_LANG && saved && saved !== DEFAULT_LANG) {
-      setLangState(saved)
-      if (id && pushedFor.current !== id) { pushedFor.current = id; pushLang(id, saved) }
-      return
-    }
-    setLangState(v)
-    writeStoredLang(v)
-  }, [client?.preferred_language, client?.id])
+    if (!clientId) return
+    const r = resolveLang(client?.preferred_language, readStoredLang(clientId), isAdmin)
+    setLangState(r.lang)
+    if (r.store) writeStoredLang(r.store, clientId)
+    if (r.push && pushedFor.current !== clientId) { pushedFor.current = clientId; pushLang(clientId, r.push) }
+  }, [client?.preferred_language, clientId, isAdmin])
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l)
-    writeStoredLang(l)
-  }, [])
+    writeStoredLang(l, clientId)
+  }, [clientId])
 
   const value = useMemo<LangCtx>(() => ({
     lang,
