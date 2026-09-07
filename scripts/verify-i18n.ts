@@ -123,8 +123,10 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
       'src/app/(auth)/onboarding/full/steps/step-shape.tsx',
       'src/app/(auth)/onboarding/full/steps/step-budget.tsx',
     ],
-    // `reply` and `chips` are data, not a screen, and `settings` is a page whose language row is
-    // the only part this move translated — its file is listed here the day the rest of it is.
+    // The rest of Settings went through t() in Move 5b, so the file is listed now: the promise
+    // was that it would be the day the whole page was translated.
+    settings: ['src/app/dashboard/settings/page.tsx'],
+    // `reply` and `chips` are data, not a screen.
   }
 
   const listed = new Set([...allScreenKeys(), ...allShapeWords()])

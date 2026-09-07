@@ -75,6 +75,15 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   settings: [
     'Language', 'Pick the language you want to read.', 'Saved.',
     'Could not save. Try again.', 'Some screens are still in English. We are working on the rest.',
+    /* Move 5b: the rest of the page — your name, your email, your password. */
+    'Your profile', 'Your name, phone, email and password', 'About you',
+    'Avatar comes from your login.', 'Your name', 'Phone', 'Email', 'Verified', 'Save',
+    'Password', 'Change password', 'Current password', 'New password', 'Confirm new password',
+    'At least 8 characters', 'Re-enter new password', 'Update password',
+    'Show password', 'Hide password',
+    'Enter your current password.', 'The new passwords do not match.',
+    'The new password needs at least 8 characters.', 'That current password is not right.',
+    'Password updated.',
   ],
 
   /* /dashboard/campaigns/new — the shelf's own chrome (the cards themselves are catalog copy) */
