@@ -24,7 +24,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { getCampaign } from '@/lib/campaigns/server'
 import { stopCampaign, getCampaignCharges } from '@/lib/campaigns/work-orders'
 import { cancelCampaignSubscriptions } from '@/lib/campaigns/campaign-subscription-server'
-import { owedRefundCents, refundCampaignPayment, pageAdmins, REFUND_UNCONFIRMED } from '@/lib/campaigns/refunds-server'
+import { owedRefundCents, refundCampaignPayment, hasOpenDispute, pageAdmins, REFUND_UNCONFIRMED, DISPUTE_OPEN } from '@/lib/campaigns/refunds-server'
 import { summarize } from '@/lib/campaigns/types'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 
@@ -77,7 +77,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // which is how "Nothing is owed." got said over money we were still holding. Either read failing
   // blocks the refund, whether or not we managed to see a charge. We send nothing, say so plainly,
   // and put it in front of a person.
-  const refundBlocked = !money.ok
+  let refundBlocked = !money.ok
   let refundedCents = 0
   let owedCents = 0
   let refundOk = true
@@ -92,6 +92,19 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     refundedCents = r?.refundedCents ?? 0
     refundOk = r?.ok === true
   }
+  // A CHARGEBACK IN FLIGHT. owedRefundCents reads settled charges only, so a disputed row comes back
+  // as "no charge" — true for refunding (the bank already pulled the money and sending it again
+  // would send it twice), and a lie to say out loud, because it made the settlement print "Nothing
+  // is owed." at an owner whose money was mid-dispute. So when there is no settled charge we ask
+  // the second question: is the bank holding one? An unreadable answer blocks the refund like any
+  // other unreadable money read.
+  let disputeOpen = false
+  if (!refundBlocked && !money.paid) {
+    const d = await hasOpenDispute(id).catch(() => ({ ok: false as const, reason: 'the payment row could not be read' }))
+    if (!d.ok) refundBlocked = true
+    else disputeOpen = d.disputed
+  }
+
   // "Failed" means we owed money and could not send it. A refund that returns ok with 0 cents is
   // the already-refunded case: nothing moved because nothing was left, which is not a failure.
   const refundFailed = owedCents > 0 && !refundOk
@@ -107,20 +120,22 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // nothing was prepaid AND nothing was delivered — the one case where it is true.
   const moneyLine = refundBlocked
     ? REFUND_UNCONFIRMED
-    : money.paid
-      ? refundedCents > 0
-        ? `We refund $${(refundedCents / 100).toFixed(2)} for work not delivered. It lands on your card in 5 to 10 days.`
-        : refundFailed
-          ? `We owe you $${(owedCents / 100).toFixed(2)} back for work we did not deliver. Our team is sending it by hand today.`
-          : money.paid.totalCents > 0
-            ? 'Everything you ordered was delivered, so there is nothing to send back.'
-            // A monthly-only order is keyed to a SetupIntent: the card was SAVED, never charged, so
-            // total_cents is 0. Saying "everything you ordered was delivered" there was a claim
-            // about work we may not have done, made only because there was no money to send back.
-            : 'Your monthly service is cancelled. Nothing was charged up front, so nothing is sent back.'
-    : charges.accruedCents > 0
-      ? `Owed for delivered work so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done; it arrives on one invoice.`
-      : 'Nothing is owed.'
+    : disputeOpen
+      ? DISPUTE_OPEN
+      : money.paid
+        ? refundedCents > 0
+          ? `We refund $${(refundedCents / 100).toFixed(2)} for work not delivered. It lands on your card in 5 to 10 days.`
+          : refundFailed
+            ? `We owe you $${(owedCents / 100).toFixed(2)} back for work we did not deliver. Our team is sending it by hand today.`
+            : money.paid.totalCents > 0
+              ? 'Everything you ordered was delivered, so there is nothing to send back.'
+              // A monthly-only order is keyed to a SetupIntent: the card was SAVED, never charged, so
+              // total_cents is 0. Saying "everything you ordered was delivered" there was a claim
+              // about work we may not have done, made only because there was no money to send back.
+              : 'Your monthly service is cancelled. Nothing was charged up front, so nothing is sent back.'
+        : charges.accruedCents > 0
+          ? `Owed for delivered work so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done; it arrives on one invoice.`
+          : 'Nothing is owed.'
 
   const settlementLines = [
     stoppedCount > 0 ? `${stoppedCount} unstarted piece${stoppedCount === 1 ? '' : 's'} of work stopped.` : 'Nothing was left to stop.',
@@ -147,6 +162,12 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       : 'Everything unstarted was voided.',
     link: `/work/today?focus=${id}`,
   }).catch(() => ({ notified: 0 }))
+
+  // The bank is holding this order's money. Nothing automatic can settle that, so a person picks it
+  // up — the same way a blocked refund does.
+  if (disputeOpen) {
+    await pageAdmins(campaign.clientId, 'A campaign stopped with a chargeback open', `"${name}" was stopped while its charge is disputed, so nothing was sent back. Settle it when the dispute closes.`, `/admin/campaign-orders?focus=${id}`)
+  }
 
   // We could not even work out what was owed. A person settles it, and the owner was told so.
   if (refundBlocked) {
@@ -184,6 +205,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       refundOwedCents: owedCents,
       refundFailed,
       refundBlocked,
+      disputeOpen,
       monthlyStopped,
       subscriptionsCanceled: subs.canceled + subs.alreadyCanceled,
       subscriptionCancelFailed: subs.failed,

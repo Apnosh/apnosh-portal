@@ -71,6 +71,11 @@ function main() {
   s.check('NOT collected: a failed charge', !collected.includes('failed'))
   s.check('settled = collected minus disputed, so we never refund on top of the bank', !settled.includes('disputed'))
   s.check('settled still covers a partial refund (there is more to give back)', settled.includes('partially_refunded'))
+  // The gap between the two sets is a real order the stop route has to talk about. Collected but not
+  // settled = the bank is holding the money. The settlement must say the dispute, never fall through
+  // to "Nothing is owed." because the settled read found no row.
+  s.check('a disputed order is collected but NOT settled — the stop must name the dispute',
+    collected.includes('disputed') && !settled.includes('disputed'))
 
   s.group('a chargeback we WIN goes back to the truth, not to "paid"')
   s.eq('nothing was ever refunded → paid', statusAfterDisputeWon(118_000, 0), 'paid')
