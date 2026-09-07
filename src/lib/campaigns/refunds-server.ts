@@ -28,7 +28,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { stripe } from '@/lib/stripe'
 import { notifyClientOwners, notifyStaffForClient, createNotification } from '@/lib/notifications'
 import { getAdminUserIds } from '@/lib/notify'
-import { refundOwedCents, refundableCents, refundStatus, SETTLED_STATUSES, type PaidBill } from './refund-math'
+import { refundOwedCents, refundableCents, refundStatus, COLLECTED_STATUSES, SETTLED_STATUSES, type PaidBill } from './refund-math'
 
 /** The paid charge we are reversing, read off campaign_payments. */
 export interface PaidCharge extends PaidBill {
@@ -54,11 +54,26 @@ export interface RefundResult {
 const NOTHING = (reason: string): RefundResult => ({ ok: false, refundedCents: 0, totalRefundedCents: 0, reason })
 
 /**
- * The paid charge for a campaign, or null. Reads with select('*') so the refund columns being
- * absent (pre-migration 254) can never error the read — a refund must still be possible.
+ * The paid-charge read, as a Result — the same shape and the same reason as DeliveredResult.
+ *
+ * ok:true + paid:null is a REAL answer: there is no settled charge on this campaign, so there is
+ * nothing to send back. ok:false means we could not read, which is a different fact entirely and
+ * must never be spoken as "nothing is owed".
  */
-export async function getPaidCharge(campaignId: string): Promise<PaidCharge | null> {
-  if (!campaignId) return null
+export type PaidChargeResult =
+  | { ok: true; paid: PaidCharge | null }
+  | { ok: false; reason: string }
+
+/**
+ * The paid charge for a campaign. Reads with select('*') so the refund columns being absent
+ * (pre-migration 254) can never error the read — a refund must still be possible.
+ *
+ * FAILS CLOSED, like the ledger read. A dead database and a campaign that was never paid for both
+ * used to come back as `null`, and the stop screen said "Nothing is owed" over the top of money we
+ * were still holding. Now an error says so and the settlement hands it to a person.
+ */
+export async function getPaidCharge(campaignId: string): Promise<PaidChargeResult> {
+  if (!campaignId) return { ok: true, paid: null }
   const admin = createAdminClient()
   try {
     const { data, error } = await admin
@@ -71,10 +86,45 @@ export async function getPaidCharge(campaignId: string): Promise<PaidCharge | nu
       .order('paid_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-    if (error || !data) return null
-    return toPaidCharge(data as Record<string, unknown>)
-  } catch {
-    return null
+    if (error) return { ok: false, reason: `payment row unreadable: ${error.message}` }
+    // No row is a real, readable answer: nothing settled was ever charged for this campaign.
+    if (!data) return { ok: true, paid: null }
+    return { ok: true, paid: toPaidCharge(data as Record<string, unknown>) }
+  } catch (e) {
+    return { ok: false, reason: `payment row unreadable: ${(e as Error)?.message ?? 'unknown error'}` }
+  }
+}
+
+/** What we say when the bank is still holding the money. Never "nothing is owed". */
+export const DISPUTE_OPEN =
+  'A bank dispute is open on this order, so we cannot send anything back until it closes. Our team is on it.'
+
+/**
+ * Is there an OPEN chargeback on this campaign?
+ *
+ * getPaidCharge answers "can we refund?" and a disputed row makes it say no — correctly, because
+ * refunding on top of a chargeback sends the same money twice. But "no" there looks exactly like
+ * "there was never a charge", and the stop settlement then told an owner whose bank had just pulled
+ * their money that nothing was owed. This is the read that tells those two apart.
+ *
+ * Same Result shape, same reason: an unreadable answer is not "no dispute".
+ */
+export async function hasOpenDispute(campaignId: string): Promise<{ ok: true; disputed: boolean } | { ok: false; reason: string }> {
+  if (!campaignId) return { ok: true, disputed: false }
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('campaign_payments')
+      .select('status')
+      .eq('campaign_id', campaignId)
+      .in('status', COLLECTED_STATUSES)
+      .order('paid_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) return { ok: false, reason: `payment row unreadable: ${error.message}` }
+    return { ok: true, disputed: String((data as Record<string, unknown> | null)?.status ?? '') === 'disputed' }
+  } catch (e) {
+    return { ok: false, reason: `payment row unreadable: ${(e as Error)?.message ?? 'unknown error'}` }
   }
 }
 
@@ -233,7 +283,10 @@ export async function owedRefundCents(campaignId: string): Promise<{
   paid: PaidCharge | null
   reason?: string
 }> {
-  const paid = await getPaidCharge(campaignId)
+  const charge = await getPaidCharge(campaignId)
+  // The charge read failed. There is no number here either — the same law as the ledger read.
+  if (!charge.ok) return { ok: false, owedCents: 0, deliveredCents: 0, paid: null, reason: charge.reason }
+  const paid = charge.paid
   if (!paid) return { ok: true, owedCents: 0, deliveredCents: 0, paid: null }
   const d = await getDeliveredCharges(campaignId)
   if (!d.ok) return { ok: false, owedCents: 0, deliveredCents: 0, paid, reason: d.reason }
@@ -258,8 +311,15 @@ export async function refundCampaignPayment(opts: {
   const { campaignId, reason } = opts
   if (!campaignId) return NOTHING('no campaign')
 
-  // 1. THE PAID ROW. No paid charge → no Stripe call, ever.
-  const paid = await getPaidCharge(campaignId)
+  // 1. THE PAID ROW. No paid charge → no Stripe call, ever. An UNREADABLE paid row is not the same
+  // thing: we do not know whether there is money to send back, so we say so and page a person
+  // rather than telling the owner there is no charge.
+  const charge = await getPaidCharge(campaignId)
+  if (!charge.ok) {
+    await pageAdmins('', 'A refund was held back', `We could not read the payment row for campaign ${campaignId} (${charge.reason}), so nothing was sent back. Settle it by hand.`, `/admin/campaign-orders?focus=${campaignId}`)
+    return NOTHING(REFUND_UNCONFIRMED)
+  }
+  const paid = charge.paid
   if (!paid) return NOTHING('There is no card charge on this campaign to send back.')
   // A monthly-only order keyed to a SetupIntent never took money; there is nothing to refund.
   if (paid.paymentIntentId.startsWith('seti_')) return NOTHING('Nothing was charged upfront on this order.')
