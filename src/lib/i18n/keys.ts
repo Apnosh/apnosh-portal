@@ -133,13 +133,41 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Two or more places', 'Mostly catering', 'Open for a season',
     /* Move 5b — the v8 shelf card: the price's time word, the lane ladder, the count row's
        detour, the "set up once" tally and the door at the bottom. */
-    'fee inside', 'monthly, cancel any time', 'Free', 'In Pro', 'Start', 'Ask',
+    'fee inside', 'monthly, cancel any time', 'Free', 'In Pro', 'Start', 'Ask', 'Quote',
     'You do it yourself, step by step', 'You do it with Apnosh AI, step by step', 'Done for you by Apnosh',
     '{n} of {total} done', '{title} is {price} today.', 'Order that instead',
     'We do not have your Google numbers yet. This is the first step.',
     'Nothing fit? Ask {name}.', 'Nothing fit? Ask us.',
     '{name} is already on your work. A real person replies {promise}.',
     'A real person replies {promise}.',
+  ],
+
+  /* the promises ledger's own words (src/lib/promises/registry.ts) — the count line printed on
+     every shelf row and every product page, and the label, who takes it, and when it shows.
+     It is its own screen because the table is drawn on two surfaces and belongs to neither. */
+  promises: [
+    // the three sentence frames promiseSentence() can return
+    'Counted after: {what} · {taken} · shows on Home {when} after you order',
+    'Counted after: {what} · marked Done the day they land',
+    'Not counted yet: {reason}',
+    // who takes the count (TAKEN_BY_WORD), plus Google's own "once it is connected" wording
+    'Taken by Google', 'Taken by you', 'Taken by Apnosh', 'Counted by a person',
+    'Taken by your website analytics', 'Taken by the platform it goes out on',
+    'Taken by Google, once your Google profile is connected',
+    // how long until Home shows it
+    'about a week', 'about two weeks', 'about three weeks', 'about a month',
+    // every spec's label, which finishes "Counted after: …"
+    'taps on your Google card', 'views of your Google card', 'views per post, where they go',
+    'the files in your library', 'orders placed on Google', 'replies posted',
+    'your rating since you started', 'new Google reviews', 'website visits, daily',
+    'listings you have confirmed, of fifty', 'ad results', 'app orders',
+    'your five profiles, set up', 'emails sent', 'texts sent', 'messages sent', 'repeat visits',
+    // and every reason a count cannot be taken at all
+    'We cannot read most directories back. Each listing counts when you confirm it.',
+    'Ad numbers live in the ad account and are not read into Home yet.',
+    'The delivery apps give us no way to read your orders.',
+    'No text or email sending yet.',
+    'Repeat visits need your register connected.',
   ],
 
   /* the fourteen goal chips and the six budget answers — asked in setup, shown on Create.

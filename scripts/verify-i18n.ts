@@ -126,6 +126,10 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
     // The rest of Settings went through t() in Move 5b, so the file is listed now: the promise
     // was that it would be the day the whole page was translated.
     settings: ['src/app/dashboard/settings/page.tsx'],
+    // The promises table is not a screen, it is the WORDS two screens draw (the shelf row and
+    // the product page). Its count line was English on a Spanish page for exactly as long as
+    // nobody read this file, so the scanner reads it.
+    promises: ['src/lib/promises/registry.ts'],
     // `reply` and `chips` are data, not a screen.
   }
 

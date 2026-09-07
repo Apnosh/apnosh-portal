@@ -166,18 +166,57 @@ export const TAKEN_BY_WORD: Record<TakenBy, string> = {
   social: 'Taken by the platform it goes out on',
 }
 
-/** The sentence the product page prints under the price, e.g.
- *  "Counted after: taps on your Google card · Taken by Google · shows on Home about 3 weeks after you order". */
-export function promiseSentence(specs: PromiseSpec[]): string | null {
+/**
+ * The count line, IN PIECES so it can be read in Spanish.
+ *
+ * It used to come back as one glued English string, and that string is drawn on every shelf row
+ * and on every product page — so a Spanish owner read a Spanish page with an English promise
+ * about money in the middle of it. The pieces are English keys, which is how the rest of the
+ * product translates: `key` is the sentence frame with its holes, and every value in `vars` is
+ * itself a key the renderer runs through t() before it fills a hole. Nothing is glued here, so
+ * a translator can move the parts of the sentence around.
+ *
+ * Render it with renderPromiseSentence(), never by hand.
+ */
+export interface PromiseSentence {
+  /** the frame, e.g. 'Counted after: {what} · {taken} · shows on Home {when} after you order' */
+  key: string
+  /** each hole's value, itself an English key to translate before filling */
+  vars: Record<string, string>
+}
+
+export function promiseSentence(specs: PromiseSpec[]): PromiseSentence | null {
   const s = specs[0]
   if (!s) return null
-  if (s.notCountedReason) return `Not counted yet: ${s.notCountedReason}`
-  if (s.metric === 'delivered_files') return `Counted after: ${s.label} · marked Done the day they land`
+  if (s.notCountedReason) return { key: 'Not counted yet: {reason}', vars: { reason: s.notCountedReason } }
+  if (s.metric === 'delivered_files') {
+    return { key: 'Counted after: {what} · marked Done the day they land', vars: { what: s.label } }
+  }
   const days = s.lagDays + s.windowDays
   const when = days <= 7 ? 'about a week' : days <= 14 ? 'about two weeks' : days <= 24 ? 'about three weeks' : 'about a month'
   // A Google count only runs once Google is connected; say so before the money, not after.
   const taken = s.takenBy === 'google' ? 'Taken by Google, once your Google profile is connected' : TAKEN_BY_WORD[s.takenBy]
-  return `Counted after: ${s.label} · ${taken} · shows on Home ${when} after you order`
+  return {
+    key: 'Counted after: {what} · {taken} · shows on Home {when} after you order',
+    vars: { what: s.label, taken, when },
+  }
+}
+
+/**
+ * The count line as one string, in this owner's language.
+ *
+ * `tr` is the screen's own bound translator (`T` from useLang), so this file stays pure and
+ * knows nothing about React or which language is on. Every hole is translated FIRST and then
+ * filled, so a Spanish frame gets Spanish parts.
+ */
+export function renderPromiseSentence(
+  line: PromiseSentence | null,
+  tr: (key: string, vars?: Record<string, string | number>) => string,
+): string | null {
+  if (!line) return null
+  const vars: Record<string, string> = {}
+  for (const [hole, key] of Object.entries(line.vars)) vars[hole] = tr(key)
+  return tr(line.key, vars)
 }
 
 /** The Creatives shelf builds its cards as `creative-<type>` and orders through the desk, so the

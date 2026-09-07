@@ -13,7 +13,7 @@
  * Honest by construction: cards that are not fully built wear "Coming soon" and do not sell.
  * Every price, turnaround and availability comes from the same modules the builder uses.
  */
-import { PROMISE_BY_CARD, promiseSentence } from '@/lib/promises/registry'
+import { PROMISE_BY_CARD, promiseSentence, renderPromiseSentence } from '@/lib/promises/registry'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -308,6 +308,9 @@ export default function CreatePage() {
   const params = useSearchParams()
   const { client } = useClient()
   const { T } = useLang()
+  /* The price as the owner reads it. Every real price is a number and travels as it is; the ONE
+     card price that is a WORD is 'Quote', and it was the last English left on a Spanish shelf. */
+  const priceWord = (p: string) => (p === 'Quote' ? T('Quote') : p)
   const clientId = client?.id
   // the view lives in the URL so back works and a product can be shared
   const view: View = useMemo(() => {
@@ -415,7 +418,7 @@ export default function CreatePage() {
         <div className="tile"><Icon />{!buy && <span style={{ position: 'absolute', top: 6, left: 6 }}><Coming /></span>}</div>
         {/* A held card prints NO price and NO ready time. Both are offers, and there is
             nothing to offer yet. Same rule as the product page's fact strip. */}
-        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{c.price} <span>· {c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</div></div>
+        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{priceWord(c.price)} <span>· {c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</div></div>
       </button>
     )
   }
@@ -426,7 +429,7 @@ export default function CreatePage() {
         <span className={`st${isDone ? ' done' : ''}`}>{isDone && <Check size={13} strokeWidth={3} />}</span>
         <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
         <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : T('Coming soon')}</span>}</span>
-        <span className="r"><b>{isDone ? T('Done') : buy ? c.price : ''}</b></span>
+        <span className="r"><b>{isDone ? T('Done') : buy ? priceWord(c.price) : ''}</b></span>
         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
       </button>
     )
@@ -480,7 +483,7 @@ export default function CreatePage() {
                 <div style={hv(g)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Mark hue={g} size={36}><GI size={20} /></Mark><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink }}>{GOALS.find((x) => x.id === g)?.label}</div>{read.summary && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{read.summary}</div>}</div></div>
                   {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>{T('We do not do {list} yet. Everything else is below.', { list: read.unsupported.join(', ') })}</div>}
-                  <div style={{ marginTop: 6 }}>{picks.map((c) => { const I = iconFor(c); return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '7px 2px' }}><Mark hue={c.goal} size={30}><I size={16} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{c.price}</b></span><ChevronRight size={15} color={C.faint} /></button> })}</div>
+                  <div style={{ marginTop: 6 }}>{picks.map((c) => { const I = iconFor(c); return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '7px 2px' }}><Mark hue={c.goal} size={30}><I size={16} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{priceWord(c.price)}</b></span><ChevronRight size={15} color={C.faint} /></button> })}</div>
                   {picks[0] && <button type="button" className="btn hue block" style={{ marginTop: 6 }} onClick={() => order(picks[0])}>{T('Build this')} <ArrowRight size={15} /></button>}
                 </div>
               )
@@ -583,13 +586,13 @@ export default function CreatePage() {
     if (!c) return null
     const Icon = iconFor(c)
     const free = hasFreeLane(c.id)
-    const price = c.price === 'Quote' && free ? T('Free') : c.price
+    const price = c.price === 'Quote' && free ? T('Free') : priceWord(c.price)
     // The time word under the price. A monthly card says what monthly means; everything else
     // says when it is ready. "Fee inside" is true: chargedPriceLabel folds the service fee in.
     const monthly = c.price.includes('/mo') && !c.price.includes('+')
     const priceSub = monthly ? T('monthly, cancel any time') : c.price === 'Quote' ? c.ready : `${c.ready} · ${T('fee inside')}`
     const lanes = lanesFor(c.id)
-    const count = promiseSentence(PROMISE_BY_CARD[c.id] ?? [])
+    const count = renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T)
     // The glyph and the Order button take the card's goal colour, or mint, per the switch above.
     const chrome: HueKey = SHELF_CHROME_MINT ? 'mint' : c.goal
     return (
@@ -656,7 +659,7 @@ export default function CreatePage() {
                 return (
                   <div key={id} className="row" style={hv('amber')}>
                     <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                      <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{c.price} · {c.ready}</span></span>
+                      <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{priceWord(c.price)} · {c.ready}</span></span>
                     </button>
                     <button type="button" className="btn ghost" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => setBudgetSheet(true)}>{T('Raise budget')}</button>
                   </div>
@@ -741,7 +744,7 @@ export default function CreatePage() {
                 <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? T('Coming soon') : mw ? T('matches “{word}”', { word: mw }) : c.sub || c.plain}</span></span>
                 {/* No price on a held card, here either. The search row was the last place a
                     coming-soon card still carried one, which read as a thing you could buy. */}
-                <span className="r">{buy ? <><b>{c.price}</b><span>{c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</span>
+                <span className="r">{buy ? <><b>{priceWord(c.price)}</b><span>{c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</span>
               </button> })}
           </div>
         )}
@@ -791,7 +794,7 @@ export default function CreatePage() {
           <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>{T('Three picks that fit what you said. About {amount} to start.', { amount: total ? `$${total.toLocaleString()}` : T('a quote') })}</div>
         </div>
         <div style={{ padding: '12px 12px 0' }}>{picks.map((c) => { const Icon = iconFor(c); const why = whyNow(c) ?? c.plain.split('.')[0]
-          return <button key={c.id} type="button" onClick={() => open(c)} className="row press" style={hv(c.goal)}><Mark hue={c.goal} size={36}><Icon size={18} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span><span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{why}</span></span><span className="r"><b>{c.price}</b></span></button> })}</div>
+          return <button key={c.id} type="button" onClick={() => open(c)} className="row press" style={hv(c.goal)}><Mark hue={c.goal} size={36}><Icon size={18} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span><span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{why}</span></span><span className="r"><b>{priceWord(c.price)}</b></span></button> })}</div>
         <div style={{ padding: '10px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {picks[0] && <button type="button" className="btn block" onClick={() => order(picks[0])}>{T('Start with the first one')} <ArrowRight size={15} /></button>}
           <button type="button" onClick={() => setAnswers([])} style={{ border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{T('Start over')}</button>
@@ -825,11 +828,11 @@ export default function CreatePage() {
         {/* A coming-soon card prints NO price. A price is an offer, and there is nothing to
             offer yet; the reason takes its place. */}
         <div className="pp-facts">
-          {buy && <div><b>{c.price}</b><span>{T('price')}</span></div>}
+          {buy && <div><b>{priceWord(c.price)}</b><span>{T('price')}</span></div>}
           <div><b>{c.ready}</b><span>{T('ready in')}</span></div><div><b>{T(c.you)}</b><span>{T('you do')}</span></div><div><b>{c.channels.length}</b><span>{T(c.channels.length === 1 ? 'channel' : 'channels')}</span></div>
         </div>
         {!buy && <div style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: C.fill, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{notSellableReason(c.id)}</div>}
-        {(() => { const ps = buy ? promiseSentence(PROMISE_BY_CARD[c.id] ?? []) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
+        {(() => { const ps = buy ? renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
         <div className="pp-sec"><h2>{T('In plain words')}</h2><p>{c.plain}</p></div>
         <div className="pp-sec"><h2>{T('What you get')}</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>
         <div className="pp-sec"><h2>{T('What happens after you order')}</h2>
@@ -841,7 +844,7 @@ export default function CreatePage() {
         <div className="sticky"><div className="in">
           {/* No price and no Order on a card that cannot be bought. The bar says what it is
               waiting on and offers the one thing that is real: telling us you want it. */}
-          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? c.price : T('Not on sale yet')}<span>{buy ? `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}` : T('We will tell you the day it opens')}</span></div>
+          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? priceWord(c.price) : T('Not on sale yet')}<span>{buy ? `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}` : T('We will tell you the day it opens')}</span></div>
           {buy
             ? <button type="button" className="btn hue" onClick={() => order(c)}>{T(c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order')} <ArrowRight size={15} /></button>
             : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>{T('Tell me when')}</Link>}
