@@ -443,7 +443,7 @@ export default function CreatePage() {
       // Steer the chip rail, which is what draws the shelf now.
       const c = res?.situation ? CHIP_FOR_GOAL[SITUATION_GOAL[res.situation]] : null
       if (c) { setChip(c); setShowLater(null) }
-    } catch { setRead({ ok: false, reason: 'no answer', situation: null, summary: '', unsupported: [] }) }
+    } catch { setRead({ ok: false, reason: 'no-answer', situation: null, summary: '', unsupported: [] }) }
     setReading(false)
   }
   /* The four example sentences. They are TRANSLATED before they are shown and before they are

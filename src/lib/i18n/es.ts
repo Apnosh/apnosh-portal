@@ -373,4 +373,11 @@ export const ES: Record<string, string> = {
   'Nothing fit? Ask us.': '¿Nada te sirve? Pregúntanos.',
   '{name} is already on your work. A real person replies {promise}.': '{name} ya está en tu trabajo. Una persona real responde {promise}.',
   'A real person replies {promise}.': 'Una persona real responde {promise}.',
+
+  /* ── Move 5b: the funnel's band words, drawn into the canvas ───────────────────────────── */
+  'very low': 'muy bajo',
+  'low': 'bajo',
+  'average': 'normal',
+  'high': 'alto',
+  'very high': 'muy alto',
 }

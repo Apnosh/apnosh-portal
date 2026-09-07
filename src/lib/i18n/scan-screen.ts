@@ -50,8 +50,11 @@ function looksLikeCode(v: string): boolean {
   if (/^\[[a-z][\w-]*\]/.test(v)) return true                  // [onboarding] a console.warn
   if (/^[A-Za-z_$][\w$]*(\.[\w$]+)+$/.test(v)) return true      // tr.orb, a property read
   if (/[,_]/.test(v) && /^[a-z_, ]+$/.test(v)) return true      // id, subject, last_message_at
+  if (CSS_SHORTHAND.test(v)) return true                        // 0 0 auto (flex), 1fr auto (grid)
   return false
 }
+/** A value made only of sizes and css keywords, with nothing to read in it. */
+const CSS_SHORTHAND = /^(?:[\d.]+(?:px|rem|em|fr|%|vh|vw|dvh|s|ms)?|auto|none|min-content|max-content|inherit|initial)(?:\s+(?:[\d.]+(?:px|rem|em|fr|%|vh|vw|dvh|s|ms)?|auto|none|min-content|max-content|inherit|initial))+$/
 
 /** Drop comments: a note to a reader is not copy on a screen. Block comments, whole comment
  *  lines, and a trailing // — never the // in a URL, which is why the lookbehind is there. */
@@ -111,6 +114,16 @@ const TPL_VAL = /(?:[{[(,?]|\breturn)\s*`([^`]*)`/g
  *  the file is one), but the `:` of a ternary whose then-half is a string can. */
 const TERNARY_ELSE = /\?\s*(['"])(?:[^'"]*)\1\s*:\s*(['"])([^'"]*)\2/g
 const TKEY = /\b[tT]\(\s*(['"])([^'"]+)\1/g
+/**
+ * A string sitting behind a colon in an object literal: `{ veryLow: 'very low', low: 'low' }`.
+ *
+ * This is how the funnel's band words got onto a Spanish page. They are a Record, they are drawn
+ * straight into the canvas, and every other pattern here needs a `{ [ ( , ?` immediately before
+ * the quote — which a `key:` is not. Safe to add because dropCodeProps has already blanked every
+ * `style={{…}}`, and looksLikeCode throws out what is left of css (`'0 6px 20px rgba(…)'`,
+ * `'saturate(180%) blur(16px)'`). A one-word value is still skipped, same as everywhere else.
+ */
+const OBJ_VAL = /[{,]\s*(?:'[^'\n]+'|"[^"\n]+"|\[[^\]\n]+\]|[A-Za-z_$][\w$]*)\s*:\s*(['"])([^'"\n]*)\1/g
 
 /**
  * Every string this source draws that the manifest does not carry, in the order found.
@@ -144,6 +157,8 @@ export function looseStringsIn(source: string, listed: Set<string>): string[] {
   for (const m of src.matchAll(STR_VAL)) { const v = m[2].trim(); if (isPhrase(holes(v))) seen.add(v) }
   for (const m of src.matchAll(TPL_VAL)) { const v = m[1].trim(); if (isPhrase(holes(v))) seen.add(v) }
   for (const m of src.matchAll(TERNARY_ELSE)) { const v = m[3].trim(); if (isPhrase(holes(v))) seen.add(v) }
+  // a Record's values: { veryLow: 'very low' } — behind a colon, which nothing above reaches
+  for (const m of src.matchAll(OBJ_VAL)) { const v = m[2].trim(); if (isPhrase(holes(v))) seen.add(v) }
   // the key inside t('…') / T("…"), whichever quote it was written with
   for (const m of src.matchAll(TKEY)) seen.add(m[2])
 

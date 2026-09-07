@@ -879,7 +879,9 @@ export default function HomeFunnel({
       const weak = dband === 'veryLow' || dband === 'low'
       const cr = bandCol(dband) // theme-aware band colour for the text
       const pct = Math.round((b / a) * 100)
-      const label = (pct >= 1 ? pct : '<1') + '% · ' + BAND_WORD[dband] // e.g. "4% · average", "45% · very high"
+      // The band word is drawn INTO the canvas, so it never went through a React tree and stayed
+      // English on a Spanish page. It is one t() call like every other word on this screen.
+      const label = (pct >= 1 ? pct : '<1') + '% · ' + T(BAND_WORD[dband]) // e.g. "4% · average", "45% · very high"
       const midY = (layout[i].y + rAt(i) + (layout[i + 1].y - rAt(i + 1))) / 2
       const px = cx + (layout[i].dx + layout[i + 1].dx) / 2
       ctx.font = weak ? '700 11px Inter, sans-serif' : '600 11px Inter, sans-serif'
@@ -1256,10 +1258,15 @@ export default function HomeFunnel({
       {/* one quiet line under the tabs: the real window · the lag note · what the +/- compares
           (owner ask 2026-09-02: the audience row came out so the funnel gets the room) */}
       {rangeLabel && (
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'center', gap: 6, padding: '2px 16px 8px', whiteSpace: 'nowrap', overflow: 'hidden', textAlign: 'center' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
-          {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
-          <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· ${T('change vs {when}', { when: compareLabel })}` : `· ${T('platforms report a few days behind')}`}</span>
+        /* The canvas starts at the top of this block and the crowd drifts up behind the words, so
+           the line sits on its own plate from the tokens rather than on the sprites. The funnel
+           itself is untouched: this is chrome above it. */
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 16px 8px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', background: C.card, border: `1px solid ${C.line}`, borderRadius: 999, padding: '3px 11px' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
+            {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
+            <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· ${T('change vs {when}', { when: compareLabel })}` : `· ${T('platforms report a few days behind')}`}</span>
+          </span>
         </div>
       )}
       </div>

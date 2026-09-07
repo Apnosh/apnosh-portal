@@ -39,6 +39,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'the year before', 'the {n} days before', 'change vs {when}',
     'platforms report a few days behind', 'to', 'Your business', 'Alerts', 'Alerts ({n})',
     'Getting your numbers', 'Google {g} · Social {s}', '– even',
+    // the band word inside each conversion pill, drawn into the canvas (home-funnel BAND_WORD)
+    'very low', 'low', 'average', 'high', 'very high',
     // the whole funnel, read out loud to a screen reader
     'Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects.',
   ],
