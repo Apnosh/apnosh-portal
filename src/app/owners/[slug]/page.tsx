@@ -6,7 +6,7 @@ import { getClientLanguage } from '@/lib/i18n/language'
 import { t, type Lang } from '@/lib/i18n/t'
 import { getPromiseRows } from '@/lib/promises/read'
 import { creditWords, REFERRAL_CREDIT_CENTS } from '@/lib/referrals/model'
-import { ensureReferralCode } from '@/lib/referrals/server'
+import { referralCodeFor } from '@/lib/referrals/server'
 
 /**
  * /owners/<slug> — one owner's page, for the friend they sent it to.
@@ -96,8 +96,12 @@ export default async function OwnerPage({ params }: PageProps) {
   const amount = creditWords(REFERRAL_CREDIT_CENTS)
   /* The button carries the OWNER'S OWN CODE. Without it the page would promise a friend $50 and
      then send them to a signup that had never heard of them — the credit only exists because the
-     code travels. No code, no promise: the page says the plain invitation instead. */
-  const code = await ensureReferralCode(owner.id)
+     code travels. No code, no promise: the page says the plain invitation instead.
+
+     READ, never make. This page is a public GET; anybody on the internet can call it, and a GET
+     that writes a row is a GET that can be used to write rows. The code is made when the owner
+     turns their page on, which is a thing they chose to do. */
+  const code = await referralCodeFor(owner.id)
 
   return (
     <main style={{

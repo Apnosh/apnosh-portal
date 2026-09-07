@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { referralsEnabled } from '@/lib/referral-gate'
+import { ensureReferralCode } from '@/lib/referrals/server'
 
 /**
  * POST /api/referrals/featured — "Show my page" on or off.
@@ -21,6 +22,10 @@ export async function POST(req: NextRequest) {
   if (!access.authorized) {
     return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   }
+  // THE CODE IS MADE HERE, not on the public page. Turning the page on is a deliberate act by the
+  // owner; a stranger loading /owners/<slug> is not, and that GET must not write anything.
+  // Best-effort: a page with no code still draws, it just shows the plain invitation.
+  if (on) await ensureReferralCode(clientId)
   const { error } = await createAdminClient().from('clients').update({ featured_opt_in: on }).eq('id', clientId)
   if (error) {
     console.warn('[referrals] could not save the opt-in (apply migration 261?):', error.message)

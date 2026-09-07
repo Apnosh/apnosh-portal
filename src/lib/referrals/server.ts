@@ -65,6 +65,22 @@ export async function ensureReferralCode(clientId: string): Promise<string | nul
   } catch (e) { warn('could not make a code', e); return null }
 }
 
+/**
+ * This client's code, READ ONLY. Null when they have none yet.
+ *
+ * The public /owners/<slug> page reads this rather than ensureReferralCode: a GET anybody on the
+ * internet can make must not write a row. The code is made when the owner turns their page on
+ * (POST /api/referrals/featured), which is a thing they did on purpose.
+ */
+export async function referralCodeFor(clientId: string): Promise<string | null> {
+  if (!referralsEnabled() || !clientId) return null
+  try {
+    const { data, error } = await createAdminClient().from('referral_codes').select('code').eq('client_id', clientId).maybeSingle()
+    if (error) { warn('could not read the code', error); return null }
+    return (data?.code as string) || null
+  } catch (e) { warn('could not read the code', e); return null }
+}
+
 /** Whose code is this? NULL for a code nobody holds — which is what a mistyped code is. */
 export async function clientForCode(rawCode: string): Promise<{ clientId: string; name: string } | null> {
   if (!referralsEnabled()) return null
