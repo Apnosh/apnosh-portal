@@ -71,3 +71,19 @@ export function deskPaymentDue(row: DeskAcceptRow): boolean {
 
 /** The one code the screen keys on to show "Pay to start" instead of an error. */
 export const DESK_NEEDS_PAYMENT = 'DESK_NEEDS_PAYMENT'
+
+/**
+ * May the owner still cancel this order themselves?
+ *
+ * ONLY BEFORE IT LANDS. Once the work is delivered the thing exists — somebody made it — and
+ * cancelling is a conversation with a person, not a button. Both halves are asked because either
+ * can be ahead of the other: the request row's own status, and the work order that makes the thing.
+ *
+ * Pure so the screen and the route cannot drift into showing a button the server refuses.
+ */
+export function deskCancelable(status: string | null | undefined, workOrderStatus?: string | null): boolean {
+  const s = String(status ?? '')
+  if (['delivered', 'closed', 'declined'].includes(s)) return false
+  if (['delivered', 'approved', 'done'].includes(String(workOrderStatus ?? ''))) return false
+  return ['requested', 'in_review', 'quoted', AWAITING_PAYMENT, 'in_progress'].includes(s)
+}

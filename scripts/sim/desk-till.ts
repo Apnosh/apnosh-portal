@@ -14,8 +14,8 @@ import { deskBill } from '@/lib/requests/desk-bill'
 import { feeCentsOn, SERVICE_FEE_RATE, monthlyPhrase, fmtMoney } from '@/lib/campaigns/checkout-bill'
 import { priceCreativeRequest, fmtTotal, type CreativePrice } from '@/lib/requests/pricing'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
-import { refundOwedCents, COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
-import { deskPaymentMatchesOrder, deskPaymentDue, AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
+import { refundOwedCents, refundStatus, COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
+import { deskPaymentMatchesOrder, deskPaymentDue, deskCancelable, AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
 import { workStarted } from '@/lib/campaigns/work-orders-core'
 import { DESIGN_LINES } from '@/lib/design/design-copy'
@@ -193,6 +193,23 @@ function main() {
   s.check('and a disputed one, which is money the bank is holding', (COLLECTED_STATUSES as readonly string[]).includes('disputed'))
   s.check('a pending row is NOT collected, so a first charge may still start', !(COLLECTED_STATUSES as readonly string[]).includes('pending'))
   s.check('and neither is a failed one', !(COLLECTED_STATUSES as readonly string[]).includes('failed'))
+
+  s.group('Cancelling an order: only before the work lands, and the screen agrees with the server')
+  s.check('an order waiting for the card can be cancelled', deskCancelable(AWAITING_PAYMENT))
+  s.check('so can one already in the works', deskCancelable('in_progress'))
+  s.check('and a quote nobody has said yes to', deskCancelable('quoted'))
+  s.check('a delivered order cannot — that is a conversation, not a button', !deskCancelable('delivered'))
+  s.check('nor a closed one', !deskCancelable('closed'))
+  s.check('nor one we declined', !deskCancelable('declined'))
+  s.check('in progress on the row but DELIVERED on the work order is delivered', !deskCancelable('in_progress', 'delivered'))
+  s.check('and approved work is delivered too', !deskCancelable('in_progress', 'approved'))
+  s.check('work merely being made is still cancellable', deskCancelable('in_progress', 'in_progress'))
+  s.check('a status we do not know is never cancellable', !deskCancelable('something_else') && !deskCancelable(null))
+  // A full refund is what triggers the desk settlement (subscription cancel + work stop), so the
+  // status math that decides "full" has to agree with the refund we actually send.
+  s.eq('everything back reads as refunded', refundStatus(17_820, 17_820), 'refunded')
+  s.eq('part of it back is partly refunded, which does NOT stop the work', refundStatus(17_820, 5_000), 'partially_refunded')
+  s.eq('nothing back leaves the row paid', refundStatus(17_820, 0), 'paid')
 
   const ok = s.report('The desk through the till — one fee, one card form, one shut switch')
   process.exit(ok ? 0 : 1)

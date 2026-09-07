@@ -220,16 +220,42 @@ export interface CancelSubsResult {
  * status 'shipped', so ongoing monthly services (e.g. review replies) keep billing as agreed.
  */
 export async function cancelCampaignSubscriptions(campaignId: string): Promise<CancelSubsResult> {
+  return cancelSubscriptionsKeyedOn('campaign_id', campaignId, `/admin/campaign-orders?focus=${campaignId}`, 'A stopped campaign')
+}
+
+/**
+ * The same cancel, for a DESK order — the money half of cancelling a Request Desk order.
+ *
+ * A monthly desk line (a social posting package) starts a real Stripe subscription through
+ * ensureDeskSubscription, whose id is stored on the SAME column of the SAME payment row the
+ * campaign lane uses; only the key differs. Without this, a fully refunded desk order kept billing
+ * every month forever: the refund settlement only knew how to cancel a campaign's subscriptions.
+ *
+ * Degrades exactly like the campaign one: pre-258 the request_id column is absent, the read errors,
+ * and the answer is zeros rather than a throw.
+ */
+export async function cancelDeskSubscriptions(requestId: string): Promise<CancelSubsResult> {
+  return cancelSubscriptionsKeyedOn('request_id', requestId, '/admin/requests', 'A cancelled desk order')
+}
+
+async function cancelSubscriptionsKeyedOn(
+  column: 'campaign_id' | 'request_id',
+  value: string,
+  adminLink: string,
+  /** How the page to staff names the thing, e.g. "A stopped campaign". */
+  what: string,
+): Promise<CancelSubsResult> {
   const result: CancelSubsResult = { canceled: 0, alreadyCanceled: 0, failed: 0 }
+  if (!value) return result
   const a = admin()
   let rows: Array<Record<string, unknown>> = []
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (a.from('campaign_payments') as any)
       .select('stripe_payment_intent_id, stripe_subscription_id, subscription_status, client_id, monthly_cents')
-      .eq('campaign_id', campaignId)
+      .eq(column, value)
       .not('stripe_subscription_id', 'is', null)
-    if (error || !Array.isArray(data)) return result   // pre-215/221 or read failure — nothing recorded to cancel
+    if (error || !Array.isArray(data)) return result   // pre-215/221/258 or read failure — nothing recorded to cancel
     rows = data
   } catch {
     return result
@@ -254,12 +280,12 @@ export async function cancelCampaignSubscriptions(campaignId: string): Promise<C
       } else {
         result.failed++
         await stampSub(a, piId, { subscription_status: 'cancel_failed' })
-        // Never silently keep charging a stopped campaign: page staff to cancel by hand.
+        // Never silently keep charging a stopped order: page staff to cancel by hand.
         await notifyStaffForClient(String(row.client_id ?? ''), ['strategist'], {
           kind: 'payment',
           title: 'Monthly subscription needs a manual cancel',
-          body: `A stopped campaign's $${Math.round(Number(row.monthly_cents ?? 0) / 100)}/mo subscription (${subId}) did not cancel automatically (${msg || 'unknown error'}). Cancel it in Stripe now.`,
-          link: `/admin/campaign-orders?focus=${campaignId}`,
+          body: `${what}'s $${Math.round(Number(row.monthly_cents ?? 0) / 100)}/mo subscription (${subId}) did not cancel automatically (${msg || 'unknown error'}). Cancel it in Stripe now.`,
+          link: adminLink,
         }).catch(() => ({ notified: 0 }))
       }
     }

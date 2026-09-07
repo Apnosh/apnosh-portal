@@ -29,6 +29,7 @@ import { stripe } from '@/lib/stripe'
 import { notifyClientOwners, notifyStaffForClient, createNotification } from '@/lib/notifications'
 import { getAdminUserIds } from '@/lib/notify'
 import { refundOwedCents, refundableCents, refundStatus, COLLECTED_STATUSES, SETTLED_STATUSES, type PaidBill } from './refund-math'
+import { STOP_NOTE } from './work-orders-core'
 
 /** The paid charge we are reversing, read off campaign_payments. */
 export interface PaidCharge extends PaidBill {
@@ -526,6 +527,17 @@ export async function settleRefund(opts: {
     } catch (e) { console.warn('[refund] subscription cancel failed', (e as Error)?.message) }
   }
 
+  // THE SAME TWO THINGS FOR A DESK ORDER. This whole block used to be `isFull && campaignId`, so a
+  // fully refunded desk order kept its monthly subscription billing every month and left its work
+  // order sitting on a designer's queue — money back, work still being made, nobody told.
+  if (isFull && !campaignId && paid.requestId) {
+    try {
+      const { cancelDeskSubscriptions } = await import('./campaign-subscription-server')
+      await cancelDeskSubscriptions(paid.requestId)
+    } catch (e) { console.warn('[refund] desk subscription cancel failed', (e as Error)?.message) }
+    await stopDeskWork(paid.requestId, paid.clientId).catch((e) => console.warn('[refund] desk work stop failed', (e as Error)?.message))
+  }
+
   // THE TAX. A committed Stripe Tax transaction is a reported sale; money going back has to go back
   // in the tax report too. Best-effort + logged: the refund itself already succeeded and must never
   // be undone by a reporting hiccup.
@@ -542,6 +554,49 @@ export async function settleRefund(opts: {
     }).catch(() => ({ notified: 0 }))
   }
   await pageAdmins(paid.clientId, `Refund sent: ${dollars}`, `${reason} ${campaignId ? `Campaign ${campaignId}` : paid.requestId ? `Desk order ${paid.requestId}` : '(unlinked)'}. Refund ${refundId ?? '(taken outside the app)'}.${isFull && campaignId ? ' The campaign was stopped and its monthly billing canceled.' : ''}`, campaignId ? undefined : '/admin/requests')
+}
+
+/**
+ * Stop the work behind a fully refunded DESK order.
+ *
+ * The same rule the campaign sweep uses: work NOT YET STARTED is voided ('declined' with the stop
+ * note, which every reader already knows how to show), and work already in hand is left alone —
+ * a person is making it, and pulling it out from under them mid-piece helps nobody. Staff are told
+ * either way, because either way somebody has to stop or finish something.
+ *
+ * Best-effort, like everything after the money moved: the refund already happened and nothing here
+ * may undo it.
+ */
+async function stopDeskWork(requestId: string, clientId: string): Promise<void> {
+  const admin = createAdminClient()
+  const ts = new Date().toISOString()
+  const key = `request:${requestId}`
+  const { data: voided } = await admin
+    .from('creator_work_orders')
+    .update({ status: 'declined', note: STOP_NOTE, updated_at: ts })
+    .eq('campaign_piece_key', key)
+    .in('status', ['offered', 'accepted'])
+    .select('id')
+  const { data: inFlight } = await admin
+    .from('creator_work_orders')
+    .select('id')
+    .eq('campaign_piece_key', key)
+    .in('status', ['in_progress', 'revision', 'delivered', 'approved'])
+  // The order row stops saying it is in the works. Best-effort: a status the CHECK refuses leaves
+  // the row alone, and the work orders above are the thing that actually stops.
+  await admin.from('creative_requests').update({ status: 'closed', updated_at: ts }).eq('id', requestId)
+    .then(() => undefined, () => undefined)
+
+  const stopped = voided?.length ?? 0
+  const running = inFlight?.length ?? 0
+  await notifyStaffForClient(clientId, ['strategist', 'designer'], {
+    kind: 'payment',
+    title: 'A desk order was refunded in full',
+    body: running > 0
+      ? `${stopped} unstarted piece(s) stopped. ${running} piece(s) are already being made — finish or stop them by hand, the money has gone back.`
+      : `${stopped} unstarted piece(s) stopped. Nothing is being made for this order.`,
+    link: '/admin/requests',
+  }).catch(() => ({ notified: 0 }))
 }
 
 /**

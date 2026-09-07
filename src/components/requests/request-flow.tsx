@@ -21,6 +21,7 @@ import {
 } from '@/lib/requests/catalog'
 import CreativeFlow from '@/components/requests/creative-flow'
 import DeskCheckout from '@/components/requests/desk-checkout'
+import { deskCancelable } from '@/lib/requests/desk-guards'
 import { useClient } from '@/lib/client-context'
 
 interface RequestNote {
@@ -78,6 +79,9 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
   const [actErr, setActErr] = useState<string | null>(null)
   /* The order the owner is paying for right now. The till is the ONE card form (desk-checkout). */
   const [payFor, setPayFor] = useState<{ id: string; label: string } | null>(null)
+  /* Cancelling sends money back, so it asks first. This holds the order mid-question. */
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null)
+  const [cancelMsg, setCancelMsg] = useState<string | null>(null)
   const { client } = useClient()
 
   const loadMine = useCallback(async () => {
@@ -125,6 +129,26 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
       }
       if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
       if (kind === 'note') setReply('')
+      await loadMine()
+    } catch (e) {
+      setActErr(e instanceof Error ? e.message : 'That did not go through. Try again.')
+    }
+    setBusy(null)
+  }
+
+  /* CANCELLING AN ORDER. The server decides everything that matters (is it delivered, was it
+   * paid, how much goes back) — this only asks first and repeats the answer word for word. */
+  const cancelOrder = async (id: string) => {
+    if (busy) return
+    setBusy(id)
+    setActErr(null)
+    setCancelMsg(null)
+    try {
+      const r = await fetch(`/api/requests/${id}/cancel`, { method: 'POST' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
+      setCancelMsg(typeof d.message === 'string' ? d.message : 'Your order is cancelled.')
+      setConfirmCancel(null)
       await loadMine()
     } catch (e) {
       setActErr(e instanceof Error ? e.message : 'That did not go through. Try again.')
@@ -275,6 +299,60 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                             ? `$${(r.quote_cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} on your card. Your team starts the same day.`
                             : 'Your team starts the same day.'}
                         </div>
+                      </div>
+                    )}
+                    {/* CANCEL. Only before the work lands — after that it is a conversation, not a
+                        button, and the server says so in the same words. */}
+                    {deskCancelable(r.status) && (
+                      <div style={{ marginTop: 10 }}>
+                        {confirmCancel === r.id ? (
+                          <div style={{ background: DESK.amberWash, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '11px 13px' }}>
+                            <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: DESK.ink, lineHeight: 1.5 }}>
+                              We stop the work that has not started and send back what you paid for it. It lands on your card in 5 to 10 days. Work already being made keeps going.
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                              <button
+                                type="button"
+                                disabled={busy === r.id}
+                                onClick={() => { void cancelOrder(r.id) }}
+                                style={{
+                                  flex: 1, height: 38, borderRadius: 19, border: `1.5px solid ${DESK.amberLine}`,
+                                  background: DESK.card, color: DESK.amber, fontFamily: DESK.disp, fontSize: 13.5,
+                                  fontWeight: 700, cursor: busy === r.id ? 'default' : 'pointer',
+                                }}
+                              >
+                                {busy === r.id ? 'Cancelling...' : 'Yes, cancel it'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmCancel(null)}
+                                style={{
+                                  flex: 1, height: 38, borderRadius: 19, border: `1.5px solid ${DESK.line}`,
+                                  background: DESK.card, color: DESK.ink2, fontFamily: DESK.disp, fontSize: 13.5,
+                                  fontWeight: 700, cursor: 'pointer',
+                                }}
+                              >
+                                Keep it
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setCancelMsg(null); setActErr(null); setConfirmCancel(r.id) }}
+                            style={{
+                              background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer',
+                              fontFamily: DESK.body, fontSize: 12.5, fontWeight: 600, color: DESK.mute,
+                            }}
+                          >
+                            Cancel this order
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {cancelMsg && (
+                      <div style={{ marginTop: 8, fontFamily: DESK.body, fontSize: 12.5, color: DESK.mintDeep, lineHeight: 1.45 }}>
+                        {cancelMsg}
                       </div>
                     )}
                     {/* the thread: every note both ways, oldest first */}
