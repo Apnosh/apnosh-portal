@@ -32,6 +32,9 @@ export default function ContentMenu({ restaurant, menuItems, clientId, draftId, 
   const [busy, setBusy] = useState(false)
   const [undo, setUndo] = useState<CartLine | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The ship was refused for money (402 SHIP_NEEDS_PAYMENT). Retrying cannot clear that, so the
+  // cart swaps "Ship it" for the door that can: checkout.
+  const [needsPayment, setNeedsPayment] = useState(false)
   const inFlight = useRef(false)   // synchronous guard so a double-tap can't create twice
 
   // Resume a saved draft: load its pieces back into the cart and update it in place on
@@ -71,7 +74,7 @@ export default function ContentMenu({ restaurant, menuItems, clientId, draftId, 
   async function persist(ship: boolean) {
     if (inFlight.current || !cart.length) return
     inFlight.current = true
-    setBusy(true); setError(null)
+    setBusy(true); setError(null); setNeedsPayment(false)
     const campName = name.trim() || `${restaurant} campaign`
     const items = cartToLineItems(cart)
     try {
@@ -90,7 +93,13 @@ export default function ContentMenu({ restaurant, menuItems, clientId, draftId, 
         // The status flip IS the order: if it doesn't land, the campaign is only a saved
         // draft, so fail the whole ship instead of navigating to a page that looks live.
         const r = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }) }).catch(() => null)
-        if (!r || !r.ok) throw new Error("That didn't go through. Nothing was ordered. Try again.")
+        if (!r || !r.ok) {
+          // 402 SHIP_NEEDS_PAYMENT: this plan costs money, and money is taken at checkout, not
+          // here. "Try again" could never clear it, so say why and send them to the door that works.
+          const j = r ? ((await r.json().catch(() => ({}))) as { code?: string }) : {}
+          if (r?.status === 402 && j.code === 'SHIP_NEEDS_PAYMENT') { setNeedsPayment(true); throw new Error('This order needs payment first. Nothing was ordered.') }
+          throw new Error("That didn't go through. Nothing was ordered. Try again.")
+        }
       }
       router.push(id ? `/dashboard/campaigns/${id}` : '/dashboard/campaigns')   // stays in-flight through nav
     } catch (e) {
@@ -105,7 +114,7 @@ export default function ContentMenu({ restaurant, menuItems, clientId, draftId, 
       <div style={{ width: '100%', maxWidth: 480, background: C.bg, display: 'flex', flexDirection: 'column', height: '100dvh', boxShadow: '0 0 40px rgba(0,0,0,0.06)' }}>
 
         {view === 'menu' && <MenuView restaurant={restaurant} cart={cart} bill={bill} onOpen={(def) => setModal({ def })} onBack={() => (cart.length ? setView('cart') : exit())} onReview={() => setView('cart')} />}
-        {view === 'cart' && <CartView name={name} setName={setName} restaurant={restaurant} shootCart={shootCart} restCart={restCart} onSiteCount={onSiteCount} solo={solo} bill={bill} busy={busy} error={error} undo={undo} onUndo={() => { if (undo) { setCart((c) => [...c, undo]); setUndo(null) } }} onEdit={(l) => setModal({ def: PIECE_BY_TYPE[l.type], editing: l })} onRemove={removeLine} onQty={setQty} onAddMore={() => setView('menu')} onBack={exit} onCost={() => setView('cost')} onShip={() => persist(true)} onSave={() => persist(false)} />}
+        {view === 'cart' && <CartView name={name} setName={setName} restaurant={restaurant} shootCart={shootCart} restCart={restCart} onSiteCount={onSiteCount} solo={solo} bill={bill} busy={busy} error={error} needsPayment={needsPayment} onCheckout={() => router.push('/dashboard/campaigns/new')} undo={undo} onUndo={() => { if (undo) { setCart((c) => [...c, undo]); setUndo(null) } }} onEdit={(l) => setModal({ def: PIECE_BY_TYPE[l.type], editing: l })} onRemove={removeLine} onQty={setQty} onAddMore={() => setView('menu')} onBack={exit} onCost={() => setView('cost')} onShip={() => persist(true)} onSave={() => persist(false)} />}
         {view === 'cost' && <CostView cart={cart} bill={bill} shootDays={shootDays} solo={solo} onSiteCount={onSiteCount} busy={busy} onBack={() => setView('cart')} onShip={() => persist(true)} />}
 
         {modal && <AddPieceModal def={modal.def} menuItems={menuItems} editing={modal.editing} onSubmit={addOrUpdate} onClose={() => setModal(null)} />}
@@ -163,6 +172,8 @@ function CartView(p: {
   name: string; setName: (s: string) => void; restaurant: string
   shootCart: CartLine[]; restCart: CartLine[]; onSiteCount: number; solo: boolean
   bill: ReturnType<typeof campaignBill>; busy: boolean; error: string | null; undo: CartLine | null; onUndo: () => void
+  /** The ship was refused for money: show the way to pay instead of a retry that cannot work. */
+  needsPayment: boolean; onCheckout: () => void
   onEdit: (l: CartLine) => void; onRemove: (id: string) => void; onQty: (id: string, q: number) => void
   onAddMore: () => void; onBack: () => void; onCost: () => void; onShip: () => void; onSave: () => void
 }) {
@@ -215,11 +226,17 @@ function CartView(p: {
           </button>
           <div style={{ display: 'flex', gap: 10 }}>
             <button onClick={p.onSave} disabled={p.busy} style={{ flex: '0 0 auto', minWidth: 96, background: '#fff', color: C.ink, border: `1.5px solid ${C.line}`, borderRadius: 12, padding: 14, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>Save</button>
-            <button onClick={p.onShip} disabled={p.busy} style={{ flex: 1, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: p.busy ? 0.7 : 1 }}>
-              {p.busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />} Ship it
-            </button>
+            {p.needsPayment ? (
+              <button onClick={p.onCheckout} style={{ flex: 1, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <Rocket size={17} /> Go to checkout
+              </button>
+            ) : (
+              <button onClick={p.onShip} disabled={p.busy} style={{ flex: 1, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: 14, fontWeight: 700, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: p.busy ? 0.7 : 1 }}>
+                {p.busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />} Ship it
+              </button>
+            )}
           </div>
-          <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8 }}>Nothing is charged now. Each piece bills only when it ships.</div>
+          <div style={{ fontSize: 11, color: C.faint, textAlign: 'center', marginTop: 8 }}>{p.needsPayment ? 'Checkout takes the card and starts the work. Your plan is saved.' : 'A plan that costs money is paid at checkout before your team starts.'}</div>
         </div>
       )}
     </>

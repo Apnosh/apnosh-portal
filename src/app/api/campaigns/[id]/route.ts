@@ -166,7 +166,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
     const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, invoiceLane })
     if (invoiceLane && gate === 'allow' && (preTaxCents > 0 || perMonthCents > 0)) invoiceBill = { preTaxCents, perMonthCents }
-    if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT }, { status: 402 })
+    // A machine-readable code, not just the sentence: the legacy ship buttons (the campaign detail
+    // page, the Content Menu) used to show this as a plain error with a "Try again" that could never
+    // succeed. They read the code and send the owner to checkout instead.
+    if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT, code: 'SHIP_NEEDS_PAYMENT' }, { status: 402 })
     if (gate === 'verify') {
       const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId: paymentIntentId!, clientId: campaign.clientId, campaignId: id, preTaxCents })
       if (!verified.ok) return NextResponse.json({ error: verified.reason }, { status: 402 })

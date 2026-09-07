@@ -59,6 +59,9 @@ export default function CampaignDetailPage() {
   const [busy, setBusy] = useState(false)
   // Ship-only failure, shown inline over the footer (the footer's Ship button is the retry).
   const [shipError, setShipError] = useState<string | null>(null)
+  // The ship was refused for money (402 SHIP_NEEDS_PAYMENT). "Try again" can never clear that, so
+  // the footer swaps the retry for the one thing that can: paying for the order.
+  const [needsPayment, setNeedsPayment] = useState(false)
   // The stop settlement, straight from the server — what stopped, what still bills, and that
   // the MONEY stopped. Shown as a banner after a stop (the server also sends it to the inbox).
   const [stopNote, setStopNote] = useState<{ summary: string; cancelFailed: boolean } | null>(null)
@@ -140,11 +143,20 @@ export default function CampaignDetailPage() {
     const shippedAt = new Date().toISOString()
     // Re-send the owner's last-seen creator picks so mint dispatches to exactly
     // who they chose, even if an incremental save earlier failed.
+    setNeedsPayment(false)
     const r = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: shippedAt, creator_choices: camp.creatorChoices ?? {} } }) }).catch(() => null)
     if (!r || !r.ok) {
       // The status flip never landed: the campaign is still a draft, so no optimistic
       // "shipped" state and no navigation — a false success would hide an unplaced order.
-      setShipError("That didn't go through. Nothing was ordered. Try again.")
+      // 402 SHIP_NEEDS_PAYMENT is not a hiccup: this plan costs money and money is paid at
+      // checkout, so retrying here is a dead end. Say why, and offer the door that works.
+      const body = r ? ((await r.json().catch(() => ({}))) as { code?: string }) : {}
+      if (r?.status === 402 && body.code === 'SHIP_NEEDS_PAYMENT') {
+        setNeedsPayment(true)
+        setShipError('This order needs payment first. Nothing was ordered.')
+      } else {
+        setShipError("That didn't go through. Nothing was ordered. Try again.")
+      }
       setBusy(false)
       return
     }
@@ -228,17 +240,24 @@ export default function CampaignDetailPage() {
             state — a third status voice down here would just repeat them. */}
         {camp && !shipped && (
           <>
-            <HonestBillBar items={camp.draft.items} note={path === 'strategist' ? 'Approving is free. Each piece bills only when it ships.' : 'Nothing is charged until a piece ships.'} />
+            <HonestBillBar items={camp.draft.items} note="A plan that costs money is paid at checkout before your team starts." />
             <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: '#fff' }}>
               {shipError && <div style={{ fontSize: 12.5, color: C.red, textAlign: 'center', marginBottom: 8 }}>{shipError}</div>}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => router.push('/dashboard/campaigns')} disabled={busy} style={{ flex: '0 0 auto', minWidth: 104, height: 48, background: '#fff', color: C.ink, borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Save draft</button>
-                <button onClick={ship} disabled={busy} className="cw-press" style={{ flex: 1, height: 48, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.7 : 1 }}>
-                  {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
-                  {path === 'strategist' ? 'Approve & ship' : path === 'diy' ? 'Schedule it' : 'Ship it'}
-                </button>
+                {needsPayment ? (
+                  <button onClick={() => router.push('/dashboard/campaigns/new')} className="cw-press" style={{ flex: 1, height: 48, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Rocket size={17} />
+                    Go to checkout
+                  </button>
+                ) : (
+                  <button onClick={ship} disabled={busy} className="cw-press" style={{ flex: 1, height: 48, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.7 : 1 }}>
+                    {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
+                    {path === 'strategist' ? 'Approve & ship' : path === 'diy' ? 'Schedule it' : 'Ship it'}
+                  </button>
+                )}
               </div>
-              <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>Saved as a draft already. Save to come back later, or approve to hand it to your team.</div>
+              <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>{needsPayment ? 'Checkout takes the card and starts the work. Your plan is saved here.' : 'Saved as a draft already. Save to come back later, or approve to hand it to your team.'}</div>
             </div>
           </>
         )}
@@ -415,7 +434,7 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
       {/* path/lifecycle banner (strategist draft awaiting the owner's OK) */}
       {inReview && camp.draft.path === 'strategist' && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: C.greenSoft, color: C.greenDk, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
-          <span style={{ fontSize: 14 }}>◆</span><span>Apnosh is building every piece you kept. Review the plan below, then tap <b>Approve &amp; ship</b> when it looks right. Approving doesn’t charge you.</span>
+          <span style={{ fontSize: 14 }}>◆</span><span>Apnosh is building every piece you kept. Review the plan below, then tap <b>Approve &amp; ship</b> when it looks right. A plan that costs money goes to checkout first, so nothing starts until you pay.</span>
         </div>
       )}
 
