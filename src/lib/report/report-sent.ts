@@ -34,22 +34,51 @@ export function previousMonth(now: Date): { year: number; month: number } {
 }
 
 /**
- * Is today the first business day of its month?
+ * May the report go out today?
  *
- * Business day, not the 1st: a report that lands on a Saturday is read on Monday with two days of
- * other mail on top of it, and a restaurant owner's Monday is already full. Monday–Friday, in UTC
- * — the same clock every other cron in this app runs on. No holiday calendar: a holiday is one
- * day's difference and a wrong calendar is a silent skip.
+ * The 1st through the 5th, Monday–Friday, in UTC — the same clock every other cron in this app
+ * runs on. Business days, not the 1st: a report that lands on a Saturday is read on Monday with
+ * two days of other mail on top of it, and a restaurant owner's Monday is already full. No holiday
+ * calendar: a holiday is one day's difference and a wrong calendar is a silent skip.
+ *
+ * IT USED TO BE THE FIRST BUSINESS DAY AND NOTHING ELSE — exactly one day a month. That was tidy
+ * and it dropped people. The month is CLAIMED before the email goes out and GIVEN BACK when
+ * nobody could be told (releaseReportMonth below), and a client whose numbers could not be read
+ * that morning is never claimed at all — so both of those wait for the next run, and with one
+ * sending day a month the next run was thirty days away. The window is five days wide instead,
+ * and the dedupe (one owner_reports row per client per month) is what keeps it to one email.
  */
-export function isFirstBusinessDay(d: Date): boolean {
+export function isReportDay(d: Date): boolean {
   const day = d.getUTCDay()          // 0 Sun … 6 Sat
   if (day === 0 || day === 6) return false
   const date = d.getUTCDate()
-  if (date === 1) return true
-  // The 2nd is the first business day when the 1st was a Sunday; the 3rd when the 1st was Saturday.
-  if (date === 2 && day === 1) return true
-  if (date === 3 && day === 1) return true
-  return false
+  return date >= 1 && date <= 5
+}
+
+/**
+ * Who this run works on: the clients with NO row for this month, and no more than `cap` of them.
+ *
+ * THE CLAIM IS THE DEDUPE, so it is also the filter. Reading the month's rows once and skipping
+ * those clients means a second run on the 2nd is not the first run again — it does no work for
+ * anybody already told, and picks up exactly the ones who were missed. The cap is here because
+ * the route has sixty seconds: whoever is left comes back as `remaining`, and tomorrow's run
+ * takes them.
+ */
+export function clientsToProcess<T extends { id: string }>(
+  clients: readonly T[],
+  claimed: ReadonlySet<string>,
+  cap: number,
+): { batch: T[]; already: number; remaining: number } {
+  const todo = clients.filter((c) => !claimed.has(c.id))
+  const batch = cap > 0 ? todo.slice(0, cap) : [...todo]
+  return { batch, already: clients.length - todo.length, remaining: todo.length - batch.length }
+}
+
+/** The same list, in runs of `size`. Sending sixty emails one after another does not fit in 60s. */
+export function inBatches<T>(list: readonly T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < list.length; i += Math.max(1, size)) out.push(list.slice(i, i + Math.max(1, size)))
+  return out
 }
 
 /** The i18n keys the email draws. Listed here so keys.ts and the sender cannot drift apart. */
@@ -125,10 +154,15 @@ export async function claimReportMonth(
  *
  * The claim goes down BEFORE the email, which is the only safe order — but that leaves one hole:
  * if nobody could actually be told (the notify threw, or there was no owner to send to), the row
- * says the report was sent and no run will ever try again. A month claimed and never delivered is
- * the quietest way to skip somebody forever.
+ * says the report was sent while nothing arrived. A month claimed and never delivered is the
+ * quietest way to skip somebody.
  *
- * So the claim is released. The ROW is the claim (unique client_id + month), so releasing it means
+ * So the claim is released, and a released month is picked up again by the next run inside the
+ * sending window — the 1st through the 5th (isReportDay above), which is exactly what that window
+ * is five days wide for. Released on the 1st, sent on the 2nd. Released on the 5th and it waits
+ * for next month, which is the honest limit of this.
+ *
+ * The ROW is the claim (unique client_id + month), so releasing it means
  * deleting it: sent_at is NOT NULL in migration 260 and cannot be blanked, and adding a nullable
  * "not really sent" state would give the dedupe two meanings.
  *

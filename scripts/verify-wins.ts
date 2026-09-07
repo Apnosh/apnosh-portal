@@ -14,8 +14,11 @@
  *      junk URL is rejected before it ever reaches the database.
  *   3. THE REPORT NEVER PRINTS A NUMBER IT DOES NOT HAVE. A chapter with nothing in it gets the
  *      honest waiting line, never a zero, and a month with no chapters at all is never emailed.
- *   4. THE FIRST BUSINESS DAY IS THE FIRST BUSINESS DAY. The cron runs on the 1st through the 5th
- *      so a weekend cannot swallow a month; exactly one of those days may send.
+ *   4. THE SENDING WINDOW, AND WHO IS LEFT IN IT. The cron runs on the 1st through the 5th so a
+ *      weekend cannot swallow a month, and EVERY business day in there may send — the
+ *      owner_reports row, not the calendar, is what keeps it to one email. That is what makes a
+ *      month given back (nobody could be told) actually get another try. Day two must do nothing
+ *      for the clients already claimed, and a run must never take more than it can finish.
  *
  * Plus the loop the i18n scanner cannot close: the weekly sentence's key is chosen at runtime, so
  * the scanner never sees it. Here we check the two keys the reader can return (they live in
@@ -29,7 +32,7 @@
 import { isWin, isWinType, winNumber, newShareToken, isShareToken, winTypeIsMint, renderCardWords, WIN_TYPE } from '../src/lib/love/win'
 import { countedCardWords, COUNTED_LABEL_KEY, COUNTED_BIG_KEY, COUNTED_CONTEXT_KEY } from '../src/lib/promises/lines'
 import {
-  isFirstBusinessDay, monthKey, previousMonth, reportLines, hasSomethingToSay,
+  isReportDay, clientsToProcess, inBatches, monthKey, previousMonth, reportLines, hasSomethingToSay,
   WAITING_KEY, MOVED_KEY, SAID_ONE_KEY, SAID_MANY_KEY, WORKED_KEY, WORKED_POSTS_KEY,
 } from '../src/lib/report/report-sent'
 import { WEEKLY_GOOGLE_KEY, WEEKLY_SOCIAL_KEY } from '../src/lib/love/week-window'
@@ -207,29 +210,67 @@ console.log('\n3. The report never prints a number it does not have')
   check('the waiting line carries no number', !/\{[a-z]+\}/.test(WAITING_KEY) && !/\d/.test(WAITING_KEY))
 }
 
-console.log('\n4. The first business day')
+console.log('\n4. The sending window, and who is left in it')
 {
   const utc = (y: number, m: number, d: number) => new Date(Date.UTC(y, m - 1, d, 16))
   // September 2026: the 1st is a Tuesday.
-  check('Tuesday the 1st sends', isFirstBusinessDay(utc(2026, 9, 1)))
-  check('the 2nd does not', !isFirstBusinessDay(utc(2026, 9, 2)))
+  check('Tuesday the 1st sends', isReportDay(utc(2026, 9, 1)))
+  // THE FIX. The 2nd used to be shut, so a month given back on the 1st waited thirty days.
+  check('the 2nd sends too, so a month given back gets another try', isReportDay(utc(2026, 9, 2)))
   // August 2026: the 1st is a Saturday, so Monday the 3rd is the first business day.
-  check('a Saturday 1st does not send', !isFirstBusinessDay(utc(2026, 8, 1)))
-  check('the Sunday after it does not send', !isFirstBusinessDay(utc(2026, 8, 2)))
-  check('Monday the 3rd sends', isFirstBusinessDay(utc(2026, 8, 3)))
-  // November 2026: the 1st is a Sunday, so Monday the 2nd is the first business day.
-  check('a Sunday 1st does not send', !isFirstBusinessDay(utc(2026, 11, 1)))
-  check('Monday the 2nd sends', isFirstBusinessDay(utc(2026, 11, 2)))
-  // Exactly one day in each of the first five may send, every month for two years.
-  const bad: string[] = []
+  check('a Saturday 1st does not send', !isReportDay(utc(2026, 8, 1)))
+  check('the Sunday after it does not send', !isReportDay(utc(2026, 8, 2)))
+  check('Monday the 3rd sends', isReportDay(utc(2026, 8, 3)))
+  check('the 6th is outside the window', !isReportDay(utc(2026, 9, 6)) && !isReportDay(utc(2026, 9, 15)))
+  // Every month for two years has at least one sending day, and never a weekend one.
+  const noDay: string[] = []
+  const weekend: string[] = []
   for (let y = 2026; y <= 2027; y += 1) {
     for (let m = 1; m <= 12; m += 1) {
       let n = 0
-      for (let d = 1; d <= 5; d += 1) if (isFirstBusinessDay(utc(y, m, d))) n += 1
-      if (n !== 1) bad.push(`${y}-${m}:${n}`)
+      for (let d = 1; d <= 5; d += 1) {
+        if (!isReportDay(utc(y, m, d))) continue
+        n += 1
+        const wd = utc(y, m, d).getUTCDay()
+        if (wd === 0 || wd === 6) weekend.push(`${y}-${m}-${d}`)
+      }
+      if (n === 0) noDay.push(`${y}-${m}`)
     }
   }
-  check('exactly one of the first five days sends, every month', bad.length === 0, bad.join(' '))
+  check('every month has a day the report can go out', noDay.length === 0, noDay.join(' '))
+  check('no weekend is ever a sending day', weekend.length === 0, weekend.join(' '))
+
+  // DAY TWO DOES NOT DO DAY ONE AGAIN. The claim row is the dedupe, so it is also the work list.
+  const clients = Array.from({ length: 25 }, (_, i) => ({ id: `c${i}`, name: `Client ${i}` }))
+  const day1 = clientsToProcess(clients, new Set<string>(), 60)
+  check('day one takes everybody', day1.batch.length === 25 && day1.already === 0 && day1.remaining === 0)
+
+  // The 1st told twenty of them and gave two back (nobody to send to), so five are unclaimed.
+  const stillClaimed = new Set(clients.slice(0, 18).map((c) => c.id))
+  const day2 = clientsToProcess(clients, stillClaimed, 60)
+  check('day two works only on the clients with no row for the month',
+    day2.batch.length === 7 && day2.already === 18, `${day2.batch.length} / ${day2.already}`)
+  check('a month given back is one of them', day2.batch.some((c) => c.id === 'c18'))
+  check('a client already told is never touched again', !day2.batch.some((c) => stillClaimed.has(c.id)))
+  check('everybody claimed means there is nothing to do',
+    clientsToProcess(clients, new Set(clients.map((c) => c.id)), 60).batch.length === 0)
+
+  // THE RUN HAS SIXTY SECONDS. What it cannot reach comes back as a number, not as silence.
+  const capped = clientsToProcess(clients, new Set<string>(), 10)
+  check('a run takes no more than its cap', capped.batch.length === 10)
+  check('what it did not reach is counted, not dropped', capped.remaining === 15)
+  check('the cap takes them in order, so nobody is starved', capped.batch[0].id === 'c0' && capped.batch[9].id === 'c9')
+
+  check('sixty clients go ten at a time', () => {
+    const runs = inBatches(Array.from({ length: 60 }, (_, i) => i), 10)
+    return runs.length === 6 && runs.every((r) => r.length === 10)
+  })
+  check('a short list is one run', inBatches([1, 2, 3], 10).length === 1)
+  check('an empty list is no runs at all', inBatches([], 10).length === 0)
+  check('every client lands in exactly one run', () => {
+    const runs = inBatches(clients, 10)
+    return runs.flat().length === 25 && new Set(runs.flat().map((c) => c.id)).size === 25
+  })
 
   check('the report is about LAST month', monthKey(previousMonth(utc(2026, 9, 1)).year, previousMonth(utc(2026, 9, 1)).month) === '2026-08')
   check('January reaches back into last year', monthKey(previousMonth(utc(2026, 1, 1)).year, previousMonth(utc(2026, 1, 1)).month) === '2025-12')
