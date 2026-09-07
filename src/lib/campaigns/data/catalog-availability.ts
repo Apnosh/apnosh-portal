@@ -79,12 +79,16 @@ export const FULLY_BUILT_LIVE: readonly string[] = [
    * involved. Performance reporting lands in the funnel's paid-ads slots when the
    * ads adapter ships; until then the weekly tuning report is the deliverable. */
   'reach',
-  /* THE FOUR DOORLESS SERVICES (2026-09-07). Listed here on purpose so that the PLAYBOOK LAW
-   * below, not the allowlist, is what decides whether each one reaches the shelf. Each has a
-   * real price in the catalog and no card until now. truck-location has a playbook and a
-   * promise today, so its card is live. The other three are held by the law and say which of
-   * the two things is missing, which is a to-do with a name on it rather than a mystery. */
-  'trucklocation', 'barnights', 'seasonplan', 'cateringengine',
+  /* THE DOORLESS SERVICES (2026-09-07). Four services had a real price in the catalog and no
+   * card at all. Only ONE of them is finished, so only one is listed here: truck-location has
+   * a written playbook and a promise spec today.
+   *
+   * barnights, seasonplan and cateringengine are deliberately NOT here. The allowlist means
+   * "we finished this", and we have not: nobody has written the steps for bar-events,
+   * seasonal-cal or catering-engine. They stay in the catalog as coming-soon cards with the
+   * no-playbook reason (COMING_SOON_GROUP below), which is a to-do with a name on it rather
+   * than a price with nothing behind it. Add an id here the day its playbook is written. */
+  'trucklocation',
 ]
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
@@ -124,6 +128,9 @@ export const COMING_SOON_REASON: Record<string, string> = {
   pos: 'Your till talks to us differently depending on who makes it. We are building those one at a time, and we will not connect yours until the numbers it sends are right.',
   // The graphic configurator works end to end; only the price list is unsigned. Honest about that.
   pricing: 'This one is built and working. We are finishing the price list so what you see is what you pay. Coming soon.',
+  // Priced in the catalog, but nobody has written the steps a person follows to do the work.
+  // Selling it would mint an order with an empty checklist, so it waits for the steps.
+  playbook: 'Nobody has written the steps for this one yet, so we will not sell it. Writing them is the only thing left. Coming soon.',
 }
 
 /** Which reason group each bookmarked built-in belongs to (drives COMING_SOON_REASON). */
@@ -160,6 +167,9 @@ const COMING_SOON_GROUP: Record<string, keyof typeof COMING_SOON_REASON> = {
   // Monthly management: priced services (gbp-posts $85/mo, social-mgmt $475/mo) held until the
   // publish rails are real.
   gbpmgmt: 'manage', socialmgmt: 'manage',
+  // The three doorless services with no written steps yet (see FULLY_BUILT_LIVE above). Named
+  // here so the card says WHICH thing is missing instead of a bare "coming soon".
+  barnights: 'playbook', seasonplan: 'playbook', cateringengine: 'playbook',
 }
 
 /**
@@ -228,9 +238,17 @@ export function availabilityFor(id: string, overrides?: VisibilityOverrideMap): 
   return BUILTIN_AVAILABILITY[id] ?? 'live'
 }
 
-/** Can this card be added to a plan / bought / shipped right now? */
+/**
+ * Can this card be added to a plan / bought / shipped right now?
+ *
+ * ONE LAW, ONE FUNCTION: this is `sellable` and nothing else. It used to read only
+ * `availabilityFor === 'live'`, which gated the store shelf but not the buy guard, the checkout
+ * charge, the builder's deep link or the recommender. So a card the playbook law held back still
+ * had a price, an Add button and a charge behind it on four other surfaces. Every caller of
+ * isBuyable now gets the same answer the shelf does.
+ */
 export function isBuyable(id: string, overrides?: VisibilityOverrideMap): boolean {
-  return availabilityFor(id, overrides) === 'live'
+  return sellable(id, overrides).ok
 }
 
 /** Should this card be dropped from the browse entirely (search, shelves, deep-links)? */
@@ -249,9 +267,11 @@ export function draftSourceCatalogIds(draft: { sourceCatalogId?: string; sourceC
   return [...new Set(ids.map((x) => x.trim()).filter(Boolean))]
 }
 
-/** The subset of ids that are NOT buyable right now (coming soon or hidden). */
+/** The subset of ids that are NOT sellable right now: coming soon, hidden, no playbook, or no
+ *  way to count it. Same law as isBuyable, so the ship guard and the checkout charge refuse
+ *  exactly what the store refuses to show a price for. */
 export function unbuyableCatalogIds(ids: readonly string[], overrides?: VisibilityOverrideMap): string[] {
-  return ids.filter((id) => availabilityFor(id, overrides) !== 'live')
+  return ids.filter((id) => !sellable(id, overrides).ok)
 }
 
 /** The owner-facing "why it's coming soon" line for a bookmarked card, or null when it is live/hidden
