@@ -55,6 +55,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'No matches', 'No people or messages match that search.',
     'No business linked yet', 'Finish setting up your restaurant to start messaging your team.',
     'Loading…', 'Back', 'Send', 'Sending…', 'Sent · {time}', 'Today', 'Yesterday', 'now',
+    /* the line under a person's name in the conversation header */
+    'Apnosh team', 'replies {promise}', 'Replies {promise}',
     'Your strategist', 'Videographer', 'Photographer', 'Designer', 'Account & billing', 'Support',
     'Plans, priorities, anything', 'Films your content', 'Photos of your food & space',
     'Graphics, menus, flyers', 'Plans, invoices, payments', 'Anything else',

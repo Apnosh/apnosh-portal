@@ -120,6 +120,9 @@ export const ES: Record<string, string> = {
   'Today': 'Hoy',
   'Yesterday': 'Ayer',
   'now': 'ahora',
+  'Apnosh team': 'Equipo Apnosh',
+  'replies {promise}': 'contesta {promise}',
+  'Replies {promise}': 'Contesta {promise}',
   /* who you can reach, and what each one is for */
   'Your strategist': 'Tu estratega',
   'Videographer': 'Camarógrafo',
