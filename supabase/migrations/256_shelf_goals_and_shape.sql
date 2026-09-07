@@ -64,18 +64,20 @@ on conflict (slug) do nothing;
 
 -- ── 2. The shape of the business ─────────────────────────────────────────────────────────
 -- Six shapes, because these are the six that change what the store may show:
---   storefront     a place people come to (the default, and what every shelf assumes today)
+--   storefront     a place people come to (what an unanswered shelf falls back to)
 --   truck          the spot moves; Google's pin does not
 --   delivery_only  no dining room, so directions and Reserve are wrong to sell
 --   two_locations  each shop has its own numbers and its own listing
 --   catering       the buyer is an office, not a walk-in
 --   seasonal       the year has an on-season and an off-season
-alter table clients add column if not exists shape text default 'storefront'
+--
+-- NO DEFAULT, on purpose. A default of 'storefront' would stamp every existing client as a
+-- storefront, and then nothing could tell an owner who ANSWERED "a place people come to" from
+-- the thousands who were never asked. Null is the honest state for "never asked"; the code
+-- reads it as a storefront (getClientShelfShape), which is the same shelf without the false
+-- record. The CHECK allows null for exactly that reason.
+alter table clients add column if not exists shape text
   check (shape is null or shape in ('storefront','truck','delivery_only','two_locations','catering','seasonal'));
-
--- The language the owner reads. 'en' today; Rosa's shelf is the reason the column exists now
--- rather than later. Nothing translates yet, and nothing should claim it does.
-alter table clients add column if not exists preferred_language text default 'en';
 
 -- The same answer on the onboarding draft row, so a half-finished setup restores it. The
 -- clients column above stays the one the product reads.
@@ -83,4 +85,3 @@ alter table businesses add column if not exists shape text
   check (shape is null or shape in ('storefront','truck','delivery_only','two_locations','catering','seasonal'));
 
 comment on column clients.shape is 'How the business runs. Read by the Create shelf (chip-shelf overrides) and set at onboarding.';
-comment on column clients.preferred_language is 'The language the owner reads. Only en is translated today.';

@@ -328,7 +328,10 @@ export function screenToStepIndex(bizType: string, screen1: number): number {
 }
 
 export function getSteps(): StepId[] {
-  /* SIX SCREENS.
+  /* TEN SCREENS for a restaurant today (getScreens groups these steps into screens; count it
+   * there, not here, and update this line when it moves). It said SIX for a while after the
+   * shelf move added four, which is the kind of stale number that makes a reader trust the
+   * next comment less.
    *
    * It was twenty for a restaurant, about a hundred inputs, and it read as an interrogation.
    * The Google + website lookup at the name step now answers most of it before we ask, so the

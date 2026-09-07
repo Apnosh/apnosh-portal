@@ -76,6 +76,10 @@ export function inferShelfShape(data: {
  * The client's shape, read from the database. Safe before migration 256 runs: a missing column
  * comes back as 42703 (or PostgREST's PGRST204) and we return the storefront default rather than
  * failing the page. Never throws.
+ *
+ * NULL means nobody was ever asked (the column has no default on purpose, so an answered
+ * 'storefront' and an unanswered row stay tellable apart in the data). Both draw the storefront
+ * shelf, which is the one that works for anyone.
  */
 export async function getClientShelfShape(clientId: string): Promise<ShelfShape> {
   if (!clientId) return DEFAULT_SHAPE
