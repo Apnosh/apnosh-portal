@@ -16,6 +16,7 @@
 import { useState } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 import {
   DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, ConfirmButton,
 } from '@/components/campaigns/desk/ui'
@@ -247,7 +248,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
         <div style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '12px 14px', margin: '12px 0' }}>
           <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>Assigned to</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: DESK.ink }}>Your Apnosh creative team</div>
-          <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.45 }}>A named creator picks it up within 1 business day. You can follow it in Your requests.</div>
+          <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.45 }}>{`A named creator picks it up ${REPLY_PROMISE}. You can follow it in Your requests.`}</div>
         </div>
         {sendError && (
           <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, marginBottom: 12, lineHeight: 1.45 }}>
@@ -455,7 +456,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
             <div style={{ padding: '10px 0' }}>
               <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 3 }}>Assigned to</div>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>Your Apnosh creative team</div>
-              <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>A named creator picks it up within 1 business day. You can follow it in Your requests.</div>
+              <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{`A named creator picks it up ${REPLY_PROMISE}. You can follow it in Your requests.`}</div>
             </div>
           </div>
           {CREATIVE_LEVELS[type.id] && (() => {
@@ -543,7 +544,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
                 </ReceiptFrame>
                 {price.startsAt && (
                   <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 8, lineHeight: 1.5 }}>
-                    This is the starting point. The final number is agreed in your thread before work starts. We answer within 1 business day.
+                    {`This is the starting point. The final number is agreed in your thread before work starts. We answer ${REPLY_PROMISE}.`}
                   </div>
                 )}
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 8, lineHeight: 1.5 }}>{REVISION_LINE}</div>

@@ -23,6 +23,7 @@ import {
 } from '@/lib/dashboard/subscribe-to-service'
 import SubscribeFlow from './subscribe-flow'
 import CancelServiceButton from './cancel-service-button'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 export const dynamic = 'force-dynamic'
 
@@ -174,7 +175,7 @@ export default async function ServiceDetailPage({ params }: PageProps) {
               </div>
               <div className="flex items-start gap-2 text-[11.5px] text-ink-3">
                 <Sparkles className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                <span>Your strategist is in touch within 24 hours of subscribing.</span>
+                <span>Your strategist is in touch {REPLY_PROMISE} of subscribing.</span>
               </div>
             </div>
           </div>

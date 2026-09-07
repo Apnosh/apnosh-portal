@@ -13,6 +13,7 @@
 
 import Link from 'next/link'
 import { MessageSquare, ArrowRight } from 'lucide-react'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 export interface StrategistCardData {
   name: string
@@ -51,8 +52,8 @@ export default function YourStrategist({ strategist }: { strategist: StrategistC
             Your strategist
           </p>
           <p className="text-sm text-ink-2 leading-relaxed">
-            Your strategist will be assigned within 24 hours of your first goals being set.
-            They'll reach out to introduce themselves.
+            Your strategist will be assigned {REPLY_PROMISE} of your first goals being set.
+            They&apos;ll reach out to introduce themselves.
           </p>
         </div>
       </section>

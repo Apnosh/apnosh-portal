@@ -110,6 +110,10 @@ export interface CampaignExecution {
   adTargeting?: string    // the area + people the ads should reach (paid-ads)
   brandVoice?: string     // how replies/content should sound; words to use and avoid (review-responses)
   photoUrls?: string      // comma-joined URLs of owner-uploaded photos (gbp-setup photo set)
+  /** The staff person who owns this campaign's house-team work (auth user id). Server-written at
+   *  mint by ensureClientStrategist; creator_work_orders has no staff-owner column, so this is
+   *  where the name on a house-team piece lives. Never in the owner PATCH whitelist. */
+  strategistId?: string
   /** ISO day of the BOOKED on-site shoot. Server-written (ship route from the held slot;
    *  confirmBookingForPayment on confirm) and NOT in the owner PATCH whitelist. Feeds
    *  deriveSchedule so no piece is ever scheduled before the shoot that produces it. */

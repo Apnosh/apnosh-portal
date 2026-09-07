@@ -18,6 +18,7 @@ import { shipBillingGate, SHIP_NEEDS_PAYMENT } from '@/lib/campaigns/ship-guard'
 import { beatsFromLines } from '@/lib/campaigns/catalog'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
+import { ensureClientStrategist } from '@/lib/team/assign'
 import type { LineItem, PieceProducer } from '@/lib/campaigns/types'
 
 async function authorize(id: string) {
@@ -182,7 +183,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ;(async () => {
         const { notifyClientOwners } = await import('@/lib/notifications')
         const dollars = `$${(preTaxCents / 100).toFixed(2)}`
-        await notifyClientOwners(campaign.clientId, { kind: 'client_signoff', title: 'Order placed', body: `${dollars}${perMonthCents > 0 ? ` today, then $${(perMonthCents / 100).toFixed(2)}/mo` : ''} charged to your card for "${campaign.draft.name}". A receipt is on its way from Stripe.`, link: `/dashboard/campaigns/${id}` })
+        await notifyClientOwners(campaign.clientId, { kind: 'client_signoff', title: 'Order placed', body: `${dollars}${perMonthCents > 0 ? ` today, then $${(perMonthCents / 100).toFixed(2)}/mo` : ''} charged to your card for "${campaign.draft.name}". A receipt is on its way from Stripe.`, link: `/dashboard/campaigns/${id}`, email: true, emailCategory: 'billing' })
       })().catch(() => {})
     }
   }
@@ -288,6 +289,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    // SOMEONE OWNS THIS ORDER. Written before anything mints, so the work orders below carry a
+    // name and the staff handoff at the end of this block reaches a named person instead of
+    // paging every admin. A client onboarded before this existed gets their strategist here, the
+    // first time they ship. Best-effort; a client with no staff to pick just behaves as before.
+    await ensureClientStrategist(campaign.clientId).catch(() => null)
     // HELD means "work starts later": only when the OWNER picked a date (plan-ahead) and the
     // schedule's first piece lands more than a week out. Captured BEFORE the estimate-mode
     // anchor below stamps a future first-post date onto target_date, which is not a hold.
@@ -407,6 +413,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           body: `${campaign.draft.name}. The owner approved it to go live. Build and run the pieces.`,
           link: `/work/drafts?focus=${id}`,
         },
+        // An order just got placed. Admins stay on this one alongside the strategist, so one
+        // person's day off cannot be the reason a paid campaign sits unseen.
+        { alsoAdmins: true },
       ).catch(() => ({ notified: 0 }))
     } else if (teamWork) {
       // A service-only plan (SEO, listings, ads — the system goals sell mostly services,
@@ -425,6 +434,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           body: `${campaign.draft.name}. ${n} ${n === 1 ? 'service' : 'services'} to set up and run. No content pieces to build.`,
           link: `/work/today?focus=${id}`,
         },
+        { alsoAdmins: true },
       ).catch(() => ({ notified: 0 }))
     }
     // Dead-letter: the campaign had TEAM pieces to produce but made none (the

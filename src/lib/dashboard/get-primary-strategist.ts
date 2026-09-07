@@ -74,7 +74,8 @@ function shape(
   email: string | null,
   avatarUrl: string | null,
 ): PrimaryStrategist {
-  const name = (fullName || email || 'Your strategist').trim()
+  // Never the email address: an unnamed profile reads as "Your strategist", not admin@apnosh.com.
+  const name = (fullName || 'Your strategist').trim()
   const parts = name.split(/\s+/)
   const firstName = parts[0] || name
   const initials = ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase() || '??'

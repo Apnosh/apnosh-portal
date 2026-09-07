@@ -93,6 +93,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         title: `${type?.label ?? 'Your request'}: a note from the team`,
         body: text.slice(0, 300),
         link: '/dashboard/requests',
+        // A person answered them. That reaches them where they are, not only in the app.
+        email: true,
+        emailCategory: 'messages',
       })
     }
   } catch (e) {

@@ -105,7 +105,10 @@ export async function POST(req: Request) {
     await stampSendOff()
     await savePref()
     // law: no silent stalls — staff hear about it the moment it lands
-    await notifyStaffForClient(business.client_id, ['content'], {
+    // 'content' is not a role_capability, so Postgres refused the whole capability lookup and this
+    // notice quietly fell back to paging every admin. The people who post for an owner are the
+    // community managers, with the strategist on the account.
+    await notifyStaffForClient(business.client_id, ['strategist', 'community_mgr'], {
       kind: 'task' as never,
       title: `Post this for ${business.name}`,
       body: `"${d.title}" is approved and waiting to be posted (owner picked done-for-you posting).`,

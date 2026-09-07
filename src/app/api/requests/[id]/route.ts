@@ -14,7 +14,6 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { REQUEST_STATUSES, STATUS_LABEL, requestTypeById, type RequestStatus } from '@/lib/requests/catalog'
 import { notifyClientOwners } from '@/lib/notifications'
-import { sendEmailIfConfigured, ownerEmailsForClient } from '@/lib/email/send'
 
 export const runtime = 'nodejs'
 
@@ -120,18 +119,26 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         title,
         body: row.team_note ? String(row.team_note).slice(0, 300) : undefined,
         link: '/dashboard/requests',
+        // Two moments are worth a phone buzzing: the work landing, and a person answering.
+        // Every other status move stays an in-app row.
+        email: body.status === 'delivered' || (noteChanged && body.status === undefined),
+        // Delivered is their work landing; a note is a person answering them. Different switches.
+        emailCategory: body.status === 'delivered' ? 'content' : 'messages',
       })
     } catch (e) {
       console.error('[requests] owner notify failed (update still saved)', e)
     }
-    /* Email leaves the portal only for the moment that needs a yes: the quote. */
+    /* Email leaves the portal only for the moment that needs a yes: the quote. Through
+     * emailClientOwners so the owner's email settings decide here too — this was the last
+     * owner email that wrote straight to the address and skipped the page. */
     if (body.status === 'quoted') {
       try {
-        const emails = await ownerEmailsForClient(row.client_id)
-        await sendEmailIfConfigured({
-          to: emails,
+        const { emailClientOwners } = await import('@/lib/notifications')
+        await emailClientOwners(row.client_id, {
           subject: `Your ${type?.label?.toLowerCase() ?? 'request'} price is ready`,
-          text: `${row.team_note ?? 'Your price and plan are ready.'}\n\nSay yes in the portal and we start: https://portal.apnosh.com/dashboard/requests`,
+          body: `${row.team_note ?? 'Your price and plan are ready.'}\n\nSay yes in the portal and we start.`,
+          link: '/dashboard/requests',
+          category: 'billing',
         })
       } catch { /* best-effort */ }
     }

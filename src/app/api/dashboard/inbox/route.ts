@@ -47,15 +47,15 @@ function dayBucket(iso?: string | null): 'Today' | 'Yesterday' | 'Earlier' {
 const ICON: Record<string, string> = { approval: '🎨', post_review: '📝', campaign: '🚀', review: '⭐', connection: '🔌', task: '✅', win: '🎉' }
 const CHIP_BY_KIND: Record<string, Chip> = { approval: 'approvals', post_review: 'approvals', campaign: 'approvals', review: 'reviews', connection: 'fix', task: 'todos' }
 // Owner-relevant notification types for the quiet "good to know" lane.
-const WIN_TYPES = new Set(['draft_published', 'draft_approved', 'client_signoff', 'payment', 'holiday_hours_reminder', 'traffic_anomaly', 'site_audit', 'awaiting_you_digest', 'campaign_wrapped'])
+const WIN_TYPES = new Set(['draft_published', 'draft_approved', 'client_signoff', 'payment', 'holiday_hours_reminder', 'traffic_anomaly', 'site_audit', 'awaiting_you_digest', 'campaign_wrapped', 'date_moved'])
 /* Which platform a good-to-know row is about, so its avatar can wear that platform's mark
  * (owner 2026-09-04: "Google for Google Business Profile"). Everything else is Apnosh's own. */
-const WIN_SOURCE: Record<string, string> = { holiday_hours_reminder: 'google', traffic_anomaly: 'google', site_audit: 'website', draft_published: 'apnosh', draft_approved: 'apnosh', client_signoff: 'apnosh', payment: 'apnosh', awaiting_you_digest: 'apnosh', campaign_wrapped: 'apnosh' }
+const WIN_SOURCE: Record<string, string> = { holiday_hours_reminder: 'google', traffic_anomaly: 'google', site_audit: 'website', draft_published: 'apnosh', draft_approved: 'apnosh', client_signoff: 'apnosh', payment: 'apnosh', awaiting_you_digest: 'apnosh', campaign_wrapped: 'apnosh', date_moved: 'apnosh' }
 /* Routes that exist on the owner side today. A stored notification link that points anywhere
  * else (retired pages like /dashboard/local-seo, or admin and creator pages) is replaced by the
  * right home for its type, so a tap never lands on a 404. */
 const OWNER_ROUTES = ['/dashboard/insights', '/dashboard/campaigns', '/dashboard/approvals', '/dashboard/connected-accounts', '/dashboard/reviews', '/dashboard/inbox', '/dashboard/calendar', '/dashboard/results', '/dashboard/preview', '/dashboard/billing', '/dashboard/google-profile', '/dashboard/more', '/dashboard/orders', '/dashboard/bookings', '/dashboard/requests', '/dashboard/goals', '/dashboard/business-info', '/dashboard/review-replies', '/dashboard/messages']
-const FALLBACK_LINK: Record<string, string> = { holiday_hours_reminder: '/dashboard/google-profile', traffic_anomaly: '/dashboard/insights', site_audit: '/dashboard/insights', draft_published: '/dashboard/campaigns', draft_approved: '/dashboard/approvals', client_signoff: '/dashboard/approvals', payment: '/dashboard/billing', awaiting_you_digest: '/dashboard/inbox', campaign_wrapped: '/dashboard/campaigns' }
+const FALLBACK_LINK: Record<string, string> = { holiday_hours_reminder: '/dashboard/google-profile', traffic_anomaly: '/dashboard/insights', site_audit: '/dashboard/insights', draft_published: '/dashboard/campaigns', draft_approved: '/dashboard/approvals', client_signoff: '/dashboard/approvals', payment: '/dashboard/billing', awaiting_you_digest: '/dashboard/inbox', campaign_wrapped: '/dashboard/campaigns', date_moved: '/dashboard' }
 /* A task or approval about a platform names it in its title ("Google Business Profile setup
  * needs 1 thing from you"); when the generator only knows 'apnosh' or 'system', read the
  * platform off the words so the row can wear the right mark. */
@@ -75,7 +75,7 @@ function safeLink(type: string, link: string | null | undefined): string {
   if (l === '/dashboard' || OWNER_ROUTES.some((r) => l === r || l.startsWith(r + '/') || l.startsWith(r + '?'))) return l
   return FALLBACK_LINK[type] ?? '/dashboard/inbox'
 }
-const WIN_ICON: Record<string, string> = { draft_published: '🎬', draft_approved: '✅', client_signoff: '👍', payment: '💳', holiday_hours_reminder: '🗓️', traffic_anomaly: '📈', site_audit: '🔍', awaiting_you_digest: '⏳', campaign_wrapped: '🏁' }
+const WIN_ICON: Record<string, string> = { draft_published: '🎬', draft_approved: '✅', client_signoff: '👍', payment: '💳', holiday_hours_reminder: '🗓️', traffic_anomaly: '📈', site_audit: '🔍', awaiting_you_digest: '⏳', campaign_wrapped: '🏁', date_moved: '🗓️' }
 
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')
