@@ -17,14 +17,16 @@ export interface Measured {
   reportedDays: number
 }
 
-type Gbp = { date: string; directions: number | null; calls: number | null; website_clicks: number | null; impressions_total: number | null; search_views: number | null; food_orders: number | null }
+export type Gbp = { date: string; location_id?: string | null; directions: number | null; calls: number | null; website_clicks: number | null; impressions_total: number | null; search_views: number | null; food_orders: number | null }
 
 const reported = (r: Gbp) => (r.impressions_total ?? 0) + (r.search_views ?? 0) + (r.directions ?? 0) + (r.calls ?? 0) + (r.website_clicks ?? 0) > 0
 
-async function gbpRows(clientId: string, from: string, to: string): Promise<Gbp[]> {
+/** The reported Google days in [from, to], newest last. Exported because the weekly sentence
+ *  (src/lib/love/sentence.ts) has to count the same days this does, or the two disagree. */
+export async function gbpRows(clientId: string, from: string, to: string): Promise<Gbp[]> {
   const { data } = await createAdminClient()
     .from('gbp_metrics')
-    .select('date, directions, calls, website_clicks, impressions_total, search_views, food_orders')
+    .select('date, location_id, directions, calls, website_clicks, impressions_total, search_views, food_orders')
     .eq('client_id', clientId).gte('date', from).lte('date', to).order('date')
   return ((data ?? []) as Gbp[]).filter(reported)
 }
