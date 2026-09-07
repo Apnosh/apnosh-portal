@@ -121,6 +121,39 @@ export async function claimReportMonth(
 }
 
 /**
+ * Give the month back.
+ *
+ * The claim goes down BEFORE the email, which is the only safe order — but that leaves one hole:
+ * if nobody could actually be told (the notify threw, or there was no owner to send to), the row
+ * says the report was sent and no run will ever try again. A month claimed and never delivered is
+ * the quietest way to skip somebody forever.
+ *
+ * So the claim is released. The ROW is the claim (unique client_id + month), so releasing it means
+ * deleting it: sent_at is NOT NULL in migration 260 and cannot be blanked, and adding a nullable
+ * "not really sent" state would give the dedupe two meanings.
+ *
+ * Never touches a row that was OPENED: an open can only happen if the email arrived, so that row
+ * is a real send whatever the sender thought.
+ */
+export async function releaseReportMonth(
+  admin: SupabaseClient,
+  clientId: string,
+  month: string,
+): Promise<void> {
+  try {
+    const { error } = await admin
+      .from('owner_reports')
+      .delete()
+      .eq('client_id', clientId)
+      .eq('month', month)
+      .is('opened_at', null)
+    if (error) console.warn('[report-sent] could not release the month:', error.message)
+  } catch (e) {
+    console.warn('[report-sent] releasing the month threw:', (e as Error)?.message)
+  }
+}
+
+/**
  * They opened the report the email pointed at. Best-effort in every direction: before migration
  * 260 the table is not there, and a stamp is never worth a broken page. Only stamps a month that
  * was actually SENT (the update matches nothing otherwise), so an owner browsing back through old

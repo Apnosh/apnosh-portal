@@ -16,6 +16,11 @@
  * overlapping runs cannot both mail the same owner. Before 260 is applied nothing is sent at all
  * and the run says which SQL is missing — an email with no dedupe behind it is a mailshot.
  *
+ * AND A MONTH NOBODY WAS TOLD ABOUT IS GIVEN BACK. If the notify throws, or there is no owner to
+ * send to, the claim is released so the month can be tried again; those clients are counted as
+ * `failed`, apart from `sent`, because a run reporting twelve sends where three went nowhere is
+ * the number that hides the failure.
+ *
  * NEVER A NUMBER THE LEDGER DOES NOT HOLD. A chapter with nothing in it says the honest waiting
  * line (src/lib/report/report-sent.ts), the same shape the promises ledger's not_counted state
  * gets. A month with no chapters at all is not emailed: nobody is sent an empty page.
@@ -29,7 +34,7 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildMonthlyReport } from '@/lib/report/build-month'
-import { claimReportMonth, hasSomethingToSay, isFirstBusinessDay, monthKey, previousMonth, reportLines } from '@/lib/report/report-sent'
+import { claimReportMonth, hasSomethingToSay, isFirstBusinessDay, monthKey, previousMonth, releaseReportMonth, reportLines } from '@/lib/report/report-sent'
 import { getClientLanguage } from '@/lib/i18n/language'
 import { notifyClientOwners } from '@/lib/notifications'
 import { t } from '@/lib/i18n/t'
@@ -74,7 +79,7 @@ export async function GET(req: Request) {
   const { data: clients, error } = await q
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
-  let sent = 0, quiet = 0, already = 0
+  let sent = 0, quiet = 0, already = 0, failed = 0
   const outcomes: { client: string; sent: boolean; why?: string }[] = []
 
   for (const c of (clients ?? []) as { id: string; name: string }[]) {
@@ -105,7 +110,7 @@ export async function GET(req: Request) {
       .map((l) => t(l.key, lang, l.vars))
       .join('\n')
 
-    await notifyClientOwners(c.id, {
+    const told = await notifyClientOwners(c.id, {
       kind: 'report_ready',
       title: t('Your {month} is ready', lang, { month: monthLabel }),
       body,
@@ -115,9 +120,20 @@ export async function GET(req: Request) {
       emailCategory: 'content',
     }).catch(() => ({ notified: 0 }))
 
+    // NOBODY TOLD MEANS THE MONTH IS STILL FREE. The claim was taken before the send, so a client
+    // whose notify threw (or who has no owner row to send to) would have kept a month that was
+    // never delivered, forever. Give it back and count it apart from the sends: a run that says
+    // "sent 12" while three of them went nowhere is the number that hides the failure.
+    if (!told || told.notified === 0) {
+      await releaseReportMonth(admin, c.id, key)
+      failed += 1
+      outcomes.push({ client: c.name, sent: false, why: 'nobody could be told; the month was given back' })
+      continue
+    }
+
     sent += 1
     outcomes.push({ client: c.name, sent: true })
   }
 
-  return NextResponse.json({ ok: true, dryRun, month: key, sent, quiet, already, outcomes: outcomes.slice(0, 50) })
+  return NextResponse.json({ ok: true, dryRun, month: key, sent, quiet, already, failed, outcomes: outcomes.slice(0, 50) })
 }
