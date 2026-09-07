@@ -150,7 +150,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // ── G7 (hardened for the ONE pay-first model, owner decision B): payment-aware ship.
   // Every billable campaign ships through the upfront checkout, which threads the paid PaymentIntent
   // into this PATCH. shipBillingGate decides:
-  //   'allow'  → free/DIY $0 order, or a genuinely legacy pre-checkout campaign (dated carve-out)
+  //   'allow'  → free/DIY $0 order, or the invoice lane (there is no legacy carve-out any more)
   //   'verify' → a PaymentIntent was presented → confirm the charge succeeded + covers the bill, or 402
   //   'refuse' → a billable, non-legacy ship with NO payment → block (it must go through checkout)
   // THE INVOICE LANE. While card checkout is shut, a billable order used to die at prepare with a
@@ -164,7 +164,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (wantsShip) {
     const { preTaxCents, perMonthCents } = checkoutBill({ items: campaign.draft.items })
     const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
-    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt, invoiceLane })
+    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, invoiceLane })
     if (invoiceLane && gate === 'allow' && (preTaxCents > 0 || perMonthCents > 0)) invoiceBill = { preTaxCents, perMonthCents }
     if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT }, { status: 402 })
     if (gate === 'verify') {

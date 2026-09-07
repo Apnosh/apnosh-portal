@@ -770,17 +770,17 @@ s.group('Edit-footage intake: edit fires in ANY cart position (readiness keys of
 // ── Owner-sim fix 1b: a monthly-only cart is BILLABLE (never the free path) ──
 s.group('Ship gate: monthly-only carts must pay (card + consent), never the free path')
 {
-  const MODERN = '2026-07-16T00:00:00Z'
   s.eq('monthly-only, no intent → REFUSE (must go through checkout)',
-    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false, createdAtISO: MODERN }), 'refuse')
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false }), 'refuse')
   s.eq('monthly-only, SetupIntent presented → verify',
-    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: true, createdAtISO: MODERN }), 'verify')
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: true }), 'verify')
   s.eq('truly free ($0 one-time, $0 monthly) still ships freely',
-    shipBillingGate({ preTaxCents: 0, perMonthCents: 0, hasPaymentIntent: false, createdAtISO: MODERN }), 'allow')
-  s.eq('legacy pre-checkout campaign keeps its carve-out',
-    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false, createdAtISO: '2026-07-01T00:00:00Z' }), 'allow')
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 0, hasPaymentIntent: false }), 'allow')
+  // The dated legacy carve-out is gone (money move 1): an old draft is billed like a new one.
+  s.eq('an old draft gets no carve-out — billable, unpaid → REFUSE',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false }), 'refuse')
   s.eq('omitted perMonthCents behaves as before (back-compat)',
-    shipBillingGate({ preTaxCents: 0, hasPaymentIntent: false, createdAtISO: MODERN }), 'allow')
+    shipBillingGate({ preTaxCents: 0, hasPaymentIntent: false }), 'allow')
 }
 
 // ── Owner-sim fixes 1f + 1i: fee-included display + plain-words pass-through ──
