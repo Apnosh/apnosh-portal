@@ -109,14 +109,28 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
         ? `We refund $${(refundedCents / 100).toFixed(2)} for work not delivered. It lands on your card in 5 to 10 days.`
         : refundFailed
           ? `We owe you $${(owedCents / 100).toFixed(2)} back for work we did not deliver. Our team is sending it by hand today.`
-          : 'Everything you ordered was delivered, so there is nothing to send back.'
+          : money.paid.totalCents > 0
+            ? 'Everything you ordered was delivered, so there is nothing to send back.'
+            // A monthly-only order is keyed to a SetupIntent: the card was SAVED, never charged, so
+            // total_cents is 0. Saying "everything you ordered was delivered" there was a claim
+            // about work we may not have done, made only because there was no money to send back.
+            : 'Your monthly service is cancelled. Nothing was charged up front, so nothing is sent back.'
     : charges.accruedCents > 0
       ? `Owed for delivered work so far: $${Math.round(charges.accruedCents / 100)}. That stands — the work was done; it arrives on one invoice.`
       : 'Nothing is owed.'
 
   const settlementLines = [
     stoppedCount > 0 ? `${stoppedCount} unstarted piece${stoppedCount === 1 ? '' : 's'} of work stopped.` : 'Nothing was left to stop.',
-    sweep.inFlight > 0 ? `${sweep.inFlight} piece${sweep.inFlight === 1 ? ' is' : 's are'} already being made — they finish and bill as normal.` : null,
+    // What really happens to in-flight work: stopCampaign voids only creator orders still 'offered'
+    // or 'accepted' (work-orders.ts:1042), so anything already in_progress / revision / delivered /
+    // approved keeps going. What it does NOT do is keep billing: the refund above already sent back
+    // the money for every piece that had not landed, these among them, and once they land the
+    // checkout still covers them. So "bill as normal" was only ever true when nothing was prepaid.
+    sweep.inFlight > 0
+      ? refundedCents > 0
+        ? `${sweep.inFlight} piece${sweep.inFlight === 1 ? ' is' : 's are'} already being made. They finish, and there is nothing more to pay for them.`
+        : `${sweep.inFlight} piece${sweep.inFlight === 1 ? ' is' : 's are'} already being made — they finish and bill as normal.`
+      : null,
     moneyLine,
     monthlyLine,
   ].filter((l): l is string => !!l)
@@ -126,7 +140,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     kind: 'client_signoff',
     title: `Campaign stopped by the owner: ${name}`,
     body: sweep.inFlight > 0
-      ? `${sweep.inFlight} in-flight piece(s) continue and bill; everything unstarted was voided.`
+      ? `${sweep.inFlight} in-flight piece(s) continue${refundedCents > 0 ? ' and are already refunded, so they are on us' : ' and bill'}; everything unstarted was voided.`
       : 'Everything unstarted was voided.',
     link: `/work/today?focus=${id}`,
   }).catch(() => ({ notified: 0 }))

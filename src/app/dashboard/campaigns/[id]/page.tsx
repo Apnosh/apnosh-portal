@@ -168,9 +168,13 @@ export default function CampaignDetailPage() {
     // The money half is said up front: a prepaid owner gets back what they paid for work we have
     // not delivered. The exact number comes back with the settlement (the server does the math).
     const moneyBack = ' If you paid upfront for work we have not delivered, we send that money back.'
+    // Work already being made keeps going (only unstarted work is voided), but it is part of what
+    // the refund above sends back, so it does not bill again. Saying "bills as normal" here and
+    // refunding it one screen later were two different promises about the same pieces.
+    const inFlight = ' Work already being made finishes.'
     const confirmMsg = monthly > 0
-      ? `Stop this campaign? Nothing new will start or post. Your $${Math.round(monthly)}/mo billing is canceled right away. Work already being made finishes and bills as normal.${moneyBack} This cannot be undone.`
-      : `Stop this campaign? Nothing new will start or post. Work already being made finishes and bills as normal.${moneyBack} This cannot be undone.`
+      ? `Stop this campaign? Nothing new will start or post. Your $${Math.round(monthly)}/mo billing is canceled right away.${inFlight}${moneyBack} This cannot be undone.`
+      : `Stop this campaign? Nothing new will start or post.${inFlight}${moneyBack} This cannot be undone.`
     if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) return
     setBusy(true)
     const r = await fetch(`/api/campaigns/${id}/stop`, { method: 'POST' }).catch(() => null)
@@ -421,7 +425,7 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
           {stopped && (
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#f4f4f6', color: C.ink, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
               <Ban size={14} style={{ flexShrink: 0, marginTop: 1, color: C.mute }} />
-              <span>This campaign is stopped. Nothing new starts or posts. Anything already in flight finished and billed as normal.</span>
+              <span>This campaign is stopped. Nothing new starts or posts. Anything already in flight was finished.</span>
             </div>
           )}
           {/* the interrupt/result card: a piece needing your OK (any phase), or the live/done story */}

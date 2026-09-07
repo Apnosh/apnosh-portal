@@ -271,6 +271,7 @@ export async function refundCampaignPayment(opts: {
   )
   if (want <= 0) {
     // Nothing left. Sync our row to Stripe's truth so the ledger stops lying about being 'paid'.
+    // (stampRefund leaves refunded_at alone when nothing has actually been sent back.)
     await stampRefund(paid, alreadyCents, null)
     return {
       ok: true,
@@ -366,7 +367,10 @@ async function stampRefund(paid: PaidCharge, totalRefundedCents: number, refundI
   const full: Record<string, unknown> = {
     status,
     refunded_cents: totalRefundedCents,
-    refunded_at: new Date().toISOString(),
+    // refunded_at is "the day money went back". Stamping it for a 0-cent sync (the already-refunded
+    // / nothing-to-refund path) would date a refund that never happened, and the refunded_at index
+    // is what the money reports read.
+    ...(totalRefundedCents > 0 ? { refunded_at: new Date().toISOString() } : {}),
     ...(refundId ? { stripe_refund_id: refundId } : {}),
   }
   const { error } = await admin.from('campaign_payments').update(full).eq('stripe_payment_intent_id', paid.paymentIntentId)
