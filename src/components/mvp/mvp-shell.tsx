@@ -8,8 +8,10 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import BottomNav, { type NavKey } from './bottom-nav'
 import TopRow from './top-row'
+import { useClient } from '@/lib/client-context'
 
 const SHELL_CSS = `
 .mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center;overflow:hidden}
@@ -65,9 +67,35 @@ export function useHideOnScroll(getEl: () => HTMLElement | null): boolean {
   return tucked
 }
 
+/**
+ * The owner session log, written from the one place every owner screen already passes through.
+ *
+ * Every screen in the app is inside this shell, so a screen change here IS the owner being
+ * here. One POST per screen (the ref keeps a remount on the same path from counting twice),
+ * fired and forgotten: the log is a nice-to-have and must never slow a screen down or break
+ * one when the table is not there yet.
+ */
+function useSeenLog(clientId: string | undefined) {
+  const pathname = usePathname()
+  const lastLogged = useRef<string>('')
+  useEffect(() => {
+    if (!clientId || !pathname) return
+    const key = `${clientId}|${pathname}`
+    if (lastLogged.current === key) return
+    lastLogged.current = key
+    void fetch('/api/dashboard/seen', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId }),
+      keepalive: true,
+    }).catch(() => { /* best effort */ })
+  }, [clientId, pathname])
+}
+
 export default function MvpShell({ active, unread, header, children, wide, noHeader, middle, title, back, right }: { /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; /** replaces the bell (a page's own action) */ right?: React.ReactNode; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const tucked = useHideOnScroll(() => scrollRef.current)
+  const { client } = useClient()
+  useSeenLog(client?.id)
   return (
     <div className="mvp-shell">
       <style>{SHELL_CSS}</style>
