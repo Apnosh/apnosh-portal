@@ -280,6 +280,39 @@ function main() {
   s.check('a voided credit (face 0) with money against it reads as over, never as free',
     overApplyVerdict({ faceCents: 0, settledCents: 5_000, rowCreditCents: 5_000 }) === 'over')
 
+  /* ── 3c-iv. a retry is not a second spend ────────────────────────────── */
+  s.group('paying the same order again is a retry, not a credit used twice')
+  // THE LEDGER AS THE ALARM NOW READS IT (settledCentsFor with excludeIntentId): every collected
+  // payment that names the credit, MINUS the checkout being judged. Whether this order's own row
+  // is already 'paid' depends on who got here first — the webhook flips then asks, the desk lane
+  // can be retried on a row it already stamped — so the judge is never allowed to count itself.
+  // The old code passed a flag for that instead, and one wrong guess zeroed a real discount and
+  // handed the credit back to be spent again.
+  type PaidRow = { intentId: string; creditCents: number }
+  const ledgerMinus = (rows: PaidRow[], judged: string) =>
+    rows.filter((r) => r.intentId !== judged).reduce((n, r) => n + r.creditCents, 0)
+  const judge = (rows: PaidRow[], judged: string, rowCents: number) =>
+    overApplyVerdict({ faceCents: face, settledCents: ledgerMinus(rows, judged), rowCreditCents: rowCents })
+  const paidA: PaidRow = { intentId: 'pi_a', creditCents: 5_000 }
+  const paidB: PaidRow = { intentId: 'pi_b', creditCents: 5_000 }
+
+  s.eq('first payment: nothing else has the credit, so the $50 is real', judge([], 'pi_a', 5_000), 'ok')
+  s.eq('the row is already paid when we ask (the webhook flipped it first) and it is STILL fine',
+    judge([paidA], 'pi_a', 5_000), 'ok')
+  s.eq('and a third and fourth try on that same paid row read the same', judge([paidA], 'pi_a', 5_000), 'ok')
+  s.eq('a SECOND checkout paying the same credit is still caught', judge([paidA], 'pi_b', 5_000), 'over')
+  s.eq('and the owner is short by exactly that second $50',
+    overAppliedCents({ faceCents: face, settledCents: ledgerMinus([paidA], 'pi_b'), rowCreditCents: 5_000 }), 5_000)
+  s.eq('retrying the second one does not un-catch it', judge([paidA, paidB], 'pi_b', 5_000), 'over')
+  s.eq('two halves of one credit on two orders add up and are fine',
+    judge([{ intentId: 'pi_a', creditCents: 2_000 }], 'pi_b', 3_000), 'ok')
+  s.eq('a cent more than the credit is over, even across two orders',
+    judge([{ intentId: 'pi_a', creditCents: 2_000 }], 'pi_b', 3_001), 'over')
+  s.eq('leaving the judged row out never turns a real double-spend into an ok',
+    judge([paidA, paidB], 'pi_c', 5_000), 'over')
+  s.eq('a ledger that will not answer still changes nothing',
+    overApplyVerdict({ faceCents: face, settledCents: null, rowCreditCents: 5_000 }), 'unreadable')
+
   /* ── 3d. the receipt adds up ─────────────────────────────────────────── */
   s.group('the lines on the receipt add up to the number on the card')
   // What the screen prints, in the order it prints it: Subtotal, Friend credit, Service fee, Tax,

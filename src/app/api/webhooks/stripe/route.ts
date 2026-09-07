@@ -778,8 +778,9 @@ async function handleCampaignPaymentSucceeded(
   // THE CREDIT, PRICED AGAIN. Same last look /api/checkout/complete takes, because this backstop is
   // the ONLY thing that runs when the tab closed — and the double-spend it guards against is
   // exactly the two-tabs case. The money stays recorded; only a discount that was already spent is
-  // taken off the row, and a person is paged. `alreadyCounted` because the flip above already put
-  // this row's cents into the ledger sum.
+  // taken off the row, and a person is paged. The flip above already put this row's cents into the
+  // ledger, and that is fine: the check leaves this checkout out of the sum by id, so it cannot
+  // catch itself no matter who wrote the row first.
   if (row.client_credit_id && (row.friend_credit_cents ?? 0) > 0) {
     const { friendCreditOverApplied } = await import('@/lib/referrals/server')
     const over = await friendCreditOverApplied({
@@ -787,7 +788,6 @@ async function handleCampaignPaymentSucceeded(
       clientId: row.client_id,
       creditId: row.client_credit_id,
       rowCreditCents: row.friend_credit_cents ?? 0,
-      alreadyCounted: true,
     }).catch(() => false)
     if (over) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

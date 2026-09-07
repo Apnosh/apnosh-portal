@@ -467,16 +467,26 @@ export async function claimFriendCredit(clientId: string, intentKey: string, max
  * second, then go back and pay the first — and every abandoned-then-paid round trip took another
  * $50 off a $50 credit. The ledger cannot be talked into that: every collected order that used the
  * credit is a row, and the sum of those rows is what is gone.
+ *
+ * `excludeIntentId` leaves ONE checkout out of the sum: the one being judged. A row that is
+ * already 'paid' — because the webhook flipped it, or because this is the second try at the same
+ * order — is in the ledger already, and adding its own cents on top of itself makes an honest
+ * retry look like a credit spent twice. So the judge never counts the row it is judging.
  */
-export async function settledCentsFor(creditId: string): Promise<number | null> {
+export async function settledCentsFor(creditId: string, excludeIntentId?: string | null): Promise<number | null> {
   try {
     const { data, error } = await createAdminClient()
       .from('campaign_payments')
-      .select('friend_credit_cents')
+      .select('friend_credit_cents, stripe_payment_intent_id')
       .eq('client_credit_id', creditId)
       .in('status', COLLECTED_STATUSES)
     if (error) return null
-    return (data ?? []).reduce((n, r) => n + (Number((r as { friend_credit_cents?: number }).friend_credit_cents) || 0), 0)
+    const skip = (excludeIntentId ?? '').trim()
+    // Filtered here rather than in the query: a `neq` in PostgREST also drops rows whose intent id
+    // is null, and a row we cannot see is a row whose money silently stops counting.
+    return (data ?? [])
+      .filter((r) => !skip || (r as { stripe_payment_intent_id?: string | null }).stripe_payment_intent_id !== skip)
+      .reduce((n, r) => n + (Number((r as { friend_credit_cents?: number }).friend_credit_cents) || 0), 0)
   } catch {
     return null
   }
@@ -573,15 +583,19 @@ async function markCheckoutCancelled(intentId: string): Promise<void> {
  * as though the discount were real, because then nothing anywhere says the owner was undercharged.
  * So the row keeps the money and loses the credit, and a person is told, by name and by amount.
  *
- * Pass `alreadyCounted` when the payment row is already 'paid' in the ledger (the webhook flips
- * first and asks second), so its own cents are not counted twice.
+ * THE ROW BEING JUDGED IS NEVER PART OF THE EVIDENCE. Whether this order's payment is already
+ * 'paid' in the ledger depends on who got here first — the webhook flips the row then asks, the
+ * desk lane can be retried on a row it already stamped, the cart lane can be called twice — and a
+ * flag passed by the caller was one wrong guess away from zeroing a real discount and freeing a
+ * credit that had really been spent. So the ledger sum always LEAVES THIS CHECKOUT OUT, and this
+ * order's own cents are always added back on top. A retry reads exactly like the first try; only
+ * a SECOND checkout can push the sum past the face value.
  */
 export async function friendCreditOverApplied(args: {
   intentId: string
   clientId: string
   creditId: string | null | undefined
   rowCreditCents: number | null | undefined
-  alreadyCounted?: boolean
 }): Promise<boolean> {
   const creditId = (args.creditId ?? '').trim()
   const rowCents = Math.max(0, Math.round(Number(args.rowCreditCents) || 0))
@@ -592,8 +606,8 @@ export async function friendCreditOverApplied(args: {
     if (error || !data) { warn('could not read the credit at payment time', error); return false }
     face = Number(data.cents) || 0
   } catch (e) { warn('could not read the credit at payment time', e); return false }
-  const settled = await settledCentsFor(creditId)
-  const input = { faceCents: face, settledCents: settled, rowCreditCents: args.alreadyCounted ? 0 : rowCents }
+  const settled = await settledCentsFor(creditId, args.intentId)
+  const input = { faceCents: face, settledCents: settled, rowCreditCents: rowCents }
   const verdict = overApplyVerdict(input)
   // Unreadable: change nothing. Zeroing a credit we cannot account for would hand an owner back
   // money they really did spend. Say it loudly so a person can look.

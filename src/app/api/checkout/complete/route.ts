@@ -148,6 +148,22 @@ async function completeDeskOrder(paymentIntentId: string, requestId: string, pay
   const clientId = String(payRow.client_id ?? '')
   const taxCalculationId = (payRow.stripe_tax_calculation_id as string | null) ?? null
 
+  // ALREADY DONE — the same short-circuit the cart lane has above. A retry (a double tap, a
+  // refreshed tab, the webhook backstop getting here first) must be a no-op, not a second run
+  // through the money checks on a row that is already paid. The row has to name THIS order and
+  // the order has to be finished, so a paid payment for something else can never be answered here.
+  if (String(payRow.status ?? '') === 'paid' && (payRow.request_id as string | null) === requestId) {
+    const { data: doneRaw } = await createAdminClient()
+      .from('creative_requests')
+      .select('paid_at, work_order_id')
+      .eq('id', requestId)
+      .maybeSingle()
+    const done = doneRaw as { paid_at?: string | null; work_order_id?: string | null } | null
+    if (done?.paid_at && done.work_order_id) {
+      return NextResponse.json({ ok: true, requestId, workOrderId: String(done.work_order_id) })
+    }
+  }
+
   // Stripe's copy of the same fact. The intent was created by our own prepare route with the
   // order's id on it; an intent that does not say so is not this order's, whatever our row says.
   // A read we cannot make is a FAILURE, never a pass — this is the money path.
