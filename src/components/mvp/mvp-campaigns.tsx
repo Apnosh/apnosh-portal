@@ -72,7 +72,9 @@ type Tab = 'all' | 'live' | 'production' | 'done'
  */
 function tabOf(c: HuedCard): Exclude<Tab, 'all'> | null {
   if (c.kind === 'draft') return null
-  if (c.state) {
+  // not_counted is a ledger row the product cannot count yet, not a place on the shelf: the card
+  // keeps its progress words, so the tab must read those too or the count and the pill disagree.
+  if (c.state && c.state !== 'not_counted') {
     if (DONE_STATES.has(c.state)) return 'done'
     if (c.state === 'ordered' || c.state === 'held' || c.state === 'production') return 'production'
     return 'live'

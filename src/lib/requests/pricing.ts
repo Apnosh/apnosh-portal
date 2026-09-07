@@ -176,7 +176,7 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
 
     case 'website': {
       if (a.scope === 'Brand new website') {
-        lines.push(line('New website, starting point', 1500, `The floor for a new build. The final number is agreed in your thread before work starts. We answer ${REPLY_PROMISE}.`))
+        lines.push(line('New website, starting point', 1500, `The floor for a new build. The final number is agreed in your thread before work starts. We reply ${REPLY_PROMISE}.`))
         startsAt = true
       } else if (a.scope === 'Redesign my website') {
         lines.push(line('Website redesign', 900, 'Your pages, redesigned end to end, 2 revisions.'))
@@ -207,7 +207,7 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
       break
 
     case 'other':
-      lines.push(line('Open request, starting point', 150, `The floor to start. Anything bigger is agreed in your thread before work starts. We answer ${REPLY_PROMISE}.`))
+      lines.push(line('Open request, starting point', 150, `The floor to start. Anything bigger is agreed in your thread before work starts. We reply ${REPLY_PROMISE}.`))
       startsAt = true
       break
 

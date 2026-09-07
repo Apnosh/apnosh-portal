@@ -231,7 +231,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     /* Polish 2 — screen 10, one last look. Section names, row labels, the terms line and the
        two answers of ours it plays back (the role, the approval style). */
     'One last look', 'Tap Edit to change anything.', 'Edit', 'Complete setup',
-    "I agree to Apnosh's", 'Terms of Service', 'and the', 'Privacy Policy',
+    'I agree to the', 'Terms of Service', 'and the', 'Privacy Policy', 'of Apnosh.',
     '{n} total', '{n} uploaded',
     'You', 'Business', 'What you are', 'How it runs', 'Menu', 'Specials', 'Story', 'Goals',
     'Budget', 'Promote', 'Brand', 'Discovery', 'Workflow', 'Connected', 'Assets',

@@ -24,6 +24,7 @@
  * with — this module never picks keys.
  */
 import 'server-only'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { stripe } from '@/lib/stripe'
 import { notifyClientOwners, notifyStaffForClient, createNotification } from '@/lib/notifications'
@@ -247,7 +248,7 @@ export type DeliveredResult =
 
 /** What we say to the owner when the ledger cannot be read. Never a number we cannot stand behind. */
 export const REFUND_UNCONFIRMED =
-  'We could not confirm what was delivered, so nothing was refunded yet. Our team will settle this by hand within one business day.'
+  'We could not confirm what was delivered, so nothing was refunded yet. Our team will settle this by hand ' + REPLY_PROMISE + '.'
 
 /**
  * What a campaign has actually DELIVERED, in cents, plus the ledger rows whose work did NOT land.

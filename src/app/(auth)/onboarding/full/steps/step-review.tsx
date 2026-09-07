@@ -77,8 +77,8 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
         ]} />
         <ReviewCard T={T} title="What you are" stepId="biz_type" onEdit={onGoToStep} rows={[
           { label: 'Type', value: (data.biz_type === 'Other' ? data.biz_other : data.biz_type) || null },
-          { label: 'Cuisine', value: isFood ? ((data.cuisine === 'Other' ? data.cuisine_other : data.cuisine) || null) : null },
-          { label: 'Vibe', value: isFood && data.service_styles.length ? data.service_styles.join(', ') : null },
+          { label: 'Cuisine', value: isFood ? ((data.cuisine === 'Other' ? data.cuisine_other : (data.cuisine ? T(data.cuisine) : '')) || null) : null },
+          { label: 'Vibe', value: isFood && data.service_styles.length ? data.service_styles.map((v: string) => T(v)).join(', ') : null },
           { label: 'Mission', value: data.biz_desc || null },
           { label: 'Audience', value: data.customer_types.length ? data.customer_types.join(', ') : null },
         ]} />
@@ -148,10 +148,10 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           {/* Four pieces, not one sentence with holes in it: the two link words have to be
               tappable, so they cannot ride inside a {placeholder}. */}
           <span>
-            {T("I agree to Apnosh's")}{' '}
+            {T('I agree to the')}{' '}
             <a href="/terms" target="_blank" className="underline" style={{ color: '#2e9a78' }}>{T('Terms of Service')}</a>
             {' '}{T('and the')}{' '}
-            <a href="/privacy" target="_blank" className="underline" style={{ color: '#2e9a78' }}>{T('Privacy Policy')}</a>.
+            <a href="/privacy" target="_blank" className="underline" style={{ color: '#2e9a78' }}>{T('Privacy Policy')}</a>{' '}{T('of Apnosh.')}
           </span>
         </label>
       </div>

@@ -199,7 +199,7 @@ function DetailSheet({ asset, onClose, onChanged }: { asset: Asset; onClose: () 
 
         <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.mute, marginBottom: 6 }}>Name</label>
         <input className="mvp-input" value={name} onChange={e => setName(e.target.value)} onBlur={saveName} style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px', fontSize: 16, color: C.ink, fontFamily: 'inherit', outline: 'none', marginBottom: 4 }} />
-        <p style={{ fontSize: 11.5, color: C.faint, margin: '0 2px 16px' }}>{savingName ? 'Saving…' : 'Tap away to save the name.'}</p>
+        <p style={{ fontSize: 11.5, color: C.mute, margin: '0 2px 16px' }}>{savingName ? 'Saving…' : 'Tap away to save the name.'}</p>
 
         <div style={{ background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 16, padding: '10px 14px', marginBottom: 18, fontSize: 12.5, color: C.mute, lineHeight: 1.7 }}>
           <div>Type: {asset.type}</div>

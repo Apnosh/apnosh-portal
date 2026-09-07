@@ -9,7 +9,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import BottomNav, { NAV_RESERVE, type NavKey } from './bottom-nav'
+import BottomNav, { NAV_RESERVE, NAV_HEIGHT, NAV_BOTTOM, NAV_GAP, type NavKey } from './bottom-nav'
 import TopRow from './top-row'
 import { useClient } from '@/lib/client-context'
 
@@ -22,8 +22,14 @@ import { useClient } from '@/lib/client-context'
                    + env(safe-area-inset-bottom) for a phone with a chin.
 
    The tall tail keeps its extra room for the floating top row. */
-const TAIL = `calc(${NAV_RESERVE}px + env(safe-area-inset-bottom))`
-const TAIL_TALL = `calc(${NAV_RESERVE + 8}px + env(safe-area-inset-bottom))`
+/* The nav sits at max(10px, safe-area) from the bottom AND grows by the safe area (its minHeight
+   is 54px + inset), so on a phone with a chin the footprint is inset + 54 + inset + 12, not
+   76 + inset. Written the same way the nav writes it, so the two cannot drift. NAV_RESERVE stays
+   the no-chin number for anyone who needs a plain px. */
+void NAV_RESERVE
+const SAB = 'env(safe-area-inset-bottom)'
+const TAIL = `calc(${NAV_HEIGHT + NAV_GAP}px + max(${NAV_BOTTOM}px, ${SAB}) + ${SAB})`
+const TAIL_TALL = `calc(${NAV_HEIGHT + NAV_GAP + 8}px + max(${NAV_BOTTOM}px, ${SAB}) + ${SAB})`
 
 const SHELL_CSS = `
 .mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center;overflow:hidden}
