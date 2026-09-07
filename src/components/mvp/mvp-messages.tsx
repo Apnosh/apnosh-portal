@@ -517,7 +517,9 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
           <Avatar c={c} person={person} size={36} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.15 }}>{title}</div>
-            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c ? T(c.name) : T('Apnosh team')} · ${c?.key === 'strategist' ? T('we reply {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}` : c?.key === 'strategist' ? T('We reply {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}</div>
+            {/* The green promise line goes quiet when the clock below it says we missed it: a kept-promise
+                badge over a broken one reads as the product not knowing what it did. */}
+            {promiseClock?.state !== 'late' && <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c ? T(c.name) : T('Apnosh team')} · ${c?.key === 'strategist' ? T('we reply {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}` : c?.key === 'strategist' ? T('We reply {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}</div>}
           </div>
         </div>
         <span />

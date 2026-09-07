@@ -92,7 +92,7 @@ export default function TellAFriendPage() {
             same as this owner not having a counted number yet, and telling somebody their orders
             will open a door that does not exist is a promise we cannot keep. */}
         {state && !state.enabled && (
-          <MvpEmpty icon={<Users size={20} />} title={T('Not open yet')} text={T('This is not running yet.')} />
+          <MvpEmpty icon={<Users size={20} />} title={T('Not open yet')} text={T('We turn this on once the first orders are counted.')} />
         )}
         {state && state.enabled && !state.eligible && (
           <MvpEmpty

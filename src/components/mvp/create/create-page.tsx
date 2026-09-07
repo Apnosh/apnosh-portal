@@ -418,7 +418,7 @@ export default function CreatePage() {
         <div className="tile"><Icon />{!buy && <span style={{ position: 'absolute', top: 6, left: 6 }}><Coming /></span>}</div>
         {/* A held card prints NO price and NO ready time. Both are offers, and there is
             nothing to offer yet. Same rule as the product page's fact strip. */}
-        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{priceWord(c.price)} <span>· {c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</div></div>
+        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{priceWord(c.price)} <span>· {T(c.ready)}</span></> : <span>{T('Not on sale yet')}</span>}</div></div>
       </button>
     )
   }
@@ -596,7 +596,7 @@ export default function CreatePage() {
     // The time word under the price. A monthly card says what monthly means; everything else
     // says when it is ready. "Fee inside" is true: chargedPriceLabel folds the service fee in.
     const monthly = c.price.includes('/mo') && !c.price.includes('+')
-    const priceSub = monthly ? T('monthly, cancel any time') : c.price === 'Quote' ? c.ready : `${c.ready} · ${T('fee inside')}`
+    const priceSub = monthly ? T('monthly, cancel any time') : c.price === 'Quote' ? T(c.ready) : `${T(c.ready)} · ${T('fee inside')}`
     const lanes = lanesFor(c.id, client?.tier === 'Pro')
     const count = renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T)
     // The glyph and the Order button take the card's goal colour, or mint, per the switch above.

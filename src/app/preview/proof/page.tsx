@@ -54,7 +54,7 @@ const SAMPLES = [
   {
     id: 'sample-down', label: 'Quieter week on Google',
     big: '3 calls · 14 direction taps',
-    context: 'Calls: 3, down from 7. Direction taps: 14, down from 24. A push this week turns it around.',
+    context: 'Calls: 3, down from 7. Direction taps: 14, down from 24. Worth a push this week.',
     tone: 'heads_up' as const,
     cta: { label: 'Plan the push', href: '/campaigns/new' },
   },

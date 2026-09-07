@@ -32,7 +32,7 @@ const GLYPH: Record<HueKey, typeof Megaphone> = {
   mint: Sparkles, announce: Megaphone, event: Ticket, deal: Tag, nights: Moon, newfaces: MapPin, regulars: Heart,
   reviews: Star, online: ShoppingCart, catering: Users, brand: Share2, amber: Clock, grey: FileText, red: AlertCircle,
 }
-type HuedCard = CampCard & { hue: HueKey; promise?: string | null; openUrl?: string | null; /** the seven-state row behind this card, when it has one. The pill, the line, the action AND the tab all read it. */ state?: PromiseState | null }
+type HuedCard = CampCard & { hue: HueKey; promise?: string | null; openUrl?: string | null; /** the seven-state row behind this card, when it has one. The pill, the line, the action AND the tab all read it. */ state?: PromiseState | null; /** where a card with no ledger state sits; desk orders set it so a thing still being made never reads Live */ tab?: 'production' | 'live' | 'done' }
 /** The seven states an order lives. The words come from the same table the server reads. */
 type OrderState = PromiseState
 type LedgerRow = { id: string; label: string; line: string; state: OrderState; campaignId: string | null; requestId: string | null; showsOn: string; openUrl: string | null }
@@ -79,6 +79,7 @@ function tabOf(c: HuedCard): Exclude<Tab, 'all'> | null {
     if (c.state === 'ordered' || c.state === 'held' || c.state === 'production') return 'production'
     return 'live'
   }
+  if (c.tab) return c.tab
   if (c.pill === 'In production') return 'production'
   return c.kind === 'done' ? 'done' : 'live'
 }
@@ -154,16 +155,22 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
     const done = d.workStatus === 'delivered' || d.workStatus === 'approved' || d.status === 'delivered' || d.status === 'closed'
     const making = d.workStatus === 'in_progress' || d.status === 'in_progress'
     const st = d.state
+    // Staff see "Overdue" on the same order; the owner must not read "due Aug 21" three weeks later
+    // as if it were still ahead of them.
+    const today = new Date().toISOString().slice(0, 10)
+    const late = !!d.dueDate && !done && d.dueDate < today
+    const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     return {
       key: `desk:${d.id}`,
       kind: st ? (DONE_STATES.has(st) ? 'done' : done && st === 'delivered' ? 'done' : 'live') : done ? 'done' : 'live',
       title: d.label,
-      pill: (st ? PILL_FOR[st] : null) ?? (done ? 'Done' : making ? 'Making' : 'Ordered'),
+      pill: (st && st !== 'not_counted' ? PILL_FOR[st] : null) ?? (done ? 'Done' : late ? 'Late' : making ? 'Making' : 'Ordered'),
+      tab: done ? 'done' : 'production',
       pillIcon: st === 'held' ? 'calendar' : st === 'counted' || (!st && done) ? 'check' : 'dot',
       blurb: '', cost: null, recurring: false, perf: null, review: false,
       href: `/dashboard/requests/${d.id}`,
       action: st ? ACTION_FOR[st] : done ? 'See it' : null,
-      when: `Ordered ${new Date(`${d.orderedOn}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${d.dueDate && !done ? ` · due ${new Date(`${d.dueDate}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`,
+      when: `Ordered ${day(d.orderedOn)}${d.dueDate && !done ? (late ? ` · was due ${day(d.dueDate)}. We owe you this.` : ` · due ${day(d.dueDate)}`) : ''}`,
       hue: 'mint', promise: d.line, openUrl: d.openUrl, state: st,
     }
   })
@@ -266,6 +273,8 @@ function CampaignCard({ c }: { c: HuedCard }) {
   const WAITING = c.pill === 'Ordered' || c.pill === 'In production' || c.pill === 'Held'
   const pill = c.kind === 'done'
     ? { bg: '#eef0ef', fg: C.mute }
+    : c.pill === 'Late'
+      ? { bg: '#fbeaea', fg: '#c92d32' } // the kit's red: a promise we missed, said plainly
     : needsYou || WAITING
       ? { bg: '#FEF4E4', fg: '#8A5A12' }
       : { bg: C.greenSoft, fg: C.greenDk }

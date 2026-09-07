@@ -46,7 +46,7 @@ export default function PreviewCheckoutPage() {
         <div style={{ flexShrink: 0, display: 'flex', gap: 8, padding: '12px 18px 8px', overflowX: 'auto' }}>
           {(['free', 'card', 'invoice', 'confirmed', 'invoiced'] as const).map((v) => (
             <button key={v} onClick={() => setView(v)} style={{ flex: 'none', fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999, cursor: 'pointer', border: '1px solid #E4E0D6', background: view === v ? '#EAF6F1' : '#fff', color: view === v ? '#2E9A78' : '#4A554F' }}>
-              {v === 'free' ? 'The seal' : v === 'card' ? 'The card' : v === 'invoice' ? 'On invoice' : v === 'confirmed' ? 'The confirmation' : 'Invoice confirmed'}
+              {v === 'free' ? 'Free plan' : v === 'card' ? 'The card' : v === 'invoice' ? 'On invoice' : v === 'confirmed' ? 'The confirmation' : 'Invoice confirmed'}
             </button>
           ))}
         </div>

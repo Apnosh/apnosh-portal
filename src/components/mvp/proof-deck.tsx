@@ -25,7 +25,7 @@ const SAMPLE_CARDS: ProofCardData[] = [
   { id: 'example-gbp', label: 'Example · a week on Google', big: '9 calls · 31 direction taps', context: 'Calls: 9, up from 4. Direction taps: 31, up from 12.', attribution: 'Since your menu photos went live, Aug 21.', spark: [9, 12, 10, 13, 17, 22, 31] },
   { id: 'example-post', label: 'Example · a post that landed', big: '2,418 people saw it', context: '86 saved or shared it.', attribution: 'You approved it Monday. It published Tuesday at 5 pm.' },
   { id: 'example-reviews', label: 'Example · a review month', big: '6 new reviews · 4.7 average', context: 'Every one got a reply within a day.', attribution: 'Since the review kit went up by your register, Aug 2.' },
-  { id: 'example-down', label: 'Example · a quieter week', big: '3 calls · 14 direction taps', context: 'Calls: 3, down from 7. Direction taps: 14, down from 24. A push this week turns it around.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
+  { id: 'example-down', label: 'Example · a quieter week', big: '3 calls · 14 direction taps', context: 'Calls: 3, down from 7. Direction taps: 14, down from 24. Worth a push this week.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
   { id: 'example-start', label: 'Example · grow', big: 'Start your first campaign', context: 'A plan built from your numbers, ready in a few minutes.', tone: 'heads_up', cta: { label: 'Start a campaign', href: '/campaigns/new' } },
 ]
 

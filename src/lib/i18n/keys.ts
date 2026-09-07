@@ -143,7 +143,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Two or more places', 'Mostly catering', 'Open for a season',
     /* Move 5b — the v8 shelf card: the price's time word, the lane ladder, the count row's
        detour, the "set up once" tally and the door at the bottom. */
-    'fee inside', 'monthly, cancel any time', 'Free', 'In Pro', 'Included', 'Start', 'Ask', 'Quote',
+    'fee inside', '1 week', '2 weeks', '2 days', '3 days', '4 days', '5 days', 'monthly, cancel any time', 'Free', 'In Pro', 'Included', 'Start', 'Ask', 'Quote',
     'You do it yourself, step by step', 'You do it with Apnosh AI, step by step', 'Done for you by Apnosh',
     '{n} of {total} done', '{title} is {price} today.', 'Order that instead',
     'We do not have your Google numbers yet. This is the first step.',
@@ -338,7 +338,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'See my page',
     'Not yet', 'This opens once one of your orders has its number.',
     // the OTHER "no": the loop itself is shut, which is not the same thing
-    'Not open yet', 'This is not running yet.',
+    'Not open yet', 'We turn this on once the first orders are counted.',
     // the finish screen after setup
     'Your friend {name} sent you.', 'A friend sent you.', '{amount} off your first order.',
     // the public page

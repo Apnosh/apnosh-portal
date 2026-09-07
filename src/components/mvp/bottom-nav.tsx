@@ -9,7 +9,7 @@
 import Link from 'next/link'
 import { Home as HomeIcon, CalendarDays, Plus, MessageCircle, Menu } from 'lucide-react'
 
-const C = { green: '#4abd98', greenDk: '#2e9a78', line: '#e6e6ea', navOff: '#aeaeb2' }
+const C = { green: '#4abd98', greenDk: '#2e9a78', line: '#e6e6ea', navOff: '#6e6e73' } // mute, not faint: a 10.5px label at 2.2:1 was unreadable
 
 /**
  * THE NAV'S FOOTPRINT, WRITTEN ONCE.

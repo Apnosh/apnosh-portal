@@ -354,7 +354,13 @@ export const ES: Record<string, string> = {
   'Busy part of the year, quiet the rest': 'Una temporada fuerte, el resto tranquilo',
 
   /* ── Move 5b: the Create shelf card, its lane ladder and the door at the bottom ─────────── */
-  'fee inside': 'con la comisión incluida',
+  'fee inside': 'con la tarifa de servicio incluida',
+  '1 week': '1 semana',
+  '2 weeks': '2 semanas',
+  '2 days': '2 días',
+  '3 days': '3 días',
+  '4 days': '4 días',
+  '5 days': '5 días',
   'monthly, cancel any time': 'al mes, cancelas cuando quieras',
   'Free': 'Gratis',
   'In Pro': 'Con Pro',
@@ -407,8 +413,8 @@ export const ES: Record<string, string> = {
   'Password updated.': 'Contraseña guardada.',
 
   /* ── Move 5b: the promises ledger, printed on every shelf row and product page ──────────── */
-  'Counted after: {what} · {taken} · shows on Home {when} after you order': 'Se cuenta con: {what} · {taken} · aparece en Inicio {when} después de pedirlo',
-  'Counted after: {what} · marked Done the day they land': 'Se cuenta con: {what} · marcado como Listo el día que llega',
+  'Counted after: {what} · {taken} · shows on Home {when} after you order': 'Lo que contamos: {what} · {taken} · sale en Inicio {when} después de pedirlo',
+  'Counted after: {what} · marked Done the day they land': 'Lo que contamos: {what} · marcado como Listo el día que llega',
   'Not counted yet: {reason}': 'Todavía no se cuenta: {reason}',
   'Taken by Google': 'Lo mide Google',
   'Taken by you': 'Lo mides tú',
@@ -567,7 +573,7 @@ export const ES: Record<string, string> = {
   'Not yet': 'Todavía no',
   'This opens once one of your orders has its number.': 'Esto se abre cuando uno de tus pedidos ya tiene su número.',
   'Not open yet': 'Todavía no está abierto',
-  'This is not running yet.': 'Esto todavía no está funcionando.',
+  'We turn this on once the first orders are counted.': 'Lo abrimos cuando los primeros pedidos tengan su número.',
   'Your friend {name} sent you.': 'Te recomendó tu amigo {name}.',
   'A friend sent you.': 'Te recomendó un amigo.',
   '{amount} off your first order.': '{amount} de descuento en tu primer pedido.',
