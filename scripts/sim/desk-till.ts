@@ -17,6 +17,7 @@ import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout
 import { refundOwedCents } from '@/lib/campaigns/refund-math'
 import { deskPaymentMatchesOrder, deskPaymentDue, AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
+import { workStarted } from '@/lib/campaigns/work-orders-core'
 import { Suite } from './lib'
 
 /** Every desk type the price sheet can price, with a plausible answer set. */
@@ -152,6 +153,18 @@ function main() {
   for (const st of REQUEST_STATUSES) {
     s.check(`"${st}" has words for the owner to read`, Boolean(STATUS_LABEL[st] && STATUS_OWNER_LINE[st]))
   }
+
+  s.group('The desk card can say who is on the work (the read that always errored)')
+  // creator_work_orders has no started_at and never has: the promise read asked for it anyway, so
+  // every desk landing came back 42703 and byRequest was empty for every client, forever.
+  s.check('an offered order has NOT started — a name on it is not a start', !workStarted('offered'))
+  s.check('nor has an accepted one', !workStarted('accepted'))
+  s.check('in progress has', workStarted('in_progress'))
+  s.check('so has one back in hand for changes', workStarted('revision'))
+  s.check('and a delivered one', workStarted('delivered'))
+  s.check('and an approved one', workStarted('approved'))
+  s.check('a declined order never started', !workStarted('declined'))
+  s.check('and neither did nothing at all', !workStarted(null) && !workStarted(undefined) && !workStarted(''))
 
   const ok = s.report('The desk through the till — one fee, one card form, one shut switch')
   process.exit(ok ? 0 : 1)

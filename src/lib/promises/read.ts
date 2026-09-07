@@ -18,6 +18,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { measure, matchedBaseline, today, shiftDays, hasGoogle, hasFoodOrders, locationCount } from './metrics'
 import { TAKEN_BY_WORD, type MetricKey, type TakenBy } from './registry'
 import { lineFor, STATE_RANK, type PromiseState } from './lines'
+// The one table of "the work has begun" statuses, shared with the work-order spine — there is no
+// started_at on creator_work_orders to read instead.
+import { workStarted } from '@/lib/campaigns/work-orders-core'
 
 // The seven states, and their words, live in ./lines — pure and client-safe, so the card, the
 // "your count is in" cron and a script all read one table instead of three copies of it.
@@ -92,7 +95,11 @@ async function landingsFor(clientId: string): Promise<{ byService: Map<string, L
   const byRequest = new Map<string, Landing>()
   const [svc, creator] = await Promise.all([
     a.from('service_work_orders').select('campaign_id, service_id, status, assignee_id, started_at, proof_note, proof_url').eq('client_id', clientId).then((r) => r, () => ({ data: null })),
-    a.from('creator_work_orders').select('campaign_piece_key, status, creator_id, delivered_url, started_at').eq('client_id', clientId).then((r) => r, () => ({ data: null })),
+    // NO started_at here. creator_work_orders has never had that column (only service_work_orders
+    // does, from migration 190), so asking for it made PostgREST answer 42703 for EVERY client —
+    // this map was empty always, and no desk order could ever say who was on it. The status is the
+    // start: a creator moves the order to in_progress when they pick it up.
+    a.from('creator_work_orders').select('campaign_piece_key, status, creator_id, delivered_url').eq('client_id', clientId).then((r) => r, () => ({ data: null })),
   ])
   for (const row of ((svc as { data: unknown }).data ?? []) as { campaign_id: string | null; service_id: string | null; status: string; assignee_id: string | null; started_at: string | null; proof_note: string | null; proof_url: string | null }[]) {
     if (!row.campaign_id || !row.service_id) continue
@@ -105,13 +112,13 @@ async function landingsFor(clientId: string): Promise<{ byService: Map<string, L
       openUrl: delivered ? row.proof_url : null,
     })
   }
-  for (const row of ((creator as { data: unknown }).data ?? []) as { campaign_piece_key: string | null; status: string; creator_id: string | null; delivered_url: string | null; started_at: string | null }[]) {
+  for (const row of ((creator as { data: unknown }).data ?? []) as { campaign_piece_key: string | null; status: string; creator_id: string | null; delivered_url: string | null }[]) {
     const key = row.campaign_piece_key ?? ''
     if (!key.startsWith('request:')) continue
     const delivered = row.status === 'delivered' || row.status === 'approved' || row.status === 'done'
     byRequest.set(key.slice('request:'.length), {
       assigned: !!row.creator_id,
-      started: !!row.started_at || ['in_progress', 'delivered', 'approved', 'done'].includes(row.status),
+      started: workStarted(row.status),
       delivered,
       note: delivered ? 'Delivered · open it' : 'Being made',
       openUrl: delivered ? row.delivered_url : null,

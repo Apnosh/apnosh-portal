@@ -38,6 +38,23 @@ export const ALLOWED_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
   declined: [],
 }
 
+/**
+ * Has the work on this order actually BEGUN?
+ *
+ * creator_work_orders has no started_at column and never has (only service_work_orders got one, in
+ * migration 190). The promise read asked for it anyway, so every desk order's landing read came
+ * back 42703 and no desk card could say who was on it. The status is the start: 'offered' and
+ * 'accepted' are a queue, 'revision' is the work in hand again.
+ *
+ * 'done' is not a creator status the table can hold — it is accepted here because older readers
+ * write it in memory and a status we do not recognise must never read as "not started".
+ */
+export const WORK_STARTED_STATUSES = ['in_progress', 'revision', 'delivered', 'approved', 'done'] as const
+
+export function workStarted(status: string | null | undefined): boolean {
+  return (WORK_STARTED_STATUSES as readonly string[]).includes(String(status ?? ''))
+}
+
 /** Thrown when a status write violates the machine; surfaced as 409 by the route. */
 export class IllegalTransition extends Error {
   constructor(message: string) { super(message); this.name = 'IllegalTransition' }
