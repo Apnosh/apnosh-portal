@@ -128,14 +128,49 @@ export function goalSlugForChip(chip: string | null | undefined): GoalSlug | nul
   return CHIP_TO_SLUG[chip.trim()] ?? null
 }
 
-/** slug → the chip the owner tapped, so a saved goal row can be read back in their words. */
+/**
+ * The two slugs no chip maps to any more, and the closest chip for each.
+ *
+ * They are not dead history: 'be_known_for' is what SIX of the fourteen chips collapsed into
+ * before migration 256, so it is on most existing clients' goal rows, and it is still what the
+ * 23503 fallback writes when the migration has not run yet. 'more_reservations' comes from
+ * defaultGoalsForShape for a fine-dining place. Without these two lines chipForGoalSlug returned
+ * null for both, the shelf-context route dropped the goal, and every one of those owners opened
+ * the store on a generic shelf instead of their own.
+ *
+ * The collapse cannot be undone (six chips, one row, the other five words are gone), so this is
+ * the best SINGLE chip for each, and both have a real shelf.
+ */
+const LEGACY_SLUG_TO_CHIP: Record<string, string> = {
+  be_known_for: 'Build local awareness',
+  more_reservations: 'More bookings or orders',
+}
+
+/** slug → the chip the owner tapped, so a saved goal row can be read back in their words.
+ *  New slugs first, then the two legacy ones, so a row written at any time still reads back. */
 const SLUG_TO_CHIP: Record<string, string> = Object.fromEntries(
   Object.entries(CHIP_TO_SLUG).map(([chip, slug]) => [slug, chip]),
 )
 export function chipForGoalSlug(slug: string | null | undefined): string | null {
   if (!slug) return null
-  return SLUG_TO_CHIP[slug.trim()] ?? null
+  const s = slug.trim()
+  return SLUG_TO_CHIP[s] ?? LEGACY_SLUG_TO_CHIP[s] ?? null
 }
+
+/**
+ * Every slug that can sit on a client_goals row today: the fourteen one-to-one ones, the two
+ * legacy ones above, and nothing else. Typed as Record<GoalSlug, true> on purpose, so adding a
+ * slug to the union without deciding which chip reads it back is a compile error rather than an
+ * owner opening the store on a generic shelf. scripts/verify-chip-shelf.ts walks this list.
+ */
+const EVERY_GOAL_SLUG: Record<GoalSlug, true> = {
+  more_foot_traffic: true, regulars_more_often: true, more_online_orders: true,
+  more_reservations: true, better_reputation: true, be_known_for: true,
+  fill_slow_times: true, grow_catering: true,
+  local_awareness: true, promote_offering: true, grow_social: true, launch_something: true,
+  stay_top_of_mind: true, beat_nearby: true, better_photos: true, younger_crowd: true,
+}
+export const ALL_GOAL_SLUGS: readonly GoalSlug[] = Object.keys(EVERY_GOAL_SLUG) as GoalSlug[]
 
 /**
  * The slugs that existed BEFORE migration 256, for the fallback write. Until the migration

@@ -14,7 +14,7 @@ import { CHIP_ORDER, CHIP_SHELF, SHAPE_OVERRIDES, KNOWN_SHELF_IDS, shelfForChip,
 import { GOAL_CHIPS } from '../src/app/(auth)/onboarding/full/data'
 import { sellable, notSellableReason } from '../src/lib/campaigns/data/catalog-availability'
 import { CLIENT_SHAPES, type ClientShape } from '../src/lib/clients/shape'
-import { goalSlugForChip } from '../src/lib/goals/defaults'
+import { goalSlugForChip, chipForGoalSlug, legacyGoalSlugForChip, ALL_GOAL_SLUGS } from '../src/lib/goals/defaults'
 
 let fail = 0
 const ok = (cond: boolean, msg: string) => { console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${msg}`); if (!cond) fail++ }
@@ -118,6 +118,31 @@ const slugs = chips.map((c) => goalSlugForChip(c))
 const nulls = chips.filter((c, i) => !slugs[i])
 ok(nulls.length === 0, `every chip maps to a slug${nulls.length ? ` (unmapped: ${nulls.join(', ')})` : ''}`)
 ok(new Set(slugs).size === chips.length, `all ${chips.length} slugs are distinct (${new Set(slugs).size} distinct)`)
+
+// 11) EVERY slug that was ever written reads back as a chip with a shelf. Most existing clients
+//     were saved before migration 256, when six chips collapsed into 'be_known_for', and the
+//     23503 fallback still writes those slugs today. A slug that reads back as null is an owner
+//     opening the store on a generic shelf instead of their own.
+console.log('\n== every slug ever written reads back as a chip with a shelf ==')
+const orphanSlugs: string[] = []
+for (const slug of ALL_GOAL_SLUGS) {
+  const chip = chipForGoalSlug(slug)
+  if (!chip) { orphanSlugs.push(`${slug}: reads back as nothing`); continue }
+  if (!CHIP_SHELF[chip]) orphanSlugs.push(`${slug}: reads back as "${chip}", which has no shelf`)
+}
+ok(orphanSlugs.length === 0, `all ${ALL_GOAL_SLUGS.length} slugs read back${orphanSlugs.length ? `\n        ${orphanSlugs.join('\n        ')}` : ''}`)
+
+// 12) The pre-migration fallback round-trips. When goals_catalog has no row for a new slug the
+//     writer retries with the legacy one, so that legacy slug has to come back as a real chip.
+console.log('\n== the pre-migration fallback round-trips ==')
+const badFallback: string[] = []
+for (const chip of chips) {
+  const legacy = legacyGoalSlugForChip(chip)
+  if (!legacy) { badFallback.push(`${chip}: no fallback slug`); continue }
+  const back = chipForGoalSlug(legacy)
+  if (!back || !CHIP_SHELF[back]) badFallback.push(`${chip} -> ${legacy} -> ${back ?? 'nothing'}`)
+}
+ok(badFallback.length === 0, `every chip's fallback slug reads back to a shelf${badFallback.length ? `\n        ${badFallback.join('\n        ')}` : ''}`)
 
 console.log('\n====================================================')
 console.log(fail === 0 ? 'RESULT: chip-shelf is clean.' : `RESULT: ${fail} check${fail === 1 ? '' : 's'} failed.`)
