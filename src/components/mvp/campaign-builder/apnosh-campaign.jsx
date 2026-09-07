@@ -1422,7 +1422,7 @@ function StrategistBrief({ restaurant, onBack, onSent }) {
         </div>
         <h1 style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 24, lineHeight: 1.12, color: TOKENS.ink, margin: "0 0 9px", letterSpacing: -0.2 }}>Hand it to a marketer</h1>
         <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.45, margin: "0 0 20px" }}>
-          They get this whole draft, plus {restaurant}'s goal and budget. Add anything else and a real person refines it, then sends it back for you to approve, usually within a few hours.
+          They get this whole draft, plus {restaurant}'s goal and budget. Add anything else and a real person refines it, then sends it back for you to approve, usually within one business day.
         </p>
 
         <label style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 8 }}>Anything you really want included?</label>
