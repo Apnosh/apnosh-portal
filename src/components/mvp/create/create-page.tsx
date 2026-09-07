@@ -237,6 +237,18 @@ const CREATE_CSS = `
 .cr .sticky .p span{display:block;font-family:Inter,system-ui,sans-serif;font-size:11.5px;color:#6e6e73;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .sticky .btn{height:46px;padding:0 20px}
 `
+/**
+ * THE ONE OPEN DECISION ON THIS PAGE, and it is the owner's.
+ *
+ * The shelf's Order pills and row glyphs wear the per-goal hue map (hues.ts, owner-approved
+ * 2026-09-04: purple newfaces, blue reviews, teal event). The same file's first paragraph says
+ * chrome stays mint, and the v8 mockup the twenty owners actually scored is mint and ink only.
+ * Both readings are defensible and only the owner can settle it, so nothing is changed here:
+ * false keeps the hues that are live today, true paints every row's glyph and button mint and
+ * leaves the goal colour to the section dot. Flip this one line, look at both, then keep one.
+ */
+const SHELF_CHROME_MINT = false
+
 /* a card's colour, as CSS variables the classes read */
 const hv = (k: HueKey): React.CSSProperties => ({ ['--c1' as string]: hueOf(k)[0], ['--c2' as string]: hueOf(k)[1], ['--t1' as string]: tint(k, 0.16), ['--sh' as string]: tint(k, 0.4, 1) } as React.CSSProperties)
 
@@ -578,11 +590,13 @@ export default function CreatePage() {
     const priceSub = monthly ? T('monthly, cancel any time') : c.price === 'Quote' ? c.ready : `${c.ready} · ${T('fee inside')}`
     const lanes = lanesFor(c.id)
     const count = promiseSentence(PROMISE_BY_CARD[c.id] ?? [])
+    // The glyph and the Order button take the card's goal colour, or mint, per the switch above.
+    const chrome: HueKey = SHELF_CHROME_MINT ? 'mint' : c.goal
     return (
-      <div className="crow" style={hv(c.goal)}>
+      <div className="crow" style={hv(chrome)}>
         <div className="top">
           <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-            <Mark hue={c.goal} size={38}><Icon size={19} /></Mark>
+            <Mark hue={chrome} size={38}><Icon size={19} /></Mark>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span className="t">{c.title}</span>
               {/* Amber is a finding from their own numbers. The no-numbers-yet line is not one, so it
