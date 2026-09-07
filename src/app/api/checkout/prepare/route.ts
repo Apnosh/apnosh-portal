@@ -11,6 +11,7 @@ import type { CampaignDraft } from '@/lib/campaigns/types'
 import { campaignCheckoutEnabled } from '@/lib/checkout-gate'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { deskBill } from '@/lib/requests/desk-bill'
+import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 
 /** Plain owner-facing name for a catalog id (falls back to the id itself). */
 function cardName(id: string): string {
@@ -256,7 +257,15 @@ async function prepareDeskOrder(clientId: string, requestId: string) {
 
   // Already paid: never a second charge, and never a second work order. The screen shows the
   // confirmation instead.
-  if (row.paid_at) return NextResponse.json({ alreadyPaid: true, requestId })
+  //
+  // creative_requests.paid_at is NOT enough on its own. It is stamped by finalizePaidDeskOrder,
+  // which runs after the charge — so an owner whose tab closed between the card clearing and the
+  // stamp comes back to a page that cheerfully makes them a SECOND PaymentIntent for an order
+  // Stripe has already collected. The payment ledger is the truth about money; the order row is
+  // only its echo. Either one saying paid is enough to stop.
+  if (row.paid_at || (await hasCollectedPayment(requestId))) {
+    return NextResponse.json({ alreadyPaid: true, requestId })
+  }
 
   const cadence = row.cadence === 'monthly' ? 'monthly' as const : 'once' as const
   const bill = deskBill(row.quote_cents as number | null, cadence)
@@ -375,4 +384,30 @@ async function insertDeskPayment(args: {
       ? 'Card checkout for the desk is not set up yet (apply migration 258). Nothing was charged.'
       : 'Could not start checkout. Nothing was charged.',
   }, { status: 500 })
+}
+
+/**
+ * Has a card already been collected for this desk order?
+ *
+ * Reads the payment ledger, which is written the moment Stripe confirms, rather than the order row,
+ * which is stamped a step later. COLLECTED_STATUSES, not 'paid' alone: a partly refunded or
+ * disputed charge is still money that was taken, and offering a fresh PaymentIntent on top of it
+ * would charge the same order twice.
+ *
+ * FALSE on an unreadable read (pre-258 there is no request_id column to filter on). That is the
+ * honest degrade: pre-258 insertDeskPayment fails closed and no card is ever taken, so there is no
+ * collected payment to miss.
+ */
+async function hasCollectedPayment(requestId: string): Promise<boolean> {
+  try {
+    const { data, error } = await paymentsTable()
+      .select('status')
+      .eq('request_id', requestId)
+      .in('status', COLLECTED_STATUSES)
+      .limit(1)
+    if (error || !Array.isArray(data)) return false
+    return data.length > 0
+  } catch {
+    return false
+  }
 }

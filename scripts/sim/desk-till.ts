@@ -14,7 +14,7 @@ import { deskBill } from '@/lib/requests/desk-bill'
 import { feeCentsOn, SERVICE_FEE_RATE, monthlyPhrase, fmtMoney } from '@/lib/campaigns/checkout-bill'
 import { priceCreativeRequest, fmtTotal, type CreativePrice } from '@/lib/requests/pricing'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
-import { refundOwedCents } from '@/lib/campaigns/refund-math'
+import { refundOwedCents, COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 import { deskPaymentMatchesOrder, deskPaymentDue, AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
 import { workStarted } from '@/lib/campaigns/work-orders-core'
@@ -181,6 +181,18 @@ function main() {
   for (const [k, line] of [['cart.confirm.sub', confirmSub], ['done.sub.order', doneSub]] as const) {
     s.check(`${k}: no em dashes, no marketing`, !line.includes('—'))
   }
+
+  s.group('Money that landed with nobody watching')
+  // The webhook backstop only knew the cart's kind, so a desk order whose tab closed after the card
+  // cleared stayed pending forever. And prepare read only the ORDER row's paid stamp, which is
+  // written a step after the money — so a returning owner was offered a second charge.
+  const DESK_KINDS = ['desk_checkout', 'desk_checkout_setup']
+  s.check('the desk\'s two kinds are the ones prepare puts on its intents', DESK_KINDS.every((k) => deskPaymentMatchesOrder({ rowRequestId: REQ, rowCampaignId: null, intentKind: k, intentRequestId: REQ }, REQ)))
+  s.check('"paid" counts as collected', (COLLECTED_STATUSES as readonly string[]).includes('paid'))
+  s.check('so does a partly refunded charge — money was still taken', (COLLECTED_STATUSES as readonly string[]).includes('partially_refunded'))
+  s.check('and a disputed one, which is money the bank is holding', (COLLECTED_STATUSES as readonly string[]).includes('disputed'))
+  s.check('a pending row is NOT collected, so a first charge may still start', !(COLLECTED_STATUSES as readonly string[]).includes('pending'))
+  s.check('and neither is a failed one', !(COLLECTED_STATUSES as readonly string[]).includes('failed'))
 
   const ok = s.report('The desk through the till — one fee, one card form, one shut switch')
   process.exit(ok ? 0 : 1)

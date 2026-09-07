@@ -171,6 +171,8 @@ async function dispatch(event: Stripe.Event, supabase: AdminClient) {
       return handleCampaignPaymentSucceeded(supabase, event.data.object as Stripe.PaymentIntent)
     case 'payment_intent.payment_failed':
       return handleCampaignPaymentFailed(supabase, event.data.object as Stripe.PaymentIntent)
+    case 'setup_intent.succeeded':
+      return handleDeskSetupSucceeded(supabase, event.data.object as Stripe.SetupIntent)
     case 'payment_intent.processing':
       return handleInvoicePaymentProcessing(supabase, event.data.object as Stripe.PaymentIntent)
 
@@ -747,19 +749,31 @@ async function handleCampaignPaymentSucceeded(
   supabase: AdminClient,
   pi: Stripe.PaymentIntent,
 ) {
-  if (pi.metadata?.kind !== 'campaign_checkout') return
+  const kind = String(pi.metadata?.kind ?? '')
+  // The DESK pays through the same route with its own kinds. This backstop only knew the cart's,
+  // so a desk order whose tab closed after the card cleared stayed 'pending' forever: paid at
+  // Stripe, unpaid here, no work order, and nobody told.
+  const isDesk = kind === 'desk_checkout' || kind === 'desk_checkout_setup'
+  if (kind !== 'campaign_checkout' && !isDesk) return
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rows } = await (supabase as any)
     .from('campaign_payments')
     .update({ status: 'paid', paid_at: unixToIso(pi.created) })
     .eq('stripe_payment_intent_id', pi.id)
     .eq('status', 'pending')
-    .select('id, client_id, campaign_id, total_cents')
+    .select('*')
+  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; campaign_id: string | null; request_id?: string | null; total_cents: number } | undefined : undefined
+  if (!row) return
+
+  if (isDesk) {
+    await settleDeskPayment(supabase, row, pi.metadata?.requestId ?? null, unixToIso(pi.created))
+    return
+  }
+
   // A charged card with no shipped order is real money with nobody's name on it. The happy path
   // links the campaign at ship; when the tab closed first, this row lands paid and orphaned. Page
   // every admin so a person ships it from the draft snapshot. Best-effort.
-  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; campaign_id: string | null; total_cents: number } | undefined : undefined
-  if (row && !row.campaign_id) {
+  if (!row.campaign_id) {
     try {
       const { getAdminUserIds, createNotification } = await import('@/lib/notify')
       const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
@@ -769,6 +783,65 @@ async function handleCampaignPaymentSucceeded(
       }
     } catch (e) { console.warn('[stripe] orphan-payment page failed', (e as Error)?.message) }
   }
+}
+
+
+/**
+ * A DESK order whose card cleared with nobody watching.
+ *
+ * The happy path (/api/checkout/complete) stamps the order and mints the work. When the tab closed
+ * first, this is the only thing that ever runs — so it does the two parts that cannot wait: the
+ * order row says it is paid (or /checkout/prepare offers a second card for an order already paid
+ * for), and a paid order with nothing being made pages every admin.
+ *
+ * The mint itself is deliberately NOT done here. It is the same idempotent finalize the happy path
+ * calls, and a webhook is not the place to start work orders behind a person's back; the page is.
+ */
+async function settleDeskPayment(
+  supabase: AdminClient,
+  row: { id: string; client_id: string; request_id?: string | null; total_cents: number },
+  metaRequestId: string | null,
+  /** Stripe's own timestamp for the event. Null only if Stripe sent no created time. */
+  paidAtISO: string | null,
+) {
+  const requestId = typeof row.request_id === 'string' && row.request_id ? row.request_id : metaRequestId
+  if (!requestId) return
+  const { error: stampErr } = await supabase
+    .from('creative_requests')
+    .update({ paid_at: paidAtISO ?? new Date().toISOString(), payment_id: row.id })
+    .eq('id', requestId)
+  if (stampErr) console.warn('[stripe webhook] desk paid stamp failed (apply migration 258):', stampErr.message)
+
+  const { data: req } = await supabase.from('creative_requests').select('work_order_id').eq('id', requestId).maybeSingle()
+  if ((req as { work_order_id?: string | null } | null)?.work_order_id) return
+  try {
+    const { getAdminUserIds, createNotification } = await import('@/lib/notify')
+    const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
+    const name = ((client as { name?: string } | null)?.name) ?? 'A client'
+    for (const adminId of await getAdminUserIds(supabase)) {
+      await createNotification({ supabase, userId: adminId, type: 'order_confirmed', title: 'Paid, nothing made', body: `${name} paid $${(row.total_cents / 100).toFixed(2)} for a desk order and no work order was created (the tab closed before checkout finished). Make it from the request.`, link: '/admin/requests' })
+    }
+  } catch (e) { console.warn('[stripe] orphan desk-order page failed', (e as Error)?.message) }
+}
+
+/**
+ * setup_intent.succeeded — the MONTHLY desk order's version of the same edge.
+ *
+ * A monthly-only desk line takes no money today: its row is keyed to a SetupIntent, so
+ * payment_intent.succeeded never fires for it and nothing here would have heard about it at all.
+ */
+async function handleDeskSetupSucceeded(supabase: AdminClient, si: Stripe.SetupIntent) {
+  if (String(si.metadata?.kind ?? '') !== 'desk_checkout_setup') return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rows } = await (supabase as any)
+    .from('campaign_payments')
+    .update({ status: 'paid', paid_at: unixToIso(si.created) })
+    .eq('stripe_payment_intent_id', si.id)
+    .eq('status', 'pending')
+    .select('*')
+  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; request_id?: string | null; total_cents: number } | undefined : undefined
+  if (!row) return
+  await settleDeskPayment(supabase, row, si.metadata?.requestId ?? null, unixToIso(si.created))
 }
 
 // ============================================================
