@@ -11,7 +11,7 @@ import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { contentFor } from "@/lib/campaigns/data/content-overrides";
-import { isBuyable, isHidden, comingSoonReason } from "@/lib/campaigns/data/catalog-availability";
+import { isBuyable, isHidden, notSellableReason } from "@/lib/campaigns/data/catalog-availability";
 import { REQUEST_TYPES } from "@/lib/requests/catalog";
 import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, unbundleFor } from "@/lib/campaigns/data/live-alternatives";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
@@ -2226,7 +2226,10 @@ export const catGet = (id) => {
 // a buy the server would reject.
 const buyableId = (id) => isBuyable(id, CONTENT_OVERRIDES);
 const hiddenId = (id) => isHidden(id, CONTENT_OVERRIDES);
-const soonReason = (id) => comingSoonReason(id, CONTENT_OVERRIDES);
+// notSellableReason, not comingSoonReason: the footer has to explain whatever buyableId just
+// refused, and the law refuses more than the allowlist does. Reading the narrower one would
+// leave a held card saying a bare "Coming soon." while the store's own shelf said why.
+const soonReason = (id) => notSellableReason(id, CONTENT_OVERRIDES);
 // Drop hidden ids and push coming-soon ids to the END of a shelf's id list (bookmarked cards still
 // render, with a badge, but never crowd out what the owner can actually buy).
 const orderIds = (ids) => {
