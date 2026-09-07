@@ -6,8 +6,9 @@ import 'server-only'
  * so this is the read that proves it — for every piece of work still running on this client, the
  * staff person who owns it, what they are on, and the thread to reach them in.
  *
- * NO UI in this move. The avatar row is a later move; this endpoint is the thing it will read, and
- * it exists now so the drill can check "every minted order has a name on it" without opening a UI.
+ * Home's people row and the Messages strip both read this, so the two can never disagree about
+ * who is on your work; the drill checks "every minted order has a name on it" through the same
+ * endpoint, without opening a UI.
  *
  * Where the names come from:
  *   service_work_orders.assignee_id  — stamped at mint (service-work-orders.ts)
@@ -120,10 +121,16 @@ export async function getOrderPeople(clientId: string, reads: PeopleReads = {}):
   if (!clientId) return empty
   const admin = createAdminClient()
 
+  // A floor on how old a piece of work can be and still put a face on Home. A quote nobody ever
+  // accepted, or an order a client walked away from, keeps its status forever — without this it
+  // would keep a person on the row for the life of the account. Ninety days is long enough that
+  // a real slow job (a shoot waiting on a season) is still counted.
+  const since = new Date(Date.now() - 90 * 86_400_000).toISOString()
+
   const [svcRes, creatorRes, deskRes, strategistId, lag, ask] = await Promise.all([
-    admin.from('service_work_orders').select('id, title, status, due_date, assignee_id, campaign_id').eq('client_id', clientId).limit(200).then((r) => r.data ?? [], () => []),
-    admin.from('creator_work_orders').select('id, title, status, due_date, discipline, vendor_id, campaign_id').eq('client_id', clientId).limit(200).then((r) => r.data ?? [], () => []),
-    admin.from('creative_requests').select('id, type, status, created_at').eq('client_id', clientId).limit(100).then((r) => r.data ?? [], () => []),
+    admin.from('service_work_orders').select('id, title, status, due_date, assignee_id, campaign_id').eq('client_id', clientId).gte('created_at', since).limit(200).then((r) => r.data ?? [], () => []),
+    admin.from('creator_work_orders').select('id, title, status, due_date, discipline, vendor_id, campaign_id').eq('client_id', clientId).gte('created_at', since).limit(200).then((r) => r.data ?? [], () => []),
+    admin.from('creative_requests').select('id, type, status, created_at').eq('client_id', clientId).gte('created_at', since).limit(100).then((r) => r.data ?? [], () => []),
     currentStrategist(admin, clientId).catch(() => null),
     reads.lag ? replyLagMinutesMedian(clientId, 30).catch(() => null) : Promise.resolve(null),
     reads.ask ? latestAsk(clientId).catch(() => null) : Promise.resolve(null),
