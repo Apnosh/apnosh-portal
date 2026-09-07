@@ -439,7 +439,8 @@ export interface OnboardingData {
   /** How the business runs (ShelfShape). Decides what the Create shelf may show. */
   shape: string
   /** The language the owner picked in the top bar ('en' | 'es'), written to
-   *  clients.preferred_language at the end. '' = they never touched it, so English. */
+   *  clients.preferred_language at the end. '' = they never touched it in THIS session, and
+   *  the finish falls back to the language the browser remembers (page.tsx handleComplete). */
   preferred_language: string
   price_range: string
   signature_items: string[]

@@ -19,7 +19,7 @@
  * every single string will eventually forget one.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_LANG, isLang, localeOf, t, type Lang } from '@/lib/i18n/t'
 import { useClient } from '@/lib/client-context'
 
@@ -50,6 +50,17 @@ export function readStoredLang(): Lang | null {
   } catch { return null }
 }
 
+/** Tell the record what the browser already knows. Best-effort in every direction: no await,
+ *  no error surface, and a database without migration 259 answers ok:false, which is fine —
+ *  the owner keeps reading the language they picked either way. */
+function pushLang(clientId: string, l: Lang): void {
+  fetch('/api/dashboard/more', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ clientId, language: l }),
+  }).catch(() => { /* the browser copy still decides what they read */ })
+}
+
 function writeStoredLang(l: Lang): void {
   try { localStorage.setItem(STORAGE_KEY, l) } catch { /* storage off; the client row still decides */ }
 }
@@ -57,6 +68,8 @@ function writeStoredLang(l: Lang): void {
 export function MvpLanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(DEFAULT_LANG)
   const { client } = useClient()
+  /** the client we have already written the browser's answer up for, so it happens once */
+  const pushedFor = useRef<string | null>(null)
 
   // 1. The remembered answer paints first, so a Spanish owner never reads a flash of English.
   useEffect(() => {
@@ -64,12 +77,27 @@ export function MvpLanguageProvider({ children }: { children: React.ReactNode })
     if (saved) setLangState(saved)
   }, [])
 
-  // 2. The client row is the record and wins. Before migration 259 runs the field is simply
-  //    absent, which reads as English — the same thing every owner sees today.
+  // 2. The client row is the record and wins — with ONE exception, because the column's
+  //    default is 'en'. A row that says English cannot be told apart from a row nobody has
+  //    answered for, so an 'en' on the record must never overwrite a browser that remembers
+  //    Spanish: that owner would tap Español in setup and be handed English on every load
+  //    until they found Settings. When they disagree that way we keep Spanish and write it
+  //    up, best-effort, so the record catches up with the owner. Once the record says 'es'
+  //    (or the owner picks English in Settings, which writes 'en' up itself) they agree and
+  //    the record leads from then on.
   useEffect(() => {
     const v = client?.preferred_language
-    if (isLang(v)) { setLangState(v); writeStoredLang(v) }
-  }, [client?.preferred_language])
+    const id = client?.id
+    if (!isLang(v)) return
+    const saved = readStoredLang()
+    if (v === DEFAULT_LANG && saved && saved !== DEFAULT_LANG) {
+      setLangState(saved)
+      if (id && pushedFor.current !== id) { pushedFor.current = id; pushLang(id, saved) }
+      return
+    }
+    setLangState(v)
+    writeStoredLang(v)
+  }, [client?.preferred_language, client?.id])
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l)

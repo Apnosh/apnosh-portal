@@ -14,6 +14,8 @@ import {
 } from './data'
 import StepRenderer, { OnboardingFrame } from './step-renderer'
 import { completeOnboardingCRM } from '@/lib/onboarding-actions'
+import { readStoredLang } from '@/components/mvp/mvp-language'
+import { DEFAULT_LANG, isLang } from '@/lib/i18n/t'
 import { budgetCapForChip, budgetChipForCap } from '@/lib/goals/defaults'
 
 export default function OnboardingPage() {
@@ -325,6 +327,11 @@ export default function OnboardingPage() {
       avoid_list: data.avoid_list,
       connected: data.connected,
       logo_url: logoUrl,
+      /* The language they actually READ setup in. data.preferred_language only holds an answer
+         when the switch was tapped in THIS session, and a returning Spanish owner has it
+         remembered in the browser instead — they would have finished setup in Spanish and
+         landed on an English dashboard. The browser's answer is the fallback, English last. */
+      preferred_language: isLang(data.preferred_language) ? data.preferred_language : (readStoredLang() ?? DEFAULT_LANG),
     })
 
     setSaving(false)
