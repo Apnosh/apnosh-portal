@@ -20,7 +20,7 @@
  * CLIENT-SAFE: pure data and pure functions. No server imports, no database.
  */
 
-import { CREATE_CATALOG_IDS } from './create-catalog'
+import { CREATE_CATALOG, CREATE_CATALOG_IDS } from './create-catalog'
 import { REQUEST_TYPES } from '@/lib/requests/catalog'
 import { availabilityFor, sellable, type VisibilityOverrideMap } from './catalog-availability'
 import type { ClientShape } from '@/lib/clients/shape'
@@ -84,8 +84,9 @@ export const CHIP_SHELF: Record<string, readonly string[]> = {
     'gpost', 'dish', 'story', 'creator', 'earlyaccess',
   ],
   'Stay top of mind': [
+    // trucklocation is NOT here: a storefront has no truck. The truck shape leads with it.
     'gbp', 'socialprofiles', 'creative-social', 'listings',
-    'trucklocation', 'gbpmgmt', 'gpost', 'news', 'earlyaccess', 'loyalty',
+    'gbpmgmt', 'gpost', 'news', 'earlyaccess', 'loyalty',
   ],
   'Compete with nearby businesses': [
     'gbp', 'listings', 'reviewsreply', 'measure', 'reach',
@@ -187,4 +188,16 @@ export function laterForChip(chip: string, shape: ClientShape = 'storefront', ov
  *  store says so in those words rather than dropping the row. */
 export function isEmailOff(id: string, overrides?: VisibilityOverrideMap): boolean {
   return availabilityFor(id, overrides) === 'hidden'
+}
+
+/** The owner-facing title for any id on a shelf, including the ones hidden from browse (the
+ *  email cards). The store lists those by name and says why, so it needs a title for them. */
+const TITLES: Record<string, string> = (() => {
+  const out: Record<string, string> = {}
+  for (const c of CREATE_CATALOG) out[c.id] = c.title
+  for (const t of REQUEST_TYPES) out[`creative-${t.id}`] = t.label
+  return out
+})()
+export function shelfTitle(id: string): string {
+  return TITLES[id] ?? id
 }
