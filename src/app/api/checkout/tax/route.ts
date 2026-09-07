@@ -9,6 +9,31 @@ function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
 }
 
+type Row = StoredBillRow & { client_id: string; status: string; stripe_customer_id: string }
+
+/**
+ * The saved checkout, by its intent. Named columns rather than `*` — the row carries the whole
+ * draft snapshot, and this read runs on every keystroke in the address form.
+ *
+ * friend_credit_cents does not exist before migration 261, and asking for a column that is not
+ * there fails the whole read (42703). So a missing column is retried WITHOUT it, and reads as no
+ * credit, which is what it is on a database that has never issued one.
+ */
+async function paymentRow(paymentIntentId: string): Promise<Row | null> {
+  const base = 'client_id, subtotal_cents, service_fee_cents, tax_cents, total_cents, status, stripe_customer_id'
+  const { data, error } = await paymentsTable()
+    .select(`${base}, friend_credit_cents`)
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+  if (!error) return (data as Row | null) ?? null
+  if ((error as { code?: string }).code !== '42703') return null
+  const { data: plain } = await paymentsTable()
+    .select(base)
+    .eq('stripe_payment_intent_id', paymentIntentId)
+    .maybeSingle()
+  return (plain as Row | null) ?? null
+}
+
 /**
  * POST /api/checkout/tax — recompute tax for a pending checkout once the owner enters a billing
  * address, and update the PaymentIntent amount to match. Returns the refreshed itemized bill.
@@ -26,13 +51,7 @@ export async function POST(req: NextRequest) {
   const address = body.address as BillingAddress | undefined
   if (!paymentIntentId) return NextResponse.json({ error: 'paymentIntentId required' }, { status: 400 })
 
-  // select('*') so a database without migration 261 — where friend_credit_cents does not exist —
-  // cannot fail this read on a missing column (42703). The bill function below reads an absent
-  // credit as zero, which is what it is.
-  const { data: row } = await paymentsTable()
-    .select('*')
-    .eq('stripe_payment_intent_id', paymentIntentId)
-    .maybeSingle()
+  const row = await paymentRow(paymentIntentId)
   if (!row) return NextResponse.json({ error: 'Checkout not found' }, { status: 404 })
 
   const access = await checkClientAccess(row.client_id as string)
@@ -43,8 +62,8 @@ export async function POST(req: NextRequest) {
   // (refund-math measures delivered work against it) while the fee and the total are the credited
   // ones, so adding those two back together charges the owner the $50 we gave them. preTaxFromRow
   // takes the credit off and can never come out above the amount already on the intent.
-  const preTaxCents = preTaxFromRow(row as StoredBillRow)
-  const friendCreditCents = Math.max(0, Number((row as { friend_credit_cents?: number }).friend_credit_cents ?? 0) || 0)
+  const preTaxCents = preTaxFromRow(row)
+  const friendCreditCents = Math.max(0, Number(row.friend_credit_cents ?? 0) || 0)
   try {
     const tax = await computeTaxCents({ preTaxCents, address, customerId: row.stripe_customer_id as string })
     const totalCents = preTaxCents + tax.taxCents
