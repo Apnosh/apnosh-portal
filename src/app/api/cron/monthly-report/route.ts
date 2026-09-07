@@ -21,6 +21,9 @@
  * `failed`, apart from `sent`, because a run reporting twelve sends where three went nowhere is
  * the number that hides the failure.
  *
+ * A CLIENT WE COULD NOT READ IS NOT A QUIET CLIENT. A failed read is counted as `unreadable` and
+ * never claimed, so it is tried again rather than filed as "nothing to report".
+ *
  * NEVER A NUMBER THE LEDGER DOES NOT HOLD. A chapter with nothing in it says the honest waiting
  * line (src/lib/report/report-sent.ts), the same shape the promises ledger's not_counted state
  * gets. A month with no chapters at all is not emailed: nobody is sent an empty page.
@@ -33,7 +36,7 @@
  */
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { buildMonthlyReport } from '@/lib/report/build-month'
+import { buildMonthlyReport, type MonthlyReport } from '@/lib/report/build-month'
 import { claimReportMonth, hasSomethingToSay, isFirstBusinessDay, monthKey, previousMonth, releaseReportMonth, reportLines } from '@/lib/report/report-sent'
 import { getClientLanguage } from '@/lib/i18n/language'
 import { notifyClientOwners } from '@/lib/notifications'
@@ -79,11 +82,22 @@ export async function GET(req: Request) {
   const { data: clients, error } = await q
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
 
-  let sent = 0, quiet = 0, already = 0, failed = 0
+  let sent = 0, quiet = 0, already = 0, failed = 0, unreadable = 0
   const outcomes: { client: string; sent: boolean; why?: string }[] = []
 
   for (const c of (clients ?? []) as { id: string; name: string }[]) {
-    const report = await buildMonthlyReport(admin, c.id, year, month).catch(() => null)
+    // A READ THAT FAILED IS NOT A QUIET MONTH. Both used to end up in the same bucket, so a run
+    // whose reads were all timing out reported a page of "nothing to report" and looked healthy.
+    // A client we could not read is not claimed either: the month stays free to try again.
+    let report: MonthlyReport | null = null
+    try {
+      report = await buildMonthlyReport(admin, c.id, year, month)
+    } catch (e) {
+      unreadable += 1
+      console.warn('[monthly-report] could not read the month for', c.id, (e as Error)?.message)
+      outcomes.push({ client: c.name, sent: false, why: 'could not read the month' })
+      continue
+    }
     if (!report || !hasSomethingToSay(report)) {
       quiet += 1
       outcomes.push({ client: c.name, sent: false, why: 'nothing to report' })
@@ -135,5 +149,5 @@ export async function GET(req: Request) {
     outcomes.push({ client: c.name, sent: true })
   }
 
-  return NextResponse.json({ ok: true, dryRun, month: key, sent, quiet, already, failed, outcomes: outcomes.slice(0, 50) })
+  return NextResponse.json({ ok: true, dryRun, month: key, sent, quiet, already, failed, unreadable, outcomes: outcomes.slice(0, 50) })
 }
