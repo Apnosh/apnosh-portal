@@ -18,7 +18,8 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getActiveClientGoals, getGoalsCatalog } from '@/lib/goals/queries'
 import { getRatingsForOrders } from '@/lib/campaigns/work-ratings'
 import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
-import { DEFAULT_LANG, isLang, type Lang } from '@/lib/i18n/t'
+import { isLang } from '@/lib/i18n/t'
+import { getClientLanguage } from '@/lib/i18n/language'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,15 +32,18 @@ export async function GET(req: NextRequest) {
   if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
 
   const admin = createAdminClient()
-  const [client, biz, gbp, goals, catalog, orders] = await Promise.all([
-    // preferred_language is selected by name; before migration 259 the whole select errors, so
-    // it is guarded by readLanguage below rather than by a second round trip.
-    admin.from('clients').select('name, location, tier, preferred_language').eq('id', clientId).maybeSingle(),
+  const [client, biz, gbp, goals, catalog, orders, language] = await Promise.all([
+    // The three columns this screen has always read, and NOT preferred_language: PostgREST
+    // fails a select on the name of a column that is not there, so asking for it here would
+    // take the whole row down (name, city and tier included) on any database where migration
+    // 259 has not run yet. The language comes from its own guarded read below.
+    admin.from('clients').select('name, location, tier').eq('id', clientId).maybeSingle(),
     admin.from('businesses').select('logo_url, cuisine, cuisine_other, preferences, approval_preferences').eq('client_id', clientId).maybeSingle(),
     admin.from('gbp_locations').select('hours, address').eq('client_id', clientId).limit(1).maybeSingle(),
     getActiveClientGoals(clientId).catch(() => []),
     getGoalsCatalog().catch(() => []),
     admin.from('work_orders').select('id, title, discipline, creator_id, status, updated_at, campaign_id').eq('client_id', clientId).in('status', ['delivered', 'approved']).order('updated_at', { ascending: false }).limit(60),
+    getClientLanguage(clientId),
   ])
 
   const prefs = (biz.data?.preferences as Record<string, unknown> | null) ?? {}
@@ -74,7 +78,7 @@ export async function GET(req: NextRequest) {
       hours: (gbp.data?.hours as unknown) ?? null,
       goals: (goals as Array<{ goalSlug: string; priority: number }>).sort((a, b) => a.priority - b.priority).map((g) => ({ slug: g.goalSlug, name: (catalog as Array<{ slug: string; displayName: string }>).find((c) => c.slug === g.goalSlug)?.displayName ?? g.goalSlug })),
     },
-    settings: { approveFirst: !(approval.auto_approve === true), favorites, language: readLanguage(client.data) },
+    settings: { approveFirst: !(approval.auto_approve === true), favorites, language },
     people: [...peopleMap.values()],
     toRate,
   }, { headers: { 'Cache-Control': 'no-store' } })
@@ -95,13 +99,6 @@ export async function POST(req: NextRequest) {
   const { error } = await admin.from('businesses').update(patch).eq('id', biz.id as string)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ ok: true })
-}
-
-/** The saved language, or English. A row read before migration 259 has no such field, and
- *  English is what that owner is already being shown, so it is the honest fallback. */
-function readLanguage(row: unknown): Lang {
-  const v = (row as { preferred_language?: unknown } | null)?.preferred_language
-  return isLang(v) ? v : DEFAULT_LANG
 }
 
 /**
