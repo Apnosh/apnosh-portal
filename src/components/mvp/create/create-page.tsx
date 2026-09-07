@@ -371,7 +371,9 @@ export default function CreatePage() {
     return (
       <button type="button" onClick={() => open(c)} className={`card mini press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
         <div className="tile"><Icon />{!buy && <span style={{ position: 'absolute', top: 6, left: 6 }}><Coming /></span>}</div>
-        <div className="body"><div className="t">{c.title}</div><div className="p">{c.price} <span>· {c.ready}</span></div></div>
+        {/* A held card prints NO price and NO ready time. Both are offers, and there is
+            nothing to offer yet. Same rule as the product page's fact strip. */}
+        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{c.price} <span>· {c.ready}</span></> : <span>Not on sale yet</span>}</div></div>
       </button>
     )
   }
@@ -382,7 +384,7 @@ export default function CreatePage() {
         <span className={`st${isDone ? ' done' : ''}`}>{isDone && <Check size={13} strokeWidth={3} />}</span>
         <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
         <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : 'Coming soon'}</span>}</span>
-        <span className="r"><b>{isDone ? 'Done' : c.price}</b></span>
+        <span className="r"><b>{isDone ? 'Done' : buy ? c.price : ''}</b></span>
         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
       </button>
     )
@@ -624,7 +626,9 @@ export default function CreatePage() {
               return <button key={c.id} type="button" onClick={() => open(c)} className={`row press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
                 <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
                 <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? 'Coming soon' : mw ? `matches “${mw}”` : c.sub || c.plain}</span></span>
-                <span className="r"><b>{c.price}</b><span>{c.ready}</span></span>
+                {/* No price on a held card, here either. The search row was the last place a
+                    coming-soon card still carried one, which read as a thing you could buy. */}
+                <span className="r">{buy ? <><b>{c.price}</b><span>{c.ready}</span></> : <span>Not on sale yet</span>}</span>
               </button> })}
           </div>
         )}

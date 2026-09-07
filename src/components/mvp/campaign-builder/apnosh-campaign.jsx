@@ -2403,7 +2403,11 @@ function planTags(p) {
   // One-time amounts show WITH the 10% checkout service fee folded in ("fee included"), so the
   // number on the shelf is the number the card is charged (pre-tax) — never a cart surprise.
   const oneTimeShown = pr ? withServiceFee(pr.oneTime) : 0;
-  if (pr && (pr.oneTime > 0 || pr.perMonth > 0)) {
+  // A HELD CARD PRINTS NO PRICE, here as on the store's own shelf. A price is an offer, and a
+  // card the law holds back has nothing to offer yet; the Soon ribbon and the disabled footer
+  // are the whole story. The pass-through and cadence chips stay, since they describe the work.
+  const soon = !buyableId(p.id);
+  if (!soon && pr && (pr.oneTime > 0 || pr.perMonth > 0)) {
     if (pr.oneTime > 0 && pr.perMonth > 0) {
       t.push({ label: `Setup $${oneTimeShown.toLocaleString()}`, accent: true });
       t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });
