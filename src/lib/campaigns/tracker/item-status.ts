@@ -27,6 +27,10 @@ export interface ItemServiceOrder {
   status: string   // queued | claimed | in_progress | blocked_client | blocked_gate | ready_for_client | delivered
   dueDate: string | null
   deliveredAt: string | null
+  /** The delivered thing, so the owner can open what they bought from their own order page. */
+  proofUrl?: string | null
+  /** The handover checklist state (website work): what has changed hands and what has not. */
+  handover?: unknown
 }
 
 export type ItemStatusWord = 'Needs you' | 'Setting up' | 'Being made' | 'Live' | 'Done' | 'Stopped'

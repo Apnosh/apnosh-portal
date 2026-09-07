@@ -59,7 +59,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   ])
   // Additive: only the owner-safe columns ride out — never steps, assignees, or internal notes.
   const serviceOrders: ItemServiceOrder[] | null = svcOrders
-    ? svcOrders.map((o) => ({ lineItemId: o.lineItemId, serviceId: o.serviceId, status: o.status, dueDate: o.dueDate, deliveredAt: o.deliveredAt }))
+    // proof_url and handover ride out because they are the owner's OWN order: the thing they
+    // bought, and the list of what they now hold. Steps, assignees and internal notes never do.
+    ? svcOrders.map((o) => ({ lineItemId: o.lineItemId, serviceId: o.serviceId, status: o.status, dueDate: o.dueDate, deliveredAt: o.deliveredAt, proofUrl: o.proofUrl, handover: o.handover ?? null }))
     : null
   return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking, serviceOrders, since })
 }

@@ -38,6 +38,23 @@ export const ALLOWED_TRANSITIONS: Record<WorkOrderStatus, WorkOrderStatus[]> = {
   declined: [],
 }
 
+/**
+ * Has the work on this order actually BEGUN?
+ *
+ * creator_work_orders has no started_at column and never has (only service_work_orders got one, in
+ * migration 190). The promise read asked for it anyway, so every desk order's landing read came
+ * back 42703 and no desk card could say who was on it. The status is the start: 'offered' and
+ * 'accepted' are a queue, 'revision' is the work in hand again.
+ *
+ * 'done' is not a creator status the table can hold — it is accepted here because older readers
+ * write it in memory and a status we do not recognise must never read as "not started".
+ */
+export const WORK_STARTED_STATUSES = ['in_progress', 'revision', 'delivered', 'approved', 'done'] as const
+
+export function workStarted(status: string | null | undefined): boolean {
+  return (WORK_STARTED_STATUSES as readonly string[]).includes(String(status ?? ''))
+}
+
 /** Thrown when a status write violates the machine; surfaced as 409 by the route. */
 export class IllegalTransition extends Error {
   constructor(message: string) { super(message); this.name = 'IllegalTransition' }
@@ -580,6 +597,38 @@ export function buildChargeRow(o: { id: string; client_id: string; campaign_id: 
     source: 'creator',
     amount_cents: Math.max(0, Math.round(o.amount_cents || 0)),
     status,
+  }
+}
+
+/**
+ * Does this accrual need a PERSON to send a bill?
+ *
+ * The graphic order is the one desk order that takes no card: it mints on placement and the money
+ * row is written when the owner approves the finished piece. The screen has always said we bill it
+ * after approval — and the only thing that turns an accrued row into a real invoice is an admin
+ * button on the client's billing card that nobody was ever told to press. So the copy promised a
+ * bill that no code and no person was going to send.
+ *
+ * This is the decision that makes it true. A request-linked piece (campaign_piece_key
+ * 'request:<id>') whose money was never collected at the till, with a real price on it, means
+ * somebody has to send the bill — and gets told so, by name and amount, with the link.
+ *
+ * A campaign piece is NOT this: its cart already took the money, or its invoice lane pages the
+ * admins at ship. A covered piece was paid at the till. A $0 piece has its own "no price" page.
+ *
+ * Pure so the promise in the copy and the notice that keeps it cannot drift apart.
+ */
+export function billNoticeDue(opts: { requestId: string; covered: boolean; amountCents: number }): boolean {
+  if (!opts.requestId) return false
+  if (opts.covered) return false
+  return opts.amountCents > 0
+}
+
+/** The words on that notice. Plain: who, what, how much, and that a person sends it. */
+export function billNoticeLines(clientName: string, title: string, amountCents: number): { title: string; body: string } {
+  return {
+    title: `Send the bill: ${clientName} approved ${title}`,
+    body: `$${(amountCents / 100).toFixed(2)} is accrued and waiting. Open their billing card and send the invoice.`,
   }
 }
 

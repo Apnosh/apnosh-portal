@@ -256,7 +256,12 @@ export async function startMonthlyRetainer(opts: {
 export async function startCampaignSubscription(opts: {
   customerId: string
   clientId: string
-  campaignId: string
+  /** The campaign this subscription bills for. Omitted for a Request Desk order, which has none. */
+  campaignId?: string
+  /** A DESK order's request id — the desk sells monthly work too (a social posting package), and
+   *  putting its id in the campaign_id slot would file the charge against a campaign that does not
+   *  exist. One of the two is always set. */
+  requestId?: string
   amountCents: number
   productId: string
   defaultPaymentMethodId?: string
@@ -282,8 +287,9 @@ export async function startCampaignSubscription(opts: {
     description: `Monthly services — ${opts.planName ?? 'Apnosh campaign'}`,
     metadata: {
       client_id: opts.clientId,
-      campaign_id: opts.campaignId,
-      kind: 'campaign_subscription',
+      ...(opts.campaignId ? { campaign_id: opts.campaignId } : {}),
+      ...(opts.requestId ? { request_id: opts.requestId } : {}),
+      kind: opts.requestId ? 'desk_subscription' : 'campaign_subscription',
     },
     // TAX, the same way the one-time half does it. Checkout already runs Stripe Tax
     // (tax.calculations at /api/checkout/prepare, a committed transaction at /complete), so a

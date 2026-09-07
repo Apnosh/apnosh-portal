@@ -77,6 +77,33 @@ export async function isCampaignCheckoutPaid(campaignId: string): Promise<boolea
   }
 }
 
+/**
+ * The same G1 gate for a DESK order, keyed on request_id.
+ *
+ * The Request Desk now takes the card at checkout, and its work order then runs the ordinary
+ * creator rail: delivered, approved, and approval accrues an owner charge. With no gate here that
+ * charge lands 'accrued' and an invoice bills the owner a SECOND time for the order they already
+ * paid for at the till. Same law as the campaign lane, same words on the row.
+ *
+ * Degrades to FALSE (pre-258 there is no request_id column to filter on) — and that is honest:
+ * pre-258 no desk order can take a card, so there is no checkout money to be covered by.
+ */
+export async function isRequestCheckoutPaid(requestId: string): Promise<boolean> {
+  if (!requestId) return false
+  try {
+    const { data, error } = await admin()
+      .from('campaign_payments')
+      .select('id')
+      .eq('request_id', requestId)
+      .in('status', COLLECTED_STATUSES)
+      .limit(1)
+    if (error || !data) return false
+    return data.length > 0
+  } catch {
+    return false
+  }
+}
+
 /** Upfront payments for many campaigns → { campaignId: info } (collected rows only; latest wins). */
 export async function getCampaignPaymentsBatch(campaignIds: string[]): Promise<Record<string, CampaignPaymentInfo>> {
   const ids = campaignIds.filter(Boolean)

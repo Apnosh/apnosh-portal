@@ -114,6 +114,86 @@ export async function ensureCampaignSubscription(paymentIntentId: string, campai
   }
 }
 
+/**
+ * The desk's own monthly: a Request Desk order priced by the month (a social posting package).
+ *
+ * Same machinery as ensureCampaignSubscription, and deliberately a sibling rather than a branch
+ * inside it: that one derives the monthly total from the payment row's `draft` snapshot, and a desk
+ * order has no draft. Its monthly total comes from the stored quote (deskBill), which is the number
+ * the owner agreed to on the consent tick.
+ *
+ * Same guarantees: idempotent on the existing subscription id AND on Stripe's own idempotency key,
+ * honest on failure (a 'failed' row plus a page to staff, never a silently dropped monthly), and
+ * degrade-safe on a missing table or column.
+ */
+export async function ensureDeskSubscription(intentId: string, requestId: string, monthlyCents: number, planName: string): Promise<SubResult> {
+  if (monthlyCents <= 0) return { ok: true, status: 'none' }
+  const a = admin()
+  let row: Record<string, unknown> | null = null
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (a.from('campaign_payments') as any)
+      .select('client_id, stripe_customer_id, stripe_subscription_id')
+      .eq('stripe_payment_intent_id', intentId)
+      .maybeSingle()
+    row = data
+  } catch {
+    return { ok: true, status: 'none' }
+  }
+  if (!row) return { ok: true, status: 'none' }
+  if (typeof row.stripe_subscription_id === 'string' && row.stripe_subscription_id) {
+    return { ok: true, status: 'already', subscriptionId: row.stripe_subscription_id }
+  }
+
+  const clientId = String(row.client_id ?? '')
+  const customerId = String(row.stripe_customer_id ?? '')
+  if (!customerId) {
+    await failAndNotify(a, intentId, clientId, requestId, monthlyCents, 'no Stripe customer on the payment row', '/admin/requests')
+    return { ok: false, status: 'failed', error: 'no customer' }
+  }
+  let productId = ''
+  try {
+    const { data: prod } = await a.from('products').select('stripe_product_id').eq('category', 'retainer').eq('active', true).maybeSingle()
+    productId = String((prod as { stripe_product_id?: string } | null)?.stripe_product_id ?? '')
+  } catch { /* handled below */ }
+  if (!productId) {
+    await failAndNotify(a, intentId, clientId, requestId, monthlyCents, 'no monthly product seeded (run the Stripe products sync)', '/admin/requests')
+    return { ok: false, status: 'failed', error: 'no product' }
+  }
+
+  // The card the owner just used becomes the subscription's card. A monthly-only desk order saved
+  // it on a SetupIntent (seti_...); a mixed order on the PaymentIntent.
+  let pmId: string | undefined
+  try {
+    if (intentId.startsWith('seti_')) {
+      const si = await stripe.setupIntents.retrieve(intentId)
+      pmId = typeof si.payment_method === 'string' ? si.payment_method : si.payment_method?.id
+    } else {
+      const pi = await stripe.paymentIntents.retrieve(intentId)
+      pmId = typeof pi.payment_method === 'string' ? pi.payment_method : pi.payment_method?.id
+    }
+  } catch { /* fall back to the customer's default PM */ }
+
+  try {
+    const sub = await startCampaignSubscription({
+      customerId,
+      clientId,
+      requestId,
+      amountCents: monthlyCents,
+      productId,
+      defaultPaymentMethodId: pmId,
+      planName,
+      idempotencyKey: `desksub_${requestId}`,
+    })
+    await stampSub(a, intentId, { stripe_subscription_id: sub.id, subscription_status: 'active', monthly_cents: monthlyCents })
+    return { ok: true, status: 'active', subscriptionId: sub.id }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'subscription create failed'
+    await failAndNotify(a, intentId, clientId, requestId, monthlyCents, msg, '/admin/requests')
+    return { ok: false, status: 'failed', error: msg }
+  }
+}
+
 export interface CancelSubsResult {
   /** Subscriptions we canceled with Stripe right now. */
   canceled: number
@@ -140,16 +220,42 @@ export interface CancelSubsResult {
  * status 'shipped', so ongoing monthly services (e.g. review replies) keep billing as agreed.
  */
 export async function cancelCampaignSubscriptions(campaignId: string): Promise<CancelSubsResult> {
+  return cancelSubscriptionsKeyedOn('campaign_id', campaignId, `/admin/campaign-orders?focus=${campaignId}`, 'A stopped campaign')
+}
+
+/**
+ * The same cancel, for a DESK order — the money half of cancelling a Request Desk order.
+ *
+ * A monthly desk line (a social posting package) starts a real Stripe subscription through
+ * ensureDeskSubscription, whose id is stored on the SAME column of the SAME payment row the
+ * campaign lane uses; only the key differs. Without this, a fully refunded desk order kept billing
+ * every month forever: the refund settlement only knew how to cancel a campaign's subscriptions.
+ *
+ * Degrades exactly like the campaign one: pre-258 the request_id column is absent, the read errors,
+ * and the answer is zeros rather than a throw.
+ */
+export async function cancelDeskSubscriptions(requestId: string): Promise<CancelSubsResult> {
+  return cancelSubscriptionsKeyedOn('request_id', requestId, '/admin/requests', 'A cancelled desk order')
+}
+
+async function cancelSubscriptionsKeyedOn(
+  column: 'campaign_id' | 'request_id',
+  value: string,
+  adminLink: string,
+  /** How the page to staff names the thing, e.g. "A stopped campaign". */
+  what: string,
+): Promise<CancelSubsResult> {
   const result: CancelSubsResult = { canceled: 0, alreadyCanceled: 0, failed: 0 }
+  if (!value) return result
   const a = admin()
   let rows: Array<Record<string, unknown>> = []
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error } = await (a.from('campaign_payments') as any)
       .select('stripe_payment_intent_id, stripe_subscription_id, subscription_status, client_id, monthly_cents')
-      .eq('campaign_id', campaignId)
+      .eq(column, value)
       .not('stripe_subscription_id', 'is', null)
-    if (error || !Array.isArray(data)) return result   // pre-215/221 or read failure — nothing recorded to cancel
+    if (error || !Array.isArray(data)) return result   // pre-215/221/258 or read failure — nothing recorded to cancel
     rows = data
   } catch {
     return result
@@ -174,12 +280,12 @@ export async function cancelCampaignSubscriptions(campaignId: string): Promise<C
       } else {
         result.failed++
         await stampSub(a, piId, { subscription_status: 'cancel_failed' })
-        // Never silently keep charging a stopped campaign: page staff to cancel by hand.
+        // Never silently keep charging a stopped order: page staff to cancel by hand.
         await notifyStaffForClient(String(row.client_id ?? ''), ['strategist'], {
           kind: 'payment',
           title: 'Monthly subscription needs a manual cancel',
-          body: `A stopped campaign's $${Math.round(Number(row.monthly_cents ?? 0) / 100)}/mo subscription (${subId}) did not cancel automatically (${msg || 'unknown error'}). Cancel it in Stripe now.`,
-          link: `/admin/campaign-orders?focus=${campaignId}`,
+          body: `${what}'s $${Math.round(Number(row.monthly_cents ?? 0) / 100)}/mo subscription (${subId}) did not cancel automatically (${msg || 'unknown error'}). Cancel it in Stripe now.`,
+          link: adminLink,
         }).catch(() => ({ notified: 0 }))
       }
     }
@@ -195,13 +301,14 @@ async function stampSub(a: any, paymentIntentId: string, patch: Record<string, u
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function failAndNotify(a: any, paymentIntentId: string, clientId: string, campaignId: string, monthlyCents: number, reason: string): Promise<void> {
+async function failAndNotify(a: any, paymentIntentId: string, clientId: string, orderId: string, monthlyCents: number, reason: string, link?: string): Promise<void> {
   await stampSub(a, paymentIntentId, { subscription_status: 'failed', monthly_cents: monthlyCents })
   // Never silently drop recurring revenue: page staff to set it up by hand. The one-time order stands.
   await notifyStaffForClient(clientId, ['strategist'], {
     kind: 'payment',
     title: 'Monthly subscription failed to start',
-    body: `A paid campaign's $${Math.round(monthlyCents / 100)}/mo services didn't start automatically (${reason}). Start it manually; the one-time order is fine.`,
-    link: `/admin/campaign-orders?focus=${campaignId}`,
+    body: `A paid order's $${Math.round(monthlyCents / 100)}/mo services didn't start automatically (${reason}). Start it manually; the one-time order is fine.`,
+    // A desk order is not on the campaign-orders board, so it must not be linked there.
+    link: link ?? `/admin/campaign-orders?focus=${orderId}`,
   }).catch(() => ({ notified: 0 }))
 }

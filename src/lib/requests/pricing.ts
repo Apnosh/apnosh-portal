@@ -242,14 +242,14 @@ export const fmtCents = (cents: number): string => `$${Math.round(cents / 100).t
 /**
  * The total, said the way it is really billed.
  *
- * A monthly line used to print "$560 a month", which promised a subscription the Request Desk does
- * not have: POST /api/requests stores quote_cents ONCE with no cadence and mints one work order.
- * Nothing bills a second month. So the desk charges the first month, and says so.
- *
- * When the desk goes through the till (recurring billing on a request), this becomes "a month"
- * again — the cadence now rides on the row, so the change is one line here.
+ * This said "for the first month" for as long as it was true: the desk stored one quote, minted one
+ * work order and nothing ever billed a second month, so "a month" would have promised a
+ * subscription that did not exist. The desk now goes through the till — a monthly desk line saves
+ * the card and starts a real Stripe subscription with automatic_tax on it — so "a month" is the
+ * true word again, and the tax rides with it, because the subscription really does add tax to
+ * every invoice.
  */
-export const fmtTotal = (p: CreativePrice): string => `${fmtCents(p.totalCents)}${p.monthly ? ' for the first month' : ''}`
+export const fmtTotal = (p: CreativePrice): string => `${fmtCents(p.totalCents)}${p.monthly ? ' a month, plus tax' : ''}`
 
 /** The valve, said the way Tony needs to hear it (persona guardrail). */
 export const VALVE_LINE =

@@ -1,19 +1,26 @@
 /**
  * Stripe webhook -- Apnosh billing v2.
  *
- * Handles the 14 events the spec requires plus 2 legacy events
+ * Handles the 18 events the spec requires plus 2 legacy events
  * (checkout.session.completed, invoice.payment_succeeded) needed by the
  * existing /dashboard/orders self-serve flow.
  *
  * REQUIRED EVENTS ON THE STRIPE ENDPOINT. Three of these are money going BACKWARDS, and if the
  * endpoint is not subscribed to them nothing here ever runs: the campaign keeps its 'paid' row, the
- * work keeps minting, the subscription keeps billing, and nobody is told. Add all three in the
- * Stripe dashboard (Developers -> Webhooks -> this endpoint -> Select events):
+ * work keeps minting, the subscription keeps billing, and nobody is told. Add all four below in
+ * the Stripe dashboard (Developers -> Webhooks -> this endpoint -> Select events):
  *
  *   charge.refunded         a refund, ours or one taken by hand in the dashboard
  *   charge.dispute.created  a chargeback opened
  *   charge.dispute.closed   the bank decided (won -> restore the status; lost -> settle as a
  *                           full refund, without calling Stripe refunds)
+ *
+ * A fourth is easy to leave off because nothing is charged on it:
+ *
+ *   setup_intent.succeeded   a MONTHLY-only desk order takes no money today — its payment row is
+ *                            keyed to a SetupIntent, so payment_intent.succeeded never fires for
+ *                            it. Without this event that order stays 'pending' forever, the owner
+ *                            is offered a second card, and nobody is told the work is unmade.
  *
  * The rest: customer.subscription.created/updated/deleted, invoice.created, invoice.finalized,
  * invoice.paid, invoice.payment_failed, invoice.voided, invoice.marked_uncollectible,
@@ -46,6 +53,9 @@ import {
 } from '@/lib/billing-grants'
 
 export const runtime = 'nodejs'
+// Headroom. One handler (settleDeskPayment) waits a few seconds for the happy path to finish
+// before it calls a paid order orphaned; a timeout there would make Stripe retry the whole event.
+export const maxDuration = 60
 
 // Generic SupabaseClient (no generated DB types) -- the billing tables
 // from migration 055 are not in the generated types yet. Once the repo's
@@ -171,6 +181,8 @@ async function dispatch(event: Stripe.Event, supabase: AdminClient) {
       return handleCampaignPaymentSucceeded(supabase, event.data.object as Stripe.PaymentIntent)
     case 'payment_intent.payment_failed':
       return handleCampaignPaymentFailed(supabase, event.data.object as Stripe.PaymentIntent)
+    case 'setup_intent.succeeded':
+      return handleDeskSetupSucceeded(supabase, event.data.object as Stripe.SetupIntent)
     case 'payment_intent.processing':
       return handleInvoicePaymentProcessing(supabase, event.data.object as Stripe.PaymentIntent)
 
@@ -747,19 +759,31 @@ async function handleCampaignPaymentSucceeded(
   supabase: AdminClient,
   pi: Stripe.PaymentIntent,
 ) {
-  if (pi.metadata?.kind !== 'campaign_checkout') return
+  const kind = String(pi.metadata?.kind ?? '')
+  // The DESK pays through the same route with its own kinds. This backstop only knew the cart's,
+  // so a desk order whose tab closed after the card cleared stayed 'pending' forever: paid at
+  // Stripe, unpaid here, no work order, and nobody told.
+  const isDesk = kind === 'desk_checkout' || kind === 'desk_checkout_setup'
+  if (kind !== 'campaign_checkout' && !isDesk) return
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: rows } = await (supabase as any)
     .from('campaign_payments')
     .update({ status: 'paid', paid_at: unixToIso(pi.created) })
     .eq('stripe_payment_intent_id', pi.id)
     .eq('status', 'pending')
-    .select('id, client_id, campaign_id, total_cents')
+    .select('*')
+  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; campaign_id: string | null; request_id?: string | null; total_cents: number } | undefined : undefined
+  if (!row) return
+
+  if (isDesk) {
+    await settleDeskPayment(supabase, row, pi.metadata?.requestId ?? null, unixToIso(pi.created))
+    return
+  }
+
   // A charged card with no shipped order is real money with nobody's name on it. The happy path
   // links the campaign at ship; when the tab closed first, this row lands paid and orphaned. Page
   // every admin so a person ships it from the draft snapshot. Best-effort.
-  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; campaign_id: string | null; total_cents: number } | undefined : undefined
-  if (row && !row.campaign_id) {
+  if (!row.campaign_id) {
     try {
       const { getAdminUserIds, createNotification } = await import('@/lib/notify')
       const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
@@ -769,6 +793,80 @@ async function handleCampaignPaymentSucceeded(
       }
     } catch (e) { console.warn('[stripe] orphan-payment page failed', (e as Error)?.message) }
   }
+}
+
+
+/**
+ * A DESK order whose card cleared with nobody watching.
+ *
+ * The happy path (/api/checkout/complete) stamps the order and mints the work. When the tab closed
+ * first, this is the only thing that ever runs — so it does the two parts that cannot wait: the
+ * order row says it is paid (or /checkout/prepare offers a second card for an order already paid
+ * for), and a paid order with nothing being made pages every admin.
+ *
+ * The mint itself is deliberately NOT done here. It is the same idempotent finalize the happy path
+ * calls, and a webhook is not the place to start work orders behind a person's back; the page is.
+ *
+ * IT WAITS BEFORE IT PAGES. Stripe fires this a second or two after the card clears, while
+ * /checkout/complete is usually still working — so "no work order yet" was almost always a race,
+ * not an orphan, and every ordinary desk order paged every admin with "Paid, nothing made". So the
+ * work-order read is re-tried for a few seconds first. We do NOT drop the page for anything fresh
+ * instead: Stripe ALWAYS arrives fresh, so an age gate here would mean nobody is ever told, and a
+ * paid order nobody makes is the worse of the two mistakes. A page that turns out to be a lost race
+ * costs an admin one click on /admin/requests, where the work order is already sitting.
+ */
+/** Wait a beat. Only used to give the happy path time to finish before we call an order orphaned. */
+const beat = (ms: number) => new Promise((r) => setTimeout(r, ms))
+async function settleDeskPayment(
+  supabase: AdminClient,
+  row: { id: string; client_id: string; request_id?: string | null; total_cents: number },
+  metaRequestId: string | null,
+  /** Stripe's own timestamp for the event. Null only if Stripe sent no created time. */
+  paidAtISO: string | null,
+) {
+  const requestId = typeof row.request_id === 'string' && row.request_id ? row.request_id : metaRequestId
+  if (!requestId) return
+  const { error: stampErr } = await supabase
+    .from('creative_requests')
+    .update({ paid_at: paidAtISO ?? new Date().toISOString(), payment_id: row.id })
+    .eq('id', requestId)
+  if (stampErr) console.warn('[stripe webhook] desk paid stamp failed (apply migration 258):', stampErr.message)
+
+  // Three looks over about six seconds. finalizePaidDeskOrder writes work_order_id on the row the
+  // moment its mint lands, so the first look that finds one ends this quietly.
+  for (let look = 0; look < 3; look++) {
+    if (look > 0) await beat(3000)
+    const { data: req } = await supabase.from('creative_requests').select('work_order_id').eq('id', requestId).maybeSingle()
+    if ((req as { work_order_id?: string | null } | null)?.work_order_id) return
+  }
+  try {
+    const { getAdminUserIds, createNotification } = await import('@/lib/notify')
+    const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
+    const name = ((client as { name?: string } | null)?.name) ?? 'A client'
+    for (const adminId of await getAdminUserIds(supabase)) {
+      await createNotification({ supabase, userId: adminId, type: 'order_confirmed', title: 'Paid, nothing made', body: `${name} paid $${(row.total_cents / 100).toFixed(2)} for a desk order and no work order was created (the tab closed before checkout finished). Make it from the request.`, link: '/admin/requests' })
+    }
+  } catch (e) { console.warn('[stripe] orphan desk-order page failed', (e as Error)?.message) }
+}
+
+/**
+ * setup_intent.succeeded — the MONTHLY desk order's version of the same edge.
+ *
+ * A monthly-only desk line takes no money today: its row is keyed to a SetupIntent, so
+ * payment_intent.succeeded never fires for it and nothing here would have heard about it at all.
+ */
+async function handleDeskSetupSucceeded(supabase: AdminClient, si: Stripe.SetupIntent) {
+  if (String(si.metadata?.kind ?? '') !== 'desk_checkout_setup') return
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: rows } = await (supabase as any)
+    .from('campaign_payments')
+    .update({ status: 'paid', paid_at: unixToIso(si.created) })
+    .eq('stripe_payment_intent_id', si.id)
+    .eq('status', 'pending')
+    .select('*')
+  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; request_id?: string | null; total_cents: number } | undefined : undefined
+  if (!row) return
+  await settleDeskPayment(supabase, row, si.metadata?.requestId ?? null, unixToIso(si.created))
 }
 
 // ============================================================

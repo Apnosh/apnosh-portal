@@ -32,6 +32,8 @@ import { isBuyable, isHidden, BUILTIN_AVAILABILITY, FULLY_BUILT_LIVE, RETIRED_ID
 import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { fitsBudget, isSellable, filterRecsByFacts, deliveryLedShape } from '@/lib/campaigns/planning/rank-facts'
 import { ITEM_PRICES } from '@/lib/campaigns/builder/item-prices'
+import { handoverFor, handoverProgress, handoverGuard, markHandover, readHandover, WEBSITE_HANDOVER } from '@/lib/campaigns/handover'
+import { lineFor, PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState } from '@/lib/promises/lines'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -836,10 +838,99 @@ s.group('Intake rail: playbook needsInput keys reach the owner (recurring includ
   s.eq('delivery-opt declares pos-vendor (rendered as delivery logins)', playbookNeedKeys('delivery-opt').includes('pos-vendor'), true)
   s.eq('unknown service → no keys, no fake asks', playbookNeedKeys('nope').length, 0)
   // Drift guard: every needsInput key any playbook declares has a consumer in service-needs.ts.
-  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact', 'truck-schedule'])
+  // 'analytics-access' is here because service-needs.ts really does ask for it — the Google
+  // connect, who runs the website, and the two links that turn a click into a countable result.
+  // The set had simply not been told, so the drift guard reported an orphan that was not one.
+  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact', 'truck-schedule', 'analytics-access'])
   const declared = new Set(Object.keys(SERVICE_PLAYBOOKS).flatMap((id) => playbookNeedKeys(id)))
   const orphans = [...declared].filter((k) => !HANDLED.has(k))
   s.check(`every declared needsInput key has an owner-facing ask (orphans: ${orphans.join(',') || 'none'})`, orphans.length === 0)
+}
+
+// ── Move 4: the seven states an order lives, said the same way everywhere ──
+s.group('Seven states: one pill, one line, one action, from one table')
+{
+  const STATES: PromiseState[] = ['ordered', 'production', 'held', 'delivered', 'counting', 'counted', 'stopped', 'not_counted']
+  const row = (state: PromiseState, over: Partial<{ sub: string; value: string; small: string; showsOn: string }> = {}) =>
+    ({ state, sub: 'Ordered Sep 1 · taps on your Google card', value: '—', small: 'counting from Sep 12', showsOn: '2026-10-08', ...over })
+
+  // Every state is spelled out in all four tables. A state missing from one of them is a card that
+  // renders undefined, or sorts to the bottom for no reason.
+  for (const st of STATES) {
+    s.check(`${st}: has a pill entry`, st in PILL_FOR)
+    s.check(`${st}: has an action entry`, st in ACTION_FOR)
+    s.check(`${st}: has a rank`, typeof STATE_RANK[st] === 'number')
+    s.check(`${st}: has a line, and it is never empty`, lineFor(row(st)).trim().length > 0)
+  }
+
+  s.eq('Ordered says the team has not started', lineFor(row('ordered', { small: 'nobody on it yet' })), 'Ordered · your team starts it next')
+  // The other honest "ordered": picked up, and PAUSED waiting on the owner. It must not read as
+  // "your team is on it" with "Waiting on you" underneath — two opposite sentences on one card.
+  s.eq('an order waiting on the owner says so instead', lineFor(row('ordered', { small: 'waiting on you' })), 'Ordered · waiting on you')
+  s.eq('In production says somebody is on it', lineFor(row('production')), 'Being made · your team is on it')
+  s.eq('Held names the day work starts', lineFor(row('held', { value: 'Jan 20' })), 'Held · work starts Jan 20 · then counted')
+  s.eq('Delivered names the day the count starts', lineFor(row('delivered')), 'Delivered · your count starts Sep 12')
+  s.eq('a delivered DELIVERABLE has no count coming, so it just says done', lineFor(row('delivered', { value: 'Done', small: 'Your photo library' })), 'Done · Your photo library')
+  s.eq('Counting names the day it shows on Home', lineFor(row('counting')), 'Counted after: taps on your Google card · on Home Oct 8')
+  s.eq('Counted is the number and what it was before', lineFor(row('counted', { value: '41', small: '▲ was 13 in the same 14 days before' })), '41 · ▲ was 13 in the same 14 days before')
+  s.eq('Stopped says what happened to the money', lineFor(row('stopped', { sub: 'Stopped · $120.00 sent back to your card' })), 'Stopped · $120.00 sent back to your card')
+  s.eq('and says so honestly when none moved', lineFor(row('stopped', { sub: 'Stopped · nothing new is running' })), 'Stopped · nothing new is running')
+  s.check('Not counted leads with the reason, not with a zero',
+    lineFor(row('not_counted', { sub: 'Ordered Sep 1 · The delivery apps give us no way to read your orders.' })).startsWith('Not counted: The delivery apps'))
+
+  // No line may print a number the row does not have.
+  for (const st of STATES) s.check(`${st}: never prints "undefined"`, !lineFor(row(st)).includes('undefined'))
+
+  s.eq('only Counted and Stopped are history', [...DONE_STATES].sort(), ['counted', 'stopped'])
+  s.check('a card being MADE has no action, because there is nothing for the owner to do',
+    ACTION_FOR.production === null && ACTION_FOR.held === null)
+  s.eq('a delivered order opens the thing', ACTION_FOR.delivered, 'Open what landed')
+  s.check('a counted row outranks everything still waiting',
+    STATE_RANK.counted < STATE_RANK.counting && STATE_RANK.counting < STATE_RANK.held)
+  s.check('and a stopped order sinks below all of it', STATE_RANK.stopped === Math.max(...STATES.map((x) => STATE_RANK[x])))
+}
+
+// ── Move 4: a website order ends in a domain the owner holds ──
+s.group('Handover: an account that changes hands is a checklist, not a promise')
+{
+  s.eq('a website order has a checklist', handoverFor('request:website').length, WEBSITE_HANDOVER.length)
+  s.eq('so does the site-and-menu service', handoverFor('site-menu').length, WEBSITE_HANDOVER.length)
+  // A photo library hands over too, and it has no domain, no DNS and no hosting login. Four rows
+  // that never apply are rows a person learns to tick without reading.
+  s.eq('a photo library gets NO domain checklist', handoverFor('photo-library').length, 0)
+  s.eq('nor does a Google setup', handoverFor('gbp-setup').length, 0)
+  s.eq('nor does nothing at all', handoverFor(null).length, 0)
+
+  s.check('the domain, the DNS and the hosting login are all required',
+    ['domain', 'dns', 'hosting'].every((id) => WEBSITE_HANDOVER.find((i) => i.id === id)?.required === true))
+  s.check('analytics is NOT, because some owners genuinely have none',
+    WEBSITE_HANDOVER.find((i) => i.id === 'analytics')?.required === false)
+
+  // The guard: delivery is refused until every required row is ticked.
+  s.check('an empty checklist blocks delivery', handoverGuard('request:website', null).ok === false)
+  s.check('and says which rows are open', (handoverGuard('request:website', null) as { reason: string }).reason.includes('domain'))
+  s.check('work that hands nothing over is never blocked', handoverGuard('photo-library', null).ok === true)
+
+  const NOW = '2026-09-07T10:00:00.000Z'
+  let state: unknown = null
+  for (const id of ['domain', 'dns', 'hosting', 'owner']) state = markHandover(state, { id, done: true }, NOW)
+  s.check('every required row ticked → delivery is allowed', handoverGuard('request:website', state).ok === true)
+  s.eq('and the optional row is still honestly open', handoverProgress('request:website', state).doneCount, 4)
+
+  const unticked = markHandover(state, { id: 'domain', done: false }, NOW)
+  s.check('un-ticking a required row blocks it again', handoverGuard('request:website', unticked).ok === false)
+  s.check('and clears the date, because an untrue date is worse than none',
+    readHandover(unticked).find((m) => m.id === 'domain')?.doneAt === undefined)
+
+  const withNote = markHandover(state, { id: 'domain', note: "in Mia's GoDaddy" }, NOW)
+  s.eq('a note says where it went and survives a re-tick', readHandover(withNote).find((m) => m.id === 'domain')?.note, "in Mia's GoDaddy")
+  s.eq('and the day it changed hands is stamped once, not moved', readHandover(withNote).find((m) => m.id === 'domain')?.doneAt, NOW)
+
+  // The stored column is jsonb: it can hold anything, including nothing.
+  for (const junk of [null, undefined, 'nope', 42, {}, { items: 'no' }, { items: [1, 2] }]) {
+    s.eq(`garbage in the column (${JSON.stringify(junk) ?? 'undefined'}) reads as no ticks`, readHandover(junk).length, 0)
+  }
+  s.check('and garbage never accidentally allows a delivery', handoverGuard('request:website', { items: [{ id: 'domain' }] }).ok === false)
 }
 
 // ── Owner-sim fix, Phase 3: pre-checkout asset checks ──

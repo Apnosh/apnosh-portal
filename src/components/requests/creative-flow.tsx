@@ -24,6 +24,8 @@ import RequestBoard from '@/components/requests/request-boards'
 import { requestTypeById, questionsFor, type RequestAnswers } from '@/lib/requests/catalog'
 import { priceCreativeRequest, fmtCents, fmtTotal, CREATIVE_LEVELS, VALVE_LINE, REVISION_LINE } from '@/lib/requests/pricing'
 import { flowFor, bucketForDate, type FlowControl, type TicketOption } from '@/lib/requests/flows'
+import { useClient } from '@/lib/client-context'
+import DeskCheckout from '@/components/requests/desk-checkout'
 
 const fmtDay = (s: string) => new Date(`${s}T12:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
 
@@ -100,6 +102,10 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
   /* the cart screen between Add to cart and Confirm order */
   const [cart, setCart] = useState(false)
   const [orderAmount, setOrderAmount] = useState<number | null>(null)
+  /* THE TILL. The order is saved and priced; this is the request id it is waiting to be paid for.
+     Nothing is made until it is. */
+  const [payFor, setPayFor] = useState<string | null>(null)
+  const { client } = useClient()
 
   if (!type || !flow) return null
   const today = new Date().toISOString().slice(0, 10)
@@ -169,9 +175,9 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
     setUploading(false)
   }
 
-  /* Confirm order: the brief goes down the ORDER lane at the price sheet's number
-   * (the server computes its own and never trusts ours); the work order mints on
-   * the house team right away. */
+  /* Confirm order: the brief goes down the ORDER lane at the price sheet's number (the server
+   * computes its own and never trusts ours). NOTHING IS MADE YET — the row lands priced and
+   * waiting, and the next screen is the card. Work follows money. */
   const send = async () => {
     if (sending) return
     setSending(true)
@@ -189,10 +195,13 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           order: true,
         }),
       })
-      const j = (await r.json().catch(() => ({}))) as { error?: string; order?: { amount_cents?: number } }
+      const j = (await r.json().catch(() => ({}))) as { error?: string; request?: { id?: string }; order?: { amount_cents?: number; needs_payment?: boolean } }
       if (!r.ok) throw new Error(typeof j.error === 'string' ? j.error : 'Could not send. Try again.')
       if (typeof j.order?.amount_cents === 'number') setOrderAmount(j.order.amount_cents)
-      setSubmitted(true)
+      // Straight to the till. A saved order with no payment is not an order yet, so the "Order
+      // placed" screen only ever appears on the far side of the card.
+      if (j.order?.needs_payment && typeof j.request?.id === 'string') setPayFor(j.request.id)
+      else setSubmitted(true)
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Could not send. Try again.')
     }
@@ -200,6 +209,19 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
   }
 
   const ground = { ...paperGround, minHeight: '100dvh', padding: '16px 16px 40px', fontFamily: DESK.body, boxSizing: 'border-box' as const }
+
+  /* ── the till: the ONE card form this app has, wrapped for one desk order ── */
+  if (payFor && client?.id) {
+    return (
+      <DeskCheckout
+        clientId={client.id}
+        requestId={payFor}
+        label={type.label}
+        onDone={() => { setPayFor(null); setSubmitted(true) }}
+        onCancel={() => setPayFor(null)}
+      />
+    )
+  }
 
   /* ── done: the stamped board ── */
   if (submitted) {
@@ -237,7 +259,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
         <DeskKeyframes />
         <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: DESK.mute, margin: '4px 0 10px' }}>Your cart</div>
         <RequestBoard typeId={type.id} answers={answers} />
-        <div style={{ fontSize: 13, color: DESK.ink2, margin: '10px 0 12px', lineHeight: 1.5 }}>One more look, then confirm. Work starts right away.</div>
+        <div style={{ fontSize: 13, color: DESK.ink2, margin: '10px 0 12px', lineHeight: 1.5 }}>One more look, then pay. Work starts the moment your card clears.</div>
         {price && (
           <ReceiptFrame>
             {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
@@ -257,7 +279,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
         )}
         <ConfirmButton
           label={sending ? 'Placing your order...' : `Confirm order${price ? ` · ${price.startsAt ? 'from ' : ''}${fmtTotal(price)}` : ''}`}
-          sub="Goes on your Apnosh bill. Nothing else to do."
+          sub="Next: your card. Nothing is made until it clears."
           disabled={sending}
           onClick={() => { void send() }}
         />

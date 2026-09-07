@@ -2,16 +2,29 @@ import 'server-only'
 /**
  * promises/read — the "Counted, as promised" rows for one client, in the words Home prints.
  *
- * Read ALWAYS: a flat month shows "41, was 41", a drop shows the drop. The state machine:
- *   held         start date in the future             → "Starts Jan 20"
- *   not_counted  the product cannot take this count   → the card's own reason
- *   done         a deliverable's work order delivered → "Done" + the handoff
- *   counting     before shows_on, or no reported days → "0 so far · counting since Sep 15"
- *   counted      a number and its matched baseline    → "41 · was 13 in the same days before"
+ * Read ALWAYS: a flat month shows "41, was 41", a drop shows the drop. This file decides WHICH of
+ * the seven states a row is in; ./lines says what each one is called. In the order an order lives
+ * them:
+ *   stopped      the campaign was stopped              → what happened to the money, or nothing new
+ *   ordered      paid, no work order has a name on it  → "your team starts it next"
+ *   production   a name on it, and it has started      → "your team is on it"
+ *   held         a start date in the future            → "Starts Jan 20"
+ *   delivered    the work landed, the count has not    → "your count starts Sep 12"
+ *   counting     before shows_on, or no reported days  → "0 so far · counting since Sep 15"
+ *   counted      a number and its matched baseline     → "41 · was 13 in the same days before"
+ * plus not_counted, the honest answer for a number the product cannot read at all.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { measure, matchedBaseline, today, shiftDays, hasGoogle, hasFoodOrders, locationCount } from './metrics'
 import { TAKEN_BY_WORD, type MetricKey, type TakenBy } from './registry'
+import { lineFor, STATE_RANK, type PromiseState } from './lines'
+// The one table of "the work has begun" statuses, shared with the work-order spine — there is no
+// started_at on creator_work_orders to read instead.
+import { workStarted } from '@/lib/campaigns/work-orders-core'
+
+// The seven states, and their words, live in ./lines — pure and client-safe, so the card, the
+// "your count is in" cron and a script all read one table instead of three copies of it.
+export { lineFor, PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState } from './lines'
 
 export interface PromiseRow {
   id: string
@@ -25,10 +38,13 @@ export interface PromiseRow {
   /** the small line under the number */
   small: string
   tone: 'up' | 'down' | 'flat' | 'wait' | 'done' | 'off'
-  state: 'held' | 'counting' | 'counted' | 'not_counted' | 'done'
+  /** Where this order stands. See ./lines for the seven states and the words each one gets. */
+  state: PromiseState
   campaignId: string | null
   requestId: string | null
   showsOn: string
+  /** the delivered file or page, when the work landed and left something to open */
+  openUrl: string | null
 }
 
 type Stored = {
@@ -40,22 +56,134 @@ type Stored = {
 const fmt = (n: number) => n >= 10000 ? `${Math.round(n / 1000)}k` : n.toLocaleString('en-US')
 const md = (ymd: string) => new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
-async function deliveredState(p: Stored): Promise<{ done: boolean; note: string }> {
-  const a = createAdminClient()
-  if (p.campaign_id && p.service_id) {
-    const { data } = await a.from('service_work_orders').select('status, proof_note').eq('campaign_id', p.campaign_id).eq('service_id', p.service_id).limit(1).maybeSingle()
-    const r = data as { status?: string; proof_note?: string | null } | null
-    if (r?.status === 'delivered') return { done: true, note: r.proof_note || 'Delivered · open it from the order' }
-    return { done: false, note: r?.status === 'blocked_client' ? 'Waiting on you' : 'Being made' }
-  }
-  if (p.creative_request_id) {
-    const { data } = await a.from('creator_work_orders').select('status').eq('campaign_piece_key', `request:${p.creative_request_id}`).limit(1).maybeSingle()
-    const s = (data as { status?: string } | null)?.status
-    if (s === 'delivered' || s === 'approved' || s === 'done') return { done: true, note: 'Delivered · open it from the order' }
-    return { done: false, note: 'Being made' }
-  }
-  return { done: false, note: 'Being made' }
+/**
+ * Where the WORK behind one promise stands. Not the count — the making of the thing.
+ *
+ * The seven states a card can read all come from here plus the dates on the promise row:
+ * ordered (nobody on it), in production (a name on it, started), delivered (it landed).
+ */
+export interface Landing {
+  /** somebody's name is on the work order */
+  assigned: boolean
+  /** the work actually began */
+  started: boolean
+  /** it landed */
+  delivered: boolean
+  /** the work is PAUSED waiting on the owner — nobody is making anything until they answer */
+  blocked: boolean
+  /** the owner-facing note under the word */
+  note: string
+  /** the delivered file or page, when there is one to open */
+  openUrl: string | null
 }
+
+/** Money that went back on this order, in the words the stopped card prints. */
+interface RefundLine {
+  refundedCents: number
+  /** The WHOLE charge went back. A desk order has no "stopped" flag of its own; this is it. */
+  full: boolean
+}
+
+/**
+ * Every work order behind this client's promises, read in TWO queries.
+ *
+ * It used to be one query per promise row, inside the loop, and only for `delivered_files` rows —
+ * so a Google service could be delivered and its card had no way to know, and a client with sixty
+ * rows made sixty round trips. Read once, keyed both ways: campaign+service for the service lane,
+ * request id for the desk lane.
+ *
+ * Best-effort: an unreadable lane leaves an empty map, and every card falls back to "Being made",
+ * which is what it said before any of this existed.
+ */
+async function landingsFor(clientId: string): Promise<{ byService: Map<string, Landing>; byRequest: Map<string, Landing> }> {
+  const a = createAdminClient()
+  const byService = new Map<string, Landing>()
+  const byRequest = new Map<string, Landing>()
+  const [svc, creator] = await Promise.all([
+    a.from('service_work_orders').select('campaign_id, service_id, status, assignee_id, started_at, proof_note, proof_url').eq('client_id', clientId).then((r) => r, () => ({ data: null })),
+    // NO started_at here. creator_work_orders has never had that column (only service_work_orders
+    // does, from migration 190), so asking for it made PostgREST answer 42703 for EVERY client —
+    // this map was empty always, and no desk order could ever say who was on it. The status is the
+    // start: a creator moves the order to in_progress when they pick it up.
+    a.from('creator_work_orders').select('campaign_piece_key, status, creator_id, delivered_url').eq('client_id', clientId).then((r) => r, () => ({ data: null })),
+  ])
+  for (const row of ((svc as { data: unknown }).data ?? []) as { campaign_id: string | null; service_id: string | null; status: string; assignee_id: string | null; started_at: string | null; proof_note: string | null; proof_url: string | null }[]) {
+    if (!row.campaign_id || !row.service_id) continue
+    const delivered = row.status === 'delivered'
+    byService.set(`${row.campaign_id}|${row.service_id}`, {
+      assigned: !!row.assignee_id,
+      started: !!row.started_at || ['in_progress', 'blocked_client', 'blocked_gate', 'ready_for_client', 'delivered'].includes(row.status),
+      delivered,
+      blocked: row.status === 'blocked_client',
+      note: delivered ? (row.proof_note || 'Delivered · open it') : row.status === 'blocked_client' ? 'Waiting on you' : 'Being made',
+      openUrl: delivered ? row.proof_url : null,
+    })
+  }
+  for (const row of ((creator as { data: unknown }).data ?? []) as { campaign_piece_key: string | null; status: string; creator_id: string | null; delivered_url: string | null }[]) {
+    const key = row.campaign_piece_key ?? ''
+    if (!key.startsWith('request:')) continue
+    const delivered = row.status === 'delivered' || row.status === 'approved' || row.status === 'done'
+    byRequest.set(key.slice('request:'.length), {
+      assigned: !!row.creator_id,
+      started: workStarted(row.status),
+      delivered,
+      // A creator order has no "waiting on the owner" status; only the service lane does.
+      blocked: false,
+      note: delivered ? 'Delivered · open it' : 'Being made',
+      openUrl: delivered ? row.delivered_url : null,
+    })
+  }
+  return { byService, byRequest }
+}
+
+/**
+ * The landing for one stored promise row, or NULL when no work order stands behind it.
+ *
+ * Null matters. An owner-run line, a card-level fallback row and a pre-190 order all have no work
+ * order, and saying "nobody is on it" about work nobody was ever supposed to do would be a lie. A
+ * null landing means the dates decide the state, exactly as they did before.
+ */
+function landingOf(p: Stored, maps: { byService: Map<string, Landing>; byRequest: Map<string, Landing> }): Landing | null {
+  if (p.campaign_id && p.service_id) return maps.byService.get(`${p.campaign_id}|${p.service_id}`) ?? null
+  if (p.creative_request_id) return maps.byRequest.get(p.creative_request_id) ?? null
+  return null
+}
+
+/**
+ * The two things a card needs that live outside the promise: which campaigns were STOPPED, and what
+ * money went back. One query each, per client. Best-effort — an unreadable read means no card ever
+ * says "Stopped", which is the same as before this existed and never a wrong claim about money.
+ */
+async function stopsAndRefunds(clientId: string): Promise<{ stopped: Set<string>; refundByCampaign: Map<string, RefundLine>; refundByRequest: Map<string, RefundLine> }> {
+  const a = createAdminClient()
+  const stopped = new Set<string>()
+  const refundByCampaign = new Map<string, RefundLine>()
+  const refundByRequest = new Map<string, RefundLine>()
+  const [camps, pays] = await Promise.all([
+    a.from('campaigns').select('id, status').eq('client_id', clientId).then((r) => r, () => ({ data: null })),
+    // select('*') so the request_id column being absent (pre-258) can never error the read.
+    a.from('campaign_payments').select('*').eq('client_id', clientId).then((r) => r, () => ({ data: null })),
+  ])
+  for (const c of ((camps as { data: unknown }).data ?? []) as { id: string; status: string }[]) {
+    if (c.status === 'stopped') stopped.add(c.id)
+  }
+  for (const p of ((pays as { data: unknown }).data ?? []) as Record<string, unknown>[]) {
+    const back = Number(p.refunded_cents) || 0
+    if (back <= 0) continue
+    // 'refunded' is the status refundStatus() writes when everything went back; a partial refund
+    // leaves the row 'partially_refunded' and the order is still running.
+    const line: RefundLine = { refundedCents: back, full: String(p.status ?? '') === 'refunded' }
+    // The LARGEST refund on an order is the one worth naming; several partials on one order are
+    // one story to the owner, not three lines.
+    const cid = (p.campaign_id as string | null) ?? null
+    const rid = (p.request_id as string | null) ?? null
+    if (cid && (refundByCampaign.get(cid)?.refundedCents ?? 0) < back) refundByCampaign.set(cid, line)
+    if (rid && (refundByRequest.get(rid)?.refundedCents ?? 0) < back) refundByRequest.set(rid, line)
+  }
+  return { stopped, refundByCampaign, refundByRequest }
+}
+
+const money = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 
 export async function getPromiseRows(clientId: string, limit = 3): Promise<PromiseRow[]> {
   const { data, error } = await createAdminClient().from('order_promises').select('*').eq('client_id', clientId).order('ordered_on', { ascending: false }).limit(60)
@@ -67,18 +195,69 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
   const shops = await locationCount(clientId).catch(() => 0)
   // A Google count on a client with two shops is both shops added together; say so on the row.
   const bothShops = shops > 1 ? ' · both shops together' : ''
+  // The work behind every promise, and the two facts that live outside it (stops, refunds), read
+  // once per client instead of once per row.
+  const [maps, stops] = await Promise.all([
+    landingsFor(clientId).catch(() => ({ byService: new Map<string, Landing>(), byRequest: new Map<string, Landing>() })),
+    stopsAndRefunds(clientId).catch(() => ({ stopped: new Set<string>(), refundByCampaign: new Map<string, RefundLine>(), refundByRequest: new Map<string, RefundLine>() })),
+  ])
   for (const p of data as Stored[]) {
     const who = TAKEN_BY_WORD[p.taken_by] ?? ''
-    const base = { id: p.id, label: p.label, campaignId: p.campaign_id, requestId: p.creative_request_id, showsOn: p.shows_on }
+    const land = landingOf(p, maps)
+    const base = { id: p.id, label: p.label, campaignId: p.campaign_id, requestId: p.creative_request_id, showsOn: p.shows_on, openUrl: land?.openUrl ?? null }
+
+    // STOPPED wins over everything. The order is over; the only thing left to say is what happened
+    // to the money, and only when money really moved.
+    if (p.campaign_id && stops.stopped.has(p.campaign_id)) {
+      const back = stops.refundByCampaign.get(p.campaign_id)
+      out.push({ ...base, sub: back ? `Stopped · ${money(back.refundedCents)} sent back to your card` : 'Stopped · nothing new is running', value: 'Stopped', small: back ? 'refunded' : 'no new work', tone: 'off', state: 'stopped' }); continue
+    }
+    // A DESK ORDER GETS THE SEVENTH STATE TOO. It has no campaign row to be 'stopped', so its end
+    // is the money: a charge sent back IN FULL means the order is over. Until this, a cancelled and
+    // fully refunded desk order kept printing "your team is on it" at an owner whose money was
+    // already back on their card. A partial refund is a credit, not an ending, and is not read here.
+    if (!p.campaign_id && p.creative_request_id) {
+      const back = stops.refundByRequest.get(p.creative_request_id)
+      if (back?.full) {
+        out.push({ ...base, sub: `Stopped · ${money(back.refundedCents)} sent back to your card`, value: 'Stopped', small: 'refunded', tone: 'off', state: 'stopped' }); continue
+      }
+    }
     if (p.state === 'not_counted') {
       out.push({ ...base, sub: `Ordered ${md(p.ordered_on)} · ${p.reason ?? 'not counted yet'}`, value: 'Not counted', small: who, tone: 'off', state: 'not_counted' }); continue
     }
     if (p.start_on && p.start_on > t) {
       out.push({ ...base, sub: `Held · work starts ${md(p.start_on)} · counted: ${p.metric_label}`, value: md(p.start_on), small: 'starts', tone: 'wait', state: 'held' }); continue
     }
+    // BEFORE THE WORK LANDS, and only where a real work order says so. No work order means nobody
+    // was ever meant to make anything (an owner-run line, a card-level row), so the dates decide.
+    if (land && !land.delivered) {
+      const started = land.started && land.assigned
+      // WAITING ON THE OWNER IS NOT PRODUCTION. A blocked order used to read "In production ·
+      // your team is on it" with "Waiting on you" underneath it — two opposite sentences on one
+      // card, and the one in the big type was the wrong one. Nobody is making anything until the
+      // owner answers, so it reads as ordered, and the line says what is holding it.
+      if (started && land.blocked) {
+        out.push({
+          ...base,
+          sub: `${p.metric_label} · waiting on you`,
+          value: 'Ordered',
+          small: 'waiting on you',
+          tone: 'wait',
+          state: 'ordered',
+        }); continue
+      }
+      out.push({
+        ...base,
+        sub: started ? `${p.metric_label} · your team is on it` : `Ordered ${md(p.ordered_on)} · your team starts it next`,
+        value: started ? 'Being made' : 'Ordered',
+        small: started ? land.note : 'nobody on it yet',
+        tone: 'wait',
+        state: started ? 'production' : 'ordered',
+      }); continue
+    }
     if (p.metric_key === 'delivered_files') {
-      const d = await deliveredState(p)
-      out.push({ ...base, sub: `Ordered ${md(p.ordered_on)} · ${p.metric_label}`, value: d.done ? 'Done' : 'Making', small: d.note, tone: d.done ? 'done' : 'wait', state: d.done ? 'done' : 'counting' }); continue
+      const done = !!land?.delivered
+      out.push({ ...base, sub: `Ordered ${md(p.ordered_on)} · ${p.metric_label}`, value: done ? 'Done' : 'Making', small: done ? (land?.note ?? 'Delivered') : 'Being made', tone: done ? 'done' : 'wait', state: done ? 'delivered' : 'production' }); continue
     }
     // A Google count for a client with no Google yet is "connect Google", not "0 so far". It flips
     // to counting the day rows appear, with no write.
@@ -94,8 +273,19 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
     if (p.metric_key === 'post_reach' && p.creative_request_id && !p.campaign_id) {
       out.push({ ...base, sub: `${p.metric_label} · counts once it is posted through your connected accounts`, value: '—', small: 'not posted through Apnosh yet', tone: 'wait', state: 'counting' }); continue
     }
+    // The work landed but the count has not started yet. This is its own state, not "counting":
+    // the owner should read "it is done, the number starts on the 12th", not a count with no days
+    // in it. Re-anchoring on delivery is what makes this window real.
     if (p.count_from > t) {
-      out.push({ ...base, sub: `Ordered ${md(p.ordered_on)} · ${p.metric_label}`, value: '—', small: `counting from ${md(p.count_from)}`, tone: 'wait', state: 'counting' }); continue
+      const landed = !!land?.delivered
+      out.push({
+        ...base,
+        sub: landed ? `Delivered · ${p.metric_label} starts ${md(p.count_from)}` : `Ordered ${md(p.ordered_on)} · ${p.metric_label}`,
+        value: landed ? 'Delivered' : '—',
+        small: `counting from ${md(p.count_from)}`,
+        tone: 'wait',
+        state: landed ? 'delivered' : 'counting',
+      }); continue
     }
     const cur = await measure(clientId, p.metric_key, p.count_from, t, p.campaign_id)
     if (p.metric_key === 'rating') {
@@ -123,20 +313,13 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
     const small = p.metric_key === 'post_reach' ? `${arrow} your usual post: ${fmt(before)} · ${cur.reportedDays} posts` : `${arrow} was ${fmt(before)} in the same ${cur.reportedDays} days before`
     out.push({ ...base, sub: `${sinceText} · ${who}`, value: fmt(cur.value), small, tone, state: t >= p.shows_on ? 'counted' : 'counting' })
   }
-  // Newest first, but a counted row with a number outranks a row that is only waiting.
-  const rank = (r: PromiseRow) => (r.state === 'counted' ? 0 : r.state === 'done' ? 1 : r.state === 'counting' ? 2 : r.state === 'held' ? 3 : 4)
+  // Newest first, but a counted row with a number outranks a row that is only waiting, and a
+  // stopped order sinks below everything still running.
+  const rank = (r: PromiseRow) => STATE_RANK[r.state] ?? 8
   const withLine = out.map((r) => ({ ...r, line: lineFor(r) }))
   return (limit > 0 ? withLine.sort((a, b) => rank(a) - rank(b)).slice(0, limit) : withLine)
 }
 
-/** The one line a Campaigns card prints under its pill, from the same row Home prints. */
-function lineFor(r: Omit<PromiseRow, 'line'>): string {
-  if (r.state === 'not_counted') return `Not counted: ${r.sub.replace(/^Ordered [^·]+· /, '')}`
-  if (r.state === 'held') return `Held · work starts ${r.value} · then counted`
-  if (r.state === 'done') return `Done · ${r.small}`
-  if (r.state === 'counting') return r.value === '—' ? `Counted after: ${r.sub.replace(/^Ordered [^·]+· /, '')} · on Home ${md(r.showsOn)}` : `Counting · ${r.value} · on Home ${md(r.showsOn)}`
-  return `${r.value} · ${r.small}`
-}
 
 /** Desk orders (creative_requests placed as orders) for the Campaigns feed: they have no campaign
  *  row, so the list would otherwise never show them. Joined to their ledger row when one exists. */

@@ -20,6 +20,9 @@ import {
   type RequestType, type RequestAnswers, type RequestStatus,
 } from '@/lib/requests/catalog'
 import CreativeFlow from '@/components/requests/creative-flow'
+import DeskCheckout from '@/components/requests/desk-checkout'
+import { deskCancelable } from '@/lib/requests/desk-guards'
+import { useClient } from '@/lib/client-context'
 
 interface RequestNote {
   id: string
@@ -56,6 +59,7 @@ const STATUS_TONE: Record<RequestStatus, { fg: string; bg: string }> = {
   requested: { fg: DESK.ink2, bg: '#EFEDE6' },
   in_review: { fg: DESK.ink2, bg: '#EFEDE6' },
   quoted: { fg: DESK.mintDeep, bg: DESK.mintWash },
+  awaiting_payment: { fg: DESK.amber, bg: DESK.amberWash },
   in_progress: { fg: DESK.mintDeep, bg: DESK.mintWash },
   delivered: { fg: DESK.mintDeep, bg: DESK.mintWash },
   closed: { fg: DESK.mute, bg: '#EFEDE6' },
@@ -73,6 +77,14 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
   const [reply, setReply] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [actErr, setActErr] = useState<string | null>(null)
+  /* The order the owner is paying for right now. The till is the ONE card form (desk-checkout). */
+  const [payFor, setPayFor] = useState<{ id: string; label: string } | null>(null)
+  /* Cancelling sends money back, so it asks first. This holds the order mid-question. */
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null)
+  /* The answer the server gave about ONE order, keyed to it. Unkeyed, the line printed under
+   * every card in the list: cancel one order and every other order said it was cancelled. */
+  const [cancelMsg, setCancelMsg] = useState<{ id: string; text: string } | null>(null)
+  const { client } = useClient()
 
   const loadMine = useCallback(async () => {
     try {
@@ -109,6 +121,14 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
             body: JSON.stringify({ body: reply.trim() }),
           })
       const d = await r.json().catch(() => ({}))
+      /* The order was placed, not quoted: money comes before work. Open the till rather than
+       * printing a refusal at somebody who only wants to get started. */
+      if (r.status === 402 && d.code === 'DESK_NEEDS_PAYMENT') {
+        const row = mine.find((m) => m.id === id)
+        setPayFor({ id, label: requestTypeById(row?.type ?? '')?.label ?? 'Order' })
+        setBusy(null)
+        return
+      }
       if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
       if (kind === 'note') setReply('')
       await loadMine()
@@ -118,7 +138,40 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
     setBusy(null)
   }
 
+  /* CANCELLING AN ORDER. The server decides everything that matters (is it delivered, was it
+   * paid, how much goes back) — this only asks first and repeats the answer word for word. */
+  const cancelOrder = async (id: string) => {
+    if (busy) return
+    setBusy(id)
+    setActErr(null)
+    setCancelMsg(null)
+    try {
+      const r = await fetch(`/api/requests/${id}/cancel`, { method: 'POST' })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
+      setCancelMsg({ id, text: typeof d.message === 'string' ? d.message : 'Your order is cancelled.' })
+      setConfirmCancel(null)
+      await loadMine()
+    } catch (e) {
+      setActErr(e instanceof Error ? e.message : 'That did not go through. Try again.')
+    }
+    setBusy(null)
+  }
+
   const label = { fontFamily: DESK.mono, fontSize: 10.5, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: DESK.mute }
+
+  /* ── the till: an order placed and not paid for is finished here ─────────────────── */
+  if (payFor && client?.id) {
+    return (
+      <DeskCheckout
+        clientId={client.id}
+        requestId={payFor.id}
+        label={payFor.label}
+        onDone={() => { setPayFor(null); loadMine() }}
+        onCancel={() => setPayFor(null)}
+      />
+    )
+  }
 
   /* ── a creative's own Drafting Table flow ─────────────────────────────────────────── */
   if (type) {
@@ -147,7 +200,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
         Your requests
       </h1>
       <p style={{ fontFamily: DESK.body, fontSize: 13.5, color: DESK.ink2, margin: '0 0 14px', lineHeight: 1.5 }}>
-        We answer each one with a plan and a price. Nothing is charged until you say yes.
+        We answer each one with a plan and a price. Nothing is charged until you tap pay.
       </p>
 
       <Ticket
@@ -204,7 +257,8 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                         {r.team_note}
                       </div>
                     )}
-                    {/* the yes: quoted -> in the works, one tap */}
+                    {/* the yes: a PERSON'S quote goes to work on one tap, and the work is
+                        reviewed before anything is billed — which is true of this lane only. */}
                     {r.status === 'quoted' && (
                       <div style={{ marginTop: 10 }}>
                         <button
@@ -223,6 +277,84 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                         <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.mute, marginTop: 6, textAlign: 'center', lineHeight: 1.45 }}>
                           You review the finished work before paying.
                         </div>
+                      </div>
+                    )}
+                    {/* an order the OWNER placed: the till priced it, so the card is what starts
+                        it. No "you review before paying" here — that would be the old lie. */}
+                    {r.status === 'awaiting_payment' && (
+                      <div style={{ marginTop: 10 }}>
+                        <button
+                          type="button"
+                          disabled={!client?.id}
+                          onClick={() => setPayFor({ id: r.id, label: t?.label ?? 'Order' })}
+                          style={{
+                            width: '100%', height: 44, borderRadius: 22, border: 'none',
+                            background: client?.id ? DESK.grad : '#E7E4DB', color: client?.id ? '#fff' : DESK.mute,
+                            fontFamily: DESK.disp, fontSize: 15, fontWeight: 700, cursor: client?.id ? 'pointer' : 'default',
+                            boxShadow: client?.id ? '0 8px 20px rgba(46,154,120,0.3)' : 'none',
+                          }}
+                        >
+                          Pay to start
+                        </button>
+                        <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.mute, marginTop: 6, textAlign: 'center', lineHeight: 1.45 }}>
+                          {r.quote_cents != null && r.quote_cents > 0
+                            ? `$${(r.quote_cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })} on your card. Your team starts the same day.`
+                            : 'Your team starts the same day.'}
+                        </div>
+                      </div>
+                    )}
+                    {/* CANCEL. Only before the work lands — after that it is a conversation, not a
+                        button, and the server says so in the same words. */}
+                    {deskCancelable(r.status) && (
+                      <div style={{ marginTop: 10 }}>
+                        {confirmCancel === r.id ? (
+                          <div style={{ background: DESK.amberWash, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '11px 13px' }}>
+                            <div style={{ fontFamily: DESK.body, fontSize: 12.5, color: DESK.ink, lineHeight: 1.5 }}>
+                              We stop the work that has not started and send back what you paid for it. It lands on your card in 5 to 10 days. Work already being made keeps going.
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                              <button
+                                type="button"
+                                disabled={busy === r.id}
+                                onClick={() => { void cancelOrder(r.id) }}
+                                style={{
+                                  flex: 1, height: 38, borderRadius: 19, border: `1.5px solid ${DESK.amberLine}`,
+                                  background: DESK.card, color: DESK.amber, fontFamily: DESK.disp, fontSize: 13.5,
+                                  fontWeight: 700, cursor: busy === r.id ? 'default' : 'pointer',
+                                }}
+                              >
+                                {busy === r.id ? 'Cancelling...' : 'Yes, cancel it'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmCancel(null)}
+                                style={{
+                                  flex: 1, height: 38, borderRadius: 19, border: `1.5px solid ${DESK.line}`,
+                                  background: DESK.card, color: DESK.ink2, fontFamily: DESK.disp, fontSize: 13.5,
+                                  fontWeight: 700, cursor: 'pointer',
+                                }}
+                              >
+                                Keep it
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setCancelMsg(null); setActErr(null); setConfirmCancel(r.id) }}
+                            style={{
+                              background: 'none', border: 'none', padding: '2px 0', cursor: 'pointer',
+                              fontFamily: DESK.body, fontSize: 12.5, fontWeight: 600, color: DESK.mute,
+                            }}
+                          >
+                            Cancel this order
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {cancelMsg?.id === r.id && (
+                      <div style={{ marginTop: 8, fontFamily: DESK.body, fontSize: 12.5, color: DESK.mintDeep, lineHeight: 1.45 }}>
+                        {cancelMsg.text}
                       </div>
                     )}
                     {/* the thread: every note both ways, oldest first */}
