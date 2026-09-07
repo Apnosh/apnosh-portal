@@ -34,7 +34,11 @@ export default function StepShape({ data, update, nav }: Props) {
         title={T('How does it run?')}
         subtitle={T('This decides what we show you and what we never will.')}
         icon={<Store size={26} strokeWidth={2} />}
-        hue="newfaces"
+        // MINT, like the ring below it. The glyph took the newfaces purple while everything else
+        // on this screen was mint, which is the split the ring fix already closed. Chrome never
+        // wears a goal colour (hues.ts, first paragraph). step-budget and step-role keep their
+        // own hues on purpose: those screens are hued end to end, not half and half.
+        hue="mint"
         small
       />
       <div className="mt-4">
