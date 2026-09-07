@@ -28,7 +28,7 @@ import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from 
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { curatedDetourFor } from '@/lib/campaigns/data/live-alternatives'
 import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
-import { CONTACT_KEY, firstName } from '../people-row'
+import { hrefFor, firstName, type OrderPerson } from '../people-row'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { SHAPE_LABEL, DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
@@ -340,14 +340,14 @@ export default function CreatePage() {
   const [budgetSheet, setBudgetSheet] = useState(false)
   /** The people who are on this client's live orders, for the bottom door. Empty is a fine
    *  answer: the door then says Get help, which is a real place, and never invents a name. */
-  const [people, setPeople] = useState<{ id: string; name: string; role: string }[]>([])
+  const [people, setPeople] = useState<OrderPerson[]>([])
 
   useEffect(() => {
     if (!clientId) return
     let live = true
     fetch(`/api/dashboard/why-signals?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSignals(j as Signals) }).catch(() => {})
     fetch(`/api/campaigns/shelf-context?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setCtx(j as ShelfCtx) }).catch(() => {})
-    fetch(`/api/dashboard/people?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.people)) setPeople(j.people as { id: string; name: string; role: string }[]) }).catch(() => {})
+    fetch(`/api/dashboard/people?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.people)) setPeople(j.people as OrderPerson[]) }).catch(() => {})
     fetch(`/api/campaigns?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
       if (!live || !Array.isArray(j?.campaigns)) return
       const ids = new Set<string>()
@@ -513,7 +513,10 @@ export default function CreatePage() {
   const Fallback = () => {
     const p = people[0]
     const who = p ? firstName(p.name) : null
-    const href = p ? `/dashboard/messages?to=${CONTACT_KEY[p.role] ?? 'strategist'}` : '/dashboard/get-help'
+    /* The same rule the people strip uses (hrefFor): their thread when one exists, else the work
+       itself. This door sent everyone to Messages, so a person with no thread yet opened an empty
+       room instead of the order they are on. */
+    const href = p ? hrefFor(p) : '/dashboard/get-help'
     return (
       <div className="ask">
         <div style={{ fontWeight: 600, color: C.ink, marginBottom: 2 }}>{who ? T('Nothing fit? Ask {name}.', { name: who }) : T('Nothing fit? Ask us.')}</div>

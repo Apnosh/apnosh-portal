@@ -30,8 +30,8 @@ import { useLang } from './mvp-language'
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
 /** The shape /api/dashboard/people returns (src/lib/team/people.ts). */
-interface PersonOrder { kind: 'service' | 'creator' | 'desk'; id: string; title: string; campaignId: string | null }
-interface OrderPerson {
+export interface PersonOrder { kind: 'service' | 'creator' | 'desk'; id: string; title: string; campaignId: string | null }
+export interface OrderPerson {
   id: string
   name: string
   avatarUrl: string | null
@@ -53,8 +53,12 @@ export const CONTACT_KEY: Record<string, string> = {
 }
 
 /** Where a tap on this person goes. The conversation when one exists, else the work itself —
- *  never a dead tap, and never a thread we would have to invent to make the link true. */
-function hrefFor(p: OrderPerson): string {
+ *  never a dead tap, and never a thread we would have to invent to make the link true.
+ *
+ *  Exported because the Create shelf's bottom door names the same person and has to land in the
+ *  same place. It used to send everyone to Messages, which for a person with no thread yet is a
+ *  door onto an empty room. */
+export function hrefFor(p: OrderPerson): string {
   if (p.threadId) return `/dashboard/messages?to=${CONTACT_KEY[p.role] ?? 'strategist'}`
   const first = p.orders[0]
   if (first?.kind === 'desk') return `/dashboard/requests/${first.id}`
