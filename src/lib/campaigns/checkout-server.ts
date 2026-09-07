@@ -263,13 +263,18 @@ export async function verifyAndLinkCheckoutPayment(opts: {
 
   // Bind the payment to the order (idempotent with /checkout/complete + the webhook backstop).
   // A desk order binds on request_id, which prepare already wrote, so there is nothing to link —
-  // only the paid stamp. The campaign lane keeps its "first write wins" guard on campaign_id.
+  // only the paid stamp. It is NOT re-written here: writing it was how a payment for one order
+  // could be re-pointed at another. The filter is the guard instead, and it is the desk's own
+  // "first write wins": a row already bound to a campaign, or to a different request, is not
+  // touched. The campaign lane keeps the same guard on campaign_id.
   const nowISO = new Date().toISOString()
   try {
     if (opts.requestId) {
       await paymentsTable()
-        .update({ status: 'paid', request_id: opts.requestId, paid_at: nowISO, shipped_at: nowISO })
+        .update({ status: 'paid', paid_at: nowISO, shipped_at: nowISO })
         .eq('stripe_payment_intent_id', opts.paymentIntentId)
+        .eq('request_id', opts.requestId)
+        .is('campaign_id', null)
     } else {
       await paymentsTable()
         .update({ status: 'paid', campaign_id: opts.campaignId, paid_at: nowISO, shipped_at: nowISO })

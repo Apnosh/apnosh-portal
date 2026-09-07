@@ -15,6 +15,7 @@ import { feeCentsOn, SERVICE_FEE_RATE, monthlyPhrase, fmtMoney } from '@/lib/cam
 import { priceCreativeRequest, fmtTotal, type CreativePrice } from '@/lib/requests/pricing'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 import { refundOwedCents } from '@/lib/campaigns/refund-math'
+import { deskPaymentMatchesOrder } from '@/lib/requests/desk-guards'
 import { Suite } from './lib'
 
 /** Every desk type the price sheet can price, with a plausible answer set. */
@@ -121,6 +122,20 @@ function main() {
   // subtotal is 0), so there is nothing to prorate and the math must not invent a refund.
   s.eq('a monthly-only order has nothing upfront to send back', refundOwedCents({ totalCents: 0, subtotalCents: 0, refundedCents: 0 }, 0), 0)
   s.check('the receipt prints in whole money', fmtMoney(17_820) === '$178.20')
+
+  s.group('Whose payment is this? (the order id comes from the browser, so nothing may be taken on trust)')
+  const REQ = 'req-1111', OTHER = 'req-2222'
+  const good = { rowRequestId: REQ, rowCampaignId: null, intentKind: 'desk_checkout', intentRequestId: REQ }
+  s.check('the order\'s own payment pays for it', deskPaymentMatchesOrder(good, REQ))
+  s.check('a monthly order\'s card-setup counts too', deskPaymentMatchesOrder({ ...good, intentKind: 'desk_checkout_setup' }, REQ))
+  s.check('another order\'s settled payment CANNOT pay for this one', !deskPaymentMatchesOrder({ ...good, rowRequestId: OTHER, intentRequestId: OTHER }, REQ))
+  s.check('a payment stamped for this order but made for another is refused', !deskPaymentMatchesOrder({ ...good, intentRequestId: OTHER }, REQ))
+  s.check('a row for another order is refused even when Stripe names this one', !deskPaymentMatchesOrder({ ...good, rowRequestId: OTHER }, REQ))
+  s.check('a campaign checkout is never a desk order\'s payment', !deskPaymentMatchesOrder({ ...good, rowCampaignId: 'camp-1', intentKind: 'campaign_checkout' }, REQ))
+  s.check('a campaign-bound row is refused even wearing desk metadata', !deskPaymentMatchesOrder({ ...good, rowCampaignId: 'camp-1' }, REQ))
+  s.check('a pre-258 row with no request_id pays for nothing', !deskPaymentMatchesOrder({ ...good, rowRequestId: null }, REQ))
+  s.check('an intent with no metadata pays for nothing', !deskPaymentMatchesOrder({ rowRequestId: REQ, rowCampaignId: null }, REQ))
+  s.check('and no order id at all is never a match', !deskPaymentMatchesOrder(good, ''))
 
   const ok = s.report('The desk through the till — one fee, one card form, one shut switch')
   process.exit(ok ? 0 : 1)

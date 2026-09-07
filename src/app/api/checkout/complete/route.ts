@@ -7,6 +7,7 @@ import { ensureCampaignSubscription } from '@/lib/campaigns/campaign-subscriptio
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
 import { deskBill } from '@/lib/requests/desk-bill'
+import { deskPaymentMatchesOrder } from '@/lib/requests/desk-guards'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 function denied(reason: string | undefined) {
@@ -32,8 +33,9 @@ export async function POST(req: NextRequest) {
   const requestId = typeof body.requestId === 'string' ? body.requestId : undefined
   if (!paymentIntentId) return NextResponse.json({ error: 'paymentIntentId required' }, { status: 400 })
 
+  // select('*') so the request_id column being absent (pre-258) cannot error the read.
   const { data: row } = await paymentsTable()
-    .select('client_id, status, campaign_id, total_cents, stripe_tax_calculation_id')
+    .select('*')
     .eq('stripe_payment_intent_id', paymentIntentId)
     .maybeSingle()
   if (!row) return NextResponse.json({ error: 'Checkout not found' }, { status: 404 })
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   // A DESK order: the work is minted HERE, on the far side of a verified charge, instead of at the
   // moment the owner tapped Confirm. Everything below this block is the campaign lane.
-  if (requestId) return completeDeskOrder(paymentIntentId, requestId, row.client_id as string, row.stripe_tax_calculation_id as string | null)
+  if (requestId) return completeDeskOrder(paymentIntentId, requestId, row as Record<string, unknown>)
 
   // Already reconciled — hand back the same campaign, no double work. Still confirm the shoot booking
   // AND ensure the monthly subscription (both idempotent) in case a prior attempt linked the campaign
@@ -115,12 +117,44 @@ export async function POST(req: NextRequest) {
 /**
  * Finish a paid DESK order.
  *
- * The verification is the campaign lane's own — verifyAndLinkCheckoutPayment — which proves the row
- * exists, belongs to this client, is really captured at Stripe, and covers the bill, then binds it.
- * Only after all four does the work order mint. FAILS CLOSED: an unverified payment mints nothing
- * and says why.
+ * THE PAYMENT MUST BE THIS ORDER'S OWN. requestId arrives in the request body, and the payment row
+ * used to be found by PaymentIntent alone — so any settled payment on the same account could be
+ * pointed at any unpaid desk order, and the row's request_id was then overwritten to match. One
+ * card charge, two orders delivered, and the first order's receipt now names the second. The three
+ * checks below close it, all BEFORE anything is verified or minted:
+ *   1. the row already says it belongs to THIS request (prepare stamps request_id at creation)
+ *   2. the row is not a campaign checkout wearing a desk order's name
+ *   3. Stripe's own metadata on the intent says the same two things
+ *
+ * After those, the verification is the campaign lane's own — verifyAndLinkCheckoutPayment — which
+ * proves the charge is really captured at Stripe and covers the bill. Only then does the work order
+ * mint. FAILS CLOSED: an unverified or mismatched payment mints nothing and says why.
  */
-async function completeDeskOrder(paymentIntentId: string, requestId: string, clientId: string, taxCalculationId: string | null) {
+async function completeDeskOrder(paymentIntentId: string, requestId: string, payRow: Record<string, unknown>) {
+  const clientId = String(payRow.client_id ?? '')
+  const taxCalculationId = (payRow.stripe_tax_calculation_id as string | null) ?? null
+
+  // Stripe's copy of the same fact. The intent was created by our own prepare route with the
+  // order's id on it; an intent that does not say so is not this order's, whatever our row says.
+  // A read we cannot make is a FAILURE, never a pass — this is the money path.
+  let meta: Record<string, string> | null = null
+  try {
+    meta = (paymentIntentId.startsWith('seti_')
+      ? (await stripe.setupIntents.retrieve(paymentIntentId)).metadata
+      : (await stripe.paymentIntents.retrieve(paymentIntentId)).metadata) ?? {}
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not verify payment.' }, { status: 502 })
+  }
+  const claim = {
+    rowRequestId: typeof payRow.request_id === 'string' ? payRow.request_id : null,
+    rowCampaignId: (payRow.campaign_id as string | null) ?? null,
+    intentKind: meta.kind ?? null,
+    intentRequestId: meta.requestId ?? null,
+  }
+  if (!deskPaymentMatchesOrder(claim, requestId)) {
+    return NextResponse.json({ ok: false, error: 'That payment is not for this order.' }, { status: 403 })
+  }
+
   const admin = createAdminClient()
   const { data: reqRaw } = await admin.from('creative_requests').select('*').eq('id', requestId).maybeSingle()
   const reqRow = reqRaw as Record<string, unknown> | null
@@ -146,11 +180,11 @@ async function completeDeskOrder(paymentIntentId: string, requestId: string, cli
     } catch { /* the tax was collected on the charge; the reporting transaction is non-critical */ }
   }
 
-  const { data: payRow } = await paymentsTable().select('id').eq('stripe_payment_intent_id', paymentIntentId).maybeSingle()
   const { finalizePaidDeskOrder } = await import('@/lib/requests/desk-order')
   const done = await finalizePaidDeskOrder({
     requestId,
-    paymentRowId: (payRow as { id?: string } | null)?.id ?? null,
+    // The row we already read and checked — the receipt this order points back at.
+    paymentRowId: typeof payRow.id === 'string' ? payRow.id : null,
     intentId: paymentIntentId,
   })
   return NextResponse.json({ ok: done.ok, requestId, workOrderId: done.workOrderId, ...(done.warnings.length ? { warnings: done.warnings } : {}) })
