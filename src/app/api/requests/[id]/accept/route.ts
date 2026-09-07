@@ -1,12 +1,13 @@
 /**
  * POST /api/requests/[id]/accept — the owner says yes to a quote.
  *
- * This is the loop's closer: quoted → in_progress, accepted_at stamped, and the
- * request bridges into the creator work-order rail (delivery requires a link,
- * the owner approves the work, approval drives money) so fulfillment runs on
- * the hardened spine instead of beside it. Only the request's own client can
- * accept, and only from 'quoted' — there is nothing to say yes to before a
- * price exists.
+ * This is the loop's closer, and since Move 5b the yes is not free either. A quote with a price
+ * moves to 'awaiting_payment' and the owner pays through the same desk checkout their own orders
+ * use; the work order is minted on the far side of the charge. A quote of $0 still goes straight
+ * to 'in_progress' and bridges into the creator work-order rail (delivery requires a link, the
+ * owner approves the work, approval drives money), because there is nothing to pay. Only the
+ * request's own client can accept, and only from 'quoted': there is nothing to say yes to before
+ * a price exists.
  *
  * IT IS NOT THE TILL. An order the owner placed themselves is priced by the
  * server and pays by card first ('awaiting_payment'); it must never be turned
@@ -20,7 +21,8 @@ import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { requestTypeById, summaryLine, type RequestAnswers } from '@/lib/requests/catalog'
 import { mintRequestWorkOrder } from '@/lib/requests/bridge'
-import { deskPaymentDue, DESK_NEEDS_PAYMENT } from '@/lib/requests/desk-guards'
+import { deskPaymentDue, acceptGoesToTill, AWAITING_PAYMENT, DESK_NEEDS_PAYMENT } from '@/lib/requests/desk-guards'
+import { campaignCheckoutEnabled } from '@/lib/checkout-gate'
 import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 import { notifyStaffForClient } from '@/lib/notifications'
 
@@ -76,6 +78,41 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'This request has no quote to accept yet.' }, { status: 409 })
   }
 
+  /* THE YES GOES TO THE TILL. A person's quote used to mint work here and bill "on delivery",
+   * which was the last free work in the desk: a work order existed, an invoice did not, and no row
+   * anywhere said money was owed. A quote with a price now moves to awaiting_payment on the yes and
+   * pays through the same desk checkout an owner's own order pays through; the work is minted on
+   * the far side of the charge (finalizePaidDeskOrder). A quote of $0 still mints on the yes,
+   * because there is nothing to pay. */
+  const quoteCents = (row.quote_cents as number | null) ?? null
+  /* The same switch every other card path reads. With it off the desk's prepare answers
+   * checkoutClosed, so sending the yes to awaiting_payment parked the owner where no card can be
+   * taken and no button goes forward. Shut till, the yes mints the work and the bill follows the
+   * approval, which is what the screen says too. */
+  if (acceptGoesToTill(quoteCents, campaignCheckoutEnabled())) {
+    const { data: sentToTill, error: tillErr } = await admin
+      .from('creative_requests')
+      .update({ status: AWAITING_PAYMENT, accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .eq('status', 'quoted')   // one accept wins, same as below
+      .select('id, status')
+      .single()
+    if (tillErr || !sentToTill) {
+      return NextResponse.json({ error: 'Could not accept. Try again.' }, { status: 500 })
+    }
+    try {
+      await notifyStaffForClient(clientId, ['strategist', 'designer'], {
+        kind: 'client_signoff',
+        title: `Said yes: ${summaryLine(String(row.type), (row.brief ?? {}) as RequestAnswers)}`,
+        body: `The owner accepted the $${((quoteCents ?? 0) / 100).toFixed(0)} quote and is paying now. Work starts when the card clears.`,
+        link: '/admin/requests',
+      })
+    } catch (e) {
+      console.error('[requests] accept-to-till staff notify failed (the accept still stands)', e)
+    }
+    return NextResponse.json({ ok: true, needsPayment: true, requestId: id, request: sentToTill })
+  }
+
   const workOrderId = await mintRequestWorkOrder({
     id: String(row.id),
     client_id: String(row.client_id),
@@ -103,14 +140,19 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Could not accept. Try again.' }, { status: 500 })
   }
 
-  /* Staff hear the yes immediately — this is the moment work starts. */
+  /* Staff hear the yes immediately — this is the moment work starts. When a PRICED quote mints
+   * because the till is shut, the same notice carries the bill: the owner was told we send it
+   * after they approve, and a person has to send it. Nothing else in the app will. */
   try {
     const type = requestTypeById(String(row.type))
     const cents = Number(row.quote_cents) || 0
+    const owed = cents > 0
     await notifyStaffForClient(clientId, ['strategist', 'designer'], {
       kind: 'client_signoff',
       title: `Accepted: ${summaryLine(String(row.type), (row.brief ?? {}) as RequestAnswers)}`,
-      body: `The owner said yes${cents ? ` at $${(cents / 100).toFixed(0)}` : ''}. ${type?.label ?? 'The work'} is now in progress.`,
+      body: owed
+        ? `The owner said yes at $${(cents / 100).toFixed(0)}. ${type?.label ?? 'The work'} is now in progress. Card checkout is off, so they were told the bill comes after they approve the work: send the $${(cents / 100).toFixed(0)} invoice then.`
+        : `The owner said yes. ${type?.label ?? 'The work'} is now in progress. Nothing to bill on this one.`,
       link: '/admin/requests',
     })
   } catch (e) {

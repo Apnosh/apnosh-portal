@@ -120,6 +120,15 @@ export interface CampaignExecution {
    *  deriveSchedule so no piece is ever scheduled before the shoot that produces it. */
   shootDateISO?: string
   setupSkipped?: string  // comma-separated readiness action ids the owner deferred ("Skip for now")
+  /** The settlement the owner was told when they stopped this campaign, in their words: what was
+   *  stopped, what still bills, and the money going back. Server-written ONLY, by the stop route,
+   *  so that the refund sentence is on the page the next time they open it and not only in the
+   *  session where they pressed the button. Never in the owner PATCH whitelist. */
+  stopSummary?: string
+  /** ISO stamp: the moment the owner stopped it. Server-written by the stop route beside the
+   *  summary, so the page can tell a stop that carries its own words from one that predates them
+   *  (settlementFromPayment fills those in from the payment row). Not owner-writable. */
+  stoppedAt?: string
   /** ISO stamp: the /dashboard/google-profile walkthrough came back ALL-GOOD on a fresh read
    *  (the self-serve gbp version's completion). Server-written ONLY, by POST
    *  /api/campaigns/:id/gbp-fixed, which re-runs the diagnosis itself and stamps only on a

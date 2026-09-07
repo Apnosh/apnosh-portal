@@ -17,6 +17,7 @@ import {
 import type { TeamMember } from '@/lib/dashboard/get-team'
 import type { TeamRequest } from '@/lib/dashboard/get-team-requests'
 import { ROLE_LABEL } from '@/lib/dashboard/team-labels'
+import { DISPLAY } from '@/components/mvp/tokens'
 
 interface Props {
   clientId: string
@@ -79,7 +80,7 @@ export default function TeamView({ clientId, team, openRequests }: Props) {
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-3 mb-2">
           Home / Team
         </p>
-        <h1 className="text-[28px] sm:text-[34px] leading-[1.1] font-bold text-ink tracking-tight" style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}>
+        <h1 className="text-[28px] sm:text-[34px] leading-[1.1] font-bold text-ink tracking-tight" style={{ fontFamily: DISPLAY }}>
           Your team
         </h1>
         <p className="text-[14px] text-ink-2 mt-2 max-w-2xl leading-relaxed">
@@ -552,7 +553,7 @@ function EmptyTeamInline() {
       </div>
       <h2
         className="text-[18px] font-semibold text-ink mb-1.5"
-        style={{ fontFamily: 'var(--font-playfair, "Playfair Display"), serif' }}
+        style={{ fontFamily: DISPLAY }}
       >
         Your team is being assembled
       </h2>

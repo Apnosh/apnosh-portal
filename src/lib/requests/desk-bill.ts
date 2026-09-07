@@ -16,6 +16,29 @@
  */
 import { SERVICE_FEE_RATE, feeCentsOn } from '@/lib/campaigns/checkout-bill'
 
+/**
+ * WHO SET THIS PRICE. It decides whether there is a fee inside the number at all.
+ *
+ *  · 'price_sheet' — the server priced the order from the sheet (priceCreativeRequest, or the
+ *    versioned graphic rate card). The 10% fee IS inside the total, by construction, so it can be
+ *    taken back out exactly.
+ *  · 'staff_quote' — a person typed a number into the admin board. There is no fee inside it; it
+ *    is just the price they agreed. Back-solving a 10% split out of it writes a fee into the
+ *    ledger that nobody ever charged, and prorates a refund against a subtotal that was never the
+ *    price. So the whole quote is the work, and the fee is zero.
+ */
+export type DeskQuoteOrigin = 'price_sheet' | 'staff_quote'
+
+/**
+ * Read the origin off the order's own brief. The order lane stamps `_pricing` when the SERVER
+ * priced it; a hand-typed quote never has one. An older row with no stamp reads as a staff quote,
+ * which is the safe way round: it books no fee rather than inventing one.
+ */
+export function deskQuoteOrigin(brief: unknown): DeskQuoteOrigin {
+  const p = (brief as { _pricing?: unknown } | null | undefined)?._pricing
+  return p && typeof p === 'object' ? 'price_sheet' : 'staff_quote'
+}
+
 export interface DeskBill {
   /** The work itself, in cents — what a refund is measured against. */
   subtotalCents: number
@@ -39,13 +62,28 @@ export interface DeskBill {
  * for the s that reproduces the stored total and take the fee as the remainder — subtotal + fee
  * always equals what the card is charged, by construction, whatever rounding did.
  *
+ * A STAFF QUOTE has no fee to invert. Nobody added 10% to it — a person typed the price they
+ * agreed — so the whole number is the work and the fee line is zero. Splitting it anyway wrote a
+ * fee into the ledger that was never charged and measured refunds against a subtotal that was
+ * never the price.
+ *
  * Fails to zero, never to a guess: a missing, negative or nonsense total bills nothing.
+ *
+ * `origin` defaults to 'price_sheet' because that is what this function has always assumed; every
+ * real call site passes it, read off the row with deskQuoteOrigin.
  */
-export function deskBill(totalCents: number | null | undefined, cadence: 'once' | 'monthly' | null | undefined): DeskBill {
+export function deskBill(
+  totalCents: number | null | undefined,
+  cadence: 'once' | 'monthly' | null | undefined,
+  origin: DeskQuoteOrigin = 'price_sheet',
+): DeskBill {
   const total = Math.max(0, Math.round(Number(totalCents) || 0))
   if (total <= 0) return { subtotalCents: 0, serviceFeeCents: 0, perMonthCents: 0, preTaxCents: 0 }
   if (cadence === 'monthly') {
     return { subtotalCents: 0, serviceFeeCents: 0, perMonthCents: total, preTaxCents: 0 }
+  }
+  if (origin === 'staff_quote') {
+    return { subtotalCents: total, serviceFeeCents: 0, perMonthCents: 0, preTaxCents: total }
   }
   // The s the quote was built from. round(total / 1.1) lands on it or within one cent of it; the
   // scan makes that exact rather than nearly right.

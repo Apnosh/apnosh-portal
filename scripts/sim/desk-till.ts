@@ -10,12 +10,12 @@
  *
  * Run:  npx tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/desk-till.ts
  */
-import { deskBill } from '@/lib/requests/desk-bill'
+import { deskBill, deskQuoteOrigin } from '@/lib/requests/desk-bill'
 import { feeCentsOn, SERVICE_FEE_RATE, monthlyPhrase, fmtMoney } from '@/lib/campaigns/checkout-bill'
 import { priceCreativeRequest, fmtTotal, type CreativePrice } from '@/lib/requests/pricing'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 import { refundOwedCents, refundStatus, COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
-import { deskPaymentMatchesOrder, paymentMatchesLane, deskPaymentDue, deskCancelable, AWAITING_PAYMENT, DESK_INTENT_KINDS, CAMPAIGN_INTENT_KINDS } from '@/lib/requests/desk-guards'
+import { deskPaymentMatchesOrder, paymentMatchesLane, deskPaymentDue, deskCancelable, acceptGoesToTill, acceptPromiseLine, adminStatusBlockedByPayment, AWAITING_PAYMENT, DESK_INTENT_KINDS, CAMPAIGN_INTENT_KINDS } from '@/lib/requests/desk-guards'
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
 import { workStarted, billNoticeDue, billNoticeLines } from '@/lib/campaigns/work-orders-core'
 import { DESIGN_LINES } from '@/lib/design/design-copy'
@@ -83,6 +83,27 @@ function main() {
     s.eq(`${c.type}: the till's split is the sheet's own lines`, [b.subtotalCents, b.serviceFeeCents], [sheetSubtotal, sheetFee])
     s.eq(`${c.type}: the charge is the price the owner was shown`, b.preTaxCents, p.totalCents)
   }
+
+  s.group('A hand-typed staff quote has no fee inside it to take back out')
+  // The split exists because the SHEET builds its total as s + 10%. A person typing $480 into the
+  // admin board added nothing: booking a $43.64 fee out of it writes money into the ledger that
+  // nobody ever charged, and prorates the refund against a subtotal that was never the price.
+  const staff = deskBill(48_000, 'once', 'staff_quote')
+  s.eq('the whole quote is the work', staff.subtotalCents, 48_000)
+  s.eq('and the fee line is zero, because there was no fee', staff.serviceFeeCents, 0)
+  s.eq('the card is charged the number the person quoted', staff.preTaxCents, 48_000)
+  const sheet = deskBill(48_000, 'once', 'price_sheet')
+  s.check('a price-sheet order still splits, because its fee is really in there', sheet.serviceFeeCents > 0)
+  s.eq('both origins charge exactly the same money', staff.preTaxCents, sheet.preTaxCents)
+  s.eq('a monthly staff quote is still monthly and still fee-free',
+    deskBill(32_000, 'monthly', 'staff_quote').perMonthCents, 32_000)
+  // Which one a row IS, read off its own brief. The order lane stamps _pricing; a quote never does.
+  s.eq('an order the server priced is a price-sheet order', deskQuoteOrigin({ _pricing: { origin: 'price_sheet' } }), 'price_sheet')
+  s.eq('a graphic order stamped with its sheet version counts too', deskQuoteOrigin({ _pricing: { priceSheetVersion: 3, tier: 2 } }), 'price_sheet')
+  s.eq('a brief with no stamp is a person\'s quote', deskQuoteOrigin({ what: 'a menu' }), 'staff_quote')
+  s.eq('and so is an older row with no brief at all', deskQuoteOrigin(null), 'staff_quote')
+  s.eq('the default is what it has always been, so nothing changed under a caller that says nothing',
+    deskBill(48_000, 'once').serviceFeeCents, sheet.serviceFeeCents)
 
   s.group('Fails to zero, never to a guess')
   for (const bad of [0, -1, -99_999, null, undefined, NaN]) {
@@ -169,6 +190,52 @@ function main() {
   s.check('a paid one is never asked twice, whatever its status says', !deskPaymentDue({ status: 'quoted', unpaidTillRow: true, paidAt: '2026-09-07T10:00:00Z' }))
   s.check('a plain request owes nothing', !deskPaymentDue({ status: 'requested' }))
   s.check('and neither does work already under way', !deskPaymentDue({ status: 'in_progress' }))
+
+  // Move 5b: the staff quote was the LAST free work in the desk. A yes to a priced quote now goes
+  // to the same till, and only a $0 quote still mints on the yes.
+  s.check('saying yes to a priced quote goes to the till', acceptGoesToTill(48000, true))
+  s.check('a one-cent quote is still money', acceptGoesToTill(1, true))
+  s.check('a $0 quote mints on the yes (there is nothing to pay)', !acceptGoesToTill(0, true))
+  s.check('a quote with no number yet mints nothing through the till', !acceptGoesToTill(null, true))
+  s.check('an undefined quote is not a price', !acceptGoesToTill(undefined, true))
+  s.check('a broken number is not a price', !acceptGoesToTill(Number.NaN, true))
+
+  // ...but only while the till can take a card. With the switch off (today's prod), sending the
+  // yes to awaiting_payment parked the owner where prepare answers checkoutClosed: no card, no
+  // way back. Shut till, the yes mints the work and a person sends the bill.
+  s.group('The yes, under the kill switch the desk actually runs on')
+  s.check('with the till shut, a priced yes does NOT go to the till', !acceptGoesToTill(48000, false))
+  s.check('a $0 quote is unchanged by the switch', !acceptGoesToTill(0, false) && !acceptGoesToTill(0, true))
+  s.check('the shut-till yes still leaves nothing owed to the card', !deskPaymentDue({ status: 'in_progress' }))
+  s.eq('open till: the line promises the card',
+    acceptPromiseLine(acceptGoesToTill(48000, true), 48000),
+    'Your card opens next. Your team starts the same day it clears.')
+  s.eq('shut till: the line promises the bill after the work, not a card',
+    acceptPromiseLine(acceptGoesToTill(48000, false), 48000),
+    'Your team starts now. We send the bill after you approve the work.')
+  s.eq('a $0 quote says there is nothing to pay under either switch',
+    acceptPromiseLine(acceptGoesToTill(0, false), 0),
+    'Nothing to pay on this one. Your team starts today.')
+  s.check('no promise line ever offers a card the switch cannot open',
+    [true, false].every((open) => {
+      const line = acceptPromiseLine(acceptGoesToTill(48000, open), 48000)
+      return open ? line.includes('card') : !line.includes('card')
+    }))
+
+  // Money makes a status one-way: a paid order pushed back to 'quoted' would offer a second yes on
+  // money already taken, and accept's paid_at check reads that as "nothing due" and mints free.
+  s.group('A paid order cannot be quoted again')
+  s.eq('an unpaid order may be quoted', adminStatusBlockedByPayment('quoted', null), null)
+  s.eq('a pre-258 row with no paid_at column reads as unpaid', adminStatusBlockedByPayment('quoted', undefined), null)
+  s.check('a paid order refuses to go back to a quote',
+    (adminStatusBlockedByPayment('quoted', '2026-09-07T00:00:00Z') ?? '').includes('already paid'))
+  s.check('and the refusal tells the person what to do instead',
+    (adminStatusBlockedByPayment('quoted', '2026-09-07T00:00:00Z') ?? '').includes('Refund'))
+  s.eq('a paid order may still be delivered', adminStatusBlockedByPayment('delivered', '2026-09-07T00:00:00Z'), null)
+  s.eq('and still closed', adminStatusBlockedByPayment('closed', '2026-09-07T00:00:00Z'), null)
+  s.eq('and still moved on to in progress', adminStatusBlockedByPayment('in_progress', '2026-09-07T00:00:00Z'), null)
+  s.check('and once it is at the till it owes money like every other order',
+    deskPaymentDue({ status: AWAITING_PAYMENT }))
   s.eq('the till writes one status and the screen keys on it', AWAITING_PAYMENT, 'awaiting_payment')
   s.check('a person may set every status EXCEPT the till\'s own', !ADMIN_SETTABLE_STATUSES.includes(AWAITING_PAYMENT as RequestStatus))
   s.eq('every other status stays settable by hand', ADMIN_SETTABLE_STATUSES.length, REQUEST_STATUSES.length - 1)

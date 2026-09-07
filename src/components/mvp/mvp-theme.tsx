@@ -64,7 +64,7 @@ const light: Palette = {
 }
 
 const dark: Palette = {
-  ink: '#eef3f0', mute: '#9fb0a8', faint: '#6d7d76', line: 'rgba(255,255,255,0.10)', bg: '#0c1310',
+  ink: '#eef3f0', mute: '#9fb0a8', faint: '#7c8c85', line: 'rgba(255,255,255,0.10)', bg: '#0c1310',
   card: '#16211c', cardSoft: '#121b17', ghost: 'rgba(255,255,255,0.13)',
   green: '#4abd98', greenDk: '#63d2ac', greenInk: '#8ee5c6', greenSoft: 'rgba(74,189,152,0.15)', greenLine: 'rgba(74,189,152,0.32)',
   amber: '#d8ab53', amberDk: '#e5be76', amberInk: '#eccb88', amberBg: 'rgba(201,154,62,0.16)', amberLine: 'rgba(201,154,62,0.34)', amberBtn: '#d8ab53',

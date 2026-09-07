@@ -167,7 +167,9 @@ export default function CampaignCheckout({ clientId, draft, desk, restaurant, pr
             invoice={prep?.invoice === true}
             breakdown={placed.breakdown}
             monthlyTaxCents={prep?.monthlyTaxCents ?? null}
-            monthlyCentsOverride={desk ? (prep?.monthlyCents ?? 0) : undefined}
+            // The SERVER's monthly whenever it worked one out: a desk order and an invoice order
+            // both carry theirs there, not on a draft line. Absent, the draft answers.
+            monthlyCents={prep?.monthlyCents}
             setupOnly={!!prep?.setupOnly}
             bookedSlot={placed.bookedSlot}
             onSetup={() => (desk ? desk.onDone(placed.campaignId) : onSuccess(placed.campaignId, 'setup'))}
@@ -258,7 +260,7 @@ function ErrorBox({ message, onBack }: { message: string; onBack: () => void }) 
   )
 }
 
-function BillCard({ b, monthlyCents, monthlyTaxCents, taxPending, costNotes, setupOnly, adSpendMinCents = 0 }: { b: Breakdown; monthlyCents: number; monthlyTaxCents?: number | null; taxPending: boolean; costNotes?: string[]; setupOnly?: boolean; adSpendMinCents?: number }) {
+export function BillCard({ b, monthlyCents, monthlyTaxCents, taxPending, costNotes, setupOnly, adSpendMinCents = 0 }: { b: Breakdown; monthlyCents: number; monthlyTaxCents?: number | null; taxPending: boolean; costNotes?: string[]; setupOnly?: boolean; adSpendMinCents?: number }) {
   // ONE real monthly total including known ad-spend minimums — never a surprise later.
   const adTotalLine = monthlyCents > 0 && adSpendMinCents > 0
     ? <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, fontWeight: 600, color: INK, marginTop: 6 }}>With ad spend, about {fmt(monthlyCents + adSpendMinCents)}+/mo.</div>
@@ -689,11 +691,11 @@ function PayForm({ clientId, draft, desk, restaurant, producerChoices, initialGa
         })
         const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
         if (!res.ok || j.ok === false) {
-          setError(j.error || 'Your card was charged but we could not start the work. Tap Finish to try again — you will not be charged twice.')
+          setError(j.error || 'Your card was charged but we could not start the work. Tap Finish to try again. You will not be charged twice.')
           setBusy(false); setStatus('Finish placing your order'); return
         }
       } catch {
-        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
+        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again. You will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return
       }
       onPlaced(desk.requestId, bill, null)
@@ -704,7 +706,7 @@ function PayForm({ clientId, draft, desk, restaurant, producerChoices, initialGa
       try {
         shippedIdRef.current = await saveAndShip({ clientId, draft, producerChoices, paymentIntentId })
       } catch {
-        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
+        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again. You will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return
       }
       // Record the answered custom gates onto the campaign so the team sees them. Best-effort.
@@ -974,13 +976,17 @@ export function FreeCheckout({ clientId, draft, producerChoices, gates, initialG
  * what was actually paid, and the handoff into the "A few things from you" setup page. The go-live
  * estimate is the real one (goLivePhraseFor over the ordered items), not an invented date.
  */
-export function Confirmation({ restaurant, draft, deskLabel, breakdown, monthlyTaxCents, monthlyCentsOverride, setupOnly, invoice, bookedSlot, onSetup, onViewCampaign }: {
+export function Confirmation({ restaurant, draft, deskLabel, breakdown, monthlyTaxCents, monthlyCents: monthlyCentsProp, setupOnly, invoice, bookedSlot, onSetup, onViewCampaign }: {
   restaurant?: string
   draft: CampaignDraft
   /** Present = a Request Desk order. The plan words ("campaign", "goes live") do not fit one
    *  bought thing, and its monthly comes from the server's bill, not from a draft with no items. */
   deskLabel?: string
-  monthlyCentsOverride?: number
+  /** The monthly the SERVER billed, in cents — the same prop InvoiceCheckout takes. Given, it
+   *  wins; the draft is only the fallback for the plan rail that has real priced items on it.
+   *  Deriving it from the draft dropped the "$115/mo" off every receipt for an order whose
+   *  monthly lives on the server bill rather than on a line item (a desk order, an invoice). */
+  monthlyCents?: number
   breakdown: Breakdown
   /** Stripe's estimate of the tax on the monthly, or null when it did not answer. Same source as
    *  the checkout screen, so the receipt repeats the number the owner already agreed to. */
@@ -996,7 +1002,7 @@ export function Confirmation({ restaurant, draft, deskLabel, breakdown, monthlyT
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const billSum = summarize(draft.items)
-  const monthlyCents = monthlyCentsOverride ?? Math.round(billSum.perMonth * 100)
+  const monthlyCents = monthlyCentsProp ?? Math.round(billSum.perMonth * 100)
   const goLive = goLivePhraseFor(draft, { creatives: [], services: draft.items, bill: billSum }, today)
   const goLiveShort = goLive.replace(/^Live in /, '').replace(/^Starts in /, '')
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })

@@ -13,7 +13,7 @@
  * Honest by construction: cards that are not fully built wear "Coming soon" and do not sell.
  * Every price, turnaround and availability comes from the same modules the builder uses.
  */
-import { PROMISE_BY_CARD, promiseSentence } from '@/lib/promises/registry'
+import { PROMISE_BY_CARD, promiseSentence, renderPromiseSentence } from '@/lib/promises/registry'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -23,9 +23,12 @@ import TopRow from '../top-row'
 import { useClient } from '@/lib/client-context'
 import { gradOf, hueOf, tint, type HueKey } from '../hues'
 import { Mark } from '../mark'
-import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuyable, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
+import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuyable, lanesFor, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
 import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from '@/lib/campaigns/data/chip-shelf'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
+import { curatedDetourFor } from '@/lib/campaigns/data/live-alternatives'
+import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
+import { hrefFor, firstName, type OrderPerson } from '../people-row'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { SHAPE_LABEL, DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
@@ -148,6 +151,20 @@ const CREATE_CSS = `
 .cr .row .r{flex:none;text-align:right}
 .cr .row .r b{display:block;font-family:'Cal Sans','Inter',sans-serif;font-size:14px;font-weight:600;font-variant-numeric:normal}
 .cr .row .r span{font-size:11px;color:#aeaeb2}
+/* a shelf card: title, why, what, price + Order, the lane ladder, the count line (v8) */
+.cr .crow{padding:11px 4px}
+.cr .crow + .crow{border-top:1px solid #e6e6ea}
+.cr .crow .top{display:flex;align-items:flex-start;gap:12px}
+.cr .crow .t{display:block;font-size:15px;font-weight:600;line-height:1.25}
+.cr .crow .why{display:block;font-size:12.5px;color:#8a5a0c;line-height:1.35;margin-top:2px}
+.cr .crow .why.none{color:#6e6e73}
+.cr .crow .w{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:12.5px;color:#6e6e73;line-height:1.35;margin-top:3px}
+.cr .crow .pl{display:block;font-size:12.5px;font-weight:600;color:#1d1d1f;margin-top:5px}
+.cr .crow .pl span{font-weight:500;color:#aeaeb2}
+.cr .lanes{display:flex;flex-direction:column;gap:5px;margin:9px 0 0 50px}
+.cr .lanes div{display:flex;gap:9px;font-size:11.5px;color:#6e6e73;line-height:1.35}
+.cr .lanes b{flex:none;min-width:66px;color:#2e9a78;font-weight:700}
+.cr .count{margin:9px 0 0 50px;padding:7px 9px;border-radius:10px;background:rgba(46,154,120,.08);color:#1c6b52;font-size:11.5px;line-height:1.35}
 /* filters */
 .cr .filters{display:flex;gap:6px;overflow-x:auto;padding:4px 16px 8px;scrollbar-width:none}
 .cr .fch{flex:none;height:34px;padding:0 12px;border-radius:17px;background:#f5f5f7;font-size:12.5px;font-weight:600;color:#1d1d1f;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;border:0;cursor:pointer;font-family:inherit}
@@ -220,6 +237,18 @@ const CREATE_CSS = `
 .cr .sticky .p span{display:block;font-family:Inter,system-ui,sans-serif;font-size:11.5px;color:#6e6e73;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .sticky .btn{height:46px;padding:0 20px}
 `
+/**
+ * THE ONE OPEN DECISION ON THIS PAGE, and it is the owner's.
+ *
+ * The shelf's Order pills and row glyphs wear the per-goal hue map (hues.ts, owner-approved
+ * 2026-09-04: purple newfaces, blue reviews, teal event). The same file's first paragraph says
+ * chrome stays mint, and the v8 mockup the twenty owners actually scored is mint and ink only.
+ * Both readings are defensible and only the owner can settle it, so nothing is changed here:
+ * false keeps the hues that are live today, true paints every row's glyph and button mint and
+ * leaves the goal colour to the section dot. Flip this one line, look at both, then keep one.
+ */
+const SHELF_CHROME_MINT = false
+
 /* a card's colour, as CSS variables the classes read */
 const hv = (k: HueKey): React.CSSProperties => ({ ['--c1' as string]: hueOf(k)[0], ['--c2' as string]: hueOf(k)[1], ['--t1' as string]: tint(k, 0.16), ['--sh' as string]: tint(k, 0.4, 1) } as React.CSSProperties)
 
@@ -279,6 +308,9 @@ export default function CreatePage() {
   const params = useSearchParams()
   const { client } = useClient()
   const { T } = useLang()
+  /* The price as the owner reads it. Every real price is a number and travels as it is; the ONE
+     card price that is a WORD is 'Quote', and it was the last English left on a Spanish shelf. */
+  const priceWord = (p: string) => (p === 'Quote' ? T('Quote') : p)
   const clientId = client?.id
   // the view lives in the URL so back works and a product can be shared
   const view: View = useMemo(() => {
@@ -301,14 +333,21 @@ export default function CreatePage() {
   const [ctx, setCtx] = useState<ShelfCtx | null>(null)
   /** The chip whose shelf is showing. Null until the client's own goals arrive. */
   const [chip, setChip] = useState<string | null>(null)
-  const [showLater, setShowLater] = useState(false)
+  /* null = the owner has not touched it, so the section opens on its own when the list is short
+     (v8: a five-row roadmap is a roadmap; a fifteen-row one is a wall). Reset to null on every
+     chip change, because the next goal's list is a different length. */
+  const [showLater, setShowLater] = useState<boolean | null>(null)
   const [budgetSheet, setBudgetSheet] = useState(false)
+  /** The people who are on this client's live orders, for the bottom door. Empty is a fine
+   *  answer: the door then says Get help, which is a real place, and never invents a name. */
+  const [people, setPeople] = useState<OrderPerson[]>([])
 
   useEffect(() => {
     if (!clientId) return
     let live = true
     fetch(`/api/dashboard/why-signals?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSignals(j as Signals) }).catch(() => {})
     fetch(`/api/campaigns/shelf-context?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setCtx(j as ShelfCtx) }).catch(() => {})
+    fetch(`/api/dashboard/people?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.people)) setPeople(j.people as OrderPerson[]) }).catch(() => {})
     fetch(`/api/campaigns?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
       if (!live || !Array.isArray(j?.campaigns)) return
       const ids = new Set<string>()
@@ -379,7 +418,7 @@ export default function CreatePage() {
         <div className="tile"><Icon />{!buy && <span style={{ position: 'absolute', top: 6, left: 6 }}><Coming /></span>}</div>
         {/* A held card prints NO price and NO ready time. Both are offers, and there is
             nothing to offer yet. Same rule as the product page's fact strip. */}
-        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{c.price} <span>· {c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</div></div>
+        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{priceWord(c.price)} <span>· {c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</div></div>
       </button>
     )
   }
@@ -390,7 +429,7 @@ export default function CreatePage() {
         <span className={`st${isDone ? ' done' : ''}`}>{isDone && <Check size={13} strokeWidth={3} />}</span>
         <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
         <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : T('Coming soon')}</span>}</span>
-        <span className="r"><b>{isDone ? T('Done') : buy ? c.price : ''}</b></span>
+        <span className="r"><b>{isDone ? T('Done') : buy ? priceWord(c.price) : ''}</b></span>
         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
       </button>
     )
@@ -418,8 +457,8 @@ export default function CreatePage() {
       setRead({ ok: r.ok && j?.ok !== false, reason: j?.reason, situation: res?.situation ?? null, summary: res?.summary ?? '', unsupported: Array.isArray(res?.unsupported) ? res.unsupported : [], when: res?.when ?? null })
       // Steer the chip rail, which is what draws the shelf now.
       const c = res?.situation ? CHIP_FOR_GOAL[SITUATION_GOAL[res.situation]] : null
-      if (c) { setChip(c); setShowLater(false) }
-    } catch { setRead({ ok: false, reason: 'no answer', situation: null, summary: '', unsupported: [] }) }
+      if (c) { setChip(c); setShowLater(null) }
+    } catch { setRead({ ok: false, reason: 'no-answer', situation: null, summary: '', unsupported: [] }) }
     setReading(false)
   }
   /* The four example sentences. They are TRANSLATED before they are shown and before they are
@@ -444,7 +483,7 @@ export default function CreatePage() {
                 <div style={hv(g)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Mark hue={g} size={36}><GI size={20} /></Mark><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink }}>{GOALS.find((x) => x.id === g)?.label}</div>{read.summary && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{read.summary}</div>}</div></div>
                   {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>{T('We do not do {list} yet. Everything else is below.', { list: read.unsupported.join(', ') })}</div>}
-                  <div style={{ marginTop: 6 }}>{picks.map((c) => { const I = iconFor(c); return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '7px 2px' }}><Mark hue={c.goal} size={30}><I size={16} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{c.price}</b></span><ChevronRight size={15} color={C.faint} /></button> })}</div>
+                  <div style={{ marginTop: 6 }}>{picks.map((c) => { const I = iconFor(c); return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '7px 2px' }}><Mark hue={c.goal} size={30}><I size={16} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{priceWord(c.price)}</b></span><ChevronRight size={15} color={C.faint} /></button> })}</div>
                   {picks[0] && <button type="button" className="btn hue block" style={{ marginTop: 6 }} onClick={() => order(picks[0])}>{T('Build this')} <ArrowRight size={15} /></button>}
                 </div>
               )
@@ -467,6 +506,33 @@ export default function CreatePage() {
         return <button key={t} type="button" onClick={() => { setAsk(words); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{words}</button> })}
     </div>
   )
+  /* ── the door at the bottom ──
+   * The rule from Move 6: name a person only when a real person is on this client's live work.
+   * Then the door is that person's own thread. Otherwise it is Get help, with the one promise
+   * the whole product makes. No stock face, no phone number we do not answer. */
+  const Fallback = () => {
+    const p = people[0]
+    const who = p ? firstName(p.name) : null
+    /* The same rule the people strip uses (hrefFor): their thread when one exists, else the work
+       itself. This door sent everyone to Messages, so a person with no thread yet opened an empty
+       room instead of the order they are on. */
+    const href = p ? hrefFor(p) : '/dashboard/get-help'
+    return (
+      <div className="ask">
+        <div style={{ fontWeight: 600, color: C.ink, marginBottom: 2 }}>{who ? T('Nothing fit? Ask {name}.', { name: who }) : T('Nothing fit? Ask us.')}</div>
+        {/* The promise sentence is REPLY_PROMISE_SENTENCE itself, not a second sentence built out
+            of the same words: two spellings meant two Spanish translations of one promise, and
+            they did not match. The name, when there is one, is its own short sentence in front. */}
+        <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 8, lineHeight: 1.4 }}>
+          {who ? `${T('{name} is already on your work.', { name: who })} ` : ''}{T(REPLY_PROMISE_SENTENCE)}
+        </div>
+        <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.ink, fontSize: 14, fontWeight: 600 }}>
+          {who ? T('Message {name}', { name: who }) : T('Get help')}
+          <span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span>
+        </Link>
+      </div>
+    )
+  }
   const AskBox = () => (
     <div className="ask">
       <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>{T('Not seeing it? Ask for anything')}</div>
@@ -479,26 +545,26 @@ export default function CreatePage() {
    * ones they picked first. It used to be ten goals keyed in different words entirely, so
    * nothing an owner said in setup could reach this page. Existing filter-chip styling; the
    * budget chip is the same pill with a dashed edge when it has never been answered. */
-  const Rail = () => {
+  const Rail = () => (
+    <div className="filters cc-scroll" style={{ paddingTop: 6, paddingBottom: 4 }}>
+      {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
+          monthly_budget null, and this pill never prints a number the owner did not say. */}
+      <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
+        {cap == null ? T('Set a budget') : T('Up to {amount} to start', { amount: money(cap) })}
+      </button>
+      {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{T(SHAPE_LABEL[shape].title)}</span>}
+    </div>
+  )
+  const GoalRail = () => {
     const mine = ctx?.goals ?? []
     const ordered = [...mine, ...CHIP_ORDER.filter((c) => !mine.includes(c))]
     return (
-      <>
-        <div className="filters cc-scroll" style={{ paddingTop: 6, paddingBottom: 4 }}>
-          {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
-              monthly_budget null, and this pill never prints a number the owner did not say. */}
-          <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
-            {cap == null ? T('Set a budget') : T('Up to {amount} to start', { amount: money(cap) })}
-          </button>
-          {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{T(SHAPE_LABEL[shape].title)}</span>}
-        </div>
-        <div className="filters cc-scroll" style={{ paddingTop: 0 }}>
-          {ordered.map((c) => {
-            const on = c === activeChip
-            return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(false) }} className={`fch${on ? ' on' : ''}`}>{T(c)}</button>
-          })}
-        </div>
-      </>
+      <div className="filters cc-scroll" style={{ paddingTop: 10 }}>
+        {ordered.map((c) => {
+          const on = c === activeChip
+          return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(null) }} className={`fch${on ? ' on' : ''}`}>{T(c)}</button>
+        })}
+      </div>
     )
   }
 
@@ -514,27 +580,53 @@ export default function CreatePage() {
     <button type="button" onClick={() => go({ name: 'search' })} style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', width: '100%', color: C.faint, fontSize: 14, cursor: 'text', fontFamily: 'inherit' }}><Search size={16} /> {T('Search campaigns')}</button>
   )
 
-  /* One shelf row: the glyph, the title, one reason, one price with one time word, one button.
-     The whole row is not the button any more, because the Order button is the point. */
-  const ShelfRow = ({ id, reason }: { id: string; reason?: string | null }) => {
+  /* ONE SHELF CARD, the v8 shape the twenty owners read:
+       glyph · title · why (their own number, when one fired) · what the work is ·
+       the price with its time word · the button, then the lane ladder where a card has
+       three lanes, then the count line from the ledger registry.
+     Nothing here is invented: the why comes from their numbers, the what from the card's own
+     plain words, the ladder from the setup-card engine, the count from PROMISE_BY_CARD. A card
+     with no promise spec prints NO count line rather than a made-up one. */
+  const ShelfRow = ({ id, reason, softReason }: { id: string; reason?: string | null; /** the reason is the no-numbers-yet line, not a finding about them */ softReason?: boolean }) => {
     const c = cards[id]
     if (!c) return null
     const Icon = iconFor(c)
     const free = hasFreeLane(c.id)
-    const price = c.price === 'Quote' && free ? 'Free' : c.price
+    const price = c.price === 'Quote' && free ? T('Free') : priceWord(c.price)
+    // The time word under the price. A monthly card says what monthly means; everything else
+    // says when it is ready. "Fee inside" is true: chargedPriceLabel folds the service fee in.
+    const monthly = c.price.includes('/mo') && !c.price.includes('+')
+    const priceSub = monthly ? T('monthly, cancel any time') : c.price === 'Quote' ? c.ready : `${c.ready} · ${T('fee inside')}`
+    const lanes = lanesFor(c.id, client?.tier === 'Pro')
+    const count = renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T)
+    // The glyph and the Order button take the card's goal colour, or mint, per the switch above.
+    const chrome: HueKey = SHELF_CHROME_MINT ? 'mint' : c.goal
     return (
-      <div className="row" style={hv(c.goal)}>
-        <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-          <Mark hue={c.goal} size={38}><Icon size={19} /></Mark>
-          <span className="tx">
-            <span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span>
-            {reason && <span className="s why" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{reason}</span>}
-            <span className="s" style={{ display: 'block' }}>{price}{price !== 'Free' && free ? T(', or free, you do it') : ''} · {c.ready}</span>
-          </span>
-        </button>
-        {/* The button matches the price. A desk card with a real price is an order, not an ask:
-            only a card that genuinely has no price ('Quote') says Ask. */}
-        <button type="button" className="btn hue" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => order(c)}>{free && c.price === 'Quote' ? 'Start' : c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask' : 'Order'}</button>
+      <div className="crow" style={hv(chrome)}>
+        <div className="top">
+          <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+            <Mark hue={chrome} size={38}><Icon size={19} /></Mark>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span className="t">{c.title}</span>
+              {/* Amber is a finding from their own numbers. The no-numbers-yet line is not one, so it
+                  wears the plain grey instead. */}
+              {reason && <span className={`why${softReason ? ' none' : ''}`}>{reason}</span>}
+              <span className="w">{c.plain || c.get[0]}</span>
+              {/* The ladder below already spells the free lane out, so the price line only says
+                  "or free, you do it" on a card that has no ladder to say it. */}
+              <span className="pl">{price}{price !== T('Free') && free && lanes.length === 0 ? T(', or free, you do it') : ''} <span>· {priceSub}</span></span>
+            </span>
+          </button>
+          {/* The button matches the price. A desk card with a real price is an order, not an ask:
+              only a card that genuinely has no price ('Quote') says Ask. */}
+          <button type="button" className="btn hue" style={{ height: 34, padding: '0 14px', flex: 'none', marginTop: 2 }} onClick={() => order(c)}>{free && c.price === 'Quote' ? T('Start') : c.handoff.kind === 'request' && c.price === 'Quote' ? T('Ask') : T('Order')}</button>
+        </div>
+        {lanes.length > 0 && (
+          <div className="lanes">
+            {lanes.map((l) => <div key={l.kind}><b>{T(l.price)}</b><span>{T(l.what)}</span></div>)}
+          </div>
+        )}
+        {count && <div className="count">{count}</div>}
       </div>
     )
   }
@@ -543,16 +635,17 @@ export default function CreatePage() {
     /* The reason line is their own number where one exists. Where Google has never reported a
        day there is no number to state, so the FIRST card says so plainly instead of a card
        going out with a hollow zero on it. Said once, on the first row, not fourteen times. */
-    const nothingYet = ctx && !ctx.hasGoogle ? "We don't have your Google numbers yet. This is the first step." : null
-    const reasonFor = (id: string, i: number) => {
-      const c = cards[id]
-      return (c ? whyNow(c) : null) ?? (i === 0 ? nothingYet : null)
-    }
+    const nothingYet = ctx && !ctx.hasGoogle ? T('We do not have your Google numbers yet. This is the first step.') : null
     const setupRows = SETUP_IDS.map((id) => cards[id]).filter((c): c is ShelfCard => !!c && isBuyable(c))
     return (
       <>
         <SayBox />
         <Examples />
+        {/* The goal rail sits UNDER the say box and the examples, the v8 order the twenty owners
+            read. It used to be pinned in the header above them, which pushed the first shelf row
+            off a 520px screen. The budget and shape chips stay in the header: they are facts about
+            this account that every price on the page is drawn at, not a choice you scroll to. */}
+        <GoalRail />
 
         <Sec t={T(SHELF_TITLE_FOR_SHAPE[shape])} s={`${T(ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet')} · ${T('{n} you can order today', { n: underCap.length })}`} hue={CHIP_HUE[activeChip] ?? 'mint'} />
         {underCap.length === 0 ? (
@@ -560,7 +653,8 @@ export default function CreatePage() {
             <b style={{ color: C.ink }}>{T('Nothing here yet for this one.')}</b> {T('Everything we could do for it is below, with the reason it is not ready.')}
           </div>
         ) : (
-          <div style={{ padding: '0 12px' }}>{underCap.map((id, i) => <ShelfRow key={id} id={id} reason={reasonFor(id, i)} />)}</div>
+          <div style={{ padding: '0 12px' }}>{underCap.map((id, i) => { const own = cards[id] ? whyNow(cards[id]) : null
+              return <ShelfRow key={id} id={id} reason={own ?? (i === 0 ? nothingYet : null)} softReason={!own} /> })}</div>
         )}
 
         {overCap.length > 0 && cap != null && (
@@ -571,7 +665,7 @@ export default function CreatePage() {
                 return (
                   <div key={id} className="row" style={hv('amber')}>
                     <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                      <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{c.price} · {c.ready}</span></span>
+                      <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{priceWord(c.price)} · {c.ready}</span></span>
                     </button>
                     <button type="button" className="btn ghost" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => setBudgetSheet(true)}>{T('Raise budget')}</button>
                   </div>
@@ -580,29 +674,45 @@ export default function CreatePage() {
           </>
         )}
 
-        {laterIds.length > 0 && (
+        {laterIds.length > 0 && (() => {
+          const openLater = showLater ?? laterIds.length <= 5
+          return (
           <div style={{ margin: '18px 16px 0' }}>
-            <button type="button" onClick={() => setShowLater((v) => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, border: 'none', background: C.fill, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
+            <button type="button" onClick={() => setShowLater(!openLater)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, border: 'none', background: C.fill, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
               <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: C.ink }}>{T('Coming later for this goal')} · {laterIds.length}</span>
-              <ChevronDown size={16} color={C.faint} style={{ transform: showLater ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
+              <ChevronDown size={16} color={C.faint} style={{ transform: openLater ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
             </button>
-            {showLater && (
+            {openLater && (
               <div style={{ padding: '6px 2px 0' }}>
-                {laterIds.map((id) => (
+                {laterIds.map((id) => {
+                  const title = cards[id]?.title ?? shelfTitle(id)
+                  /* A detour only where a HAND-PICKED piece of this very card is on sale
+                     (curatedDetourFor reads UNBUNDLED_TODAY). The broad fallback used to answer
+                     here, and it never comes back empty, so all 65 rows offered an unrelated
+                     card: "Run local ads" under a photo shoot. Nothing curated, no swap. */
+                  const alt = cards[curatedDetourFor(id) ?? '']
+                  return (
                   <div key={id} className="row" style={{ alignItems: 'flex-start' }}>
                     <span className="tx">
-                      <span className="t" style={{ display: 'block', fontSize: 14 }}>{cards[id]?.title ?? shelfTitle(id)}</span>
-                      <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>{notSellableReason(id)}</span>
+                      <span className="t" style={{ display: 'block', fontSize: 14 }}>{title}</span>
+                      <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>
+                        {notSellableReason(id)}{alt ? ` ${T('{title} is {price} today.', { title: alt.title, price: priceWord(alt.price) })}` : ''}
+                      </span>
                     </span>
-                    <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${cards[id]?.title ?? shelfTitle(id)} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>{T('Tell me when')}</Link>
+                    {alt
+                      ? <button type="button" className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', fontSize: 13 }} onClick={() => order(alt)}>{T('Order that instead')}</button>
+                      : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${title} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>{T('Tell me when')}</Link>}
                   </div>
-                ))}
+                ) })}
               </div>
             )}
           </div>
-        )}
+          )
+        })()}
 
-        <Sec t={T('Set up once')} s={T('The basics, ticked off as you go')} hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
+        {/* "2 of 5", from the same set the tick on each row reads: the setup cards this client has
+            actually ordered (a shipped campaign carrying that card's id). Never a guess. */}
+        <Sec t={T('Set up once')} s={T('{n} of {total} done', { n: setupRows.filter((c) => done.has(c.id)).length, total: setupRows.length })} hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
         <div style={{ padding: '0 12px' }}>{setupRows.map((c) => <SetupRow key={c.id} c={c} />)}</div>
 
         <div style={{ margin: '18px 16px 0' }}>
@@ -612,7 +722,7 @@ export default function CreatePage() {
             <ChevronRight size={17} color={C.faint} />
           </button>
         </div>
-        <AskBox />
+        <Fallback />
         <div style={{ height: 24 }} />
       </>
     )
@@ -640,7 +750,7 @@ export default function CreatePage() {
                 <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? T('Coming soon') : mw ? T('matches “{word}”', { word: mw }) : c.sub || c.plain}</span></span>
                 {/* No price on a held card, here either. The search row was the last place a
                     coming-soon card still carried one, which read as a thing you could buy. */}
-                <span className="r">{buy ? <><b>{c.price}</b><span>{c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</span>
+                <span className="r">{buy ? <><b>{priceWord(c.price)}</b><span>{c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</span>
               </button> })}
           </div>
         )}
@@ -690,7 +800,7 @@ export default function CreatePage() {
           <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>{T('Three picks that fit what you said. About {amount} to start.', { amount: total ? `$${total.toLocaleString()}` : T('a quote') })}</div>
         </div>
         <div style={{ padding: '12px 12px 0' }}>{picks.map((c) => { const Icon = iconFor(c); const why = whyNow(c) ?? c.plain.split('.')[0]
-          return <button key={c.id} type="button" onClick={() => open(c)} className="row press" style={hv(c.goal)}><Mark hue={c.goal} size={36}><Icon size={18} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span><span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{why}</span></span><span className="r"><b>{c.price}</b></span></button> })}</div>
+          return <button key={c.id} type="button" onClick={() => open(c)} className="row press" style={hv(c.goal)}><Mark hue={c.goal} size={36}><Icon size={18} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span><span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{why}</span></span><span className="r"><b>{priceWord(c.price)}</b></span></button> })}</div>
         <div style={{ padding: '10px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
           {picks[0] && <button type="button" className="btn block" onClick={() => order(picks[0])}>{T('Start with the first one')} <ArrowRight size={15} /></button>}
           <button type="button" onClick={() => setAnswers([])} style={{ border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{T('Start over')}</button>
@@ -724,11 +834,11 @@ export default function CreatePage() {
         {/* A coming-soon card prints NO price. A price is an offer, and there is nothing to
             offer yet; the reason takes its place. */}
         <div className="pp-facts">
-          {buy && <div><b>{c.price}</b><span>{T('price')}</span></div>}
+          {buy && <div><b>{priceWord(c.price)}</b><span>{T('price')}</span></div>}
           <div><b>{c.ready}</b><span>{T('ready in')}</span></div><div><b>{T(c.you)}</b><span>{T('you do')}</span></div><div><b>{c.channels.length}</b><span>{T(c.channels.length === 1 ? 'channel' : 'channels')}</span></div>
         </div>
         {!buy && <div style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: C.fill, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{notSellableReason(c.id)}</div>}
-        {(() => { const ps = buy ? promiseSentence(PROMISE_BY_CARD[c.id] ?? []) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
+        {(() => { const ps = buy ? renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
         <div className="pp-sec"><h2>{T('In plain words')}</h2><p>{c.plain}</p></div>
         <div className="pp-sec"><h2>{T('What you get')}</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>
         <div className="pp-sec"><h2>{T('What happens after you order')}</h2>
@@ -740,7 +850,7 @@ export default function CreatePage() {
         <div className="sticky"><div className="in">
           {/* No price and no Order on a card that cannot be bought. The bar says what it is
               waiting on and offers the one thing that is real: telling us you want it. */}
-          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? c.price : T('Not on sale yet')}<span>{buy ? `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}` : T('We will tell you the day it opens')}</span></div>
+          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? priceWord(c.price) : T('Not on sale yet')}<span>{buy ? `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}` : T('We will tell you the day it opens')}</span></div>
           {buy
             ? <button type="button" className="btn hue" onClick={() => order(c)}>{T(c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order')} <ArrowRight size={15} /></button>
             : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>{T('Tell me when')}</Link>}
@@ -756,7 +866,10 @@ export default function CreatePage() {
     <>
       <div onClick={() => setBudgetSheet(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.28)', zIndex: 40 }} />
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
+        {/* Six answers plus their sub-lines run past the bottom of a short phone, so the sheet
+            caps at 80% of the window and scrolls inside itself, keeping the last chip reachable
+            above the home bar. */}
+        <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))', maxHeight: '80vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line, margin: '0 auto 12px' }} />
           <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{T('What feels right to start?')}</div>
           <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>{T('You can change it any time. Nothing is charged now.')}</div>

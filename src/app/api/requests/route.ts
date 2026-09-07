@@ -18,6 +18,7 @@ import { jobSpec } from '@/lib/design/job-registry'
 import { priceCreativeRequest } from '@/lib/requests/pricing'
 import { mintRequestWorkOrder } from '@/lib/requests/bridge'
 import { AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
+import { campaignCheckoutEnabled } from '@/lib/checkout-gate'
 import { priceDesignOrder, type DesignOrderAnswers } from '@/lib/design/design-pricing'
 import { DESTINATIONS, type DestinationId } from '@/lib/design/destinations'
 import type { RateCard } from '@/lib/design/rate-card'
@@ -130,7 +131,7 @@ export async function POST(req: Request) {
       const { card, version } = await getActiveRateCard()
       orderCents = graphicOrderCents(body.design, card)
       const tier = graphicTier(body.design)
-      brief = { ...v.clean, _pricing: { priceSheetVersion: version, tier, spec: TIER_SPECS[tier] } }
+      brief = { ...v.clean, _pricing: { origin: 'price_sheet', priceSheetVersion: version, tier, spec: TIER_SPECS[tier] } }
       /* GD-2: the order remembers the draft it upgrades, so the designer opens
        * the client's existing draft instead of a blank page. */
       const fd = (body.design as Record<string, unknown> | null | undefined)?.fromDraftId
@@ -141,6 +142,9 @@ export async function POST(req: Request) {
       const priced = priceCreativeRequest(v.type.id, v.clean)
       orderCents = priced?.totalCents ?? null
       if (priced?.monthly) cadence = 'monthly'
+      /* The SERVER priced this, from the sheet, so the 10% fee is inside the number and the till
+       * may take it back out. A hand-typed staff quote has no stamp and no fee (desk-bill.ts). */
+      if (orderCents != null) brief = { ...brief, _pricing: { origin: 'price_sheet' } }
     }
     if (orderCents == null) {
       return NextResponse.json({ error: 'Could not price this order. Send it as a request instead.' }, { status: 400 })
@@ -326,8 +330,11 @@ export async function GET() {
     error = fb.error
   }
   if (error) {
-    if (isMissingTable(error.message)) return NextResponse.json({ requests: [] })
+    if (isMissingTable(error.message)) return NextResponse.json({ requests: [], tillOpen: campaignCheckoutEnabled() })
     return NextResponse.json({ error: 'Could not load requests' }, { status: 500 })
   }
-  return NextResponse.json({ requests: data ?? [] })
+  /* The card switch, echoed so the accept button promises what the accept route will actually do.
+   * With it off the yes mints the work and the bill follows; the screen has to say that, not
+   * "your card opens next" at a till that cannot take one. */
+  return NextResponse.json({ requests: data ?? [], tillOpen: campaignCheckoutEnabled() })
 }

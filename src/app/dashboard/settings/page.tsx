@@ -101,30 +101,30 @@ export default function SettingsPage() {
     if (!user) { setProfileSaving(false); return }
     const { error } = await supabase.from('profiles').update({ full_name: fullName, phone: phone.trim() || null }).eq('id', user.id)
     if (error) setProfileMsg({ ok: false, text: error.message })
-    else { setProfileMsg({ ok: true, text: 'Saved.' }); setInitials(fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'U') }
+    else { setProfileMsg({ ok: true, text: T('Saved.') }); setInitials(fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2) || 'U') }
     setProfileSaving(false)
   }
 
   async function handleChangePassword() {
     setPwMsg(null)
-    if (!currentPw) { setPwMsg({ ok: false, text: 'Enter your current password.' }); return }
-    if (!newPw || newPw !== confirmPw) { setPwMsg({ ok: false, text: 'New passwords do not match.' }); return }
-    if (newPw.length < 8) { setPwMsg({ ok: false, text: 'New password must be at least 8 characters.' }); return }
+    if (!currentPw) { setPwMsg({ ok: false, text: T('Enter your current password.') }); return }
+    if (!newPw || newPw !== confirmPw) { setPwMsg({ ok: false, text: T('The new passwords do not match.') }); return }
+    if (newPw.length < 8) { setPwMsg({ ok: false, text: T('The new password needs at least 8 characters.') }); return }
     setPwSaving(true)
     const supabase = createClient()
     // Re-auth: verify the current password before changing it.
     const { error: reauthErr } = await supabase.auth.signInWithPassword({ email, password: currentPw })
-    if (reauthErr) { setPwMsg({ ok: false, text: 'Current password is incorrect.' }); setPwSaving(false); return }
+    if (reauthErr) { setPwMsg({ ok: false, text: T('That current password is not right.') }); setPwSaving(false); return }
     const { error } = await supabase.auth.updateUser({ password: newPw })
     if (error) setPwMsg({ ok: false, text: error.message })
-    else { setPwMsg({ ok: true, text: 'Password updated.' }); setCurrentPw(''); setNewPw(''); setConfirmPw('') }
+    else { setPwMsg({ ok: true, text: T('Password updated.') }); setCurrentPw(''); setNewPw(''); setConfirmPw('') }
     setPwSaving(false)
   }
 
   const btn = (busy: boolean): React.CSSProperties => ({ width: '100%', height: 44, marginTop: 14, borderRadius: 12, border: 'none', background: busy ? '#bfe7da' : C.green, color: '#fff', fontSize: 15, fontWeight: 700, fontFamily: 'inherit', cursor: busy ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 })
 
   return (
-    <MvpShell active="more" header={<MvpDetailHeader title="Your profile" subtitle="Your name, phone, email and password" />}>
+    <MvpShell active="more" header={<MvpDetailHeader title={T('Your profile')} subtitle={T('Your name, phone, email and password')} />}>
       <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {loading ? (
           <div style={{ marginTop: 4 }}>
@@ -134,24 +134,24 @@ export default function SettingsPage() {
         ) : (
           <>
             {/* Profile */}
-            <MvpGroup title="About you" hue="mint">
+            <MvpGroup title={T('About you')} hue="mint">
               <div style={{ padding: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginBottom: 16 }}>
                   <span style={{ width: 52, height: 52, borderRadius: '50%', background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{initials}</span>
-                  <span style={{ fontSize: 12.5, color: C.faint }}>Avatar comes from your login.</span>
+                  <span style={{ fontSize: 12.5, color: C.faint }}>{T('Avatar comes from your login.')}</span>
                 </div>
-                <EditorField label="Your name" value={fullName} onChange={setFullName} placeholder="Your name" />
-                <EditorField label="Phone" value={phone} onChange={setPhone} placeholder="(206) 555-0100" />
+                <EditorField label={T('Your name')} value={fullName} onChange={setFullName} placeholder={T('Your name')} />
+                <EditorField label={T('Phone')} value={phone} onChange={setPhone} placeholder="(206) 555-0100" />
                 <div style={{ marginBottom: 4 }}>
-                  <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.mute, marginBottom: 6 }}>Email</label>
+                  <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.mute, marginBottom: 6 }}>{T('Email')}</label>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#f5f5f7', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 14px' }}>
                     <span style={{ fontSize: 15, color: C.mute, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</span>
-                    <MvpPill tone="good" label="Verified" />
+                    <MvpPill tone="good" label={T('Verified')} />
                   </div>
                 </div>
                 {profileMsg && <Msg msg={profileMsg} />}
                 <button type="button" onClick={handleSaveProfile} disabled={profileSaving} style={btn(profileSaving)}>
-                  {profileSaving && <Loader2 size={16} className="mvp-spin" />}Save
+                  {profileSaving && <Loader2 size={16} className="mvp-spin" />}{T('Save')}
                 </button>
               </div>
             </MvpGroup>
@@ -184,15 +184,15 @@ export default function SettingsPage() {
             </MvpGroup>
 
             {/* Security */}
-            <MvpGroup title="Password" hue="grey">
+            <MvpGroup title={T('Password')} hue="grey">
               <div style={{ padding: 14 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, marginBottom: 12 }}>Change password</div>
-                <PwField label="Current password" value={currentPw} onChange={setCurrentPw} show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} placeholder="Current password" />
-                <PwField label="New password" value={newPw} onChange={setNewPw} show={showNew} onToggle={() => setShowNew((v) => !v)} placeholder="At least 8 characters" />
-                <PwField label="Confirm new password" value={confirmPw} onChange={setConfirmPw} show={showConfirm} onToggle={() => setShowConfirm((v) => !v)} placeholder="Re-enter new password" />
+                <div style={{ fontSize: 14, fontWeight: 600, color: C.ink, marginBottom: 12 }}>{T('Change password')}</div>
+                <PwField label={T('Current password')} value={currentPw} onChange={setCurrentPw} show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} placeholder={T('Current password')} showLabel={T('Show password')} hideLabel={T('Hide password')} />
+                <PwField label={T('New password')} value={newPw} onChange={setNewPw} show={showNew} onToggle={() => setShowNew((v) => !v)} placeholder={T('At least 8 characters')} showLabel={T('Show password')} hideLabel={T('Hide password')} />
+                <PwField label={T('Confirm new password')} value={confirmPw} onChange={setConfirmPw} show={showConfirm} onToggle={() => setShowConfirm((v) => !v)} placeholder={T('Re-enter new password')} showLabel={T('Show password')} hideLabel={T('Hide password')} />
                 {pwMsg && <Msg msg={pwMsg} />}
                 <button type="button" onClick={handleChangePassword} disabled={pwSaving} style={btn(pwSaving)}>
-                  {pwSaving && <Loader2 size={16} className="mvp-spin" />}Update password
+                  {pwSaving && <Loader2 size={16} className="mvp-spin" />}{T('Update password')}
                 </button>
               </div>
             </MvpGroup>
@@ -218,7 +218,7 @@ function Msg({ msg }: { msg: { ok: boolean; text: string } }) {
 }
 
 
-function PwField({ label, value, onChange, show, onToggle, placeholder }: { label: string; value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void; placeholder?: string }) {
+function PwField({ label, value, onChange, show, onToggle, placeholder, showLabel, hideLabel }: { label: string; value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void; placeholder?: string; showLabel: string; hideLabel: string }) {
   return (
     <div style={{ marginBottom: 14 }}>
       <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: C.mute, marginBottom: 6 }}>{label}</label>
@@ -231,7 +231,7 @@ function PwField({ label, value, onChange, show, onToggle, placeholder }: { labe
           className="mvp-input"
           style={{ width: '100%', boxSizing: 'border-box', background: '#fff', border: `1px solid ${C.line}`, borderRadius: 12, padding: '12px 44px 12px 14px', fontSize: 16, color: C.ink, fontFamily: 'inherit', outline: 'none' }}
         />
-        <button type="button" onClick={onToggle} aria-label={show ? 'Hide password' : 'Show password'}
+        <button type="button" onClick={onToggle} aria-label={show ? hideLabel : showLabel}
           style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: C.faint, cursor: 'pointer', padding: 4, display: 'flex' }}>
           {show ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>

@@ -50,8 +50,11 @@ function looksLikeCode(v: string): boolean {
   if (/^\[[a-z][\w-]*\]/.test(v)) return true                  // [onboarding] a console.warn
   if (/^[A-Za-z_$][\w$]*(\.[\w$]+)+$/.test(v)) return true      // tr.orb, a property read
   if (/[,_]/.test(v) && /^[a-z_, ]+$/.test(v)) return true      // id, subject, last_message_at
+  if (CSS_SHORTHAND.test(v)) return true                        // 0 0 auto (flex), 1fr auto (grid)
   return false
 }
+/** A value made only of sizes and css keywords, with nothing to read in it. */
+const CSS_SHORTHAND = /^(?:[\d.]+(?:px|rem|em|fr|%|vh|vw|dvh|s|ms)?|auto|none|min-content|max-content|inherit|initial)(?:\s+(?:[\d.]+(?:px|rem|em|fr|%|vh|vw|dvh|s|ms)?|auto|none|min-content|max-content|inherit|initial))+$/
 
 /** Drop comments: a note to a reader is not copy on a screen. Block comments, whole comment
  *  lines, and a trailing // — never the // in a URL, which is why the lookbehind is there. */
@@ -111,6 +114,56 @@ const TPL_VAL = /(?:[{[(,?]|\breturn)\s*`([^`]*)`/g
  *  the file is one), but the `:` of a ternary whose then-half is a string can. */
 const TERNARY_ELSE = /\?\s*(['"])(?:[^'"]*)\1\s*:\s*(['"])([^'"]*)\2/g
 const TKEY = /\b[tT]\(\s*(['"])([^'"]+)\1/g
+/**
+ * A string sitting behind a colon in an object literal: `{ veryLow: 'very low', low: 'low' }`.
+ *
+ * This is how the funnel's band words got onto a Spanish page. They are a Record, they are drawn
+ * straight into the canvas, and every other pattern here needs a `{ [ ( , ?` immediately before
+ * the quote — which a `key:` is not. Safe to add because dropCodeProps has already blanked every
+ * `style={{…}}`, and looksLikeCode throws out what is left of css (`'0 6px 20px rgba(…)'`,
+ * `'saturate(180%) blur(16px)'`). A one-word value is still skipped, same as everywhere else.
+ */
+const OBJ_VAL = /[{,]\s*(?:'[^'\n]+'|"[^"\n]+"|\[[^\]\n]+\]|[A-Za-z_$][\w$]*)\s*:\s*(['"])([^'"\n]*)\1/g
+
+/**
+ * The one-word values in that same Record. `{ veryLow: 'very low', low: 'low' }` — isPhrase wants
+ * a space, so 'low', 'average' and 'high' walked straight past the check written FOR them; only
+ * 'very low' and 'very high' were caught, and the rest sat on a Spanish funnel.
+ *
+ * A one-word string on its own is far more often an id, a status or a css value than a word an
+ * owner reads, so this does not simply drop the space rule. It reads a one-word value only when
+ * the Record it sits in is ALREADY copy — some sibling value in the same object literal is a
+ * phrase this scanner would report. A map of words has words in all of its slots; a map of ids
+ * has none. Plus a short list of the words that are ids even in a copy Record ('strategist' next
+ * to 'Your strategist').
+ */
+const OBJ_WORD_OK = /^[A-Za-z][a-z]+$/
+/** One-word values that are keys or css even inside a Record of copy. Add, do not widen. */
+const NOT_COPY_WORD = new Set([
+  // the people keys the Messages contacts map routes on ('strategist' beside 'Your strategist')
+  'strategist', 'designer', 'photographer', 'videographer', 'support', 'billing', 'writer',
+  'owner', 'team', 'account', 'messages', 'public',
+  // the goal hue keys (components/mvp/hues.ts) — a colour's name, never drawn
+  'mint', 'amber', 'newfaces', 'nights', 'reviews', 'event', 'announce', 'brand', 'online',
+  'regulars', 'catering', 'foryou',
+  // the promises registry's own unions: TakenBy and MetricKey members
+  'google', 'apnosh', 'you', 'person', 'site', 'social', 'rating',
+  // Intl and css option words that stand alone
+  'short', 'long', 'numeric', 'exact', 'smooth', 'baseline', 'ellipsis',
+])
+const isWordCopy = (v: string) => OBJ_WORD_OK.test(v) && !NOT_COPY_WORD.has(v) && isCopy(v)
+
+/** The INNERMOST `{ … }` literals: a brace run with no brace inside it. Innermost so a wrapper
+ *  object cannot lend its copy to an unrelated map nested next to one. */
+function innermostObjects(src: string): string[] {
+  const out: string[] = []
+  let open = -1
+  for (let i = 0; i < src.length; i += 1) {
+    if (src[i] === '{') open = i
+    else if (src[i] === '}' && open >= 0) { out.push(src.slice(open, i + 1)); open = -1 }
+  }
+  return out
+}
 
 /**
  * Every string this source draws that the manifest does not carry, in the order found.
@@ -144,6 +197,15 @@ export function looseStringsIn(source: string, listed: Set<string>): string[] {
   for (const m of src.matchAll(STR_VAL)) { const v = m[2].trim(); if (isPhrase(holes(v))) seen.add(v) }
   for (const m of src.matchAll(TPL_VAL)) { const v = m[1].trim(); if (isPhrase(holes(v))) seen.add(v) }
   for (const m of src.matchAll(TERNARY_ELSE)) { const v = m[3].trim(); if (isPhrase(holes(v))) seen.add(v) }
+  // a Record's values: { veryLow: 'very low' } — behind a colon, which nothing above reaches
+  for (const m of src.matchAll(OBJ_VAL)) { const v = m[2].trim(); if (isPhrase(holes(v))) seen.add(v) }
+  // and the ONE-WORD values of a Record that is already copy: 'low' and 'high' sat on a Spanish
+  // funnel next to 'very low' purely because they had no space in them.
+  for (const obj of innermostObjects(src)) {
+    const vals = [...obj.matchAll(OBJ_VAL)].map((m) => m[2].trim())
+    if (!vals.some((v) => isPhrase(holes(v)))) continue
+    for (const v of vals) if (isWordCopy(holes(v))) seen.add(v)
+  }
   // the key inside t('…') / T("…"), whichever quote it was written with
   for (const m of src.matchAll(TKEY)) seen.add(m[2])
 

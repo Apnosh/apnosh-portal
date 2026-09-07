@@ -39,6 +39,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'the year before', 'the {n} days before', 'change vs {when}',
     'platforms report a few days behind', 'to', 'Your business', 'Alerts', 'Alerts ({n})',
     'Getting your numbers', 'Google {g} · Social {s}', '– even',
+    // the band word inside each conversion pill, drawn into the canvas (home-funnel BAND_WORD)
+    'very low', 'low', 'average', 'high', 'very high',
     // the whole funnel, read out loud to a screen reader
     'Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects.',
   ],
@@ -73,6 +75,15 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   settings: [
     'Language', 'Pick the language you want to read.', 'Saved.',
     'Could not save. Try again.', 'Some screens are still in English. We are working on the rest.',
+    /* Move 5b: the rest of the page — your name, your email, your password. */
+    'Your profile', 'Your name, phone, email and password', 'About you',
+    'Avatar comes from your login.', 'Your name', 'Phone', 'Email', 'Verified', 'Save',
+    'Password', 'Change password', 'Current password', 'New password', 'Confirm new password',
+    'At least 8 characters', 'Re-enter new password', 'Update password',
+    'Show password', 'Hide password',
+    'Enter your current password.', 'The new passwords do not match.',
+    'The new password needs at least 8 characters.', 'That current password is not right.',
+    'Password updated.',
   ],
 
   /* /dashboard/campaigns/new — the shelf's own chrome (the cards themselves are catalog copy) */
@@ -120,6 +131,43 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     // the shape chip on the goal rail draws SHAPE_LABEL's title (also listed under onboarding)
     'A place people come to', 'A truck or a pop-up', 'Delivery only',
     'Two or more places', 'Mostly catering', 'Open for a season',
+    /* Move 5b — the v8 shelf card: the price's time word, the lane ladder, the count row's
+       detour, the "set up once" tally and the door at the bottom. */
+    'fee inside', 'monthly, cancel any time', 'Free', 'In Pro', 'Included', 'Start', 'Ask', 'Quote',
+    'You do it yourself, step by step', 'You do it with Apnosh AI, step by step', 'Done for you by Apnosh',
+    '{n} of {total} done', '{title} is {price} today.', 'Order that instead',
+    'We do not have your Google numbers yet. This is the first step.',
+    'Nothing fit? Ask {name}.', 'Nothing fit? Ask us.',
+    /* the promise itself is REPLY_PROMISE_SENTENCE, listed once under `reply` words below */
+    '{name} is already on your work.', 'A real person replies within one business day.',
+  ],
+
+  /* the promises ledger's own words (src/lib/promises/registry.ts) — the count line printed on
+     every shelf row and every product page, and the label, who takes it, and when it shows.
+     It is its own screen because the table is drawn on two surfaces and belongs to neither. */
+  promises: [
+    // the three sentence frames promiseSentence() can return
+    'Counted after: {what} · {taken} · shows on Home {when} after you order',
+    'Counted after: {what} · marked Done the day they land',
+    'Not counted yet: {reason}',
+    // who takes the count (TAKEN_BY_WORD), plus Google's own "once it is connected" wording
+    'Taken by Google', 'Taken by you', 'Taken by Apnosh', 'Counted by a person',
+    'Taken by your website analytics', 'Taken by the platform it goes out on',
+    'Taken by Google, once your Google profile is connected',
+    // how long until Home shows it
+    'about a week', 'about two weeks', 'about three weeks', 'about a month',
+    // every spec's label, which finishes "Counted after: …"
+    'taps on your Google card', 'views of your Google card', 'views per post, where they go',
+    'the files in your library', 'orders placed on Google', 'replies posted',
+    'your rating since you started', 'new Google reviews', 'website visits, daily',
+    'listings you have confirmed, of fifty', 'ad results', 'app orders',
+    'your five profiles, set up', 'emails sent', 'texts sent', 'messages sent', 'repeat visits',
+    // and every reason a count cannot be taken at all
+    'We cannot read most directories back. Each listing counts when you confirm it.',
+    'Ad numbers live in the ad account and are not read into Home yet.',
+    'The delivery apps give us no way to read your orders.',
+    'No text or email sending yet.',
+    'Repeat visits need your register connected.',
   ],
 
   /* the fourteen goal chips and the six budget answers — asked in setup, shown on Create.

@@ -15,6 +15,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { ADMIN_SETTABLE_STATUSES, STATUS_LABEL, requestTypeById, type RequestStatus } from '@/lib/requests/catalog'
 import { notifyClientOwners } from '@/lib/notifications'
 import { markHandover, handoverGuard, handoverFor, handoverProgress } from '@/lib/campaigns/handover'
+import { adminStatusBlockedByPayment } from '@/lib/requests/desk-guards'
 
 export const runtime = 'nodejs'
 
@@ -73,9 +74,19 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
    * the person who moved it. It lives on the order's work order, not on the request row, because
    * that is the row the delivery is made from. Best-effort on the write (pre-258 the column is
    * absent) but NEVER on the guard below — the guard is the promise. */
-  const { data: reqRow } = await admin.from('creative_requests').select('type').eq('id', id).maybeSingle()
+  // select('*') so paid_at being absent (pre-258) reads as "not paid", never as an error.
+  const { data: reqRow } = await admin.from('creative_requests').select('*').eq('id', id).maybeSingle()
   const serviceKey = `request:${String((reqRow as { type?: string } | null)?.type ?? '')}`
   const woKey = `request:${id}`
+
+  /* MONEY MAKES A STATUS ONE-WAY. A paid order sent back to 'quoted' would offer the owner a
+   * second yes on money already taken, and the accept route's paid_at check reads that as "nothing
+   * due" and mints the work for free. The wrong price is a refund, not a re-quote. */
+  const paidBlock = adminStatusBlockedByPayment(
+    update.status as string | undefined,
+    (reqRow as { paid_at?: string | null } | null)?.paid_at ?? null,
+  )
+  if (paidBlock) return NextResponse.json({ error: paidBlock }, { status: 409 })
   if (body.handover && typeof body.handover.id === 'string') {
     const { data: wo } = await admin.from('creator_work_orders').select('id, handover').eq('campaign_piece_key', woKey).limit(1).maybeSingle()
     if (wo) {

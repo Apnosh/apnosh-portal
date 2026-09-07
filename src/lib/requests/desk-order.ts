@@ -19,7 +19,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { mintRequestWorkOrder } from './bridge'
 import { requestTypeById, summaryLine, type RequestAnswers } from './catalog'
-import { deskBill } from './desk-bill'
+import { deskBill, deskQuoteOrigin } from './desk-bill'
 import { notifyClientOwners, notifyStaffForClient } from '@/lib/notifications'
 
 export interface FinalizeResult {
@@ -52,7 +52,7 @@ export async function finalizePaidDeskOrder(args: { requestId: string; paymentRo
   const typeId = String(row.type ?? '')
   const brief = (row.brief ?? {}) as RequestAnswers
   const cadence = row.cadence === 'monthly' ? 'monthly' as const : 'once' as const
-  const bill = deskBill(row.quote_cents as number | null, cadence)
+  const bill = deskBill(row.quote_cents as number | null, cadence, deskQuoteOrigin(row.brief))
   const nowISO = new Date().toISOString()
 
   // 1. THE STAMP, FIRST. Everything after this is work; this is the record that it was bought.

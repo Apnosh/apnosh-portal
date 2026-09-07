@@ -1,17 +1,16 @@
 'use client'
 
 import { type ReactNode } from 'react'
+import { hueOf as kitHueOf, gradOf as kitGradOf, type HueKey } from '@/components/mvp/hues'
 
-/* Colour per answer (the Create page's goal hues), so the same thing keeps the same
- * colour from setup to the shelf: a role, a business type and a goal each carry one. */
-export const HUES: Record<string, [string, string]> = {
-  mint: ['#4abd98', '#2e9a78'], announce: ['#f6a23a', '#ee4c2c'], event: ['#34b6ae', '#2e73b6'],
-  deal: ['#c6d24f', '#5fae3e'], nights: ['#5ba8e8', '#3b6fd4'], newfaces: ['#9a5bf0', '#6a39de'],
-  regulars: ['#f7c948', '#f0922f'], reviews: ['#8089ff', '#5b53d6'], online: ['#6fd06a', '#34a76a'],
-  catering: ['#c85b7c', '#9c3a6a'], brand: ['#23c0b6', '#0f97a8'],
-}
-export const hueOf = (k?: string): [string, string] => HUES[k || 'mint'] || HUES.mint
-export const gradOf = (k?: string) => { const [a, b] = hueOf(k); return `linear-gradient(135deg, ${a}, ${b})` }
+/* Colour per answer (the Create page's goal hues), so the same thing keeps the same colour from
+ * setup to the shelf: a role, a business type and a goal each carry one. This file used to keep
+ * its OWN copy of the eleven pairs, so the kit had two maps of the same colours and only one of
+ * them was the design kit. There is one map now, in components/mvp/hues.ts; these three lines
+ * are the loose-string signature setup calls it with. */
+export { HUES } from '@/components/mvp/hues'
+export const hueOf = (k?: string): [string, string] => kitHueOf((k || 'mint') as HueKey)
+export const gradOf = (k?: string) => kitGradOf((k || 'mint') as HueKey)
 /* The dashboard's display face, so setup reads like the app it opens into. */
 export const DISPLAY = "'Cal Sans', 'Inter', -apple-system, system-ui, sans-serif"
 export const CARD_SHADOW = '0 1px 2px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.05)'
@@ -376,8 +375,12 @@ export function PrimaryPill({
         fontFamily: DISPLAY,
         letterSpacing: '-0.01em',
         cursor: disabled ? 'not-allowed' : 'pointer',
-        background: disabled ? '#e5e5ea' : 'linear-gradient(135deg, #4abd98, #2e9a78)',
-        color: disabled ? '#aeaeb2' : '#fff',
+        /* Disabled reads QUIET, not broken, and quiet still has to be readable. The old pair
+         * (#e5e5ea on #aeaeb2) measured 1.8:1 in light and 2.2:1 through the dark inversion, so
+         * a not-ready Continue was almost invisible at night. The kit's own line and mute tokens
+         * give 4.0:1 light and 5.5:1 dark. */
+        background: disabled ? '#e6e6ea' : 'linear-gradient(135deg, #4abd98, #2e9a78)',
+        color: disabled ? '#6e6e73' : '#fff',
         boxShadow: disabled ? 'none' : '0 10px 30px rgba(74,189,152,0.38)',
         transition: 'all .15s ease',
       }}

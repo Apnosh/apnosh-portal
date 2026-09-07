@@ -742,7 +742,13 @@ s.group('Availability: merged carts carry all source ids; coming-soon ids get fl
   const soonEg = Object.keys(BUILTIN_AVAILABILITY).find((id) => !isBuyable(id))!
   s.check('the coming-soon item is flagged even behind a live first item',
     JSON.stringify(unbuyableCatalogIds([liveEg, soonEg])) === JSON.stringify([soonEg]), `${liveEg} + ${soonEg}`)
-  s.eq('an all-live cart is clean', unbuyableCatalogIds([...FULLY_BUILT_LIVE]).length, 0)
+  // EMAIL OFF wins over the allowlist: 'creative-email' is on the allowlist (the desk's ids are
+  // generated from the request catalog) and hidden anyway, because the send rail is not armed.
+  // So the cart to test is the allowlist MINUS what is hidden, which is what verify-sellable
+  // checks too. Testing the raw allowlist tested the email decision, not the buy guard.
+  const allLiveCart = FULLY_BUILT_LIVE.filter((id) => !isHidden(id))
+  s.eq('an all-live cart is clean', unbuyableCatalogIds(allLiveCart).length, 0)
+  s.check('an email-off card stays unbuyable even though it is on the allowlist', !isBuyable('creative-email'))
   // A card removed from the catalog must NOT slip through as buyable (it composes to an empty $0
   // campaign). 'delivery' did exactly that until it was retired.
   s.eq('a retired card is refused by the buy guard', unbuyableCatalogIds(['delivery']).length, 1)
@@ -1045,15 +1051,25 @@ s.group('Coming-soon cards live in ONE section, never inside a category')
 {
   const rows = [
     { id: 'aware', ids: ['gbp', 'listings', 'creator'] },                       // mixed → keeps only the live ones
-    { id: 'orders', ids: ['promoevent', 'launch', 'ticket', 'catering', 'giftcard', 'slowoffer'] },  // all dark → drops
+    // Mixed too, since the owner call of 2026-08-09 put promoevent, launch and catering on sale
+    // with their email leg held. It used to be all dark, and the expectations below are DERIVED
+    // from isBuyable now so the next card that goes on sale does not fail this group again.
+    { id: 'orders', ids: ['promoevent', 'launch', 'ticket', 'catering', 'giftcard', 'slowoffer'] },
     { id: 'back', ids: ['welcome', 'news', 'birthday', 'winback'] },            // all dark → drops
   ]
   const { liveRows, soonIds } = collapseDarkShelves(rows, { buyable: (id) => isBuyable(id), hidden: () => false })
-  s.eq('the shelf with live cards survives', JSON.stringify(liveRows.map((r) => r.id)), JSON.stringify(['aware']))
+  const wantLive = rows.filter((r) => r.ids.some((id) => isBuyable(id))).map((r) => r.id)
+  const wantSoon = [...new Set(rows.flatMap((r) => r.ids))].filter((id) => !isBuyable(id))
+  s.eq('a shelf with any live card survives, an all-dark shelf drops', JSON.stringify(liveRows.map((r) => r.id)), JSON.stringify(wantLive))
+  s.check('the all-dark shelf really did drop', !liveRows.some((r) => r.id === 'back'))
   // The crux: a MIXED shelf keeps only what can be bought. Its unbuyable card moves to the bottom.
-  s.check('a mixed shelf shows only buyable cards', liveRows[0].ids.every((id) => isBuyable(id)), JSON.stringify(liveRows[0].ids))
+  // The length is asked FIRST: if the allowlist ever tightens until every card is dark, liveRows
+  // is empty and reading liveRows[0].ids would throw the harness instead of failing this check.
+  s.check('a mixed shelf shows only buyable cards',
+    liveRows.length > 0 && liveRows[0].ids.every((id) => isBuyable(id)),
+    JSON.stringify(liveRows[0]?.ids ?? []))
   s.check("the mixed shelf's coming-soon card moved to the soon section", soonIds.includes('creator'))
-  s.eq('every unbuyable card across all shelves is gathered, deduped', soonIds.length, 11)
+  s.eq('every unbuyable card across all shelves is gathered, deduped', soonIds.length, wantSoon.length)
   s.check('every gathered id is unbuyable (nothing live gets buried)', soonIds.every((id) => !isBuyable(id)))
   s.check('no id is both on a shelf and in the soon list', liveRows.every((r) => r.ids.every((id) => !soonIds.includes(id))))
   // A card that cannot be bought must never headline the store as a top pick either.
@@ -1122,9 +1138,16 @@ s.group('Retired cards leave nothing behind; TikTok off the sell surfaces')
     s.check(`${id}: cannot be bought`, !isBuyable(id))
     s.check(`${id}: dropped from the browse`, isHidden(id))
   }
-  // TikTok is unsellable until the rail exists — no sell surface may promise it.
-  const surfaces = JSON.stringify({ t: CAMPAIGN_TEMPLATES, c: SERVICE_CHANNELS, cc: CAMPAIGN_CONTENT })
-  s.check('no sell surface mentions TikTok', !/tiktok/i.test(surfaces))
+  // POSTING to TikTok is unsellable until the publish rail exists, so no channel list and no sell
+  // copy may promise a post there. ONE mention is allowed and it is not a posting promise: the
+  // social-profiles card sells a per-platform checklist the OWNER applies (social-profiles-fix.tsx
+  // carries TikTok's own steps and a link to its settings screen). It never posts anything, and
+  // striking the word out of that card would make the card lie about what it covers.
+  const tiktokChannels = Object.entries(SERVICE_CHANNELS).filter(([, v]) => v.some((x) => /tiktok/i.test(x))).map(([k]) => k)
+  s.check('no service claims TikTok as a channel it posts to', tiktokChannels.length === 0, tiktokChannels.join(','))
+  const surfaces = JSON.stringify({ t: CAMPAIGN_TEMPLATES, cc: { ...CAMPAIGN_CONTENT, socialprofiles: undefined } })
+  s.check('no sell copy promises TikTok outside the owner-applied profile checklist', !/tiktok/i.test(surfaces))
+  s.check('the profile checklist is the card that names it', /tiktok/i.test(JSON.stringify(CAMPAIGN_CONTENT.socialprofiles)))
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

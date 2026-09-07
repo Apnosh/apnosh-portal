@@ -12,6 +12,7 @@ import { refundOwedCents, refundableCents, refundStatus, statusAfterDisputeWon, 
 import { feeCentsOn, checkoutBill, monthlyPhrase } from '@/lib/campaigns/checkout-bill'
 import { priceCreativeRequest, fmtTotal } from '@/lib/requests/pricing'
 import { deskBill } from '@/lib/requests/desk-bill'
+import { refundSentLine, settlementFromPayment, stopDayWords } from '@/lib/campaigns/stop-settlement'
 import type { LineItem } from '@/lib/campaigns/types'
 import { Suite } from './lib'
 
@@ -136,6 +137,33 @@ function main() {
   const split = deskBill(desk!.totalCents, 'once')
   s.eq('the payment row’s subtotal is the sheet’s own work total', split.subtotalCents, desk!.totalCents - (desk!.lines.find((l) => l.label === 'Service fee')?.amountCents ?? 0))
   s.eq('and its two halves add to the charge', split.subtotalCents + split.serviceFeeCents, desk!.totalCents)
+
+  s.group('the words on a stopped campaign, which sit on the page forever')
+  // Present tense ages into a lie: "It lands on your card in 5 to 10 days" was still saying that
+  // three weeks after the money landed. Past tense with the day is true on both days.
+  const STOPPED_AT = '2026-09-08T17:04:00.000Z'
+  s.eq('the day is words an owner reads', stopDayWords(STOPPED_AT), 'Sep 8')
+  s.eq('a stamp we cannot read is no day at all', stopDayWords('not a date'), null)
+  s.eq('and a missing stamp is not "Invalid Date"', stopDayWords(null), null)
+  s.eq('the refund line is past tense, with the day it went',
+    refundSentLine(5_600, STOPPED_AT),
+    '$56.00 went back to your card on Sep 8. It takes 5 to 10 days to show up.')
+  s.check('no settlement line ever says "we refund" in the present',
+    !refundSentLine(5_600, STOPPED_AT).toLowerCase().includes('we refund'))
+  s.check('without a day it still reads as a finished thing',
+    refundSentLine(5_600, null).startsWith('$56.00 went back'))
+
+  // A campaign stopped before any of this was written down still has a payment row, and the row
+  // knows what the money did. A short true line beats a silent page.
+  s.eq('an older stop reads its refund off the payment row',
+    settlementFromPayment({ totalCents: 11_800, refundedCents: 5_600, refundedAt: STOPPED_AT }),
+    '$56.00 went back to your card on Sep 8. It takes 5 to 10 days to show up.')
+  s.eq('a charge with nothing sent back says so, in the past',
+    settlementFromPayment({ totalCents: 11_800, refundedCents: 0, refundedAt: null }),
+    'Everything you ordered was delivered, so there was nothing to send back.')
+  s.eq('a campaign that was never charged says nothing at all',
+    settlementFromPayment({ totalCents: 0, refundedCents: 0, refundedAt: null }), null)
+  s.eq('and no payment row says nothing at all', settlementFromPayment(null), null)
 
   const ok = s.report('Money that can go backwards — refund math + one fee')
   process.exit(ok ? 0 : 1)

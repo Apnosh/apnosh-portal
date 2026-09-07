@@ -99,14 +99,18 @@ export default function ReportView({ report, bizName, backHref }: {
         {r.said && (
           <Sec label="What they said">
             {r.said.quote && (
+              /* An open quote mark with nothing to shut it read as a sentence cut off. It closes
+                 now, and a quote that stops mid-thought (no full stop, question or exclamation at
+                 the end) gets an ellipsis first, so a trimmed one looks trimmed on purpose. */
               <div style={{ fontSize: 15, lineHeight: 1.45, color: INK, fontWeight: 600, letterSpacing: '-0.01em' }}>
                 <span style={{ color: '#4abd98', fontSize: 24, fontWeight: 800, verticalAlign: '-6px', marginRight: 2 }}>&ldquo;</span>
-                {r.said.quote}
+                {r.said.quote}{/[.!?…]$/.test(r.said.quote.trim()) ? '' : '…'}
+                <span style={{ color: '#4abd98', fontSize: 24, fontWeight: 800, verticalAlign: '-6px', marginLeft: 2 }}>&rdquo;</span>
               </div>
             )}
             <div style={{ fontSize: 11.5, color: FAINT, marginTop: 6 }}>
               {r.said.count} new review{r.said.count === 1 ? '' : 's'} &middot; {r.said.avg.toFixed(1)} average
-              {r.said.priorCount > 0 ? ` · ${r.said.priorCount} the month before` : ''}
+              {r.said.priorCount > 0 ? ` · ${r.said.priorCount} review${r.said.priorCount === 1 ? '' : 's'} the month before` : ''}
             </div>
             {r.said.loved.length > 0 && (
               <div style={{ marginTop: 12 }}>

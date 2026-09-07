@@ -6,7 +6,7 @@ import { confirmBookingForPayment } from '@/lib/campaigns/gates/booking-server'
 import { ensureCampaignSubscription } from '@/lib/campaigns/campaign-subscription-server'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
-import { deskBill } from '@/lib/requests/desk-bill'
+import { deskBill, deskQuoteOrigin } from '@/lib/requests/desk-bill'
 import { deskPaymentMatchesOrder } from '@/lib/requests/desk-guards'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -163,7 +163,7 @@ async function completeDeskOrder(paymentIntentId: string, requestId: string, pay
   if (String(reqRow.client_id ?? '') !== clientId) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
 
   const cadence = reqRow.cadence === 'monthly' ? 'monthly' as const : 'once' as const
-  const bill = deskBill(reqRow.quote_cents as number | null, cadence)
+  const bill = deskBill(reqRow.quote_cents as number | null, cadence, deskQuoteOrigin(reqRow.brief))
   const verified = await verifyAndLinkCheckoutPayment({
     paymentIntentId,
     clientId,

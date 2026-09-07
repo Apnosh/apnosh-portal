@@ -21,7 +21,7 @@ import {
 } from '@/lib/requests/catalog'
 import CreativeFlow from '@/components/requests/creative-flow'
 import DeskCheckout from '@/components/requests/desk-checkout'
-import { deskCancelable } from '@/lib/requests/desk-guards'
+import { acceptGoesToTill, acceptPromiseLine, deskCancelable } from '@/lib/requests/desk-guards'
 import { useClient } from '@/lib/client-context'
 
 interface RequestNote {
@@ -84,6 +84,10 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
   /* The answer the server gave about ONE order, keyed to it. Unkeyed, the line printed under
    * every card in the list: cancel one order and every other order said it was cancelled. */
   const [cancelMsg, setCancelMsg] = useState<{ id: string; text: string } | null>(null)
+  /* Can the till take a card at all? The server answers with the list, because the accept button's
+   * promise has to match what the accept route will do. Assumed SHUT until the server says
+   * otherwise: a screen that guesses open would promise a card at a closed till. */
+  const [tillOpen, setTillOpen] = useState(false)
   const { client } = useClient()
 
   const loadMine = useCallback(async () => {
@@ -91,6 +95,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
       const r = await fetch('/api/requests')
       const d = await r.json().catch(() => ({}))
       setMine(Array.isArray(d.requests) ? d.requests : [])
+      setTillOpen(d.tillOpen === true)
     } catch {
       setMine([])
     }
@@ -130,6 +135,15 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
         return
       }
       if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
+      /* The yes landed and the quote has a price on it: the order is now waiting for the card, so
+       * the till opens on the same tap. One yes, one card, no second trip back to this list. */
+      if (kind === 'accept' && d.needsPayment) {
+        const row = mine.find((m) => m.id === id)
+        await loadMine()
+        setPayFor({ id, label: requestTypeById(row?.type ?? '')?.label ?? 'Order' })
+        setBusy(null)
+        return
+      }
       if (kind === 'note') setReply('')
       await loadMine()
     } catch (e) {
@@ -257,9 +271,17 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                         {r.team_note}
                       </div>
                     )}
-                    {/* the yes: a PERSON'S quote goes to work on one tap, and the work is
-                        reviewed before anything is billed — which is true of this lane only. */}
-                    {r.status === 'quoted' && (
+                    {/* THE YES. With the card till open, a priced quote goes to the same till
+                        everything else does: the button says so, and the card opens on this tap.
+                        With the till OFF (today) the yes starts the work and the bill follows the
+                        approval, the same lane the graphic orders run, and the line says exactly
+                        that. It used to promise "you review the finished work before paying" in
+                        both states, which was a lie in one of them. A $0 quote is the one yes that
+                        starts work on its own under either switch. */}
+                    {r.status === 'quoted' && (() => {
+                      const pays = acceptGoesToTill(r.quote_cents, tillOpen)
+                      const amount = pays ? `$${((r.quote_cents ?? 0) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : null
+                      return (
                       <div style={{ marginTop: 10 }}>
                         <button
                           type="button"
@@ -272,13 +294,14 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                             boxShadow: busy === r.id ? 'none' : '0 8px 20px rgba(46,154,120,0.3)',
                           }}
                         >
-                          {busy === r.id ? 'Starting...' : 'Say yes — start the work'}
+                          {busy === r.id ? 'Starting...' : pays ? `Say yes and pay ${amount}` : 'Say yes, start the work'}
                         </button>
                         <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.mute, marginTop: 6, textAlign: 'center', lineHeight: 1.45 }}>
-                          You review the finished work before paying.
+                          {acceptPromiseLine(pays, r.quote_cents)}
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
                     {/* an order the OWNER placed: the till priced it, so the card is what starts
                         it. No "you review before paying" here — that would be the old lie. */}
                     {r.status === 'awaiting_payment' && (
