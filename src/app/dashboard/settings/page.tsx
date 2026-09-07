@@ -162,7 +162,7 @@ export default function SettingsPage() {
             {/* Language — the business's language, saved on the client row. Two options, each
                 written in its own language, because that is the only label a reader can be sure
                 of. The honest note under them says the translation is not finished yet. */}
-            <MvpGroup title={T('Language')} hue="nights">
+            <MvpGroup title={T('Language')} hue="mint">
               <div style={{ padding: 14 }}>
                 <div style={{ fontSize: 13.5, color: C.mute, marginBottom: 12 }}>{T('Pick the language you want to read.')}</div>
                 <div style={{ display: 'flex', gap: 8 }}>

@@ -14,6 +14,7 @@ import { ArrowLeft, Check, ChevronDown, ExternalLink, Loader2, MessageSquare, Re
 import { classifySteps, pileCounts, type PiledStep } from '@/lib/gbp-apply/piles'
 import type { WorkOrderStep } from '@/lib/campaigns/data/service-playbooks'
 import { handoverProgress } from '@/lib/campaigns/handover'
+import { DISPLAY } from '@/components/mvp/tokens'
 
 type StepX = WorkOrderStep & {
   prepared?: { proposed: string; at: string }
@@ -157,7 +158,7 @@ export default function WorkOrderInbox({ swo, clientName, deliverableLabel }: { 
         <Link href={`/admin/campaign-orders/${swo.campaignId}`} className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-3"><ArrowLeft className="w-4 h-4" /> Back to the order</Link>
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">{clientName} · {swo.title}</h1>
+            <h1 className="text-2xl text-ink" style={{ fontFamily: DISPLAY }}>{clientName} · {swo.title}</h1>
             <p className="text-sm text-ink-3 mt-0.5">{counts.yourTurn} your turn · {counts.waiting} waiting · {counts.done} done{swo.dueDate ? ` · due ${fmtShort(swo.dueDate)}` : ''}</p>
           </div>
           <div className="text-right">
