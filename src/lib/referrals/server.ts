@@ -196,6 +196,40 @@ async function accountFacts(clientId: string) {
   }
 }
 
+/**
+ * IS THIS CLIENT NEW? The two facts the "already a customer" floor needs, both read as of a moment
+ * in time — the day the code was typed at claim, the referral's own created_at at payout — so the
+ * question is asked the same way twice and cannot answer differently the second time.
+ *
+ * Money that has already come to us counts wherever it came from: a campaign order (the payments
+ * ledger) or a desk order (creative_requests.paid_at). NULL when either read fails, and the caller
+ * treats that as blocked — a referral we cannot check is not a referral we pay.
+ */
+export interface NewnessFacts { hasPaidBefore: boolean; accountAgeDays: number }
+
+export async function newnessFor(clientId: string, atIso: string): Promise<NewnessFacts | null> {
+  if (!clientId) return null
+  const admin = createAdminClient()
+  const at = Date.parse(atIso)
+  const asOf = Number.isFinite(at) ? new Date(at).toISOString() : new Date().toISOString()
+  try {
+    const [paid, desk, client] = await Promise.all([
+      admin.from('campaign_payments').select('id').eq('client_id', clientId).in('status', COLLECTED_STATUSES).lt('created_at', asOf).limit(1),
+      // select('id') with a paid_at filter: pre-258 there is no such column and the read errors,
+      // which is caught below and blocks — the honest answer when we cannot tell.
+      admin.from('creative_requests').select('id').eq('client_id', clientId).not('paid_at', 'is', null).lt('paid_at', asOf).limit(1),
+      admin.from('clients').select('created_at').eq('id', clientId).maybeSingle(),
+    ])
+    if (paid.error) return null
+    // A desk table without paid_at (pre-258) cannot have a paid desk order on it, so an error
+    // there is "no desk order", not "unknown".
+    const hasPaidBefore = (paid.data?.length ?? 0) > 0 || (!desk.error && (desk.data?.length ?? 0) > 0)
+    const born = Date.parse((client.data?.created_at as string) || '')
+    const ageDays = Number.isFinite(born) ? Math.max(0, Math.floor((Date.parse(asOf) - born) / 86_400_000)) : 0
+    return { hasPaidBefore, accountAgeDays: ageDays }
+  } catch (e) { warn('could not check whether the account is new', e); return null }
+}
+
 export interface ClaimResult {
   ok: boolean
   /** the referrer's business name, for "Your friend X sent you" */
@@ -223,7 +257,13 @@ export async function claimReferral(rawCode: string, referredClientId: string): 
   const admin = createAdminClient()
   try {
     const { data: existing } = await admin.from('referrals').select('id').eq('referred_client_id', referredClientId).maybeSingle()
-    const [a, b] = await Promise.all([accountFacts(from.clientId), accountFacts(referredClientId)])
+    // As of NOW: the code is being typed now, so "new" is measured now. The same question is asked
+    // again at payout, as of the referral's own created_at, so the two answers cannot drift.
+    const now = new Date().toISOString()
+    const [a, b, newness] = await Promise.all([
+      accountFacts(from.clientId), accountFacts(referredClientId), newnessFor(referredClientId, now),
+    ])
+    if (!newness) return { ok: false, reason: 'could not check the account' }
     const blocked = referralBlock({
       referrerClientId: from.clientId,
       referredClientId,
@@ -231,6 +271,8 @@ export async function claimReferral(rawCode: string, referredClientId: string): 
       referrerPhone: a.phone, referredPhone: b.phone,
       referrerStripeCustomerId: a.stripeCustomerId, referredStripeCustomerId: b.stripeCustomerId,
       alreadyReferred: !!existing,
+      referredHasPaidBefore: newness.hasPaidBefore,
+      referredAccountAgeDays: newness.accountAgeDays,
     })
     if (blocked) return { ok: false, reason: blocked }
 

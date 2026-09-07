@@ -12,7 +12,7 @@
  */
 import {
   CODE_CHARSET, CODE_BANNED, CODE_LENGTH, makeCode, normalizeCode, isCodeShape, referralLink,
-  REFERRAL_CREDIT_CENTS, creditWords, nextStatus, readyToCredit, referralBlock, normalizePhone,
+  REFERRAL_CREDIT_CENTS, NEW_CLIENT_DAYS, creditWords, nextStatus, readyToCredit, referralBlock, normalizePhone,
   creditAvailableCents, liveHoldCents, CREDIT_HOLD_MS, STATUS_WORD,
   type ReferralStatus, type ReferralEvent, type CreditRowState,
 } from '@/lib/referrals/model'
@@ -233,6 +233,22 @@ function main() {
   s.eq('a short number is not a phone match',
     referralBlock({ referrerClientId: A, referredClientId: B, referrerPhone: '555', referredPhone: '555' }), null)
   s.eq('a phone is its last ten digits', normalizePhone('+1 (503) 555-0134'), '5035550134')
+
+  s.group('a referral is an introduction, so the friend has to be NEW')
+  s.eq('an owner who has already paid us is our customer, not an introduction',
+    referralBlock({ referrerClientId: A, referredClientId: B, referredHasPaidBefore: true }), 'already a customer')
+  s.eq('an account older than a month was not introduced by anybody',
+    referralBlock({ referrerClientId: A, referredClientId: B, referredAccountAgeDays: 400 }), 'account is not new')
+  s.eq('a day-old account is new', referralBlock({ referrerClientId: A, referredClientId: B, referredAccountAgeDays: 1 }), null)
+  s.eq('the last day inside the window is still new',
+    referralBlock({ referrerClientId: A, referredClientId: B, referredAccountAgeDays: NEW_CLIENT_DAYS }), null)
+  s.eq('the day after it is not',
+    referralBlock({ referrerClientId: A, referredClientId: B, referredAccountAgeDays: NEW_CLIENT_DAYS + 1 }), 'account is not new')
+  s.eq('a month is the window', NEW_CLIENT_DAYS, 30)
+  s.eq('an account we know nothing about is treated as new, and the other floors still run',
+    referralBlock({ referrerClientId: A, referredClientId: B }), null)
+  s.check('a self-referral is still refused even on a brand new account',
+    referralBlock({ referrerClientId: A, referredClientId: A, referredAccountAgeDays: 0 }) === 'same business')
 
   /* ── 6. the switch ──────────────────────────────────────────────────── */
   s.group('with the switch off, nothing about this product changes')

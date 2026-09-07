@@ -144,6 +144,16 @@ export function normalizePhone(raw: string | null | undefined): string {
 const emailOf = (raw: string | null | undefined) => (raw ?? '').trim().toLowerCase()
 const domainOf = (raw: string | null | undefined) => emailOf(raw).split('@')[1] ?? ''
 
+/**
+ * How old an account may be, in days, and still be somebody's new friend.
+ *
+ * A referral is an introduction. An owner who signed up months ago and has been reading their own
+ * dashboard ever since was not introduced by anybody, and a code typed onto that account is worth
+ * $100 of real money for nothing. Thirty days is long enough that a friend who was told about us
+ * in February and got around to signing up in March still counts.
+ */
+export const NEW_CLIENT_DAYS = 30
+
 export interface FraudInput {
   referrerClientId: string
   referredClientId: string
@@ -155,6 +165,10 @@ export interface FraudInput {
   referredStripeCustomerId?: string | null
   /** this referred client already has a referral row (from any code) */
   alreadyReferred?: boolean
+  /** the referred client has already paid us for something — a campaign order or a desk order */
+  referredHasPaidBefore?: boolean
+  /** how old the referred client's account was when the code was typed, in days */
+  referredAccountAgeDays?: number
 }
 
 /**
@@ -167,6 +181,12 @@ export function referralBlock(i: FraudInput): string | null {
   if (!i.referrerClientId || !i.referredClientId) return 'missing account'
   if (i.referrerClientId === i.referredClientId) return 'same business'
   if (i.alreadyReferred) return 'already referred'
+  // A REFERRAL IS FOR SOMEBODY NEW. Without these two the loop paid out on an owner who was
+  // already ours: the payout only asked "has this client a collected order?", and every existing
+  // customer has one, so a code typed into a months-old account minted $100 on an order that had
+  // nothing to do with the friend who sent it.
+  if (i.referredHasPaidBefore) return 'already a customer'
+  if ((i.referredAccountAgeDays ?? 0) > NEW_CLIENT_DAYS) return 'account is not new'
   const e1 = emailOf(i.referrerEmail), e2 = emailOf(i.referredEmail)
   if (e1 && e2 && e1 === e2) return 'same email'
   const d1 = domainOf(i.referrerEmail), d2 = domainOf(i.referredEmail)

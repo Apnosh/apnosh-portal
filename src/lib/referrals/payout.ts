@@ -20,6 +20,7 @@ import { referralsEnabled } from '@/lib/referral-gate'
 import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 import { getPromiseRows } from '@/lib/promises/read'
 import { notifyClientOwners } from '@/lib/notifications'
+import { newnessFor } from './server'
 import { REFERRAL_CREDIT_CENTS, creditWords, nextStatus, readyToCredit, referralBlock, type ReferralStatus } from './model'
 
 const warn = (where: string, e: unknown) =>
@@ -40,20 +41,41 @@ interface Row {
   status: ReferralStatus
   credit_cents_referrer: number | null
   referred_payment_id: string | null
+  created_at: string
 }
 
-/** The referred client's FIRST collected order, or null while they have not bought anything. */
-async function firstPaidOrder(clientId: string) {
+interface Order { id: string; status: string; campaign_id: string | null; created_at: string; paid_at: string | null }
+
+/**
+ * The referred client's first order PAID AFTER THE REFERRAL WAS MADE, or null while there is none.
+ *
+ * The "after" is the whole point. Without it, an owner who has been ours for a year could have a
+ * code typed onto their account and the loop would reach back to an order they paid for in
+ * January and pay somebody $50 for it. An order counts for a referral only if the money moved
+ * after the introduction did.
+ *
+ * paid_at, not created_at: created_at is when the checkout was STARTED, and an intent opened
+ * before the code was typed and paid a week later is still an order that came after.
+ */
+async function firstPaidOrder(clientId: string, afterIso: string) {
   const admin = createAdminClient()
   const { data } = await admin
     .from('campaign_payments')
-    .select('id, status, campaign_id, created_at')
+    .select('id, status, campaign_id, created_at, paid_at')
     .eq('client_id', clientId)
     .in('status', COLLECTED_STATUSES)
-    .order('created_at', { ascending: true })
+    .gt('paid_at', afterIso)
+    .order('paid_at', { ascending: true })
     .limit(1)
     .maybeSingle()
-  return (data as { id: string; status: string; campaign_id: string | null; created_at: string } | null) ?? null
+  return (data as Order | null) ?? null
+}
+
+/** Was this order's money taken AFTER the referral? Fails closed on an order with no paid_at. */
+function paidAfter(order: Order | null, afterIso: string): boolean {
+  if (!order?.paid_at) return false
+  const paid = Date.parse(order.paid_at), made = Date.parse(afterIso)
+  return Number.isFinite(paid) && Number.isFinite(made) && paid > made
 }
 
 /** Was the order behind this referral sent back in full? Then nothing is owed to anybody. */
@@ -116,7 +138,7 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
   try {
     const { data, error } = await admin
       .from('referrals')
-      .select('id, referrer_client_id, referred_client_id, status, credit_cents_referrer, referred_payment_id')
+      .select('id, referrer_client_id, referred_client_id, status, credit_cents_referrer, referred_payment_id, created_at')
       .in('status', ['signed_up', 'first_order_paid'])
       .is('credited_at', null)
       .is('voided_at', null)
@@ -130,11 +152,14 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
     try {
       const order = r.referred_payment_id
         ? await (async () => {
-            const { data } = await admin.from('campaign_payments').select('id, status, campaign_id, created_at').eq('id', r.referred_payment_id as string).maybeSingle()
-            return (data as { id: string; status: string; campaign_id: string | null; created_at: string } | null) ?? null
+            const { data } = await admin.from('campaign_payments').select('id, status, campaign_id, created_at, paid_at').eq('id', r.referred_payment_id as string).maybeSingle()
+            return (data as Order | null) ?? null
           })()
-        : await firstPaidOrder(r.referred_client_id)
+        : await firstPaidOrder(r.referred_client_id, r.created_at)
       if (!order) continue                        // the friend has not ordered yet: nothing to do
+      // Belt and braces on the stored order too: a referred_payment_id written by an older run
+      // (or by hand) must still be an order paid after the introduction.
+      if (!paidAfter(order, r.created_at)) continue
 
       let status: ReferralStatus = r.status
       if (status === 'signed_up') {
@@ -163,12 +188,21 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
 
       // The floors again, now that both accounts have a card on file. Same card account is the
       // strongest signal there is that this is one person, and it only exists after they pay.
-      const [a, b] = await Promise.all([facts(r.referrer_client_id), facts(r.referred_client_id)])
+      //
+      // The NEWNESS floor is re-run here too, as of the day the referral was made: an account that
+      // had already paid us before the code was typed is our customer, not an introduction, and
+      // this is the last gate before real money leaves.
+      const [a, b, newness] = await Promise.all([
+        facts(r.referrer_client_id), facts(r.referred_client_id), newnessFor(r.referred_client_id, r.created_at),
+      ])
+      if (!newness) continue                     // unreadable: pay nothing, look again tomorrow
       const blocked = referralBlock({
         referrerClientId: r.referrer_client_id, referredClientId: r.referred_client_id,
         referrerEmail: a.email, referredEmail: b.email,
         referrerPhone: a.phone, referredPhone: b.phone,
         referrerStripeCustomerId: a.stripeCustomerId, referredStripeCustomerId: b.stripeCustomerId,
+        referredHasPaidBefore: newness.hasPaidBefore,
+        referredAccountAgeDays: newness.accountAgeDays,
       })
       if (blocked) {
         if (!opts.dryRun && await voidReferral(r.id, blocked)) voided += 1
