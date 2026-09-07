@@ -11,7 +11,7 @@
  * English only, like the rest of /admin. The owner-facing surfaces are the translated ones.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import { Ban, RefreshCw } from 'lucide-react'
 
 interface Referral {
@@ -40,6 +40,9 @@ export default function AdminReferralsPage() {
   const [data, setData] = useState<Payload | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
+  // A void that could not free every credit says so on the row it happened on, not in a pop-up a
+  // person clicks away and forgets.
+  const [stuck, setStuck] = useState<{ id: string; count: number } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -55,6 +58,7 @@ export default function AdminReferralsPage() {
     const reason = window.prompt('Why is this void? It goes in the ledger.')
     if (!reason || !reason.trim()) return
     setBusy(id)
+    setStuck(null)
     try {
       const res = await fetch('/api/referrals/admin', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -63,9 +67,7 @@ export default function AdminReferralsPage() {
       // A credit whose checkout is still open at Stripe survives the void on purpose (the intent
       // already has the discount inside its amount). Say so, or staff think it worked.
       const out = await res.json().catch(() => null) as { creditsStuck?: number } | null
-      if (out?.creditsStuck) {
-        window.alert(`${out.creditsStuck} credit(s) are still live: their checkout is open at Stripe and could not be cancelled. Void again once it settles.`)
-      }
+      if (out?.creditsStuck) setStuck({ id, count: out.creditsStuck })
       await load()
     } finally { setBusy('') }
   }
@@ -112,7 +114,8 @@ export default function AdminReferralsPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {data.referrals.map((r) => (
-                  <tr key={r.id}>
+                  <Fragment key={r.id}>
+                  <tr>
                     <td className="px-3 py-2 text-gray-900">{name(r.referrer_client_id)}</td>
                     <td className="px-3 py-2 text-gray-900">{name(r.referred_client_id)}</td>
                     <td className="px-3 py-2 font-mono text-gray-600">{r.code}</td>
@@ -134,6 +137,14 @@ export default function AdminReferralsPage() {
                       )}
                     </td>
                   </tr>
+                  {stuck?.id === r.id && (
+                    <tr>
+                      <td colSpan={8} className="px-3 py-2 bg-amber-50 text-amber-800 text-xs">
+                        {stuck.count} credit(s) are still live: their checkout is open at Stripe and could not be cancelled. Void again once it settles.
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 ))}
                 {data.referrals.length === 0 && (
                   <tr><td colSpan={8} className="px-3 py-6 text-center text-gray-400">Nobody has sent a friend yet.</td></tr>
