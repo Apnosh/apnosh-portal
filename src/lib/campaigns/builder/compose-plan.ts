@@ -142,6 +142,12 @@ export const ITEM_SHAPE: Record<string, ItemShape> = {
      (no beats, no services) and had no render card, so they could be recommended and never
      opened. Each now carries the real catalog service its setup card already names. */
   measure: { title: 'Get measurable', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['tracking'], seed: [] },
+  /* The four doorless services, each carrying its REAL priced catalog service (no content
+     stand-in). Held behind the playbook law until someone writes the steps. */
+  trucklocation: { title: "Where's the truck today", kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['truck-location'], seed: [] },
+  barnights: { title: 'Weekly bar nights', kind: 'setup', goal: 'capacity', dur: 'ongoing', services: ['bar-events'], seed: [] },
+  seasonplan: { title: 'A season plan and a call', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['seasonal-cal'], seed: [] },
+  cateringengine: { title: 'Catering page and follow-ups', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['catering-engine'], seed: [] },
   emaildeliver: { title: 'Land in the inbox', kind: 'setup', goal: 'retain', dur: 'setup', services: ['email-found'], seed: [] },
   deliverymenu: { title: 'Price your delivery menu', kind: 'setup', goal: 'acquire', dur: 'setup', services: ['delivery-opt'], seed: [] },
   nextdoor: { title: 'Get known on Nextdoor', kind: 'setup', goal: 'acquire', dur: 'ongoing', services: ['nextdoor-local'], seed: [] },

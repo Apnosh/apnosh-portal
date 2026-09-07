@@ -115,6 +115,14 @@ export const PROMISE_BY_CARD: Record<string, PromiseSpec[]> = {
   earlyaccess: PROMISE_BY_SERVICE['welcome-seq'],
   winback: PROMISE_BY_SERVICE['welcome-seq'],
   loyalty: PROMISE_BY_SERVICE['loyalty'],
+  /* The truck's daily post goes to the Google card, so that is where the count is taken. Its
+     text-to-your-list leg is held and unbilled, so nothing here counts a text. */
+  trucklocation: [GOOGLE_VIEWS],
+  /* barnights, seasonplan and cateringengine have NO spec on purpose. Each needs a real
+     answer first: which number a bar night moves that we can read, what a season plan even
+     promises inside one quarter, and where a catering inquiry lands before anybody can count
+     one. Until those are answered the playbook law holds the cards off the shelf, and that
+     is the honest state, not an oversight. */
 }
 
 /** By the creative desk request type (creative_requests.type). */

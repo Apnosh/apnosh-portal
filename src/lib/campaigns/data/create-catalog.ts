@@ -85,6 +85,18 @@ const SOURCE = [
   { id: 'ticket', title: 'Run a ticketed event', goal: 'new-customers', stages: ['orders', 'aware'] },
   { id: 'winback', title: 'Win back quiet guests', goal: 'regulars', stages: ['back'] },
   { id: 'direct', title: 'Get orders direct', goal: 'regulars', stages: ['actions', 'back'] },
+  /* THE FOUR DOORLESS SERVICES (2026-09-07, the shelf move). Each has been PRICED in the
+   * catalog for months and sold nowhere, so an owner who needs it concluded we do not do it:
+   * a truck's daily location post ($135/mo), a bar's weekly nights ($525/mo), a seasonal
+   * plan ($242 a quarter) and the catering engine ($715 + $105/mo). They are cards now, and
+   * they are gated by the PLAYBOOK LAW (catalog-availability `sellable`) rather than by the
+   * allowlist: each appears on the shelf the day someone writes its playbook and its promise
+   * spec, and not one day before. truck-location has both today; the other three say, in the
+   * coming-later row, exactly what is missing. */
+  { id: 'trucklocation', title: "Where's the truck today", goal: 'new-customers', stages: ['aware'] },
+  { id: 'barnights', title: 'Weekly bar nights', goal: 'slow-nights', stages: ['orders', 'aware'] },
+  { id: 'seasonplan', title: 'A season plan and a call', goal: 'new-customers', stages: ['aware', 'orders'] },
+  { id: 'cateringengine', title: 'Catering page and follow-ups', goal: 'new-customers', stages: ['orders'] },
 ] as const satisfies readonly { id: string; title: string; goal: GoalKey; stages: readonly FunnelStage[] }[]
 
 /** The closed union of create-catalog ids. Per-card maps (product-page content, why

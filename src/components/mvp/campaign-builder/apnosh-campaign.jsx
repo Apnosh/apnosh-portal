@@ -2171,6 +2171,11 @@ const CATALOG = [
 
   { id: "winback", type: "automation", icon: "heart", title: "Win back quiet guests", sub: "One email and one text to guests you haven't seen lately", cad: "once", hot: true },
   { id: "direct", type: "task", icon: "cart", title: "Get orders direct", sub: "Delivery apps take a cut of every order. Move regulars to direct", cad: "once", hot: true },
+
+  { id: "trucklocation", type: "task", icon: "pin", title: "Where's the truck today", sub: "A post each morning with today's spot", cad: "recurring" },
+  { id: "barnights", type: "task", icon: "moon", title: "Weekly bar nights", sub: "Trivia, league night, watch parties, run as a program", cad: "recurring" },
+  { id: "seasonplan", type: "task", icon: "chart", title: "A season plan and a call", sub: "The quarter mapped out, with a planning call", cad: "recurring" },
+  { id: "cateringengine", type: "task", icon: "people", title: "Catering page and follow-ups", sub: "A page, proposals, and follow-up on every inquiry", cad: "recurring" },
 ];
 // Admin CMS overlay (Phase C1): the sparse override map the wrapper fetched, set by
 // ApnoshCampaign each render. Only card title/tagline overlay HERE (catGet feeds every

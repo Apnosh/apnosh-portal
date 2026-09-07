@@ -26,6 +26,10 @@
 
 import { CREATE_CATALOG_IDS } from './create-catalog'
 import { REQUEST_TYPES } from '@/lib/requests/catalog'
+import { SERVICE_PLAYBOOKS } from './service-playbooks'
+import { setupCardByServiceId } from '@/lib/campaigns/setup/cards'
+import { itemServices } from '@/lib/campaigns/builder/item-prices'
+import { PROMISE_BY_CARD } from '@/lib/promises/registry'
 
 export type CardAvailability = 'live' | 'coming_soon' | 'hidden'
 
@@ -75,6 +79,12 @@ export const FULLY_BUILT_LIVE: readonly string[] = [
    * involved. Performance reporting lands in the funnel's paid-ads slots when the
    * ads adapter ships; until then the weekly tuning report is the deliverable. */
   'reach',
+  /* THE FOUR DOORLESS SERVICES (2026-09-07). Listed here on purpose so that the PLAYBOOK LAW
+   * below, not the allowlist, is what decides whether each one reaches the shelf. Each has a
+   * real price in the catalog and no card until now. truck-location has a playbook and a
+   * promise today, so its card is live. The other three are held by the law and say which of
+   * the two things is missing, which is a to-do with a name on it rather than a mystery. */
+  'trucklocation', 'barnights', 'seasonplan', 'cateringengine',
 ]
 
 /** Why a bookmarked card is not buyable yet, by group. Owner-facing, plain, honest — shown on the
@@ -250,4 +260,82 @@ export function comingSoonReason(id: string, overrides?: VisibilityOverrideMap):
   if (availabilityFor(id, overrides) !== 'coming_soon') return null
   const group = COMING_SOON_GROUP[id]
   return (group && COMING_SOON_REASON[group]) || 'Coming soon.'
+}
+
+/* ────────────────────────────────────────────────────────────────────────────────────────────
+ * THE PLAYBOOK LAW (the shelf move, 2026-09-07)
+ *
+ * The allowlist above answers "did we finish building this card". It does not answer the two
+ * questions the September readers said a store must answer before it takes money:
+ *
+ *   Can a person actually DO the work?   Twelve of sixty-eight services have a playbook. The rest
+ *                                        mint a work order with `steps: []` — an order with no
+ *                                        checklist, which is how five real orders land in ten days
+ *                                        as nothing at all.
+ *   Can we COUNT it afterwards?          A card with no promise spec prints a price and promises
+ *                                        a number nobody can take.
+ *
+ * So a card is sellable only when all three hold: the allowlist says live, every service it
+ * composes to can be worked, and its promise exists. A card that fails keeps its place on the
+ * goal shelf and says which of the three is missing, in plain words, with no price on it.
+ *
+ * TWO SERVICES ARE EXEMPT FROM NEEDING A PLAYBOOK, and both because they are their OWN delivery
+ * lane, not because we are looking the other way:
+ *   - content pieces ('content-…') and the desk's creative-* cards go through the Request Desk,
+ *     which has its own brief, its own producer and its own proof;
+ *   - a service that IS a setup card (setup/cards.ts) carries a real diagnosis, three owner-facing
+ *     lanes and a verifier, which is a checklist by another name.
+ * Everything else needs a row in SERVICE_PLAYBOOKS before it may be sold.
+ * ──────────────────────────────────────────────────────────────────────────────────────────── */
+
+export interface SellableVerdict {
+  ok: boolean
+  /** Owner-facing, plain, no price. Present when ok is false. */
+  reason?: string
+  /** For the team: which services blocked it. */
+  blockedBy?: string[]
+}
+
+const SELLABLE_OK: SellableVerdict = { ok: true }
+
+/** A service that carries its own lane, so it needs no SERVICE_PLAYBOOKS row. */
+function hasOwnLane(serviceId: string): boolean {
+  if (serviceId.startsWith('content-') || serviceId.startsWith('guide:')) return true
+  return !!setupCardByServiceId(serviceId)
+}
+
+/**
+ * May this card be sold today? The one answer the store, the product page and the shelf all read.
+ *
+ * Note the order of the checks: availability first (it is the owner's own decision and the CMS
+ * override), then the work, then the count. A card that is coming soon keeps its authored
+ * coming-soon reason rather than being told it has no playbook, because the authored line is the
+ * more specific truth.
+ */
+export function sellable(id: string, overrides?: VisibilityOverrideMap): SellableVerdict {
+  const avail = availabilityFor(id, overrides)
+  if (avail === 'hidden') return { ok: false, reason: 'Not offered yet: no text or email sending.' }
+  if (avail !== 'live') return { ok: false, reason: comingSoonReason(id, overrides) ?? 'Coming soon.' }
+
+  const blocked = itemServices(id).filter((s) => !hasOwnLane(s) && !SERVICE_PLAYBOOKS[s])
+  if (blocked.length) {
+    return {
+      ok: false,
+      reason: 'No playbook yet: nobody has written the steps a person follows to do this, so we will not sell it.',
+      blockedBy: blocked,
+    }
+  }
+
+  if (!(PROMISE_BY_CARD[id]?.length)) {
+    return { ok: false, reason: 'No way to count it yet, so we are not selling it until there is one.' }
+  }
+
+  return SELLABLE_OK
+}
+
+/** The plain reason a card is not on the shelf today, or null when it is sellable. The store's
+ *  "Coming later for this goal" row prints exactly this, and never a price beside it. */
+export function notSellableReason(id: string, overrides?: VisibilityOverrideMap): string | null {
+  const v = sellable(id, overrides)
+  return v.ok ? null : (v.reason ?? 'Coming soon.')
 }
