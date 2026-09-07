@@ -57,7 +57,11 @@ export const ES: Record<string, string> = {
   'Last 30 days': 'Últimos 30 días',
   'Last 90 days': 'Últimos 90 días',
   'Last year': 'Último año',
-  'Custom': 'A tu gusto',
+  'Custom': 'Otras fechas',
+  '7 days': '7 días',
+  '30 days': '30 días',
+  '90 days': '90 días',
+  '1 year': '1 año',
 
   /* ── Home: what we counted, and who is on your work ───────────────────────────────────── */
   'Counted, as promised': 'Contado, como prometimos',

@@ -26,6 +26,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'website visits & clicks', 'directions & calls', 'walk-in orders from Google', 'came back for more',
     'Your numbers show here', 'Connect accounts',
     'Last 7 days', 'Last 30 days', 'Last 90 days', 'Last year', 'Custom',
+    '7 days', '30 days', '90 days', '1 year',
     'Counted, as promised',
     'Before and after on your whole listing. It shows what happened, not proof of cause.',
     'The people on your work', 'Get help', 'A real person replies within one business day.',

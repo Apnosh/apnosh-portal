@@ -118,7 +118,10 @@ type Emblem = 'eye' | 'spark' | 'tap' | 'door' | 'heart'
 interface HStage { key: string; label: string; sub?: string; count: number | null; zone: Zone; conv?: string; tag: string; split?: string; emblem?: Emblem; deltaYoY?: number | null; deltaAbs?: number | null; insightsStage?: string }
 
 export type FunnelRange = '7d' | '30d' | '90d' | '12m' | 'custom'
-const RANGES: [FunnelRange, string][] = [['7d', 'Last 7 days'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['12m', 'Last year'], ['custom', 'Custom']]
+/* [key, the full name, the short name the narrow tab shows]. The short one is its own string
+ * on purpose: cutting "Last " off the front is an English rule, and it left a Spanish owner
+ * reading "Últimos 7 días" in a tab three words wide. */
+const RANGES: [FunnelRange, string, string][] = [['7d', 'Last 7 days', '7 days'], ['30d', 'Last 30 days', '30 days'], ['90d', 'Last 90 days', '90 days'], ['12m', 'Last year', '1 year'], ['custom', 'Custom', 'Custom']]
 
 export interface HomeFunnelProps {
   businessName?: string
@@ -1207,10 +1210,10 @@ export default function HomeFunnel({
           </Link>
         )}
         <div style={{ display: 'flex', gap: 2, flex: 1, minWidth: 0, borderRadius: 999, padding: 3, background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
-          {RANGES.filter(([k]) => !bar || k !== 'custom').map(([k, label]) => {
+          {RANGES.filter(([k]) => !bar || k !== 'custom').map(([k, label, short]) => {
             const on = curRange === k
             return (
-              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: bar ? '10px 0' : '8px 0', fontSize: bar ? 13.5 : 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }} aria-label={T(label)}>{bar ? (k === 'custom' ? <CalendarDays size={15} style={{ verticalAlign: '-2px' }} /> : k === '12m' ? '1y' : k) : T(label).replace('Last ', '').replace('year', 'Year')}</button>
+              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: bar ? '10px 0' : '8px 0', fontSize: bar ? 13.5 : 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }} aria-label={T(label)}>{bar ? (k === 'custom' ? <CalendarDays size={15} style={{ verticalAlign: '-2px' }} /> : k === '12m' ? '1y' : k) : T(short)}</button>
             )
           })}
         </div>
