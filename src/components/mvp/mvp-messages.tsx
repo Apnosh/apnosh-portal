@@ -19,12 +19,15 @@ import { createClient } from '@/lib/supabase/client'
 import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
 import { REPLY_PROMISE } from '@/lib/reply-promise'
-import { askFrom, replyLine } from '@/lib/team/reply-line'
+import Link from 'next/link'
+import { askFrom, clockTime, replyClock } from '@/lib/team/reply-line'
 import { useLang } from './mvp-language'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
   ink: '#1d1d1f', ink2: '#3a3a3c', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', bg: '#f5f5f7',
+  /* the kit's red (hues.ts), for the one line that says we broke a promise */
+  red: '#c92d32',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
@@ -32,9 +35,9 @@ const GRAD = 'linear-gradient(135deg,#54c6a2 0%,#2e9a78 100%)'
 /* ── The people an owner can reach. Each is its own conversation; the thread
  *  subject carries the role so the Apnosh team knows who it's for. ─────────── */
 /* each role gets a colour and a glyph instead of an emoji (portal redesign 2026-09-04) */
-interface Contact { key: string; name: string; blurb: string; hue: HueKey; Icon: typeof Compass; color: string; subject: string }
+interface Contact { key: string; name: string; /** the name written MID-SENTENCE. Only the strategist needs one: "Message Your strategist" put a capital Y in the middle of a line. The rest are role names and read the same either way. */ inline?: string; blurb: string; hue: HueKey; Icon: typeof Compass; color: string; subject: string }
 const CONTACTS: Contact[] = [
-  { key: 'strategist',   name: 'Your strategist',   blurb: 'Plans, priorities, anything',  hue: 'mint',     Icon: Compass,    color: '#2e9a78', subject: 'Your strategist' },
+  { key: 'strategist',   name: 'Your strategist',   inline: 'your strategist', blurb: 'Plans, priorities, anything',  hue: 'mint',     Icon: Compass,    color: '#2e9a78', subject: 'Your strategist' },
   { key: 'videographer', name: 'Videographer',      blurb: 'Films your content',           hue: 'event',    Icon: Video,      color: '#2e73b6', subject: 'Videographer' },
   { key: 'photographer', name: 'Photographer',      blurb: 'Photos of your food & space',  hue: 'catering', Icon: Camera,     color: '#9c3a6a', subject: 'Photographer' },
   { key: 'designer',     name: 'Designer',          blurb: 'Graphics, menus, flyers',      hue: 'announce', Icon: ImageIcon,  color: '#ee4c2c', subject: 'Designer' },
@@ -93,7 +96,9 @@ function dayLabel(key: string, T: Tr, locale: string): string {
   if (diff === 1) return T('Yesterday')
   return dt.toLocaleDateString(locale, diff < 7 ? { weekday: 'long' } : { month: 'short', day: 'numeric' })
 }
-const clock = (iso: string, locale: string) => new Date(iso).toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' })
+/* One clock format for the whole screen (reply-line.ts). The header said "4:17 pm" and the
+   bubble under it said "4:17 PM", with a space nobody can type in front of it. */
+const clock = (iso: string, locale: string) => clockTime(iso, locale)
 function timeAgo(iso: string | null | undefined, T: Tr, locale: string): string {
   if (!iso) return ''
   const ms = Date.now() - new Date(iso).getTime()
@@ -275,7 +280,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
       )}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 28px' }}>
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13.5, padding: 30 }}><Loader2 size={16} className="animate-spin" /> {T('Loading…')}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.mute, fontSize: 13.5, padding: 30 }}><Loader2 size={16} className="animate-spin" /> {T('Loading…')}</div>
         ) : noBusiness ? (
           <Empty title={T('No business linked yet')} sub={T('Finish setting up your restaurant to start messaging your team.')} />
         ) : q ? (
@@ -361,8 +366,8 @@ function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOp
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
           <span style={{ fontWeight: t.unread ? 700 : 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
-          {role && <span style={{ fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap', flexShrink: 0 }}>{role}</span>}
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: t.unread ? C.greenDk : C.faint, fontWeight: t.unread ? 700 : 400, flexShrink: 0 }}>{timeAgo(t.lastAt, T, locale)}</span>
+          {role && <span style={{ fontSize: 11.5, color: C.mute, whiteSpace: 'nowrap', flexShrink: 0 }}>{role}</span>}
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: t.unread ? C.greenDk : C.mute, fontWeight: t.unread ? 700 : 400, flexShrink: 0 }}>{timeAgo(t.lastAt, T, locale)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.unread ? C.ink2 : C.mute, fontWeight: t.unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.lastMessage ?? T('No messages yet')}</span>
@@ -473,6 +478,8 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
   }
 
   const title = person ? person.name : (c ? T(c.name) : active.subject)
+  /* the same name, written to sit inside a sentence rather than start one */
+  const inlineTitle = person ? person.name : (c ? T(c.inline ?? c.name) : active.subject)
   const hue: HueKey = c?.hue ?? 'mint'
   /* Modern chat layout (owner 2026-09-04): messages group by sender and by day, consecutive
      bubbles sit 3px apart with one tail per group, one avatar per group, one time per group. */
@@ -490,9 +497,16 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
      answered, so a nudge cannot move the due date, and the answered line when a person has
      replied since. Nothing shows until they have actually asked. */
   const ask = askFrom(msgs.filter((m) => !m.id.startsWith('tmp-')).map((m) => ({ sender: m.from, createdAt: m.createdAt })))
-  const promiseClock = replyLine(
+  const promiseClock = replyClock(
     { askedAt: ask?.askedAt ?? null, answeredAt: ask?.answeredAt ?? null },
-    { promise: T(REPLY_PROMISE), locale, words: { sent: T('Sent'), weAnswer: T('we answer'), due: T('due'), answeredIn: T('Answered in') } },
+    {
+      promise: T(REPLY_PROMISE),
+      locale,
+      words: {
+        sent: T('Sent'), weReply: T('we reply'), due: T('due'), answeredIn: T('Answered in'),
+        owedBy: T('we owed you a reply by'), missed: T('we missed it.'), getHelp: T('Get help'),
+      },
+    },
   )
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
@@ -503,22 +517,29 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
           <Avatar c={c} person={person} size={36} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.15 }}>{title}</div>
-            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c ? T(c.name) : T('Apnosh team')} · ${c?.key === 'strategist' ? T('replies {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}` : c?.key === 'strategist' ? T('Replies {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}</div>
+            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c ? T(c.name) : T('Apnosh team')} · ${c?.key === 'strategist' ? T('we reply {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}` : c?.key === 'strategist' ? T('We reply {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}</div>
           </div>
         </div>
         <span />
       </div>
-      {/* the promise, with a clock: when they asked, when the answer is owed, or how long it took */}
-      {promiseClock && <div style={{ flexShrink: 0, textAlign: 'center', fontSize: 11, color: C.faint, padding: '0 16px 8px' }}>{promiseClock}</div>}
+      {/* The promise, with a clock: when they asked, when the answer is owed, or how long it took —
+          and, when the day we owed has run out, that we missed it, in the kit's red with a door out.
+          A broken promise drawn in the same calm grey as a kept one is the bug this replaces. */}
+      {promiseClock && (
+        <div style={{ flexShrink: 0, textAlign: 'center', fontSize: 11, color: promiseClock.state === 'late' ? C.red : C.mute, padding: '0 16px 8px' }}>
+          {promiseClock.text}
+          {promiseClock.help && <>{' '}<Link href={promiseClock.help.href} style={{ color: C.red, fontWeight: 700 }}>{promiseClock.help.label}</Link></>}
+        </div>
+      )}
 
       {/* messages */}
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 14px 10px', background: '#fff' }}>
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> {T('Loading…')}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.mute, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> {T('Loading…')}</div>
         ) : msgs.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: 22, padding: '0 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><Avatar c={c} person={person} size={56} /></div>
-            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>{T('Message {name}', { name: title })}</div>
+            <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, marginBottom: 4 }}>{T('Message {name}', { name: inlineTitle })}</div>
             <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.55 }}>{c?.blurb ? `${T(c.blurb)}. ` : ''}{T('Say what you need. A real person picks it up.')}</div>
           </div>
         ) : groups.map((g, gi) => {
@@ -527,7 +548,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
           const lastMsg = g.msgs[g.msgs.length - 1]
           return (
             <div key={g.msgs[0].id}>
-              {showDay && <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: C.faint, padding: '10px 0 8px' }}>{dayLabel(g.day, T, locale)}</div>}
+              {showDay && <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: C.mute, padding: '10px 0 8px' }}>{dayLabel(g.day, T, locale)}</div>}
               <div className="mrise" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', justifyContent: own ? 'flex-end' : 'flex-start', marginTop: gi > 0 && !showDay ? 10 : 0 }}>
                 {!own && <Avatar c={c} person={person} size={26} />}
                 <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', alignItems: own ? 'flex-end' : 'flex-start', gap: 3 }}>
@@ -538,7 +559,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
                       ? <div key={m.id} style={{ background: gradOf(hue), color: '#fff', borderRadius: r, padding: '9px 13px', fontSize: 14.5, lineHeight: 1.4, boxShadow: glow(hue, 0.18), whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
                       : <div key={m.id} style={{ background: '#f0f0f2', color: C.ink, borderRadius: r, padding: '9px 13px', fontSize: 14.5, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
                   })}
-                  <div style={{ fontSize: 10.5, color: C.faint, margin: '1px 4px 0' }}>
+                  <div style={{ fontSize: 10.5, color: C.mute, margin: '1px 4px 0' }}>
                     {own ? (lastMsg.id === lastOwn?.id ? (lastMsg.id.startsWith('tmp-') ? T('Sending…') : T('Sent · {time}', { time: clock(lastMsg.createdAt, locale) })) : clock(lastMsg.createdAt, locale)) : `${lastMsg.senderName} · ${clock(lastMsg.createdAt, locale)}`}
                   </div>
                 </div>
@@ -551,7 +572,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
       {/* composer: a glass pill with the send button inside it */}
       <div style={{ flexShrink: 0, padding: '8px 14px calc(96px + env(safe-area-inset-bottom))', background: '#fff' }}>{/* clears the floating bottom nav */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, height: 48, borderRadius: 24, padding: '0 5px 0 16px', background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)' }}>
-          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={T('Message {name}…', { name: title })} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14.5, color: C.ink, fontFamily: 'inherit', outline: 'none', padding: 0 }} />
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') send() }} placeholder={T('Message {name}…', { name: inlineTitle })} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14.5, color: C.ink, fontFamily: 'inherit', outline: 'none', padding: 0 }} />
           <button onClick={send} disabled={!input.trim() || sending} aria-label={T('Send')} style={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', border: 'none', background: input.trim() ? gradOf(hue) : '#e3e6e5', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: input.trim() ? 'pointer' : 'default', boxShadow: input.trim() ? glow(hue, 0.35) : 'none', transition: 'background .15s' }}>{sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}</button>
         </div>
       </div>

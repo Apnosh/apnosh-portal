@@ -70,7 +70,7 @@ export function ProductionSummary({ phase, goLive, whenLine, progress, awaitingY
   const s = (() => {
     if (phase === 'live') return { chip: 'Live', tone: 'green' as const, now: 'It’s live and running', next: 'We track how it does and share a recap', est: 'Live now' }
     if (phase === 'done') return { chip: 'Done', tone: 'green' as const, now: 'All wrapped up', next: 'Your results are below', est: null as string | null }
-    if (phase === 'setup') return { chip: 'Getting set up', tone: 'amber' as const, now: awaitingYou > 0 ? 'We’re on it, and waiting on a few things from you' : 'We’re getting everything set up', next: 'We make it, then it goes live', est }
+    if (phase === 'setup') return { chip: 'Getting set up', tone: 'amber' as const, now: awaitingYou > 0 ? 'We are on it. We are waiting on a few things from you.' : 'We are getting everything set up.', next: 'We make it, then it goes live', est }
     // production
     const madePart = progress && progress.total > 0 ? `: ${progress.live} of ${progress.total} done` : ''
     return { chip: 'In production', tone: 'green' as const, now: `Your team is making your campaign${madePart}`, next: 'It goes live', est }

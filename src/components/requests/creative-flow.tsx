@@ -566,7 +566,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
                 </ReceiptFrame>
                 {price.startsAt && (
                   <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 8, lineHeight: 1.5 }}>
-                    {`This is the starting point. The final number is agreed in your thread before work starts. We answer ${REPLY_PROMISE}.`}
+                    {`This is the starting point. The final number is agreed in your thread before work starts. We reply ${REPLY_PROMISE}.`}
                   </div>
                 )}
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 8, lineHeight: 1.5 }}>{REVISION_LINE}</div>

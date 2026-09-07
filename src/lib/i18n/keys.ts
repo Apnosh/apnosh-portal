@@ -29,7 +29,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     '7 days', '30 days', '90 days', '1 year',
     'Counted, as promised',
     'Before and after on your whole listing. It shows what happened, not proof of cause.',
-    'The people on your work', 'Get help', 'A real person replies within one business day.',
+    'The people on your work', 'Get help', 'We reply within one business day.',
     '{n} pieces of work',
     // the tags on each stage, the conversion line under it, and the four stat labels
     'Real · Google', 'Real · Google + Social', '~ about · your math', 'Repeat visits',
@@ -46,7 +46,11 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   ],
 
   /* the promise and its clock — the thread header and Get help both draw these */
-  reply: ['within one business day', 'Sent', 'we answer', 'due', 'Answered in'],
+  reply: [
+    'within one business day', 'Sent', 'we reply', 'due', 'Answered in',
+    // the third state: past due, nobody answered
+    'we owed you a reply by', 'we missed it.', 'Get help',
+  ],
 
   /* /dashboard/messages — the strip of people on live orders, the inbox, one conversation */
   messages: [
@@ -58,7 +62,9 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'No business linked yet', 'Finish setting up your restaurant to start messaging your team.',
     'Loading…', 'Back', 'Send', 'Sending…', 'Sent · {time}', 'Today', 'Yesterday', 'now',
     /* the line under a person's name in the conversation header */
-    'Apnosh team', 'replies {promise}', 'Replies {promise}',
+    'Apnosh team', 'we reply {promise}', 'We reply {promise}',
+    // the same channel name, written to sit inside a sentence ("Message your strategist")
+    'your strategist',
     'Your strategist', 'Videographer', 'Photographer', 'Designer', 'Account & billing', 'Support',
     'Plans, priorities, anything', 'Films your content', 'Photos of your food & space',
     'Graphics, menus, flyers', 'Plans, invoices, payments', 'Anything else',
@@ -66,7 +72,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
 
   /* /dashboard/get-help */
   getHelp: [
-    'Get help', 'A real person answers', 'Talk to us', 'Message us',
+    'Get help', 'We reply within one business day.', 'Talk to us', 'Message us',
     'We reply {promise}', 'within one business day', 'Share feedback', 'Tell us what to make better',
     'Find it yourself', 'Questions and answers', 'The papers', 'Your agreements',
   ],
@@ -74,6 +80,10 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* /dashboard/settings — the language row */
   settings: [
     'Language', 'Pick the language you want to read.', 'Saved.',
+    // staff previewing a client's screens in another language; nothing is written
+    // The language NAME is not a key: the line is drawn in the language it names, so
+    // LANG_LABEL is already the right word in the right language.
+    'Previewing in {language} (not saved)',
     'Could not save. Try again.', 'Some screens are still in English. We are working on the rest.',
     /* Move 5b: the rest of the page — your name, your email, your password. */
     'Your profile', 'Your name, phone, email and password', 'About you',
@@ -139,7 +149,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'We do not have your Google numbers yet. This is the first step.',
     'Nothing fit? Ask {name}.', 'Nothing fit? Ask us.',
     /* the promise itself is REPLY_PROMISE_SENTENCE, listed once under `reply` words below */
-    '{name} is already on your work.', 'A real person replies within one business day.',
+    '{name} is already on your work.', 'We reply within one business day.',
   ],
 
   /* the promises ledger's own words (src/lib/promises/registry.ts) — the count line printed on
@@ -185,7 +195,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* /onboarding/full — the frame every screen sits in, the shape question, the goal tiles
      and the budget question. The chip VALUES are listed under `chips` (they are stored). */
   onboarding: [
-    'Continue', 'Getting your setup ready', 'Saving...', 'Back', 'Finish later', 'Exit',
+    'Continue', 'Getting your setup ready', 'Saving…', 'Back', 'Finish later', 'Exit',
     'Setup progress: screen {n} of {total}',
     'Save your answers and finish setup later from the dashboard.',
     'Leave setup. Your progress is saved.',
@@ -205,6 +215,34 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Two or more places', 'Each one has its own numbers',
     'Mostly catering', 'Offices, parties, big orders',
     'Open for a season', 'Busy part of the year, quiet the rest',
+    /* Polish 2 — screen 5, what you serve. The cuisine and service-style values are the SAVED
+       strings (data.ts), so they stay English in the record and only the tile is translated.
+       'Korean BBQ' is deliberately absent: it is the name of the food in both languages. */
+    'What you serve', 'Primary cuisine', 'Hawaiian poke, Ethiopian…',
+    'Service style (pick all that apply)', 'Price point',
+    'American', 'Asian Fusion', 'Chinese', 'Japanese', 'Korean', 'Vietnamese', 'Thai', 'Indian',
+    'Mexican', 'Italian', 'Mediterranean', 'French', 'Middle Eastern', 'Caribbean',
+    'Soul / Southern', 'Seafood', 'BBQ / Smokehouse', 'Vegan / Vegetarian', 'Bakery / Desserts',
+    'Other',
+    'Fast food', 'Quick service / fast casual', 'Casual dining', 'Family style', 'Fine dining',
+    'Café / coffee shop', 'Bar / lounge', 'Buffet / AYCE', 'Food truck / pop-up', 'Catering',
+    'Bakery / patisserie',
+    'Under $15 a head', '$15 to $30 a head', '$30 to $60 a head', '$60+ a head',
+    /* Polish 2 — screen 10, one last look. Section names, row labels, the terms line and the
+       two answers of ours it plays back (the role, the approval style). */
+    'One last look', 'Tap Edit to change anything.', 'Edit', 'Complete setup',
+    'I agree to the', 'Terms of Service', 'and the', 'Privacy Policy', 'of Apnosh.',
+    '{n} total', '{n} uploaded',
+    'You', 'Business', 'What you are', 'How it runs', 'Menu', 'Specials', 'Story', 'Goals',
+    'Budget', 'Promote', 'Brand', 'Discovery', 'Workflow', 'Connected', 'Assets',
+    'Role', 'Name', 'Website', 'Phone', 'Location', 'Locations', 'Other spots', 'Type', 'Cuisine',
+    'Vibe', 'Mission', 'Audience', 'Shape', 'Dishes', 'Recurring', 'Stand out', 'Competitors',
+    'Why you', 'Priority', 'Success', 'Timeline', 'To start', 'Highlights', 'Coming up', 'Tone',
+    'Custom tone', 'Content', 'Avoid', 'Hashtags', 'Keywords', 'Style', 'On camera', 'Platforms',
+    'Logo', 'Photos', 'Brand folder',
+    'Business owner', 'Manager', 'Employee', 'Agency / consultant', 'Freelancer',
+    'I want to see everything', 'Just the big stuff', 'I trust the team',
+    "Let's collaborate as we go",
   ],
 
   /* ── Move 7b ────────────────────────────────────────────────────────────────────────

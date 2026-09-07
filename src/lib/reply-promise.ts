@@ -16,5 +16,7 @@
 /** The promise as a phrase you drop into a sentence: `We reply ${REPLY_PROMISE}.` */
 export const REPLY_PROMISE = 'within one business day'
 
-/** The promise as a whole sentence. */
-export const REPLY_PROMISE_SENTENCE = 'A real person replies within one business day.'
+/** The promise as a whole sentence. ONE VERB: we reply. "Replies within…", "we answer within…",
+ *  "A real person answers" and this line were four wordings of the same promise on four screens,
+ *  which reads as four different promises. Everything says "reply" now. */
+export const REPLY_PROMISE_SENTENCE = 'We reply within one business day.'

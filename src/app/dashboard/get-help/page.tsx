@@ -13,8 +13,8 @@ import { useEffect, useState } from 'react'
 import { MessageCircle, HelpCircle, Megaphone, FileText } from 'lucide-react'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpRow, C } from '@/components/mvp/mvp-detail'
-import { REPLY_PROMISE } from '@/lib/reply-promise'
-import { replyLine } from '@/lib/team/reply-line'
+import { REPLY_PROMISE, REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
+import { replyClock } from '@/lib/team/reply-line'
 import { useClient } from '@/lib/client-context'
 import { useLang } from '@/components/mvp/mvp-language'
 
@@ -37,23 +37,28 @@ export default function GetHelpPage() {
 
   // The clock's four joining words and the promise itself come from the dictionary, so the
   // Spanish reads as one sentence rather than a translated half glued to an English half.
-  const clock = replyLine(
+  const clock = replyClock(
     { askedAt: ask?.askedAt ?? null, answeredAt: ask?.answeredAt ?? null },
     {
       promise: T(REPLY_PROMISE),
       locale,
-      words: { sent: T('Sent'), weAnswer: T('we answer'), due: T('due'), answeredIn: T('Answered in') },
+      words: {
+        sent: T('Sent'), weReply: T('we reply'), due: T('due'), answeredIn: T('Answered in'),
+        owedBy: T('we owed you a reply by'), missed: T('we missed it.'),
+      },
     },
   )
 
   return (
-    <MvpShell active="more" header={<MvpDetailHeader title={T('Get help')} subtitle={T('A real person answers')} />}>
+    <MvpShell active="more" header={<MvpDetailHeader title={T('Get help')} subtitle={T(REPLY_PROMISE_SENTENCE)} />}>
       <div style={{ background: '#fff', minHeight: '100%', padding: '10px 16px 24px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         <MvpGroup title={T('Talk to us')} hue="mint">
           <MvpRow icon={<MessageCircle size={18} />} hue="mint" label={T('Message us')} sub={T('We reply {promise}', { promise: T(REPLY_PROMISE) })} href="/dashboard/messages?to=support" />
           <MvpRow icon={<Megaphone size={18} />} hue="announce" label={T('Share feedback')} sub={T('Tell us what to make better')} href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent('Feedback: ')}`} />
         </MvpGroup>
-        {clock && <div style={{ fontSize: 12, color: C.mute, margin: '-8px 4px 18px' }}>{clock}</div>}
+        {/* No Get help door on the line here: they are already standing in it. The red is the
+            same one the thread header uses, so a missed promise reads the same in both places. */}
+        {clock && <div style={{ fontSize: 12, color: clock.state === 'late' ? '#c92d32' : C.mute, margin: '-8px 4px 18px' }}>{clock.text}</div>}
         <MvpGroup title={T('Find it yourself')} hue="nights">
           <MvpRow icon={<HelpCircle size={18} />} hue="nights" label={T('Questions and answers')} href="/dashboard/help" />
         </MvpGroup>

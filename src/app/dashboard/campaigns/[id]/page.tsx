@@ -266,7 +266,7 @@ export default function CampaignDetailPage() {
                   </button>
                 )}
               </div>
-              <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>{needsPayment ? 'Rebuild this plan in checkout to pay. This draft stays here.' : 'Saved as a draft already. Save to come back later, or approve to hand it to your team.'}</div>
+              <div style={{ fontSize: 11.5, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>{needsPayment ? 'Rebuild this plan in checkout to pay. This draft stays here.' : 'Saved as a draft already. Save to come back later, or approve to hand it to your team.'}</div>
             </div>
           </>
         )}
@@ -385,19 +385,19 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
                 <div key={i} style={{ padding: '6px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 12.5 }}>
                     <span style={{ flexShrink: 0, width: 86, fontSize: 11.5, fontWeight: 700, color: C.greenDk }}>{b.postLabel}</span>
-                    <span style={{ flex: 1, minWidth: 0, color: C.ink }}>{b.label}<span style={{ color: C.faint }}> · {b.relLabel}</span></span>
-                    {b.channel && <span style={{ flexShrink: 0, fontSize: 11, color: C.faint }}>{b.channel}</span>}
+                    <span style={{ flex: 1, minWidth: 0, color: C.ink }}>{b.label}<span style={{ color: C.mute }}> · {b.relLabel}</span></span>
+                    {b.channel && <span style={{ flexShrink: 0, fontSize: 11, color: C.mute }}>{b.channel}</span>}
                   </div>
                   {showProducer && piece && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 5, paddingLeft: 96 }}>
                       {piece.discipline && cand ? (
                         <>
-                          <span style={{ fontSize: 10.5, color: C.faint, flexShrink: 0 }}>Made by</span>
+                          <span style={{ fontSize: 10.5, color: C.mute, flexShrink: 0 }}>Made by</span>
                           <ProducerSeg active={piece.producer === 'team'} onClick={() => onSetProducer(piece.key!, 'team')}>Your team</ProducerSeg>
                           <ProducerSeg active={piece.producer === 'creator'} onClick={() => onSetProducer(piece.key!, 'creator')}>{cand.name}</ProducerSeg>
                         </>
                       ) : (
-                        <span style={{ fontSize: 10.5, color: C.faint }}>Made by your team</span>
+                        <span style={{ fontSize: 10.5, color: C.mute }}>Made by your team</span>
                       )}
                     </div>
                   )}
@@ -619,11 +619,13 @@ function SinceLaunch({ o }: { o: CampaignOutcome | null }) {
       <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '13px 15px' }}>
         {/* Left, explicitly. A proof line stretched to both margins reads as a paragraph of
             justified body text and puts holes between the words that carry the number. */}
-        <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums', textAlign: 'left', textWrap: 'pretty' }}>{line.text}</div>
+        {/* No tabular-nums: this is a sentence with a number in it, not a column of figures, and
+            monospaced digits inside Cal Sans put gaps around the very word that carries it. */}
+        <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color, letterSpacing: '-.01em', textAlign: 'left', textWrap: 'pretty' }}>{line.text}</div>
         {o.pct != null && (
           <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4, textAlign: 'left' }}>{o.after.toLocaleString('en-US')} in the two weeks after, against {o.before.toLocaleString('en-US')} the two before.</div>
         )}
-        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6, lineHeight: 1.4 }}>It shows what happened, not proof of cause.</div>
+        <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6, lineHeight: 1.4 }}>It shows what happened, not proof of cause.</div>
       </div>
     </div>
   )

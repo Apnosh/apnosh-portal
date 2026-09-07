@@ -536,7 +536,7 @@ export default function CreatePage() {
   const AskBox = () => (
     <div className="ask">
       <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>{T('Not seeing it? Ask for anything')}</div>
-      <Link href="/dashboard/requests?type=other" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.faint, fontSize: 14 }}>{T('Tell us what you need')}<span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span></Link>
+      <Link href="/dashboard/requests?type=other" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.mute, fontSize: 14 }}>{T('Tell us what you need')}<span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span></Link>
     </div>
   )
 
@@ -577,7 +577,7 @@ export default function CreatePage() {
       {q && <button type="button" onClick={() => setQ('')} aria-label={T('Clear')} style={{ width: 26, height: 26, borderRadius: 13, border: 'none', background: '#e3e6e5', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={13} /></button>}
     </div>
   ) : (
-    <button type="button" onClick={() => go({ name: 'search' })} style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', width: '100%', color: C.faint, fontSize: 14, cursor: 'text', fontFamily: 'inherit' }}><Search size={16} /> {T('Search campaigns')}</button>
+    <button type="button" onClick={() => go({ name: 'search' })} style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', width: '100%', color: C.mute, fontSize: 14, cursor: 'text', fontFamily: 'inherit' }}><Search size={16} /> {T('Search campaigns')}</button>
   )
 
   /* ONE SHELF CARD, the v8 shape the twenty owners read:
