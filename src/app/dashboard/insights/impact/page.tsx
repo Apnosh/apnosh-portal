@@ -14,7 +14,7 @@
  * English while the browser catches up.
  */
 
-import { redirect } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { resolveCurrentClient } from '@/lib/auth/resolve-client'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { buildMonthlyReport } from '@/lib/report/build-month'
@@ -39,6 +39,10 @@ export default async function ImpactPage({ searchParams }: { searchParams: Promi
   if (askedMonth) {
     year = Number(m!.slice(0, 4))
     month = Number(m!.slice(5, 7))
+    // 2026-13 matched the shape and Date.UTC rolled it into January 2027, so a typed or truncated
+    // link drew a whole report for a month nobody asked for — headed "January" while the address
+    // said 13. There is no thirteenth month; say so.
+    if (month < 1 || month > 12) notFound()
   }
 
   const admin = createAdminClient()
