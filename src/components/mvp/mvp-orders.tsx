@@ -381,7 +381,7 @@ export default function MvpOrders() {
           {/* ── HISTORY — closed and settled ────────────────────────── */}
           {tab === 'history' && (
             <>
-              {!chUnknown && receipts.length > 0 && <SectionHead label="All time" right={`${dollars(receipts.reduce((s, c) => s + (charges?.[c.draft.id]?.accruedCents ?? 0), 0))} billed`} />}
+              {!chUnknown && receipts.length > 0 && <SectionHead label="All time" right={`${dollars(receipts.reduce((s, c) => s + (payments[c.draft.id]?.totalCents ?? 0) + (charges?.[c.draft.id]?.accruedCents ?? 0), 0))} billed`} />}
               {receipts.length === 0 ? (
                 <div className="ord-rise" style={{ background: '#fff', borderRadius: 16, boxShadow: CARD_SHADOW, padding: '28px 18px', textAlign: 'center', fontSize: 13.5, color: C.mute, lineHeight: 1.5 }}>
                   No receipts yet.<br />Finished and stopped campaigns land here.

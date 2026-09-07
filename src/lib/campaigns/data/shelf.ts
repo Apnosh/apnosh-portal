@@ -8,7 +8,7 @@
  * Client-safe: pure data and pure functions.
  */
 import { CREATE_CATALOG } from './create-catalog'
-import { priceLabel, ITEM_PRICES } from '../builder/item-prices'
+import { chargedPriceLabel, chargedItemPrice } from '../builder/item-prices'
 import { availabilityFor, type CardAvailability } from './catalog-availability'
 import { etaLabelFor } from './service-turnaround'
 import { REQUEST_TYPES } from '@/lib/requests/catalog'
@@ -130,9 +130,10 @@ const CREATIVE_FACTS: Record<string, { g: Exclude<ShelfGoal, 'foryou'>; ch: stri
 }
 
 function priceNumber(id: string): number {
-  const p = (ITEM_PRICES as Record<string, { oneTime?: number; perMonth?: number } | undefined>)[id]
+  // The charged number (fee inside), so the price filter sorts on what the card will actually bill.
+  const p = chargedItemPrice(id)
   if (!p) return 0
-  return Math.round(p.oneTime ?? 0) || Math.round(p.perMonth ?? 0) || 0
+  return p.oneTime > 0 ? p.oneTime : p.perMonth
 }
 
 const DEFAULT_GET = ['A plan you approve before anything starts', 'Made by your Apnosh team, on your brand', 'Results on your Home and Insights']
@@ -144,7 +145,7 @@ function build(): Record<string, ShelfCard> {
     if (!f) continue
     const avail = availabilityFor(c.id)
     if (avail === 'hidden') continue
-    const label = priceLabel(c.id)
+    const label = chargedPriceLabel(c.id)
     out[c.id] = {
       id: c.id, title: c.title, sub: f.sub ?? '', price: label ?? 'Quote', priceN: priceNumber(c.id), cadence: label?.includes('/mo') ? (label.includes('+') ? 'To start, then monthly' : 'Monthly') : 'One-time',
       kind: f.k, goal: f.g, stage: f.st, you: f.you, ready: f.ready ?? etaLabelFor(c.id).replace(/^~/, ''), channels: f.ch, plain: f.plain, get: f.get ?? DEFAULT_GET, syn: f.syn,
