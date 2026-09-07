@@ -448,6 +448,27 @@ export async function sendMessage(threadId: string, content: string): Promise<Ac
       if (ownerId) {
         await notifyNewMessage(supabase, ownerId, profile.full_name, threadInfo.subject)
       }
+      // A person answered them. The reply promise is only kept if the owner LEARNS they were
+      // answered, so it leaves the app too. Best-effort and inert without RESEND_API_KEY; the
+      // in-app row above is unchanged either way.
+      try {
+        const { data: bizRow } = await supabase
+          .from('businesses')
+          .select('client_id')
+          .eq('id', threadInfo.business_id)
+          .maybeSingle()
+        const clientId = (bizRow as { client_id?: string } | null)?.client_id
+        if (clientId) {
+          const { emailClientOwners } = await import('@/lib/notifications')
+          await emailClientOwners(clientId, {
+            subject: `${profile.full_name || 'Your team'} replied`,
+            body: `${content.slice(0, 500)}`,
+            link: '/dashboard/messages',
+          })
+        }
+      } catch (e) {
+        console.warn('[messages] reply email failed:', (e as Error)?.message)
+      }
     } else {
       // Client sent message → notify all admins
       const adminIds = await getAdminUserIds(supabase)

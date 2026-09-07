@@ -133,9 +133,13 @@ export async function recordRequestPromise(args: { clientId: string; requestId: 
 export async function reanchorPromise(args: { campaignId: string | null; serviceId: string | null; deliveredISO: string }): Promise<void> {
   if (!args.campaignId || !args.serviceId) return
   const a = createAdminClient()
-  const { data } = await a.from('order_promises').select('id, client_id, metric_key, count_from, state').eq('campaign_id', args.campaignId).eq('service_id', args.serviceId)
+  const { data } = await a.from('order_promises').select('id, client_id, label, metric_key, count_from, state').eq('campaign_id', args.campaignId).eq('service_id', args.serviceId)
   const deliveredOn = args.deliveredISO.slice(0, 10)
-  for (const row of (data ?? []) as { id: string; client_id: string; metric_key: string; count_from: string; state: string }[]) {
+  // The day the owner was told to expect a number moves here. Silently moving it is how a card
+  // shows a zero the owner did not earn on a day nobody warned them about, so we keep the ONE
+  // moved row that best represents this order and tell them at the end.
+  let moved: { clientId: string; label: string; countFrom: string; showsOn: string } | null = null
+  for (const row of (data ?? []) as { id: string; client_id: string; label: string; metric_key: string; count_from: string; state: string }[]) {
     if (row.state === 'not_counted' || row.state === 'held') continue
     const spec = specsForService(args.serviceId).find((sp) => sp.metric === row.metric_key)
     if (!spec || spec.metric === 'delivered_files') continue
@@ -143,6 +147,36 @@ export async function reanchorPromise(args: { campaignId: string | null; service
     if (countFrom <= row.count_from) continue
     let bv: number | null = null, bd: number | null = null
     try { const b = await baseline(row.client_id, spec.metric, countFrom, 30); bv = b.value; bd = b.reportedDays } catch { /* keep the mint baseline */ }
-    await a.from('order_promises').update({ count_from: countFrom, shows_on: shiftDays(countFrom, spec.windowDays), baseline_value: bv, baseline_days: bd, updated_at: new Date().toISOString() }).eq('id', row.id)
+    const showsOn = shiftDays(countFrom, spec.windowDays)
+    const { error } = await a.from('order_promises').update({ count_from: countFrom, shows_on: showsOn, baseline_value: bv, baseline_days: bd, updated_at: new Date().toISOString() }).eq('id', row.id)
+    // Only a row that actually moved earns the notice. The LATEST showing day is the one the
+    // owner should hold in their head, so a service with two metrics tells them the later one.
+    if (!error && (!moved || showsOn > moved.showsOn)) {
+      moved = { clientId: row.client_id, label: row.label, countFrom, showsOn }
+    }
+  }
+  if (moved) await tellOwnerTheDateMoved(moved, deliveredOn)
+}
+
+/** Plain day, the way an owner says it: "Sep 12". */
+function plainDay(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+  if (!y || !m || !d) return iso.slice(0, 10)
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })
+}
+
+/** One notice per re-anchor. Best-effort: the window still moved if this fails. */
+async function tellOwnerTheDateMoved(moved: { clientId: string; label: string; countFrom: string; showsOn: string }, deliveredOn: string): Promise<void> {
+  try {
+    const { notifyClientOwners } = await import('@/lib/notifications')
+    await notifyClientOwners(moved.clientId, {
+      kind: 'date_moved',
+      title: 'Your date moved',
+      body: `Your ${moved.label} count now starts ${plainDay(moved.countFrom)}, because the work landed ${plainDay(deliveredOn)}. It shows on Home ${plainDay(moved.showsOn)}.`,
+      link: '/dashboard',
+      email: true,
+    })
+  } catch (e) {
+    console.warn('[promises] date-moved notice failed:', (e as Error)?.message)
   }
 }

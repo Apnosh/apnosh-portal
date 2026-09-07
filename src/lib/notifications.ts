@@ -35,6 +35,9 @@ export type NotificationKind =
   | 'channel_broken'
   | 'request_update'
   | 'booking_reminder'
+  // The count window moved because the work landed later than the order date. One row per
+  // re-anchor, written by reanchorPromise (src/lib/promises/record.ts).
+  | 'date_moved'
 
 export interface NotificationRow {
   id: string
@@ -147,7 +150,7 @@ export async function notifyStaffForClient(
  */
 export async function notifyClientOwners(
   clientId: string,
-  payload: { kind: NotificationKind; title: string; body?: string; link?: string },
+  payload: { kind: NotificationKind; title: string; body?: string; link?: string; email?: boolean },
 ): Promise<{ notified: number }> {
   const admin = createAdminClient()
 
@@ -178,7 +181,40 @@ export async function notifyClientOwners(
     console.warn('[notifications] client-owner fan-out failed:', error.message)
     return { notified: 0 }
   }
+  // A notification the owner only sees by opening the app is not a notification. The few events
+  // that are worth a phone buzzing also go out by email: the order they placed, the work landing,
+  // their count starting, their date moving, and a person answering them. Opt-in per call, never
+  // a blanket on every kind, so a digest or a nudge can never become a mailshot.
+  if (payload.email) {
+    await emailClientOwners(clientId, { subject: payload.title, body: payload.body, link: payload.link })
+  }
   return { notified: ids.size }
+}
+
+/**
+ * Email the client's owners the same words the in-app row carries. Best-effort and inert without
+ * RESEND_API_KEY (sendEmailIfConfigured logs and returns { sent: false }), so this is safe to wire
+ * everywhere today and starts working the day the key lands in Vercel.
+ */
+export async function emailClientOwners(
+  clientId: string,
+  payload: { subject: string; body?: string; link?: string },
+): Promise<{ sent: boolean }> {
+  try {
+    const { sendEmailIfConfigured, ownerEmailsForClient } = await import('@/lib/email/send')
+    const to = await ownerEmailsForClient(clientId)
+    if (!to.length) return { sent: false }
+    const base = process.env.NEXT_PUBLIC_APP_URL || 'https://portal.apnosh.com'
+    const where = payload.link ? `\n\n${base}${payload.link.startsWith('/') ? payload.link : `/${payload.link}`}` : ''
+    return await sendEmailIfConfigured({
+      to,
+      subject: payload.subject,
+      text: `${payload.body ?? payload.subject}${where}\n\nApnosh`,
+    })
+  } catch (e) {
+    console.warn('[notifications] owner email failed:', (e as Error)?.message)
+    return { sent: false }
+  }
 }
 
 /**

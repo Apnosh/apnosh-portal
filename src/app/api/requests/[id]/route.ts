@@ -120,6 +120,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         title,
         body: row.team_note ? String(row.team_note).slice(0, 300) : undefined,
         link: '/dashboard/requests',
+        // Two moments are worth a phone buzzing: the work landing, and a person answering.
+        // Every other status move stays an in-app row.
+        email: body.status === 'delivered' || (noteChanged && body.status === undefined),
       })
     } catch (e) {
       console.error('[requests] owner notify failed (update still saved)', e)
