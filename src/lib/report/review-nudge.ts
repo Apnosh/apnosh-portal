@@ -7,10 +7,13 @@ import 'server-only'
  * we can report on?". That is two cheap head counts — a Google day, or a review — over the
  * previous month. No report, no banner: the owner never gets sent to an empty page.
  *
- * The dollar figure is what they actually paid us last month (paid orders only), so the banner
- * never claims a spend that did not happen; when there is none the copy drops the number.
+ * The dollar figure is what they actually paid us last month and we kept, so the banner never
+ * claims a spend that did not happen; when there is none the copy drops the number. Kept means
+ * the same rule the Pro gate uses (paidOrders): status paid, a real paid_at, no dispute — a
+ * refunded or charged-back order is not last month's spend.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
+import { paidOrders } from '@/lib/entitlements-server'
 
 export interface ReviewNudge {
   /** last month, e.g. 'August' */
@@ -42,13 +45,15 @@ export async function getReviewNudge(clientId: string): Promise<ReviewNudge | nu
         .eq('client_id', clientId).gte('date', startIso.slice(0, 10)).lt('date', endIso.slice(0, 10)),
       admin.from('reviews').select('id', { count: 'exact', head: true })
         .eq('client_id', clientId).gte('posted_at', startIso).lt('posted_at', endIso),
-      admin.from('campaign_payments').select('total_cents')
-        .eq('client_id', clientId).eq('status', 'paid').gte('paid_at', startIso).lt('paid_at', endIso),
+      // No number is better than a wrong one, so a failed read here drops the dollar figure
+      // and the banner still shows.
+      paidOrders(admin, clientId, 'total_cents', startIso, endIso).catch(() => []),
     ])
     const hasData = (gbp.count ?? 0) > 0 || (reviews.count ?? 0) > 0
     if (!hasData) return null
 
-    const cents = (payments.data ?? []).reduce((n, p) => n + (Number((p as { total_cents: number }).total_cents) || 0), 0)
+    const cents = (payments as { total_cents: number | null }[])
+      .reduce((n, p) => n + (Number(p.total_cents) || 0), 0)
     return {
       prevMonthLabel: start.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' }),
       cycleLabel: now.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' }),

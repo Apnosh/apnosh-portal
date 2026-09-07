@@ -13,7 +13,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { isProClient } from '@/lib/entitlements'
+import { isProClient } from '@/lib/entitlements-server'
 import { buildAnalystPayload } from '@/lib/insights/analyst-payload'
 import { runAnalyst, funnelFromPayload, ANALYST_MODEL, READ_VERSION } from '@/lib/insights/analyst'
 import type { InsightsWindow } from '@/lib/insights/compute-stages'
