@@ -237,6 +237,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // The owner shipping a team-run campaign is the handoff signal: tell the staff
   // assigned to this client so the "your team is preparing each piece" promise is
   // real. DIY ships are owner-run, so no handoff. Best-effort; never blocks save.
+  if (justShipped && campaign.draft.path === 'diy') {
+    const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    ;(async () => {
+      const { recordCampaignPromises } = await import('@/lib/promises/record')
+      await recordCampaignPromises(campaign, id, shipISO)
+    })().catch(() => {})
+  }
   if (justShipped && campaign.draft.path !== 'diy') {
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
@@ -302,6 +309,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // is what closes the audit's #1 gap: services used to mint NOTHING and had no "done". Idempotent
     // + best-effort; a failure here must never break the ship.
     const swo = await mintServiceWorkOrders(campaign, shipISO).catch(() => ({ minted: 0, expected: 0, error: 'threw' }))
+    // THE PROMISE, RECORDED: the count this order exists to move, when it starts, and the number
+    // before — written now so Home's "Counted, as promised" strip is a read, not a composition.
+    // Best-effort; pre-migration-253 the insert fails and is swallowed.
+    ;(async () => {
+      const { recordCampaignPromises } = await import('@/lib/promises/record')
+      await recordCampaignPromises(campaign, id, shipISO)
+    })().catch(() => {})
     // Work this ship hands to Apnosh: any included, non-opted-out line the owner is NOT
     // running themselves. A pure owner-run plan (every line producer 'diy', e.g. the free
     // self-serve gbp version) creates no order to review and nothing for a team to build.
