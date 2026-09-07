@@ -5,6 +5,9 @@ import { paymentsTable } from '@/lib/campaigns/checkout-server'
 import { confirmBookingForPayment } from '@/lib/campaigns/gates/booking-server'
 import { ensureCampaignSubscription } from '@/lib/campaigns/campaign-subscription-server'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
+import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
+import { deskBill } from '@/lib/requests/desk-bill'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
@@ -26,6 +29,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const paymentIntentId = body.paymentIntentId as string | undefined
   const campaignId = body.campaignId as string | undefined
+  const requestId = typeof body.requestId === 'string' ? body.requestId : undefined
   if (!paymentIntentId) return NextResponse.json({ error: 'paymentIntentId required' }, { status: 400 })
 
   const { data: row } = await paymentsTable()
@@ -36,6 +40,10 @@ export async function POST(req: NextRequest) {
 
   const access = await checkClientAccess(row.client_id as string)
   if (!access.authorized) return denied(access.reason)
+
+  // A DESK order: the work is minted HERE, on the far side of a verified charge, instead of at the
+  // moment the owner tapped Confirm. Everything below this block is the campaign lane.
+  if (requestId) return completeDeskOrder(paymentIntentId, requestId, row.client_id as string, row.stripe_tax_calculation_id as string | null)
 
   // Already reconciled — hand back the same campaign, no double work. Still confirm the shoot booking
   // AND ensure the monthly subscription (both idempotent) in case a prior attempt linked the campaign
@@ -102,4 +110,48 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, campaignId: boundCampaignId ?? null })
+}
+
+/**
+ * Finish a paid DESK order.
+ *
+ * The verification is the campaign lane's own — verifyAndLinkCheckoutPayment — which proves the row
+ * exists, belongs to this client, is really captured at Stripe, and covers the bill, then binds it.
+ * Only after all four does the work order mint. FAILS CLOSED: an unverified payment mints nothing
+ * and says why.
+ */
+async function completeDeskOrder(paymentIntentId: string, requestId: string, clientId: string, taxCalculationId: string | null) {
+  const admin = createAdminClient()
+  const { data: reqRaw } = await admin.from('creative_requests').select('*').eq('id', requestId).maybeSingle()
+  const reqRow = reqRaw as Record<string, unknown> | null
+  if (!reqRow) return NextResponse.json({ error: 'That order does not exist.' }, { status: 404 })
+  // Tenancy: the payment's client and the order's client must be the same account.
+  if (String(reqRow.client_id ?? '') !== clientId) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+  const cadence = reqRow.cadence === 'monthly' ? 'monthly' as const : 'once' as const
+  const bill = deskBill(reqRow.quote_cents as number | null, cadence)
+  const verified = await verifyAndLinkCheckoutPayment({
+    paymentIntentId,
+    clientId,
+    requestId,
+    preTaxCents: bill.preTaxCents,
+  })
+  if (!verified.ok) return NextResponse.json({ ok: false, error: verified.reason }, { status: 402 })
+
+  // The tax transaction, so the collected tax is reportable. Best-effort, same as the cart.
+  if (taxCalculationId) {
+    try {
+      const txn = await stripe.tax.transactions.createFromCalculation({ calculation: taxCalculationId, reference: `req_${requestId}` })
+      await paymentsTable().update({ stripe_tax_transaction_id: txn.id }).eq('stripe_payment_intent_id', paymentIntentId)
+    } catch { /* the tax was collected on the charge; the reporting transaction is non-critical */ }
+  }
+
+  const { data: payRow } = await paymentsTable().select('id').eq('stripe_payment_intent_id', paymentIntentId).maybeSingle()
+  const { finalizePaidDeskOrder } = await import('@/lib/requests/desk-order')
+  const done = await finalizePaidDeskOrder({
+    requestId,
+    paymentRowId: (payRow as { id?: string } | null)?.id ?? null,
+    intentId: paymentIntentId,
+  })
+  return NextResponse.json({ ok: done.ok, requestId, workOrderId: done.workOrderId, ...(done.warnings.length ? { warnings: done.warnings } : {}) })
 }

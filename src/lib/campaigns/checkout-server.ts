@@ -216,7 +216,10 @@ export function paymentsTable() {
 export async function verifyAndLinkCheckoutPayment(opts: {
   paymentIntentId: string
   clientId: string
-  campaignId: string
+  /** The campaign this charge paid for. Omitted for a DESK order, which has no campaign row. */
+  campaignId?: string
+  /** A Request Desk order's creative_requests id. Exactly one of the two is given. */
+  requestId?: string
   preTaxCents: number
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
   let row: { client_id?: string; status?: string; campaign_id?: string | null; subtotal_cents?: number; service_fee_cents?: number } | null = null
@@ -258,13 +261,21 @@ export async function verifyAndLinkCheckoutPayment(opts: {
   const paidPreTax = (row.subtotal_cents ?? 0) + (row.service_fee_cents ?? 0)
   if (paidPreTax < opts.preTaxCents) return { ok: false, reason: 'The amount paid does not cover this order.' }
 
-  // Bind the payment to the campaign (idempotent with /checkout/complete + the webhook backstop).
+  // Bind the payment to the order (idempotent with /checkout/complete + the webhook backstop).
+  // A desk order binds on request_id, which prepare already wrote, so there is nothing to link —
+  // only the paid stamp. The campaign lane keeps its "first write wins" guard on campaign_id.
   const nowISO = new Date().toISOString()
   try {
-    await paymentsTable()
-      .update({ status: 'paid', campaign_id: opts.campaignId, paid_at: nowISO, shipped_at: nowISO })
-      .eq('stripe_payment_intent_id', opts.paymentIntentId)
-      .is('campaign_id', null)
+    if (opts.requestId) {
+      await paymentsTable()
+        .update({ status: 'paid', request_id: opts.requestId, paid_at: nowISO, shipped_at: nowISO })
+        .eq('stripe_payment_intent_id', opts.paymentIntentId)
+    } else {
+      await paymentsTable()
+        .update({ status: 'paid', campaign_id: opts.campaignId, paid_at: nowISO, shipped_at: nowISO })
+        .eq('stripe_payment_intent_id', opts.paymentIntentId)
+        .is('campaign_id', null)
+    }
   } catch {
     /* the charge is verified paid; a link hiccup is reconciled by /complete + the webhook */
   }

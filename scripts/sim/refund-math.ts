@@ -11,6 +11,7 @@
 import { refundOwedCents, refundableCents, refundStatus, statusAfterDisputeWon, COLLECTED_STATUSES, SETTLED_STATUSES } from '@/lib/campaigns/refund-math'
 import { feeCentsOn, checkoutBill, monthlyPhrase } from '@/lib/campaigns/checkout-bill'
 import { priceCreativeRequest, fmtTotal } from '@/lib/requests/pricing'
+import { deskBill } from '@/lib/requests/desk-bill'
 import type { LineItem } from '@/lib/campaigns/types'
 import { Suite } from './lib'
 
@@ -114,10 +115,27 @@ function main() {
   s.check('desk: a monthly order carries NO fee line', !monthly?.lines.some((l) => l.label === 'Service fee'))
   s.eq('desk: the monthly total is exactly the monthly price', monthly?.totalCents, 56_000)
   s.check('desk: a monthly total is flagged so the screen can say what it is', monthly?.monthly === true)
-  // The desk stores one quote and mints one work order; nothing bills a second month. So the words
-  // are "the first month", not "a month" — a promise of a subscription that does not exist.
-  s.eq('desk: a monthly order is billed for the first month, not every month', fmtTotal(monthly!), '$560 for the first month')
+  // The desk now goes through the till: a monthly line saves the card and starts a real Stripe
+  // subscription with automatic_tax on it. So "a month" is true again — and the tax has to be in
+  // the sentence, because every monthly invoice adds it.
+  s.eq('desk: a monthly order says a month, with the tax it really adds', fmtTotal(monthly!), '$560 a month, plus tax')
   s.check('desk: a one-time order says no such thing', !fmtTotal(desk!).includes('month'))
+
+  s.group('the desk order, sent back')
+  // A desk order has no charge ledger — it is ONE thing, made by one work order. So "delivered" is
+  // all of the subtotal or none of it, and the same proration does the rest.
+  const DESK_PAID = { totalCents: 17_820, subtotalCents: 15_000, refundedCents: 0 }
+  s.eq('the work never landed → the whole charge, fee and tax included', refundOwedCents(DESK_PAID, 0), 17_820)
+  s.eq('the work landed → nothing goes back', refundOwedCents(DESK_PAID, 15_000), 0)
+  s.eq('a partial refund already sent is never sent twice', refundOwedCents({ ...DESK_PAID, refundedCents: 10_000 }, 0), 7_820)
+  // A monthly-only desk order is keyed to a SetupIntent and was never charged upfront; the math
+  // must not invent a refund out of a zero subtotal.
+  s.eq('a monthly-only desk order has nothing upfront to send back', refundOwedCents({ totalCents: 0, subtotalCents: 0, refundedCents: 0 }, 0), 0)
+  // The split the payment row is written from has to reproduce the sheet's own fee, or a desk
+  // refund prorates against a subtotal that was never charged.
+  const split = deskBill(desk!.totalCents, 'once')
+  s.eq('the payment row’s subtotal is the sheet’s own work total', split.subtotalCents, desk!.totalCents - (desk!.lines.find((l) => l.label === 'Service fee')?.amountCents ?? 0))
+  s.eq('and its two halves add to the charge', split.subtotalCents + split.serviceFeeCents, desk!.totalCents)
 
   const ok = s.report('Money that can go backwards — refund math + one fee')
   process.exit(ok ? 0 : 1)

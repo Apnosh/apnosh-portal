@@ -35,6 +35,8 @@ export interface PaidCharge extends PaidBill {
   paymentIntentId: string
   clientId: string
   campaignId: string
+  /** A Request Desk order's id, when this charge paid for one instead of a campaign. */
+  requestId: string
   currency: string
   taxTransactionId: string | null
   taxReversalId: string | null
@@ -95,6 +97,59 @@ export async function getPaidCharge(campaignId: string): Promise<PaidChargeResul
   }
 }
 
+/**
+ * The paid charge for a DESK order. Same contract as getPaidCharge, keyed on request_id.
+ *
+ * A separate read rather than a parameter on that one, because a pre-258 database has no
+ * request_id column: the filter errors, and an errored read must come back as ok:false ("we could
+ * not read"), never as "there is no charge". Money is never sent back on a read we did not get.
+ */
+export async function getPaidChargeForRequest(requestId: string): Promise<PaidChargeResult> {
+  if (!requestId) return { ok: true, paid: null }
+  try {
+    const { data, error } = await createAdminClient()
+      .from('campaign_payments')
+      .select('*')
+      .eq('request_id', requestId)
+      .in('status', SETTLED_STATUSES)
+      .order('paid_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (error) return { ok: false, reason: `payment row unreadable: ${error.message}` }
+    if (!data) return { ok: true, paid: null }
+    return { ok: true, paid: toPaidCharge(data as Record<string, unknown>) }
+  } catch (e) {
+    return { ok: false, reason: `payment row unreadable: ${(e as Error)?.message ?? 'unknown error'}` }
+  }
+}
+
+/**
+ * What a DESK order has delivered, in cents.
+ *
+ * A desk order has no charge ledger — it is ONE thing, made by one work order, so the question is
+ * simply whether that work landed. Delivered (or approved) means the whole subtotal was earned;
+ * anything else means none of it was. Same fail-closed law as the campaign ledger: an unreadable
+ * work order returns ok:false, because "we could not read" looks exactly like "nothing was
+ * delivered", and that is the biggest refund this module can send.
+ */
+export async function getDeliveredForRequest(requestId: string, subtotalCents: number): Promise<DeliveredResult> {
+  if (!requestId) return { ok: false, reason: 'no order' }
+  try {
+    const { data, error } = await createAdminClient()
+      .from('creator_work_orders')
+      .select('status')
+      .eq('campaign_piece_key', `request:${requestId}`)
+      .limit(1)
+      .maybeSingle()
+    if (error) return { ok: false, reason: `work order unreadable: ${error.message}` }
+    const status = (data as { status?: string } | null)?.status ?? ''
+    const landed = status === 'delivered' || status === 'approved' || status === 'done'
+    return { ok: true, deliveredCents: landed ? Math.max(0, Math.round(subtotalCents)) : 0, staleIds: [] }
+  } catch (e) {
+    return { ok: false, reason: `work order unreadable: ${(e as Error)?.message ?? 'unknown error'}` }
+  }
+}
+
 /** What we say when the bank is still holding the money. Never "nothing is owed". */
 export const DISPUTE_OPEN =
   'A bank dispute is open on this order, so we cannot send anything back until it closes. Our team is on it.'
@@ -136,6 +191,7 @@ function toPaidCharge(row: Record<string, unknown>): PaidCharge | null {
     paymentIntentId: piId,
     clientId: String(row.client_id ?? ''),
     campaignId: String(row.campaign_id ?? ''),
+    requestId: String(row.request_id ?? ''),
     totalCents: Number(row.total_cents) || 0,
     subtotalCents: Number(row.subtotal_cents) || 0,
     refundedCents: Number(row.refunded_cents) || 0,
@@ -303,20 +359,24 @@ export async function owedRefundCents(campaignId: string): Promise<{
  *                    message already carries the number — one event, one message.
  */
 export async function refundCampaignPayment(opts: {
-  campaignId: string
+  campaignId?: string
+  /** A Request Desk order instead of a campaign. Exactly one of the two is given. */
+  requestId?: string
   amountCents?: number
   reason: string
   notifyOwner?: boolean
 }): Promise<RefundResult> {
-  const { campaignId, reason } = opts
-  if (!campaignId) return NOTHING('no campaign')
+  const { campaignId, requestId, reason } = opts
+  if (!campaignId && !requestId) return NOTHING('no order')
+  const orderRef = campaignId ? `campaign ${campaignId}` : `desk order ${requestId}`
+  const adminLink = campaignId ? `/admin/campaign-orders?focus=${campaignId}` : '/admin/requests'
 
   // 1. THE PAID ROW. No paid charge → no Stripe call, ever. An UNREADABLE paid row is not the same
   // thing: we do not know whether there is money to send back, so we say so and page a person
   // rather than telling the owner there is no charge.
-  const charge = await getPaidCharge(campaignId)
+  const charge = campaignId ? await getPaidCharge(campaignId) : await getPaidChargeForRequest(requestId!)
   if (!charge.ok) {
-    await pageAdmins('', 'A refund was held back', `We could not read the payment row for campaign ${campaignId} (${charge.reason}), so nothing was sent back. Settle it by hand.`, `/admin/campaign-orders?focus=${campaignId}`)
+    await pageAdmins('', 'A refund was held back', `We could not read the payment row for ${orderRef} (${charge.reason}), so nothing was sent back. Settle it by hand.`, adminLink)
     return NOTHING(REFUND_UNCONFIRMED)
   }
   const paid = charge.paid
@@ -329,9 +389,12 @@ export async function refundCampaignPayment(opts: {
   // delivered and which rows the refund voids — so it happens here, once, and a failure stops the
   // refund instead of guessing. Guessing here means guessing "nothing was delivered", which is the
   // largest refund we can send.
-  const delivered = await getDeliveredCharges(campaignId)
+  const delivered = campaignId
+    ? await getDeliveredCharges(campaignId)
+    // A desk order is one thing made by one work order: delivered is all of it, or none of it.
+    : await getDeliveredForRequest(requestId!, paid.subtotalCents)
   if (!delivered.ok) {
-    await pageAdmins(paid.clientId, 'A refund was held back', `We could not read what campaign ${campaignId} has delivered (${delivered.reason}), so nothing was sent back. Settle it by hand.`, `/admin/campaign-orders?focus=${campaignId}`)
+    await pageAdmins(paid.clientId, 'A refund was held back', `We could not read what ${orderRef} has delivered (${delivered.reason}), so nothing was sent back. Settle it by hand.`, adminLink)
     return NOTHING(REFUND_UNCONFIRMED)
   }
 
@@ -378,9 +441,9 @@ export async function refundCampaignPayment(opts: {
         payment_intent: paid.paymentIntentId,
         amount: want,
         reason: 'requested_by_customer',
-        metadata: { campaign_id: campaignId, client_id: paid.clientId, why: reason.slice(0, 400) },
+        metadata: { ...(campaignId ? { campaign_id: campaignId } : { request_id: requestId! }), client_id: paid.clientId, why: reason.slice(0, 400) },
       },
-      { idempotencyKey: `refund_${campaignId}_${want}_${alreadyCents}` },
+      { idempotencyKey: `refund_${campaignId ?? `req_${requestId}`}_${want}_${alreadyCents}` },
     )
     refundId = refund.id
     refundedNow = refund.amount || 0
@@ -389,8 +452,8 @@ export async function refundCampaignPayment(opts: {
     await notifyStaffForClient(paid.clientId, ['strategist'], {
       kind: 'payment',
       title: 'A refund did not go through',
-      body: `We tried to send back $${(want / 100).toFixed(2)} on a campaign and Stripe refused (${msg}). Do it in Stripe by hand.`,
-      link: `/admin/campaign-orders?focus=${campaignId}`,
+      body: `We tried to send back $${(want / 100).toFixed(2)} on an order and Stripe refused (${msg}). Do it in Stripe by hand.`,
+      link: adminLink,
     }).catch(() => ({ notified: 0 }))
     return NOTHING(`We could not send the money back (${msg}). Our team was told.`)
   }
@@ -475,10 +538,10 @@ export async function settleRefund(opts: {
       kind: 'payment',
       title: `We sent back ${dollars}`,
       body: `${reason} It lands on your card in 5 to 10 days.`,
-      link: campaignId ? `/dashboard/campaigns/${campaignId}` : '/dashboard/campaigns',
+      link: campaignId ? `/dashboard/campaigns/${campaignId}` : paid.requestId ? `/dashboard/requests/${paid.requestId}` : '/dashboard/campaigns',
     }).catch(() => ({ notified: 0 }))
   }
-  await pageAdmins(paid.clientId, `Refund sent: ${dollars}`, `${reason} Campaign ${campaignId || '(unlinked)'}. Refund ${refundId ?? '(taken outside the app)'}.${isFull ? ' The campaign was stopped and its monthly billing canceled.' : ''}`)
+  await pageAdmins(paid.clientId, `Refund sent: ${dollars}`, `${reason} ${campaignId ? `Campaign ${campaignId}` : paid.requestId ? `Desk order ${paid.requestId}` : '(unlinked)'}. Refund ${refundId ?? '(taken outside the app)'}.${isFull && campaignId ? ' The campaign was stopped and its monthly billing canceled.' : ''}`, campaignId ? undefined : '/admin/requests')
 }
 
 /**
