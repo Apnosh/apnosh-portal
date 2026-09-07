@@ -356,7 +356,7 @@ export const ES: Record<string, string> = {
   'Busy part of the year, quiet the rest': 'Una temporada fuerte, el resto tranquilo',
 
   /* ── Move 5b: the Create shelf card, its lane ladder and the door at the bottom ─────────── */
-  'fee inside': 'con todo incluido',
+  'fee inside': 'con la comisión incluida',
   'monthly, cancel any time': 'al mes, cancelas cuando quieras',
   'Free': 'Gratis',
   'In Pro': 'Con Pro',
@@ -372,8 +372,7 @@ export const ES: Record<string, string> = {
   'We do not have your Google numbers yet. This is the first step.': 'Todavía no tenemos tus números de Google. Este es el primer paso.',
   'Nothing fit? Ask {name}.': '¿Nada te sirve? Pregúntale a {name}.',
   'Nothing fit? Ask us.': '¿Nada te sirve? Pregúntanos.',
-  '{name} is already on your work. A real person replies {promise}.': '{name} ya está en tu trabajo. Una persona real responde {promise}.',
-  'A real person replies {promise}.': 'Una persona real responde {promise}.',
+  '{name} is already on your work.': '{name} ya está trabajando en lo tuyo.',
 
   /* ── Move 5b: the funnel's band words, drawn into the canvas ───────────────────────────── */
   'very low': 'muy bajo',

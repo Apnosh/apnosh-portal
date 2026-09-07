@@ -27,7 +27,7 @@ import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuy
 import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from '@/lib/campaigns/data/chip-shelf'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { curatedDetourFor } from '@/lib/campaigns/data/live-alternatives'
-import { REPLY_PROMISE } from '@/lib/reply-promise'
+import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
 import { CONTACT_KEY, firstName } from '../people-row'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
@@ -517,8 +517,11 @@ export default function CreatePage() {
     return (
       <div className="ask">
         <div style={{ fontWeight: 600, color: C.ink, marginBottom: 2 }}>{who ? T('Nothing fit? Ask {name}.', { name: who }) : T('Nothing fit? Ask us.')}</div>
+        {/* The promise sentence is REPLY_PROMISE_SENTENCE itself, not a second sentence built out
+            of the same words: two spellings meant two Spanish translations of one promise, and
+            they did not match. The name, when there is one, is its own short sentence in front. */}
         <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 8, lineHeight: 1.4 }}>
-          {who ? T('{name} is already on your work. A real person replies {promise}.', { name: who, promise: T(REPLY_PROMISE) }) : T('A real person replies {promise}.', { promise: T(REPLY_PROMISE) })}
+          {who ? `${T('{name} is already on your work.', { name: who })} ` : ''}{T(REPLY_PROMISE_SENTENCE)}
         </div>
         <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.ink, fontSize: 14, fontWeight: 600 }}>
           {who ? T('Message {name}', { name: who }) : T('Get help')}

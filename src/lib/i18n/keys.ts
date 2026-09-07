@@ -138,8 +138,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     '{n} of {total} done', '{title} is {price} today.', 'Order that instead',
     'We do not have your Google numbers yet. This is the first step.',
     'Nothing fit? Ask {name}.', 'Nothing fit? Ask us.',
-    '{name} is already on your work. A real person replies {promise}.',
-    'A real person replies {promise}.',
+    /* the promise itself is REPLY_PROMISE_SENTENCE, listed once under `reply` words below */
+    '{name} is already on your work.', 'A real person replies within one business day.',
   ],
 
   /* the promises ledger's own words (src/lib/promises/registry.ts) — the count line printed on
