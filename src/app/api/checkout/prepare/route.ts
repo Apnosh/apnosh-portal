@@ -168,6 +168,8 @@ export async function POST(req: NextRequest) {
       automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
       description: `Apnosh — ${draft.name || 'campaign'}`,
       metadata: { clientId, kind: 'campaign_checkout' },
+      // Stripe emails the receipt; before this the confirmation screen was the only trace of a charge.
+      ...('email' in cust && cust.email ? { receipt_email: cust.email } : {}),
     })
 
     const { error: insErr } = await paymentsTable().insert({

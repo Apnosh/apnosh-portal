@@ -142,3 +142,15 @@ export function formatItemPrice(p: ItemPrice | undefined | null): string | null 
 export function priceLabel(id: string): string | null {
   return formatItemPrice(ITEM_PRICES[id])
 }
+
+/** THE CHARGED price for a catalog id: the one-time amount with the 10% service fee folded in,
+ *  monthly untouched. The store card must print this, not the raw catalog number, or every card
+ *  understates the bill by 10% the day card checkout is live (checkout-bill.ts adds the fee). */
+export function chargedItemPrice(id: string): ItemPrice | null {
+  const p = ITEM_PRICES[id]
+  if (!p) return null
+  return { oneTime: p.oneTime > 0 ? withServiceFee(p.oneTime) : 0, perMonth: p.perMonth }
+}
+export function chargedPriceLabel(id: string): string | null {
+  return formatItemPrice(chargedItemPrice(id))
+}
