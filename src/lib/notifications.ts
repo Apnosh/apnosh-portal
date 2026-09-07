@@ -172,13 +172,19 @@ export async function notifyStaffForClient(
     const candidateIds = [...new Set(assignees.map(a => a.person_id))]
 
     // Of those, who has an active capability we care about?
-    const { data: caps } = await admin
+    const { data: caps, error: capsError } = await admin
       .from('person_capabilities')
       .select('person_id, capability')
       .in('person_id', candidateIds)
       .eq('status', 'active')
       .in('capability', [...capabilities, 'admin'])
 
+    // capability is an ENUM: one word that is not in role_capability makes Postgres refuse the
+    // whole query, which read here as "nobody is assigned" and paged every admin instead. Say it
+    // out loud so a typo is a line in the log, not a permanent quiet fallback.
+    if (capsError) {
+      console.warn(`[notifications] capability lookup failed for [${capabilities.join(', ')}]:`, capsError.message)
+    }
     recipients = [...new Set((caps ?? []).map(c => c.person_id))]
   }
 
