@@ -158,6 +158,31 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Mostly catering', 'Offices, parties, big orders',
     'Open for a season', 'Busy part of the year, quiet the rest',
   ],
+
+  /* MOVE 8 — the Home card, /dashboard/tell-a-friend, and the one line onboarding says on the
+     finish screen when a friend sent them. The public /owners/<slug> page draws these too; it is
+     rendered on the server in the OWNER's language. */
+  referral: [
+    'Tell a friend', 'Know an owner who would like this?', 'Give {amount}, get {amount}.',
+    'Your code', 'Send this link', 'Copied',
+    'They get {amount} off their first order. You get {amount} when their first order gets its number.',
+    'Your credit', '{amount} on your account', 'It comes off your next order.',
+    'Your friends', 'A friend', 'Nobody yet. Send your link to one owner you like.',
+    // the four states a friend can be in (STATUS_WORD in lib/referrals/model.ts)
+    'Signed up', 'First order in', 'You got your credit', 'Closed',
+    'Your page', 'Show my page', 'Other owners see your name and your counted numbers. Nothing else.',
+    'See my page',
+    'Not yet', 'This opens once one of your orders has its number.',
+    // the finish screen after setup
+    'Your friend {name} sent you.', 'A friend sent you.', '{amount} off your first order.',
+    // the public page
+    'An owner on Apnosh', 'What we counted for them',
+    'Real numbers from their account, counted after the work went live.',
+    'Start with {amount} off', 'Start with Apnosh',
+    '{name} sent you. Your first order starts with {amount} off.', '{name} works with Apnosh.',
+    // shared with other screens, drawn here too
+    'Loading…', 'Saved.', 'Could not save. Try again.', 'Saving...',
+  ],
 }
 
 /** Every key across every translated screen, once each. */

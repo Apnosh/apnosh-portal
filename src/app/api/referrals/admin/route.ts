@@ -23,7 +23,7 @@ async function requireAdmin() {
   return { ok: true as const, userId: user.id }
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const gate = await requireAdmin()
   if (!gate.ok) return NextResponse.json({ error: 'forbidden' }, { status: gate.status })
   const admin = createAdminClient()

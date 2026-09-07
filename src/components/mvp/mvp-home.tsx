@@ -1,6 +1,7 @@
 'use client'
 import CountedStrip from './counted-strip'
 import PeopleRow from './people-row'
+import TellAFriendCard from './tell-a-friend-card'
 
 /**
  * MVP Home — ported from the apnosh-mvp design (yejukim/apnosh-mvp,
@@ -300,6 +301,11 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             started, the number before. Renders nothing when there are no orders, so the funnel
             stays the whole page. Outside the SHOW_HOME_BODY guard on purpose. */}
         <CountedStrip clientId={clientId} />
+
+        {/* TELL A FRIEND (Move 8) — a proof-deck card, and the only place Home asks for a
+            referral. It draws NOTHING unless the server says the loop is open and this owner has
+            had a promise counted, so it sits right under the counted strip it depends on. */}
+        <TellAFriendCard clientId={clientId} />
 
         {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
             the owner. Flip the flag to bring back the suggestions, orders, and

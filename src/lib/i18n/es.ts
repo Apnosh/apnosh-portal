@@ -354,4 +354,43 @@ export const ES: Record<string, string> = {
   'Offices, parties, big orders': 'Oficinas, fiestas, pedidos grandes',
   'Open for a season': 'Abierto por temporada',
   'Busy part of the year, quiet the rest': 'Una temporada fuerte, el resto tranquilo',
+
+  /* ── Move 8: tell a friend ────────────────────────────────────────────────────────────── */
+  'Tell a friend': 'Dile a un amigo',
+  'Know an owner who would like this?': '¿Conoces a un dueño al que le serviría esto?',
+  'Give {amount}, get {amount}.': 'Regala {amount}, recibe {amount}.',
+  'Your code': 'Tu código',
+  'Send this link': 'Manda este enlace',
+  'Copied': 'Copiado',
+  'They get {amount} off their first order. You get {amount} when their first order gets its number.':
+    'Ellos reciben {amount} de descuento en su primer pedido. Tú recibes {amount} cuando ese primer pedido ya tiene su número.',
+  'Your credit': 'Tu crédito',
+  '{amount} on your account': '{amount} en tu cuenta',
+  'It comes off your next order.': 'Se descuenta de tu próximo pedido.',
+  'Your friends': 'Tus amigos',
+  'A friend': 'Un amigo',
+  'Nobody yet. Send your link to one owner you like.': 'Todavía nadie. Manda tu enlace a un dueño que te caiga bien.',
+  'Signed up': 'Ya se registró',
+  'First order in': 'Ya hizo su primer pedido',
+  'You got your credit': 'Ya tienes tu crédito',
+  'Closed': 'Cerrado',
+  'Your page': 'Tu página',
+  'Show my page': 'Mostrar mi página',
+  'Other owners see your name and your counted numbers. Nothing else.':
+    'Otros dueños ven tu nombre y tus números contados. Nada más.',
+  'See my page': 'Ver mi página',
+  'Not yet': 'Todavía no',
+  'This opens once one of your orders has its number.': 'Esto se abre cuando uno de tus pedidos ya tiene su número.',
+  'Your friend {name} sent you.': 'Tu amigo {name} te mandó.',
+  'A friend sent you.': 'Un amigo te mandó.',
+  '{amount} off your first order.': '{amount} de descuento en tu primer pedido.',
+  'An owner on Apnosh': 'Un dueño en Apnosh',
+  'What we counted for them': 'Lo que le contamos',
+  'Real numbers from their account, counted after the work went live.':
+    'Números reales de su cuenta, contados después de que el trabajo salió.',
+  'Start with {amount} off': 'Empieza con {amount} de descuento',
+  'Start with Apnosh': 'Empieza con Apnosh',
+  '{name} sent you. Your first order starts with {amount} off.':
+    '{name} te mandó. Tu primer pedido empieza con {amount} de descuento.',
+  '{name} works with Apnosh.': '{name} trabaja con Apnosh.',
 }

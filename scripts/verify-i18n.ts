@@ -123,6 +123,13 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
       'src/app/(auth)/onboarding/full/steps/step-shape.tsx',
       'src/app/(auth)/onboarding/full/steps/step-budget.tsx',
     ],
+    // MOVE 8 — the referral surfaces: the Home card, the owner's page, and the public page a
+    // friend opens. All three draw every string through t(), so all three are read here.
+    referral: [
+      'src/components/mvp/tell-a-friend-card.tsx',
+      'src/app/dashboard/tell-a-friend/page.tsx',
+      'src/app/owners/[slug]/page.tsx',
+    ],
     // `reply` and `chips` are data, not a screen, and `settings` is a page whose language row is
     // the only part this move translated — its file is listed here the day the rest of it is.
   }
