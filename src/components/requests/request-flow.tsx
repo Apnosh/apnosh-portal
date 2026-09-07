@@ -81,7 +81,9 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
   const [payFor, setPayFor] = useState<{ id: string; label: string } | null>(null)
   /* Cancelling sends money back, so it asks first. This holds the order mid-question. */
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null)
-  const [cancelMsg, setCancelMsg] = useState<string | null>(null)
+  /* The answer the server gave about ONE order, keyed to it. Unkeyed, the line printed under
+   * every card in the list: cancel one order and every other order said it was cancelled. */
+  const [cancelMsg, setCancelMsg] = useState<{ id: string; text: string } | null>(null)
   const { client } = useClient()
 
   const loadMine = useCallback(async () => {
@@ -147,7 +149,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
       const r = await fetch(`/api/requests/${id}/cancel`, { method: 'POST' })
       const d = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
-      setCancelMsg(typeof d.message === 'string' ? d.message : 'Your order is cancelled.')
+      setCancelMsg({ id, text: typeof d.message === 'string' ? d.message : 'Your order is cancelled.' })
       setConfirmCancel(null)
       await loadMine()
     } catch (e) {
@@ -350,9 +352,9 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                         )}
                       </div>
                     )}
-                    {cancelMsg && (
+                    {cancelMsg?.id === r.id && (
                       <div style={{ marginTop: 8, fontFamily: DESK.body, fontSize: 12.5, color: DESK.mintDeep, lineHeight: 1.45 }}>
-                        {cancelMsg}
+                        {cancelMsg.text}
                       </div>
                     )}
                     {/* the thread: every note both ways, oldest first */}
