@@ -88,8 +88,13 @@ export default function TellAFriendPage() {
       <div style={{ background: '#fff', minHeight: '100%', padding: '10px 16px 24px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {!state && <div style={{ fontSize: 13, color: C.mute, padding: '8px 4px' }}>{T('Loading…')}</div>}
 
-        {/* Not open, or no counted number yet: one honest sentence and nothing else. */}
-        {state && (!state.enabled || !state.eligible) && (
+        {/* TWO DIFFERENT "no", and they must not share a sentence. The loop being SHUT is not the
+            same as this owner not having a counted number yet, and telling somebody their orders
+            will open a door that does not exist is a promise we cannot keep. */}
+        {state && !state.enabled && (
+          <MvpEmpty icon={<Users size={20} />} title={T('Not open yet')} text={T('This is not running yet.')} />
+        )}
+        {state && state.enabled && !state.eligible && (
           <MvpEmpty
             icon={<Users size={20} />}
             title={T('Not yet')}

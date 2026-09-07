@@ -175,6 +175,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Your page', 'Show my page', 'Other owners see your name and your counted numbers. Nothing else.',
     'See my page',
     'Not yet', 'This opens once one of your orders has its number.',
+    // the OTHER "no": the loop itself is shut, which is not the same thing
+    'Not open yet', 'This is not running yet.',
     // the finish screen after setup
     'Your friend {name} sent you.', 'A friend sent you.', '{amount} off your first order.',
     // the public page

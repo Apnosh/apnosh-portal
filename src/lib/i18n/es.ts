@@ -382,6 +382,8 @@ export const ES: Record<string, string> = {
   'See my page': 'Ver mi página',
   'Not yet': 'Todavía no',
   'This opens once one of your orders has its number.': 'Esto se abre cuando uno de tus pedidos ya tiene su número.',
+  'Not open yet': 'Todavía no está abierto',
+  'This is not running yet.': 'Esto todavía no está funcionando.',
   'Your friend {name} sent you.': 'Te recomendó tu amigo {name}.',
   'A friend sent you.': 'Te recomendó un amigo.',
   '{amount} off your first order.': '{amount} de descuento en tu primer pedido.',
