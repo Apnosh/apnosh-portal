@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { referralsEnabled } from '@/lib/referral-gate'
+import { settledCentsFor } from '@/lib/referrals/server'
 
 /**
  * /api/referrals/admin — the staff view of the loop, and the one way to kill a referral by hand.
@@ -9,6 +10,12 @@ import { referralsEnabled } from '@/lib/referral-gate'
  * GET  → every code, every referral and every credit, newest first, with the business names filled
  *        in. Read only.
  * POST → { referralId, reason } voids a referral AND whatever is unspent of its credits.
+ *
+ * WHAT "UNSPENT" MEANS. Not "consumed_at is null" — that field is stamped the moment a checkout
+ * HOLDS a credit, so a credit sitting in an abandoned tab looked spent and survived the void; a
+ * fraud ring only had to open checkout to keep its $50. Spent means the payments ledger has a
+ * collected order that took the money. Nothing collected, the credit dies. Something collected,
+ * only what is LEFT dies: the credit is written down to the amount that really came off a bill.
  *
  * A SPENT CREDIT IS NEVER TAKEN BACK, here or anywhere. If a referral we should not have paid has
  * already come off a bill the owner paid, that money is theirs; the void stops the rest. Staff who
@@ -71,14 +78,30 @@ export async function POST(req: NextRequest) {
       .update({ status: 'void', voided_at: now, void_reason: reason })
       .eq('id', referralId)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    // Only what is UNSPENT. consumed_at is null is the whole of that rule.
-    const { data: killed } = await admin.from('client_credits')
-      .update({ voided_at: now, void_reason: reason })
+    // Only what is UNSPENT — and the ledger, not the credit row, is what says so.
+    const { data: rows } = await admin.from('client_credits')
+      .select('id, cents')
       .eq('referral_id', referralId)
-      .is('consumed_at', null)
       .is('voided_at', null)
-      .select('id')
-    return NextResponse.json({ ok: true, creditsVoided: killed?.length ?? 0 })
+    let creditsVoided = 0, creditsTrimmed = 0
+    for (const c of (rows ?? []) as { id: string; cents: number }[]) {
+      const settled = await settledCentsFor(c.id)
+      // Unreadable: leave it alone rather than kill a credit an owner may have already spent.
+      if (settled == null) continue
+      if (settled <= 0) {
+        const { data } = await admin.from('client_credits')
+          .update({ voided_at: now, void_reason: reason, held_cents: 0, consumed_intent_id: null })
+          .eq('id', c.id).is('voided_at', null).select('id')
+        if (data?.length) creditsVoided += 1
+      } else if (settled < (c.cents || 0)) {
+        // Part of it already came off a bill somebody paid. That part is theirs; the rest is not.
+        const { data } = await admin.from('client_credits')
+          .update({ cents: settled, consumed_cents: settled, held_cents: 0, consumed_intent_id: null, void_reason: reason })
+          .eq('id', c.id).is('voided_at', null).select('id')
+        if (data?.length) creditsTrimmed += 1
+      }
+    }
+    return NextResponse.json({ ok: true, creditsVoided, creditsTrimmed })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not void it.' }, { status: 500 })
   }

@@ -392,7 +392,7 @@ export async function claimFriendCredit(clientId: string, intentKey: string, max
  * $50 off a $50 credit. The ledger cannot be talked into that: every collected order that used the
  * credit is a row, and the sum of those rows is what is gone.
  */
-async function settledCentsFor(creditId: string): Promise<number | null> {
+export async function settledCentsFor(creditId: string): Promise<number | null> {
   try {
     const { data, error } = await createAdminClient()
       .from('campaign_payments')
