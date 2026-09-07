@@ -22,6 +22,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { requestTypeById, summaryLine, type RequestAnswers } from '@/lib/requests/catalog'
 import { mintRequestWorkOrder } from '@/lib/requests/bridge'
 import { deskPaymentDue, acceptGoesToTill, AWAITING_PAYMENT, DESK_NEEDS_PAYMENT } from '@/lib/requests/desk-guards'
+import { campaignCheckoutEnabled } from '@/lib/checkout-gate'
 import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 import { notifyStaffForClient } from '@/lib/notifications'
 
@@ -84,7 +85,11 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
    * the far side of the charge (finalizePaidDeskOrder). A quote of $0 still mints on the yes,
    * because there is nothing to pay. */
   const quoteCents = (row.quote_cents as number | null) ?? null
-  if (acceptGoesToTill(quoteCents)) {
+  /* The same switch every other card path reads. With it off the desk's prepare answers
+   * checkoutClosed, so sending the yes to awaiting_payment parked the owner where no card can be
+   * taken and no button goes forward. Shut till, the yes mints the work and the bill follows the
+   * approval, which is what the screen says too. */
+  if (acceptGoesToTill(quoteCents, campaignCheckoutEnabled())) {
     const { data: sentToTill, error: tillErr } = await admin
       .from('creative_requests')
       .update({ status: AWAITING_PAYMENT, accepted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -135,14 +140,19 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'Could not accept. Try again.' }, { status: 500 })
   }
 
-  /* Staff hear the yes immediately — this is the moment work starts. */
+  /* Staff hear the yes immediately — this is the moment work starts. When a PRICED quote mints
+   * because the till is shut, the same notice carries the bill: the owner was told we send it
+   * after they approve, and a person has to send it. Nothing else in the app will. */
   try {
     const type = requestTypeById(String(row.type))
     const cents = Number(row.quote_cents) || 0
+    const owed = cents > 0
     await notifyStaffForClient(clientId, ['strategist', 'designer'], {
       kind: 'client_signoff',
       title: `Accepted: ${summaryLine(String(row.type), (row.brief ?? {}) as RequestAnswers)}`,
-      body: `The owner said yes${cents ? ` at $${(cents / 100).toFixed(0)}` : ''}. ${type?.label ?? 'The work'} is now in progress.`,
+      body: owed
+        ? `The owner said yes at $${(cents / 100).toFixed(0)}. ${type?.label ?? 'The work'} is now in progress. Card checkout is off, so they were told the bill comes after they approve the work: send the $${(cents / 100).toFixed(0)} invoice then.`
+        : `The owner said yes. ${type?.label ?? 'The work'} is now in progress. Nothing to bill on this one.`,
       link: '/admin/requests',
     })
   } catch (e) {

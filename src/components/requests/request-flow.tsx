@@ -21,7 +21,7 @@ import {
 } from '@/lib/requests/catalog'
 import CreativeFlow from '@/components/requests/creative-flow'
 import DeskCheckout from '@/components/requests/desk-checkout'
-import { acceptGoesToTill, deskCancelable } from '@/lib/requests/desk-guards'
+import { acceptGoesToTill, acceptPromiseLine, deskCancelable } from '@/lib/requests/desk-guards'
 import { useClient } from '@/lib/client-context'
 
 interface RequestNote {
@@ -84,6 +84,10 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
   /* The answer the server gave about ONE order, keyed to it. Unkeyed, the line printed under
    * every card in the list: cancel one order and every other order said it was cancelled. */
   const [cancelMsg, setCancelMsg] = useState<{ id: string; text: string } | null>(null)
+  /* Can the till take a card at all? The server answers with the list, because the accept button's
+   * promise has to match what the accept route will do. Assumed SHUT until the server says
+   * otherwise: a screen that guesses open would promise a card at a closed till. */
+  const [tillOpen, setTillOpen] = useState(false)
   const { client } = useClient()
 
   const loadMine = useCallback(async () => {
@@ -91,6 +95,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
       const r = await fetch('/api/requests')
       const d = await r.json().catch(() => ({}))
       setMine(Array.isArray(d.requests) ? d.requests : [])
+      setTillOpen(d.tillOpen === true)
     } catch {
       setMine([])
     }
@@ -266,13 +271,15 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                         {r.team_note}
                       </div>
                     )}
-                    {/* THE YES. A quote with a price goes to the same till everything else does:
-                        the button says so, and the card opens on this tap. It used to promise
-                        "you review the finished work before paying", which was the desk's last
-                        free-work lane, with no invoice behind the promise. A $0 quote is the one
-                        yes that still starts work on its own, and it says that instead. */}
+                    {/* THE YES. With the card till open, a priced quote goes to the same till
+                        everything else does: the button says so, and the card opens on this tap.
+                        With the till OFF (today) the yes starts the work and the bill follows the
+                        approval, the same lane the graphic orders run, and the line says exactly
+                        that. It used to promise "you review the finished work before paying" in
+                        both states, which was a lie in one of them. A $0 quote is the one yes that
+                        starts work on its own under either switch. */}
                     {r.status === 'quoted' && (() => {
-                      const pays = acceptGoesToTill(r.quote_cents)
+                      const pays = acceptGoesToTill(r.quote_cents, tillOpen)
                       const amount = pays ? `$${((r.quote_cents ?? 0) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : null
                       return (
                       <div style={{ marginTop: 10 }}>
@@ -290,7 +297,7 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                           {busy === r.id ? 'Starting...' : pays ? `Say yes and pay ${amount}` : 'Say yes, start the work'}
                         </button>
                         <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.mute, marginTop: 6, textAlign: 'center', lineHeight: 1.45 }}>
-                          {pays ? 'Your card opens next. Your team starts the same day it clears.' : 'Nothing to pay on this one. Your team starts today.'}
+                          {acceptPromiseLine(pays, r.quote_cents)}
                         </div>
                       </div>
                       )

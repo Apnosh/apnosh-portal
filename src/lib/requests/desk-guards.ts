@@ -112,10 +112,11 @@ export interface DeskAcceptRow {
  *   • the owner placed it and the till priced it → it lands 'awaiting_payment' and pays first
  *   • a person quoted it → it lands 'quoted' and the owner's yes is what starts it
  *
- * The second one is the accept path and stays exactly as it was. The first must never reach it: an
- * unpaid order that mints work is free work, which is how the desk ran for months. The till-row
- * check is the belt on top of the braces — a 'quoted' row with a payment started and never
- * collected is the same unpaid order under a different status.
+ * The second one is the accept path, and since Move 5b that yes goes to the till too whenever the
+ * till is open (see acceptGoesToTill). The first must never reach the accept path at all: an unpaid
+ * order that mints work is free work, which is how the desk ran for months. The till-row check is
+ * the belt on top of the braces - a 'quoted' row with a payment started and never collected is the
+ * same unpaid order under a different status.
  */
 export function deskPaymentDue(row: DeskAcceptRow): boolean {
   if (row.paidAt) return false
@@ -129,17 +130,54 @@ export const DESK_NEEDS_PAYMENT = 'DESK_NEEDS_PAYMENT'
 /**
  * The owner said yes to a PERSON'S quote. Does that yes go to the till, or straight to work?
  *
- * To the till, whenever the quote asks for money. This lane was the last free work left in the
- * desk: the yes minted a work order on the spot and the money was "on delivery", which is a
- * promise with nobody holding it and no row anywhere that says it is owed. One yes, one card,
- * the same desk checkout the owner's own orders use.
+ * To the till, whenever the quote asks for money AND the till can take a card. This lane was the
+ * last free work left in the desk: the yes minted a work order on the spot and the money was "on
+ * delivery", which is a promise with nobody holding it and no row anywhere that says it is owed.
+ * One yes, one card, the same desk checkout the owner's own orders use.
  *
- * A quote of ZERO still mints on the yes, because there is nothing to pay: a fix we owe, a piece
- * we are comping. That is the one place the desk gives work away, and it is a decision a person
- * made when they wrote the quote, not a hole in the till.
+ * BUT THE TILL HAS A KILL SWITCH, and today it is off (CAMPAIGN_CHECKOUT_ENABLED unset). Sending
+ * the yes to a shut till left the owner on a dead end: the row sat in awaiting_payment and the
+ * desk's prepare answered checkoutClosed, so there was no way forward and no way back. So when the
+ * till is shut the yes goes back to minting the work, and the copy on both sides says the true
+ * thing: the team starts now and the bill follows the approval, which is the lane the graphic
+ * orders already run (design-copy.ts 'done.sub.order').
+ *
+ * A quote of ZERO still mints on the yes even with the till open, because there is nothing to pay:
+ * a fix we owe, a piece we are comping. That is the one place the desk gives work away, and it is
+ * a decision a person made when they wrote the quote, not a hole in the till.
+ *
+ * `tillOpen` is campaignCheckoutEnabled() on the server and the same flag echoed to the screen by
+ * GET /api/requests, so the button and the route can never disagree about what the yes will do.
  */
-export function acceptGoesToTill(quoteCents: number | null | undefined): boolean {
+export function acceptGoesToTill(quoteCents: number | null | undefined, tillOpen = true): boolean {
+  if (!tillOpen) return false
   return typeof quoteCents === 'number' && Number.isFinite(quoteCents) && quoteCents > 0
+}
+
+/** What the owner is told the yes will do. One sentence, and it must be true under both switches. */
+export function acceptPromiseLine(pays: boolean, quoteCents: number | null | undefined): string {
+  if (pays) return 'Your card opens next. Your team starts the same day it clears.'
+  if (typeof quoteCents === 'number' && quoteCents > 0) {
+    return 'Your team starts now. We send the bill after you approve the work.'
+  }
+  return 'Nothing to pay on this one. Your team starts today.'
+}
+
+/**
+ * Is this admin status move blocked because the order is already PAID?
+ *
+ * Money makes a status one-way. 'quoted' is the door the owner's yes walks through, and the yes
+ * mints work or opens a card; a paid order pushed back to 'quoted' offers a second yes on money
+ * already taken, and the accept route's own paid_at check would then wave it straight through to
+ * a free mint. Refuse it at the door instead. Returns the reason, or null when the move is fine.
+ *
+ * Pure so the admin board and the route read the same rule. Absent paid_at (pre-258) means unpaid,
+ * which is right: pre-258 the till could not take a card at all.
+ */
+export function adminStatusBlockedByPayment(nextStatus: string | null | undefined, paidAt: string | null | undefined): string | null {
+  if (!paidAt) return null
+  if (String(nextStatus ?? '') !== 'quoted') return null
+  return 'This order is already paid. It cannot go back to a quote. Refund it if the price was wrong.'
 }
 
 /**
