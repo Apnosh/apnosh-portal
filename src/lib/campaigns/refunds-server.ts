@@ -73,20 +73,48 @@ export async function getPaidCharge(campaignId: string): Promise<PaidCharge | nu
       .limit(1)
       .maybeSingle()
     if (error || !data) return null
-    const row = data as Record<string, unknown>
-    const piId = String(row.stripe_payment_intent_id ?? '')
-    if (!piId) return null
-    return {
-      paymentIntentId: piId,
-      clientId: String(row.client_id ?? ''),
-      campaignId,
-      totalCents: Number(row.total_cents) || 0,
-      subtotalCents: Number(row.subtotal_cents) || 0,
-      refundedCents: Number(row.refunded_cents) || 0,
-      currency: String(row.currency ?? 'usd'),
-      taxTransactionId: (row.stripe_tax_transaction_id as string | null) ?? null,
-      taxReversalId: (row.stripe_tax_reversal_id as string | null) ?? null,
-    }
+    return toPaidCharge(data as Record<string, unknown>)
+  } catch {
+    return null
+  }
+}
+
+/** campaign_payments row → PaidCharge. Null when the row has no PaymentIntent to act on. */
+function toPaidCharge(row: Record<string, unknown>): PaidCharge | null {
+  const piId = String(row.stripe_payment_intent_id ?? '')
+  if (!piId) return null
+  return {
+    paymentIntentId: piId,
+    clientId: String(row.client_id ?? ''),
+    campaignId: String(row.campaign_id ?? ''),
+    totalCents: Number(row.total_cents) || 0,
+    subtotalCents: Number(row.subtotal_cents) || 0,
+    refundedCents: Number(row.refunded_cents) || 0,
+    currency: String(row.currency ?? 'usd'),
+    taxTransactionId: (row.stripe_tax_transaction_id as string | null) ?? null,
+    taxReversalId: (row.stripe_tax_reversal_id as string | null) ?? null,
+  }
+}
+
+/**
+ * The charge row for one PaymentIntent, WHATEVER its status.
+ *
+ * getPaidCharge deliberately refuses a refunded or disputed row, because it answers "can we send
+ * money back?". This one answers a different question — "what do we have to settle now that money
+ * HAS gone back?" — for a refund we did not make: one taken in the Stripe dashboard, or the bank's
+ * own pull on a lost dispute. By then the row already says 'refunded'.
+ */
+export async function getChargeByPaymentIntent(paymentIntentId: string): Promise<PaidCharge | null> {
+  if (!paymentIntentId) return null
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('campaign_payments')
+      .select('*')
+      .eq('stripe_payment_intent_id', paymentIntentId)
+      .maybeSingle()
+    if (error || !data) return null
+    return toPaidCharge(data as Record<string, unknown>)
   } catch {
     return null
   }
@@ -315,15 +343,57 @@ export async function refundCampaignPayment(opts: {
   // alone still stops isCampaignCheckoutPaid from claiming a fully refunded order is covered.
   await stampRefund(paid, totalRefunded, refundId)
 
-  // 6. THE LEDGER. Void the charge rows the read above already identified as work that never
-  // landed, so nothing we did not do can be invoiced later or counted as delivered. Rows for
-  // delivered work — and rows already invoiced or paid — are left exactly alone.
-  await voidStaleCharges(delivered.staleIds)
+  // 6-9. THE SETTLEMENT: the ledger, the production stop, the tax, the people. Shared with refunds
+  // we did NOT make (see settleRefund below), because a dashboard refund has to leave the campaign
+  // in the same state as one we sent ourselves.
+  await settleRefund({
+    paid,
+    refundedNowCents: refundedNow,
+    isFull,
+    refundId,
+    reason,
+    staleIds: delivered.staleIds,
+    notifyOwner: opts.notifyOwner !== false,
+  })
 
-  // 7. Everything that would keep charging or keep accruing. Only on a FULL refund: a partial
-  // refund is a credit for one piece, not the end of the campaign, and must not quietly stop the
-  // work the owner is still paying for.
-  if (isFull) {
+  return { ok: true, refundedCents: refundedNow, totalRefundedCents: totalRefunded, refundId }
+}
+
+/**
+ * Everything that has to happen once money HAS gone back, whoever sent it.
+ *
+ * refundCampaignPayment calls this after its own Stripe refund. The webhook calls it for a refund
+ * we did not make — one taken by hand in the Stripe dashboard, or the bank's own pull on a lost
+ * dispute — so those land the campaign in exactly the same state instead of only flipping a status
+ * column and leaving the work running.
+ *
+ * Every step is best-effort and logged: the money is already back, and none of this may undo it.
+ */
+export async function settleRefund(opts: {
+  paid: PaidCharge
+  refundedNowCents: number
+  /** The whole charge went back → the campaign is over: stop production, cancel the subscription. */
+  isFull: boolean
+  /** Our Stripe refund id, or null for a refund we did not make (the tax reference falls back). */
+  refundId: string | null
+  reason: string
+  /** Charge rows for work that never landed. Omit when the ledger could not be read — we then
+   *  void nothing rather than voiding on a guess. */
+  staleIds?: string[]
+  notifyOwner: boolean
+}): Promise<void> {
+  const { paid, refundedNowCents, isFull, refundId, reason } = opts
+  const campaignId = paid.campaignId
+
+  // THE LEDGER. Void the charge rows for work that never landed, so nothing we did not do can be
+  // invoiced later or counted as delivered. Rows for delivered work — and rows already invoiced or
+  // paid — are left exactly alone.
+  await voidStaleCharges(opts.staleIds ?? [])
+
+  // Everything that would keep charging or keep accruing. Only on a FULL refund: a partial refund
+  // is a credit for one piece, not the end of the campaign, and must not quietly stop the work the
+  // owner is still paying for.
+  if (isFull && campaignId) {
     try {
       const { stopCampaign } = await import('./work-orders')
       await stopCampaign(campaignId)       // voids never-started creator work → no further payout accrual
@@ -334,24 +404,68 @@ export async function refundCampaignPayment(opts: {
     } catch (e) { console.warn('[refund] subscription cancel failed', (e as Error)?.message) }
   }
 
-  // 8. THE TAX. A committed Stripe Tax transaction is a reported sale; money going back has to go
-  // back in the tax report too. Best-effort + logged: the refund itself already succeeded and must
-  // never be undone by a reporting hiccup.
-  await reverseTax(paid, refundedNow, isFull, refundId)
+  // THE TAX. A committed Stripe Tax transaction is a reported sale; money going back has to go back
+  // in the tax report too. Best-effort + logged: the refund itself already succeeded and must never
+  // be undone by a reporting hiccup.
+  await reverseTax(paid, refundedNowCents, isFull, refundId)
 
-  // 9. THE PEOPLE. Plain words, real numbers.
-  const dollars = `$${(refundedNow / 100).toFixed(2)}`
-  if (opts.notifyOwner !== false) {
+  // THE PEOPLE. Plain words, real numbers.
+  const dollars = `$${(refundedNowCents / 100).toFixed(2)}`
+  if (opts.notifyOwner) {
     await notifyClientOwners(paid.clientId, {
       kind: 'payment',
       title: `We sent back ${dollars}`,
       body: `${reason} It lands on your card in 5 to 10 days.`,
-      link: `/dashboard/campaigns/${campaignId}`,
+      link: campaignId ? `/dashboard/campaigns/${campaignId}` : '/dashboard/campaigns',
     }).catch(() => ({ notified: 0 }))
   }
-  await pageAdmins(paid.clientId, `Refund sent: ${dollars}`, `${reason} Campaign ${campaignId}. Refund ${refundId}.${isFull ? ' The campaign was stopped and its monthly billing canceled.' : ''}`)
+  await pageAdmins(paid.clientId, `Refund sent: ${dollars}`, `${reason} Campaign ${campaignId || '(unlinked)'}. Refund ${refundId ?? '(taken outside the app)'}.${isFull ? ' The campaign was stopped and its monthly billing canceled.' : ''}`)
+}
 
-  return { ok: true, refundedCents: refundedNow, totalRefundedCents: totalRefunded, refundId }
+/**
+ * The stale charge rows for a campaign, or [] when the ledger cannot be read.
+ *
+ * Used by the webhook, where a refund has ALREADY happened: there is no "abort" left to take, so an
+ * unreadable ledger means we void nothing (and say so) instead of voiding on a guess.
+ */
+export async function staleChargeIds(campaignId: string): Promise<string[]> {
+  if (!campaignId) return []
+  const d = await getDeliveredCharges(campaignId)
+  if (!d.ok) { console.warn('[refund] ledger unreadable, voided nothing:', d.reason); return [] }
+  return d.staleIds
+}
+
+/**
+ * True when the owner was already told about a refund on this campaign in the last `minutes`.
+ *
+ * The guard for the one case we cannot tell apart: before migration 254 there is no
+ * stripe_refund_id column, so a refund WE sent and a refund taken in the dashboard look identical
+ * to the webhook. Rather than stay silent (and never tell them about a dashboard refund) or speak
+ * twice, it checks whether the message is already there.
+ */
+export async function refundAlreadyAnnounced(campaignId: string, minutes = 10): Promise<boolean> {
+  if (!campaignId) return false
+  try {
+    const admin = createAdminClient()
+    const since = new Date(Date.now() - minutes * 60_000).toISOString()
+    const { data, error } = await admin
+      .from('notifications')
+      .select('id')
+      .eq('type', 'payment')
+      .eq('link', `/dashboard/campaigns/${campaignId}`)
+      .like('title', 'We sent back %')
+      .gte('created_at', since)
+      .limit(1)
+    if (error) return false
+    return (data?.length ?? 0) > 0
+  } catch {
+    return false
+  }
+}
+
+/** Write a refund onto the payment row from outside this module (the webhook). Never throws. */
+export async function stampRefundOnRow(paid: PaidCharge, totalRefundedCents: number, refundId: string | null): Promise<void> {
+  await stampRefund(paid, totalRefundedCents, refundId)
 }
 
 // ── the small, boring halves ────────────────────────────────────────────────
@@ -404,17 +518,26 @@ async function voidStaleCharges(staleIds: string[]): Promise<number> {
 /**
  * Reverse the committed Stripe Tax transaction for the part of the sale that went back. 'full'
  * when the whole charge was refunded, 'partial' (with the flat amount, negative, as Stripe wants)
- * otherwise. Skipped when there was no tax transaction or one was already reversed.
+ * otherwise. Skipped only when there was no tax transaction to reverse.
+ *
+ * ONE REVERSAL PER REFUND. It used to skip whenever stripe_tax_reversal_id was already set, so a
+ * second partial refund reversed no tax at all and the tax report kept a sale we had given back.
+ * The guard against reversing the SAME refund twice is the reference, which is keyed to the refund
+ * id: a retry collides with a duplicate-reference error instead of double-reversing.
+ *
+ * LIMITATION: the row stores one reversal id, so after several partials it holds the LATEST, not
+ * all of them. Every reversal is still on the Stripe transaction itself, which is the tax record
+ * that matters; our column is a pointer, not the ledger.
  */
-async function reverseTax(paid: PaidCharge, refundedNow: number, isFull: boolean, refundId: string): Promise<void> {
-  if (!paid.taxTransactionId || paid.taxReversalId) return
+async function reverseTax(paid: PaidCharge, refundedNow: number, isFull: boolean, refundId: string | null): Promise<void> {
+  if (!paid.taxTransactionId) return
   try {
     const reversal = await stripe.tax.transactions.createReversal({
       mode: isFull ? 'full' : 'partial',
       original_transaction: paid.taxTransactionId,
       // Must be unique across all transactions; keyed to the refund so a retry collides
       // (a duplicate-reference error) instead of reversing the same tax twice.
-      reference: `${paid.paymentIntentId}-rev-${refundId}`,
+      reference: `${paid.paymentIntentId}-rev-${refundId ?? `ext-${refundedNow}`}`,
       ...(isFull ? {} : { flat_amount: -Math.abs(refundedNow) }),
     })
     const admin = createAdminClient()

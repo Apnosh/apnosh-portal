@@ -789,7 +789,14 @@ async function handleChargeRefunded(supabase: AdminClient, charge: Stripe.Charge
 
   const total = Number(row.total_cents) || 0
   const status = refunded >= total && total > 0 ? 'refunded' : refunded > 0 ? 'partially_refunded' : row.status
-  const weStartedIt = !!row.stripe_refund_id         // our own refunds-server already told the owner
+  const isFull = total > 0 && refunded >= total
+  const campaignId = String(row.campaign_id ?? '')
+  const clientId = String(row.client_id ?? '')
+  // Did OUR refund path send this? It stamps stripe_refund_id, so a match means the settlement has
+  // already run and this event is only the echo. Pre-254 that column does not exist, so we cannot
+  // tell — and then we treat it as external (settle it) but check whether the owner has already
+  // been told, so they never read "We sent back $X" twice for one refund.
+  const weStartedIt = !!row.stripe_refund_id
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (supabase as any)
@@ -805,24 +812,56 @@ async function handleChargeRefunded(supabase: AdminClient, charge: Stripe.Charge
   }
 
   const dollars = `$${(refunded / 100).toFixed(2)}`
-  const clientId = String(row.client_id ?? '')
   try {
     const { getAdminUserIds, createNotification } = await import('@/lib/notify')
-    const { notifyClientOwners } = await import('@/lib/notifications')
     for (const adminId of await getAdminUserIds(supabase)) {
       await createNotification({ supabase, userId: adminId, type: 'payment', title: 'Refund recorded', body: `${dollars} was refunded on a campaign charge (${piId}). The order is now ${status.replace('_', ' ')}.`, link: '/admin/campaign-orders' })
     }
-    // A refund done by hand in the Stripe dashboard is the owner's news too. Skipped when our own
-    // refund path started it, because that path already told them.
-    if (!weStartedIt && clientId) {
-      await notifyClientOwners(clientId, {
-        kind: 'payment',
-        title: `We sent back ${dollars}`,
-        body: 'It lands on your card in 5 to 10 days.',
-        link: row.campaign_id ? `/dashboard/campaigns/${row.campaign_id}` : '/dashboard/campaigns',
-      })
-    }
   } catch (e) { console.warn('[stripe] refund notify failed', (e as Error)?.message) }
+
+  // A refund we did not make is a refund all the same: someone in the Stripe dashboard just took
+  // money back on a campaign that is still running. Flipping a status column and stopping there
+  // left the work minted, the subscription billing, the ledger rows standing and the tax
+  // transaction reported. So it gets the SAME settlement our own path runs.
+  if (weStartedIt) return
+  await settleExternalRefund({ campaignId, clientId, piId, refundedNow: refunded - known, isFull })
+}
+
+/**
+ * The settlement for a refund that did not come from refundCampaignPayment: taken by hand in the
+ * Stripe dashboard, or the bank's own pull on a lost dispute.
+ *
+ * FULL → the campaign is over: void the undelivered charge rows, stop production, cancel the
+ * subscription, reverse the tax, tell everyone.
+ * PARTIAL → a credit for one piece. The row is already stamped above; this only tells the people,
+ * because stopping a campaign the owner is still paying for would be the wrong repair.
+ */
+async function settleExternalRefund(opts: {
+  campaignId: string
+  clientId: string
+  piId: string
+  refundedNow: number
+  isFull: boolean
+}) {
+  try {
+    const { getChargeByPaymentIntent, settleRefund, staleChargeIds, refundAlreadyAnnounced } =
+      await import('@/lib/campaigns/refunds-server')
+    const paid = await getChargeByPaymentIntent(opts.piId)
+    if (!paid) return
+    // Pre-254 we cannot prove this was not our own refund, so we check the owner's own inbox
+    // rather than risk saying "We sent back $X" a second time for one event.
+    const notifyOwner = !(await refundAlreadyAnnounced(opts.campaignId))
+    await settleRefund({
+      paid,
+      refundedNowCents: opts.refundedNow,
+      isFull: opts.isFull,
+      refundId: null,
+      reason: 'A refund was made on this order.',
+      // Only a FULL refund voids work: on a partial, the rest of the order stands.
+      staleIds: opts.isFull ? await staleChargeIds(opts.campaignId) : [],
+      notifyOwner,
+    })
+  } catch (e) { console.warn('[stripe] external refund settlement failed', (e as Error)?.message) }
 }
 
 /**
