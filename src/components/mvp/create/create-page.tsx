@@ -29,6 +29,7 @@ import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { SHAPE_LABEL, DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
+import { useLang } from '../mvp-language'
 
 const C = { ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', fill: '#f5f5f7', mint: '#4abd98', mintDk: '#2e9a78', mintSoft: '#eaf7f3', amberInk: '#8a5a0c', amberBg: '#fbf3e4' }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
@@ -277,6 +278,7 @@ export default function CreatePage() {
   const router = useRouter()
   const params = useSearchParams()
   const { client } = useClient()
+  const { T } = useLang()
   const clientId = client?.id
   // the view lives in the URL so back works and a product can be shared
   const view: View = useMemo(() => {
@@ -484,14 +486,14 @@ export default function CreatePage() {
           {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
               monthly_budget null, and this pill never prints a number the owner did not say. */}
           <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
-            {cap == null ? 'Set a budget' : `Up to ${money(cap)} to start`}
+            {cap == null ? T('Set a budget') : T('Up to {amount} to start', { amount: money(cap) })}
           </button>
-          {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{SHAPE_LABEL[shape].title}</span>}
+          {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{T(SHAPE_LABEL[shape].title)}</span>}
         </div>
         <div className="filters cc-scroll" style={{ paddingTop: 0 }}>
           {ordered.map((c) => {
             const on = c === activeChip
-            return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(false) }} className={`fch${on ? ' on' : ''}`}>{c}</button>
+            return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(false) }} className={`fch${on ? ' on' : ''}`}>{T(c)}</button>
           })}
         </div>
       </>
@@ -550,10 +552,10 @@ export default function CreatePage() {
         <SayBox />
         <Examples />
 
-        <Sec t={SHELF_TITLE_FOR_SHAPE[shape]} s={`${ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet'} · ${underCap.length} you can order today`} hue={CHIP_HUE[activeChip] ?? 'mint'} />
+        <Sec t={T(SHELF_TITLE_FOR_SHAPE[shape])} s={`${T(ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet')} · ${T('{n} you can order today', { n: underCap.length })}`} hue={CHIP_HUE[activeChip] ?? 'mint'} />
         {underCap.length === 0 ? (
           <div style={{ padding: '0 16px', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}>
-            <b style={{ color: C.ink }}>Nothing here yet for this one.</b> Everything we could do for it is below, with the reason it is not ready.
+            <b style={{ color: C.ink }}>{T('Nothing here yet for this one.')}</b> {T('Everything we could do for it is below, with the reason it is not ready.')}
           </div>
         ) : (
           <div style={{ padding: '0 12px' }}>{underCap.map((id, i) => <ShelfRow key={id} id={id} reason={reasonFor(id, i)} />)}</div>
@@ -561,7 +563,7 @@ export default function CreatePage() {
 
         {overCap.length > 0 && cap != null && (
           <>
-            <Sec t={`Above ${money(cap)} to start`} s={`${overCap.length} more, once you raise it`} hue="amber" />
+            <Sec t={T('Above {amount} to start', { amount: money(cap) })} s={T('{n} more, once you raise it', { n: overCap.length })} hue="amber" />
             <div style={{ padding: '0 12px' }}>
               {overCap.map((id) => { const c = cards[id]; if (!c) return null
                 return (
@@ -569,7 +571,7 @@ export default function CreatePage() {
                     <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
                       <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{c.price} · {c.ready}</span></span>
                     </button>
-                    <button type="button" className="btn ghost" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => setBudgetSheet(true)}>Raise budget</button>
+                    <button type="button" className="btn ghost" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => setBudgetSheet(true)}>{T('Raise budget')}</button>
                   </div>
                 ) })}
             </div>
@@ -579,7 +581,7 @@ export default function CreatePage() {
         {laterIds.length > 0 && (
           <div style={{ margin: '18px 16px 0' }}>
             <button type="button" onClick={() => setShowLater((v) => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, border: 'none', background: C.fill, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
-              <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: C.ink }}>Coming later for this goal · {laterIds.length}</span>
+              <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: C.ink }}>{T('Coming later for this goal')} · {laterIds.length}</span>
               <ChevronDown size={16} color={C.faint} style={{ transform: showLater ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
             </button>
             {showLater && (
@@ -590,7 +592,7 @@ export default function CreatePage() {
                       <span className="t" style={{ display: 'block', fontSize: 14 }}>{cards[id]?.title ?? shelfTitle(id)}</span>
                       <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>{notSellableReason(id)}</span>
                     </span>
-                    <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${cards[id]?.title ?? shelfTitle(id)} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>Tell me when</Link>
+                    <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${cards[id]?.title ?? shelfTitle(id)} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>{T('Tell me when')}</Link>
                   </div>
                 ))}
               </div>
@@ -754,17 +756,17 @@ export default function CreatePage() {
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
         <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
           <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line, margin: '0 auto 12px' }} />
-          <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>What feels right to start?</div>
-          <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>You can change it any time. Nothing is charged now.</div>
+          <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{T('What feels right to start?')}</div>
+          <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>{T('You can change it any time. Nothing is charged now.')}</div>
           {BUDGET_CHIPS.map((b) => { const on = cap != null && budgetCapForChip(b) === cap
             const noCap = NO_CAP_BUDGET_CHIPS.includes(b)
             return (
               <button key={b} type="button" onClick={() => setBudget(noCap ? null : b)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
                 <span style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? C.mintDk : C.line}`, background: on ? C.mintDk : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{on && <Check size={12} strokeWidth={3} />}</span>
-                <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{b}
+                <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{T(b)}
                   {/* Both of these set no cap, so the row says what happens instead of leaving
                       the owner to guess at a ceiling we would have invented. */}
-                  {noCap && <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.mute, marginTop: 1 }}>No cap set. Everything shows.</span>}
+                  {noCap && <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.mute, marginTop: 1 }}>{T('No cap set. Everything shows.')}</span>}
                 </span>
               </button>
             ) })}

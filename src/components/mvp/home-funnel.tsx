@@ -32,6 +32,8 @@ import { useRouter } from 'next/navigation'
 import { useMvpTheme } from './mvp-theme'
 import { isShelfShape, type ShelfShape } from '@/lib/clients/shape'
 import { stageLabelFor, stageSubFor, emptyLineFor } from '@/lib/clients/shape-words'
+import { useLang } from './mvp-language'
+import { t, type Lang } from '@/lib/i18n/t'
 
 /* the browser's local calendar date — the server must never guess the client's timezone */
 function localYmd(): string {
@@ -264,7 +266,7 @@ function drawEmblem(ctx: CanvasRenderingContext2D, ox: number, oy: number, r: nu
  *  computeHome falls back to deriving them from the raw actions. */
 export interface StageCounts { interest?: number; actions?: number; retention?: number }
 
-export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts, yoyAbs?: FunnelYoYAbs | null, /** the business's shape, so a truck is not told about its walk-ins. Undefined = storefront words. */ shape?: ShelfShape | null) {
+export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts, yoyAbs?: FunnelYoYAbs | null, /** the business's shape, so a truck is not told about its walk-ins. Undefined = storefront words. */ shape?: ShelfShape | null, /** the owner's language; the shape map runs first, then the words are translated. */ lang?: Lang) {
 
   const total = Math.max(0, views.total)
   // Awareness folds SOCIAL reach into the Google views (top of funnel = "people who saw you").
@@ -295,8 +297,11 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   // The stage WORDS route through one map keyed on the shape; the structure, the numbers and
   // the order below are untouched. A storefront (and a client never asked) reads the fallbacks,
   // which are the exact words that were here before.
-  const L = (k: Parameters<typeof stageLabelFor>[0], w: string) => stageLabelFor(k, shape, w)
-  const S = (k: Parameters<typeof stageSubFor>[0], w: string) => stageSubFor(k, shape, w)
+  // Shape first, then language: the shape decides WHICH English sentence is true for this
+  // business, and t() says it in their language. Composing them this way means a new shape word
+  // needs one translation, not six.
+  const L = (k: Parameters<typeof stageLabelFor>[0], w: string) => t(stageLabelFor(k, shape, w), lang)
+  const S = (k: Parameters<typeof stageSubFor>[0], w: string) => t(stageSubFor(k, shape, w), lang)
   const stages: HStage[] = [
     { key: 'shown', label: L('shown', 'Awareness'), sub: S('shown', awareSub), count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: `${pct(engaged, total)} in 100 engaged`, emblem: 'eye', deltaYoY: yoy?.awareness ?? null, deltaAbs: yoyAbs?.awareness ?? null, insightsStage: 'discovery' },
     { key: 'engaged', label: L('engaged', 'Interest'), sub: S('engaged', 'website visits & clicks'), count: engaged, zone: 'measured', tag: 'Real · Google', conv: `${pct(acted, engaged)}% took a step`, emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
@@ -447,7 +452,8 @@ export default function HomeFunnel({
    * only bends the stage WORDS (shape-words.ts); nothing about the layout or the numbers reads
    * it. A client with no shape yet is a storefront, which is the copy that was always here. */
   const shape: ShelfShape | null = isShelfShape(bellClient?.shape) ? bellClient.shape : null
-  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts, yoyAbs, shape), [views, actions, walkInRate, avgTicket, currency, yoy, counts, yoyAbs, shape])
+  const { lang, T } = useLang()
+  const { stages } = useMemo(() => computeHome(views, actions, walkInRate, avgTicket, currency, yoy ?? null, counts, yoyAbs, shape, lang), [views, actions, walkInRate, avgTicket, currency, yoy, counts, yoyAbs, shape, lang])
 
   const geom = useRef({ W: 400 })
 
@@ -1204,7 +1210,7 @@ export default function HomeFunnel({
           {RANGES.filter(([k]) => !bar || k !== 'custom').map(([k, label]) => {
             const on = curRange === k
             return (
-              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: bar ? '10px 0' : '8px 0', fontSize: bar ? 13.5 : 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }} aria-label={label}>{bar ? (k === 'custom' ? <CalendarDays size={15} style={{ verticalAlign: '-2px' }} /> : k === '12m' ? '1y' : k) : label.replace('Last ', '').replace('year', 'Year')}</button>
+              <button key={k} type="button" onClick={() => pickRange(k)} style={{ flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', border: 'none', background: on ? (theme === 'dark' ? 'rgba(255,255,255,0.16)' : '#fff') : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: bar ? '10px 0' : '8px 0', fontSize: bar ? 13.5 : 12.5, fontWeight: on ? 700 : 500, cursor: 'pointer', boxShadow: on && theme !== 'dark' ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s, color .15s' }} aria-label={T(label)}>{bar ? (k === 'custom' ? <CalendarDays size={15} style={{ verticalAlign: '-2px' }} /> : k === '12m' ? '1y' : k) : T(label).replace('Last ', '').replace('year', 'Year')}</button>
             )
           })}
         </div>
@@ -1376,6 +1382,7 @@ export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
   // promised "directions", the one thing it has no use for.
   const { client } = useClient()
   const emptyLine = emptyLineFor(isShelfShape(client?.shape) ? client.shape : null)
+  const { lang: emptyLang, T } = useLang()
   const spine = [56, 44, 34, 26]
   return (
     <div style={{ height, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '28px 18px', boxSizing: 'border-box', overflow: 'hidden', position: 'relative' }}>
@@ -1390,9 +1397,9 @@ export function HomeFunnelEmpty({ height = 620 }: { height?: number }) {
       </div>
       <div style={{ position: 'absolute', left: 18, right: 18, top: '50%', transform: 'translateY(-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
         <div style={{ background: C.card, borderRadius: 20, padding: '20px 18px', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.10)', maxWidth: 340 }}>
-          <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: C.ink }}>Your numbers show here</div>
-          <div style={{ fontSize: 14, color: C.mute, marginTop: 6, lineHeight: 1.5 }}>{emptyLine}</div>
-          <a href="/dashboard/connected-accounts" style={{ display: 'inline-block', marginTop: 14, padding: '12px 22px', borderRadius: 99, background: 'linear-gradient(135deg, #4abd98, #2e9a78)', color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none', boxShadow: '0 8px 22px rgba(74,189,152,.34)' }}>Connect accounts</a>
+          <div style={{ fontFamily: DISPLAY, fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em', color: C.ink }}>{T('Your numbers show here')}</div>
+          <div style={{ fontSize: 14, color: C.mute, marginTop: 6, lineHeight: 1.5 }}>{t(emptyLine, emptyLang)}</div>
+          <a href="/dashboard/connected-accounts" style={{ display: 'inline-block', marginTop: 14, padding: '12px 22px', borderRadius: 99, background: 'linear-gradient(135deg, #4abd98, #2e9a78)', color: '#fff', fontSize: 15, fontWeight: 700, textDecoration: 'none', boxShadow: '0 8px 22px rgba(74,189,152,.34)' }}>{T('Connect accounts')}</a>
         </div>
       </div>
     </div>

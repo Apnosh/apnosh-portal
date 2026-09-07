@@ -4,6 +4,8 @@ import { type ReactNode } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import { type OnboardingData, type StepId } from './data'
 import { PrimaryPill } from './ui'
+import { useStandaloneLang } from '@/components/mvp/mvp-language'
+import { LANG_LABEL, type Lang } from '@/lib/i18n/t'
 import StepRole from './steps/step-role'
 import StepBizName from './steps/step-biz-name'
 import StepConfirm from './steps/step-confirm'
@@ -73,6 +75,10 @@ export interface OnboardingFrameProps {
   hideAction?: boolean
   /** Optional slim strip rendered ABOVE the top bar (preview chrome). */
   topSlot?: ReactNode
+  /** Told when the owner switches language in the top bar, so the wizard can carry the answer
+   *  to the client row at the end. Setup has no client row yet, so this is the only way the
+   *  choice survives past the last screen. */
+  onLanguage?: (l: Lang) => void
 }
 
 const quietTextButton: React.CSSProperties = {
@@ -105,8 +111,14 @@ export function OnboardingFrame({
   continueLabel,
   hideAction,
   topSlot,
+  onLanguage,
 }: OnboardingFrameProps) {
   const barHidden = !!isSuccess || !!hideAction
+  /* Setup runs before a client row exists, so there is no clients.preferred_language to read
+     yet. The standalone hook reads the browser's remembered answer, which is what a returning
+     Spanish owner has, and English otherwise. The answer is written to the client row at the
+     end of setup like every other answer. */
+  const { T, lang, setLang } = useStandaloneLang()
 
   return (
     <div
@@ -139,7 +151,7 @@ export function OnboardingFrame({
         <button
           type="button"
           onClick={onBack}
-          aria-label="Back"
+          aria-label={T('Back')}
           aria-hidden={!showBack}
           tabIndex={showBack ? 0 : -1}
           disabled={saving}
@@ -182,6 +194,18 @@ export function OnboardingFrame({
           />
         </div>
 
+        {/* The language switch, in the language it switches TO — the only label a reader who
+            cannot read this screen yet can be sure of. Setup is where a Spanish-speaking owner
+            meets us, so it has to be here and not only in Settings. */}
+        <button
+          type="button"
+          onClick={() => { const next: Lang = lang === 'es' ? 'en' : 'es'; setLang(next); onLanguage?.(next) }}
+          style={quietTextButton}
+          title={LANG_LABEL[lang === 'es' ? 'en' : 'es']}
+        >
+          {LANG_LABEL[lang === 'es' ? 'en' : 'es']}
+        </button>
+
         {canSkip ? (
           <button
             type="button"
@@ -190,7 +214,7 @@ export function OnboardingFrame({
             style={quietTextButton}
             title="Save your answers and finish setup later from the dashboard."
           >
-            Finish later
+            {T('Finish later')}
           </button>
         ) : onExit ? (
           <button
@@ -200,7 +224,7 @@ export function OnboardingFrame({
             style={quietTextButton}
             title="Leave setup. Your progress is saved."
           >
-            Exit
+            {T('Exit')}
           </button>
         ) : null}
       </div>
@@ -240,7 +264,7 @@ export function OnboardingFrame({
         >
           <div style={{ maxWidth: 520, margin: '0 auto' }}>
             <PrimaryPill onClick={onNext} disabled={!valid || saving} grow>
-              {saving ? 'Saving...' : continueLabel || 'Continue'}
+              {saving ? T('Saving...') : continueLabel ? T(continueLabel) : T('Continue')}
             </PrimaryPill>
           </div>
         </div>

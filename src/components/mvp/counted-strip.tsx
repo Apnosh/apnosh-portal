@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useMvpTheme } from './mvp-theme'
+import { useLang } from './mvp-language'
 
 interface Row { id: string; label: string; sub: string; value: string; small: string; tone: 'up' | 'down' | 'flat' | 'wait' | 'done' | 'off'; state: string; campaignId: string | null; requestId: string | null }
 
@@ -17,6 +18,7 @@ interface Row { id: string; label: string; sub: string; value: string; small: st
 export default function CountedStrip({ clientId }: { clientId?: string }) {
   const [rows, setRows] = useState<Row[]>([])
   const { C } = useMvpTheme()
+  const { T } = useLang()
   const TONE: Record<Row['tone'], string> = { up: C.greenDk, down: C.coral, flat: C.ink, wait: C.faint, done: C.greenDk, off: C.mute }
   useEffect(() => {
     if (!clientId) return
@@ -29,8 +31,8 @@ export default function CountedStrip({ clientId }: { clientId?: string }) {
   }, [clientId])
   if (!rows.length) return null
   return (
-    <section aria-label="Counted, as promised" style={{ margin: '6px 0 0' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.faint, padding: '8px 2px 6px' }}>Counted, as promised</div>
+    <section aria-label={T('Counted, as promised')} style={{ margin: '6px 0 0' }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: C.faint, padding: '8px 2px 6px' }}>{T('Counted, as promised')}</div>
       <div style={{ display: 'grid', gap: 8 }}>
         {rows.map((r) => {
           const href = r.campaignId ? `/dashboard/campaigns/${r.campaignId}` : r.requestId ? `/dashboard/requests/${r.requestId}` : '/dashboard/campaigns'
@@ -51,7 +53,7 @@ export default function CountedStrip({ clientId }: { clientId?: string }) {
           )
         })}
       </div>
-      <div style={{ fontSize: 11.5, color: C.faint, padding: '6px 2px 0' }}>Before and after on your whole listing. It shows what happened, not proof of cause.</div>
+      <div style={{ fontSize: 11.5, color: C.faint, padding: '6px 2px 0' }}>{T('Before and after on your whole listing. It shows what happened, not proof of cause.')}</div>
     </section>
   )
 }

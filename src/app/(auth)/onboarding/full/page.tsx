@@ -429,6 +429,7 @@ export default function OnboardingPage() {
       onExit={!loading && !showSuccess ? handleExit : undefined}
       valid={valid}
       saving={saving}
+      onLanguage={(l) => update('preferred_language', l)}
       onNext={goNext}
       isSuccess={showSuccess}
       hideAction={loading || isReviewScreen}

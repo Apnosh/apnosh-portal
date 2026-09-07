@@ -569,6 +569,30 @@ export async function completeOnboardingCRM(
     console.error('[completeOnboardingCRM] shape write threw:', e)
   }
 
+  // 2h. The language the owner read setup in (migration 259). They picked it in the top bar
+  //     before a client row existed, so this is the first moment it can be recorded. Anything
+  //     other than the two allowed values is ignored rather than written, and a database
+  //     without the column costs one warning: they keep reading English, which is what they
+  //     would have got anyway.
+  try {
+    const { isLang } = await import('@/lib/i18n/t')
+    const picked = (data as { preferred_language?: unknown }).preferred_language
+    if (isLang(picked)) {
+      const { error: lgErr } = await supabase.from('clients').update({ preferred_language: picked }).eq('id', clientId)
+      if (lgErr) {
+        if (lgErr.code === '42703' || lgErr.code === 'PGRST204') {
+          console.warn('[completeOnboardingCRM] clients.preferred_language is missing; run migration 259.')
+        } else {
+          console.error('[completeOnboardingCRM] language write error:', lgErr.message)
+        }
+      } else {
+        console.log(`[completeOnboardingCRM] Client language: ${picked}`)
+      }
+    }
+  } catch (e) {
+    console.error('[completeOnboardingCRM] language write threw:', e)
+  }
+
   // 3. Ensure client_users row links auth user to client
   const { data: existingCU } = await supabase
     .from('client_users')

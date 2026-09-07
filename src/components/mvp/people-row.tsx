@@ -25,6 +25,7 @@ import Link from 'next/link'
 import { HelpCircle } from 'lucide-react'
 import { useMvpTheme } from './mvp-theme'
 import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
+import { useLang } from './mvp-language'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
@@ -65,14 +66,17 @@ function hrefFor(p: OrderPerson): string {
 const firstName = (n: string) => n.trim().split(/\s+/)[0] || n
 const initials = (n: string) => n.trim().split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase() ?? '').join('') || '·'
 
-/** What this person is on, in one short line: the order when there is one, else how many. */
-function whatTheyAreOn(p: OrderPerson): string {
+/** What this person is on, in one short line: the order when there is one, else how many.
+ *  An order's TITLE is the catalog's own words and stays as written; only the count line is
+ *  ours to translate. */
+function whatTheyAreOn(p: OrderPerson, T: (k: string, v?: Record<string, string | number>) => string): string {
   if (p.orders.length === 1) return p.orders[0].title
-  return `${p.orders.length} pieces of work`
+  return T('{n} pieces of work', { n: p.orders.length })
 }
 
 export default function PeopleRow({ clientId }: { clientId?: string }) {
   const { C, theme } = useMvpTheme()
+  const { T } = useLang()
   const [people, setPeople] = useState<OrderPerson[]>([])
 
   useEffect(() => {
@@ -104,10 +108,10 @@ export default function PeopleRow({ clientId }: { clientId?: string }) {
   }
 
   return (
-    <section aria-label="The people on your work" style={{ margin: '10px 0 0' }}>
+    <section aria-label={T('The people on your work')} style={{ margin: '10px 0 0' }}>
       <div className="mvp-swipe" style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '2px 2px 4px' }}>
         {people.map((p) => (
-          <Link key={p.id} href={hrefFor(p)} className="mvp-press" style={stop} title={`${p.role} · ${whatTheyAreOn(p)}`}>
+          <Link key={p.id} href={hrefFor(p)} className="mvp-press" style={stop} title={`${p.role} · ${whatTheyAreOn(p, T)}`}>
             <span style={circle}>
               {p.avatarUrl
                 ? <img src={p.avatarUrl} alt="" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -119,10 +123,10 @@ export default function PeopleRow({ clientId }: { clientId?: string }) {
         {/* the one door. Last stop in the SAME row, so there is never a second row of faces. */}
         <Link href="/dashboard/get-help" className="mvp-press" style={stop}>
           <span style={{ ...circle, color: C.mute }}><HelpCircle size={22} /></span>
-          <span style={name}>Get help</span>
+          <span style={name}>{T('Get help')}</span>
         </Link>
       </div>
-      <div style={{ fontSize: 11.5, color: C.faint, padding: '2px 2px 0' }}>{REPLY_PROMISE_SENTENCE}</div>
+      <div style={{ fontSize: 11.5, color: C.faint, padding: '2px 2px 0' }}>{T(REPLY_PROMISE_SENTENCE)}</div>
     </section>
   )
 }

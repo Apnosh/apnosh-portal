@@ -51,12 +51,16 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* /dashboard/campaigns/new — the shelf's own chrome (the cards themselves are catalog copy) */
   create: [
     'For you', 'For a truck', 'For delivery only', 'For this shop', 'For catering', 'For the season',
+    'From your own numbers', 'No numbers yet', '{n} you can order today',
     'Set a budget', 'Up to {amount} to start', 'Above {amount} to start', '{n} more, once you raise it',
     'Raise budget', 'Coming later for this goal', 'Tell me when',
     'Nothing here yet for this one.',
     'Everything we could do for it is below, with the reason it is not ready.',
     'What feels right to start?', 'You can change it any time. Nothing is charged now.',
     'No cap set. Everything shows.',
+    // the shape chip on the goal rail draws SHAPE_LABEL's title (also listed under onboarding)
+    'A place people come to', 'A truck or a pop-up', 'Delivery only',
+    'Two or more places', 'Mostly catering', 'Open for a season',
   ],
 
   /* the fourteen goal chips and the six budget answers — asked in setup, shown on Create.
@@ -71,9 +75,18 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     '$1,000 to $2,500/mo', 'Over $2,500/mo', 'Not sure yet',
   ],
 
-  /* /onboarding/full — the frame every screen sits in, and the shape question */
+  /* /onboarding/full — the frame every screen sits in, the shape question, the goal tiles
+     and the budget question. The chip VALUES are listed under `chips` (they are stored). */
   onboarding: [
     'Continue', 'Saving...', 'Back', 'Finish later', 'Exit',
+    'What matters most right now?', 'Pick up to three.',
+    'Fill the quiet nights', 'More people through the door', 'Be known nearby',
+    'A dish, a service, a night', 'More people following along',
+    'A higher rating, answered reviews', 'A menu, a look, an opening',
+    'Be remembered between visits', 'Win the block', 'Online, direct where you can',
+    'One visit into ten', 'Group and office orders', 'Plates that sell themselves',
+    'Where they actually look',
+    'What feels right to start?', 'You can change it any time. Nothing is charged now.',
     'How does it run?', 'This decides what we show you and what we never will.',
     'Pick the closest one',
     'A place people come to', 'One dining room, counter or shop',

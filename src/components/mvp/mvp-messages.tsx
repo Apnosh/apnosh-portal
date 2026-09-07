@@ -20,6 +20,7 @@ import { sendMessage, createThread } from '@/lib/actions'
 import { markThreadRead } from '@/app/dashboard/messages/actions'
 import { REPLY_PROMISE } from '@/lib/reply-promise'
 import { replyLine } from '@/lib/team/reply-line'
+import { useLang } from './mvp-language'
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3', greenBar: '#34c759',
@@ -348,6 +349,7 @@ function Empty({ title, sub }: { title: string; sub: string }) {
 /* ── A single conversation (owner ↔ a specific Apnosh person) ──────────────── */
 function Conversation({ active, person, userId, onBack, onThreadCreated }: { active: Active; person?: Person; userId: string | null; onBack: () => void; onThreadCreated: () => void }) {
   const supabase = createClient()
+  const { T, locale } = useLang()
   const [threadId, setThreadId] = useState<string | null>(active.threadId)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [loading, setLoading] = useState(!!active.threadId)
@@ -435,7 +437,10 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
      disagree with the bubbles above it. Nothing shows until they have actually asked. */
   const lastAsk = [...msgs].reverse().find((m) => m.from === 'owner' && !m.id.startsWith('tmp-'))
   const firstAnswer = lastAsk ? msgs.find((m) => m.from === 'team' && m.createdAt > lastAsk.createdAt) : undefined
-  const promiseClock = replyLine({ askedAt: lastAsk?.createdAt ?? null, answeredAt: firstAnswer?.createdAt ?? null }, { promise: REPLY_PROMISE })
+  const promiseClock = replyLine(
+    { askedAt: lastAsk?.createdAt ?? null, answeredAt: firstAnswer?.createdAt ?? null },
+    { promise: T(REPLY_PROMISE), locale, words: { sent: T('Sent'), weAnswer: T('we answer'), due: T('due'), answeredIn: T('Answered in') } },
+  )
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
       {/* conversation header: glass back circle, avatar, name, status */}

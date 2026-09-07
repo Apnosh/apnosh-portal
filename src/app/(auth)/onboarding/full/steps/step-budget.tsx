@@ -4,6 +4,7 @@ import { type ReactNode } from 'react'
 import { Wallet } from 'lucide-react'
 import { type OnboardingData, BUDGET_CHIPS } from '../data'
 import { Question, OptionCard } from '../ui'
+import { useStandaloneLang } from '@/components/mvp/mvp-language'
 
 interface Props {
   data: OnboardingData
@@ -18,11 +19,12 @@ interface Props {
  * Without it the store shows a $990 logo to someone with $150, which is how a first visit
  * ends. "Not sure yet" is a real answer: no cap is asserted and nothing is hidden. */
 export default function StepBudget({ data, update, nav, onAnswered }: Props) {
+  const { T } = useStandaloneLang()
   return (
     <>
       <Question
-        title="What feels right to start?"
-        subtitle="You can change it any time. Nothing is charged now."
+        title={T('What feels right to start?')}
+        subtitle={T('You can change it any time. Nothing is charged now.')}
         icon={<Wallet size={26} strokeWidth={2} />}
         hue="online"
       />
@@ -36,7 +38,7 @@ export default function StepBudget({ data, update, nav, onAnswered }: Props) {
               hue="online"
               onClick={() => { update('marketing_budget', b); onAnswered?.() }}
             >
-              <div className="text-[15px] font-medium" style={{ color: selected ? '#1c6b52' : '#1d1d1f' }}>{b}</div>
+              <div className="text-[15px] font-medium" style={{ color: selected ? '#1c6b52' : '#1d1d1f' }}>{T(b)}</div>
             </OptionCard>
           )
         })}
