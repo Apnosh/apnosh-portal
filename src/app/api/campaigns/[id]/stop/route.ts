@@ -26,6 +26,7 @@ import { stopCampaign, getCampaignCharges } from '@/lib/campaigns/work-orders'
 import { cancelCampaignSubscriptions } from '@/lib/campaigns/campaign-subscription-server'
 import { owedRefundCents, refundCampaignPayment, hasOpenDispute, pageAdmins, REFUND_UNCONFIRMED, DISPUTE_OPEN } from '@/lib/campaigns/refunds-server'
 import { summarize } from '@/lib/campaigns/types'
+import { refundSentLine, stopDayWords } from '@/lib/campaigns/stop-settlement'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 
 export const dynamic = 'force-dynamic'
@@ -111,9 +112,14 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
 
   const name = campaign.draft.name || 'Your campaign'
   const stoppedCount = sweep.voidedOrders + sweep.rejectedDrafts + sweep.cancelledServices
+  /* THE DAY IT HAPPENED. These words are written once and then sit on the page forever, so a
+   * sentence in the present tense goes on saying "we are sending it back" weeks after the money
+   * landed. Past tense, with the day, is true on the day and true a year later. */
+  const stoppedAt = new Date().toISOString()
+  const day = stopDayWords(stoppedAt)
   const monthlyLine = monthlyStopped <= 0 ? null
     : subs.failed > 0
-      ? `We are turning off your monthly billing ($${Math.round(monthlyStopped)}/mo) now. Our team is finishing it by hand.`
+      ? `Your monthly billing ($${Math.round(monthlyStopped)}/mo) was turned off${day ? ` on ${day}` : ''}. One step needed a person, and our team picked it up.`
       : 'Monthly billing is canceled. Nothing else charges this card for this campaign.'
   // The money line, in the owner's words. A prepaid campaign talks about the refund; a
   // pay-on-delivery campaign talks about the invoice. "Nothing is owed" is now only ever said when
@@ -124,9 +130,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       ? DISPUTE_OPEN
       : money.paid
         ? refundedCents > 0
-          ? `We refund $${(refundedCents / 100).toFixed(2)} for work not delivered. It lands on your card in 5 to 10 days.`
+          ? refundSentLine(refundedCents, stoppedAt)
           : refundFailed
-            ? `We owe you $${(owedCents / 100).toFixed(2)} back for work we did not deliver. Our team is sending it by hand today.`
+            ? `We owe you $${(owedCents / 100).toFixed(2)} back for work we did not deliver. Our team is sending it by hand.`
             : money.paid.totalCents > 0
               ? 'Everything you ordered was delivered, so there is nothing to send back.'
               // A monthly-only order is keyed to a SetupIntent: the card was SAVED, never charged, so
@@ -158,7 +164,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   // the one page about their money went quiet about it. Written to the campaign's execution jsonb
   // (an existing column, no migration), best-effort: a write that fails must never fail the stop,
   // and the same words are already in the inbox notice below.
-  await updateCampaignFields(id, { execution: { stopSummary: settlementLines.join(' ') } })
+  await updateCampaignFields(id, { execution: { stopSummary: settlementLines.join(' '), stoppedAt } })
     .catch((e) => { console.warn('[stop] could not save the settlement line', e); return false })
 
   // Staff must know immediately — especially when in-flight work continues.
@@ -217,6 +223,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
       monthlyStopped,
       subscriptionsCanceled: subs.canceled + subs.alreadyCanceled,
       subscriptionCancelFailed: subs.failed,
+      stoppedAt,
       summary: settlementLines.join(' '),
     },
   })

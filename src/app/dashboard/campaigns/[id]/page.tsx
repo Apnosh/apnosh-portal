@@ -21,6 +21,7 @@ import { reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { vibeForCampaign, creativeRolesForCampaign } from '@/lib/campaigns/creators'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { shippedStatus, ownerSetupComplete, servicesSettingUp, ownerRunWorkDone, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
+import { settlementFromPayment, type StoppedPaymentRow } from '@/lib/campaigns/stop-settlement'
 import { AUDIENCES, CHANNELS } from '@/lib/campaigns/data/campaign-templates'
 import PlayCard from '@/components/campaigns/play-card'
 import LineCard from '@/components/campaigns/line-card'
@@ -55,6 +56,10 @@ export default function CampaignDetailPage() {
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null)
   // The shoot booking (Checkout Gates): confirmed date, needs_reschedule, or request-mode — never faked.
   const [booking, setBooking] = useState<CampaignBooking | null>(null)
+  /* The upfront receipt. Read here only for the stop settlement: a campaign stopped before the
+   * stop route began writing its words down has no summary, and the payment row is the one place
+   * that still knows a refund was sent (S3). */
+  const [payment, setPayment] = useState<StoppedPaymentRow | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Ship-only failure, shown inline over the footer (the footer's Ship button is the retry).
@@ -81,6 +86,7 @@ export default function CampaignDetailPage() {
       setActivity((j.activity as ActivityEvent[]) ?? [])
       setReadiness((j.readiness as ReadinessReport) ?? null)
       setBooking((j.booking as CampaignBooking) ?? null)
+      setPayment((j.payment as StoppedPaymentRow) ?? null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Load failed') }
   }, [id])
   useEffect(() => { load() }, [load])
@@ -226,13 +232,16 @@ export default function CampaignDetailPage() {
               </div>
             )
             : <>
-                {stopNote && (
+                {/* ONE SETTLEMENT, ONCE. The banner is the answer to the tap, and it holds only
+                    until the reload brings back the settlement the stop route SAVED, which is the
+                    one that stays. Both on screen at once printed the refund sentence twice. */}
+                {stopNote && !camp.execution?.stopSummary && (
                   <div role="status" style={{ background: stopNote.cancelFailed ? '#fdf6e9' : '#eaf7f3', border: `1px solid ${stopNote.cancelFailed ? '#f0dfb8' : '#cdeae0'}`, borderRadius: 14, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: stopNote.cancelFailed ? '#854f0b' : '#2e6b57', lineHeight: 1.55 }}>
                     <div style={{ fontWeight: 700, marginBottom: 2 }}>Campaign stopped</div>
                     {stopNote.summary}
                   </div>
                 )}
-                <Detail camp={camp} progress={progress} outcomes={outcomes} since={since} pieces={pieces} activity={activity} readiness={readiness} booking={booking} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />
+                <Detail camp={camp} progress={progress} outcomes={outcomes} since={since} pieces={pieces} activity={activity} readiness={readiness} booking={booking} payment={payment} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />
               </>}
         </div>
 
@@ -266,7 +275,7 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, booking, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
+function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, booking, payment, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   outcomes: CampaignOutcomes | null
@@ -275,6 +284,7 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
   activity: ActivityEvent[]
   readiness: ReadinessReport | null
   booking: CampaignBooking | null
+  payment: StoppedPaymentRow | null
   onReload: () => Promise<void> | void
   onToggleOptOut: (id: string, r: OptOutReason) => void
   onToggleInclude: (id: string) => void
@@ -451,10 +461,13 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
                 <Ban size={14} style={{ flexShrink: 0, marginTop: 1, color: C.mute }} />
                 <span>This campaign is stopped. Nothing new starts or posts. Anything already in flight was finished.</span>
               </div>
-              {/* The settlement the stop route wrote: the refund, the monthly billing, what stopped. */}
-              {camp.execution?.stopSummary && (
-                <div style={{ marginTop: 8, paddingLeft: 22, color: C.mute, fontWeight: 500 }}>{camp.execution.stopSummary}</div>
-              )}
+              {/* The settlement the stop route wrote: the refund, the monthly billing, what stopped.
+                  A campaign stopped before it wrote any of that down has no summary — so the line
+                  is derived from its payment row instead, which still knows what went back. */}
+              {(() => {
+                const line = camp.execution?.stopSummary || settlementFromPayment(payment)
+                return line ? <div style={{ marginTop: 8, paddingLeft: 22, color: C.mute, fontWeight: 500 }}>{line}</div> : null
+              })()}
             </div>
           )}
           {/* the interrupt/result card: a piece needing your OK (any phase), or the live/done story */}
@@ -508,8 +521,11 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
             onRequestChange={() => router.push('/dashboard/messages?to=strategist')}
           />}
           {/* who handles everything: Apnosh runs setup + makes the creative. The Send Message
-              button lives on this card and goes straight to the team (Apnosh for now). */}
-          <CampaignTeamCard camp={camp} onMessage={() => router.push('/dashboard/messages?to=strategist')} />
+              button lives on this card and goes straight to the team (Apnosh for now).
+              Gone once the campaign is stopped: it is the last block on the page that still says
+              somebody is running this, which is the contradiction the whole stopped view exists
+              to end. Get help is one tap away on every screen. */}
+          {!stopped && <CampaignTeamCard camp={camp} onMessage={() => router.push('/dashboard/messages?to=strategist')} />}
           {/* Below the timeline: the ordered items as tappable Campaign-details rows — each opens
               that item's own detail page (one row per line item; two items can share a name) */}
           {!stopped && st.phase !== 'done' && (

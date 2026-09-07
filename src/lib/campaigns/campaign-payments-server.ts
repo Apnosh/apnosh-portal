@@ -18,6 +18,12 @@ export interface CampaignPaymentInfo {
   serviceFeeCents: number
   taxCents: number
   paidAt: string | null
+  /** How much of this charge has gone back, and the day it went. The stopped campaign page reads
+   *  these when the stop happened before the settlement was ever written down, so an owner still
+   *  sees what their money did. 0 / null pre-254, which reads as "nothing went back" — true, since
+   *  pre-254 nothing could be recorded as sent back. */
+  refundedCents: number
+  refundedAt: string | null
 }
 
 function admin() {
@@ -31,6 +37,8 @@ function toInfo(row: Record<string, unknown>): CampaignPaymentInfo {
     serviceFeeCents: Number(row.service_fee_cents) || 0,
     taxCents: Number(row.tax_cents) || 0,
     paidAt: (row.paid_at as string | null) ?? null,
+    refundedCents: Number(row.refunded_cents) || 0,
+    refundedAt: (row.refunded_at as string | null) ?? null,
   }
 }
 
@@ -41,7 +49,9 @@ export async function getCampaignPayment(campaignId: string): Promise<CampaignPa
   try {
     const { data, error } = await admin()
       .from('campaign_payments')
-      .select('total_cents, subtotal_cents, service_fee_cents, tax_cents, paid_at')
+      // select('*') so refunded_cents/refunded_at being absent (pre-254) reads as "nothing went
+      // back" rather than erroring the whole receipt away.
+      .select('*')
       .eq('campaign_id', campaignId)
       .in('status', COLLECTED_STATUSES)
       .order('paid_at', { ascending: false })
@@ -111,7 +121,7 @@ export async function getCampaignPaymentsBatch(campaignIds: string[]): Promise<R
   try {
     const { data, error } = await admin()
       .from('campaign_payments')
-      .select('campaign_id, total_cents, subtotal_cents, service_fee_cents, tax_cents, paid_at')
+      .select('*')   // pre-254 tolerant, same reason as the single read above
       .in('campaign_id', ids)
       .in('status', COLLECTED_STATUSES)
       .order('paid_at', { ascending: false })
