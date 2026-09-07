@@ -20,23 +20,77 @@ export interface DeskPaymentClaim {
   intentRequestId?: string | null
 }
 
+/** The two sides of the till. A payment belongs to exactly one of them, forever. */
+export type PaymentLane = 'campaign' | 'desk'
+
+/** The payment row's own two pointers (campaign_payments). Either one, never both. */
+export interface PaymentRowSides {
+  /** campaign_payments.request_id — written by /api/checkout/prepare when the intent was made. */
+  requestId?: string | null
+  /** campaign_payments.campaign_id — bound at ship, or already bound by an earlier ship. */
+  campaignId?: string | null
+}
+
+/** What the Stripe intent itself says it was made for (metadata written by /api/checkout/prepare). */
+export interface IntentSides {
+  /** metadata.kind — one of the four below. */
+  kind?: string | null
+  /** metadata.requestId — a desk intent names its order; a campaign intent never does. */
+  requestId?: string | null
+}
+
+/** The kinds /api/checkout/prepare stamps on a DESK intent (one-time card, then card-on-file). */
+export const DESK_INTENT_KINDS = ['desk_checkout', 'desk_checkout_setup']
+/** The kinds it stamps on a CAMPAIGN cart intent. */
+export const CAMPAIGN_INTENT_KINDS = ['campaign_checkout', 'campaign_checkout_setup']
+
 /**
- * May this payment finish THIS desk order?
+ * May THIS payment be spent on THIS order, on THIS side of the till?
  *
- * The order id arrives in the request body, so without this the answer used to be "any settled
- * payment on the account will do" — and the row's request_id was then overwritten to match, so one
- * card charge could deliver two orders and the first order's receipt named the second.
+ * The order id always arrives from the browser, so without this the answer used to be "any settled
+ * payment on the account will do". Two ways that was free work:
+ *   • desk lane — one card charge could deliver two orders, and the row's request_id was rewritten
+ *     to match, so the first order's receipt then named the second
+ *   • campaign lane — a paid DESK payment (its campaign_id null forever) passed the campaign's own
+ *     verify and shipped a whole campaign for nothing
  *
- * Both sides must already say the same thing. Nothing is repaired, defaulted or written to make
- * them agree.
+ * So the row and Stripe must ALREADY agree, on both pointers and on the kind. Nothing is repaired,
+ * defaulted or written to make them agree. Pure: the row and the intent are read by the caller.
+ */
+export function paymentMatchesLane(row: PaymentRowSides, pi: IntentSides, lane: PaymentLane, id: string): boolean {
+  if (!id) return false
+  const rowRequestId = row.requestId ?? null
+  const rowCampaignId = row.campaignId ?? null
+  const intentRequestId = pi.requestId ?? null
+  const kind = pi.kind ?? ''
+  if (lane === 'desk') {
+    if (rowRequestId !== id) return false
+    if (rowCampaignId != null) return false                 // a campaign checkout is never a desk order's payment
+    if (!DESK_INTENT_KINDS.includes(kind)) return false
+    return intentRequestId === id
+  }
+  // Campaign lane, the exact mirror. A desk row's money can never buy a campaign, and a payment
+  // already spent on one campaign can never ship a second — but the SAME campaign is fine, because
+  // /checkout/complete and the ship PATCH both land here and both must be idempotent.
+  if (rowRequestId != null) return false
+  if (rowCampaignId != null && rowCampaignId !== id) return false
+  if (!CAMPAIGN_INTENT_KINDS.includes(kind)) return false
+  return intentRequestId == null                            // a campaign intent never names an order
+}
+
+/**
+ * May this payment finish THIS desk order? The desk lane's name for `paymentMatchesLane`.
+ *
+ * Kept because the desk route and its sim read in these words; the rule itself is the shared one,
+ * so the two lanes cannot drift apart again.
  */
 export function deskPaymentMatchesOrder(claim: DeskPaymentClaim, requestId: string): boolean {
-  if (!requestId) return false
-  if ((claim.rowRequestId ?? null) !== requestId) return false
-  if (claim.rowCampaignId != null) return false
-  const kind = claim.intentKind ?? ''
-  if (kind !== 'desk_checkout' && kind !== 'desk_checkout_setup') return false
-  return (claim.intentRequestId ?? null) === requestId
+  return paymentMatchesLane(
+    { requestId: claim.rowRequestId, campaignId: claim.rowCampaignId },
+    { kind: claim.intentKind, requestId: claim.intentRequestId },
+    'desk',
+    requestId,
+  )
 }
 
 /** The status an owner-placed desk order lands in: priced, saved, and waiting for the card. */

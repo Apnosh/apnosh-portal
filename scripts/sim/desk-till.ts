@@ -15,7 +15,7 @@ import { feeCentsOn, SERVICE_FEE_RATE, monthlyPhrase, fmtMoney } from '@/lib/cam
 import { priceCreativeRequest, fmtTotal, type CreativePrice } from '@/lib/requests/pricing'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 import { refundOwedCents, refundStatus, COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
-import { deskPaymentMatchesOrder, deskPaymentDue, deskCancelable, AWAITING_PAYMENT } from '@/lib/requests/desk-guards'
+import { deskPaymentMatchesOrder, paymentMatchesLane, deskPaymentDue, deskCancelable, AWAITING_PAYMENT, DESK_INTENT_KINDS, CAMPAIGN_INTENT_KINDS } from '@/lib/requests/desk-guards'
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
 import { workStarted } from '@/lib/campaigns/work-orders-core'
 import { DESIGN_LINES } from '@/lib/design/design-copy'
@@ -140,6 +140,26 @@ function main() {
   s.check('a pre-258 row with no request_id pays for nothing', !deskPaymentMatchesOrder({ ...good, rowRequestId: null }, REQ))
   s.check('an intent with no metadata pays for nothing', !deskPaymentMatchesOrder({ rowRequestId: REQ, rowCampaignId: null }, REQ))
   s.check('and no order id at all is never a match', !deskPaymentMatchesOrder(good, ''))
+
+  s.group('The mirror: a desk order\'s money can never ship a campaign')
+  // The hole this closes. A DESK payment row keeps campaign_id null forever (the desk never binds
+  // one), and the campaign lane only ever asked "is there a paid row on this account for this
+  // intent" — so a $40 graphic order's receipt shipped a whole campaign for nothing.
+  const CAMP = 'camp-1111', OTHERCAMP = 'camp-2222'
+  const campRow = { requestId: null, campaignId: null }
+  const campPi = { kind: 'campaign_checkout', requestId: null }
+  s.check('a cart\'s own payment ships its campaign', paymentMatchesLane(campRow, campPi, 'campaign', CAMP))
+  s.check('a monthly-only cart\'s card-setup ships it too', paymentMatchesLane(campRow, { ...campPi, kind: 'campaign_checkout_setup' }, 'campaign', CAMP))
+  s.check('a PAID DESK ORDER CANNOT ship a campaign', !paymentMatchesLane({ requestId: REQ, campaignId: null }, { kind: 'desk_checkout', requestId: REQ }, 'campaign', CAMP))
+  s.check('nor can a desk row wearing campaign metadata', !paymentMatchesLane({ requestId: REQ, campaignId: null }, campPi, 'campaign', CAMP))
+  s.check('nor a cart row whose intent names an order', !paymentMatchesLane(campRow, { ...campPi, requestId: REQ }, 'campaign', CAMP))
+  s.check('a payment already spent on another campaign is refused', !paymentMatchesLane({ requestId: null, campaignId: OTHERCAMP }, campPi, 'campaign', CAMP))
+  s.check('but the SAME campaign again is fine — complete and ship both land here', paymentMatchesLane({ requestId: null, campaignId: CAMP }, campPi, 'campaign', CAMP))
+  s.check('an intent with no kind ships nothing', !paymentMatchesLane(campRow, { requestId: null }, 'campaign', CAMP))
+  s.check('and no campaign id at all is never a match', !paymentMatchesLane(campRow, campPi, 'campaign', ''))
+  // And the mirror the other way, so neither lane can quietly accept the other's kind.
+  s.check('a campaign intent is never a desk order\'s payment', !paymentMatchesLane({ requestId: REQ, campaignId: null }, { kind: 'campaign_checkout', requestId: REQ }, 'desk', REQ))
+  s.check('the two lanes share no kind at all', !DESK_INTENT_KINDS.some((k) => CAMPAIGN_INTENT_KINDS.includes(k)))
 
   s.group('Free work: an order the owner placed can never be started by saying yes to it')
   s.check('an order waiting for the card owes money', deskPaymentDue({ status: AWAITING_PAYMENT }))
