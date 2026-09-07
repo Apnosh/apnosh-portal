@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
-import { checkoutBill } from '@/lib/campaigns/checkout-bill'
+import { randomUUID } from 'crypto'
+import { checkoutBill, applyFriendCredit } from '@/lib/campaigns/checkout-bill'
+import { claimFriendCredit, releaseFriendCredit, stampCreditIntent } from '@/lib/referrals/server'
 import { ensureCheckoutCustomer, computeTaxCents, estimateMonthlyTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
 import { resolveGatesForDraft } from '@/lib/campaigns/gates/config-server'
 import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
@@ -172,9 +174,20 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // MOVE 8 — THE FRIEND CREDIT, and the only place in the cart it touches the money.
+  //
+  // It is claimed HERE, on the far side of the kill switch and just before the PaymentIntent, for
+  // two reasons: the intent's amount has to already have the credit in it (or the card is charged
+  // the wrong number), and nothing above this line takes a card, so a free or invoiced order never
+  // spends a credit. claimFriendCredit returns null whenever REFERRALS_ENABLED is off or migration
+  // 261 has not run, and applyFriendCredit is a no-op on null — so with the switch off every line
+  // below is byte-for-byte the order this route has always placed.
+  const claim = await claimFriendCredit(clientId, `hold:${randomUUID()}`, bill.subtotalCents)
+  const billed = claim ? applyFriendCredit(bill, claim.cents) : bill
+
   try {
-    const tax = await computeTaxCents({ preTaxCents: bill.preTaxCents, customerId: cust.customerId })
-    const totalCents = bill.preTaxCents + tax.taxCents
+    const tax = await computeTaxCents({ preTaxCents: billed.preTaxCents, customerId: cust.customerId })
+    const totalCents = billed.preTaxCents + tax.taxCents
     // Same calculation, run on the monthly line, because the subscription is taxed too (stripe.ts
     // sets automatic_tax on it). Estimate only — never committed, never charged from here.
     const monthlyTaxCents = await estimateMonthlyTaxCents({ perMonthCents: bill.perMonthCents, customerId: cust.customerId })
@@ -195,22 +208,32 @@ export async function POST(req: NextRequest) {
       ...('email' in cust && cust.email ? { receipt_email: cust.email } : {}),
     })
 
+    // The credit now belongs to a real checkout. Before this stamp it is held against nothing,
+    // which is what lets an abandoned attempt hand the money back.
+    if (claim) await stampCreditIntent(claim.creditId, pi.id)
+
     const { error: insErr } = await paymentsTable().insert({
       client_id: clientId,
       stripe_payment_intent_id: pi.id,
       stripe_customer_id: cust.customerId,
-      subtotal_cents: bill.subtotalCents,
-      service_fee_cents: bill.serviceFeeCents,
+      // The FULL items subtotal, not the discounted one: it is what delivered work is measured
+      // against if this order is ever stopped (refund-math.ts).
+      subtotal_cents: billed.subtotalCents,
+      service_fee_cents: billed.serviceFeeCents,
       tax_cents: tax.taxCents,
       total_cents: totalCents,
       status: 'pending',
       stripe_tax_calculation_id: tax.calculationId,
       draft,
+      // Only written when there IS a credit, so a database without migration 261 is never sent a
+      // column it does not have.
+      ...(claim ? { friend_credit_cents: claim.cents, client_credit_id: claim.creditId } : {}),
     })
     // If we can't record the payment (e.g. migration 215 not applied), don't leave a chargeable
     // PaymentIntent with no matching row — cancel it and surface a clear error.
     if (insErr) {
       await stripe.paymentIntents.cancel(pi.id).catch(() => {})
+      if (claim) await releaseFriendCredit(claim.creditId)
       return NextResponse.json({ error: 'Checkout is not set up yet (payments table missing). Apply migration 215 and try again.' }, { status: 500 })
     }
 
@@ -223,17 +246,22 @@ export async function POST(req: NextRequest) {
       ...(vault ? { vault } : {}),
       publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
       breakdown: {
-        subtotalCents: bill.subtotalCents,
-        serviceFeeCents: bill.serviceFeeCents,
+        subtotalCents: billed.subtotalCents,
+        serviceFeeCents: billed.serviceFeeCents,
         taxCents: tax.taxCents,
         totalCents,
+        // Absent on every bill without one, so the pay screen's own lines are unchanged until
+        // there is a credit to name.
+        ...(billed.friendCreditCents ? { friendCreditCents: billed.friendCreditCents } : {}),
       },
-      monthlyCents: bill.perMonthCents,
+      monthlyCents: billed.perMonthCents,
       monthlyTaxCents,
       savedCard,
       gates,
     })
   } catch (e) {
+    // The charge never started, so the credit was never spent. Hand it back.
+    if (claim) await releaseFriendCredit(claim.creditId)
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })
   }
 }

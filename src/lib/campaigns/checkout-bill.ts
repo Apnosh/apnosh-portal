@@ -33,6 +33,8 @@ export interface CheckoutBill {
   perMonthCents: number
   /** subtotal + service fee, in cents. Tax is added on top by the server (Stripe Tax). */
   preTaxCents: number
+  /** A friend credit taken off this bill, in cents. Absent on every bill that has none. */
+  friendCreditCents?: number
 }
 
 /** Compute the checkout bill (pre-tax) from a composed campaign draft. */
@@ -42,6 +44,43 @@ export function checkoutBill(draft: Pick<CampaignDraft, 'items'>): CheckoutBill 
   const serviceFeeCents = feeCentsOn(subtotalCents)
   const perMonthCents = Math.round(bill.perMonth * 100)
   return { subtotalCents, serviceFeeCents, perMonthCents, preTaxCents: subtotalCents + serviceFeeCents }
+}
+
+/**
+ * THE FRIEND CREDIT, ON THE BILL (Move 8). A referred owner starts with money off their first
+ * paid order, and this is the only place that decides what that does to the numbers.
+ *
+ * WHERE THE LINE SITS: above the service fee and above the tax. "Friend credit −$50" comes off
+ * the items subtotal, and the 10% fee and Stripe's tax are then worked out on what is left. So a
+ * $500 plan with a $50 credit is $450 of work, $45 of fee, and tax on $495 — the owner is not
+ * charged a fee on money we gave them, and the tax is on what they actually paid. The alternative
+ * (fee and tax on the full $500, credit taken off at the end) was rejected for exactly that: it
+ * bills a fee on a discount, and it quietly makes the credit worth less than the $50 we said.
+ *
+ * Never below zero, never bigger than the subtotal: a credit larger than the order takes the
+ * bill to $0 and the REST STAYS on the credit row for next time (client_credits.consumed_cents),
+ * because the alternative is handing back change in cash.
+ *
+ * subtotalCents IS LEFT ALONE ON PURPOSE. It is what the delivered work is measured against when
+ * an order is stopped (refundOwedCents in refund-math.ts prorates delivered item prices against
+ * it). Shrinking it by the credit would make a fully delivered order look over-delivered and
+ * quietly zero out refunds. The credit rides in its own field, and preTaxCents — the number the
+ * card is actually charged, before tax — is the one that comes down.
+ *
+ * Pure. The PaymentIntent is created from the preTaxCents this returns, so the number the owner
+ * reads and the number the card is charged are the same number.
+ */
+export function applyFriendCredit(bill: CheckoutBill, creditCents: number): CheckoutBill {
+  const credit = Math.min(Math.max(0, Math.round(creditCents || 0)), Math.max(0, bill.subtotalCents))
+  if (credit <= 0) return bill
+  const billableCents = bill.subtotalCents - credit
+  const serviceFeeCents = feeCentsOn(billableCents)
+  return {
+    ...bill,
+    serviceFeeCents,
+    preTaxCents: billableCents + serviceFeeCents,
+    friendCreditCents: credit,
+  }
 }
 
 /** "$1,180.00" — the one money format the checkout screens print. */
