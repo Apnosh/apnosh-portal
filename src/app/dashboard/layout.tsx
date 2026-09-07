@@ -112,6 +112,7 @@ const MVP_EXACT = new Set([
   '/dashboard/team', // the team page moved onto the mobile kit (portal redesign 2026-09-04)
   '/dashboard/preferences', '/dashboard/people', '/dashboard/get-help', '/dashboard/whats-new', // the More tab's pages (owner 2026-09-05)
   '/dashboard/guests', // the guest list (send-rail audience) owns its full-screen chrome
+  '/dashboard/wins', // the wins shelf renders its own MvpShell (Move 7b)
 ])
 const MVP_PREFIX = [
   '/dashboard/insights', // insights + its sub-routes (e.g. /insights/analyst) own their full-screen chrome
@@ -123,6 +124,9 @@ const MVP_PREFIX = [
   '/dashboard/design', // the graphic Drafting Table (/design/order) owns its full-screen chrome
   '/dashboard/delivery-menu', // delivery-menu setup tool, mobile-first
   '/dashboard/email', // email deliverability setup tool, mobile-first
+  '/dashboard/wins', // the shelf and one win (/wins/[id]) own their full-screen chrome; the card
+                     // is a square somebody screenshots, so a back-header on top of it is a second
+                     // header in the picture
 ]
 function isMvpRoute(path: string): boolean {
   return MVP_EXACT.has(path) || MVP_PREFIX.some(p => path === p || path.startsWith(p + '/'))
