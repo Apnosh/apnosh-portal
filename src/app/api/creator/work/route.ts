@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { listWorkOrdersForCreator, listWorkOrdersForCampaign, getWorkOrder, getCreatorIdForUser, updateWorkOrder, type WorkOrderStatus } from '@/lib/campaigns/work-orders'
 import { safeHref, IllegalTransition } from '@/lib/campaigns/work-orders-core'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { handoverFor, handoverGuard } from '@/lib/campaigns/handover'
 
 // Every read/write is scoped to the caller's tenant: a campaign's or order's
 // client must pass checkClientAccess (owner / team / admin). This closes the
@@ -77,6 +79,16 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'only the owner can approve a delivery or request changes' }, { status: 403 })
   }
 
+  // THE HANDOVER. This is the flip that writes the delivered file into the owner's library and
+  // emails them that their work landed — so it is the flip a website order must not reach with the
+  // domain still in an Apnosh account. The admin desk enforces this on its own delivered-flip; a
+  // creator delivering the same order through this route walked straight past it.
+  // On the TRANSITION only: re-saving an already delivered order must not re-litigate it.
+  if (body.status === 'delivered' && order.status !== 'delivered') {
+    const guard = await handoverGuardForOrder(body.id)
+    if (!guard.ok) return NextResponse.json({ error: guard.reason }, { status: 400 })
+  }
+
   try {
     await updateWorkOrder(body.id, {
       ...(body.status ? { status: body.status as WorkOrderStatus } : {}),
@@ -88,5 +100,42 @@ export async function PATCH(req: NextRequest) {
   } catch (e) {
     if (e instanceof IllegalTransition) return NextResponse.json({ error: e.message }, { status: 409 })
     return NextResponse.json({ error: e instanceof Error ? e.message : 'update failed' }, { status: 500 })
+  }
+}
+
+/**
+ * The handover checklist standing between a work order and "delivered".
+ *
+ * Reads the two things it needs off the row itself: which desk type this order is (its
+ * campaign_piece_key carries 'request:<id>', and the request row carries the type), and what has
+ * been ticked so far. A piece of work that hands nothing over passes without a read.
+ *
+ * Degrades OPEN on an unreadable row, and that is deliberate: this guard exists to make a promise
+ * true, not to strand a creator who finished the job because a column is not there yet (pre-258
+ * the handover column does not exist and nothing can be ticked). The admin desk enforces the same
+ * rule on the same order.
+ */
+async function handoverGuardForOrder(orderId: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+  try {
+    const admin = createAdminClient()
+    // select('*') so a missing handover column (pre-258) reads as "nothing ticked", not an error.
+    const { data: wo, error } = await admin
+      .from('creator_work_orders')
+      .select('*')
+      .eq('id', orderId)
+      .maybeSingle()
+    if (error || !wo) return { ok: true }
+    const key = String((wo as { campaign_piece_key?: string | null }).campaign_piece_key ?? '')
+    if (!key.startsWith('request:')) return { ok: true }
+    const { data: req } = await admin
+      .from('creative_requests')
+      .select('type')
+      .eq('id', key.slice('request:'.length))
+      .maybeSingle()
+    const serviceKey = `request:${String((req as { type?: string } | null)?.type ?? '')}`
+    if (handoverFor(serviceKey).length === 0) return { ok: true }
+    return handoverGuard(serviceKey, (wo as { handover?: unknown }).handover ?? null)
+  } catch {
+    return { ok: true }
   }
 }
