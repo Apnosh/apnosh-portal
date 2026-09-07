@@ -38,7 +38,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     // the chrome around the funnel: the compare line, the date pickers, the two icon buttons
     'the year before', 'the {n} days before', 'change vs {when}',
     'platforms report a few days behind', 'to', 'Your business', 'Alerts', 'Alerts ({n})',
-    'Getting your numbers',
+    'Getting your numbers', 'Google {g} · Social {s}', '– even',
     // the whole funnel, read out loud to a screen reader
     'Your marketing funnel from Google: Awareness (how many times you showed up), Interest (everyone who clicked, called, or asked directions), Actions (directions and calls), Orders (walk-ins who came in and bought), and Retention (customers who came back). The Awareness, Interest, and Customer-actions stages are measured from Google; the amber Orders stage is estimated from your walk-in rate; Retention is locked until a register connects.',
   ],
@@ -65,7 +65,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* /dashboard/get-help */
   getHelp: [
     'Get help', 'A real person answers', 'Talk to us', 'Message us',
-    'We reply within one business day', 'Share feedback', 'Tell us what to make better',
+    'We reply {promise}', 'within one business day', 'Share feedback', 'Tell us what to make better',
     'Find it yourself', 'Questions and answers', 'The papers', 'Your agreements',
   ],
 
@@ -98,6 +98,25 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Back to Create', 'price', 'ready in', 'you do', 'channel', 'channels',
     'In plain words', 'What you get', 'What happens after you order',
     'Amber is you. Everything else is us.', 'Where it shows up',
+    // the describe box, the guide's path, the product page's timeline and the why-now lines
+    'Reading', 'Plan it', 'We do not do {list} yet. Everything else is below.', 'Build this',
+    'Send it to your strategist', 'Tell us what you need', 'Halloween party Oct 31, want it packed',
+    'New fall menu lands Sep 18', 'Tuesdays are dead, fill them', 'Get office lunch orders',
+    'Set up once', 'The basics, ticked off as you go', 'Done', '{n} result', '{n} results', 'for “{q}”',
+    '{n} reviews are waiting for a reply', 'You are at {r} stars',
+    '{n} thing on your listing needs fixing', '{n} things on your listing need fixing',
+    '{n} people saw your listing this month', '{n} people asked for directions this month', 'Found',
+    'Tempted', 'Come in', 'Come back', '{n} saw your listing this month', 'How many people see you',
+    '{r} stars · {n} reviews', 'What they think when they look', '{n} asked for directions',
+    'Who actually comes', 'Who comes twice', 'How a guest reaches you', 'Why these three',
+    'Where it sits:', 'Three picks that fit what you said. About {amount} to start.', 'a quote',
+    'Start with the first one', 'Moves {stage}', 'Nothing', 'Approve', 'Show up', 'Day 0', 'Day 1',
+    'Day 2', 'Day 3', 'Week 1', 'Every week', 'Monthly', 'You order. We read what you already have.',
+    'We start the work and send you anything we need.', 'You check the result. One tap, or a note.',
+    'Done, and on your Home.', 'You order. We read your menu, photos and calendar.',
+    'The first pieces land for your OK.', 'New pieces go out on the plan.',
+    'A read of what moved, on Insights.', 'We draft it.', 'You approve in Inbox. One tap, or a note.',
+    'It goes out.', 'Goes well with', 'Ask for a quote', 'Order', 'Guide me',
     // the shape chip on the goal rail draws SHAPE_LABEL's title (also listed under onboarding)
     'A place people come to', 'A truck or a pop-up', 'Delivery only',
     'Two or more places', 'Mostly catering', 'Open for a season',
@@ -118,7 +137,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* /onboarding/full — the frame every screen sits in, the shape question, the goal tiles
      and the budget question. The chip VALUES are listed under `chips` (they are stored). */
   onboarding: [
-    'Continue', 'Saving...', 'Back', 'Finish later', 'Exit',
+    'Continue', 'Getting your setup ready', 'Saving...', 'Back', 'Finish later', 'Exit',
     'Setup progress: screen {n} of {total}',
     'Save your answers and finish setup later from the dashboard.',
     'Leave setup. Your progress is saved.',

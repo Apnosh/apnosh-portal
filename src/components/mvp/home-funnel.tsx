@@ -280,7 +280,7 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const hasSocial = social > 0
   const awareTag = t(hasSocial ? 'Real · Google + Social' : 'Real · Google', lang)
   const awareSub = hasSocial ? 'times you showed up on Google and social' : 'times you showed up on Google'
-  const awareSplit = hasSocial ? `Google ${google.toLocaleString()} · Social ${social.toLocaleString()}` : undefined
+  const awareSplit = hasSocial ? t('Google {g} · Social {s}', lang, { g: google.toLocaleString(), s: social.toLocaleString() }) : undefined
   const { directions, calls, websiteClicks } = actions
   // Interest + Actions come STRAIGHT from the honest Insights stage headlines
   // (counts), so the animation and the Insights page always show the same
@@ -818,7 +818,7 @@ export default function HomeFunnel({
           const pctStr = Math.abs(r0) > 999 ? `${Math.round(Math.abs(r0) / 100 + 1)}×` : `${Math.abs(r0)}%`
           const tickStr = s.deltaAbs != null
             ? (r0 === 0 ? '± 0' : (r0 > 0 ? '+' : '−') + Math.abs(r0).toLocaleString())
-            : (r0 === 0 ? '– even' : (r0 > 0 ? '▲' : '▼') + pctStr)
+            : (r0 === 0 ? T('– even') : (r0 > 0 ? '▲' : '▼') + pctStr)
           ctx.font = '700 13px Inter, sans-serif'
           ctx.textAlign = numLeft ? 'left' : 'right'
           const tw = ctx.measureText(tickStr).width
@@ -894,7 +894,7 @@ export default function HomeFunnel({
       ctx.globalAlpha = 1
     }
     ctx.textAlign = 'left'
-  }, [C, theme, layout, stages, effH, rAt, flowTop, flowBot, loading])
+  }, [C, T, theme, layout, stages, effH, rAt, flowTop, flowBot, loading])
 
   const resize = useCallback(() => {
     const cv = canvasRef.current

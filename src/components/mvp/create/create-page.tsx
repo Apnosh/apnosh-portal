@@ -354,13 +354,13 @@ export default function CreatePage() {
   /* why-now lines from the account's own numbers */
   const whyNow = useCallback((c: ShelfCard): string | null => {
     const s = signals; if (!s) return null
-    if ((c.id === 'reviewsreply' || c.id === 'reviewsplan') && s.unrepliedReviews) return `${s.unrepliedReviews} reviews are waiting for a reply`
-    if (c.id === 'reviewsplan' && s.rating != null && s.rating < 4.3) return `You are at ${s.rating.toFixed(1)} stars`
-    if ((c.id === 'gbp' || c.id === 'listings') && s.listingGaps?.length) return `${s.listingGaps.length} thing${s.listingGaps.length === 1 ? '' : 's'} on your listing need fixing`
-    if (c.id === 'gpost' && s.views30d) return `${s.views30d.toLocaleString()} people saw your listing this month`
-    if (c.id === 'friction' && s.actions30d && s.actions30d.directions > 0) return `${s.actions30d.directions} people asked for directions this month`
+    if ((c.id === 'reviewsreply' || c.id === 'reviewsplan') && s.unrepliedReviews) return T('{n} reviews are waiting for a reply', { n: s.unrepliedReviews })
+    if (c.id === 'reviewsplan' && s.rating != null && s.rating < 4.3) return T('You are at {r} stars', { r: s.rating.toFixed(1) })
+    if ((c.id === 'gbp' || c.id === 'listings') && s.listingGaps?.length) return T(s.listingGaps.length === 1 ? '{n} thing on your listing needs fixing' : '{n} things on your listing need fixing', { n: s.listingGaps.length })
+    if (c.id === 'gpost' && s.views30d) return T('{n} people saw your listing this month', { n: s.views30d.toLocaleString() })
+    if (c.id === 'friction' && s.actions30d && s.actions30d.directions > 0) return T('{n} people asked for directions this month', { n: s.actions30d.directions })
     return null
-  }, [signals])
+  }, [signals, T])
 
   const open = (c: ShelfCard) => go({ name: 'product', id: c.id })
   const order = (c: ShelfCard) => {
@@ -390,7 +390,7 @@ export default function CreatePage() {
         <span className={`st${isDone ? ' done' : ''}`}>{isDone && <Check size={13} strokeWidth={3} />}</span>
         <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
         <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : T('Coming soon')}</span>}</span>
-        <span className="r"><b>{isDone ? 'Done' : buy ? c.price : ''}</b></span>
+        <span className="r"><b>{isDone ? T('Done') : buy ? c.price : ''}</b></span>
         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
       </button>
     )
@@ -422,6 +422,8 @@ export default function CreatePage() {
     } catch { setRead({ ok: false, reason: 'no answer', situation: null, summary: '', unsupported: [] }) }
     setReading(false)
   }
+  /* The four example sentences. They are TRANSLATED before they are shown and before they are
+     dropped in the box, because what an owner reads has to be what they would send. */
   const EXAMPLES: [ShelfGoal, string][] = [['event', 'Halloween party Oct 31, want it packed'], ['announce', 'New fall menu lands Sep 18'], ['nights', 'Tuesdays are dead, fill them'], ['catering', 'Get office lunch orders']]
   const SayBox = () => (
     <div className="say">
@@ -430,7 +432,7 @@ export default function CreatePage() {
         <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder={T('Say it in a sentence. A date, a dish, a slow night…')} />
         <div className="foot">
           <span className="hint">{T('We read it and suggest a plan. You can change anything.')}</span>
-          <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? 'Reading' : 'Plan it'}</button>
+          <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? T('Reading') : T('Plan it')}</button>
         </div>
         {read && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
@@ -441,16 +443,16 @@ export default function CreatePage() {
               return (
                 <div style={hv(g)}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><Mark hue={g} size={36}><GI size={20} /></Mark><div style={{ flex: 1, minWidth: 0 }}><div style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink }}>{GOALS.find((x) => x.id === g)?.label}</div>{read.summary && <div style={{ fontSize: 12.5, color: C.mute, marginTop: 1 }}>{read.summary}</div>}</div></div>
-                  {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>We do not do {read.unsupported.join(', ')} yet. Everything else is below.</div>}
+                  {read.unsupported.length > 0 && <div style={{ fontSize: 12, color: C.amberInk, background: C.amberBg, borderRadius: 10, padding: '7px 10px', marginTop: 8 }}>{T('We do not do {list} yet. Everything else is below.', { list: read.unsupported.join(', ') })}</div>}
                   <div style={{ marginTop: 6 }}>{picks.map((c) => { const I = iconFor(c); return <button key={c.id} type="button" onClick={() => open(c)} className="row" style={{ ...hv(c.goal), padding: '7px 2px' }}><Mark hue={c.goal} size={30}><I size={16} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{c.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{c.price}</b></span><ChevronRight size={15} color={C.faint} /></button> })}</div>
-                  {picks[0] && <button type="button" className="btn hue block" style={{ marginTop: 6 }} onClick={() => order(picks[0])}>Build this <ArrowRight size={15} /></button>}
+                  {picks[0] && <button type="button" className="btn hue block" style={{ marginTop: 6 }} onClick={() => order(picks[0])}>{T('Build this')} <ArrowRight size={15} /></button>}
                 </div>
               )
             })() : (
               <div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>{T('We could not read that one.')}</div>
                 <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>{T('Pick a goal above and we show the best ways, or send your words to your strategist and a person reads them.')}</div>
-                <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(ask)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 13, fontWeight: 700, color: C.mintDk, textDecoration: 'none' }}>Send it to your strategist <ArrowRight size={14} /></Link>
+                <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(ask)}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, fontSize: 13, fontWeight: 700, color: C.mintDk, textDecoration: 'none' }}>{T('Send it to your strategist')} <ArrowRight size={14} /></Link>
               </div>
             )}
           </div>
@@ -461,14 +463,14 @@ export default function CreatePage() {
 
   const Examples = () => (
     <div className="ex cc-scroll" style={{ margin: '10px 16px 0' }}>
-      {EXAMPLES.map(([g, t]) => { const k: HueKey = g === 'foryou' ? 'mint' : g
-        return <button key={t} type="button" onClick={() => { setAsk(t); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{t}</button> })}
+      {EXAMPLES.map(([g, t]) => { const k: HueKey = g === 'foryou' ? 'mint' : g; const words = T(t)
+        return <button key={t} type="button" onClick={() => { setAsk(words); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{words}</button> })}
     </div>
   )
   const AskBox = () => (
     <div className="ask">
       <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>{T('Not seeing it? Ask for anything')}</div>
-      <Link href="/dashboard/requests?type=other" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.faint, fontSize: 14 }}>Tell us what you need<span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span></Link>
+      <Link href="/dashboard/requests?type=other" style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.faint, fontSize: 14 }}>{T('Tell us what you need')}<span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span></Link>
     </div>
   )
 
@@ -600,7 +602,7 @@ export default function CreatePage() {
           </div>
         )}
 
-        <Sec t="Set up once" s="The basics, ticked off as you go" hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
+        <Sec t={T('Set up once')} s={T('The basics, ticked off as you go')} hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
         <div style={{ padding: '0 12px' }}>{setupRows.map((c) => <SetupRow key={c.id} c={c} />)}</div>
 
         <div style={{ margin: '18px 16px 0' }}>
@@ -627,7 +629,7 @@ export default function CreatePage() {
           {active.length > 0 && <button type="button" onClick={() => setFilters({ budget: 'any', you: 'any', speed: 'any', kind: 'any' })} className="fch" style={{ color: C.mute }}>Clear {active.length}</button>}
         </div>
         {!q && <div className="hintbar"><Lightbulb />{T('Plain words work: try flyer, menu photos, TikTok, Yelp, coupons')}</div>}
-        <div style={{ padding: '16px 16px 6px', fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{hits.length} {hits.length === 1 ? 'result' : 'results'}{q ? ` for “${q}”` : ''}</div>
+        <div style={{ padding: '16px 16px 6px', fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{T(hits.length === 1 ? '{n} result' : '{n} results', { n: hits.length })}{q ? ` ${T('for “{q}”', { q })}` : ''}</div>
         {hits.length === 0 ? (
           <div style={{ padding: '20px 16px', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing matches yet.')}</b> {T('Loosen a filter, or just tell us what you need.')}</div>
         ) : (
@@ -653,10 +655,10 @@ export default function CreatePage() {
     const step = answers.length
     const s = signals
     const path: [string, string, typeof Eye, string, HueKey][] = [
-      ['found', 'Found', Eye, s?.views30d ? `${s.views30d.toLocaleString()} saw your listing this month` : 'How many people see you', 'mint'],
-      ['tempt', 'Tempted', Lightbulb, s?.rating ? `${s.rating.toFixed(1)} stars · ${s.ratingCount ?? 0} reviews` : 'What they think when they look', 'nights'],
-      ['slow', 'Come in', DoorOpen, s?.actions30d ? `${s.actions30d.directions} asked for directions` : 'Who actually comes', 'amber'],
-      ['back', 'Come back', Repeat, 'Who comes twice', 'brand'],
+      ['found', T('Found'), Eye, s?.views30d ? T('{n} saw your listing this month', { n: s.views30d.toLocaleString() }) : T('How many people see you'), 'mint'],
+      ['tempt', T('Tempted'), Lightbulb, s?.rating ? T('{r} stars · {n} reviews', { r: s.rating.toFixed(1), n: s.ratingCount ?? 0 }) : T('What they think when they look'), 'nights'],
+      ['slow', T('Come in'), DoorOpen, s?.actions30d ? T('{n} asked for directions', { n: s.actions30d.directions }) : T('Who actually comes'), 'amber'],
+      ['back', T('Come back'), Repeat, T('Who comes twice'), 'brand'],
     ]
     const weak = answers[0] ?? null
     const Path = ({ k }: { k: string }) => (
@@ -672,7 +674,7 @@ export default function CreatePage() {
             <div className="opts">{qq.opts.map(([v, t, sub]) => <button key={v} type="button" onClick={() => setAnswers((a) => [...a, v])} className="opt press"><span className="rr" /><span style={{ flex: 1 }}><span className="t" style={{ display: 'block' }}>{t}</span>{sub && <span className="s" style={{ display: 'block' }}>{sub}</span>}</span></button>)}</div>
             {step > 0 && <button type="button" onClick={() => setAnswers((a) => a.slice(0, -1))} style={{ marginTop: 12, border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer', padding: 0 }}>{T('Back a step')}</button>}
           </div>
-          <Path k="How a guest reaches you" />
+          <Path k={T('How a guest reaches you')} />
         </div>
       )
     }
@@ -683,17 +685,17 @@ export default function CreatePage() {
     return (
       <div style={{ paddingBottom: 24 }}>
         <div style={{ padding: '10px 16px 0' }}>
-          <div className="eyebrow" style={{ ...hv(stage[4]), color: hueOf(stage[4])[1], background: tint(stage[4], 0.16), borderRadius: 999, padding: '5px 10px' }}>Where it sits: {stage[1]} · {stage[3]}</div>
+          <div className="eyebrow" style={{ ...hv(stage[4]), color: hueOf(stage[4])[1], background: tint(stage[4], 0.16), borderRadius: 999, padding: '5px 10px' }}>{T('Where it sits:')} {stage[1]} · {stage[3]}</div>
           <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, color: C.ink, marginTop: 8, lineHeight: 1.1 }}>{T('Your starter shelf')}</div>
-          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>Three picks that fit what you said. About {total ? `$${total.toLocaleString()}` : 'a quote'} to start.</div>
+          <div style={{ fontSize: 13.5, color: C.mute, marginTop: 4 }}>{T('Three picks that fit what you said. About {amount} to start.', { amount: total ? `$${total.toLocaleString()}` : T('a quote') })}</div>
         </div>
         <div style={{ padding: '12px 12px 0' }}>{picks.map((c) => { const Icon = iconFor(c); const why = whyNow(c) ?? c.plain.split('.')[0]
           return <button key={c.id} type="button" onClick={() => open(c)} className="row press" style={hv(c.goal)}><Mark hue={c.goal} size={36}><Icon size={18} /></Mark><span className="tx"><span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span><span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{why}</span></span><span className="r"><b>{c.price}</b></span></button> })}</div>
         <div style={{ padding: '10px 16px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {picks[0] && <button type="button" className="btn block" onClick={() => order(picks[0])}>Start with the first one <ArrowRight size={15} /></button>}
+          {picks[0] && <button type="button" className="btn block" onClick={() => order(picks[0])}>{T('Start with the first one')} <ArrowRight size={15} /></button>}
           <button type="button" onClick={() => setAnswers([])} style={{ border: 'none', background: 'none', color: C.mute, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{T('Start over')}</button>
         </div>
-        <Path k="Why these three" />
+        <Path k={T('Why these three')} />
       </div>
     )
   }
@@ -703,10 +705,10 @@ export default function CreatePage() {
     if (!c) return <div style={{ padding: 30, textAlign: 'center', color: C.mute }}>{T('That one is not on the shelf.')} <button type="button" onClick={() => go({ name: 'browse' })} style={{ border: 'none', background: 'none', color: C.mintDk, fontWeight: 700, cursor: 'pointer', font: 'inherit' }}>{T('Back to Create')}</button></div>
     const Icon = iconFor(c); const SI = STAGE_ICON[c.stage]; const buy = isBuyable(c); const YI = YOU_ICON[c.you] ?? Check
     const TL: [string, string, boolean][] = c.kind === 'setup'
-      ? [['Day 0', 'You order. We read what you already have.', false], ['Day 1', 'We start the work and send you anything we need.', false], ['Day 3', 'You check the result. One tap, or a note.', true], [c.ready, 'Done, and on your Home.', false]]
+      ? [[T('Day 0'), T('You order. We read what you already have.'), false], [T('Day 1'), T('We start the work and send you anything we need.'), false], [T('Day 3'), T('You check the result. One tap, or a note.'), true], [c.ready, T('Done, and on your Home.'), false]]
       : c.kind === 'program'
-        ? [['Day 0', 'You order. We read your menu, photos and calendar.', false], ['Week 1', 'The first pieces land for your OK.', true], ['Every week', 'New pieces go out on the plan.', false], ['Monthly', 'A read of what moved, on Insights.', false]]
-        : [['Day 0', 'You order. We read your menu, photos and calendar.', false], ['Day 1', 'We draft it.', false], ['Day 2', 'You approve in Inbox. One tap, or a note.', true], [c.ready, 'It goes out.', false]]
+        ? [[T('Day 0'), T('You order. We read your menu, photos and calendar.'), false], [T('Week 1'), T('The first pieces land for your OK.'), true], [T('Every week'), T('New pieces go out on the plan.'), false], [T('Monthly'), T('A read of what moved, on Insights.'), false]]
+        : [[T('Day 0'), T('You order. We read your menu, photos and calendar.'), false], [T('Day 1'), T('We draft it.'), false], [T('Day 2'), T('You approve in Inbox. One tap, or a note.'), true], [c.ready, T('It goes out.'), false]]
     /* What else is on the shelves this card sits on, and only what can be bought: a "goes well
        with" row full of coming-soon cards is a shop window of empty boxes. */
     const goesWith = [...new Set(CHIP_ORDER.filter((ch) => shelfForChip(ch, shape).includes(c.id)).flatMap((ch) => liveForChip(ch, shape)))]
@@ -716,14 +718,14 @@ export default function CreatePage() {
       <div style={{ ...hv(c.goal), paddingBottom: 100 }}>
         <div className="pp-hero">
           <span className="glass"><Icon /></span>
-          <span className="pill-w mv"><SI /> Moves {c.stage}</span>
+          <span className="pill-w mv"><SI /> {T('Moves {stage}', { stage: T(c.stage) })}</span>
           <div style={{ position: 'relative' }}><h1>{c.title}</h1>{why && buy && <div className="why">{why}</div>}{!buy && <div className="why"><span className="pill-w grey">{T('Coming soon')}</span></div>}</div>
         </div>
         {/* A coming-soon card prints NO price. A price is an offer, and there is nothing to
             offer yet; the reason takes its place. */}
         <div className="pp-facts">
           {buy && <div><b>{c.price}</b><span>{T('price')}</span></div>}
-          <div><b>{c.ready}</b><span>{T('ready in')}</span></div><div><b>{c.you}</b><span>{T('you do')}</span></div><div><b>{c.channels.length}</b><span>{T(c.channels.length === 1 ? 'channel' : 'channels')}</span></div>
+          <div><b>{c.ready}</b><span>{T('ready in')}</span></div><div><b>{T(c.you)}</b><span>{T('you do')}</span></div><div><b>{c.channels.length}</b><span>{T(c.channels.length === 1 ? 'channel' : 'channels')}</span></div>
         </div>
         {!buy && <div style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: C.fill, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{notSellableReason(c.id)}</div>}
         {(() => { const ps = buy ? promiseSentence(PROMISE_BY_CARD[c.id] ?? []) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
@@ -734,13 +736,13 @@ export default function CreatePage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute }}><YI size={14} color="#d99a1e" /> {T('Amber is you. Everything else is us.')}</div>
         </div>
         <div className="pp-sec"><h2>{T('Where it shows up')}</h2><div className="chips">{c.channels.map((x) => <span key={x}>{x}</span>)}</div></div>
-        {goesWith.length > 0 && (<><Sec t="Goes well with" hue={c.goal} /><Shelf>{goesWith.map((x) => <Mini key={x.id} c={x} />)}</Shelf></>)}
+        {goesWith.length > 0 && (<><Sec t={T('Goes well with')} hue={c.goal} /><Shelf>{goesWith.map((x) => <Mini key={x.id} c={x} />)}</Shelf></>)}
         <div className="sticky"><div className="in">
           {/* No price and no Order on a card that cannot be bought. The bar says what it is
               waiting on and offers the one thing that is real: telling us you want it. */}
-          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? c.price : T('Not on sale yet')}<span>{buy ? `${c.cadence} · ${c.you.toLowerCase()} · ${c.ready}` : T('We will tell you the day it opens')}</span></div>
+          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? c.price : T('Not on sale yet')}<span>{buy ? `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}` : T('We will tell you the day it opens')}</span></div>
           {buy
-            ? <button type="button" className="btn hue" onClick={() => order(c)}>{c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order'} <ArrowRight size={15} /></button>
+            ? <button type="button" className="btn hue" onClick={() => order(c)}>{T(c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order')} <ArrowRight size={15} /></button>
             : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>{T('Tell me when')}</Link>}
         </div></div>
       </div>
@@ -790,7 +792,7 @@ export default function CreatePage() {
     </>
   ) : null
 
-  const title = view.name === 'guide' ? 'Guide me' : view.name === 'product' ? (cards[view.id]?.title ?? 'Create') : null
+  const title = view.name === 'guide' ? T('Guide me') : view.name === 'product' ? (cards[view.id]?.title ?? 'Create') : null
   const backTo = view.name === 'browse' ? undefined : '/dashboard/campaigns/new'
   return (
     <MvpShell active="create" header={

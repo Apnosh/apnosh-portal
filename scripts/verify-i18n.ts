@@ -27,6 +27,7 @@ import { allShapeWords, stageSubFor, stageLabelFor, emptyLineFor, EMPTY_LINE_DEF
 import { SHELF_SHAPES } from '../src/lib/clients/shape'
 import { replyLine, oneBusinessDayAfter, waitLabel, askFrom } from '../src/lib/team/reply-line'
 import { resolveLang } from '../src/lib/i18n/resolve-lang'
+import { looseStringsIn } from '../src/lib/i18n/scan-screen'
 
 let failures = 0
 function check(name: string, ok: boolean | (() => boolean), detail?: string) {
@@ -106,14 +107,9 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
    * rendering 'Real · Google', '3 in 100 engaged', 'Getting your numbers' and 'Repeat visits'
    * in the middle of a Spanish page.
    *
-   * So this reads the SOURCE of the screens. Every JSX text node and every label / sub / title
-   * / tag / placeholder / aria-label string in these files has to be a key the manifest carries
-   * — and every t('…') key in them has to be listed too, because a key that is not in the
-   * dictionary renders its English and nothing would have said so.
-   *
-   * It is a regex pass, not a parser: it will miss text glued together out of expressions, and
-   * it is meant to be tightened when it does. Missing something is fine; passing a screen with
-   * plain English literals on it is not.
+   * So this reads the SOURCE of the screens. The scanner is src/lib/i18n/scan-screen.ts, kept
+   * apart from this script so it can be pointed at a scratch file with known English in it and
+   * proved to bite. All this part owns is WHICH files are the screens.
    */
   const SCREEN_FILES: Record<string, readonly string[]> = {
     home: ['src/components/mvp/home-funnel.tsx', 'src/components/mvp/people-row.tsx', 'src/components/mvp/counted-strip.tsx'],
@@ -121,6 +117,7 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
     getHelp: ['src/app/dashboard/get-help/page.tsx'],
     create: ['src/components/mvp/create/create-page.tsx'],
     onboarding: [
+      'src/app/(auth)/onboarding/full/page.tsx',
       'src/app/(auth)/onboarding/full/step-renderer.tsx',
       'src/app/(auth)/onboarding/full/steps/step-goals.tsx',
       'src/app/(auth)/onboarding/full/steps/step-shape.tsx',
@@ -130,30 +127,13 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
     // the only part this move translated — its file is listed here the day the rest of it is.
   }
 
-  /** Not owner copy: a proper noun, a symbol, or a word that is the same in both languages. */
-  const NOT_COPY = new Set(['Google', 'Apnosh', 'TikTok', 'Yelp', 'Instagram', 'Facebook', 'Free'])
-  const isCopy = (v: string) => /[A-Za-z]{2}/.test(v) && !NOT_COPY.has(v)
-
   const listed = new Set([...allScreenKeys(), ...allShapeWords()])
-  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n')
-  // a template literal is checked with its holes emptied: `${n} took a step` is English copy,
-  // `${a} · ${b}` is two values with a dot between them and nothing to translate.
-  const holes = (v: string) => v.replace(/\$\{[^}]*\}/g, '')
-  const CODEY = /[(){}=;]/
-  const PROP = /\b(label|sub|title|tag|conv|message|placeholder|aria-label|alt|blurb|subtitle|hint)\s*[:=]\s*(?:\{\s*)?(['"`])([^'"`]*)\2/g
-  const TEXT = />([^<>{}\n]{1,400})<\//g
-  const TKEY = /\b[tT]\(\s*'([^']+)'/g
-
   for (const [screen, files] of Object.entries(SCREEN_FILES)) {
     const loose: string[] = []
     for (const rel of files) {
       let src = ''
-      try { src = strip(readFileSync(join(process.cwd(), rel), 'utf8')) } catch { loose.push(`${rel}: cannot read`); continue }
-      const seen = new Set<string>()
-      for (const m of src.matchAll(TEXT)) { const v = m[1].trim(); if (!CODEY.test(v) && isCopy(v)) seen.add(v) }
-      for (const m of src.matchAll(PROP)) { const v = holes(m[3]).trim(); if (isCopy(v)) seen.add(m[3].trim()) }
-      for (const m of src.matchAll(TKEY)) seen.add(m[1])
-      for (const v of seen) if (!listed.has(v)) loose.push(`${rel.split('/').pop()}: "${v}"`)
+      try { src = readFileSync(join(process.cwd(), rel), 'utf8') } catch { loose.push(`${rel}: cannot read`); continue }
+      for (const v of looseStringsIn(src, listed)) loose.push(`${rel.split('/').pop()}: "${v}"`)
     }
     check(`  ${screen}: every string it draws is in the manifest`, loose.length === 0, loose.join('  |  '))
   }

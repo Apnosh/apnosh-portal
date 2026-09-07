@@ -50,7 +50,7 @@ export default function GetHelpPage() {
     <MvpShell active="more" header={<MvpDetailHeader title={T('Get help')} subtitle={T('A real person answers')} />}>
       <div style={{ background: '#fff', minHeight: '100%', padding: '10px 16px 24px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         <MvpGroup title={T('Talk to us')} hue="mint">
-          <MvpRow icon={<MessageCircle size={18} />} hue="mint" label={T('Message us')} sub={T(`We reply ${REPLY_PROMISE}`)} href="/dashboard/messages?to=support" />
+          <MvpRow icon={<MessageCircle size={18} />} hue="mint" label={T('Message us')} sub={T('We reply {promise}', { promise: T(REPLY_PROMISE) })} href="/dashboard/messages?to=support" />
           <MvpRow icon={<Megaphone size={18} />} hue="announce" label={T('Share feedback')} sub={T('Tell us what to make better')} href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent('Feedback: ')}`} />
         </MvpGroup>
         {clock && <div style={{ fontSize: 12, color: C.mute, margin: '-8px 4px 18px' }}>{clock}</div>}
