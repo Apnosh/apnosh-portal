@@ -345,3 +345,42 @@ export function priorIntentVerdict(status: string | null | undefined): PriorInte
       return 'unknown'
   }
 }
+
+/* ── The last look, at the moment money is recorded ──────────────────────────
+   The cancel above closes the door. This is the alarm on it: if a credit somehow came off two
+   bills anyway, the second one must not be recorded as though the discount were real. */
+
+/**
+ * Is this payment about to claim more of a credit than the credit has left?
+ *
+ *   'ok'         — the sums add up; record the order with its credit
+ *   'over'       — the credit is already spent. Record the money (it was taken), but with NO
+ *                  credit on the row, and tell a person.
+ *   'unreadable' — the ledger would not answer. Change nothing and say so: zeroing a credit we
+ *                  cannot account for would hand an owner back money they really did spend.
+ *
+ * `rowCreditCents` is the credit on THIS payment row that is NOT yet inside `settledCents`. Pass 0
+ * when the row is already in the sum — the webhook flips a row to paid and then asks, so its own
+ * cents are already counted. Only ask this about an order that carries a credit; an order with
+ * none has nothing to check.
+ */
+export type OverApplyVerdict = 'ok' | 'over' | 'unreadable'
+
+export function overApplyVerdict(i: { faceCents: number; settledCents: number | null; rowCreditCents: number }): OverApplyVerdict {
+  if (i.settledCents == null) return 'unreadable'
+  const row = Math.max(0, Math.round(i.rowCreditCents || 0))
+  const face = Math.max(0, Math.round(i.faceCents || 0))
+  return Math.max(0, Math.round(i.settledCents)) + row > face ? 'over' : 'ok'
+}
+
+/**
+ * How many cents of this order's discount were never really there — the amount the owner was
+ * undercharged by. Zero whenever the sums add up.
+ */
+export function overAppliedCents(i: { faceCents: number; settledCents: number | null; rowCreditCents: number }): number {
+  if (overApplyVerdict(i) !== 'over') return 0
+  const row = Math.max(0, Math.round(i.rowCreditCents || 0))
+  const face = Math.max(0, Math.round(i.faceCents || 0))
+  const settled = Math.max(0, Math.round(i.settledCents ?? 0))
+  return Math.min(row, settled + row - face)
+}

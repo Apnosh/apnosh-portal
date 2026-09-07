@@ -21,8 +21,8 @@ import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 import { getPromiseRows } from '@/lib/promises/read'
 import {
   REFERRAL_CREDIT_CENTS, CODE_LENGTH, makeCode, normalizeCode, isCodeShape,
-  referralBlock, creditAvailableCents, isRealIntentId, priorIntentVerdict,
-  type HoldState, type ReferralStatus,
+  referralBlock, creditAvailableCents, creditWords, isRealIntentId, priorIntentVerdict,
+  overApplyVerdict, overAppliedCents, type HoldState, type ReferralStatus,
 } from './model'
 
 const warn = (where: string, e: unknown) =>
@@ -537,6 +537,66 @@ async function markCheckoutCancelled(intentId: string): Promise<void> {
       .eq('stripe_payment_intent_id', intentId)
       .in('status', ['pending', 'failed'])
   } catch (e) { warn('could not close the old checkout row', e) }
+}
+
+/**
+ * THE LAST LOOK, at the moment a payment is recorded. True means "record the money, but with no
+ * credit on it" — the caller writes friend_credit_cents 0.
+ *
+ * The cancel above closes the door; this is the alarm on it. If a credit somehow came off two
+ * bills anyway, the money still has to be recorded — it was really taken, and a payment we drop is
+ * worse than a discount we mis-priced. What must never happen is the second order being recorded
+ * as though the discount were real, because then nothing anywhere says the owner was undercharged.
+ * So the row keeps the money and loses the credit, and a person is told, by name and by amount.
+ *
+ * Pass `alreadyCounted` when the payment row is already 'paid' in the ledger (the webhook flips
+ * first and asks second), so its own cents are not counted twice.
+ */
+export async function friendCreditOverApplied(args: {
+  intentId: string
+  clientId: string
+  creditId: string | null | undefined
+  rowCreditCents: number | null | undefined
+  alreadyCounted?: boolean
+}): Promise<boolean> {
+  const creditId = (args.creditId ?? '').trim()
+  const rowCents = Math.max(0, Math.round(Number(args.rowCreditCents) || 0))
+  if (!creditId || rowCents <= 0) return false          // no credit on this order: nothing to check
+  let face = 0
+  try {
+    const { data, error } = await createAdminClient().from('client_credits').select('cents').eq('id', creditId).maybeSingle()
+    if (error || !data) { warn('could not read the credit at payment time', error); return false }
+    face = Number(data.cents) || 0
+  } catch (e) { warn('could not read the credit at payment time', e); return false }
+  const settled = await settledCentsFor(creditId)
+  const input = { faceCents: face, settledCents: settled, rowCreditCents: args.alreadyCounted ? 0 : rowCents }
+  const verdict = overApplyVerdict(input)
+  // Unreadable: change nothing. Zeroing a credit we cannot account for would hand an owner back
+  // money they really did spend. Say it loudly so a person can look.
+  if (verdict === 'unreadable') {
+    console.error('[referrals] could not account for credit', creditId, 'while recording', args.intentId)
+    return false
+  }
+  if (verdict !== 'over') return false
+  const short = overAppliedCents(input)
+  console.error(`[referrals] credit over-applied on ${args.intentId}; owner was undercharged by ${creditWords(short)}`)
+  try {
+    const admin = createAdminClient()
+    const { getAdminUserIds, createNotification } = await import('@/lib/notify')
+    const { data: client } = await admin.from('clients').select('name').eq('id', args.clientId).maybeSingle()
+    const name = (client?.name as string) || 'A client'
+    for (const adminId of await getAdminUserIds(admin)) {
+      await createNotification({
+        supabase: admin,
+        userId: adminId,
+        type: 'payment',
+        title: 'Credit used twice',
+        body: `Credit over-applied on ${args.intentId}: ${name} was undercharged by ${creditWords(short)}. Refund the order or settle it by hand.`,
+        link: '/admin/referrals',
+      })
+    }
+  } catch (e) { warn('could not page anybody about a credit used twice', e) }
+  return true
 }
 
 /**

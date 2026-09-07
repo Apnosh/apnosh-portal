@@ -14,7 +14,7 @@ import {
   CODE_CHARSET, CODE_BANNED, CODE_LENGTH, makeCode, normalizeCode, isCodeShape, referralLink,
   REFERRAL_CREDIT_CENTS, NEW_CLIENT_DAYS, creditWords, nextStatus, readyToCredit, referralBlock, normalizePhone,
   creditAvailableCents, liveHoldCents, CREDIT_HOLD_MS, STATUS_WORD, friendWord, REFUND_VOID_REASON,
-  isRealIntentId, priorIntentVerdict,
+  isRealIntentId, priorIntentVerdict, overApplyVerdict, overAppliedCents,
   type ReferralStatus, type ReferralEvent, type CreditRowState,
 } from '@/lib/referrals/model'
 import { checkoutBill, applyFriendCredit, feeCentsOn, preTaxFromRow, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
@@ -244,6 +244,41 @@ function main() {
   s.check('every verdict that is not a plain cancel-or-gone refuses the credit',
     (['processing', 'succeeded', 'requires_capture', '', null, undefined, 'weird'] as const)
       .every((st) => { const v = priorIntentVerdict(st); return v !== 'cancel' && v !== 'gone' }))
+
+  /* ── 3c-iii. the alarm on the door ───────────────────────────────────── */
+  s.group('if a credit somehow comes off two bills, the second one says so out loud')
+  const face = REFERRAL_CREDIT_CENTS
+  // PI_b is recorded first: nothing else has settled, so its $50 is real.
+  s.eq('the first of the two orders is priced correctly',
+    overApplyVerdict({ faceCents: face, settledCents: 0, rowCreditCents: 5_000 }), 'ok')
+  // Then PI_a is paid. The ledger now already carries $50 against a $50 credit.
+  s.eq('the SECOND order is caught: the credit is already spent',
+    overApplyVerdict({ faceCents: face, settledCents: 5_000, rowCreditCents: 5_000 }), 'over')
+  s.eq('and the owner was undercharged by exactly the second $50',
+    overAppliedCents({ faceCents: face, settledCents: 5_000, rowCreditCents: 5_000 }), 5_000)
+  s.eq('a credit taken twice is never reported as more than this order took',
+    overAppliedCents({ faceCents: face, settledCents: 20_000, rowCreditCents: 5_000 }), 5_000)
+  s.eq('spending exactly the face value is fine, never over',
+    overApplyVerdict({ faceCents: face, settledCents: 2_000, rowCreditCents: 3_000 }), 'ok')
+  s.eq('a cent past it is over',
+    overApplyVerdict({ faceCents: face, settledCents: 2_000, rowCreditCents: 3_001 }), 'over')
+  s.eq('and that cent is what the owner was short', overAppliedCents({ faceCents: face, settledCents: 2_000, rowCreditCents: 3_001 }), 1)
+  s.eq('the webhook flips the row first, so it asks with its own cents already in the sum',
+    overApplyVerdict({ faceCents: face, settledCents: 5_000, rowCreditCents: 0 }), 'ok')
+  s.eq('and it still catches the second one that way',
+    overApplyVerdict({ faceCents: face, settledCents: 10_000, rowCreditCents: 0 }), 'over')
+  s.eq('a ledger that will not answer changes nothing',
+    overApplyVerdict({ faceCents: face, settledCents: null, rowCreditCents: 5_000 }), 'unreadable')
+  s.eq('and an unreadable ledger reports nobody undercharged',
+    overAppliedCents({ faceCents: face, settledCents: null, rowCreditCents: 5_000 }), 0)
+  s.eq('an order that adds up owes nobody anything',
+    overAppliedCents({ faceCents: face, settledCents: 0, rowCreditCents: 5_000 }), 0)
+  s.eq('an order carrying no credit is always fine, whatever the ledger says',
+    overApplyVerdict({ faceCents: face, settledCents: 99_999, rowCreditCents: 0 }), 'over')
+  // ^ which is why the CALLER asks only about an order that carries a credit. Proved here so the
+  // day somebody drops that guard, this line is what tells them.
+  s.check('a voided credit (face 0) with money against it reads as over, never as free',
+    overApplyVerdict({ faceCents: 0, settledCents: 5_000, rowCreditCents: 5_000 }) === 'over')
 
   /* ── 3d. the receipt adds up ─────────────────────────────────────────── */
   s.group('the lines on the receipt add up to the number on the card')

@@ -772,8 +772,28 @@ async function handleCampaignPaymentSucceeded(
     .eq('stripe_payment_intent_id', pi.id)
     .eq('status', 'pending')
     .select('*')
-  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; campaign_id: string | null; request_id?: string | null; total_cents: number } | undefined : undefined
+  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; campaign_id: string | null; request_id?: string | null; total_cents: number; friend_credit_cents?: number | null; client_credit_id?: string | null } | undefined : undefined
   if (!row) return
+
+  // THE CREDIT, PRICED AGAIN. Same last look /api/checkout/complete takes, because this backstop is
+  // the ONLY thing that runs when the tab closed — and the double-spend it guards against is
+  // exactly the two-tabs case. The money stays recorded; only a discount that was already spent is
+  // taken off the row, and a person is paged. `alreadyCounted` because the flip above already put
+  // this row's cents into the ledger sum.
+  if (row.client_credit_id && (row.friend_credit_cents ?? 0) > 0) {
+    const { friendCreditOverApplied } = await import('@/lib/referrals/server')
+    const over = await friendCreditOverApplied({
+      intentId: pi.id,
+      clientId: row.client_id,
+      creditId: row.client_credit_id,
+      rowCreditCents: row.friend_credit_cents ?? 0,
+      alreadyCounted: true,
+    }).catch(() => false)
+    if (over) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('campaign_payments').update({ friend_credit_cents: 0 }).eq('stripe_payment_intent_id', pi.id)
+    }
+  }
 
   if (isDesk) {
     await settleDeskPayment(supabase, row, pi.metadata?.requestId ?? null, unixToIso(pi.created))

@@ -9,6 +9,7 @@ import { verifyAndLinkCheckoutPayment } from '@/lib/campaigns/checkout-server'
 import { deskBill } from '@/lib/requests/desk-bill'
 import { deskPaymentMatchesOrder } from '@/lib/requests/desk-guards'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { friendCreditOverApplied } from '@/lib/referrals/server'
 
 function denied(reason: string | undefined) {
   return NextResponse.json({ error: reason ?? 'forbidden' }, { status: reason === 'unauthenticated' ? 401 : 403 })
@@ -75,6 +76,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not verify payment.' }, { status: 502 })
   }
 
+  // THE CREDIT, PRICED AGAIN AT THE LAST MOMENT. The money is real and is recorded either way —
+  // never lose a payment — but a discount that was already spent on another order must not be
+  // recorded as though it were real, or nothing anywhere says the owner was undercharged. When it
+  // was, the row is written with no credit on it and every admin is paged. Best-effort: a database
+  // without migration 261 has no credit columns, so this is a clean no-op.
+  const overApplied = await friendCreditOverApplied({
+    intentId: paymentIntentId,
+    clientId: row.client_id as string,
+    creditId: (row.client_credit_id as string | null) ?? null,
+    rowCreditCents: (row.friend_credit_cents as number | null) ?? 0,
+  }).catch(() => false)
+
   const nowISO = new Date().toISOString()
   await paymentsTable()
     .update({
@@ -82,6 +95,7 @@ export async function POST(req: NextRequest) {
       campaign_id: campaignId ?? row.campaign_id ?? null,
       paid_at: nowISO,
       ...(campaignId ? { shipped_at: nowISO } : {}),
+      ...(overApplied ? { friend_credit_cents: 0 } : {}),
     })
     .eq('stripe_payment_intent_id', paymentIntentId)
 
@@ -161,6 +175,18 @@ async function completeDeskOrder(paymentIntentId: string, requestId: string, pay
   if (!reqRow) return NextResponse.json({ error: 'That order does not exist.' }, { status: 404 })
   // Tenancy: the payment's client and the order's client must be the same account.
   if (String(reqRow.client_id ?? '') !== clientId) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+  // Same last look the cart takes, because a desk order carries a friend credit too. Done BEFORE
+  // the verify that stamps the row paid, and it never blocks the payment — it only stops a spent
+  // discount being recorded as a real one, and pages a person when it happens.
+  if (await friendCreditOverApplied({
+    intentId: paymentIntentId,
+    clientId,
+    creditId: (payRow.client_credit_id as string | null) ?? null,
+    rowCreditCents: (payRow.friend_credit_cents as number | null) ?? 0,
+  }).catch(() => false)) {
+    await paymentsTable().update({ friend_credit_cents: 0 }).eq('stripe_payment_intent_id', paymentIntentId)
+  }
 
   const cadence = reqRow.cadence === 'monthly' ? 'monthly' as const : 'once' as const
   const bill = deskBill(reqRow.quote_cents as number | null, cadence)
