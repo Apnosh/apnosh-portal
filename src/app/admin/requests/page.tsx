@@ -328,6 +328,11 @@ export default function AdminRequestsPage() {
                       )}
                     </div>
 
+                    {/* THE HANDOVER. A website order is not delivered when the site is live — it is
+                        delivered when the owner holds the domain. Marking it delivered is refused
+                        by the API until every required row is ticked, so the rows live here. */}
+                    <HandoverBoard requestId={row.id} busy={saving === row.id} onSaved={() => void load()} onError={setError} />
+
                     <div className="flex flex-wrap gap-2">
                       {!v1Only && (
                         <>
@@ -372,6 +377,93 @@ export default function AdminRequestsPage() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The handover checklist for one desk order, on the board where staff move its status.
+ *
+ * Renders nothing for work that hands nothing over (every type but a website today), so it never
+ * becomes a row a person learns to tick without reading. The note beside each row is where it went
+ * in plain words, because a tick with no note is a memory, not a record.
+ */
+function HandoverBoard({ requestId, busy, onSaved, onError }: {
+  requestId: string
+  busy: boolean
+  onSaved: () => void
+  onError: (m: string | null) => void
+}) {
+  const [state, setState] = useState<{ items: { id: string; label: string; why: string; required: boolean; done: boolean; note?: string }[]; doneCount: number } | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [notes, setNotes] = useState<Record<string, string>>({})
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/requests/${requestId}`)
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.handover) setState(d.handover)
+    } catch { /* the board still works; the checklist just does not show */ }
+  }, [requestId])
+  useEffect(() => { void load() }, [load])
+
+  if (!state || state.items.length === 0) return null
+
+  const mark = async (id: string, done: boolean) => {
+    if (saving || busy) return
+    setSaving(id); onError(null)
+    try {
+      const r = await fetch(`/api/requests/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ handover: { id, done, ...(notes[id] !== undefined ? { note: notes[id] } : {}) } }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'Could not save that.')
+      await load(); onSaved()
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Could not save that.')
+    }
+    setSaving(null)
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-sm font-semibold text-gray-900">What the owner has to hold</div>
+        <div className="text-[11px] text-gray-500">{state.doneCount} of {state.items.length} done</div>
+      </div>
+      <div className="mt-1 text-xs text-gray-500">This order cannot be marked delivered until every required row is ticked.</div>
+      <div className="mt-2.5 space-y-2">
+        {state.items.map((it) => (
+          <div key={it.id} className="rounded-lg border border-gray-100 p-2.5">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={it.done}
+                disabled={saving !== null || busy}
+                onChange={(e) => { void mark(it.id, e.target.checked) }}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-gray-900">
+                  {it.label}
+                  {!it.required && <span className="ml-1.5 text-[11px] font-normal text-gray-400">optional</span>}
+                </span>
+                <span className="block text-[11.5px] text-gray-500 leading-snug">{it.why}</span>
+              </span>
+            </label>
+            <input
+              type="text"
+              defaultValue={it.note ?? ''}
+              onChange={(e) => setNotes((n) => ({ ...n, [it.id]: e.target.value }))}
+              onBlur={() => { if (notes[it.id] !== undefined && notes[it.id] !== (it.note ?? '')) void mark(it.id, it.done) }}
+              placeholder="Where it went, e.g. in Mia's GoDaddy, mia@ is the owner"
+              className="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

@@ -48,6 +48,8 @@ interface PrepareResult {
   invoice?: boolean
   /** Monthly-only cart: a SetupIntent saves the card (no charge today); the subscription bills it. */
   setupOnly?: boolean
+  /** A desk order that has already been paid for. Never a second charge, never a second work order. */
+  alreadyPaid?: boolean
   paymentIntentId?: string
   clientSecret?: string
   publishableKey?: string | null
@@ -188,9 +190,12 @@ export default function CampaignCheckout({ clientId, draft, desk, restaurant, pr
                 and placing it "on invoice" would mean shipping a campaign that does not exist. So it
                 says the same sentence a campaign says and stops. Nothing was minted. */}
             {desk && prep?.invoice && <ErrorBox message="Card checkout is not open yet. Your order is saved, and your team will send an invoice for this." onBack={onCancel} />}
+            {/* Paid already — a reopened tab, a back button, a double tap. Say so plainly rather
+                than let it fall through to the missing-keys message and read as a fault. */}
+            {desk && prep?.alreadyPaid && <ErrorBox message="This order is already paid. Your team has it." onBack={onCancel} />}
             {!desk && prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} onPlaced={onPlaced} />}
             {!desk && prep?.invoice && !prep.free && <InvoiceCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} breakdown={prep.breakdown} monthlyCents={prep.monthlyCents ?? 0} onPlaced={onPlaced} />}
-            {prep && !prep.free && !prep.invoice && prep.clientSecret && prep.publishableKey && (
+            {prep && !prep.free && !prep.invoice && !prep.alreadyPaid && prep.clientSecret && prep.publishableKey && (
               <Elements
                 stripe={stripePromiseFor(prep.publishableKey)}
                 options={{ clientSecret: prep.clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: MINT, fontFamily: 'Inter, sans-serif', borderRadius: '12px' } } }}
@@ -213,7 +218,7 @@ export default function CampaignCheckout({ clientId, draft, desk, restaurant, pr
                 />
               </Elements>
             )}
-            {prep && !prep.free && !prep.invoice && (!prep.clientSecret || !prep.publishableKey) && (
+            {prep && !prep.free && !prep.invoice && !prep.alreadyPaid && (!prep.clientSecret || !prep.publishableKey) && (
               <ErrorBox message="Payments aren’t configured yet (missing Stripe keys). Add the Stripe keys and try again." onBack={onCancel} />
             )}
           </>
