@@ -8,7 +8,7 @@
  * ledger; this component never invents or estimates.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { X, ChevronRight, ChevronDown } from 'lucide-react'
 
 export interface ProofCardData {
@@ -36,12 +36,17 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   card: ProofCardData
   onDismiss: () => void
   onSee?: () => void
-  /** Fired when the owner opens the win: the strip expands, or they tap the card's link. */
+  /** Fired once when the owner opens the win: the strip expands, they tap the card, or its link. */
   onOpen?: () => void
   /** Home renders the slim strip first so the funnel hero keeps its height. */
   defaultOpen?: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  /* One "they opened it" per card. The deck renders the front card already expanded, so without
+     a tap on the card itself the only way to open a WIN was a link most wins do not have — and
+     the mark that says a win landed was never written. Once, so a link tap does not double it. */
+  const opened = useRef(false)
+  const markOpen = () => { if (!opened.current) { opened.current = true; onOpen?.() } }
   const headsUp = card.tone === 'heads_up'
   const dotColor = headsUp ? '#aeaeb2' : '#4abd98'
   const labelColor = headsUp ? '#6e6e73' : '#2e9a78'
@@ -49,7 +54,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   if (!open) {
     return (
       <button
-        onClick={() => { setOpen(true); onOpen?.() }}
+        onClick={() => { setOpen(true); markOpen() }}
         className="mvp-rise"
         style={{
           display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
@@ -67,6 +72,9 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   return (
     <div
       className="mvp-rise"
+      /* a tap anywhere on the card counts as opening the win (the X and the link handle their
+         own clicks); nothing about how the card looks changes */
+      onClick={markOpen}
       style={{
         position: 'relative', borderRadius: 18, padding: '16px 16px 15px', marginBottom: 12,
         background: '#fff',
@@ -74,7 +82,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       }}
     >
       <button
-        onClick={onDismiss} aria-label="Hide this"
+        onClick={(e) => { e.stopPropagation(); onDismiss() }} aria-label="Hide this"
         style={{ position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 99, border: 'none', background: '#f1f1f4', color: '#8e8e93', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
       >
         <X size={13} />
@@ -108,14 +116,14 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       {card.cta ? (
         <a
           href={card.cta.href}
-          onClick={() => onOpen?.()}
+          onClick={markOpen}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}
         >
           {card.cta.label} <ChevronRight size={13} />
         </a>
       ) : onSee && (
         <button
-          onClick={onSee}
+          onClick={(e) => { e.stopPropagation(); markOpen(); onSee() }}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
         >
           See the week <ChevronRight size={13} />
