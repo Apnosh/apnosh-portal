@@ -121,16 +121,20 @@ export async function getOrderPeople(clientId: string, reads: PeopleReads = {}):
   if (!clientId) return empty
   const admin = createAdminClient()
 
-  // A floor on how old a piece of work can be and still put a face on Home. A quote nobody ever
-  // accepted, or an order a client walked away from, keeps its status forever — without this it
-  // would keep a person on the row for the life of the account. Ninety days is long enough that
-  // a real slow job (a shoot waiting on a season) is still counted.
-  const since = new Date(Date.now() - 90 * 86_400_000).toISOString()
+  // A floor on how old a NEVER-ACCEPTED request can be and still put a face on Home. A quote
+  // nobody ever answered keeps its status forever, and without a floor it would keep a person
+  // on the row for the life of the account. It applies ONLY to that case: a creative_request
+  // still sitting at requested / in_review / quoted. An open work order is real work somebody
+  // is on, however old it is — a shoot waiting on a season, a program running all year — and
+  // cutting those at ninety days took the person off Home while they were still doing the job.
+  const QUOTE_FLOOR = new Date(Date.now() - 90 * 86_400_000).toISOString()
+  /** a desk request nobody has accepted yet — the only place the floor applies */
+  const NEVER_STARTED = new Set(['requested', 'in_review', 'quoted'])
 
   const [svcRes, creatorRes, deskRes, strategistId, lag, ask] = await Promise.all([
-    admin.from('service_work_orders').select('id, title, status, due_date, assignee_id, campaign_id').eq('client_id', clientId).gte('created_at', since).limit(200).then((r) => r.data ?? [], () => []),
-    admin.from('creator_work_orders').select('id, title, status, due_date, discipline, vendor_id, campaign_id').eq('client_id', clientId).gte('created_at', since).limit(200).then((r) => r.data ?? [], () => []),
-    admin.from('creative_requests').select('id, type, status, created_at').eq('client_id', clientId).gte('created_at', since).limit(100).then((r) => r.data ?? [], () => []),
+    admin.from('service_work_orders').select('id, title, status, due_date, assignee_id, campaign_id').eq('client_id', clientId).order('created_at', { ascending: false }).limit(200).then((r) => r.data ?? [], () => []),
+    admin.from('creator_work_orders').select('id, title, status, due_date, discipline, vendor_id, campaign_id').eq('client_id', clientId).order('created_at', { ascending: false }).limit(200).then((r) => r.data ?? [], () => []),
+    admin.from('creative_requests').select('id, type, status, created_at').eq('client_id', clientId).order('created_at', { ascending: false }).limit(100).then((r) => r.data ?? [], () => []),
     currentStrategist(admin, clientId).catch(() => null),
     reads.lag ? replyLagMinutesMedian(clientId, 30).catch(() => null) : Promise.resolve(null),
     reads.ask ? latestAsk(clientId).catch(() => null) : Promise.resolve(null),
@@ -174,6 +178,8 @@ export async function getOrderPeople(clientId: string, reads: PeopleReads = {}):
     const { requestTypeById } = await import('@/lib/requests/catalog')
     for (const r of deskRes as { id: string; type: string; status: string; created_at: string }[]) {
       if (DESK_DONE.has(r.status)) continue
+      // the floor, and only here: a quote nobody ever accepted stops being somebody's work
+      if (NEVER_STARTED.has(r.status) && r.created_at < QUOTE_FLOOR) continue
       add(strategistId, { kind: 'desk', id: r.id, title: requestTypeById(r.type)?.label ?? r.type, status: r.status, dueDate: null, campaignId: null }, ROLE_OF_REQUEST[r.type] ?? 'Strategist')
     }
   }
