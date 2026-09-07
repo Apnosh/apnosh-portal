@@ -164,6 +164,8 @@ async function dispatch(event: Stripe.Event, supabase: AdminClient) {
       return handleChargeRefunded(supabase, event.data.object as Stripe.Charge)
     case 'charge.dispute.created':
       return handleDisputeCreated(supabase, event.data.object as Stripe.Dispute)
+    case 'charge.dispute.closed':
+      return handleDisputeClosed(supabase, event.data.object as Stripe.Dispute)
 
     // --- Legacy (orders self-serve flow) ---
     case 'checkout.session.completed':
@@ -922,6 +924,80 @@ async function handleDisputeCreated(supabase: AdminClient, dispute: Stripe.Dispu
       })
     }
   } catch (e) { console.warn('[stripe] dispute page failed', (e as Error)?.message) }
+}
+
+/**
+ * charge.dispute.closed — the bank decided.
+ *
+ * WON: the money stays with us. The row was parked on 'disputed', which reads as "contested" on
+ * every money surface, so it goes back to the collected status the refund history says it should
+ * be — 'paid' when nothing was ever refunded, 'partially_refunded' when something was — and
+ * disputed_at is cleared. dispute_cents is KEPT: it happened, and the history should say so.
+ *
+ * LOST: the bank has taken the money. That is a full refund in everything but name, so it gets the
+ * same settlement — void the undelivered charge rows, stop production, cancel the subscription,
+ * reverse the tax, tell everyone — WITHOUT calling Stripe refunds, because refunding a charge the
+ * bank already pulled would send the same money twice.
+ */
+async function handleDisputeClosed(supabase: AdminClient, dispute: Stripe.Dispute) {
+  const piId = typeof dispute.payment_intent === 'string' ? dispute.payment_intent : dispute.payment_intent?.id
+  if (!piId) return
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: row } = await (supabase as any)
+    .from('campaign_payments')
+    .select('*')
+    .eq('stripe_payment_intent_id', piId)
+    .maybeSingle()
+  if (!row) return
+  if (dispute.status !== 'won' && dispute.status !== 'lost') return   // warning_closed and friends
+
+  const total = Number(row.total_cents) || 0
+  const refunded = Number(row.refunded_cents) || 0
+  const amount = dispute.amount || 0
+  const campaignId = String(row.campaign_id ?? '')
+  const clientId = String(row.client_id ?? '')
+
+  if (dispute.status === 'won') {
+    // Back to what the refund history says, not blindly to 'paid'.
+    const restored = refunded > 0 && refunded < total ? 'partially_refunded' : refunded >= total && total > 0 ? 'refunded' : 'paid'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
+      .from('campaign_payments')
+      .update({ status: restored, disputed_at: null })
+      .eq('stripe_payment_intent_id', piId)
+    if (error) {
+      console.warn('[stripe] dispute columns missing, writing status only (apply migration 254):', error.message)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('campaign_payments').update({ status: restored }).eq('stripe_payment_intent_id', piId)
+    }
+    try {
+      const { pageAdmins } = await import('@/lib/campaigns/refunds-server')
+      await pageAdmins(clientId, `Chargeback won: $${(amount / 100).toFixed(2)}`, `The bank decided in our favour on campaign ${campaignId || '(unlinked)'}. The order reads ${restored.replace('_', ' ')} again.`, campaignId ? `/admin/campaign-orders?focus=${campaignId}` : '/admin/campaign-orders')
+    } catch (e) { console.warn('[stripe] dispute-won page failed', (e as Error)?.message) }
+    return
+  }
+
+  // LOST. The money is gone; settle the campaign as if we had refunded it in full.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase as any)
+    .from('campaign_payments')
+    .update({ status: 'refunded' })
+    .eq('stripe_payment_intent_id', piId)
+  try {
+    const { getChargeByPaymentIntent, settleRefund, staleChargeIds } = await import('@/lib/campaigns/refunds-server')
+    const paid = await getChargeByPaymentIntent(piId)
+    if (!paid) return
+    await settleRefund({
+      paid,
+      refundedNowCents: amount,
+      isFull: true,
+      refundId: null,                     // no refund object exists; the bank did this
+      reason: 'Your bank reversed this charge, so we stopped the campaign.',
+      staleIds: await staleChargeIds(campaignId),
+      notifyOwner: true,
+    })
+  } catch (e) { console.warn('[stripe] dispute-lost settlement failed', (e as Error)?.message) }
 }
 
 async function handleCampaignPaymentFailed(
