@@ -76,7 +76,11 @@ export interface Landing {
 }
 
 /** Money that went back on this order, in the words the stopped card prints. */
-interface RefundLine { refundedCents: number }
+interface RefundLine {
+  refundedCents: number
+  /** The WHOLE charge went back. A desk order has no "stopped" flag of its own; this is it. */
+  full: boolean
+}
 
 /**
  * Every work order behind this client's promises, read in TWO queries.
@@ -161,7 +165,9 @@ async function stopsAndRefunds(clientId: string): Promise<{ stopped: Set<string>
   for (const p of ((pays as { data: unknown }).data ?? []) as Record<string, unknown>[]) {
     const back = Number(p.refunded_cents) || 0
     if (back <= 0) continue
-    const line: RefundLine = { refundedCents: back }
+    // 'refunded' is the status refundStatus() writes when everything went back; a partial refund
+    // leaves the row 'partially_refunded' and the order is still running.
+    const line: RefundLine = { refundedCents: back, full: String(p.status ?? '') === 'refunded' }
     // The LARGEST refund on an order is the one worth naming; several partials on one order are
     // one story to the owner, not three lines.
     const cid = (p.campaign_id as string | null) ?? null
@@ -200,6 +206,16 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
     if (p.campaign_id && stops.stopped.has(p.campaign_id)) {
       const back = stops.refundByCampaign.get(p.campaign_id)
       out.push({ ...base, sub: back ? `Stopped · ${money(back.refundedCents)} sent back to your card` : 'Stopped · nothing new is running', value: 'Stopped', small: back ? 'refunded' : 'no new work', tone: 'off', state: 'stopped' }); continue
+    }
+    // A DESK ORDER GETS THE SEVENTH STATE TOO. It has no campaign row to be 'stopped', so its end
+    // is the money: a charge sent back IN FULL means the order is over. Until this, a cancelled and
+    // fully refunded desk order kept printing "your team is on it" at an owner whose money was
+    // already back on their card. A partial refund is a credit, not an ending, and is not read here.
+    if (!p.campaign_id && p.creative_request_id) {
+      const back = stops.refundByRequest.get(p.creative_request_id)
+      if (back?.full) {
+        out.push({ ...base, sub: `Stopped · ${money(back.refundedCents)} sent back to your card`, value: 'Stopped', small: 'refunded', tone: 'off', state: 'stopped' }); continue
+      }
     }
     if (p.state === 'not_counted') {
       out.push({ ...base, sub: `Ordered ${md(p.ordered_on)} · ${p.reason ?? 'not counted yet'}`, value: 'Not counted', small: who, tone: 'off', state: 'not_counted' }); continue
