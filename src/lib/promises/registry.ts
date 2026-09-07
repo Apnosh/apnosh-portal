@@ -61,6 +61,7 @@ export const PROMISE_BY_SERVICE: Record<string, PromiseSpec[]> = {
   'paid-ads': [{ metric: 'gbp_impressions', label: 'ad results', takenBy: 'apnosh', lagDays: 0, windowDays: 0, notCountedReason: 'Ad numbers live in the ad account and are not read into Home yet.' }],
   'delivery-opt': [{ metric: 'gbp_food_orders', label: 'app orders', takenBy: 'you', lagDays: 0, windowDays: 0, notCountedReason: 'The delivery apps give us no way to read your orders.' }],
   'photo-library': [FILES],
+  'social-profiles': [{ metric: 'delivered_files', label: 'your five profiles, set up', takenBy: 'apnosh', lagDays: 0, windowDays: 0 }],
   'capture-kit': [FILES],
   'graphic': [FILES],
   'reel-1': [POSTS],
@@ -96,6 +97,7 @@ export const PROMISE_BY_CARD: Record<string, PromiseSpec[]> = {
   reach: PROMISE_BY_SERVICE['paid-ads'],
   deliverymenu: PROMISE_BY_SERVICE['delivery-opt'],
   shoot: [FILES],
+  socialprofiles: PROMISE_BY_SERVICE['social-profiles'],
   design: [FILES],
   graphic: [FILES],
   reel: [POSTS], story: [POSTS], dish: [POSTS], creative: [POSTS], socialmgmt: [POSTS],
@@ -149,3 +151,7 @@ export function promiseSentence(specs: PromiseSpec[]): string | null {
   const when = days <= 7 ? 'about a week' : days <= 14 ? 'about two weeks' : days <= 24 ? 'about three weeks' : 'about a month'
   return `Counted after: ${s.label} · ${TAKEN_BY_WORD[s.takenBy]} · shows on Home ${when} after you order`
 }
+
+/** The Creatives shelf builds its cards as `creative-<type>` and orders through the desk, so the
+ *  product page prints the same promise the desk order will write. */
+for (const [type, specs] of Object.entries(PROMISE_BY_REQUEST_TYPE)) PROMISE_BY_CARD[`creative-${type}`] = specs

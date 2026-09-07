@@ -66,11 +66,12 @@ async function build(clientId: string, spec: PromiseSpec, label: string, ordered
 
 /** Every included, non-opted-out line becomes its promise rows; a plan with no matching line
  *  falls back to the store card it came from. Returns the number of rows written. */
-export async function recordCampaignPromises(campaign: SavedCampaign, campaignId: string, shipISO: string): Promise<number> {
+export async function recordCampaignPromises(campaign: SavedCampaign, campaignId: string, shipISO: string, opts: { heldFrom?: string | null } = {}): Promise<number> {
   const orderedOn = shipISO.slice(0, 10)
-  // A held order (target date in the future, the owner chose plan-ahead) counts from when work starts.
-  const target = campaign.draft.targetDate ? String(campaign.draft.targetDate).slice(0, 10) : null
-  const startOn = target && target > orderedOn ? target : null
+  // HELD is decided by the caller: the ship block knows whether the owner picked a date and when
+  // the first piece lands. The estimate-mode anchor it stamps onto target_date is a first-post
+  // date, not a hold, so target_date is never read here.
+  const startOn = opts.heldFrom && opts.heldFrom > orderedOn ? opts.heldFrom : null
   const rows: Row[] = []
   const seen = new Set<string>()
   const items = (campaign.draft.items ?? []).filter((it) => it.included && !it.optOut)

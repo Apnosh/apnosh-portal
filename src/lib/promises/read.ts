@@ -10,7 +10,7 @@ import 'server-only'
  *   counted      a number and its matched baseline    → "41 · was 13 in the same days before"
  */
 import { createAdminClient } from '@/lib/supabase/admin'
-import { measure, matchedBaseline, today, shiftDays } from './metrics'
+import { measure, matchedBaseline, today, shiftDays, hasGoogle, hasFoodOrders, locationCount } from './metrics'
 import { TAKEN_BY_WORD, type MetricKey, type TakenBy } from './registry'
 
 export interface PromiseRow {
@@ -45,23 +45,28 @@ async function deliveredState(p: Stored): Promise<{ done: boolean; note: string 
   if (p.campaign_id && p.service_id) {
     const { data } = await a.from('service_work_orders').select('status, proof_note').eq('campaign_id', p.campaign_id).eq('service_id', p.service_id).limit(1).maybeSingle()
     const r = data as { status?: string; proof_note?: string | null } | null
-    if (r?.status === 'delivered') return { done: true, note: r.proof_note || 'In your Photos and files' }
+    if (r?.status === 'delivered') return { done: true, note: r.proof_note || 'Delivered · open it from the order' }
     return { done: false, note: r?.status === 'blocked_client' ? 'Waiting on you' : 'Being made' }
   }
   if (p.creative_request_id) {
     const { data } = await a.from('creator_work_orders').select('status').eq('campaign_piece_key', `request:${p.creative_request_id}`).limit(1).maybeSingle()
     const s = (data as { status?: string } | null)?.status
-    if (s === 'delivered' || s === 'approved' || s === 'done') return { done: true, note: 'In your Photos and files' }
+    if (s === 'delivered' || s === 'approved' || s === 'done') return { done: true, note: 'Delivered · open it from the order' }
     return { done: false, note: 'Being made' }
   }
   return { done: false, note: 'Being made' }
 }
 
 export async function getPromiseRows(clientId: string, limit = 3): Promise<PromiseRow[]> {
-  const { data, error } = await createAdminClient().from('order_promises').select('*').eq('client_id', clientId).order('ordered_on', { ascending: false }).limit(limit > 0 ? 12 : 60)
+  const { data, error } = await createAdminClient().from('order_promises').select('*').eq('client_id', clientId).order('ordered_on', { ascending: false }).limit(60)
   if (error || !data) return []
   const t = today()
   const out: Omit<PromiseRow, 'line'>[] = []
+  const google = await hasGoogle(clientId).catch(() => false)
+  const foodOrders = google ? await hasFoodOrders(clientId).catch(() => false) : false
+  const shops = await locationCount(clientId).catch(() => 0)
+  // A Google count on a client with two shops is both shops added together; say so on the row.
+  const bothShops = shops > 1 ? ' · both shops together' : ''
   for (const p of data as Stored[]) {
     const who = TAKEN_BY_WORD[p.taken_by] ?? ''
     const base = { id: p.id, label: p.label, campaignId: p.campaign_id, requestId: p.creative_request_id, showsOn: p.shows_on }
@@ -74,6 +79,20 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
     if (p.metric_key === 'delivered_files') {
       const d = await deliveredState(p)
       out.push({ ...base, sub: `Ordered ${md(p.ordered_on)} · ${p.metric_label}`, value: d.done ? 'Done' : 'Making', small: d.note, tone: d.done ? 'done' : 'wait', state: d.done ? 'done' : 'counting' }); continue
+    }
+    // A Google count for a client with no Google yet is "connect Google", not "0 so far". It flips
+    // to counting the day rows appear, with no write.
+    if ((p.metric_key === 'gbp_card_taps' || p.metric_key === 'gbp_impressions' || p.metric_key === 'gbp_food_orders') && !google) {
+      out.push({ ...base, sub: `${p.metric_label} · connect your Google profile and this counts from then`, value: 'Not counted', small: 'Google not connected', tone: 'off', state: 'not_counted' }); continue
+    }
+    // Google's food-orders column exists but is empty for most listings. Never print a zero from it.
+    if (p.metric_key === 'gbp_food_orders' && !foodOrders) {
+      out.push({ ...base, sub: `${p.metric_label} · Google has not reported orders for your listing yet`, value: 'Not counted', small: 'nothing reported', tone: 'off', state: 'not_counted' }); continue
+    }
+    // A desk order's post cannot be traced to its published post today (the send-off rail keys
+    // drafts by deliverable; a deliverable carries no order id). Say so; never "0 so far".
+    if (p.metric_key === 'post_reach' && p.creative_request_id && !p.campaign_id) {
+      out.push({ ...base, sub: `${p.metric_label} · counts once it is posted through your connected accounts`, value: '—', small: 'not posted through Apnosh yet', tone: 'wait', state: 'counting' }); continue
     }
     if (p.count_from > t) {
       out.push({ ...base, sub: `Ordered ${md(p.ordered_on)} · ${p.metric_label}`, value: '—', small: `counting from ${md(p.count_from)}`, tone: 'wait', state: 'counting' }); continue
@@ -91,7 +110,8 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
     }
     const b = await matchedBaseline(clientId, p.metric_key, p.count_from, cur.reportedDays).catch(() => ({ value: p.baseline_value, reportedDays: p.baseline_days ?? 0 }))
     const before = b.value ?? p.baseline_value
-    const sinceText = p.metric_key === 'post_reach' ? `${p.metric_label}` : `${p.metric_label} since ${md(p.count_from)}`
+    const isGoogle = p.metric_key === 'gbp_card_taps' || p.metric_key === 'gbp_impressions' || p.metric_key === 'gbp_food_orders'
+    const sinceText = p.metric_key === 'post_reach' ? `${p.metric_label}` : `${p.metric_label} since ${md(p.count_from)}${isGoogle ? bothShops : ''}`
     if (before == null) {
       out.push({ ...base, sub: `${sinceText} · ${who}`, value: fmt(cur.value), small: 'first count, nothing before', tone: 'flat', state: t >= p.shows_on ? 'counted' : 'counting' }); continue
     }

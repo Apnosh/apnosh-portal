@@ -81,6 +81,24 @@ async function siteSessions(clientId: string, from: string, to: string): Promise
   } catch { return { value: null, reportedDays: 0 } }
 }
 
+/** Has this client ever had a reported Google day? A Google promise for a client with no Google is
+ *  "connect Google", never "0 so far". */
+export async function hasGoogle(clientId: string): Promise<boolean> {
+  const rows = await gbpRows(clientId, shiftDays(today(), -365), today())
+  return rows.length > 0
+}
+/** Has Google ever reported a food order for this client? The column exists but most syncs never
+ *  fill it; a promise on it must say "not reported" rather than print a zero. */
+export async function hasFoodOrders(clientId: string): Promise<boolean> {
+  const { data } = await createAdminClient().from('gbp_metrics').select('food_orders').eq('client_id', clientId).gt('food_orders', 0).limit(1)
+  return !!(data && data.length)
+}
+/** More than one location on the client: every Google count here is both shops added together. */
+export async function locationCount(clientId: string): Promise<number> {
+  const { count } = await createAdminClient().from('client_locations').select('id', { count: 'exact', head: true }).eq('client_id', clientId)
+  return count ?? 0
+}
+
 /** Measure one metric over [from, to] (YYYY-MM-DD, inclusive). `campaignId` scopes post_reach. */
 export async function measure(clientId: string, metric: MetricKey, from: string, to: string, campaignId: string | null = null): Promise<Measured> {
   switch (metric) {

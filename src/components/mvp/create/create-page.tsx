@@ -582,7 +582,7 @@ export default function CreatePage() {
         <div className="pp-facts">
           <div><b>{c.price}</b><span>price</span></div><div><b>{c.ready}</b><span>ready in</span></div><div><b>{c.you}</b><span>you do</span></div><div><b>{c.channels.length}</b><span>{c.channels.length === 1 ? 'channel' : 'channels'}</span></div>
         </div>
-        {(() => { const ps = promiseSentence(PROMISE_BY_CARD[c.id] ?? []); return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
+        {(() => { const ps = buy ? promiseSentence(PROMISE_BY_CARD[c.id] ?? []) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
         <div className="pp-sec"><h2>In plain words</h2><p>{c.plain}</p></div>
         <div className="pp-sec"><h2>What you get</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>
         <div className="pp-sec"><h2>What happens after you order</h2>
