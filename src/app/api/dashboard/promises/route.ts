@@ -29,8 +29,16 @@ export async function GET(req: NextRequest) {
       // The Campaigns feed: every ledger row (for the card line) + desk orders (which have no
       // campaign row). Each is best-effort so a missing table never empties the other.
       const [rows, desk] = await Promise.all([getPromiseRows(clientId, 0).catch(() => []), getDeskOrders(clientId).catch(() => [])])
-      const byReq = new Map(rows.filter((r) => r.requestId).map((r) => [r.requestId as string, r.line]))
-      return NextResponse.json({ rows, desk: desk.map((d) => ({ ...d, line: byReq.get(d.id) ?? null })) })
+      // A desk card reads the SAME seven states a campaign card reads, so its state and its
+      // delivered link ride along with its line instead of the feed inventing its own words.
+      const byReq = new Map(rows.filter((r) => r.requestId).map((r) => [r.requestId as string, r]))
+      return NextResponse.json({
+        rows,
+        desk: desk.map((d) => {
+          const pr = byReq.get(d.id)
+          return { ...d, line: pr?.line ?? null, state: pr?.state ?? null, openUrl: pr?.openUrl ?? null }
+        }),
+      })
     }
     const rows = await getPromiseRows(clientId, 3)
     return NextResponse.json({ rows })

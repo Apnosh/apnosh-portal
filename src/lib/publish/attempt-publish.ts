@@ -387,6 +387,22 @@ export async function attemptPublish(draftId: string): Promise<AttemptPublishRes
     console.error('publish charge accrual threw', draftId, e)
   }
 
+  // THE FILE THE OWNER KEEPS. A published piece is a delivered piece: its media belongs in their
+  // own Photos & files library, where they can open it again long after the post scrolls away.
+  // Same one success point as the accrual above, so every publish path writes it once.
+  // Best-effort + idempotent on the link; a library hiccup never un-publishes a post.
+  try {
+    const { recordDeliveredAssets } = await import('@/lib/campaigns/delivered-assets')
+    await recordDeliveredAssets({
+      clientId: draft.client_id,
+      name: caption.split('\n')[0].slice(0, 80) || 'Your post',
+      urls: mediaUrls,
+      tags: ['post'],
+    })
+  } catch (e) {
+    console.warn('[publish] library write failed', draftId, (e as Error)?.message)
+  }
+
   // Suppress the "all failed" case (handled above). If we got here,
   // at least one platform succeeded — surface that as ok, with the
   // partial-failure visible in perPlatform.

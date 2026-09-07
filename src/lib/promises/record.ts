@@ -11,7 +11,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import type { SavedCampaign } from '@/lib/campaigns/view'
 import { PROMISE_BY_CARD, PROMISE_BY_REQUEST_TYPE, type PromiseSpec } from './registry'
 import { baseline, shiftDays } from './metrics'
-import { specsForService } from './registry'
+import { specsForService, specsForPromiseService } from './registry'
 
 interface Row {
   client_id: string
@@ -134,24 +134,35 @@ export interface ReanchoredWindow {
   showsOnDay: string
 }
 
-/** When a service work order is delivered, move the count window to start from delivery (plus the
+/** When a work order is delivered, move the count window to start from delivery (plus the
  *  source lag) and recompute the baseline against the days before it. A promise that is already
  *  counting from a later date, or is held/not counted, is left alone.
  *
+ *  Two ways in, because a promise has two anchors. A campaign service names its campaign + service;
+ *  a DESK order has no campaign row at all (its work order carries 'request:<id>' as its piece key),
+ *  so it names its request. Before this, only the campaign half re-anchored, and every desk order
+ *  counted from the day it was ordered — which is what the audit found.
+ *
  *  Returns the moved window so the caller — the delivery — can say it in the ONE email it is
  *  already sending, instead of a second one landing in the same second. */
-export async function reanchorPromise(args: { campaignId: string | null; serviceId: string | null; deliveredISO: string }): Promise<ReanchoredWindow | null> {
-  if (!args.campaignId || !args.serviceId) return null
+export async function reanchorPromise(args: { campaignId?: string | null; serviceId?: string | null; requestId?: string | null; deliveredISO: string }): Promise<ReanchoredWindow | null> {
+  const byRequest = !!args.requestId
+  if (!byRequest && (!args.campaignId || !args.serviceId)) return null
   const a = createAdminClient()
-  const { data } = await a.from('order_promises').select('id, client_id, label, metric_key, count_from, state').eq('campaign_id', args.campaignId).eq('service_id', args.serviceId)
+  const q = a.from('order_promises').select('id, client_id, label, service_id, metric_key, count_from, state')
+  const { data } = byRequest
+    ? await q.eq('creative_request_id', args.requestId as string)
+    : await q.eq('campaign_id', args.campaignId as string).eq('service_id', args.serviceId as string)
   const deliveredOn = args.deliveredISO.slice(0, 10)
   // The day the owner was told to expect a number moves here. Silently moving it is how a card
   // shows a zero the owner did not earn on a day nobody warned them about, so we keep the ONE
   // moved row that best represents this order and tell them at the end.
   let moved: { clientId: string; label: string; countFrom: string; showsOn: string } | null = null
-  for (const row of (data ?? []) as { id: string; client_id: string; label: string; metric_key: string; count_from: string; state: string }[]) {
+  for (const row of (data ?? []) as { id: string; client_id: string; label: string; service_id: string | null; metric_key: string; count_from: string; state: string }[]) {
     if (row.state === 'not_counted' || row.state === 'held') continue
-    const spec = specsForService(args.serviceId).find((sp) => sp.metric === row.metric_key)
+    // The ROW's own service_id, not the caller's: a desk row stores 'request:<type>', which only
+    // specsForPromiseService can read.
+    const spec = specsForPromiseService(row.service_id).find((sp) => sp.metric === row.metric_key)
     if (!spec || spec.metric === 'delivered_files') continue
     const countFrom = shiftDays(deliveredOn, spec.lagDays)
     if (countFrom <= row.count_from) continue

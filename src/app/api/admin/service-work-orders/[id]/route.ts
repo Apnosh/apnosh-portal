@@ -204,23 +204,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       emailCategory: 'content',
     }).catch(() => ({ notified: 0 }))
 
-    // OWNERSHIP (sim crack #26): a delivered photo/video service lands in the owner's own
-    // Photos & files library, not just a proof row on a feed. The deliverable link becomes
-    // an asset they can open and download. Best-effort; never blocks the delivery.
-    const PHOTO_SERVICES = new Set(['photo-library', 'menu-photo-refresh'])
-    if (finalProof && PHOTO_SERVICES.has((row.service_id as string) ?? '')) {
-      try {
-        const isImage = /\.(jpe?g|png|webp|gif|heic)(\?|$)/i.test(finalProof)
-        await svc.from('assets').insert({
-          client_id: row.client_id,
-          name: `${(row.title as string) || 'Your photos'} (delivered by your team)`,
-          type: isImage ? 'image' : 'file',
-          file_url: finalProof,
-          tags: ['delivered', 'apnosh'],
-          uploaded_by_client: false,
-        })
-      } catch { /* the proof still lives on the work order */ }
-    }
+    // OWNERSHIP: the delivered thing lands in the owner's own Photos & files library
+    // (/dashboard/assets), not just as a proof row on an admin screen.
+    //
+    // This used to run for two photo services only, and it wrote type 'file', which is not one of
+    // the four kinds the assets table allows — so even those two never landed. Every service
+    // delivers something the owner paid for, so every service writes its link, through the one
+    // function that knows the four kinds. Best-effort; never blocks the delivery.
+    const { recordDeliveredAsset } = await import('@/lib/campaigns/delivered-assets')
+    await recordDeliveredAsset({
+      clientId: row.client_id as string,
+      name: (row.title as string) || 'Delivered work',
+      url: finalProof,
+    })
   }
 
   if (row.campaign_id) revalidatePath(`/admin/campaign-orders/${row.campaign_id}`)

@@ -244,12 +244,14 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
   // note matching one verbatim would hide the decline from the owner's tracker
   // and re-arm the reconcile's revive machinery, so it is quoted, not trusted.
   if (patch.note === PLAN_REMOVED_NOTE || patch.note === STOP_NOTE) patch = { ...patch, note: `"${patch.note}"` }
-  type CurOrder = { status: string; campaign_id: string | null; client_id: string; title: string | null }
+  // campaign_piece_key carries the desk order's request id ('request:<uuid>') on a work order with
+  // no campaign row — that is how a delivery finds the promise it has to re-anchor.
+  type CurOrder = { status: string; campaign_id: string | null; client_id: string; title: string | null; campaign_piece_key: string | null; delivered_url: string | null }
   let cur: CurOrder | null = null
   if (patch.status) {
     const { data, error: readErr } = await admin
       .from('creator_work_orders')
-      .select('status, delivered_url, concept_status, campaign_id, client_id, title')
+      .select('status, delivered_url, concept_status, campaign_id, client_id, title, campaign_piece_key')
       .eq('id', id)
       .single()
     if (readErr || !data) throw new IllegalTransition('work order not found')
@@ -284,14 +286,45 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
   // so finished pieces sat invisible until the owner happened to open the campaign
   // (the silent stall). Tell them; the campaign page has Approve / Ask-for-changes.
   if (patch.status === 'delivered' && cur) {
-    // Campaign pieces point the owner at the campaign; a marketplace booking (no campaign) points at
-    // the bookings list, where the same Approve / Ask-for-changes gate lives.
-    const reviewLink = cur.campaign_id ? `/dashboard/campaigns/${cur.campaign_id}` : '/dashboard/bookings'
+    // A DESK order's work order carries 'request:<id>' and no campaign. That is the id its promise
+    // is filed under, and the link the owner should follow.
+    const requestId = cur.campaign_piece_key?.startsWith('request:') ? cur.campaign_piece_key.slice('request:'.length) : null
+    // Campaign pieces point the owner at the campaign; a desk order at its own order page; a
+    // marketplace booking (no campaign) at the bookings list, where the same Approve /
+    // Ask-for-changes gate lives.
+    const reviewLink = cur.campaign_id ? `/dashboard/campaigns/${cur.campaign_id}`
+      : requestId ? `/dashboard/requests/${requestId}`
+      : '/dashboard/bookings'
+
+    // THE FILE THE OWNER KEEPS. A delivered link is a thing they bought; it belongs in their own
+    // Photos & files library, not only on a work order row. Best-effort, idempotent on the link.
+    const deliveredUrl = patch.delivered_url ?? cur.delivered_url
+    try {
+      const { recordDeliveredAsset } = await import('./delivered-assets')
+      await recordDeliveredAsset({ clientId: cur.client_id, name: cur.title || 'Delivered work', url: deliveredUrl })
+    } catch (e) { console.warn('[work-orders] library write failed', (e as Error)?.message) }
+
+    // THE PROMISE, RE-ANCHORED (desk orders). The count starts the day the work landed, not the day
+    // it was ordered. Awaited so the ONE email below can carry the new dates — a second "your date
+    // moved" email a second later reads like the system is broken.
+    let moved: import('@/lib/promises/record').ReanchoredWindow | null = null
+    if (requestId) {
+      try {
+        const { reanchorPromise } = await import('@/lib/promises/record')
+        moved = await reanchorPromise({ requestId, deliveredISO: new Date().toISOString() })
+      } catch (e) { console.warn('[work-orders] re-anchor failed', (e as Error)?.message) }
+    }
+
     await notifyClientOwners(cur.client_id, {
       kind: 'client_signoff',
       title: `${cur.title || 'A piece'} is ready for your review`,
-      body: 'The finished work was delivered. Take a look and approve it, or ask for changes.',
+      body: moved
+        ? `The finished work was delivered. Take a look and approve it, or ask for changes. Your count starts ${moved.countFromDay} and shows on Home ${moved.showsOnDay}.`
+        : 'The finished work was delivered. Take a look and approve it, or ask for changes.',
       link: reviewLink,
+      // Worth a phone buzzing: the thing they bought landed and it is their turn.
+      email: true,
+      emailCategory: 'content',
     }).catch(() => ({ notified: 0 }))
   }
   // A creator saying no used to be terminal (the signal WAS the recovery). Now

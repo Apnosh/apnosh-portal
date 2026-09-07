@@ -82,6 +82,20 @@ export function specsForService(serviceId: string | null | undefined): PromiseSp
   return PROMISE_BY_SERVICE[serviceId] ?? []
 }
 
+/**
+ * The specs behind the service_id a LEDGER ROW actually stores.
+ *
+ * A campaign row stores the catalog service ('gbp-setup', 'content-3'); a desk row stores
+ * 'request:<type>' (recordRequestPromise writes it that way). specsForService only knows the
+ * first shape, so a desk delivery looking up its own promise found nothing and the window never
+ * moved. One resolver for both spellings.
+ */
+export function specsForPromiseService(serviceId: string | null | undefined): PromiseSpec[] {
+  if (!serviceId) return []
+  if (serviceId.startsWith('request:')) return PROMISE_BY_REQUEST_TYPE[serviceId.slice('request:'.length)] ?? []
+  return specsForService(serviceId)
+}
+
 /** By the store card the owner tapped (create-catalog id). Used on the product page BEFORE the
  *  order, and as the fallback at mint when no line matched. */
 export const PROMISE_BY_CARD: Record<string, PromiseSpec[]> = {
