@@ -144,6 +144,14 @@ const WHY_FOR: Record<CreateCatalogId, WhyFn> = {
   earlyaccess: () => null,
   winback: () => null,
   direct: () => null,
+
+  /* The four doorless services. None is buyable yet (the playbook law holds three of them),
+     and the truck card's own line is about a pin that does not move, not about a number in
+     this bundle. Authored copy, always. */
+  trucklocation: () => null,
+  barnights: () => null,
+  seasonplan: () => null,
+  cateringengine: () => null,
 }
 
 /** The personalized why line for a card, or null (-> show the authored fallback). */

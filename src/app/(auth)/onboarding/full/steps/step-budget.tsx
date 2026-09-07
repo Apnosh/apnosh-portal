@@ -1,0 +1,47 @@
+'use client'
+
+import { type ReactNode } from 'react'
+import { Wallet } from 'lucide-react'
+import { type OnboardingData, BUDGET_CHIPS } from '../data'
+import { Question, OptionCard } from '../ui'
+
+interface Props {
+  data: OnboardingData
+  update: <K extends keyof OnboardingData>(field: K, value: OnboardingData[K]) => void
+  nav: ReactNode
+  /** Solo screens advance themselves one beat after the tap. */
+  onAnswered?: () => void
+}
+
+/* One question, one tap. The answer becomes businesses.monthly_budget, which the Create
+ * shelf uses to draw the line between "you can order this today" and "above what you set".
+ * Without it the store shows a $990 logo to someone with $150, which is how a first visit
+ * ends. "Not sure yet" is a real answer: no cap is asserted and nothing is hidden. */
+export default function StepBudget({ data, update, nav, onAnswered }: Props) {
+  return (
+    <>
+      <Question
+        title="What feels right to start?"
+        subtitle="You can change it any time. Nothing is charged now."
+        icon={<Wallet size={26} strokeWidth={2} />}
+        hue="online"
+      />
+      <div className="flex flex-col gap-2 mt-5">
+        {BUDGET_CHIPS.map((b) => {
+          const selected = data.marketing_budget === b
+          return (
+            <OptionCard
+              key={b}
+              selected={selected}
+              hue="online"
+              onClick={() => { update('marketing_budget', b); onAnswered?.() }}
+            >
+              <div className="text-[15px] font-medium" style={{ color: selected ? '#1c6b52' : '#1d1d1f' }}>{b}</div>
+            </OptionCard>
+          )
+        })}
+      </div>
+      {nav}
+    </>
+  )
+}

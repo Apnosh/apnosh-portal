@@ -1151,7 +1151,103 @@ export const SERVICE_PLAYBOOKS: Record<string, ServicePlaybook> = {
       metricLabel: 'Ad reach, clicks, and cost per result',
     },
   },
+
+  /* ── "Where's the truck today" — the daily location broadcast. The first of the four
+   *    doorless services to get a playbook, and the reason the playbook law exists.
+   *
+   *    The strategist's read of this service was blunt: "the truck is thirty hand-posted
+   *    mornings for $135". That is exactly right, and it is fine, as long as the thirty
+   *    mornings are a scripted job with a person's name on it instead of a hope. So the steps
+   *    below are a DAILY CHECKLIST a person can follow at 8am, not a project plan.
+   *
+   *    Two of the six deliverables in the catalog cannot be run today and are marked HELD in
+   *    the step that would do them: the day-of text to the owner's list needs a send rail that
+   *    does not exist, and the truck-locator apps have no write API we have built. Held legs
+   *    are not billed (service-availability's held-leg rule), and the store card says so in
+   *    its own words. The rest is real work every morning. ── */
+  'truck-location': {
+    serviceId: 'truck-location',
+    steps: [
+      {
+        id: 'stops',
+        label: 'Get the schedule of stops',
+        lead: 'The whole service runs off the calendar, so it starts there.',
+        actions: [
+          'Get the next two weeks of stops: place, address, hours',
+          'Agree how a change reaches us and by when (a text by 7am is enough)',
+          'Agree who signs off a post when the spot is a surprise',
+          'Write the recurring stops into the calendar so a normal week needs no message',
+        ],
+        actor: 'client',
+        needsInput: 'truck-schedule',
+        proof: 'note',
+      },
+      {
+        id: 'kit',
+        label: 'Build the post kit once',
+        lead: 'Same look every morning, so regulars learn to spot it.',
+        actions: [
+          'Write the standing caption, with slots for the place, the hours and the cross street',
+          'Make the map card template on the truck brand',
+          'Confirm the connected accounts we post to (Google, Instagram, Facebook)',
+          'Get the owner to approve the template once, so no morning needs an approval',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+      {
+        id: 'daily',
+        label: 'Post the spot, every morning',
+        lead: 'The job itself: one post a day, before the first customer looks.',
+        actions: [
+          "Check the calendar for today's stop before 9am",
+          'Fill the template with the place, the hours and the cross street',
+          'Post to the connected social accounts',
+          'Post to the Google profile',
+          'HELD, not billed: the day-of text to the owner list. There is no send rail yet, so this is not done and not charged.',
+          'HELD, not billed: the truck-locator apps (StreetFoodFinder, Truckster). We have no way to write to them, so the owner still updates those.',
+          'When the calendar is blank or wrong, message the owner and do not guess a location',
+        ],
+        actor: 'ops',
+        proof: 'link',
+      },
+      {
+        id: 'month',
+        label: 'Close the month',
+        lead: 'Count the days that got a post, and say what the posts moved.',
+        actions: [
+          'Count the days a spot was posted, out of the days the truck ran',
+          'Pull the Google views on the days a spot was posted',
+          'Name the stops that drew and the ones that did not',
+          'Send the owner the read and ask for next month of stops',
+        ],
+        actor: 'ops',
+        proof: 'screenshot',
+      },
+    ],
+    deliverable: {
+      liveLinkLabel: "Today's location post",
+      metricLabel: 'Google views on the days a spot is posted',
+    },
+  },
 }
+
+/* ── TODO, team (not engineering). Three services now have a store card and are held OFF the
+ *    shelf by the playbook law (catalog-availability `sellable`) purely because nobody has
+ *    written their steps. Each needs a playbook here AND a promise spec in
+ *    src/lib/promises/registry.ts, and appears on the shelf the day both exist:
+ *
+ *      'bar-events'      ($525/mo, card 'barnights') — the weekly cycle: pick the night, build
+ *                        the format, the graphics, the posts, the door signage, the read of who
+ *                        came. Its text-to-regulars leg has no rail; mark it held and unbilled.
+ *      'seasonal-cal'    ($242 a quarter, card 'seasonplan') — the planning call, the calendar
+ *                        of dates for this owner's place, the promo list, the mid-quarter
+ *                        refresh, and what is handed over at the end.
+ *      'catering-engine' ($715 + $105/mo, card 'cateringengine') — the page build, the proposal
+ *                        template, and the follow-up cadence. The outreach and the reminders
+ *                        are email, which has no rail, and there is no lead inbox for the
+ *                        inquiries to land in; both legs are held and unbilled until there is.
+ * ── */
 
 export function playbookFor(serviceId: string): ServicePlaybook | undefined {
   return SERVICE_PLAYBOOKS[serviceId]

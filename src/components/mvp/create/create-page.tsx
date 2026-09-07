@@ -23,7 +23,12 @@ import TopRow from '../top-row'
 import { useClient } from '@/lib/client-context'
 import { gradOf, hueOf, tint, type HueKey } from '../hues'
 import { Mark } from '../mark'
-import { GOALS, GOAL_CARDS, FILTERS, GUIDE_QS, QUICK_IDS, SEASON_IDS, PROGRAM_IDS, SETUP_IDS, SITUATION_GOAL, isBuyable, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
+import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuyable, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
+import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from '@/lib/campaigns/data/chip-shelf'
+import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
+import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
+import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
+import { SHAPE_LABEL, DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
 
 const C = { ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', fill: '#f5f5f7', mint: '#4abd98', mintDk: '#2e9a78', mintSoft: '#eaf7f3', amberInk: '#8a5a0c', amberBg: '#fbf3e4' }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
@@ -221,6 +226,52 @@ type View = { name: 'browse' } | { name: 'search' } | { name: 'guide' } | { name
 
 interface Signals { views30d?: number; actions30d?: { directions: number; calls: number; websiteClicks: number }; rating?: number; ratingCount?: number; unrepliedReviews?: number; listingGaps?: string[] }
 interface Describe { ok: boolean; reason?: string; situation: string | null; summary: string; unsupported: string[]; when?: string | null }
+/** The four facts about THIS client the shelf is drawn from (/api/campaigns/shelf-context). */
+interface ShelfCtx { goals: string[]; monthlyBudget: number | null; shape: ShelfShape; hasGoogle: boolean }
+
+/* One glyph and one colour per goal chip, the same pair the owner saw on the setup tiles and
+ * the same hue family the cards wear. Keys are the exact GOAL_CHIPS strings (stored values). */
+const CHIP_HUE: Record<string, HueKey> = {
+  'More customers on slow days': 'nights',
+  'More foot traffic overall': 'newfaces',
+  'Build local awareness': 'brand',
+  'Promote a specific offering': 'announce',
+  'Grow social following': 'catering',
+  'Improve online reputation': 'reviews',
+  'Launch something new': 'announce',
+  'Stay top of mind': 'regulars',
+  'Compete with nearby businesses': 'newfaces',
+  'More bookings or orders': 'online',
+  'Turn first-timers into regulars': 'regulars',
+  'Grow catering orders': 'catering',
+  'Better photos of my food': 'event',
+  'Reach a younger crowd': 'brand',
+}
+/** What the "For you" shelf is called for this shape, in the owner's words (from the mockups). */
+const SHELF_TITLE_FOR_SHAPE: Record<ShelfShape, string> = {
+  storefront: 'For you',
+  truck: 'For a truck',
+  delivery_only: 'For delivery only',
+  two_locations: 'For this shop',
+  catering: 'For catering',
+  seasonal: 'For the season',
+}
+const money = (n: number) => `$${n.toLocaleString()}`
+/* The describe box reads a situation and lands on a shelf goal; the shelf is keyed by the
+ * owner's chip now, so this is the one bridge between the two vocabularies. */
+const CHIP_FOR_GOAL: Record<ShelfGoal, string> = {
+  foryou: 'More foot traffic overall',
+  announce: 'Launch something new',
+  event: 'Promote a specific offering',
+  deal: 'More customers on slow days',
+  nights: 'More customers on slow days',
+  newfaces: 'More foot traffic overall',
+  regulars: 'Turn first-timers into regulars',
+  reviews: 'Improve online reputation',
+  online: 'More bookings or orders',
+  catering: 'Grow catering orders',
+  brand: 'Build local awareness',
+}
 
 export default function CreatePage() {
   const router = useRouter()
@@ -240,19 +291,22 @@ export default function CreatePage() {
   }, [params, router])
   const back = () => router.back()
 
-  const [goal, setGoal] = useState<ShelfGoal>('foryou')
   const [q, setQ] = useState('')
   const [filters, setFilters] = useState<Record<FilterKey, string>>({ budget: 'any', you: 'any', speed: 'any', kind: 'any' })
   const [sheet, setSheet] = useState<FilterKey | null>(null)
   const [signals, setSignals] = useState<Signals | null>(null)
-  const [recs, setRecs] = useState<{ id: string; reason: string }[] | null>(null)
   const [done, setDone] = useState<Set<string>>(new Set())
+  const [ctx, setCtx] = useState<ShelfCtx | null>(null)
+  /** The chip whose shelf is showing. Null until the client's own goals arrive. */
+  const [chip, setChip] = useState<string | null>(null)
+  const [showLater, setShowLater] = useState(false)
+  const [budgetSheet, setBudgetSheet] = useState(false)
 
   useEffect(() => {
     if (!clientId) return
     let live = true
     fetch(`/api/dashboard/why-signals?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setSignals(j as Signals) }).catch(() => {})
-    fetch(`/api/campaigns/recommend-items?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && Array.isArray(j?.recommended)) setRecs(j.recommended as { id: string; reason: string }[]) }).catch(() => { if (live) setRecs([]) })
+    fetch(`/api/campaigns/shelf-context?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => { if (live && j) setCtx(j as ShelfCtx) }).catch(() => {})
     fetch(`/api/campaigns?clientId=${clientId}`).then((r) => (r.ok ? r.json() : null)).then((j) => {
       if (!live || !Array.isArray(j?.campaigns)) return
       const ids = new Set<string>()
@@ -265,6 +319,35 @@ export default function CreatePage() {
     }).catch(() => {})
     return () => { live = false }
   }, [clientId])
+
+  /* ── the owner's own shelf ──
+   * The chip they picked in setup opens the page. Until their goals arrive we show the second
+   * chip ("More foot traffic overall"), because it is the one whose shelf is true for anyone. */
+  const shape: ShelfShape = ctx?.shape ?? DEFAULT_SHAPE
+  const activeChip = chip ?? ctx?.goals[0] ?? CHIP_ORDER[1]
+  const cap = ctx?.monthlyBudget ?? null
+  /** What this card asks for on the first payment (the one-time amount, or the first month). */
+  const firstPayment = useCallback((id: string) => shelfCard(id)?.priceN ?? 0, [])
+  const liveIds = useMemo(() => liveForChip(activeChip, shape), [activeChip, shape])
+  const underCap = useMemo(() => liveIds.filter((id) => cap == null || firstPayment(id) <= cap), [liveIds, cap, firstPayment])
+  const overCap = useMemo(() => liveIds.filter((id) => cap != null && firstPayment(id) > cap), [liveIds, cap, firstPayment])
+  const laterIds = useMemo(() => laterForChip(activeChip, shape), [activeChip, shape])
+
+  const setBudget = async (chipLabel: string | null) => {
+    const value = chipLabel ? budgetCapForChip(chipLabel) : null
+    const before = ctx?.monthlyBudget ?? null
+    setCtx((c) => (c ? { ...c, monthlyBudget: value } : c))
+    setBudgetSheet(false)
+    if (!clientId) return
+    try {
+      const r = await fetch(`/api/campaigns/shelf-context?clientId=${clientId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monthlyBudget: value }),
+      })
+      // The route now 404s when the update matched no row. Put the old number back rather than
+      // leaving a shelf drawn at a cap that was never saved and reverts on the next load.
+      if (!r.ok) setCtx((c) => (c ? { ...c, monthlyBudget: before } : c))
+    } catch { setCtx((c) => (c ? { ...c, monthlyBudget: before } : c)) }
+  }
 
   /* why-now lines from the account's own numbers */
   const whyNow = useCallback((c: ShelfCard): string | null => {
@@ -287,49 +370,14 @@ export default function CreatePage() {
 
   /* ── pieces ── */
   const Coming = () => <span className="pill-w grey">Coming soon</span>
-  const Facts = ({ c }: { c: ShelfCard }) => (
-    <div className="facts">
-      <div><b>{c.price}</b><span>price</span></div>
-      <div><b>{c.ready}</b><span>ready in</span></div>
-      <div><b>{c.you}</b><span>you do</span></div>
-    </div>
-  )
   /* small: a quick ask */
   const Mini = ({ c }: { c: ShelfCard }) => { const Icon = iconFor(c); const buy = isBuyable(c)
     return (
       <button type="button" onClick={() => open(c)} className={`card mini press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
         <div className="tile"><Icon />{!buy && <span style={{ position: 'absolute', top: 6, left: 6 }}><Coming /></span>}</div>
-        <div className="body"><div className="t">{c.title}</div><div className="p">{c.price} <span>· {c.ready}</span></div></div>
-      </button>
-    )
-  }
-  /* standard: a campaign */
-  const Std = ({ c, badge }: { c: ShelfCard; badge?: string | null }) => { const Icon = iconFor(c); const SI = STAGE_ICON[c.stage]; const buy = isBuyable(c)
-    return (
-      <button type="button" onClick={() => open(c)} className={`card pc press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
-        <div className="tile">
-          {(badge || !buy) && <span className="badge">{buy ? <span className="pill-w amber">{badge}</span> : <Coming />}</span>}
-          <span className="glass"><Icon /></span>
-          <span className="pill-w mv"><SI /> Moves {c.stage}</span>
-        </div>
-        <div className="body">
-          <div className="t">{c.title}</div>
-          <div className="s">{c.sub || c.plain}</div>
-          <Facts c={c} />
-        </div>
-      </button>
-    )
-  }
-  /* big: a program we run monthly */
-  const Big = ({ c }: { c: ShelfCard }) => { const Icon = iconFor(c); const buy = isBuyable(c)
-    return (
-      <button type="button" onClick={() => open(c)} className={`card big press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
-        <div className="tile"><span className="glass"><Icon /></span><span className={`pill-w badge${buy ? '' : ' grey'}`}>{buy ? 'We run it monthly' : 'Coming soon'}</span><div className="t">{c.title}</div></div>
-        <div className="body">
-          <div className="s">{c.plain.split('.')[0]}.</div>
-          <Facts c={c} />
-          <div className="month"><div className="k">Every month</div><ul>{c.get.slice(0, 4).map((g) => <li key={g}>{g}</li>)}</ul></div>
-        </div>
+        {/* A held card prints NO price and NO ready time. Both are offers, and there is
+            nothing to offer yet. Same rule as the product page's fact strip. */}
+        <div className="body"><div className="t">{c.title}</div><div className="p">{buy ? <>{c.price} <span>· {c.ready}</span></> : <span>Not on sale yet</span>}</div></div>
       </button>
     )
   }
@@ -340,7 +388,7 @@ export default function CreatePage() {
         <span className={`st${isDone ? ' done' : ''}`}>{isDone && <Check size={13} strokeWidth={3} />}</span>
         <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
         <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : 'Coming soon'}</span>}</span>
-        <span className="r"><b>{isDone ? 'Done' : c.price}</b></span>
+        <span className="r"><b>{isDone ? 'Done' : buy ? c.price : ''}</b></span>
         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
       </button>
     )
@@ -366,7 +414,9 @@ export default function CreatePage() {
       const j = await r.json().catch(() => ({}))
       const res = (j?.result ?? j) as { situation?: string | null; summary?: string; unsupported?: string[]; when?: string | null }
       setRead({ ok: r.ok && j?.ok !== false, reason: j?.reason, situation: res?.situation ?? null, summary: res?.summary ?? '', unsupported: Array.isArray(res?.unsupported) ? res.unsupported : [], when: res?.when ?? null })
-      if (res?.situation && SITUATION_GOAL[res.situation]) setGoal(SITUATION_GOAL[res.situation])
+      // Steer the chip rail, which is what draws the shelf now.
+      const c = res?.situation ? CHIP_FOR_GOAL[SITUATION_GOAL[res.situation]] : null
+      if (c) { setChip(c); setShowLater(false) }
     } catch { setRead({ ok: false, reason: 'no answer', situation: null, summary: '', unsupported: [] }) }
     setReading(false)
   }
@@ -384,7 +434,7 @@ export default function CreatePage() {
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
             {read.ok && read.situation ? (() => {
               const g = SITUATION_GOAL[read.situation] ?? 'announce'
-              const picks = GOAL_CARDS[g].map((id) => shelfCard(id)).filter((c): c is ShelfCard => !!c).filter(isBuyable).slice(0, 3)
+              const picks = liveForChip(CHIP_FOR_GOAL[g] ?? CHIP_ORDER[1], shape).map((id) => shelfCard(id)).filter((c): c is ShelfCard => !!c).slice(0, 3)
               const GI = GOAL_ICON[g]
               return (
                 <div style={hv(g)}>
@@ -420,17 +470,36 @@ export default function CreatePage() {
     </div>
   )
 
-  /* ── the goal rail: orbs ── */
-  const Rail = () => (
-    <div className="rail cc-scroll">
-      {GOALS.map((g) => { const on = goal === g.id; const GI = GOAL_ICON[g.id]; const hue: HueKey = g.id === 'foryou' ? 'mint' : g.id
-        return <button key={g.id} type="button" onClick={() => setGoal(g.id)} className={`orb${on ? ' on' : ''}`} style={hv(hue)}><i><GI /></i>{g.short}</button> })}
-    </div>
-  )
+  /* ── the goal rail ──
+   * The fourteen chips the owner was actually asked in setup, in their own words, with the
+   * ones they picked first. It used to be ten goals keyed in different words entirely, so
+   * nothing an owner said in setup could reach this page. Existing filter-chip styling; the
+   * budget chip is the same pill with a dashed edge when it has never been answered. */
+  const Rail = () => {
+    const mine = ctx?.goals ?? []
+    const ordered = [...mine, ...CHIP_ORDER.filter((c) => !mine.includes(c))]
+    return (
+      <>
+        <div className="filters cc-scroll" style={{ paddingTop: 6, paddingBottom: 4 }}>
+          {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
+              monthly_budget null, and this pill never prints a number the owner did not say. */}
+          <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
+            {cap == null ? 'Set a budget' : `Up to ${money(cap)} to start`}
+          </button>
+          {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{SHAPE_LABEL[shape].title}</span>}
+        </div>
+        <div className="filters cc-scroll" style={{ paddingTop: 0 }}>
+          {ordered.map((c) => {
+            const on = c === activeChip
+            return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(false) }} className={`fch${on ? ' on' : ''}`}>{c}</button>
+          })}
+        </div>
+      </>
+    )
+  }
 
   /* ── views ── */
   const cards = shelfCards()
-  const goalMeta = GOALS.find((g) => g.id === goal)!
   const SearchBar = ({ live }: { live?: boolean }) => live ? (
     <div style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 0 14px' }}>
       <Search size={16} color={C.faint} />
@@ -441,33 +510,97 @@ export default function CreatePage() {
     <button type="button" onClick={() => go({ name: 'search' })} style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', width: '100%', color: C.faint, fontSize: 14, cursor: 'text', fontFamily: 'inherit' }}><Search size={16} /> Search campaigns</button>
   )
 
+  /* One shelf row: the glyph, the title, one reason, one price with one time word, one button.
+     The whole row is not the button any more, because the Order button is the point. */
+  const ShelfRow = ({ id, reason }: { id: string; reason?: string | null }) => {
+    const c = cards[id]
+    if (!c) return null
+    const Icon = iconFor(c)
+    const free = hasFreeLane(c.id)
+    const price = c.price === 'Quote' && free ? 'Free' : c.price
+    return (
+      <div className="row" style={hv(c.goal)}>
+        <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+          <Mark hue={c.goal} size={38}><Icon size={19} /></Mark>
+          <span className="tx">
+            <span className="t" style={{ display: 'block', fontWeight: 600 }}>{c.title}</span>
+            {reason && <span className="s why" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35 }}>{reason}</span>}
+            <span className="s" style={{ display: 'block' }}>{price}{price !== 'Free' && free ? ', or free, you do it' : ''} · {c.ready}</span>
+          </span>
+        </button>
+        {/* The button matches the price. A desk card with a real price is an order, not an ask:
+            only a card that genuinely has no price ('Quote') says Ask. */}
+        <button type="button" className="btn hue" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => order(c)}>{free && c.price === 'Quote' ? 'Start' : c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask' : 'Order'}</button>
+      </div>
+    )
+  }
+
   const browse = () => {
-    const forYou = goal === 'foryou'
-    const goalIds = forYou ? (recs?.length ? recs.map((r) => r.id) : GOAL_CARDS.newfaces.slice(0, 4)) : GOAL_CARDS[goal]
-    const goalCards = goalIds.map((id) => cards[id]).filter((c): c is ShelfCard => !!c)
+    /* The reason line is their own number where one exists. Where Google has never reported a
+       day there is no number to state, so the FIRST card says so plainly instead of a card
+       going out with a hollow zero on it. Said once, on the first row, not fourteen times. */
+    const nothingYet = ctx && !ctx.hasGoogle ? "We don't have your Google numbers yet. This is the first step." : null
+    const reasonFor = (id: string, i: number) => {
+      const c = cards[id]
+      return (c ? whyNow(c) : null) ?? (i === 0 ? nothingYet : null)
+    }
+    const setupRows = SETUP_IDS.map((id) => cards[id]).filter((c): c is ShelfCard => !!c && isBuyable(c))
     return (
       <>
         <SayBox />
         <Examples />
-        {!forYou ? (
-          <>
-            <Sec t={goalMeta.label} s="The best ways, in order" hue={goal} />
-            <Shelf>{goalCards.filter((c) => c.kind !== 'setup').map((c) => c.kind === 'program' ? <div key={c.id} style={{ flex: '0 0 auto', width: 300 }}><Big c={c} /></div> : c.kind === 'quick' ? <Mini key={c.id} c={c} /> : <Std key={c.id} c={c} badge={whyNow(c)} />)}</Shelf>
-            {goalCards.some((c) => c.kind === 'setup') && <div style={{ padding: '0 12px' }}>{goalCards.filter((c) => c.kind === 'setup').map((c) => <SetupRow key={c.id} c={c} />)}</div>}
-          </>
+
+        <Sec t={SHELF_TITLE_FOR_SHAPE[shape]} s={`${ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet'} · ${underCap.length} you can order today`} hue={CHIP_HUE[activeChip] ?? 'mint'} />
+        {underCap.length === 0 ? (
+          <div style={{ padding: '0 16px', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}>
+            <b style={{ color: C.ink }}>Nothing here yet for this one.</b> Everything we could do for it is below, with the reason it is not ready.
+          </div>
         ) : (
+          <div style={{ padding: '0 12px' }}>{underCap.map((id, i) => <ShelfRow key={id} id={id} reason={reasonFor(id, i)} />)}</div>
+        )}
+
+        {overCap.length > 0 && cap != null && (
           <>
-            {recs && recs.length > 0 && (<><Sec t="For you" s="From your own numbers" hue="mint" /><Shelf>{recs.map((r) => cards[r.id]).filter((c): c is ShelfCard => !!c).slice(0, 6).map((c) => <Std key={c.id} c={c} badge={recs.find((r) => r.id === c.id)?.reason ?? null} />)}</Shelf></>)}
-            <Sec t="Quick asks" s="One thing, done in days" hue="announce" more={() => { setFilters((f) => ({ ...f, kind: 'quick' })); go({ name: 'search' }) }} />
-            <Shelf>{QUICK_IDS.map((id) => cards[id]).filter((c): c is ShelfCard => !!c).map((c) => <Mini key={c.id} c={c} />)}</Shelf>
-            <Sec t="Campaigns for the season" s="A few pieces over a couple of weeks" hue="event" more={() => { setFilters((f) => ({ ...f, kind: 'campaign' })); go({ name: 'search' }) }} />
-            <Shelf>{SEASON_IDS.filter((id) => !(recs ?? []).slice(0, 6).some((r) => r.id === id)).map((id) => cards[id]).filter((c): c is ShelfCard => !!c).map((c) => <Std key={c.id} c={c} badge={whyNow(c)} />)}</Shelf>
-            <Sec t="Let us run it" s="Month after month, with a read of what moved" hue="nights" />
-            <div style={{ padding: '0 16px' }}>{PROGRAM_IDS.map((id) => cards[id]).filter((c): c is ShelfCard => !!c).slice(0, 2).map((c) => <Big key={c.id} c={c} />)}</div>
-            <Sec t="Set up once" s="The basics, ticked off as you go" hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
-            <div style={{ padding: '0 12px' }}>{SETUP_IDS.map((id) => cards[id]).filter((c): c is ShelfCard => !!c).map((c) => <SetupRow key={c.id} c={c} />)}</div>
+            <Sec t={`Above ${money(cap)} to start`} s={`${overCap.length} more, once you raise it`} hue="amber" />
+            <div style={{ padding: '0 12px' }}>
+              {overCap.map((id) => { const c = cards[id]; if (!c) return null
+                return (
+                  <div key={id} className="row" style={hv('amber')}>
+                    <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
+                      <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{c.price} · {c.ready}</span></span>
+                    </button>
+                    <button type="button" className="btn ghost" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => setBudgetSheet(true)}>Raise budget</button>
+                  </div>
+                ) })}
+            </div>
           </>
         )}
+
+        {laterIds.length > 0 && (
+          <div style={{ margin: '18px 16px 0' }}>
+            <button type="button" onClick={() => setShowLater((v) => !v)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, border: 'none', background: C.fill, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
+              <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: C.ink }}>Coming later for this goal · {laterIds.length}</span>
+              <ChevronDown size={16} color={C.faint} style={{ transform: showLater ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
+            </button>
+            {showLater && (
+              <div style={{ padding: '6px 2px 0' }}>
+                {laterIds.map((id) => (
+                  <div key={id} className="row" style={{ alignItems: 'flex-start' }}>
+                    <span className="tx">
+                      <span className="t" style={{ display: 'block', fontSize: 14 }}>{cards[id]?.title ?? shelfTitle(id)}</span>
+                      <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>{notSellableReason(id)}</span>
+                    </span>
+                    <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${cards[id]?.title ?? shelfTitle(id)} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>Tell me when</Link>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        <Sec t="Set up once" s="The basics, ticked off as you go" hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
+        <div style={{ padding: '0 12px' }}>{setupRows.map((c) => <SetupRow key={c.id} c={c} />)}</div>
+
         <div style={{ margin: '18px 16px 0' }}>
           <button type="button" onClick={() => go({ name: 'guide' })} className="press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 18, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
             <Mark hue="mint" size={38}><Compass size={22} /></Mark>
@@ -501,7 +634,9 @@ export default function CreatePage() {
               return <button key={c.id} type="button" onClick={() => open(c)} className={`row press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
                 <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
                 <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? 'Coming soon' : mw ? `matches “${mw}”` : c.sub || c.plain}</span></span>
-                <span className="r"><b>{c.price}</b><span>{c.ready}</span></span>
+                {/* No price on a held card, here either. The search row was the last place a
+                    coming-soon card still carried one, which read as a thing you could buy. */}
+                <span className="r">{buy ? <><b>{c.price}</b><span>{c.ready}</span></> : <span>Not on sale yet</span>}</span>
               </button> })}
           </div>
         )}
@@ -570,7 +705,10 @@ export default function CreatePage() {
       : c.kind === 'program'
         ? [['Day 0', 'You order. We read your menu, photos and calendar.', false], ['Week 1', 'The first pieces land for your OK.', true], ['Every week', 'New pieces go out on the plan.', false], ['Monthly', 'A read of what moved, on Insights.', false]]
         : [['Day 0', 'You order. We read your menu, photos and calendar.', false], ['Day 1', 'We draft it.', false], ['Day 2', 'You approve in Inbox. One tap, or a note.', true], [c.ready, 'It goes out.', false]]
-    const goesWith = GOAL_CARDS[c.goal].filter((x) => x !== c.id).map((x) => cards[x]).filter((x): x is ShelfCard => !!x).slice(0, 4)
+    /* What else is on the shelves this card sits on, and only what can be bought: a "goes well
+       with" row full of coming-soon cards is a shop window of empty boxes. */
+    const goesWith = [...new Set(CHIP_ORDER.filter((ch) => shelfForChip(ch, shape).includes(c.id)).flatMap((ch) => liveForChip(ch, shape)))]
+      .filter((x) => x !== c.id).map((x) => cards[x]).filter((x): x is ShelfCard => !!x).slice(0, 4)
     const why = whyNow(c)
     return (
       <div style={{ ...hv(c.goal), paddingBottom: 100 }}>
@@ -579,9 +717,13 @@ export default function CreatePage() {
           <span className="pill-w mv"><SI /> Moves {c.stage}</span>
           <div style={{ position: 'relative' }}><h1>{c.title}</h1>{why && buy && <div className="why">{why}</div>}{!buy && <div className="why"><span className="pill-w grey">Coming soon</span></div>}</div>
         </div>
+        {/* A coming-soon card prints NO price. A price is an offer, and there is nothing to
+            offer yet; the reason takes its place. */}
         <div className="pp-facts">
-          <div><b>{c.price}</b><span>price</span></div><div><b>{c.ready}</b><span>ready in</span></div><div><b>{c.you}</b><span>you do</span></div><div><b>{c.channels.length}</b><span>{c.channels.length === 1 ? 'channel' : 'channels'}</span></div>
+          {buy && <div><b>{c.price}</b><span>price</span></div>}
+          <div><b>{c.ready}</b><span>ready in</span></div><div><b>{c.you}</b><span>you do</span></div><div><b>{c.channels.length}</b><span>{c.channels.length === 1 ? 'channel' : 'channels'}</span></div>
         </div>
+        {!buy && <div style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: C.fill, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{notSellableReason(c.id)}</div>}
         {(() => { const ps = buy ? promiseSentence(PROMISE_BY_CARD[c.id] ?? []) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
         <div className="pp-sec"><h2>In plain words</h2><p>{c.plain}</p></div>
         <div className="pp-sec"><h2>What you get</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>
@@ -592,14 +734,44 @@ export default function CreatePage() {
         <div className="pp-sec"><h2>Where it shows up</h2><div className="chips">{c.channels.map((x) => <span key={x}>{x}</span>)}</div></div>
         {goesWith.length > 0 && (<><Sec t="Goes well with" hue={c.goal} /><Shelf>{goesWith.map((x) => <Mini key={x.id} c={x} />)}</Shelf></>)}
         <div className="sticky"><div className="in">
-          <div className="p">{c.price}<span>{c.cadence} · {c.you.toLowerCase()} · {c.ready}</span></div>
+          {/* No price and no Order on a card that cannot be bought. The bar says what it is
+              waiting on and offers the one thing that is real: telling us you want it. */}
+          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? c.price : 'Not on sale yet'}<span>{buy ? `${c.cadence} · ${c.you.toLowerCase()} · ${c.ready}` : 'We will tell you the day it opens'}</span></div>
           {buy
-            ? <button type="button" className="btn hue" onClick={() => order(c)}>{c.handoff.kind === 'request' ? 'Ask for a quote' : 'Order'} <ArrowRight size={15} /></button>
+            ? <button type="button" className="btn hue" onClick={() => order(c)}>{c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order'} <ArrowRight size={15} /></button>
             : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>Tell me when</Link>}
         </div></div>
       </div>
     )
   }
+
+  /* ── the budget sheet ──
+   * The same six answers onboarding asks, in the same words, so setting it here and setting it
+   * there are one thing. Saved straight to businesses.monthly_budget. */
+  const budgetSheetUI = budgetSheet ? (
+    <>
+      <div onClick={() => setBudgetSheet(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.28)', zIndex: 40 }} />
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line, margin: '0 auto 12px' }} />
+          <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>What feels right to start?</div>
+          <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>You can change it any time. Nothing is charged now.</div>
+          {BUDGET_CHIPS.map((b) => { const on = cap != null && budgetCapForChip(b) === cap
+            const noCap = NO_CAP_BUDGET_CHIPS.includes(b)
+            return (
+              <button key={b} type="button" onClick={() => setBudget(noCap ? null : b)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
+                <span style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? C.mintDk : C.line}`, background: on ? C.mintDk : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{on && <Check size={12} strokeWidth={3} />}</span>
+                <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{b}
+                  {/* Both of these set no cap, so the row says what happens instead of leaving
+                      the owner to guess at a ceiling we would have invented. */}
+                  {noCap && <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.mute, marginTop: 1 }}>No cap set. Everything shows.</span>}
+                </span>
+              </button>
+            ) })}
+        </div>
+      </div>
+    </>
+  ) : null
 
   /* ── the filter sheet ── */
   const FilterSheet = () => sheet ? (
@@ -633,6 +805,7 @@ export default function CreatePage() {
         {view.name === 'product' && product(view.id)}
       </div>
       <FilterSheet />
+      {budgetSheetUI}
       {view.name !== 'browse' && view.name !== 'product' && (
         <button type="button" onClick={back} aria-label="Back" style={{ display: 'none' }}><ChevronLeft /></button>
       )}

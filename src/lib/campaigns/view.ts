@@ -110,6 +110,7 @@ export interface CampaignExecution {
   adTargeting?: string    // the area + people the ads should reach (paid-ads)
   brandVoice?: string     // how replies/content should sound; words to use and avoid (review-responses)
   photoUrls?: string      // comma-joined URLs of owner-uploaded photos (gbp-setup photo set)
+  truckSchedule?: string  // the week's stops: day, hours, place, one per line (truck-location)
   /** The staff person who owns this campaign's house-team work (auth user id). Server-written at
    *  mint by ensureClientStrategist; creator_work_orders has no staff-owner column, so this is
    *  where the name on a house-team piece lives. Never in the owner PATCH whitelist. */
@@ -279,6 +280,9 @@ export function ownerSetupComplete(s: SavedCampaign): boolean {
   // The paid lane needs the link so the team can set it. The owner-run lanes do not: they
   // are done when the owner says so (free) or when our verified write lands (AI).
   if (svc.has('google-food-order')) need.push(filled(ex.orderingLink))
+  // The truck card posts where the truck is, every morning. With no stops there is nothing to
+  // post, so this campaign is not ready no matter what else is filled in.
+  if (svc.has('truck-location')) need.push(filled(ex.truckSchedule))
   // The self-serve Google-profile fix (the gbp card's free version): the campaign's deliverable
   // IS the owner's walkthrough, so the campaign honestly needs them until the fixer's all-good
   // diagnosis stamps execution.gbpFixedAt.

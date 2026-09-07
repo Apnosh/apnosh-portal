@@ -9,9 +9,11 @@
  */
 import { CREATE_CATALOG } from './create-catalog'
 import { chargedPriceLabel, chargedItemPrice } from '../builder/item-prices'
-import { availabilityFor, type CardAvailability } from './catalog-availability'
+import { availabilityFor, sellable, type CardAvailability } from './catalog-availability'
 import { etaLabelFor } from './service-turnaround'
 import { REQUEST_TYPES } from '@/lib/requests/catalog'
+import { priceCreativeRequest, fmtCents } from '@/lib/requests/pricing'
+import { SETUP_CARDS } from '@/lib/campaigns/setup/cards'
 
 export type ShelfGoal = 'foryou' | 'announce' | 'event' | 'deal' | 'nights' | 'newfaces' | 'regulars' | 'reviews' | 'online' | 'catering' | 'brand'
 export type ShelfKind = 'quick' | 'campaign' | 'setup' | 'program'
@@ -113,6 +115,12 @@ const FACTS: Record<string, F> = {
   reviewsreply: { k: 'program', g: 'reviews', st: 'Interest', you: 'Approve', ch: ['Google'], plain: 'Every review gets a drafted reply, worst first, for you to approve. Monthly.', syn: 'reply reviews respond google', ready: '3 days' },
   socialmgmt: { k: 'program', g: 'brand', st: 'Awareness', you: 'Approve', ch: ['Instagram', 'Facebook', 'TikTok'], plain: 'Your social, run for you: posts, stories and replies every week.', syn: 'social media manager posts weekly', ready: '1 week' },
   gbpmgmt: { k: 'program', g: 'newfaces', st: 'Awareness', you: 'Nothing', ch: ['Google'], plain: 'Your Google listing kept active: a post a week, new photos, questions answered.', syn: 'google listing weekly posts', ready: '1 week' },
+  /* The four doorless services. Priced for months, sold nowhere, so an owner who needed one
+     concluded we do not do it. Gated by the playbook law, not by the allowlist. */
+  trucklocation: { k: 'program', g: 'brand', st: 'Awareness', you: 'Approve', ch: ['Google', 'Instagram', 'Facebook'], plain: "Your spot changes daily and Google's pin does not. Every morning we post where you are, from the schedule of stops you keep.", get: ["A post each morning with today's spot", 'Your stops read from the calendar you keep', 'Google views on the days a spot is posted'], syn: 'truck location where today pop-up spot', ready: '3 days' },
+  barnights: { k: 'program', g: 'nights', st: 'Orders', you: 'Approve', ch: ['Instagram', 'Facebook', 'Print'], plain: 'A weekly night with a reason to come: trivia, league night, a watch party. Planned, made and posted, month after month.', get: ['A night planned around your room', 'The graphics and the posts each week', 'A read of which nights filled'], syn: 'trivia league watch party bar night weekly', ready: '1 week' },
+  seasonplan: { k: 'program', g: 'announce', st: 'Awareness', you: 'Show up', ch: ['Everywhere'], plain: 'Your next quarter mapped out: the dates that matter for your place, what to promote each week, and a call to walk it through.', get: ['The quarter mapped week by week', 'A planning call with your strategist', 'A refresh part-way through'], syn: 'season calendar quarter plan lent holiday', ready: '1 week' },
+  cateringengine: { k: 'program', g: 'catering', st: 'Orders', you: 'Approve', ch: ['Your site', 'Email'], plain: 'A catering page offices can order from, a proposal to send back, and a follow-up on every inquiry so none of them go cold.', get: ['A catering page on your site', 'A proposal you can send the same day', 'A follow-up on every inquiry'], syn: 'catering office proposals inquiries follow up', ready: '2 weeks' },
 }
 const CREATIVE_FACTS: Record<string, { g: Exclude<ShelfGoal, 'foryou'>; ch: string[]; syn: string; plain: string }> = {
   graphic: { g: 'announce', ch: ['Print', 'Social'], syn: 'flyer poster promo image design', plain: 'A flyer, a poster, a promo image, any one-off design. Tell us what it is for and we quote it.' },
@@ -157,9 +165,30 @@ function build(): Record<string, ShelfCard> {
     const cf = CREATIVE_FACTS[t.id] ?? CREATIVE_FACTS.other
     const avail = availabilityFor(id)
     if (avail === 'hidden') continue
+    /* The desk has had a signed price sheet since 2026-08-09 and the store still said
+       "Quote" on every one of its cards, so a shelf of live, orderable work read as a shelf
+       of unknowns. The base tier is the honest number to print before the owner has picked
+       anything, so it prints as a FROM. The graphic keeps its own engine and stays a quote. */
+    const base = priceCreativeRequest(t.id, {})
+    /* The desk's only monthly type: 'social' prices a month of posts, not a one-time piece.
+     * The price sheet marks it (CreativePrice.monthly); the name is a belt for older sheets.
+     * A monthly price carries no service fee, so its "what you get" line must not claim one. */
+    const monthly = t.id === 'social' || !!(base as { monthly?: boolean } | null)?.monthly
+    const priceLabel = base ? `from ${fmtCents(base.totalCents)}` : 'Quote'
+    /* ONE STORY PER CARD. These cards used to print a price AND say "2 days to a quote" AND
+     * offer a button that said Ask, which is three different products on one card. A card with
+     * a real price is an ORDER: it says when the work starts, its first "what you get" line
+     * names the tier that price buys, and the button says Order. Only the graphic has no price
+     * sheet (the design engine owns it), so only the graphic stays a quote and keeps Ask. */
     out[id] = {
-      id, title: t.label, sub: (t as { blurb?: string }).blurb ?? '', price: 'Quote', priceN: 0, cadence: 'One-time',
-      kind: 'quick', goal: cf.g, stage: 'Interest', you: 'Approve', ready: '2 days to a quote', channels: cf.ch, plain: cf.plain, get: ['A quote in two days, no charge to ask', 'Made by a designer or creator we know', 'Two rounds of changes'], syn: cf.syn,
+      id, title: t.label, sub: (t as { blurb?: string }).blurb ?? '', price: priceLabel, priceN: base ? Math.round(base.totalCents / 100) : 0, cadence: monthly ? 'Monthly' : 'One-time',
+      kind: 'quick', goal: cf.g, stage: 'Interest', you: 'Approve',
+      ready: base ? 'Starts in 2 days' : '2 days to a quote',
+      channels: cf.ch, plain: cf.plain,
+      get: base
+        ? [monthly ? `${base.lines[0].label} at ${fmtCents(base.totalCents)}, one month at a time` : `${base.lines[0].label} at ${fmtCents(base.totalCents)}, service fee inside`, 'Made by a designer or creator we know', 'Two rounds of changes', 'Pick a bigger one and we show the new price before you pay']
+        : ['A quote in two days, no charge to ask', 'Made by a designer or creator we know', 'Two rounds of changes'],
+      syn: cf.syn,
       availability: avail, handoff: { kind: 'request', type: t.id },
     }
   }
@@ -169,7 +198,19 @@ function build(): Record<string, ShelfCard> {
 let _cards: Record<string, ShelfCard> | null = null
 export function shelfCards(): Record<string, ShelfCard> { if (!_cards) _cards = build(); return _cards }
 export function shelfCard(id: string): ShelfCard | undefined { return shelfCards()[id] }
-export const isBuyable = (c: ShelfCard) => c.availability === 'live'
+/* Buyable now means SELLABLE: the allowlist says live, every service it composes to can be
+ * worked, and there is a way to count it (catalog-availability `sellable`). The old test read
+ * only the first of those, which is how a card with no playbook kept its Order button. */
+export const isBuyable = (c: ShelfCard) => sellable(c.id).ok
+
+/** Cards that can be started for nothing: every setup card carries a do-it-yourself lane where we
+ *  show the owner where to tap and check the result. The store marks those rows Free, because
+ *  "free, you do it" is a real offer and hiding it behind a paid price loses the owner who has
+ *  no money this month and time on a Tuesday. */
+const FREE_LANE_IDS: ReadonlySet<string> = new Set(
+  SETUP_CARDS.filter((c) => c.lanes.some((l) => l.kind === 'diy')).map((c) => c.id),
+)
+export const hasFreeLane = (id: string): boolean => FREE_LANE_IDS.has(id)
 
 /* the browse sections */
 export const QUICK_IDS = ['design', 'creative-graphic', 'creative-social', 'creative-video', 'creative-photos', 'creative-copy', 'story', 'gpost', 'dish', 'reel']
@@ -219,8 +260,12 @@ export function starterPicks(hurt: string, you: string, bud: string): ShelfCard[
   const budTest = (c: ShelfCard) => bud === 'u200' ? c.priceN < 200 : bud === 'u600' ? c.priceN <= 600 : true
   const youTest = (c: ShelfCard) => you === 'Show up' ? true : you === 'Approve' ? c.you !== 'Show up' : c.you === 'Nothing'
   const picks: ShelfCard[] = list.filter((c) => budTest(c) && youTest(c) && isBuyable(c))
+  // Loosen the "how hands-on" and the budget answers before giving up, but NEVER the buyable
+  // one. The old last line back-filled with cards that cannot be bought, so an owner who asked
+  // for three picks was handed a coming-soon card as a recommendation. Two real picks beat
+  // three where one is a door that does not open.
   for (const c of list) if (picks.length < 3 && !picks.includes(c) && budTest(c) && isBuyable(c)) picks.push(c)
-  for (const c of list) if (picks.length < 3 && !picks.includes(c)) picks.push(c)
+  for (const c of list) if (picks.length < 3 && !picks.includes(c) && isBuyable(c)) picks.push(c)
   return picks.slice(0, 3)
 }
 

@@ -96,11 +96,88 @@ export function inferShapeFromOnboarding(data: {
  * default-goals matrix. Owner can override during onboarding.
  */
 /**
- * The onboarding "#1 priority" chip → a real GoalSlug, so the recommender runs on
- * what the owner actually SAID, not a shape guess. Every GOAL_CHIPS value maps;
- * an unknown/legacy chip returns null (shape defaults then stand).
+ * The onboarding goal chip → a real GoalSlug, ONE TO ONE.
+ *
+ * It used to collapse: fourteen chips folded into seven slugs, six of them into
+ * 'be_known_for'. So an owner who tapped "Better photos of my food" and one who tapped
+ * "Reach a younger crowd" saved the same goal, and the store had no way to draw either of
+ * them their own shelf. Migration 256 adds the eight missing slugs so nothing is lost
+ * between the tap and the row.
+ *
+ * Every GOAL_CHIPS value maps; an unknown/legacy chip returns null (shape defaults then
+ * stand). The reverse map exists so a saved goal row reads back as the owner's own words.
  */
 const CHIP_TO_SLUG: Record<string, GoalSlug> = {
+  'More customers on slow days': 'fill_slow_times',
+  'More foot traffic overall': 'more_foot_traffic',
+  'Build local awareness': 'local_awareness',
+  'Promote a specific offering': 'promote_offering',
+  'Grow social following': 'grow_social',
+  'Improve online reputation': 'better_reputation',
+  'Launch something new': 'launch_something',
+  'Stay top of mind': 'stay_top_of_mind',
+  'Compete with nearby businesses': 'beat_nearby',
+  'More bookings or orders': 'more_online_orders',
+  'Turn first-timers into regulars': 'regulars_more_often',
+  'Grow catering orders': 'grow_catering',
+  'Better photos of my food': 'better_photos',
+  'Reach a younger crowd': 'younger_crowd',
+}
+export function goalSlugForChip(chip: string | null | undefined): GoalSlug | null {
+  if (!chip) return null
+  return CHIP_TO_SLUG[chip.trim()] ?? null
+}
+
+/**
+ * The two slugs no chip maps to any more, and the closest chip for each.
+ *
+ * They are not dead history: 'be_known_for' is what SIX of the fourteen chips collapsed into
+ * before migration 256, so it is on most existing clients' goal rows, and it is still what the
+ * 23503 fallback writes when the migration has not run yet. 'more_reservations' comes from
+ * defaultGoalsForShape for a fine-dining place. Without these two lines chipForGoalSlug returned
+ * null for both, the shelf-context route dropped the goal, and every one of those owners opened
+ * the store on a generic shelf instead of their own.
+ *
+ * The collapse cannot be undone (six chips, one row, the other five words are gone), so this is
+ * the best SINGLE chip for each, and both have a real shelf.
+ */
+const LEGACY_SLUG_TO_CHIP: Record<string, string> = {
+  be_known_for: 'Build local awareness',
+  more_reservations: 'More bookings or orders',
+}
+
+/** slug → the chip the owner tapped, so a saved goal row can be read back in their words.
+ *  New slugs first, then the two legacy ones, so a row written at any time still reads back. */
+const SLUG_TO_CHIP: Record<string, string> = Object.fromEntries(
+  Object.entries(CHIP_TO_SLUG).map(([chip, slug]) => [slug, chip]),
+)
+export function chipForGoalSlug(slug: string | null | undefined): string | null {
+  if (!slug) return null
+  const s = slug.trim()
+  return SLUG_TO_CHIP[s] ?? LEGACY_SLUG_TO_CHIP[s] ?? null
+}
+
+/**
+ * Every slug that can sit on a client_goals row today: the fourteen one-to-one ones, the two
+ * legacy ones above, and nothing else. Typed as Record<GoalSlug, true> on purpose, so adding a
+ * slug to the union without deciding which chip reads it back is a compile error rather than an
+ * owner opening the store on a generic shelf. scripts/verify-chip-shelf.ts walks this list.
+ */
+const EVERY_GOAL_SLUG: Record<GoalSlug, true> = {
+  more_foot_traffic: true, regulars_more_often: true, more_online_orders: true,
+  more_reservations: true, better_reputation: true, be_known_for: true,
+  fill_slow_times: true, grow_catering: true,
+  local_awareness: true, promote_offering: true, grow_social: true, launch_something: true,
+  stay_top_of_mind: true, beat_nearby: true, better_photos: true, younger_crowd: true,
+}
+export const ALL_GOAL_SLUGS: readonly GoalSlug[] = Object.keys(EVERY_GOAL_SLUG) as GoalSlug[]
+
+/**
+ * The slugs that existed BEFORE migration 256, for the fallback write. Until the migration
+ * runs, goals_catalog has no row for the eight new slugs and the foreign key rejects them, so
+ * the onboarding writer retries with these and the owner still gets goals.
+ */
+const LEGACY_CHIP_TO_SLUG: Record<string, GoalSlug> = {
   'More customers on slow days': 'fill_slow_times',
   'More foot traffic overall': 'more_foot_traffic',
   'Build local awareness': 'be_known_for',
@@ -116,26 +193,39 @@ const CHIP_TO_SLUG: Record<string, GoalSlug> = {
   'Better photos of my food': 'be_known_for',
   'Reach a younger crowd': 'be_known_for',
 }
-export function goalSlugForChip(chip: string | null | undefined): GoalSlug | null {
+export function legacyGoalSlugForChip(chip: string | null | undefined): GoalSlug | null {
   if (!chip) return null
-  return CHIP_TO_SLUG[chip.trim()] ?? null
+  return LEGACY_CHIP_TO_SLUG[chip.trim()] ?? null
 }
 
 /**
  * The onboarding budget chip → a monthly cap in dollars for businesses.monthly_budget
- * (the over-budget guard + recommender read it). 'Not sure yet' / unknown → null (no cap
- * is asserted). The cap is the TOP of the chosen range so we never under-sell their pick.
+ * (the over-budget guard + recommender read it). The cap is the TOP of the chosen range so we
+ * never under-sell their pick.
+ *
+ * TWO CHIPS ASSERT NO CAP AT ALL, and neither is here: 'Not sure yet', and the top chip.
+ * "Over $2,500/mo" used to map to 5000, which the store then read back to the owner as "Up to
+ * $5,000 to start" — a number they never said, invented by doubling the last band. An open top
+ * end is an open top end: no cap, nothing hidden.
  */
 const BUDGET_TO_CAP: Record<string, number> = {
   'Under $200/mo': 200,
   '$200 to $500/mo': 500,
   '$500 to $1,000/mo': 1000,
   '$1,000 to $2,500/mo': 2500,
-  'Over $2,500/mo': 5000,
 }
+
+/** The chips that mean "do not cap me". Both leave monthly_budget alone and show every card. */
+export const NO_CAP_BUDGET_CHIPS: readonly string[] = ['Over $2,500/mo', 'Not sure yet']
 export function budgetCapForChip(chip: string | null | undefined): number | null {
   if (!chip) return null
   return BUDGET_TO_CAP[chip.trim()] ?? null
+}
+
+/** The saved cap read back as the chip the owner tapped, so resuming setup relights it. */
+export function budgetChipForCap(cap: number | null | undefined): string {
+  if (cap == null) return ''
+  return Object.keys(BUDGET_TO_CAP).find((k) => BUDGET_TO_CAP[k] === Number(cap)) ?? ''
 }
 
 export function defaultGoalsForShape(shape: {

@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Footprints, Repeat, ShoppingBag, CalendarCheck, Star, Award, Clock, ChefHat,
+  MapPin, Megaphone, Heart, Rocket, Lightbulb, Trophy, Camera, Sparkles,
   CheckCircle2, ChevronUp, ChevronDown, X,
 } from 'lucide-react'
 import type { CatalogGoal, ClientGoal, GoalSlug } from '@/lib/goals/types'
@@ -32,6 +33,15 @@ const GOAL_HUE: Record<GoalSlug, HueKey> = {
   be_known_for: 'brand',
   fill_slow_times: 'nights',
   grow_catering: 'catering',
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: 'brand',
+  promote_offering: 'announce',
+  grow_social: 'catering',
+  launch_something: 'announce',
+  stay_top_of_mind: 'regulars',
+  beat_nearby: 'newfaces',
+  better_photos: 'event',
+  younger_crowd: 'brand',
 }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 
@@ -44,6 +54,15 @@ const GOAL_ICONS: Record<GoalSlug, React.ComponentType<{ size?: number }>> = {
   be_known_for: Award,
   fill_slow_times: Clock,
   grow_catering: ChefHat,
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: MapPin,
+  promote_offering: Megaphone,
+  grow_social: Heart,
+  launch_something: Rocket,
+  stay_top_of_mind: Lightbulb,
+  beat_nearby: Trophy,
+  better_photos: Camera,
+  younger_crowd: Sparkles,
 }
 
 export default function MvpGoals({ clientId, catalog, activeGoals }: { clientId: string; catalog: CatalogGoal[]; activeGoals: ClientGoal[] }) {

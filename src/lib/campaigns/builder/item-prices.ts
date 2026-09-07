@@ -100,6 +100,17 @@ export function computeItemNotes(id: string): string[] {
   }
 }
 
+/** The catalog services a card composes to, deduped, through the SAME rail as its price. This
+ *  is what the playbook law reads: a card may only be sold when every service on this list can
+ *  actually be worked. Empty for an id that composes nothing (or fails to compose). */
+export function computeItemServices(id: string): string[] {
+  try {
+    return [...new Set(draftFromBuilder({ itemId: id, status: 'estimate', vals: {} }).items.map((it) => it.serviceId).filter(Boolean))]
+  } catch {
+    return []
+  }
+}
+
 function compute(): Record<string, ItemPrice> {
   const out: Record<string, ItemPrice> = {}
   for (const id of IDS) out[id] = computeItemPrice(id)
@@ -114,9 +125,21 @@ const ITEM_PRICE_NOTES: Record<string, string[]> = (() => {
   return out
 })()
 
+const ITEM_SERVICES: Record<string, string[]> = (() => {
+  const out: Record<string, string[]> = {}
+  for (const id of IDS) out[id] = computeItemServices(id)
+  return out
+})()
+
 /** The verbatim billed-at-cost notes for a catalog card id (empty when none). */
 export function priceNotes(id: string): string[] {
   return ITEM_PRICE_NOTES[id] ?? []
+}
+
+/** The catalog services a card composes to. Empty for an unknown id (a desk request card
+ *  composes nothing: it is its own lane). */
+export function itemServices(id: string): string[] {
+  return ITEM_SERVICES[id] ?? []
 }
 
 /** Price a runtime-registered DB campaign (Phase C2) through the SAME rail the built-ins

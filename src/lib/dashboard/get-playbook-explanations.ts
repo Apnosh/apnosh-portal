@@ -41,6 +41,15 @@ const GOAL_DISPLAY: Record<GoalSlug, string> = {
   be_known_for: 'Be known as the spot',
   fill_slow_times: 'Fill slow times',
   grow_catering: 'Grow catering',
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: 'Be known nearby',
+  promote_offering: 'Promote one thing',
+  grow_social: 'Grow social following',
+  launch_something: 'Launch something new',
+  stay_top_of_mind: 'Stay top of mind',
+  beat_nearby: 'Win the block',
+  better_photos: 'Better photos of the food',
+  younger_crowd: 'Reach a younger crowd',
 }
 
 const GOAL_RATIONALE: Record<GoalSlug, string> = {
@@ -52,6 +61,15 @@ const GOAL_RATIONALE: Record<GoalSlug, string> = {
   be_known_for: 'Drives sales through branded demand.',
   fill_slow_times: 'Drives sales through better daypart utilization.',
   grow_catering: 'Drives sales through B2B and events.',
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: 'Drives sales by being the name people already know.',
+  promote_offering: 'Drives sales by pushing one thing, not everything.',
+  grow_social: 'Drives sales through an audience you can reach again for free.',
+  launch_something: 'Drives sales by making a change land as an event.',
+  stay_top_of_mind: 'Drives sales by being remembered between visits.',
+  beat_nearby: 'Drives sales by winning the comparison on the map.',
+  better_photos: 'Drives sales because the picture is the menu now.',
+  younger_crowd: 'Drives sales by showing up where a younger crowd looks.',
 }
 
 export async function getPlaybookExplanations(clientId: string): Promise<PlaybookExplanation[]> {

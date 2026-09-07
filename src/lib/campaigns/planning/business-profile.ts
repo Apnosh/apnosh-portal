@@ -33,6 +33,15 @@ const GOAL_KEY: Record<GoalSlug, GoalKey> = {
   be_known_for: 'new-customers',
   fill_slow_times: 'slow-nights',
   grow_catering: 'new-customers',
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: 'new-customers',
+  promote_offering: 'new-customers',
+  grow_social: 'new-customers',
+  launch_something: 'new-customers',
+  stay_top_of_mind: 'regulars',
+  beat_nearby: 'new-customers',
+  better_photos: 'new-customers',
+  younger_crowd: 'new-customers',
 }
 
 const GOAL_LABEL: Record<GoalKey, string> = {

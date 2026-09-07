@@ -3,6 +3,7 @@
 import { CheckCircle2 } from 'lucide-react'
 import { type OnboardingData, type StepId, ROLES, APPROVAL_TYPES, FOOD_BIZ_TYPES } from '../data'
 import { Question, PrimaryPill, gradOf, DISPLAY, CARD_SHADOW } from '../ui'
+import { SHAPE_LABEL, isShelfShape } from '@/lib/clients/shape'
 
 interface Props {
   data: OnboardingData
@@ -38,6 +39,12 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
     .join(', ') || null
   // Keep the count honest: when extra spots exist, show the real total
   // (primary + extras) so it can never read "Just 1" above a list of spots.
+  // The two answers the STORE reads and the review never played back. An owner who is about to
+  // finish setup should see the budget the shelf will price against and the shape it will draw
+  // for, with an Edit next to each, rather than meeting both as a surprise on the Create page.
+  // Left blank when they skipped the screen: "never answered" is a real state and the shelf
+  // treats it as a storefront with no cap, so the review must not invent an answer either.
+  const shapeValue = isShelfShape(data.shape) ? SHAPE_LABEL[data.shape].title : null
   const locationsValue = extraLocs.length
     ? `${extraLocs.length + 1} total`
     : (data.location_count || null)
@@ -64,6 +71,9 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           { label: 'Mission', value: data.biz_desc || null },
           { label: 'Audience', value: data.customer_types.length ? data.customer_types.join(', ') : null },
         ]} />
+        <ReviewCard title="How it runs" stepId="shape" onEdit={onGoToStep} rows={[
+          { label: 'Shape', value: shapeValue },
+        ]} />
         {isFood && (
           <ReviewCard title="Menu" stepId="menu" onEdit={onGoToStep} rows={[
             { label: 'Dishes', value: menuList },
@@ -83,6 +93,9 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
           { label: 'Priority', value: data.primary_goal || null },
           { label: 'Success', value: data.success_signs.length ? data.success_signs.join(', ') : null },
           { label: 'Timeline', value: data.timeline || null },
+        ]} />
+        <ReviewCard title="Budget" stepId="budget" onEdit={onGoToStep} rows={[
+          { label: 'To start', value: data.marketing_budget || null },
         ]} />
         <ReviewCard title="Promote" stepId="promote" onEdit={onGoToStep} rows={[
           { label: 'Highlights', value: data.main_offerings || null },
@@ -142,6 +155,8 @@ export default function StepReview({ data, update, onGoToStep, onComplete, savin
 const REVIEW_HUE: Record<string, string> = {
   You: 'mint', Business: 'newfaces', 'What you are': 'announce', Menu: 'announce', Specials: 'deal',
   Story: 'brand', Goals: 'event', Promote: 'announce', Brand: 'brand', Discovery: 'newfaces',
+  // Same hues the two new setup screens wear, so the review reads as the same flow.
+  'How it runs': 'newfaces', Budget: 'online',
   Workflow: 'nights', Connected: 'nights', Assets: 'catering',
 }
 
