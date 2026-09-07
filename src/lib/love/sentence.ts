@@ -7,7 +7,9 @@ import 'server-only'
  * Google days against the seven before (gbpRows, the same reported-days rule the promises
  * ledger counts by). Google delivers days late and writes zero rows for days it has not sent,
  * so counting calendar days would compare a full week against a half-reported one and print a
- * fake drop.
+ * fake drop. A client with more than one shop gets one Google row per shop per day, so the rows
+ * are added up per day before the weeks are cut (src/lib/love/week-window.ts) — the same way the
+ * ledger adds locations together.
  *
  * One difference from the ledger, on purpose: the demo location is dropped here. gbpRows keeps
  * every location, and a demo row would put made-up taps in a sentence the owner reads as theirs.
@@ -22,6 +24,7 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { gbpRows, shiftDays, today, type Gbp } from '@/lib/promises/metrics'
+import { weekPair } from '@/lib/love/week-window'
 
 const DAY = 86400000
 const n = (v: number) => v.toLocaleString('en-US')
@@ -36,22 +39,15 @@ export async function weeklySentence(clientId: string): Promise<string | null> {
   try {
     // 60 days back, because a slow feed can leave big gaps and we still want 14 reported days.
     const rows = await gbpRows(clientId, shiftDays(today(), -60), today())
-    const days = rows
-      .filter((r) => r.location_id !== 'demo-proof')
-      .sort((a, b) => (a.date < b.date ? 1 : -1)) // newest first
-    // "This week" has to mean this week: the newest day is no more than three days stale (Google
-    // runs a couple of days behind), and the fourteen days fit in three calendar weeks.
-    const dayMs = (d: string) => Date.parse(`${d}T00:00:00Z`)
-    const todayMs = dayMs(today())
-    const fresh = days.length >= 14
-      && todayMs - dayMs(days[0].date) <= 3 * DAY
-      && dayMs(days[0].date) - dayMs(days[13].date) <= 21 * DAY
-    if (fresh) {
-      const thisWeek = days.slice(0, 7).reduce((sum, r) => sum + taps(r), 0)
-      const lastWeek = days.slice(7, 14).reduce((sum, r) => sum + taps(r), 0)
-      if (thisWeek + lastWeek > 0) {
-        return `This week your Google listing got ${n(thisWeek)} taps: calls, directions, and website visits. Last week it was ${n(lastWeek)}.`
-      }
+    // Per DATE, not per row: a client with two shops has two rows for the same day, and slicing
+    // fourteen rows would cut the week in half. weekPair adds the locations up per day, takes the
+    // newest fourteen days, and checks those days are actually this week.
+    const pair = weekPair(
+      rows.filter((r) => r.location_id !== 'demo-proof').map((r) => ({ date: r.date, value: taps(r) })),
+      today(),
+    )
+    if (pair && pair.thisWeek + pair.lastWeek > 0) {
+      return `This week your Google listing got ${n(pair.thisWeek)} taps: calls, directions, and website visits. Last week it was ${n(pair.lastWeek)}.`
     }
   } catch (e) {
     console.warn('[love] weekly sentence: google read failed', (e as Error)?.message)
