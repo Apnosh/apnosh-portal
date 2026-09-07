@@ -22,7 +22,7 @@ import { getPromiseRows } from '@/lib/promises/read'
 import {
   REFERRAL_CREDIT_CENTS, CODE_LENGTH, makeCode, normalizeCode, isCodeShape,
   referralBlock, creditAvailableCents, creditWords, isRealIntentId, priorIntentVerdict,
-  overApplyVerdict, overAppliedCents, type HoldState, type ReferralStatus,
+  overApplyVerdict, overAppliedCents, liveHoldCents, type HoldState, type ReferralStatus,
 } from './model'
 
 const warn = (where: string, e: unknown) =>
@@ -134,11 +134,20 @@ export interface ReferralState {
   friends: FriendRow[]
   /** credit sitting on the account, in cents, unspent and unvoided */
   creditCents: number
+  /**
+   * How much of that is HELD by a checkout the owner has open right now.
+   *
+   * The balance above deliberately ignores holds — a tab somebody closed is not a spend, and an
+   * owner must not be told their $50 is gone because they looked at checkout. But the next bill
+   * they open WILL be short by this much, so the page has to say it, or the number on this screen
+   * and the number on the bill disagree with nothing to explain the gap.
+   */
+  heldCents: number
   featured: boolean
   slug: string | null
 }
 
-const SHUT: ReferralState = { enabled: false, eligible: false, code: null, friends: [], creditCents: 0, featured: false, slug: null }
+const SHUT: ReferralState = { enabled: false, eligible: false, code: null, friends: [], creditCents: 0, heldCents: 0, featured: false, slug: null }
 
 /** Everything /dashboard/tell-a-friend and the Home card need, in one read. */
 export async function referralStateFor(clientId: string): Promise<ReferralState> {
@@ -149,6 +158,7 @@ export async function referralStateFor(clientId: string): Promise<ReferralState>
   const code = await ensureReferralCode(clientId)
   let friends: FriendRow[] = []
   let creditCents = 0
+  let heldCents = 0
   let featured = false
   let slug: string | null = null
   try {
@@ -177,17 +187,31 @@ export async function referralStateFor(clientId: string): Promise<ReferralState>
   try {
     const { data } = await admin
       .from('client_credits')
-      .select('id, cents, voided_at')
+      .select('id, cents, held_cents, consumed_intent_id, consumed_at, voided_at')
       .eq('client_id', clientId)
       .is('voided_at', null)
     // WHAT THEY STILL HAVE, not what a row remembers. consumed_cents is stamped when a checkout
     // HOLDS a credit, so an owner who opened checkout and closed the tab was shown $0 on a $50
     // they still had. Only money a collected order really took counts as gone — the same ledger
     // sum the checkout claims against, so the page and the till cannot disagree.
-    for (const c of (data ?? []) as { id: string; cents: number }[]) {
+    const now = Date.now()
+    for (const c of (data ?? []) as { id: string; cents: number; held_cents: number; consumed_intent_id: string | null; consumed_at: string | null }[]) {
       const settled = await settledCentsFor(c.id)
       if (settled == null) continue
-      creditCents += Math.max(0, (c.cents || 0) - settled)
+      const left = Math.max(0, (c.cents || 0) - settled)
+      creditCents += left
+      // And how much of it the NEXT bill will not see, because a checkout still open is sitting on
+      // it. Same arithmetic the checkout uses, so the two numbers come from one place.
+      const hold = await holdStateFor(c.consumed_intent_id)
+      if (hold == null) continue
+      heldCents += Math.min(left, liveHoldCents({
+        cents: c.cents || 0,
+        settledCents: settled,
+        heldCents: c.held_cents || 0,
+        hold,
+        heldAtMs: c.consumed_at ? Date.parse(c.consumed_at) : null,
+        nowMs: now,
+      }))
     }
   } catch (e) { warn('could not read the credits', e) }
   try {
@@ -195,7 +219,7 @@ export async function referralStateFor(clientId: string): Promise<ReferralState>
     featured = !!data?.featured_opt_in
     slug = (data?.slug as string) || null
   } catch (e) { warn('could not read the opt-in', e) }
-  return { enabled: true, eligible: true, code, friends, creditCents, featured, slug }
+  return { enabled: true, eligible: true, code, friends, creditCents, heldCents, featured, slug }
 }
 
 /* ── a friend arrives ────────────────────────────────────────────────────── */

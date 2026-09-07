@@ -366,6 +366,7 @@ export const ES: Record<string, string> = {
     'Ellos reciben {amount} de descuento en su primer pedido. Tú recibes {amount} cuando ese primer pedido ya tiene su número.',
   'Your credit': 'Tu crédito',
   '{amount} on your account': '{amount} en tu cuenta',
+  '{amount} of it is on hold in a checkout you left open.': 'Hay {amount} apartado en un pago que dejaste abierto.',
   'It comes off your next order.': 'Se descuenta de tu próximo pedido.',
   'Your friends': 'Tus amigos',
   'A friend': 'Un amigo',

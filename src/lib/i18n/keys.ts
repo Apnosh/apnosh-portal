@@ -167,6 +167,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Your code', 'Send this link', 'Copied',
     'They get {amount} off their first order. You get {amount} when their first order gets its number.',
     'Your credit', '{amount} on your account', 'It comes off your next order.',
+    // said only while a checkout they left open is sitting on part of the balance
+    '{amount} of it is on hold in a checkout you left open.',
     'Your friends', 'A friend', 'Nobody yet. Send your link to one owner you like.',
     // the four states a friend can be in (STATUS_WORD in lib/referrals/model.ts)
     'Signed up', 'First order in', 'You got your credit', 'Closed',

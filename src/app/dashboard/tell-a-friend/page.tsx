@@ -21,7 +21,7 @@ import { creditWords, friendWord, referralLink, REFERRAL_CREDIT_CENTS, type Refe
 interface Friend { id: string; name: string; status: ReferralStatus; createdAt: string; voidReason?: string | null }
 interface State {
   enabled: boolean; eligible: boolean; code: string | null
-  friends: Friend[]; creditCents: number; featured: boolean; slug: string | null
+  friends: Friend[]; creditCents: number; heldCents: number; featured: boolean; slug: string | null
 }
 
 const TONE: Record<ReferralStatus, 'good' | 'warn' | 'neutral'> = {
@@ -44,7 +44,7 @@ export default function TellAFriendPage() {
     fetch(`/api/referrals/me?clientId=${id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => { if (alive && j) setState(j as State) })
-      .catch(() => { if (alive) setState({ enabled: false, eligible: false, code: null, friends: [], creditCents: 0, featured: false, slug: null }) })
+      .catch(() => { if (alive) setState({ enabled: false, eligible: false, code: null, friends: [], creditCents: 0, heldCents: 0, featured: false, slug: null }) })
     return () => { alive = false }
   }, [client?.id])
 
@@ -125,13 +125,18 @@ export default function TellAFriendPage() {
               </button>
             </div>
 
+            {/* The balance is what they still HAVE. A checkout they left open is sitting on part of
+                it, so the next bill will be short by that much — said here, or the number on this
+                screen and the number on the bill disagree with nothing to explain the gap. */}
             {state.creditCents > 0 && (
               <MvpGroup title={T('Your credit')} hue="mint">
                 <MvpRow
                   icon={<Copy size={18} />}
                   hue="mint"
                   label={T('{amount} on your account', { amount: creditWords(state.creditCents) })}
-                  sub={T('It comes off your next order.')}
+                  sub={state.heldCents > 0
+                    ? `${T('It comes off your next order.')} ${T('{amount} of it is on hold in a checkout you left open.', { amount: creditWords(state.heldCents) })}`
+                    : T('It comes off your next order.')}
                 />
               </MvpGroup>
             )}
