@@ -85,10 +85,11 @@ function useSeenLog(clientId: string | undefined) {
   useEffect(() => {
     if (!clientId || !pathname) return
     const day = new Date().toISOString().slice(0, 10)
-    const dayKey = `apnosh-seen-${clientId}-${day}`
+    // one key per client holding the last day logged, so this never grows a key a day
+    const dayKey = `apnosh-seen-${clientId}`
     try {
-      if (localStorage.getItem(dayKey)) return
-      localStorage.setItem(dayKey, '1')
+      if (localStorage.getItem(dayKey) === day) return
+      localStorage.setItem(dayKey, day)
     } catch {
       // storage off (private window): keep the old one-per-screen guard so we still log the day
       const key = `${clientId}|${pathname}`
