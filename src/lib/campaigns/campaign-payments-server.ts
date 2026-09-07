@@ -7,6 +7,29 @@
 import 'server-only'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 
+/**
+ * The statuses that mean MONEY WAS COLLECTED and the campaign is still running.
+ *
+ * 'paid'               — nothing has gone back.
+ * 'partially_refunded' — some went back (one piece credited); the rest of the order stands and the
+ *                        work continues, so the checkout still covers it. Reading only 'paid' here
+ *                        meant a $1 credit hid the whole receipt and made every piece delivered
+ *                        afterwards accrue as invoiceable — a second bill for work already paid for.
+ * 'disputed'           — the bank is holding the money while it decides. The charge is real until
+ *                        the dispute closes; a chargeback must not silently re-bill the owner.
+ *
+ * 'refunded' (in full) is deliberately NOT here: a full refund only ever happens with the campaign
+ * stopped, so there is nothing left to cover.
+ */
+export const COLLECTED_STATUSES = ['paid', 'partially_refunded', 'disputed'] as const
+
+/**
+ * Collected money that is also UNCONTESTED: the charge is ours to give back. Used where the
+ * question is "can we still refund against this?" — a disputed charge is excluded because the bank
+ * has already pulled the money and refunding it again would send it twice.
+ */
+export const SETTLED_STATUSES = ['paid', 'partially_refunded'] as const
+
 export interface CampaignPaymentInfo {
   totalCents: number
   subtotalCents: number
@@ -29,14 +52,16 @@ function toInfo(row: Record<string, unknown>): CampaignPaymentInfo {
   }
 }
 
-/** The upfront payment for one campaign (latest paid row), or null. */
+/** The upfront payment for one campaign (latest COLLECTED row), or null. This is the RECEIPT: a
+ *  partly refunded or disputed order still has one, and hiding it is how an owner loses the record
+ *  of a charge that is still on their card. */
 export async function getCampaignPayment(campaignId: string): Promise<CampaignPaymentInfo | null> {
   try {
     const { data, error } = await admin()
       .from('campaign_payments')
       .select('total_cents, subtotal_cents, service_fee_cents, tax_cents, paid_at')
       .eq('campaign_id', campaignId)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .order('paid_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -48,7 +73,7 @@ export async function getCampaignPayment(campaignId: string): Promise<CampaignPa
 }
 
 /**
- * True when this campaign was paid IN FULL at checkout (a 'paid' campaign_payments row exists).
+ * True when this campaign's checkout money was COLLECTED (see COLLECTED_STATUSES).
  * The G1 gate: when true, the per-piece accrual records its charge as 'covered_by_checkout'
  * instead of 'accrued', so the invoicing path can never bill the same work a second time.
  * Degrades to FALSE on any failure (missing table pre-215, no env) — a read hiccup must never
@@ -61,7 +86,7 @@ export async function isCampaignCheckoutPaid(campaignId: string): Promise<boolea
       .from('campaign_payments')
       .select('id')
       .eq('campaign_id', campaignId)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .limit(1)
     if (error || !data) return false
     return data.length > 0
@@ -70,7 +95,7 @@ export async function isCampaignCheckoutPaid(campaignId: string): Promise<boolea
   }
 }
 
-/** Upfront payments for many campaigns → { campaignId: info } (paid rows only; latest wins). */
+/** Upfront payments for many campaigns → { campaignId: info } (collected rows only; latest wins). */
 export async function getCampaignPaymentsBatch(campaignIds: string[]): Promise<Record<string, CampaignPaymentInfo>> {
   const ids = campaignIds.filter(Boolean)
   if (!ids.length) return {}
@@ -79,7 +104,7 @@ export async function getCampaignPaymentsBatch(campaignIds: string[]): Promise<R
       .from('campaign_payments')
       .select('campaign_id, total_cents, subtotal_cents, service_fee_cents, tax_cents, paid_at')
       .in('campaign_id', ids)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .order('paid_at', { ascending: false })
     if (error || !data) return {}
     const map: Record<string, CampaignPaymentInfo> = {}

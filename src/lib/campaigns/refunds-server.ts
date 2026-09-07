@@ -29,6 +29,7 @@ import { stripe } from '@/lib/stripe'
 import { notifyClientOwners, notifyStaffForClient, createNotification } from '@/lib/notifications'
 import { getAdminUserIds } from '@/lib/notify'
 import { refundOwedCents, refundableCents, refundStatus, type PaidBill } from './refund-math'
+import { SETTLED_STATUSES } from './campaign-payments-server'
 
 /** The paid charge we are reversing, read off campaign_payments. */
 export interface PaidCharge extends PaidBill {
@@ -65,7 +66,9 @@ export async function getPaidCharge(campaignId: string): Promise<PaidCharge | nu
       .from('campaign_payments')
       .select('*')
       .eq('campaign_id', campaignId)
-      .in('status', ['paid', 'partially_refunded'])
+      // SETTLED, not merely collected: a disputed charge is money the bank already pulled, and
+      // refunding it on top of the chargeback would send the same money back twice.
+      .in('status', SETTLED_STATUSES)
       .order('paid_at', { ascending: false })
       .limit(1)
       .maybeSingle()
