@@ -10,7 +10,7 @@
  * reached by the toggle, since nothing can truly ship here.
  */
 import { useState } from 'react'
-import { FreeCheckout, Confirmation } from '@/components/mvp/campaign-builder/campaign-checkout'
+import { FreeCheckout, InvoiceCheckout, Confirmation } from '@/components/mvp/campaign-builder/campaign-checkout'
 import { DeskKeyframes, paperGround } from '@/components/campaigns/desk/ui'
 import type { CampaignDraft } from '@/lib/campaigns/types'
 
@@ -25,20 +25,24 @@ const DRAFT = {
 } as unknown as CampaignDraft
 
 export default function PreviewCheckoutPage() {
-  const [view, setView] = useState<'free' | 'confirmed'>('free')
+  const [view, setView] = useState<'free' | 'invoice' | 'confirmed' | 'invoiced'>('free')
   return (
     <div style={{ position: 'fixed', inset: 0, ...paperGround, display: 'flex', justifyContent: 'center' }}>
       <DeskKeyframes />
       <div style={{ width: '100%', maxWidth: 480, display: 'flex', flexDirection: 'column', height: '100%' }}>
         <div style={{ flexShrink: 0, display: 'flex', gap: 8, padding: '12px 18px 8px' }}>
-          {(['free', 'confirmed'] as const).map((v) => (
+          {(['free', 'invoice', 'confirmed', 'invoiced'] as const).map((v) => (
             <button key={v} onClick={() => setView(v)} style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, fontWeight: 700, padding: '6px 12px', borderRadius: 999, cursor: 'pointer', border: '1px solid #E4E0D6', background: view === v ? '#EAF6F1' : '#fff', color: view === v ? '#2E9A78' : '#4A554F' }}>
-              {v === 'free' ? 'The seal' : 'The confirmation'}
+              {v === 'free' ? 'The seal' : v === 'invoice' ? 'On invoice' : v === 'confirmed' ? 'The confirmation' : 'Invoice confirmed'}
             </button>
           ))}
         </div>
         {view === 'free' ? (
           <FreeCheckout clientId="preview-no-account" draft={DRAFT} onPlaced={() => setView('confirmed')} />
+        ) : view === 'invoice' ? (
+          <InvoiceCheckout clientId="preview-no-account" draft={DRAFT} breakdown={{ subtotalCents: 65500, serviceFeeCents: 6550, taxCents: 0, totalCents: 72050 }} monthlyCents={11500} onPlaced={() => setView('invoiced')} />
+        ) : view === 'invoiced' ? (
+          <Confirmation draft={DRAFT} invoice breakdown={{ subtotalCents: 65500, serviceFeeCents: 6550, taxCents: 0, totalCents: 72050 }} onSetup={() => setView('free')} onViewCampaign={() => setView('free')} />
         ) : (
           <Confirmation
             restaurant="Yellowbee Market & Cafe"

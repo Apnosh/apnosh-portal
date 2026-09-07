@@ -39,10 +39,17 @@ export function shipBillingGate(opts: {
   perMonthCents?: number
   hasPaymentIntent: boolean
   createdAtISO?: string | null
+  /** THE INVOICE LANE. True only when the SERVER has confirmed card checkout is shut AND the client
+   *  declared the order is placed on invoice. While the checkout is closed, a billable order ships
+   *  without a card; its delivered work accrues as invoiceable charges the admin billing queue
+   *  bills, which is the established revenue path. The moment the checkout opens, this is false
+   *  and a billable ship needs a verified charge again. */
+  invoiceLane?: boolean
 }): ShipGate {
   const billable = opts.preTaxCents > 0 || (opts.perMonthCents ?? 0) > 0
   if (!billable) return 'allow'                      // nothing billable — free/DIY lanes ship freely
   if (opts.hasPaymentIntent) return 'verify'         // upfront-checkout order — verify the charge
+  if (opts.invoiceLane) return 'allow'               // card checkout shut: ship now, invoice on delivery
   // Billable, no payment presented: allow ONLY genuinely legacy (pre-checkout) campaigns.
   const created = opts.createdAtISO ? Date.parse(opts.createdAtISO) : NaN
   const cutoff = Date.parse(CHECKOUT_REQUIRED_SINCE)

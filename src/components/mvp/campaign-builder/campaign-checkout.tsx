@@ -43,6 +43,8 @@ interface Breakdown { subtotalCents: number; serviceFeeCents: number; taxCents: 
 interface SavedCard { brand: string; last4: string }
 interface PrepareResult {
   free?: boolean
+  /** Card checkout is shut: the order is placed on invoice (no card today, the team bills on delivery). */
+  invoice?: boolean
   /** Monthly-only cart: a SetupIntent saves the card (no charge today); the subscription bills it. */
   setupOnly?: boolean
   paymentIntentId?: string
@@ -132,6 +134,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
           <Confirmation
             restaurant={restaurant}
             draft={draft}
+            invoice={prep?.invoice === true}
             breakdown={placed.breakdown}
             setupOnly={!!prep?.setupOnly}
             bookedSlot={placed.bookedSlot}
@@ -152,7 +155,8 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
               </div>
             )}
             {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} onPlaced={onPlaced} />}
-            {prep && !prep.free && prep.clientSecret && prep.publishableKey && (
+            {prep?.invoice && !prep.free && <InvoiceCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} breakdown={prep.breakdown} monthlyCents={prep.monthlyCents ?? 0} onPlaced={onPlaced} />}
+            {prep && !prep.free && !prep.invoice && prep.clientSecret && prep.publishableKey && (
               <Elements
                 stripe={stripePromiseFor(prep.publishableKey)}
                 options={{ clientSecret: prep.clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: MINT, fontFamily: 'Inter, sans-serif', borderRadius: '12px' } } }}
@@ -173,7 +177,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
                 />
               </Elements>
             )}
-            {prep && !prep.free && (!prep.clientSecret || !prep.publishableKey) && (
+            {prep && !prep.free && !prep.invoice && (!prep.clientSecret || !prep.publishableKey) && (
               <ErrorBox message="Payments aren’t configured yet (missing Stripe keys). Add the Stripe keys and try again." onBack={onCancel} />
             )}
           </>
@@ -795,6 +799,57 @@ function PayForm({ clientId, draft, restaurant, producerChoices, initialGateAnsw
   )
 }
 
+/**
+ * InvoiceCheckout — card checkout is shut, the order is real. Shows the bill, takes no card, and
+ * ships the order declared `billing: 'invoice'`; the ship route re-checks the kill switch server-side
+ * before it allows a billable ship without a payment. Replaces the 503 that used to claim the plan
+ * was saved while nothing was.
+ */
+/** Exported for /preview/campaign/checkout (fixture verification without an account). */
+export function InvoiceCheckout({ clientId, draft, producerChoices, gates, initialGateAnswers, breakdown, monthlyCents, onPlaced }: { clientId: string; initialGateAnswers?: Record<string, string>; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; gates?: ResolvedGates; breakdown: Breakdown; monthlyCents: number; onPlaced: (id: string, breakdown: Breakdown) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  const customGates = gates?.custom ?? []
+  const [gateAnswers, setGateAnswers] = useState<Record<string, string>>(initialGateAnswers ?? {})
+  const blocked = customGatesBlocking(customGates, gateAnswers)
+  const place = async () => {
+    if (busy || blocked) return
+    setBusy(true); setError(null)
+    try {
+      const id = await saveAndShip({ clientId, draft, producerChoices, billing: 'invoice' })
+      const patch = gateExecutionPatch(customGates, gateAnswers)
+      if (Object.keys(patch).length) fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { execution: patch } }) }).catch(() => {})
+      onPlaced(id, breakdown)
+    } catch (e) {
+      const msg = e instanceof Error && e.message ? e.message : ''
+      setError(msg || 'That didn’t go through. Nothing was ordered. Try again.'); setBusy(false)
+      setAttempt((a) => a + 1)
+    }
+  }
+  return (
+    <>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 18px 16px' }}>
+        <ReceiptFrame style={{ marginBottom: 16 }}>
+          <ReceiptRow label="Subtotal" amount={fmt(breakdown.subtotalCents)} />
+          {breakdown.serviceFeeCents > 0 && <ReceiptRow label="Service fee (10%)" amount={fmt(breakdown.serviceFeeCents)} />}
+          <ReceiptRule />
+          <ReceiptTotal label="On your invoice" big={fmt(breakdown.totalCents)} small={monthlyCents > 0 ? `then ${fmt(monthlyCents)}/mo` : 'no card today'} />
+        </ReceiptFrame>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13, color: SUB, lineHeight: 1.5, marginBottom: 16 }}>Card checkout is not open yet, so there is nothing to pay now. Place the order and your team starts. The invoice comes when the work lands{monthlyCents > 0 ? ', with the monthly line on it' : ''}. Tax is added on the invoice.</div>
+        <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
+      </div>
+      <div style={{ flexShrink: 0, textAlign: 'center', padding: '2px 18px calc(14px + env(safe-area-inset-bottom))' }}>
+        {error && <div role="alert" style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, fontWeight: 600, color: '#b3462e', textAlign: 'center', marginBottom: 4 }}>{error}</div>}
+        <ConfirmButton key={attempt} label={busy ? 'Placing your order...' : 'Place order on invoice'} disabled={busy || blocked} onClick={place} />
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 6 }}>
+          {busy ? 'Placing your order…' : blocked ? (blockedGate(customGates, gateAnswers) ? 'This cannot be ordered yet' : 'Answer the questions above') : 'No card today. This starts your campaign.'}
+        </div>
+      </div>
+    </>
+  )
+}
+
 /** Exported for /preview/campaign/checkout (fixture verification without an account). */
 export function FreeCheckout({ clientId, draft, producerChoices, gates, initialGateAnswers, onPlaced }: { clientId: string; initialGateAnswers?: Record<string, string>; draft: CampaignDraft; producerChoices?: Record<string, PieceProducer>; gates?: ResolvedGates; onPlaced: (id: string, breakdown: Breakdown) => void }) {
   const [busy, setBusy] = useState(false)
@@ -850,10 +905,12 @@ export function FreeCheckout({ clientId, draft, producerChoices, gates, initialG
  * what was actually paid, and the handoff into the "A few things from you" setup page. The go-live
  * estimate is the real one (goLivePhraseFor over the ordered items), not an invented date.
  */
-export function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSlot, onSetup, onViewCampaign }: {
+export function Confirmation({ restaurant, draft, breakdown, setupOnly, invoice, bookedSlot, onSetup, onViewCampaign }: {
   restaurant?: string
   draft: CampaignDraft
   breakdown: Breakdown
+  /** Placed on invoice (card checkout shut): nothing paid today, the team bills when the work lands. */
+  invoice?: boolean
   /** Monthly-only order: nothing paid today, the subscription bills the saved card. */
   setupOnly?: boolean
   /** The shoot slot locked at checkout (if any) — replayed here so the owner sees what they booked. */
@@ -867,7 +924,7 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSl
   const goLive = goLivePhraseFor(draft, { creatives: [], services: draft.items, bill: billSum }, today)
   const goLiveShort = goLive.replace(/^Live in /, '').replace(/^Starts in /, '')
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  const free = breakdown.totalCents <= 0 && !setupOnly
+  const free = breakdown.totalCents <= 0 && !setupOnly && !invoice
   // The "help us start faster" blurb reflects what THIS order actually needs: no "best time to
   // film" on an order with no filming, and a booked slot means the film time is already set.
   const needsFilm = draftNeedsShoot(draft) && !bookedSlot
@@ -889,6 +946,7 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSl
       ? { state: 'active', title: 'Over to you', sub: 'Your steps are waiting whenever you are' }
       : { state: 'active', title: 'We get to work', sub: 'Your team starts right away' },
     { state: 'todo', title: 'Goes live', sub: goLiveShort || 'We confirm the date once we start' },
+    ...(invoice ? [{ state: 'todo' as const, title: 'Invoice comes', sub: 'When the work lands. No card today.' }] : []),
   ]
 
   return (
@@ -898,7 +956,7 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSl
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div style={{ marginBottom: 14 }}><Stamp mint>Approved</Stamp></div>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 24, fontWeight: 700, color: INK, letterSpacing: -0.4 }}>Order confirmed</div>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: SUB, marginTop: 4 }}>{restaurant ? `${restaurant}’s campaign is on the way.` : 'Your campaign is on the way.'}</div>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: SUB, marginTop: 4 }}>{restaurant ? `${restaurant}’s campaign is on the way.` : 'Your campaign is on the way.'}{invoice ? ' Your team sends the invoice when the work lands.' : ''}</div>
         </div>
 
         {/* timeline */}
@@ -929,6 +987,13 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSl
               <ReceiptRule />
               <ReceiptTotal label="Billed today" big={fmt(monthlyCents)} small="first month" />
             </>
+          ) : invoice ? (
+            <>
+              <ReceiptRow label="Subtotal" amount={fmt(breakdown.subtotalCents)} />
+              {breakdown.serviceFeeCents > 0 && <ReceiptRow label="Service fee (10%)" amount={fmt(breakdown.serviceFeeCents)} />}
+              <ReceiptRule />
+              <ReceiptTotal label="On your invoice" big={fmt(breakdown.totalCents)} small={monthlyCents > 0 ? `then ${fmt(monthlyCents)}/mo` : 'no card today'} />
+            </>
           ) : free ? (
             <ReceiptTotal label="Paid today" big="Free" />
           ) : (
@@ -942,7 +1007,8 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, bookedSl
           )}
           {/* Every path with a monthly took a card + consent at checkout (paid orders save the card
               on the charge; monthly-only orders save it on a SetupIntent) — say exactly what bills. */}
-          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{setupOnly ? 'Billed to your card each month starting today. Cancel anytime.' : `Plus ${fmt(monthlyCents)}/mo in monthly services, billed to this card starting today.`}</div>}
+          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{invoice ? `Plus ${fmt(monthlyCents)}/mo in monthly services, on the same invoice. Tax is added on the invoice.` : setupOnly ? 'Billed to your card each month starting today. Cancel anytime.' : `Plus ${fmt(monthlyCents)}/mo in monthly services, billed to this card starting today.`}</div>}
+          {invoice && monthlyCents <= 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>Card checkout is not open yet. Tax is added on the invoice.</div>}
         </ReceiptFrame>
 
         {/* needs-you handoff */}

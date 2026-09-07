@@ -11,7 +11,7 @@ import type { CampaignDraft, PieceProducer } from '../types'
 
 export const SHIP_FAIL = "That didn't go through. Nothing was ordered. Try again."
 
-export async function saveAndShip({ clientId, draft, producerChoices, paymentIntentId }: {
+export async function saveAndShip({ clientId, draft, producerChoices, paymentIntentId, billing }: {
   clientId: string
   draft: CampaignDraft
   producerChoices?: Record<string, PieceProducer>
@@ -20,6 +20,9 @@ export async function saveAndShip({ clientId, draft, producerChoices, paymentInt
    *  it ships a billable draft. Absent on the delivery-gated (buy-now) path, which bills per
    *  piece on delivery and needs no upfront payment. */
   paymentIntentId?: string
+  /** 'invoice': placed while card checkout is shut. The ship route re-checks the switch server-side
+   *  and, only then, ships the billable order without a card; the team invoices on delivery. */
+  billing?: 'invoice'
 }): Promise<string> {
   const h = { 'Content-Type': 'application/json' }
   const res = await fetch('/api/campaigns', { method: 'POST', headers: h, body: JSON.stringify({ clientId, draft }) })
@@ -37,6 +40,7 @@ export async function saveAndShip({ clientId, draft, producerChoices, paymentInt
   // strict write-whitelist) so the ship route can bind + verify the charge for a billable order.
   const shipBody: Record<string, unknown> = { fields: { status: 'shipped', phase: 'monitor', shipped_at: new Date().toISOString() } }
   if (paymentIntentId) shipBody.paymentIntentId = paymentIntentId
+  if (billing) shipBody.billing = billing
   const sr = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: h, body: JSON.stringify(shipBody) }).catch(() => null)
   if (!sr || !sr.ok) throw new Error(SHIP_FAIL)
   return id
