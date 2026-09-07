@@ -5,7 +5,10 @@
  * 7 days, not dismissed), else computed on-read as the fallback so the card
  * works before migration 249 lands. `?list=1` returns the archive (newest
  * first) for the Results page.
- * POST: { id, action: 'read' | 'dismiss' } — cross-device state.
+ * POST: { id, action: 'read' | 'open' | 'dismiss' | 'share' } — cross-device state.
+ *   read    the card reached the front of the deck (it was in front of them)
+ *   open    they tapped into it (the card's link) — the mark that says a win landed
+ *   share   they sent it somewhere (no share button yet; the column is ready for one)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -95,13 +98,20 @@ export async function GET(req: NextRequest) {
   }, { headers: { 'Cache-Control': 'no-store' } })
 }
 
-/** Cross-device card state: mark read (expanded) or dismissed. */
+const MARKS: Record<string, string> = {
+  read: 'read_at',
+  open: 'opened_at',
+  share: 'shared_at',
+  dismiss: 'dismissed_at',
+}
+
+/** Cross-device card state: seen, opened, shared, or dismissed. */
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as { clientId?: string; id?: string; action?: string } | null
   const clientId = body?.clientId ?? ''
   const cardKey = body?.id ?? ''
   const action = body?.action
-  if (!clientId || !cardKey || (action !== 'read' && action !== 'dismiss')) {
+  if (!clientId || !cardKey || !action || !MARKS[action]) {
     return NextResponse.json({ error: 'clientId, id, action required' }, { status: 400 })
   }
 
@@ -118,14 +128,15 @@ export async function POST(req: NextRequest) {
     if (!cu) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
   }
 
-  const patch = action === 'read' ? { read_at: new Date().toISOString() } : { dismissed_at: new Date().toISOString() }
+  const patch = { [MARKS[action]]: new Date().toISOString() }
   const { error } = await adminDb()
     .from('proof_cards')
     .update(patch)
     .eq('client_id', clientId)
     .eq('card_key', cardKey)
-  // Table missing pre-migration: the client-side localStorage fallback covers dismissal.
-  if (error && error.code !== '42P01') {
+  // Table missing pre-migration (42P01), or opened_at / shared_at missing before 257 (42703):
+  // the client-side localStorage fallback covers dismissal, and a mark is never worth a 500.
+  if (error && error.code !== '42P01' && error.code !== '42703') {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   return NextResponse.json({ ok: true })

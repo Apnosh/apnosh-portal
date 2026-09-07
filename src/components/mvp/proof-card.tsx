@@ -36,7 +36,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   card: ProofCardData
   onDismiss: () => void
   onSee?: () => void
-  /** Fired once when the strip expands — Home marks the card read. */
+  /** Fired when the owner opens the win: the strip expands, or they tap the card's link. */
   onOpen?: () => void
   /** Home renders the slim strip first so the funnel hero keeps its height. */
   defaultOpen?: boolean
@@ -108,6 +108,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       {card.cta ? (
         <a
           href={card.cta.href}
+          onClick={() => onOpen?.()}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}
         >
           {card.cta.label} <ChevronRight size={13} />
