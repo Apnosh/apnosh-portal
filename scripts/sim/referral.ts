@@ -211,6 +211,30 @@ function main() {
   s.eq('a refunded order gives the credit back: it is not in the ledger and it holds nothing',
     creditAvailableCents(credit({ settledCents: 0, heldCents: 5_000, hold: 'dropped' })), 5_000)
 
+  /* ── 3d. the receipt adds up ─────────────────────────────────────────── */
+  s.group('the lines on the receipt add up to the number on the card')
+  // What the screen prints, in the order it prints it: Subtotal, Friend credit, Service fee, Tax,
+  // Due today. Before Move 8's fix there was no credit row, so these lines added to $55 more than
+  // the card was charged and nothing on the page explained the gap.
+  const shown = {
+    subtotal: credited.subtotalCents,
+    friendCredit: credited.friendCreditCents ?? 0,
+    fee: credited.serviceFeeCents,
+    tax: taxOn(credited.preTaxCents),
+  }
+  const due = credited.preTaxCents + shown.tax
+  s.eq('subtotal − credit + fee + tax is exactly Due today',
+    shown.subtotal - shown.friendCredit + shown.fee + shown.tax, due)
+  s.eq('without the credit row the lines would be over by exactly the credit',
+    (shown.subtotal + shown.fee + shown.tax) - due, REFERRAL_CREDIT_CENTS)
+  s.eq('and Due today is $55 plus the tax on it below the uncredited bill',
+    (bill.preTaxCents + taxOn(bill.preTaxCents)) - due,
+    5_500 + (taxOn(bill.preTaxCents) - shown.tax))
+  s.eq('the credit row is the one the server sent', shown.friendCredit, REFERRAL_CREDIT_CENTS)
+  const plainShown = { subtotal: bill.subtotalCents, fee: bill.serviceFeeCents, tax: taxOn(bill.preTaxCents) }
+  s.eq('a bill with no credit still adds up with no credit row',
+    plainShown.subtotal + plainShown.fee + plainShown.tax, bill.preTaxCents + plainShown.tax)
+
   /* ── 4. money that goes backwards ────────────────────────────────────── */
   s.group('a refund never hands back a credit as cash')
   // The order above, paid: $450 + $45 fee + 8% tax = $534.60 on the card, on $500 of items.
