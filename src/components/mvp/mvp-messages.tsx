@@ -76,8 +76,10 @@ function personFor(c: Contact | null, people: Person[]): Person | undefined {
 const SHORT: Record<string, string> = { strategist: 'Strategist', videographer: 'Video', photographer: 'Photos', designer: 'Design', account: 'Billing', support: 'Support' }
 const firstName = (n: string) => n.trim().split(/\s+/)[0] ?? n
 interface Msg { id: string; from: 'owner' | 'team'; senderName: string; text: string; createdAt: string }
-/** draft pre-fills the composer (deep links pass who/what the note is about). */
-interface Active { threadId: string | null; contact: Contact | null; subject: string; draft?: string }
+/** draft pre-fills the composer (deep links pass who/what the note is about). `person` is the
+ *  face that was tapped: two people can share one role, so the header must draw the one the
+ *  owner actually pressed, not whoever the role happens to resolve to. */
+interface Active { threadId: string | null; contact: Contact | null; subject: string; draft?: string; person?: { name: string; avatarUrl: string | null } }
 
 /* The dates and times an owner reads. Every one of them takes the language: a Spanish owner
    was being shown "Monday" and "Sep 8" beside their own words, because the locale was pinned
@@ -190,9 +192,22 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
 
   useEffect(() => { loadThreads() }, [loadThreads])
 
-  const openContact = useCallback((c: Contact, draft?: string) => {
-    const existing = threads.find((t) => contactForSubject(t.subject)?.key === c.key)
-    setActive({ threadId: existing?.id ?? null, contact: c, subject: existing?.subject ?? c.subject, draft })
+  // A face on the strip is a PERSON; a row in the list is a ROLE. When we know the person we
+  // open THEIR thread (people.ts already told us its id) and carry their name and photo into
+  // the header. Matching by role instead put two people who share a role — two designers on one
+  // account — in the same conversation, with the other one's name at the top of it.
+  const openContact = useCallback((c: Contact, opts?: { draft?: string; op?: OrderPerson }) => {
+    const op = opts?.op
+    const existing = op?.threadId
+      ? threads.find((t) => t.id === op.threadId)
+      : threads.find((t) => contactForSubject(t.subject)?.key === c.key)
+    setActive({
+      threadId: op?.threadId ?? existing?.id ?? null,
+      contact: c,
+      subject: existing?.subject ?? op?.threadSubject ?? c.subject,
+      draft: opts?.draft,
+      person: op ? { name: op.name, avatarUrl: op.avatarUrl } : undefined,
+    })
   }, [threads])
 
   const openThread = useCallback((t: ThreadRow) => {
@@ -212,14 +227,16 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
     if (!to) return
     const draft = params.get('draft') ?? undefined
     const c = CONTACTS.find((x) => x.key === to) ?? CONTACTS.find((x) => x.key === 'strategist')!
-    openContact(c, draft)
+    openContact(c, { draft })
   }, [loading, businessId, openContact])
 
   const onBack = () => { setActive(null); loadThreads() }
   const onThreadCreated = () => { loadThreads() }
 
   if (active) {
-    return <Conversation key={active.threadId ?? active.subject} active={active} person={personFor(active.contact, people)} userId={userId} onBack={onBack} onThreadCreated={onThreadCreated} />
+    // keyed on the person too: two people on one role with no thread yet share a subject, and
+    // the composer must not carry from one to the other.
+    return <Conversation key={active.threadId ?? `${active.subject}:${active.person?.name ?? ''}`} active={active} person={active.person ?? personFor(active.contact, people)} userId={userId} onBack={onBack} onThreadCreated={onThreadCreated} />
   }
 
   const q = (queryProp ?? query).trim().toLowerCase()
@@ -235,10 +252,10 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
   // whether or not anyone was working for them. Now it is the people on live orders, from the
   // same read Home uses, and Support is the last stop so there is always one door.
   const supportContact = CONTACTS.find((c) => c.key === 'support')!
-  const suggested: { key: string; c: Contact; person?: { name: string; avatarUrl: string | null }; label: string; started: boolean }[] = [
+  const suggested: { key: string; c: Contact; op?: OrderPerson; person?: { name: string; avatarUrl: string | null }; label: string; started: boolean }[] = [
     ...orderPeople.map((op) => {
       const c = contactForSubject(op.threadSubject) ?? supportContact
-      return { key: `on-${op.id}`, c, person: { name: op.name, avatarUrl: op.avatarUrl }, label: firstName(op.name), started: !!op.threadId }
+      return { key: `on-${op.id}`, c, op, person: { name: op.name, avatarUrl: op.avatarUrl }, label: firstName(op.name), started: !!op.threadId }
     }),
     { key: 'support', c: supportContact, label: SHORT.support ?? supportContact.name, started: activeKeys.has('support') },
   ]
@@ -290,7 +307,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
                 const c = s.c
                 const has = s.started
                 return (
-                  <button key={s.key} type="button" onClick={() => openContact(c)} className="mvp-press" style={{ flex: '0 0 auto', width: 66, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}>
+                  <button key={s.key} type="button" onClick={() => openContact(c, { op: s.op })} className="mvp-press" style={{ flex: '0 0 auto', width: 66, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}>
                     <span style={{ position: 'relative' }}>
                       <span style={{ display: 'inline-flex', padding: 2, borderRadius: '50%', background: has ? 'transparent' : gradOf(c.hue) }}>
                         <span style={{ display: 'inline-flex', padding: 2, borderRadius: '50%', background: '#fff' }}><Avatar c={c} person={s.person} size={54} /></span>
@@ -382,7 +399,7 @@ function Empty({ title, sub }: { title: string; sub: string }) {
 }
 
 /* ── A single conversation (owner ↔ a specific Apnosh person) ──────────────── */
-function Conversation({ active, person, userId, onBack, onThreadCreated }: { active: Active; person?: Person; userId: string | null; onBack: () => void; onThreadCreated: () => void }) {
+function Conversation({ active, person, userId, onBack, onThreadCreated }: { active: Active; /** the tapped person when we have one, else the role's person — only the name and the photo are read */ person?: { name: string; avatarUrl: string | null }; userId: string | null; onBack: () => void; onThreadCreated: () => void }) {
   const supabase = createClient()
   const { T, locale } = useLang()
   const [threadId, setThreadId] = useState<string | null>(active.threadId)
