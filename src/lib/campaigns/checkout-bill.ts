@@ -83,6 +83,47 @@ export function applyFriendCredit(bill: CheckoutBill, creditCents: number): Chec
   }
 }
 
+/**
+ * A saved checkout row, as far as the bill is concerned. Every field is optional because this is
+ * read back from a database that may be older than the columns: pre-261 there is no
+ * friend_credit_cents at all, and the honest reading of a column that is not there is zero.
+ */
+export interface StoredBillRow {
+  subtotal_cents?: number | null
+  service_fee_cents?: number | null
+  /** the friend credit already taken off this bill. Absent (or null) reads as no credit. */
+  friend_credit_cents?: number | null
+  total_cents?: number | null
+  tax_cents?: number | null
+}
+
+/**
+ * THE PRE-TAX BASE OF A SAVED CHECKOUT, and the reason the tax step cannot erase a credit.
+ *
+ * The payment row stores the FULL items subtotal (delivered work is measured against it when an
+ * order is stopped) alongside the discounted fee and total. So "subtotal + fee" is NOT what the
+ * card is being charged on a credited order — it is $50 more, and the tax route used to update the
+ * PaymentIntent with exactly that number, quietly billing the owner for the credit we gave them.
+ *
+ * One rule, in one function, used by prepare and by the tax recompute:
+ *
+ *     pre-tax = subtotal − friend credit + service fee
+ *
+ * AND NEVER MORE THAN PREPARE ALREADY PUT ON THE INTENT. total_cents − tax_cents is what the
+ * intent was created for; entering an address changes the tax, never the base. So a recompute may
+ * lower this number (a smaller bill) but may never raise the amount an owner is charged. Fail
+ * closed: any missing or unreadable number is zero, never a guess.
+ */
+export function preTaxFromRow(row: StoredBillRow): number {
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : 0)
+  const subtotal = Math.max(0, n(row.subtotal_cents))
+  const fee = Math.max(0, n(row.service_fee_cents))
+  const credit = Math.min(Math.max(0, n(row.friend_credit_cents)), subtotal)
+  const fromParts = Math.max(0, subtotal - credit + fee)
+  const prepared = n(row.total_cents) - n(row.tax_cents)
+  return prepared > 0 ? Math.min(fromParts, prepared) : fromParts
+}
+
 /** "$1,180.00" — the one money format the checkout screens print. */
 export function fmtMoney(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((cents || 0) / 100)

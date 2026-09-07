@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
 import { randomUUID } from 'crypto'
-import { checkoutBill, applyFriendCredit } from '@/lib/campaigns/checkout-bill'
+import { checkoutBill, applyFriendCredit, preTaxFromRow } from '@/lib/campaigns/checkout-bill'
 import { claimFriendCredit, releaseFriendCredit, stampCreditIntent } from '@/lib/referrals/server'
 import { ensureCheckoutCustomer, computeTaxCents, estimateMonthlyTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
 import { resolveGatesForDraft } from '@/lib/campaigns/gates/config-server'
@@ -184,10 +184,19 @@ export async function POST(req: NextRequest) {
   // below is byte-for-byte the order this route has always placed.
   const claim = await claimFriendCredit(clientId, `hold:${randomUUID()}`, bill.subtotalCents)
   const billed = claim ? applyFriendCredit(bill, claim.cents) : bill
+  // The row this checkout is about to be saved as. The amount the card is charged is read back OUT
+  // of it with preTaxFromRow — the same function the tax route uses when the owner enters an
+  // address — so the two can never disagree about what a credited bill costs.
+  const storedBill = {
+    subtotal_cents: billed.subtotalCents,
+    service_fee_cents: billed.serviceFeeCents,
+    friend_credit_cents: claim ? claim.cents : 0,
+  }
+  const preTaxCents = preTaxFromRow(storedBill)
 
   try {
-    const tax = await computeTaxCents({ preTaxCents: billed.preTaxCents, customerId: cust.customerId })
-    const totalCents = billed.preTaxCents + tax.taxCents
+    const tax = await computeTaxCents({ preTaxCents, customerId: cust.customerId })
+    const totalCents = preTaxCents + tax.taxCents
     // Same calculation, run on the monthly line, because the subscription is taxed too (stripe.ts
     // sets automatic_tax on it). Estimate only — never committed, never charged from here.
     const monthlyTaxCents = await estimateMonthlyTaxCents({ perMonthCents: bill.perMonthCents, customerId: cust.customerId })

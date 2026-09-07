@@ -15,7 +15,7 @@ import {
   REFERRAL_CREDIT_CENTS, creditWords, nextStatus, readyToCredit, referralBlock, normalizePhone,
   STATUS_WORD, type ReferralStatus, type ReferralEvent,
 } from '@/lib/referrals/model'
-import { checkoutBill, applyFriendCredit, feeCentsOn, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
+import { checkoutBill, applyFriendCredit, feeCentsOn, preTaxFromRow, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
 import { refundOwedCents } from '@/lib/campaigns/refund-math'
 import { referralsEnabled } from '@/lib/referral-gate'
 import type { LineItem } from '@/lib/campaigns/types'
@@ -117,6 +117,34 @@ function main() {
   s.eq('a monthly-only cart has nothing to take a credit off', applyFriendCredit(monthlyOnly, 5_000), monthlyOnly)
   s.eq('the amount is said the same way everywhere', creditWords(REFERRAL_CREDIT_CENTS), '$50')
   s.eq('an odd amount still reads as money', creditWords(4_250), '$42.50')
+
+  /* ── 3b. the row, read back ──────────────────────────────────────────── */
+  s.group('the tax step reads the credited bill back, and never charges the credit')
+  // The row prepare saves: the FULL subtotal (refund-math needs it), the discounted fee, and the
+  // credit in its own column. This is the shape the tax route reads back off the database.
+  const savedRow = {
+    subtotal_cents: credited.subtotalCents,
+    service_fee_cents: credited.serviceFeeCents,
+    friend_credit_cents: credited.friendCreditCents ?? 0,
+  }
+  s.eq('the row reads back as the amount prepare charged', preTaxFromRow(savedRow), credited.preTaxCents)
+  s.eq('subtotal + fee alone would have billed the credit back', savedRow.subtotal_cents + savedRow.service_fee_cents, credited.preTaxCents + 5_000)
+  const taxed = { ...savedRow, tax_cents: taxOn(credited.preTaxCents), total_cents: credited.preTaxCents + taxOn(credited.preTaxCents) }
+  s.eq('a second recompute is the same number, not a bigger one', preTaxFromRow(taxed), credited.preTaxCents)
+  s.check('the recompute can never raise what prepare put on the intent',
+    preTaxFromRow({ ...taxed, service_fee_cents: 99_999 }) <= taxed.total_cents - taxed.tax_cents)
+  const plainRow = { subtotal_cents: bill.subtotalCents, service_fee_cents: bill.serviceFeeCents }
+  s.eq('a bill with no credit reads back exactly as it always did', preTaxFromRow(plainRow), bill.preTaxCents)
+  s.eq('a database without migration 261 has no credit column, and that reads as no credit',
+    preTaxFromRow({ subtotal_cents: 50_000, service_fee_cents: 5_000 }), 55_000)
+  s.eq('a null credit is no credit', preTaxFromRow({ subtotal_cents: 50_000, service_fee_cents: 5_000, friend_credit_cents: null }), 55_000)
+  s.eq('a credit bigger than the order never makes a negative bill',
+    preTaxFromRow({ subtotal_cents: 3_000, service_fee_cents: 0, friend_credit_cents: 9_000 }), 0)
+  s.eq('a row of nothing is a bill of nothing', preTaxFromRow({}), 0)
+  s.eq('garbage in a column is zero, never a guess',
+    preTaxFromRow({ subtotal_cents: NaN as unknown as number, service_fee_cents: 5_000 }), 5_000)
+  s.eq('the setup-only row (nothing today) stays nothing',
+    preTaxFromRow({ subtotal_cents: 0, service_fee_cents: 0, tax_cents: 0, total_cents: 0 }), 0)
 
   /* ── 4. money that goes backwards ────────────────────────────────────── */
   s.group('a refund never hands back a credit as cash')
