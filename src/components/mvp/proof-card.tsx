@@ -6,6 +6,10 @@
  * window plus the surface ("This week on Google"). Renders in the Home
  * banner slot, one at a time, dismissible. Every number comes from the
  * ledger; this component never invents or estimates.
+ *
+ * A WIN — mint, with a real number in it (src/lib/love/win.ts) — can also carry a `share` link,
+ * drawn in the same CTA style as the move a heads-up card carries. It goes to the page where the
+ * card becomes a square the owner can send somebody. Nothing else about the card changes.
  */
 
 import { useRef, useState } from 'react'
@@ -28,8 +32,12 @@ export interface ProofCardData {
   firedAt?: string
   /** 'win' (mint, default) or 'heads_up' (gray) — the down-week material. */
   tone?: 'win' | 'heads_up'
+  /** proof_cards.card_type, kept so a caller can ask whether this card is a WIN (lib/love/win.ts). */
+  cardType?: string
   /** The move a heads-up card carries. Renders as the card's one action. */
   cta?: { label: string; href: string }
+  /** A WIN's second door: the page where it becomes something to send somebody. Same CTA style. */
+  share?: { label: string; href: string }
 }
 
 export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen = false }: {
@@ -113,22 +121,34 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
           {card.attribution}
         </div>
       )}
-      {card.cta ? (
-        <a
-          href={card.cta.href}
-          onClick={markOpen}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}
-        >
-          {card.cta.label} <ChevronRight size={13} />
-        </a>
-      ) : onSee && (
-        <button
-          onClick={(e) => { e.stopPropagation(); markOpen(); onSee() }}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-        >
-          See the week <ChevronRight size={13} />
-        </button>
-      )}
+      {/* one row, so a win with both a move and a share link does not grow a second stack */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        {card.cta ? (
+          <a
+            href={card.cta.href}
+            onClick={markOpen}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}
+          >
+            {card.cta.label} <ChevronRight size={13} />
+          </a>
+        ) : onSee && (
+          <button
+            onClick={(e) => { e.stopPropagation(); markOpen(); onSee() }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+          >
+            See the week <ChevronRight size={13} />
+          </button>
+        )}
+        {card.share && (
+          <a
+            href={card.share.href}
+            onClick={markOpen}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}
+          >
+            {card.share.label} <ChevronRight size={13} />
+          </a>
+        )}
+      </div>
     </div>
   )
 }

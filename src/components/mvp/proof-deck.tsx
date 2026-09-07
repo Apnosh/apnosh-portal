@@ -11,6 +11,8 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import ProofCard, { type ProofCardData } from './proof-card'
+import { useLang } from './mvp-language'
+import { isWin } from '@/lib/love/win'
 
 function deckDepth(pos: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, opacity: 1 }
@@ -28,6 +30,7 @@ const SAMPLE_CARDS: ProofCardData[] = [
 ]
 
 export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: string; mute?: string }) {
+  const { T } = useLang()
   const [cards, setCards] = useState<ProofCardData[]>([])
   const [examples, setExamples] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -95,6 +98,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
             spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
             firedAt: (c.fired_at as string) ?? undefined,
             tone: (c.tone as ProofCardData['tone']) ?? 'win',
+            cardType: String(c.card_type ?? ''),
             cta: (c.cta as ProofCardData['cta']) ?? undefined,
           }))
         // a real account never sees samples (owner 2026-09-03): every client has at least one
@@ -159,7 +163,11 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
             ...(pos === 0 && (dx !== 0 || flying !== 0) ? { transform: flying !== 0 ? `translateX(${flying * 120}%) rotate(${flying * 8}deg)` : `translateX(${dx}px) rotate(${dx / 22}deg)`, opacity: flying !== 0 ? 0 : 1, transition: flying !== 0 ? 'transform .22s ease-in, opacity .22s ease-in' : 'none' } : {}) }}>
             {pos === 0 ? (
               <ProofCard
-                card={c}
+                /* a win gets its second door: the page where it becomes something to send
+                   somebody. The same rules the share route enforces decide which cards get it. */
+                card={!examples && isWin({ cardKey: c.id, cardType: c.cardType ?? '', big: c.big })
+                  ? { ...c, share: { label: T('Show someone'), href: `/dashboard/wins/${encodeURIComponent(c.id)}` } }
+                  : c}
                 defaultOpen
                 onOpen={() => act(c.id, 'open')}
                 onDismiss={() => {
