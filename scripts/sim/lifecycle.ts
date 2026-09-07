@@ -26,7 +26,7 @@ import { SERVICE_CHANNELS } from '@/lib/campaigns/data/service-channels'
 import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
 import { SERVICE_PLAYBOOKS, playbookNeedKeys } from '@/lib/campaigns/data/service-playbooks'
 import { assetGatesForDraft, resolveGates } from '@/lib/campaigns/gates/config'
-import { goalSlugForChip, budgetCapForChip } from '@/lib/goals/defaults'
+import { goalSlugForChip, budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY, unbundleFor } from '@/lib/campaigns/data/live-alternatives'
 import { isBuyable, isHidden, BUILTIN_AVAILABILITY, FULLY_BUILT_LIVE, RETIRED_IDS } from '@/lib/campaigns/data/catalog-availability'
 import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
@@ -887,11 +887,13 @@ s.group('Goal chips: every chip maps to a real goal slug (the #1 priority is fin
 
 s.group('Budget chips: one question feeds the guard + the ranker')
 {
-  const known = BUDGET_CHIPS.filter((c) => c !== 'Not sure yet')
-  s.check('every dollar chip maps to a cap', known.every((c) => (budgetCapForChip(c) ?? 0) > 0))
+  // The two open-ended chips assert no cap at all; every banded chip caps at the top of its band.
+  const known = BUDGET_CHIPS.filter((c) => !NO_CAP_BUDGET_CHIPS.includes(c))
+  s.check('every banded chip maps to a cap', known.every((c) => (budgetCapForChip(c) ?? 0) > 0))
   s.eq('Under $200/mo → 200', budgetCapForChip('Under $200/mo'), 200)
   s.eq('$500 to $1,000/mo → 1000 (top of range, never under-sold)', budgetCapForChip('$500 to $1,000/mo'), 1000)
   s.eq('"Not sure yet" asserts NO cap', budgetCapForChip('Not sure yet'), null)
+  s.eq('"Over $2,500/mo" asserts NO cap (never an invented $5,000)', budgetCapForChip('Over $2,500/mo'), null)
   s.eq('unknown text asserts NO cap', budgetCapForChip('whatever'), null)
 }
 

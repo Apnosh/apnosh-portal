@@ -27,7 +27,7 @@ import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuy
 import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from '@/lib/campaigns/data/chip-shelf'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
-import { budgetCapForChip } from '@/lib/goals/defaults'
+import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { SHAPE_LABEL, DEFAULT_SHAPE, type ClientShape } from '@/lib/clients/shape'
 
 const C = { ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', fill: '#f5f5f7', mint: '#4abd98', mintDk: '#2e9a78', mintSoft: '#eaf7f3', amberInk: '#8a5a0c', amberBg: '#fbf3e4' }
@@ -481,6 +481,8 @@ export default function CreatePage() {
     return (
       <>
         <div className="filters cc-scroll" style={{ paddingTop: 6, paddingBottom: 4 }}>
+          {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
+              monthly_budget null, and this pill never prints a number the owner did not say. */}
           <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
             {cap == null ? 'Set a budget' : `Up to ${money(cap)} to start`}
           </button>
@@ -753,10 +755,15 @@ export default function CreatePage() {
           <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>What feels right to start?</div>
           <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>You can change it any time. Nothing is charged now.</div>
           {BUDGET_CHIPS.map((b) => { const on = cap != null && budgetCapForChip(b) === cap
+            const noCap = NO_CAP_BUDGET_CHIPS.includes(b)
             return (
-              <button key={b} type="button" onClick={() => setBudget(b === 'Not sure yet' ? null : b)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
+              <button key={b} type="button" onClick={() => setBudget(noCap ? null : b)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
                 <span style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? C.mintDk : C.line}`, background: on ? C.mintDk : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{on && <Check size={12} strokeWidth={3} />}</span>
-                <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{b}</span>
+                <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{b}
+                  {/* Both of these set no cap, so the row says what happens instead of leaving
+                      the owner to guess at a ceiling we would have invented. */}
+                  {noCap && <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.mute, marginTop: 1 }}>No cap set. Everything shows.</span>}
+                </span>
               </button>
             ) })}
         </div>

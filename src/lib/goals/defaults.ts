@@ -200,16 +200,23 @@ export function legacyGoalSlugForChip(chip: string | null | undefined): GoalSlug
 
 /**
  * The onboarding budget chip → a monthly cap in dollars for businesses.monthly_budget
- * (the over-budget guard + recommender read it). 'Not sure yet' / unknown → null (no cap
- * is asserted). The cap is the TOP of the chosen range so we never under-sell their pick.
+ * (the over-budget guard + recommender read it). The cap is the TOP of the chosen range so we
+ * never under-sell their pick.
+ *
+ * TWO CHIPS ASSERT NO CAP AT ALL, and neither is here: 'Not sure yet', and the top chip.
+ * "Over $2,500/mo" used to map to 5000, which the store then read back to the owner as "Up to
+ * $5,000 to start" — a number they never said, invented by doubling the last band. An open top
+ * end is an open top end: no cap, nothing hidden.
  */
 const BUDGET_TO_CAP: Record<string, number> = {
   'Under $200/mo': 200,
   '$200 to $500/mo': 500,
   '$500 to $1,000/mo': 1000,
   '$1,000 to $2,500/mo': 2500,
-  'Over $2,500/mo': 5000,
 }
+
+/** The chips that mean "do not cap me". Both leave monthly_budget alone and show every card. */
+export const NO_CAP_BUDGET_CHIPS: readonly string[] = ['Over $2,500/mo', 'Not sure yet']
 export function budgetCapForChip(chip: string | null | undefined): number | null {
   if (!chip) return null
   return BUDGET_TO_CAP[chip.trim()] ?? null
