@@ -30,9 +30,10 @@ import { t, localeOf, type Lang } from '@/lib/i18n/t'
 
 const INK = '#12241d', MUTE = '#48484a', FAINT = '#8e8e93'
 
-function Sec({ label, gray = false, children }: { label: string; gray?: boolean; children: React.ReactNode }) {
+/** `hide` takes the whole section off the printed page, chrome and heading together. */
+function Sec({ label, gray = false, hide = false, children }: { label: string; gray?: boolean; hide?: boolean; children: React.ReactNode }) {
   return (
-    <div className="rpt-sec" style={{ background: '#fff', borderRadius: 18, padding: 16, marginTop: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07)' }}>
+    <div className={hide ? 'rpt-sec rpt-hide' : 'rpt-sec'} style={{ background: '#fff', borderRadius: 18, padding: 16, marginTop: 12, boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 8px 24px rgba(0,0,0,0.07)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: gray ? '#6e6e73' : '#2e9a78', marginBottom: 8 }}>
         <span style={{ width: 6, height: 6, borderRadius: 99, background: gray ? '#aeaeb2' : '#4abd98' }} />
         {label}
@@ -220,10 +221,13 @@ export default function ReportView({ report, bizName, backHref, lang = 'en' }: {
           </Sec>
         )}
 
-        {/* Send this to someone: print (which is save-as-PDF everywhere) and the link. */}
+        {/* Send this to someone: print (which is save-as-PDF everywhere) and the link. The WHOLE
+            section goes off the printed page — only the buttons were hidden before, so the paper
+            carried an empty "Send this to someone" heading and a line about a link nobody printing
+            it can click. */}
         {anyChapter && (
-          <Sec label={T('Send this to someone')} gray>
-            <div className="rpt-hide" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Sec label={T('Send this to someone')} gray hide>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
                 onClick={() => window.print()}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px', borderRadius: 99, border: '1px solid #e6e6ea', background: '#fff', color: '#1d1d1f', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
