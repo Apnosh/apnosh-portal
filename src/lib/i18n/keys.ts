@@ -78,6 +78,10 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* /dashboard/settings — the language row */
   settings: [
     'Language', 'Pick the language you want to read.', 'Saved.',
+    // staff previewing a client's screens in another language; nothing is written
+    // The language NAME is not a key: the line is drawn in the language it names, so
+    // LANG_LABEL is already the right word in the right language.
+    'Previewing in {language} (not saved)',
     'Could not save. Try again.', 'Some screens are still in English. We are working on the rest.',
     /* Move 5b: the rest of the page — your name, your email, your password. */
     'Your profile', 'Your name, phone, email and password', 'About you',

@@ -540,6 +540,8 @@ export const ES: Record<string, string> = {
     'Todavía no se cuenta. Cuando lleguen los números, aparecen aquí.',
 
   // Polish 2
+  /* staff previewing a client's screens in another language (?lang=); nothing is saved */
+  'Previewing in {language} (not saved)': 'Viendo en {language} (no se guarda)',
   /* the reply clock's third state: the day we owed ran out and nobody answered */
   'we owed you a reply by': 'te debíamos respuesta el',
   'we missed it.': 'no cumplimos.',

@@ -26,7 +26,7 @@ import { t, localeOf, money, num, DEFAULT_LANG, isLang, LANGS } from '../src/lib
 import { allShapeWords, stageSubFor, stageLabelFor, emptyLineFor, EMPTY_LINE_DEFAULT } from '../src/lib/clients/shape-words'
 import { SHELF_SHAPES } from '../src/lib/clients/shape'
 import { replyClock, oneBusinessDayAfter, waitLabel, askFrom, dayDate } from '../src/lib/team/reply-line'
-import { resolveLang } from '../src/lib/i18n/resolve-lang'
+import { previewLangFrom, resolveLang } from '../src/lib/i18n/resolve-lang'
 import { looseStringsIn } from '../src/lib/i18n/scan-screen'
 
 let failures = 0
@@ -273,7 +273,8 @@ console.log('\n6. Which language a screen draws, and what gets written')
   // The rule that decides between the record and the browser. The bug it exists to stop: an
   // admin (or an owner with two locations) opens a Spanish client, then an English one, and the
   // second one is drawn in Spanish AND saved as Spanish.
-  const r = (db: unknown, local: 'en' | 'es' | null, isAdmin: boolean) => resolveLang(db, local, isAdmin)
+  const r = (db: unknown, local: 'en' | 'es' | null, isAdmin: boolean, preview: 'en' | 'es' | null = null) =>
+    resolveLang(db, local, isAdmin, preview)
 
   check('an admin reads the record and writes nothing', () => {
     const a = r('es', null, true)
@@ -315,6 +316,47 @@ console.log('\n6. Which language a screen draws, and what gets written')
     }
     return pushes.length === 1 && pushes[0] === 'en/es/false'
   })
+
+  /* STAFF PREVIEW (?lang=es). A strategist could not see what a Spanish owner sees without
+   * changing that owner's record, so nobody looked. Now they can look and nothing moves. */
+  check('staff previewing Spanish read Spanish and write nothing', () => {
+    const a = r('en', null, true, 'es')
+    return a.lang === 'es' && a.push === null && a.store === null
+  })
+  check('staff can preview English on a Spanish client too', () => {
+    const a = r('es', null, true, 'en')
+    return a.lang === 'en' && a.push === null && a.store === null
+  })
+  check('a preview beats a record staff have not got yet', () => r(null, null, true, 'es').lang === 'es')
+  check('an OWNER\'s ?lang= is ignored: a link somebody sent them cannot change their business', () => {
+    const a = r('en', null, false, 'es')
+    const b = r('es', null, false, 'en')
+    return a.lang === 'en' && b.lang === 'es'
+  })
+  check('no preview on the URL leaves every old answer exactly where it was', () => {
+    const a = r('es', null, true, null)
+    return a.lang === 'es' && a.push === null && a.store === null
+  })
+  check('a preview still never writes, in any of the eighteen cases', () => {
+    for (const db of [null, 'en', 'es'] as const) {
+      for (const local of [null, 'en', 'es'] as const) {
+        for (const pv of ['en', 'es'] as const) {
+          const a = r(db, local, true, pv)
+          if (a.push || a.store || a.lang !== pv) return false
+        }
+      }
+    }
+    return true
+  })
+  // What counts as a preview on the URL, and what does not.
+  check('?lang= is read off the query, and only a real language', () =>
+    previewLangFrom('?lang=es') === 'es'
+    && previewLangFrom('lang=en&x=1') === 'en'
+    && previewLangFrom('?lang=fr') === null
+    && previewLangFrom('?lang=') === null
+    && previewLangFrom('?other=es') === null
+    && previewLangFrom('') === null
+    && previewLangFrom(null) === null)
 }
 
 console.log(failures === 0 ? '\n✓ i18n verified\n' : `\n✗ ${failures} failed\n`)

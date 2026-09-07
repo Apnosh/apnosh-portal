@@ -37,8 +37,9 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { DEFAULT_LANG, isLang, localeOf, t, type Lang } from '@/lib/i18n/t'
-import { resolveLang } from '@/lib/i18n/resolve-lang'
+import { previewLangFrom, resolveLang } from '@/lib/i18n/resolve-lang'
 import { useClient } from '@/lib/client-context'
 
 /** the pre-login hint: what the last person to use this browser was reading */
@@ -48,6 +49,8 @@ const keyFor = (clientId: string) => `${STORAGE_KEY}:${clientId}`
 
 export interface LangCtx {
   lang: Lang
+  /** staff are reading this in a language that is NOT the client's, and nothing is being saved */
+  preview?: boolean
   /** t() with the language already bound. `vars` fills {name} holes. */
   T: (key: string, vars?: Record<string, string | number>) => string
   /** 'en-US' / 'es-US', for toLocaleString on numbers, dates and money. */
@@ -98,6 +101,8 @@ function writeStoredLang(l: Lang, clientId?: string | null): void {
 
 export function MvpLanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Lang>(DEFAULT_LANG)
+  /** staff preview: ?lang=es draws Spanish and saves nothing (resolve-lang.ts) */
+  const [preview, setPreview] = useState(false)
   const { client, isAdmin } = useClient()
   /** the client we have already written the browser's answer up for, so it happens once */
   const pushedFor = useRef<string | null>(null)
@@ -114,13 +119,20 @@ export function MvpLanguageProvider({ children }: { children: React.ReactNode })
   //    the owner's browser can only correct an 'en' — the column's default, which cannot be told
   //    apart from a row nobody has answered for — using what it remembers FOR THIS CLIENT.
   const clientId = client?.id ?? null
+  const pathname = usePathname()
   useEffect(() => {
     if (!clientId) return
-    const r = resolveLang(client?.preferred_language, readStoredLang(clientId), isAdmin)
+    /* The preview is read here, off window, rather than through useSearchParams: that hook forces
+     * every page under this provider into a Suspense boundary at build time, and this is a
+     * read-only staff aid, not a route input. Re-read on every screen change, which is when a
+     * strategist would drop ?lang=es on a URL. */
+    const wanted = previewLangFrom(typeof window === 'undefined' ? null : window.location.search)
+    const r = resolveLang(client?.preferred_language, readStoredLang(clientId), isAdmin, wanted)
     setLangState(r.lang)
+    setPreview(isAdmin && !!wanted)
     if (r.store) writeStoredLang(r.store, clientId)
     if (r.push && pushedFor.current !== clientId) { pushedFor.current = clientId; pushLang(clientId, r.push) }
-  }, [client?.preferred_language, clientId, isAdmin])
+  }, [client?.preferred_language, clientId, isAdmin, pathname])
 
   const setLang = useCallback((l: Lang) => {
     setLangState(l)
@@ -129,10 +141,11 @@ export function MvpLanguageProvider({ children }: { children: React.ReactNode })
 
   const value = useMemo<LangCtx>(() => ({
     lang,
+    preview,
     T: (key: string, vars?: Record<string, string | number>) => t(key, lang, vars),
     locale: localeOf(lang),
     setLang,
-  }), [lang, setLang])
+  }), [lang, preview, setLang])
 
   return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>
 }

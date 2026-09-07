@@ -53,12 +53,15 @@ export default function SettingsPage() {
   const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   // Language — the business's, not the login's
-  const { client } = useClient()
-  const { lang, setLang, T } = useLang()
+  const { client, isAdmin } = useClient()
+  const { lang, setLang, T, preview } = useLang()
   const [langMsg, setLangMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
   async function pickLanguage(next: Lang) {
     if (next === lang) return
+    // Staff previewing with ?lang= are READING somebody else's business. Tapping the other
+    // language here must not save onto their row, so for staff it does nothing at all.
+    if (isAdmin) return
     // The screen switches first. The save is what makes it stick on the next device.
     setLang(next)
     setLangMsg(null)
@@ -171,13 +174,21 @@ export default function SettingsPage() {
                         type="button"
                         onClick={() => pickLanguage(l)}
                         aria-pressed={on}
-                        style={{ flex: 1, height: 46, borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink, background: on ? C.green : '#fff', border: `1px solid ${on ? C.green : C.line}` }}
+                        disabled={isAdmin}
+                        style={{ flex: 1, height: 46, borderRadius: 12, cursor: isAdmin ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink, background: on ? C.green : '#fff', border: `1px solid ${on ? C.green : C.line}` }}
                       >
                         {LANG_LABEL[l]}
                       </button>
                     )
                   })}
                 </div>
+                {/* Staff, previewing with ?lang= on the URL. Says so, so nobody thinks they just
+                    changed what this owner reads — they did not, and cannot from here. */}
+                {isAdmin && preview && (
+                  <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45, fontWeight: 600 }}>
+                    {T('Previewing in {language} (not saved)', { language: LANG_LABEL[lang] })}
+                  </div>
+                )}
                 <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>{T('Some screens are still in English. We are working on the rest.')}</div>
                 {langMsg && <Msg msg={langMsg} />}
               </div>
