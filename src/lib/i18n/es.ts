@@ -68,7 +68,7 @@ export const ES: Record<string, string> = {
   'Before and after on your whole listing. It shows what happened, not proof of cause.': 'Antes y después en todo tu perfil. Muestra lo que pasó. No prueba que fue por esto.',
   'The people on your work': 'Las personas en tus pedidos',
   'Get help': 'Pedir ayuda',
-  'A real person replies within one business day.': 'Una persona de verdad te contesta en un día hábil.',
+  'We reply within one business day.': 'Te contestamos en un día hábil.',
   '{n} pieces of work': '{n} trabajos',
 
   /* ── Home: the funnel's tags, its conversion lines and the chrome around it ────────────── */
@@ -97,7 +97,7 @@ export const ES: Record<string, string> = {
   /* ── The reply promise, and the clock on it ───────────────────────────────────────────── */
   'within one business day': 'en un día hábil',
   'Sent': 'Enviado',
-  'we answer': 'contestamos',
+  'we reply': 'contestamos',
   'due': 'vence el',
   'Answered in': 'Contestado en',
 
@@ -123,8 +123,7 @@ export const ES: Record<string, string> = {
   'Yesterday': 'Ayer',
   'now': 'ahora',
   'Apnosh team': 'Equipo Apnosh',
-  'replies {promise}': 'contesta {promise}',
-  'Replies {promise}': 'Contesta {promise}',
+  'we reply {promise}': 'contestamos {promise}',
   /* who you can reach, and what each one is for */
   'Your strategist': 'Tu estratega',
   'Videographer': 'Camarógrafo',
@@ -140,7 +139,6 @@ export const ES: Record<string, string> = {
   'Anything else': 'Cualquier otra cosa',
 
   /* ── Get help ─────────────────────────────────────────────────────────────────────────── */
-  'A real person answers': 'Te contesta una persona de verdad',
   'Talk to us': 'Habla con nosotros',
   'Message us': 'Mándanos un mensaje',
   'We reply {promise}': 'Contestamos {promise}',

@@ -492,7 +492,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
   const ask = askFrom(msgs.filter((m) => !m.id.startsWith('tmp-')).map((m) => ({ sender: m.from, createdAt: m.createdAt })))
   const promiseClock = replyLine(
     { askedAt: ask?.askedAt ?? null, answeredAt: ask?.answeredAt ?? null },
-    { promise: T(REPLY_PROMISE), locale, words: { sent: T('Sent'), weAnswer: T('we answer'), due: T('due'), answeredIn: T('Answered in') } },
+    { promise: T(REPLY_PROMISE), locale, words: { sent: T('Sent'), weAnswer: T('we reply'), due: T('due'), answeredIn: T('Answered in') } },
   )
   return (
     <div style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', background: '#fff' }}>
@@ -503,7 +503,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
           <Avatar c={c} person={person} size={36} />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 16, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.15 }}>{title}</div>
-            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c ? T(c.name) : T('Apnosh team')} · ${c?.key === 'strategist' ? T('replies {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}` : c?.key === 'strategist' ? T('Replies {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}</div>
+            <div style={{ fontSize: 11.5, color: C.greenDk, fontWeight: 600, marginTop: 1, display: 'flex', alignItems: 'center', gap: 5 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: C.greenBar, flexShrink: 0 }} />{person ? `${c ? T(c.name) : T('Apnosh team')} · ${c?.key === 'strategist' ? T('we reply {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}` : c?.key === 'strategist' ? T('We reply {promise}', { promise: T(REPLY_PROMISE) }) : T('Apnosh team')}</div>
           </div>
         </div>
         <span />

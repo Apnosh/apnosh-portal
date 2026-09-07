@@ -6,7 +6,7 @@
  * ignored. This turns the claim into two facts the owner can read: when they asked, and when the
  * answer is due. Once it is answered, how long it actually took.
  *
- *   Sent Tue 3:10 pm · we answer within one business day · due Wed 3:10 pm
+ *   Sent Tue 3:10 pm · we reply within one business day · due Wed 3:10 pm
  *   Answered in 2h 14m
  *
  * PURE on purpose (no server-only, no database): the thread header already has the messages
@@ -129,7 +129,7 @@ export function replyLine(
 ): string | null {
   const locale = opts?.locale ?? 'en-US'
   const promise = opts?.promise ?? 'within one business day'
-  const w = { sent: 'Sent', weAnswer: 'we answer', due: 'due', answeredIn: 'Answered in', ...(opts?.words ?? {}) }
+  const w = { sent: 'Sent', weAnswer: 'we reply', due: 'due', answeredIn: 'Answered in', ...(opts?.words ?? {}) }
   if (!input.askedAt) return null
   const asked = new Date(input.askedAt)
   if (Number.isNaN(asked.getTime())) return null

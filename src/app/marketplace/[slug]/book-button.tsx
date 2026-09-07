@@ -45,7 +45,7 @@ export default function BookButton({ vendorSlug, listingSlug, listingType, isApn
           <p className="text-[12px] text-ink-2">
             {isApnosh && listingType === 'subscription'
               ? `Your Account Manager will reach out ${REPLY_PROMISE} to set up your subscription, schedule your onboarding shoot, and start the work.`
-              : "Apnosh will coordinate with this vendor and follow up within 1-2 business days."}
+              : `Apnosh will coordinate with this vendor and follow up ${REPLY_PROMISE}.`}
           </p>
         </div>
       </div>

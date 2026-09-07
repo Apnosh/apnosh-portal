@@ -29,7 +29,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     '7 days', '30 days', '90 days', '1 year',
     'Counted, as promised',
     'Before and after on your whole listing. It shows what happened, not proof of cause.',
-    'The people on your work', 'Get help', 'A real person replies within one business day.',
+    'The people on your work', 'Get help', 'We reply within one business day.',
     '{n} pieces of work',
     // the tags on each stage, the conversion line under it, and the four stat labels
     'Real · Google', 'Real · Google + Social', '~ about · your math', 'Repeat visits',
@@ -46,7 +46,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   ],
 
   /* the promise and its clock — the thread header and Get help both draw these */
-  reply: ['within one business day', 'Sent', 'we answer', 'due', 'Answered in'],
+  reply: ['within one business day', 'Sent', 'we reply', 'due', 'Answered in'],
 
   /* /dashboard/messages — the strip of people on live orders, the inbox, one conversation */
   messages: [
@@ -58,7 +58,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'No business linked yet', 'Finish setting up your restaurant to start messaging your team.',
     'Loading…', 'Back', 'Send', 'Sending…', 'Sent · {time}', 'Today', 'Yesterday', 'now',
     /* the line under a person's name in the conversation header */
-    'Apnosh team', 'replies {promise}', 'Replies {promise}',
+    'Apnosh team', 'we reply {promise}', 'We reply {promise}',
     'Your strategist', 'Videographer', 'Photographer', 'Designer', 'Account & billing', 'Support',
     'Plans, priorities, anything', 'Films your content', 'Photos of your food & space',
     'Graphics, menus, flyers', 'Plans, invoices, payments', 'Anything else',
@@ -66,7 +66,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
 
   /* /dashboard/get-help */
   getHelp: [
-    'Get help', 'A real person answers', 'Talk to us', 'Message us',
+    'Get help', 'We reply within one business day.', 'Talk to us', 'Message us',
     'We reply {promise}', 'within one business day', 'Share feedback', 'Tell us what to make better',
     'Find it yourself', 'Questions and answers', 'The papers', 'Your agreements',
   ],
@@ -139,7 +139,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'We do not have your Google numbers yet. This is the first step.',
     'Nothing fit? Ask {name}.', 'Nothing fit? Ask us.',
     /* the promise itself is REPLY_PROMISE_SENTENCE, listed once under `reply` words below */
-    '{name} is already on your work.', 'A real person replies within one business day.',
+    '{name} is already on your work.', 'We reply within one business day.',
   ],
 
   /* the promises ledger's own words (src/lib/promises/registry.ts) — the count line printed on

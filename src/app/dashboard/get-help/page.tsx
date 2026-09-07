@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react'
 import { MessageCircle, HelpCircle, Megaphone, FileText } from 'lucide-react'
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, MvpGroup, MvpRow, C } from '@/components/mvp/mvp-detail'
-import { REPLY_PROMISE } from '@/lib/reply-promise'
+import { REPLY_PROMISE, REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
 import { replyLine } from '@/lib/team/reply-line'
 import { useClient } from '@/lib/client-context'
 import { useLang } from '@/components/mvp/mvp-language'
@@ -42,12 +42,12 @@ export default function GetHelpPage() {
     {
       promise: T(REPLY_PROMISE),
       locale,
-      words: { sent: T('Sent'), weAnswer: T('we answer'), due: T('due'), answeredIn: T('Answered in') },
+      words: { sent: T('Sent'), weAnswer: T('we reply'), due: T('due'), answeredIn: T('Answered in') },
     },
   )
 
   return (
-    <MvpShell active="more" header={<MvpDetailHeader title={T('Get help')} subtitle={T('A real person answers')} />}>
+    <MvpShell active="more" header={<MvpDetailHeader title={T('Get help')} subtitle={T(REPLY_PROMISE_SENTENCE)} />}>
       <div style={{ background: '#fff', minHeight: '100%', padding: '10px 16px 24px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         <MvpGroup title={T('Talk to us')} hue="mint">
           <MvpRow icon={<MessageCircle size={18} />} hue="mint" label={T('Message us')} sub={T('We reply {promise}', { promise: T(REPLY_PROMISE) })} href="/dashboard/messages?to=support" />
