@@ -53,7 +53,9 @@ export async function getReviewNudge(clientId: string): Promise<ReviewNudge | nu
       prevMonthLabel: start.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' }),
       cycleLabel: now.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' }),
       budget: Math.round(cents / 100),
-      href: '/dashboard/insights/impact',
+      // The banner names LAST month, so the link has to open last month. Without ?m= the report
+      // page defaults to the month they are in now, and "your August report" opened September.
+      href: `/dashboard/insights/impact?m=${startIso.slice(0, 7)}`,
     }
   } catch (e) {
     // A missing table or a read hiccup just means no banner — never a broken Home.
