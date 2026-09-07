@@ -129,6 +129,10 @@ export const PROMISE_BY_REQUEST_TYPE: Record<string, PromiseSpec[]> = {
   writing: [FILES],
   video: [POSTS],
   social: [POSTS],
+  // The desk's own ids for three more types (the shelf calls one of them 'writing').
+  copy: [FILES],
+  ads: [FILES],
+  other: [FILES],
 }
 
 export const TAKEN_BY_WORD: Record<TakenBy, string> = {
@@ -149,7 +153,9 @@ export function promiseSentence(specs: PromiseSpec[]): string | null {
   if (s.metric === 'delivered_files') return `Counted after: ${s.label} · marked Done the day they land`
   const days = s.lagDays + s.windowDays
   const when = days <= 7 ? 'about a week' : days <= 14 ? 'about two weeks' : days <= 24 ? 'about three weeks' : 'about a month'
-  return `Counted after: ${s.label} · ${TAKEN_BY_WORD[s.takenBy]} · shows on Home ${when} after you order`
+  // A Google count only runs once Google is connected; say so before the money, not after.
+  const taken = s.takenBy === 'google' ? 'Taken by Google, once your Google profile is connected' : TAKEN_BY_WORD[s.takenBy]
+  return `Counted after: ${s.label} · ${taken} · shows on Home ${when} after you order`
 }
 
 /** The Creatives shelf builds its cards as `creative-<type>` and orders through the desk, so the
