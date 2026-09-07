@@ -2,16 +2,26 @@ import 'server-only'
 /**
  * promises/read — the "Counted, as promised" rows for one client, in the words Home prints.
  *
- * Read ALWAYS: a flat month shows "41, was 41", a drop shows the drop. The state machine:
- *   held         start date in the future             → "Starts Jan 20"
- *   not_counted  the product cannot take this count   → the card's own reason
- *   done         a deliverable's work order delivered → "Done" + the handoff
- *   counting     before shows_on, or no reported days → "0 so far · counting since Sep 15"
- *   counted      a number and its matched baseline    → "41 · was 13 in the same days before"
+ * Read ALWAYS: a flat month shows "41, was 41", a drop shows the drop. This file decides WHICH of
+ * the seven states a row is in; ./lines says what each one is called. In the order an order lives
+ * them:
+ *   stopped      the campaign was stopped              → what happened to the money, or nothing new
+ *   ordered      paid, no work order has a name on it  → "your team starts it next"
+ *   production   a name on it, and it has started      → "your team is on it"
+ *   held         a start date in the future            → "Starts Jan 20"
+ *   delivered    the work landed, the count has not    → "your count starts Sep 12"
+ *   counting     before shows_on, or no reported days  → "0 so far · counting since Sep 15"
+ *   counted      a number and its matched baseline     → "41 · was 13 in the same days before"
+ * plus not_counted, the honest answer for a number the product cannot read at all.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { measure, matchedBaseline, today, shiftDays, hasGoogle, hasFoodOrders, locationCount } from './metrics'
 import { TAKEN_BY_WORD, type MetricKey, type TakenBy } from './registry'
+import { lineFor, STATE_RANK, type PromiseState } from './lines'
+
+// The seven states, and their words, live in ./lines — pure and client-safe, so the card, the
+// "your count is in" cron and a script all read one table instead of three copies of it.
+export { lineFor, PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState } from './lines'
 
 export interface PromiseRow {
   id: string
@@ -25,19 +35,8 @@ export interface PromiseRow {
   /** the small line under the number */
   small: string
   tone: 'up' | 'down' | 'flat' | 'wait' | 'done' | 'off'
-  /**
-   * THE SEVEN STATES a card reads, in the order an order lives them:
-   *   ordered      paid, no work order has a name on it yet
-   *   production   somebody is on it and has started
-   *   held         the owner picked a start date that has not arrived
-   *   delivered    the work landed; the count has not started
-   *   counting     count_from has passed, no number yet
-   *   counted      shows_on has passed and there is a number
-   *   stopped      the campaign was stopped (with the refund line, when money went back)
-   * plus `not_counted`, which is not a stage of an order but the honest answer for a card whose
-   * number the product cannot read at all. It is never a card's whole story, it IS the story.
-   */
-  state: 'ordered' | 'production' | 'held' | 'delivered' | 'counting' | 'counted' | 'stopped' | 'not_counted'
+  /** Where this order stands. See ./lines for the seven states and the words each one gets. */
+  state: PromiseState
   campaignId: string | null
   requestId: string | null
   showsOn: string
@@ -274,42 +273,11 @@ export async function getPromiseRows(clientId: string, limit = 3): Promise<Promi
   }
   // Newest first, but a counted row with a number outranks a row that is only waiting, and a
   // stopped order sinks below everything still running.
-  const ORDER: Record<PromiseRow['state'], number> = { counted: 0, delivered: 1, counting: 2, production: 3, ordered: 4, held: 5, not_counted: 6, stopped: 7 }
-  const rank = (r: PromiseRow) => ORDER[r.state] ?? 8
+  const rank = (r: PromiseRow) => STATE_RANK[r.state] ?? 8
   const withLine = out.map((r) => ({ ...r, line: lineFor(r) }))
   return (limit > 0 ? withLine.sort((a, b) => rank(a) - rank(b)).slice(0, limit) : withLine)
 }
 
-/**
- * The one line a Campaigns card prints under its pill, from the same row Home prints.
- *
- * ONE line per state, and every copy string for the seven states lives here — a card must never
- * invent its own words for a state, or the same order reads differently on two screens.
- */
-export function lineFor(r: Omit<PromiseRow, 'line'>): string {
-  if (r.state === 'stopped') return `Stopped · ${r.sub.replace(/^Stopped · /, '')}`
-  if (r.state === 'not_counted') return `Not counted: ${r.sub.replace(/^Ordered [^·]+· /, '')}`
-  if (r.state === 'held') return `Held · work starts ${r.value} · then counted`
-  if (r.state === 'ordered') return `Ordered · your team starts it next`
-  if (r.state === 'production') return `Being made · your team is on it`
-  // A deliverable is finished on delivery and has no number coming; anything else names the day
-  // its count begins, which is now the day the work landed plus its lag.
-  if (r.state === 'delivered') return r.value === 'Done' ? `Done · ${r.small}` : `Delivered · your count starts ${r.small.replace(/^counting from /, '')}`
-  if (r.state === 'counting') return r.value === '—' ? `Counted after: ${r.sub.replace(/^Ordered [^·]+· /, '')} · on Home ${md(r.showsOn)}` : `Counting · ${r.value} · on Home ${md(r.showsOn)}`
-  return `${r.value} · ${r.small}`
-}
-
-/** The action word that goes with each state — one per card, never two. */
-export const ACTION_FOR: Record<PromiseRow['state'], string | null> = {
-  ordered: 'See your order',
-  production: null,          // nothing for the owner to do while it is being made
-  held: null,
-  delivered: 'Open what landed',
-  counting: 'See results',
-  counted: 'See results',
-  stopped: 'See details',
-  not_counted: null,
-}
 
 /** Desk orders (creative_requests placed as orders) for the Campaigns feed: they have no campaign
  *  row, so the list would otherwise never show them. Joined to their ledger row when one exists. */

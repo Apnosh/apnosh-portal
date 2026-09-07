@@ -33,6 +33,7 @@ import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { fitsBudget, isSellable, filterRecsByFacts, deliveryLedShape } from '@/lib/campaigns/planning/rank-facts'
 import { ITEM_PRICES } from '@/lib/campaigns/builder/item-prices'
 import { handoverFor, handoverProgress, handoverGuard, markHandover, readHandover, WEBSITE_HANDOVER } from '@/lib/campaigns/handover'
+import { lineFor, PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState } from '@/lib/promises/lines'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -844,6 +845,46 @@ s.group('Intake rail: playbook needsInput keys reach the owner (recurring includ
   const declared = new Set(Object.keys(SERVICE_PLAYBOOKS).flatMap((id) => playbookNeedKeys(id)))
   const orphans = [...declared].filter((k) => !HANDLED.has(k))
   s.check(`every declared needsInput key has an owner-facing ask (orphans: ${orphans.join(',') || 'none'})`, orphans.length === 0)
+}
+
+// ── Move 4: the seven states an order lives, said the same way everywhere ──
+s.group('Seven states: one pill, one line, one action, from one table')
+{
+  const STATES: PromiseState[] = ['ordered', 'production', 'held', 'delivered', 'counting', 'counted', 'stopped', 'not_counted']
+  const row = (state: PromiseState, over: Partial<{ sub: string; value: string; small: string; showsOn: string }> = {}) =>
+    ({ state, sub: 'Ordered Sep 1 · taps on your Google card', value: '—', small: 'counting from Sep 12', showsOn: '2026-10-08', ...over })
+
+  // Every state is spelled out in all four tables. A state missing from one of them is a card that
+  // renders undefined, or sorts to the bottom for no reason.
+  for (const st of STATES) {
+    s.check(`${st}: has a pill entry`, st in PILL_FOR)
+    s.check(`${st}: has an action entry`, st in ACTION_FOR)
+    s.check(`${st}: has a rank`, typeof STATE_RANK[st] === 'number')
+    s.check(`${st}: has a line, and it is never empty`, lineFor(row(st)).trim().length > 0)
+  }
+
+  s.eq('Ordered says the team has not started', lineFor(row('ordered')), 'Ordered · your team starts it next')
+  s.eq('In production says somebody is on it', lineFor(row('production')), 'Being made · your team is on it')
+  s.eq('Held names the day work starts', lineFor(row('held', { value: 'Jan 20' })), 'Held · work starts Jan 20 · then counted')
+  s.eq('Delivered names the day the count starts', lineFor(row('delivered')), 'Delivered · your count starts Sep 12')
+  s.eq('a delivered DELIVERABLE has no count coming, so it just says done', lineFor(row('delivered', { value: 'Done', small: 'Your photo library' })), 'Done · Your photo library')
+  s.eq('Counting names the day it shows on Home', lineFor(row('counting')), 'Counted after: taps on your Google card · on Home Oct 8')
+  s.eq('Counted is the number and what it was before', lineFor(row('counted', { value: '41', small: '▲ was 13 in the same 14 days before' })), '41 · ▲ was 13 in the same 14 days before')
+  s.eq('Stopped says what happened to the money', lineFor(row('stopped', { sub: 'Stopped · $120.00 sent back to your card' })), 'Stopped · $120.00 sent back to your card')
+  s.eq('and says so honestly when none moved', lineFor(row('stopped', { sub: 'Stopped · nothing new is running' })), 'Stopped · nothing new is running')
+  s.check('Not counted leads with the reason, not with a zero',
+    lineFor(row('not_counted', { sub: 'Ordered Sep 1 · The delivery apps give us no way to read your orders.' })).startsWith('Not counted: The delivery apps'))
+
+  // No line may print a number the row does not have.
+  for (const st of STATES) s.check(`${st}: never prints "undefined"`, !lineFor(row(st)).includes('undefined'))
+
+  s.eq('only Counted and Stopped are history', [...DONE_STATES].sort(), ['counted', 'stopped'])
+  s.check('a card being MADE has no action, because there is nothing for the owner to do',
+    ACTION_FOR.production === null && ACTION_FOR.held === null)
+  s.eq('a delivered order opens the thing', ACTION_FOR.delivered, 'Open what landed')
+  s.check('a counted row outranks everything still waiting',
+    STATE_RANK.counted < STATE_RANK.counting && STATE_RANK.counting < STATE_RANK.held)
+  s.check('and a stopped order sinks below all of it', STATE_RANK.stopped === Math.max(...STATES.map((x) => STATE_RANK[x])))
 }
 
 // ── Move 4: a website order ends in a domain the owner holds ──

@@ -21,6 +21,9 @@ import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgres
 import { upcomingOccasions } from '@/lib/design/occasions'
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { campaignHue, gradOf, hueOf, tint, type HueKey } from './hues'
+/* ONE PILL, ONE ACTION, ONE LINE PER STATE — from src/lib/promises/lines.ts, the same table the
+   server writes the card's line with. A card must never invent its own word for a state. */
+import { PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState } from '@/lib/promises/lines'
 import { Mark } from './mark'
 import { Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Sparkles, FileText, AlertCircle } from 'lucide-react'
 
@@ -30,24 +33,11 @@ const GLYPH: Record<HueKey, typeof Megaphone> = {
   reviews: Star, online: ShoppingCart, catering: Users, brand: Share2, amber: Clock, grey: FileText, red: AlertCircle,
 }
 type HuedCard = CampCard & { hue: HueKey; promise?: string | null; openUrl?: string | null }
-/** The seven states an order lives, written once in src/lib/promises/read.ts and read here. */
-type OrderState = 'ordered' | 'production' | 'held' | 'delivered' | 'counting' | 'counted' | 'stopped' | 'not_counted'
+/** The seven states an order lives. The words come from the same table the server reads. */
+type OrderState = PromiseState
 type LedgerRow = { id: string; label: string; line: string; state: OrderState; campaignId: string | null; requestId: string | null; showsOn: string; openUrl: string | null }
 type DeskRow = { id: string; type: string; label: string; orderedOn: string; status: string; dueDate: string | null; workStatus: string | null; line: string | null; state: OrderState | null; openUrl: string | null }
 
-/* ONE PILL PER STATE. The words an owner reads for where their order stands; the line under them
-   comes from lineFor, so a card can never say one thing in the pill and another underneath. */
-const PILL_FOR: Record<OrderState, string | null> = {
-  ordered: 'Ordered', production: 'In production', held: 'Held', delivered: 'Delivered',
-  counting: 'Counting', counted: 'Counted', stopped: 'Stopped', not_counted: null,
-}
-/* ONE ACTION PER STATE. null = there is nothing for the owner to do, so the card shows no button. */
-const ACTION_FOR: Record<OrderState, string | null> = {
-  ordered: 'See your order', production: null, held: null, delivered: 'Open what landed',
-  counting: 'See results', counted: 'See results', stopped: 'See details', not_counted: null,
-}
-/* Which tab a state belongs to. Counted and Stopped are history; everything else is still running. */
-const DONE_STATES = new Set<OrderState>(['counted', 'stopped'])
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -103,8 +93,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
 
   // Drafts (unshipped plans) live on the Orders tab now — Campaigns shows only shipped/live/done.
   // One line per card: the row with a number wins, then counting, then held, then not counted.
-  const RANK: Record<OrderState, number> = { counted: 0, delivered: 1, counting: 2, production: 3, ordered: 4, held: 5, not_counted: 6, stopped: 7 }
-  const rowRank = (r: LedgerRow) => RANK[r.state] ?? 8
+  const rowRank = (r: LedgerRow) => STATE_RANK[r.state] ?? 8
   const promiseByCampaign = new Map<string, LedgerRow>()
   for (const r of promises.rows) {
     if (!r.campaignId) continue

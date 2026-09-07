@@ -53,6 +53,10 @@
       "schedule": "0 16 * * *"
     },
     {
+      "path": "/api/cron/count-is-in",
+      "schedule": "0 17 * * *"
+    },
+    {
       "path": "/api/cron/reconcile-accruals",
       "schedule": "0 */6 * * *"
     },
