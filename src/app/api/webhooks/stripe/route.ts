@@ -996,11 +996,26 @@ async function handleDisputeClosed(supabase: AdminClient, dispute: Stripe.Disput
   }
 
   // LOST. The money is gone; settle the campaign as if we had refunded it in full.
+  //
+  // refunded_cents is stamped too, not just the status. The money reports read that column, so a
+  // chargeback that only flipped the status showed as a $0 reversal — a full charge still counted
+  // as revenue we kept. It is the whole charge minus anything we had already sent back by hand
+  // (the bank pulls what is left), never more than the total. dispute_cents is untouched: the two
+  // numbers answer different questions and the history should keep both.
+  const bankTookCents = Math.max(0, total - refunded)          // the bank pulls what is left
+  const totalBackCents = Math.min(total, refunded + bankTookCents)   // everything that has gone back
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { error: lostErr } = await (supabase as any)
     .from('campaign_payments')
-    .update({ status: 'refunded' })
+    .update({ status: 'refunded', refunded_cents: totalBackCents, refunded_at: new Date().toISOString() })
     .eq('stripe_payment_intent_id', piId)
+  if (lostErr) {
+    // Pre-254 the refund columns are absent. The status flip is the part that MATTERS (it stops the
+    // order reading as covered), so it goes on its own rather than being lost with them.
+    console.warn('[stripe] refund columns missing, writing status only (apply migration 254):', lostErr.message)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('campaign_payments').update({ status: 'refunded' }).eq('stripe_payment_intent_id', piId)
+  }
   try {
     const { getChargeByPaymentIntent, settleRefund, staleChargeIds } = await import('@/lib/campaigns/refunds-server')
     const paid = await getChargeByPaymentIntent(piId)
