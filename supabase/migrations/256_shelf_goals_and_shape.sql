@@ -85,3 +85,6 @@ alter table businesses add column if not exists shape text
   check (shape is null or shape in ('storefront','truck','delivery_only','two_locations','catering','seasonal'));
 
 comment on column clients.shape is 'How the business runs. Read by the Create shelf (chip-shelf overrides) and set at onboarding.';
+
+-- Make PostgREST see the new columns without a redeploy.
+notify pgrst, 'reload schema';

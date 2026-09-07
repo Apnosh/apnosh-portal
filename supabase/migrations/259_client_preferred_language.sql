@@ -34,3 +34,6 @@ end $$;
 
 comment on column clients.preferred_language is
   'The language this owner reads the product in: en or es. Read by src/lib/i18n, written from Settings.';
+
+-- Make PostgREST see the new columns without a redeploy.
+notify pgrst, 'reload schema';
