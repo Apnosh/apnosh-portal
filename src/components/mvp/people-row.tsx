@@ -130,7 +130,7 @@ export default function PeopleRow({ clientId }: { clientId?: string }) {
           <span style={name}>{T('Get help')}</span>
         </Link>
       </div>
-      <div style={{ fontSize: 11.5, color: C.faint, padding: '2px 2px 0' }}>{T(REPLY_PROMISE_SENTENCE)}</div>
+      <div style={{ fontSize: 11.5, color: C.mute, padding: '2px 2px 0' }}>{T(REPLY_PROMISE_SENTENCE)}</div>
     </section>
   )
 }

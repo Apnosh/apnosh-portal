@@ -278,7 +278,7 @@ export default function MvpMessages({ query: queryProp, onActiveChange }: { quer
       )}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 28px' }}>
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13.5, padding: 30 }}><Loader2 size={16} className="animate-spin" /> {T('Loading…')}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.mute, fontSize: 13.5, padding: 30 }}><Loader2 size={16} className="animate-spin" /> {T('Loading…')}</div>
         ) : noBusiness ? (
           <Empty title={T('No business linked yet')} sub={T('Finish setting up your restaurant to start messaging your team.')} />
         ) : q ? (
@@ -364,8 +364,8 @@ function ThreadRowView({ t, onOpen, first = true, person }: { t: ThreadRow; onOp
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
           <span style={{ fontWeight: t.unread ? 700 : 600, fontSize: 14.5, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</span>
-          {role && <span style={{ fontSize: 11.5, color: C.faint, whiteSpace: 'nowrap', flexShrink: 0 }}>{role}</span>}
-          <span style={{ marginLeft: 'auto', fontSize: 11, color: t.unread ? C.greenDk : C.faint, fontWeight: t.unread ? 700 : 400, flexShrink: 0 }}>{timeAgo(t.lastAt, T, locale)}</span>
+          {role && <span style={{ fontSize: 11.5, color: C.mute, whiteSpace: 'nowrap', flexShrink: 0 }}>{role}</span>}
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: t.unread ? C.greenDk : C.mute, fontWeight: t.unread ? 700 : 400, flexShrink: 0 }}>{timeAgo(t.lastAt, T, locale)}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: t.unread ? C.ink2 : C.mute, fontWeight: t.unread ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.lastMessage ?? T('No messages yet')}</span>
@@ -531,7 +531,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
       {/* messages */}
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '6px 14px 10px', background: '#fff' }}>
         {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> {T('Loading…')}</div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.mute, fontSize: 13, padding: 30 }}><Loader2 size={15} className="animate-spin" /> {T('Loading…')}</div>
         ) : msgs.length === 0 ? (
           <div style={{ textAlign: 'center', marginTop: 22, padding: '0 24px' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}><Avatar c={c} person={person} size={56} /></div>
@@ -544,7 +544,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
           const lastMsg = g.msgs[g.msgs.length - 1]
           return (
             <div key={g.msgs[0].id}>
-              {showDay && <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: C.faint, padding: '10px 0 8px' }}>{dayLabel(g.day, T, locale)}</div>}
+              {showDay && <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 600, color: C.mute, padding: '10px 0 8px' }}>{dayLabel(g.day, T, locale)}</div>}
               <div className="mrise" style={{ display: 'flex', gap: 8, alignItems: 'flex-end', justifyContent: own ? 'flex-end' : 'flex-start', marginTop: gi > 0 && !showDay ? 10 : 0 }}>
                 {!own && <Avatar c={c} person={person} size={26} />}
                 <div style={{ maxWidth: '78%', display: 'flex', flexDirection: 'column', alignItems: own ? 'flex-end' : 'flex-start', gap: 3 }}>
@@ -555,7 +555,7 @@ function Conversation({ active, person, userId, onBack, onThreadCreated }: { act
                       ? <div key={m.id} style={{ background: gradOf(hue), color: '#fff', borderRadius: r, padding: '9px 13px', fontSize: 14.5, lineHeight: 1.4, boxShadow: glow(hue, 0.18), whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
                       : <div key={m.id} style={{ background: '#f0f0f2', color: C.ink, borderRadius: r, padding: '9px 13px', fontSize: 14.5, lineHeight: 1.4, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
                   })}
-                  <div style={{ fontSize: 10.5, color: C.faint, margin: '1px 4px 0' }}>
+                  <div style={{ fontSize: 10.5, color: C.mute, margin: '1px 4px 0' }}>
                     {own ? (lastMsg.id === lastOwn?.id ? (lastMsg.id.startsWith('tmp-') ? T('Sending…') : T('Sent · {time}', { time: clock(lastMsg.createdAt, locale) })) : clock(lastMsg.createdAt, locale)) : `${lastMsg.senderName} · ${clock(lastMsg.createdAt, locale)}`}
                   </div>
                 </div>

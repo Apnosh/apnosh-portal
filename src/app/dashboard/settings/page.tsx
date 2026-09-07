@@ -138,7 +138,7 @@ export default function SettingsPage() {
               <div style={{ padding: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 13, marginBottom: 16 }}>
                   <span style={{ width: 52, height: 52, borderRadius: '50%', background: C.greenSoft, color: C.greenDk, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, flexShrink: 0 }}>{initials}</span>
-                  <span style={{ fontSize: 12.5, color: C.faint }}>{T('Avatar comes from your login.')}</span>
+                  <span style={{ fontSize: 12.5, color: C.mute }}>{T('Avatar comes from your login.')}</span>
                 </div>
                 <EditorField label={T('Your name')} value={fullName} onChange={setFullName} placeholder={T('Your name')} />
                 <EditorField label={T('Phone')} value={phone} onChange={setPhone} placeholder="(206) 555-0100" />
@@ -178,7 +178,7 @@ export default function SettingsPage() {
                     )
                   })}
                 </div>
-                <div style={{ fontSize: 12.5, color: C.faint, marginTop: 10, lineHeight: 1.45 }}>{T('Some screens are still in English. We are working on the rest.')}</div>
+                <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>{T('Some screens are still in English. We are working on the rest.')}</div>
                 {langMsg && <Msg msg={langMsg} />}
               </div>
             </MvpGroup>

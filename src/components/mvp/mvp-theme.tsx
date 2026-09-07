@@ -63,6 +63,13 @@ const light: Palette = {
   pathRGB: '46,154,120', pathAlpha: 0.4,
 }
 
+/**
+ * KNOWN GAP, not a bug to fix here. Dark mode on these screens is a whole-page CSS invert
+ * (globals.css, `html[data-apnosh-theme='dark'] body { filter: invert(1) hue-rotate(180deg) }`),
+ * so the LIGHT palette above is what every inline style actually renders and this dark set is
+ * dead code for them. Which means a contrast fix in dark has to be made in light. Making the
+ * screens genuinely theme-aware is its own piece of work.
+ */
 const dark: Palette = {
   ink: '#eef3f0', mute: '#9fb0a8', faint: '#7c8c85', line: 'rgba(255,255,255,0.10)', bg: '#0c1310',
   card: '#16211c', cardSoft: '#121b17', ghost: 'rgba(255,255,255,0.13)',
