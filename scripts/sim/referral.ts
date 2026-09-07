@@ -1,0 +1,188 @@
+/**
+ * Tell a friend, proved before a dollar of it can move.
+ *
+ * Everything that decides money or eligibility in Move 8 is a pure function, and this pins all of
+ * it: the code charset, the state machine, the credit on the bill (with the fee and the tax in the
+ * right order), the refund that voids a referral, the fraud floors, and — the one that matters
+ * most today — that with the kill switch off the whole loop is invisible and the bill is byte for
+ * byte the bill this product already charges.
+ *
+ * No server, no Stripe, no database, no network. Run:
+ *   npx tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/referral.ts
+ */
+import {
+  CODE_CHARSET, CODE_BANNED, CODE_LENGTH, makeCode, normalizeCode, isCodeShape, referralLink,
+  REFERRAL_CREDIT_CENTS, creditWords, nextStatus, readyToCredit, referralBlock, normalizePhone,
+  STATUS_WORD, type ReferralStatus, type ReferralEvent,
+} from '@/lib/referrals/model'
+import { checkoutBill, applyFriendCredit, feeCentsOn, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
+import { refundOwedCents } from '@/lib/campaigns/refund-math'
+import { referralsEnabled } from '@/lib/referral-gate'
+import type { LineItem } from '@/lib/campaigns/types'
+import { Suite } from './lib'
+
+function item(id: string, price: number, kind: 'one-time' | 'monthly' = 'one-time'): LineItem {
+  return {
+    id, position: 0, serviceId: id, name: id, stage: 'foundation', price,
+    cadence: kind === 'monthly' ? { kind: 'recurring', every: 'monthly' } : { kind: 'one-time' },
+    included: true, paused: false, lock: 'editable',
+  } as unknown as LineItem
+}
+
+/** A deterministic 0..1 source, so the same call makes the same code every time this runs. */
+function seeded(seed: number): () => number {
+  let s = seed >>> 0
+  return () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 2 ** 32 }
+}
+
+/** Stripe's tax, as a flat rate, so the ORDER of the credit and the tax can be checked. */
+const taxOn = (preTax: number, rate = 0.08) => Math.round(preTax * rate)
+
+function main() {
+  const s = new Suite()
+
+  /* ── 1. the code ─────────────────────────────────────────────────────── */
+  s.group('the code can be read off a phone and typed by somebody else')
+  s.check('no ambiguous character is in the charset',
+    [...CODE_BANNED].every((ch) => !CODE_CHARSET.includes(ch)), CODE_CHARSET)
+  s.eq('the charset has no duplicates', new Set(CODE_CHARSET).size, CODE_CHARSET.length)
+  s.check('the charset is big enough to matter', CODE_CHARSET.length >= 24, `${CODE_CHARSET.length} characters`)
+  s.eq('a code is seven characters', makeCode(seeded(1)).length, CODE_LENGTH)
+  s.check('every character of a code is in the charset',
+    [...makeCode(seeded(7))].every((ch) => CODE_CHARSET.includes(ch)), makeCode(seeded(7)))
+  s.eq('the same randomness makes the same code', makeCode(seeded(42)), makeCode(seeded(42)))
+  s.check('different randomness makes different codes', makeCode(seeded(1)) !== makeCode(seeded(2)))
+  s.check('a thousand codes are all well-formed',
+    Array.from({ length: 1000 }, (_, i) => makeCode(seeded(i))).every(isCodeShape))
+  s.check('a thousand codes barely collide', new Set(Array.from({ length: 1000 }, (_, i) => makeCode(seeded(i)))).size >= 999)
+  s.check('broken randomness still makes a code, never a crash',
+    isCodeShape(makeCode(() => NaN)) && isCodeShape(makeCode(() => Infinity)))
+  s.eq('lower case and spaces are the same code', normalizeCode(' k3m-9pq r '), 'K3M9PQR')
+  s.eq('nothing typed is an empty code', normalizeCode(null), '')
+  s.check('a code with a banned character is not one of ours', !isCodeShape('K3M9PQ0'))
+  s.check('a short code is not one of ours', !isCodeShape('K3M9'))
+  s.check('a real code is', isCodeShape(makeCode(seeded(9))))
+  s.eq('the link is the code on our domain', referralLink('K3M9PQR', 'https://apnosh.com'), 'https://apnosh.com/r/K3M9PQR')
+  s.eq('a trailing slash does not double up', referralLink('K3M9PQR', 'https://apnosh.com/'), 'https://apnosh.com/r/K3M9PQR')
+
+  /* ── 2. the state machine ────────────────────────────────────────────── */
+  s.group('a referral pays on the COUNT, and only once')
+  s.eq('signing up is not payment', nextStatus('signed_up', 'counted'), null)
+  s.eq('a paid first order moves it along', nextStatus('signed_up', 'order_paid'), 'first_order_paid')
+  s.eq('the count is what pays', nextStatus('first_order_paid', 'counted'), 'credited')
+  s.eq('a full refund before the count voids it', nextStatus('first_order_paid', 'refunded_full'), 'void')
+  s.eq('a refund with no order behind it changes nothing', nextStatus('signed_up', 'refunded_full'), null)
+  s.eq('a fraud floor voids it at any point before payment', nextStatus('first_order_paid', 'fraud'), 'void')
+  s.eq('credited is terminal: a later refund never claws it back', nextStatus('credited', 'refunded_full'), null)
+  s.eq('credited is terminal for fraud too — that is an admin decision', nextStatus('credited', 'fraud'), null)
+  s.eq('void is terminal', nextStatus('void', 'counted'), null)
+  s.check('nothing pays twice', (['signed_up', 'first_order_paid', 'credited', 'void'] as ReferralStatus[])
+    .every((st) => (['order_paid', 'counted', 'refunded_full', 'fraud'] as ReferralEvent[])
+      .every((ev) => nextStatus(st, ev) !== 'credited' || st === 'first_order_paid')))
+  s.check('a stamped payout is never paid again', !readyToCredit({ status: 'first_order_paid', creditedAt: '2026-09-01' }, true))
+  s.check('a voided referral is never paid', !readyToCredit({ status: 'first_order_paid', voidedAt: '2026-09-01' }, true))
+  s.check('no count, no money', !readyToCredit({ status: 'first_order_paid' }, false))
+  s.check('a count on a paid order pays', readyToCredit({ status: 'first_order_paid' }, true))
+  s.check('a count on an unpaid signup does not', !readyToCredit({ status: 'signed_up' }, true))
+  s.check('every state has a word an owner can read',
+    (['signed_up', 'first_order_paid', 'credited', 'void'] as ReferralStatus[]).every((st) => !!STATUS_WORD[st]?.trim()))
+
+  /* ── 3. the credit on the bill ───────────────────────────────────────── */
+  s.group('the credit comes off BEFORE the fee and the tax')
+  const plan = { items: [item('a', 400), item('b', 100), item('m', 99, 'monthly')] }
+  const bill = checkoutBill(plan)
+  s.eq('the plain bill is $500 of work and $50 of fee', [bill.subtotalCents, bill.serviceFeeCents, bill.preTaxCents], [50_000, 5_000, 55_000])
+  const credited = applyFriendCredit(bill, REFERRAL_CREDIT_CENTS)
+  s.eq('the credit is named on the bill', credited.friendCreditCents, 5_000)
+  s.eq('the fee is 10% of what is left, not of the full plan', credited.serviceFeeCents, feeCentsOn(45_000))
+  s.eq('the charge before tax is $450 of work plus $45 of fee', credited.preTaxCents, 49_500)
+  s.eq('the items subtotal is untouched, so a refund can still prorate', credited.subtotalCents, bill.subtotalCents)
+  s.eq('the monthly line is untouched: a credit is money off today', credited.perMonthCents, bill.perMonthCents)
+  s.eq('the tax is charged on what they actually pay', taxOn(credited.preTaxCents), taxOn(49_500))
+  s.check('the tax is LOWER than it would have been at full price', taxOn(credited.preTaxCents) < taxOn(bill.preTaxCents))
+  s.eq('the owner is $55 better off: the $50 plus the fee on it',
+    (bill.preTaxCents + taxOn(bill.preTaxCents)) - (credited.preTaxCents + taxOn(credited.preTaxCents)),
+    5_000 + Math.round(5_000 * SERVICE_FEE_RATE) + (taxOn(bill.preTaxCents) - taxOn(credited.preTaxCents)))
+  s.check('nobody pays a fee on money we gave them', credited.serviceFeeCents === bill.serviceFeeCents - 500)
+
+  s.group('the credit fails closed at every edge')
+  s.eq('no credit changes nothing at all', applyFriendCredit(bill, 0), bill)
+  s.eq('a negative credit changes nothing', applyFriendCredit(bill, -10_000), bill)
+  s.eq('garbage changes nothing', applyFriendCredit(bill, NaN), bill)
+  const small = checkoutBill({ items: [item('a', 30)] })
+  const overCredit = applyFriendCredit(small, REFERRAL_CREDIT_CENTS)
+  s.eq('a credit bigger than the order takes the bill to zero, never below', overCredit.preTaxCents, 0)
+  s.eq('and it only ever spends what the order was worth', overCredit.friendCreditCents, 3_000)
+  const monthlyOnly = checkoutBill({ items: [item('m', 99, 'monthly')] })
+  s.eq('a monthly-only cart has nothing to take a credit off', applyFriendCredit(monthlyOnly, 5_000), monthlyOnly)
+  s.eq('the amount is said the same way everywhere', creditWords(REFERRAL_CREDIT_CENTS), '$50')
+  s.eq('an odd amount still reads as money', creditWords(4_250), '$42.50')
+
+  /* ── 4. money that goes backwards ────────────────────────────────────── */
+  s.group('a refund never hands back a credit as cash')
+  // The order above, paid: $450 + $45 fee + 8% tax = $534.60 on the card, on $500 of items.
+  const paid = { totalCents: credited.preTaxCents + taxOn(credited.preTaxCents), subtotalCents: credited.subtotalCents, refundedCents: 0 }
+  s.eq('the card was charged $534.60, not $594', paid.totalCents, 53_460)
+  s.eq('nothing delivered → back comes what they PAID, not what the plan listed', refundOwedCents(paid, 0), 53_460)
+  s.check('the refund is smaller than the same order with no credit',
+    refundOwedCents(paid, 0) < refundOwedCents({ totalCents: bill.preTaxCents + taxOn(bill.preTaxCents), subtotalCents: bill.subtotalCents, refundedCents: 0 }, 0))
+  s.eq('everything delivered → nothing back', refundOwedCents(paid, 50_000), 0)
+  s.eq('half delivered → half of what they paid', refundOwedCents(paid, 25_000), 26_730)
+  s.check('a refund can never exceed the money that was really taken', refundOwedCents(paid, 0) <= paid.totalCents)
+
+  /* ── 5. the floors ──────────────────────────────────────────────────── */
+  s.group('two businesses run by one person are not a referral')
+  const A = 'client-a', B = 'client-b'
+  s.eq('you cannot refer yourself', referralBlock({ referrerClientId: A, referredClientId: A }), 'same business')
+  s.eq('no account, no referral', referralBlock({ referrerClientId: '', referredClientId: B }), 'missing account')
+  s.eq('one credit per referred business, ever',
+    referralBlock({ referrerClientId: A, referredClientId: B, alreadyReferred: true }), 'already referred')
+  s.eq('the same email is the same person',
+    referralBlock({ referrerClientId: A, referredClientId: B, referrerEmail: 'Ana@Taqueria.com', referredEmail: 'ana@taqueria.com' }), 'same email')
+  s.eq('the same business domain is the same business',
+    referralBlock({ referrerClientId: A, referredClientId: B, referrerEmail: 'ana@taqueria.com', referredEmail: 'luis@taqueria.com' }), 'same email domain')
+  s.eq('two owners on gmail are two owners',
+    referralBlock({ referrerClientId: A, referredClientId: B, referrerEmail: 'ana@gmail.com', referredEmail: 'luis@gmail.com' }), null)
+  s.eq('the same phone, written two ways, is one phone',
+    referralBlock({ referrerClientId: A, referredClientId: B, referrerPhone: '(503) 555-0134', referredPhone: '+1 503 555 0134' }), 'same phone')
+  s.eq('the same card account is one payer',
+    referralBlock({ referrerClientId: A, referredClientId: B, referrerStripeCustomerId: 'cus_123', referredStripeCustomerId: 'cus_123' }), 'same card account')
+  s.eq('two real strangers pass', referralBlock({
+    referrerClientId: A, referredClientId: B,
+    referrerEmail: 'ana@taqueria.com', referredEmail: 'luis@panaderia.com',
+    referrerPhone: '503-555-0134', referredPhone: '503-555-9911',
+    referrerStripeCustomerId: 'cus_1', referredStripeCustomerId: 'cus_2',
+  }), null)
+  s.eq('a missing phone is not a matching phone',
+    referralBlock({ referrerClientId: A, referredClientId: B, referrerPhone: '', referredPhone: '' }), null)
+  s.eq('a short number is not a phone match',
+    referralBlock({ referrerClientId: A, referredClientId: B, referrerPhone: '555', referredPhone: '555' }), null)
+  s.eq('a phone is its last ten digits', normalizePhone('+1 (503) 555-0134'), '5035550134')
+
+  /* ── 6. the switch ──────────────────────────────────────────────────── */
+  s.group('with the switch off, nothing about this product changes')
+  const before = process.env.REFERRALS_ENABLED
+  delete process.env.REFERRALS_ENABLED
+  s.check('unset is shut', !referralsEnabled())
+  process.env.REFERRALS_ENABLED = ''
+  s.check('empty is shut', !referralsEnabled())
+  process.env.REFERRALS_ENABLED = 'TRUE'
+  s.check('the wrong case is shut', !referralsEnabled())
+  process.env.REFERRALS_ENABLED = '1'
+  s.check('a one is shut', !referralsEnabled())
+  process.env.REFERRALS_ENABLED = 'yes'
+  s.check('a yes is shut', !referralsEnabled())
+  process.env.REFERRALS_ENABLED = 'true'
+  s.check('only the exact word opens it', referralsEnabled())
+  if (before === undefined) delete process.env.REFERRALS_ENABLED
+  else process.env.REFERRALS_ENABLED = before
+  // The switch off means claimFriendCredit answers null, and null through applyFriendCredit is the
+  // untouched bill — the same object the checkout has always built.
+  s.eq('a bill with no credit is the bill this product already charged', applyFriendCredit(bill, 0), checkoutBill(plan))
+  s.eq('and its total is unchanged to the cent', applyFriendCredit(bill, 0).preTaxCents, 55_000)
+
+  const ok = s.report('Tell a friend — codes, states, credit maths, refunds, floors, the switch')
+  process.exit(ok ? 0 : 1)
+}
+
+main()
