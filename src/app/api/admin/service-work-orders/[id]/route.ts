@@ -154,6 +154,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Tell the owner when their service is genuinely DONE (proof-backed delivered).
   // Service deliveries previously notified nobody — the same silent-stall class
   // the creator lane fixed. Best-effort, never blocks the write result.
+  // Things that went wrong AFTER the delivery landed. The order is delivered either way, but the
+  // admin must not be told "ok" when the money row behind it never got written.
+  const warnings: string[] = []
   if (update.status === 'delivered' && row.status !== 'delivered' && row.client_id) {
     // THE PROMISE, RE-ANCHORED: the count runs from the day the work landed, not the day it was
     // ordered, so a week of setup never sits inside the "after" window. Best-effort.
@@ -166,10 +169,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Before this, service work was invisible to the ledger — which is why a stopped prepaid
     // campaign could say "Nothing is owed" while the team had already done the work. Idempotent
     // and best-effort by contract; a failure here never un-delivers the order.
-    ;(async () => {
+    //
+    // AWAITED, not detached. A floating promise in a serverless handler can be killed at teardown,
+    // and this one decides whether the work is ever billable — a silently dropped accrual is work
+    // done for free that nobody finds out about. Same shape as the publish lane
+    // (src/lib/publish/attempt-publish.ts:383). A throw rides back on the response so the admin who
+    // marked it delivered sees it instead of only the log. (The function itself returns false for
+    // legitimate no-ops — monthly, DIY, unanchored — and dead-letters real insert failures to
+    // staff, so only a throw is news here.)
+    let chargeWarning: string | null = null
+    try {
       const { accrueChargeForDeliveredService } = await import('@/lib/campaigns/work-orders')
       await accrueChargeForDeliveredService(id)
-    })().catch((e) => console.warn('[service-wo] charge accrual failed', (e as Error)?.message))
+    } catch (e) {
+      chargeWarning = (e as Error)?.message ?? 'unknown error'
+      console.warn('[service-wo] charge accrual failed', chargeWarning)
+    }
+    if (chargeWarning) warnings.push(`The money row for this delivery was not written (${chargeWarning}). It will not appear on a bill or in a refund until it is.`)
 
     const { notifyClientOwners } = await import('@/lib/notifications')
     await notifyClientOwners(row.client_id as string, {
@@ -199,5 +215,5 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   if (row.campaign_id) revalidatePath(`/admin/campaign-orders/${row.campaign_id}`)
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, ...(warnings.length ? { warnings } : {}) })
 }
