@@ -170,6 +170,10 @@ function build(): Record<string, ShelfCard> {
        of unknowns. The base tier is the honest number to print before the owner has picked
        anything, so it prints as a FROM. The graphic keeps its own engine and stays a quote. */
     const base = priceCreativeRequest(t.id, {})
+    /* The desk's only monthly type: 'social' prices a month of posts, not a one-time piece.
+     * The price sheet marks it (CreativePrice.monthly); the name is a belt for older sheets.
+     * A monthly price carries no service fee, so its "what you get" line must not claim one. */
+    const monthly = t.id === 'social' || !!(base as { monthly?: boolean } | null)?.monthly
     const priceLabel = base ? `from ${fmtCents(base.totalCents)}` : 'Quote'
     /* ONE STORY PER CARD. These cards used to print a price AND say "2 days to a quote" AND
      * offer a button that said Ask, which is three different products on one card. A card with
@@ -177,12 +181,12 @@ function build(): Record<string, ShelfCard> {
      * names the tier that price buys, and the button says Order. Only the graphic has no price
      * sheet (the design engine owns it), so only the graphic stays a quote and keeps Ask. */
     out[id] = {
-      id, title: t.label, sub: (t as { blurb?: string }).blurb ?? '', price: priceLabel, priceN: base ? Math.round(base.totalCents / 100) : 0, cadence: 'One-time',
+      id, title: t.label, sub: (t as { blurb?: string }).blurb ?? '', price: priceLabel, priceN: base ? Math.round(base.totalCents / 100) : 0, cadence: monthly ? 'Monthly' : 'One-time',
       kind: 'quick', goal: cf.g, stage: 'Interest', you: 'Approve',
       ready: base ? 'Starts in 2 days' : '2 days to a quote',
       channels: cf.ch, plain: cf.plain,
       get: base
-        ? [`${base.lines[0].label} at ${fmtCents(base.totalCents)}, service fee inside`, 'Made by a designer or creator we know', 'Two rounds of changes', 'Pick a bigger one and we show the new price before you pay']
+        ? [monthly ? `${base.lines[0].label} at ${fmtCents(base.totalCents)}, one month at a time` : `${base.lines[0].label} at ${fmtCents(base.totalCents)}, service fee inside`, 'Made by a designer or creator we know', 'Two rounds of changes', 'Pick a bigger one and we show the new price before you pay']
         : ['A quote in two days, no charge to ask', 'Made by a designer or creator we know', 'Two rounds of changes'],
       syn: cf.syn,
       availability: avail, handoff: { kind: 'request', type: t.id },
