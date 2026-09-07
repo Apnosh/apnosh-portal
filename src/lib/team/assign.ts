@@ -37,12 +37,19 @@ export async function ensureClientStrategist(clientId: string): Promise<string |
       return null
     }
 
+    // A MACHINE PICK IS NOT AN INTRODUCTION. is_primary_contact=true is what makes this person
+    // the face on the owner's dashboard (get-primary-strategist.ts), and a profile with no
+    // full_name showed up there as an email address — the owner met "admin@apnosh.com". So the
+    // row is still written and still owns the work; it only claims the primary-contact seat when
+    // there is a real name to put in it. A human naming a primary contact on the team page is
+    // unaffected: this only ever writes false, never takes the flag away.
+    const named = await hasRealName(admin, personId)
     const row: Record<string, unknown> = {
       person_id: personId,
       client_id: clientId,
       role: 'strategist',
       scope: 'client',
-      is_primary_contact: true,
+      is_primary_contact: named,
       assigned_at: new Date().toISOString(),
       notes: 'Assigned automatically at onboarding so every order has a name on it.',
     }
@@ -80,6 +87,12 @@ export async function ensureClientStrategist(clientId: string): Promise<string |
     console.warn('[team] ensureClientStrategist threw:', (e as Error)?.message)
     return null
   }
+}
+
+/** Does this person have a name an owner could be introduced by? Nothing here guesses one. */
+async function hasRealName(admin: Admin, personId: string): Promise<boolean> {
+  const { data } = await admin.from('profiles').select('full_name').eq('id', personId).maybeSingle()
+  return Boolean((data as { full_name?: string | null } | null)?.full_name?.trim())
 }
 
 /**

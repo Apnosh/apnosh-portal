@@ -181,7 +181,9 @@ export async function getOrderPeople(clientId: string): Promise<OrderPeople> {
     const subject = THREAD_SUBJECT[role]
     return {
       id,
-      name: (p?.full_name || p?.email || 'Your Apnosh team') as string,
+      // Never the email address. A profile with no full_name showed the owner
+      // "admin@apnosh.com" as the person on their work; the team name is the honest answer.
+      name: (p?.full_name || 'Your Apnosh team') as string,
       avatarUrl: p?.avatar_url ?? null,
       role,
       orders: orders.get(id) ?? [],
