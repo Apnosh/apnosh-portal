@@ -17,7 +17,7 @@ import 'server-only'
  */
 import { createAdminClient } from '@/lib/supabase/admin'
 import { referralsEnabled } from '@/lib/referral-gate'
-import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
+import { SETTLED_STATUSES } from '@/lib/campaigns/refund-math'
 import { getPromiseRows } from '@/lib/promises/read'
 import { notifyClientOwners } from '@/lib/notifications'
 import { newnessFor } from './server'
@@ -63,7 +63,10 @@ async function firstPaidOrder(clientId: string, afterIso: string) {
     .from('campaign_payments')
     .select('id, status, campaign_id, created_at, paid_at')
     .eq('client_id', clientId)
-    .in('status', COLLECTED_STATUSES)
+    // SETTLED, not COLLECTED. A disputed charge is money the bank is holding while it decides,
+    // and paying a referrer $50 off it is giving away real money on a charge that may be about to
+    // go back. The dispute is settled or it is not; either way the count is not in yet.
+    .in('status', SETTLED_STATUSES)
     .gt('paid_at', afterIso)
     .order('paid_at', { ascending: true })
     .limit(1)
@@ -78,12 +81,28 @@ function paidAfter(order: Order | null, afterIso: string): boolean {
   return Number.isFinite(paid) && Number.isFinite(made) && paid > made
 }
 
-/** Was the order behind this referral sent back in full? Then nothing is owed to anybody. */
-async function refundedInFull(paymentId: string): Promise<boolean> {
+/**
+ * Where the money behind this referral stands.
+ *
+ *   'here'  — settled, ours, and a payout may be built on it
+ *   'held'  — DISPUTED. The bank is holding it while it decides. Not a refund, so the referral is
+ *             not voided; not money either, so nothing is paid out of it. It waits for tomorrow's
+ *             run, which is exactly what a dispute is: not decided yet.
+ *   'gone'  — sent back in full. Nothing is owed to anybody, and the referral is voided.
+ *
+ * An unreadable row answers 'held': it stops the payout and voids nothing, which is the reversible
+ * mistake.
+ */
+type MoneyState = 'here' | 'held' | 'gone'
+
+async function moneyState(paymentId: string): Promise<MoneyState> {
   try {
-    const { data } = await createAdminClient().from('campaign_payments').select('status').eq('id', paymentId).maybeSingle()
-    return data?.status === 'refunded'
-  } catch { return false }
+    const { data, error } = await createAdminClient().from('campaign_payments').select('status').eq('id', paymentId).maybeSingle()
+    if (error || !data) return 'held'
+    if (data.status === 'refunded') return 'gone'
+    if (data.status === 'disputed') return 'held'
+    return 'here'
+  } catch { return 'held' }
 }
 
 /**
@@ -175,9 +194,11 @@ export async function runReferralPayouts(opts: { dryRun?: boolean; limit?: numbe
         }
       }
 
-      // The refund check comes BEFORE the count check, always: money that went back cannot make
-      // a payout, however good the number looks.
-      if (await refundedInFull(order.id)) {
+      // The money check comes BEFORE the count check, always: money that went back — or that the
+      // bank is holding — cannot make a payout, however good the number looks.
+      const money = await moneyState(order.id)
+      if (money === 'held') continue           // disputed: decide nothing today, void nothing
+      if (money === 'gone') {
         if (!opts.dryRun && await voidReferral(r.id, 'the order was refunded in full')) voided += 1
         else if (opts.dryRun) voided += 1
         continue
