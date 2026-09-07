@@ -127,6 +127,22 @@ export function deskPaymentDue(row: DeskAcceptRow): boolean {
 export const DESK_NEEDS_PAYMENT = 'DESK_NEEDS_PAYMENT'
 
 /**
+ * The owner said yes to a PERSON'S quote. Does that yes go to the till, or straight to work?
+ *
+ * To the till, whenever the quote asks for money. This lane was the last free work left in the
+ * desk: the yes minted a work order on the spot and the money was "on delivery", which is a
+ * promise with nobody holding it and no row anywhere that says it is owed. One yes, one card,
+ * the same desk checkout the owner's own orders use.
+ *
+ * A quote of ZERO still mints on the yes, because there is nothing to pay: a fix we owe, a piece
+ * we are comping. That is the one place the desk gives work away, and it is a decision a person
+ * made when they wrote the quote, not a hole in the till.
+ */
+export function acceptGoesToTill(quoteCents: number | null | undefined): boolean {
+  return typeof quoteCents === 'number' && Number.isFinite(quoteCents) && quoteCents > 0
+}
+
+/**
  * May the owner still cancel this order themselves?
  *
  * ONLY BEFORE IT LANDS. Once the work is delivered the thing exists — somebody made it — and

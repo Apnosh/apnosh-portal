@@ -21,7 +21,7 @@ import {
 } from '@/lib/requests/catalog'
 import CreativeFlow from '@/components/requests/creative-flow'
 import DeskCheckout from '@/components/requests/desk-checkout'
-import { deskCancelable } from '@/lib/requests/desk-guards'
+import { acceptGoesToTill, deskCancelable } from '@/lib/requests/desk-guards'
 import { useClient } from '@/lib/client-context'
 
 interface RequestNote {
@@ -130,6 +130,15 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
         return
       }
       if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'That did not go through. Try again.')
+      /* The yes landed and the quote has a price on it: the order is now waiting for the card, so
+       * the till opens on the same tap. One yes, one card, no second trip back to this list. */
+      if (kind === 'accept' && d.needsPayment) {
+        const row = mine.find((m) => m.id === id)
+        await loadMine()
+        setPayFor({ id, label: requestTypeById(row?.type ?? '')?.label ?? 'Order' })
+        setBusy(null)
+        return
+      }
       if (kind === 'note') setReply('')
       await loadMine()
     } catch (e) {
@@ -257,9 +266,15 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                         {r.team_note}
                       </div>
                     )}
-                    {/* the yes: a PERSON'S quote goes to work on one tap, and the work is
-                        reviewed before anything is billed — which is true of this lane only. */}
-                    {r.status === 'quoted' && (
+                    {/* THE YES. A quote with a price goes to the same till everything else does:
+                        the button says so, and the card opens on this tap. It used to promise
+                        "you review the finished work before paying", which was the desk's last
+                        free-work lane, with no invoice behind the promise. A $0 quote is the one
+                        yes that still starts work on its own, and it says that instead. */}
+                    {r.status === 'quoted' && (() => {
+                      const pays = acceptGoesToTill(r.quote_cents)
+                      const amount = pays ? `$${((r.quote_cents ?? 0) / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : null
+                      return (
                       <div style={{ marginTop: 10 }}>
                         <button
                           type="button"
@@ -272,13 +287,14 @@ export default function RequestFlow({ menu = [] }: { menu?: { id: string; name: 
                             boxShadow: busy === r.id ? 'none' : '0 8px 20px rgba(46,154,120,0.3)',
                           }}
                         >
-                          {busy === r.id ? 'Starting...' : 'Say yes — start the work'}
+                          {busy === r.id ? 'Starting...' : pays ? `Say yes and pay ${amount}` : 'Say yes, start the work'}
                         </button>
                         <div style={{ fontFamily: DESK.body, fontSize: 11.5, color: DESK.mute, marginTop: 6, textAlign: 'center', lineHeight: 1.45 }}>
-                          You review the finished work before paying.
+                          {pays ? 'Your card opens next. Your team starts the same day it clears.' : 'Nothing to pay on this one. Your team starts today.'}
                         </div>
                       </div>
-                    )}
+                      )
+                    })()}
                     {/* an order the OWNER placed: the till priced it, so the card is what starts
                         it. No "you review before paying" here — that would be the old lie. */}
                     {r.status === 'awaiting_payment' && (

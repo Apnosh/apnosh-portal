@@ -15,7 +15,7 @@ import { feeCentsOn, SERVICE_FEE_RATE, monthlyPhrase, fmtMoney } from '@/lib/cam
 import { priceCreativeRequest, fmtTotal, type CreativePrice } from '@/lib/requests/pricing'
 import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
 import { refundOwedCents, refundStatus, COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
-import { deskPaymentMatchesOrder, paymentMatchesLane, deskPaymentDue, deskCancelable, AWAITING_PAYMENT, DESK_INTENT_KINDS, CAMPAIGN_INTENT_KINDS } from '@/lib/requests/desk-guards'
+import { deskPaymentMatchesOrder, paymentMatchesLane, deskPaymentDue, deskCancelable, acceptGoesToTill, AWAITING_PAYMENT, DESK_INTENT_KINDS, CAMPAIGN_INTENT_KINDS } from '@/lib/requests/desk-guards'
 import { ADMIN_SETTABLE_STATUSES, REQUEST_STATUSES, STATUS_LABEL, STATUS_OWNER_LINE, type RequestStatus } from '@/lib/requests/catalog'
 import { workStarted, billNoticeDue, billNoticeLines } from '@/lib/campaigns/work-orders-core'
 import { DESIGN_LINES } from '@/lib/design/design-copy'
@@ -169,6 +169,17 @@ function main() {
   s.check('a paid one is never asked twice, whatever its status says', !deskPaymentDue({ status: 'quoted', unpaidTillRow: true, paidAt: '2026-09-07T10:00:00Z' }))
   s.check('a plain request owes nothing', !deskPaymentDue({ status: 'requested' }))
   s.check('and neither does work already under way', !deskPaymentDue({ status: 'in_progress' }))
+
+  // Move 5b: the staff quote was the LAST free work in the desk. A yes to a priced quote now goes
+  // to the same till, and only a $0 quote still mints on the yes.
+  s.check('saying yes to a priced quote goes to the till', acceptGoesToTill(48000))
+  s.check('a one-cent quote is still money', acceptGoesToTill(1))
+  s.check('a $0 quote mints on the yes (there is nothing to pay)', !acceptGoesToTill(0))
+  s.check('a quote with no number yet mints nothing through the till', !acceptGoesToTill(null))
+  s.check('an undefined quote is not a price', !acceptGoesToTill(undefined))
+  s.check('a broken number is not a price', !acceptGoesToTill(Number.NaN))
+  s.check('and once it is at the till it owes money like every other order',
+    deskPaymentDue({ status: AWAITING_PAYMENT }))
   s.eq('the till writes one status and the screen keys on it', AWAITING_PAYMENT, 'awaiting_payment')
   s.check('a person may set every status EXCEPT the till\'s own', !ADMIN_SETTABLE_STATUSES.includes(AWAITING_PAYMENT as RequestStatus))
   s.eq('every other status stays settable by hand', ADMIN_SETTABLE_STATUSES.length, REQUEST_STATUSES.length - 1)
