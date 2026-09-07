@@ -13,7 +13,8 @@
 import {
   CODE_CHARSET, CODE_BANNED, CODE_LENGTH, makeCode, normalizeCode, isCodeShape, referralLink,
   REFERRAL_CREDIT_CENTS, creditWords, nextStatus, readyToCredit, referralBlock, normalizePhone,
-  STATUS_WORD, type ReferralStatus, type ReferralEvent,
+  creditAvailableCents, liveHoldCents, CREDIT_HOLD_MS, STATUS_WORD,
+  type ReferralStatus, type ReferralEvent, type CreditRowState,
 } from '@/lib/referrals/model'
 import { checkoutBill, applyFriendCredit, feeCentsOn, preTaxFromRow, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
 import { refundOwedCents } from '@/lib/campaigns/refund-math'
@@ -145,6 +146,52 @@ function main() {
     preTaxFromRow({ subtotal_cents: NaN as unknown as number, service_fee_cents: 5_000 }), 5_000)
   s.eq('the setup-only row (nothing today) stays nothing',
     preTaxFromRow({ subtotal_cents: 0, service_fee_cents: 0, tax_cents: 0, total_cents: 0 }), 0)
+
+
+  /* ── 3c. one credit, spent once ──────────────────────────────────────── */
+  s.group('a $50 credit is $50, however many checkouts it is carried through')
+  const T0 = Date.UTC(2026, 8, 7, 9, 0, 0)
+  const hour = 60 * 60 * 1000
+  /** The credit row as the checkout reads it, with everything else defaulted to "nothing yet". */
+  const credit = (o: Partial<CreditRowState> = {}): CreditRowState => ({
+    cents: REFERRAL_CREDIT_CENTS, settledCents: 0, heldCents: 0, hold: 'dropped',
+    heldAtMs: null, nowMs: T0, ...o,
+  })
+  s.eq('a fresh credit is all there', creditAvailableCents(credit()), 5_000)
+
+  // THE SEQUENCE FROM THE REVIEW, step by step. pi1 holds it, pi2 tries, pi1 is then paid, pi3
+  // tries. Only ONE of the three may ever take money off a bill.
+  const heldByPi1 = credit({ heldCents: 5_000, hold: 'waiting', heldAtMs: T0 })
+  s.eq('pi1 holds it, so pi2 in the next tab gets nothing',
+    creditAvailableCents({ ...heldByPi1, nowMs: T0 + hour }), 0)
+  s.eq('a day later the abandoned hold expires and pi2 may have it',
+    creditAvailableCents({ ...heldByPi1, nowMs: T0 + CREDIT_HOLD_MS + 1 }), 5_000)
+  // pi1 is paid after all. The ledger now carries the spend, and the hold moved to pi2.
+  const afterPi1Paid = credit({ settledCents: 5_000, heldCents: 5_000, hold: 'waiting', heldAtMs: T0 + CREDIT_HOLD_MS + 1, nowMs: T0 + CREDIT_HOLD_MS + 2 * hour })
+  s.eq('once pi1 is paid there is nothing left for pi3', creditAvailableCents(afterPi1Paid), 0)
+  s.eq('and nothing left even after pi2 is dropped too',
+    creditAvailableCents({ ...afterPi1Paid, hold: 'dropped', heldCents: 0 }), 0)
+  s.eq('two collected orders somehow naming one credit still leaves nothing',
+    creditAvailableCents(credit({ settledCents: 10_000 })), 0)
+  s.eq('and a fourth checkout after all of it still gets nothing',
+    creditAvailableCents(credit({ settledCents: 5_000, nowMs: T0 + 30 * 24 * hour })), 0)
+
+  s.group('a hold is not a spend')
+  s.eq('the checkout that collected is counted in the ledger, not twice as a hold',
+    liveHoldCents(credit({ heldCents: 5_000, hold: 'collected', heldAtMs: T0 })), 0)
+  s.eq('a cancelled checkout holds nothing',
+    liveHoldCents(credit({ heldCents: 5_000, hold: 'dropped', heldAtMs: T0 })), 0)
+  s.eq('an open checkout holds every cent it took',
+    liveHoldCents(credit({ heldCents: 5_000, hold: 'waiting', heldAtMs: T0, nowMs: T0 + hour })), 5_000)
+  s.eq('a hold with no time on it is treated as fresh, never as free money',
+    liveHoldCents(credit({ heldCents: 5_000, hold: 'waiting', heldAtMs: null })), 5_000)
+  s.eq('exactly a day old is expired', liveHoldCents(credit({ heldCents: 5_000, hold: 'waiting', heldAtMs: T0, nowMs: T0 + CREDIT_HOLD_MS })), 0)
+  s.eq('a minute short of a day is not', liveHoldCents(credit({ heldCents: 5_000, hold: 'waiting', heldAtMs: T0, nowMs: T0 + CREDIT_HOLD_MS - 60_000 })), 5_000)
+  s.eq('a day is the number', CREDIT_HOLD_MS, 24 * 60 * 60 * 1000)
+  s.eq('a partly spent credit gives back what is left', creditAvailableCents(credit({ settledCents: 2_000 })), 3_000)
+  s.check('a credit can never be worth more than it says', creditAvailableCents(credit({ settledCents: -9_999 })) <= 5_000)
+  s.eq('a refunded order gives the credit back: it is not in the ledger and it holds nothing',
+    creditAvailableCents(credit({ settledCents: 0, heldCents: 5_000, hold: 'dropped' })), 5_000)
 
   /* ── 4. money that goes backwards ────────────────────────────────────── */
   s.group('a refund never hands back a credit as cash')

@@ -182,7 +182,8 @@ export async function POST(req: NextRequest) {
   // spends a credit. claimFriendCredit returns null whenever REFERRALS_ENABLED is off or migration
   // 261 has not run, and applyFriendCredit is a no-op on null — so with the switch off every line
   // below is byte-for-byte the order this route has always placed.
-  const claim = await claimFriendCredit(clientId, `hold:${randomUUID()}`, bill.subtotalCents)
+  const holdKey = `hold:${randomUUID()}`
+  const claim = await claimFriendCredit(clientId, holdKey, bill.subtotalCents)
   const billed = claim ? applyFriendCredit(bill, claim.cents) : bill
   // The row this checkout is about to be saved as. The amount the card is charged is read back OUT
   // of it with preTaxFromRow — the same function the tax route uses when the owner enters an
@@ -193,6 +194,10 @@ export async function POST(req: NextRequest) {
     friend_credit_cents: claim ? claim.cents : 0,
   }
   const preTaxCents = preTaxFromRow(storedBill)
+  // The key the credit is actually held under. It starts as the hold and becomes the PaymentIntent
+  // id once Stripe answers; a release must name the key that is really on the row, or a failed
+  // checkout would hand back a credit some other checkout has since taken.
+  let creditIntentKey = holdKey
 
   try {
     const tax = await computeTaxCents({ preTaxCents, customerId: cust.customerId })
@@ -219,7 +224,7 @@ export async function POST(req: NextRequest) {
 
     // The credit now belongs to a real checkout. Before this stamp it is held against nothing,
     // which is what lets an abandoned attempt hand the money back.
-    if (claim) await stampCreditIntent(claim.creditId, pi.id)
+    if (claim && await stampCreditIntent(claim.creditId, holdKey, pi.id)) creditIntentKey = pi.id
 
     const { error: insErr } = await paymentsTable().insert({
       client_id: clientId,
@@ -242,7 +247,7 @@ export async function POST(req: NextRequest) {
     // PaymentIntent with no matching row — cancel it and surface a clear error.
     if (insErr) {
       await stripe.paymentIntents.cancel(pi.id).catch(() => {})
-      if (claim) await releaseFriendCredit(claim.creditId)
+      if (claim) await releaseFriendCredit(claim.creditId, creditIntentKey)
       return NextResponse.json({ error: 'Checkout is not set up yet (payments table missing). Apply migration 215 and try again.' }, { status: 500 })
     }
 
@@ -270,7 +275,7 @@ export async function POST(req: NextRequest) {
     })
   } catch (e) {
     // The charge never started, so the credit was never spent. Hand it back.
-    if (claim) await releaseFriendCredit(claim.creditId)
+    if (claim) await releaseFriendCredit(claim.creditId, creditIntentKey)
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })
   }
 }

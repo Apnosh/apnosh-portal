@@ -187,3 +187,72 @@ export const STATUS_WORD: Record<ReferralStatus, string> = {
   credited: 'You got your credit',
   void: 'Closed',
 }
+
+/* ── What is LEFT of a credit ────────────────────────────────────────────────
+   The one place that decides how much of a $50 credit a checkout may take, so the checkout, the
+   owner's balance and the sim all read the same arithmetic. */
+
+/**
+ * How long a checkout may sit on a credit before the money goes back.
+ *
+ * A hold is not a spend. An owner who opens checkout and closes the tab has not bought anything,
+ * and their $50 must come back to them — but not INSTANTLY, or two tabs open at the same counter
+ * would each be handed the same $50 and only one of them would be paid for. A day is long enough
+ * that no honest checkout is still open, and short enough that nobody notices their credit gone.
+ */
+export const CREDIT_HOLD_MS = 24 * 60 * 60 * 1000
+
+/** What became of the checkout a credit is held against. */
+export type HoldState =
+  /** it took money. Those cents are SPENT, and the payments ledger is what says so. */
+  | 'collected'
+  /** it is still open (a pending intent, or one so new it has no ledger row yet). */
+  | 'waiting'
+  /** nothing holds it: no intent, or one that was cancelled, failed, or sent back in full. */
+  | 'dropped'
+
+export interface CreditRowState {
+  /** the credit's face value, in cents (client_credits.cents) */
+  cents: number
+  /**
+   * What this credit has REALLY paid for: the sum of friend_credit_cents across every collected
+   * payment that names it. The ledger, never the credit row's own consumed_cents — that field is
+   * a cache, and the whole bug was trusting it.
+   */
+  settledCents: number
+  /** the cents the current hold is for (client_credits.held_cents) */
+  heldCents: number
+  /** what the checkout holding those cents turned into */
+  hold: HoldState
+  /** when the hold was taken (client_credits.consumed_at), in ms, or null for no hold */
+  heldAtMs: number | null
+  /** now, in ms. Passed in so this function has no clock of its own and the sim can move time. */
+  nowMs: number
+}
+
+/**
+ * The cents a live hold is sitting on. Zero once the hold is older than a day, or once the
+ * checkout behind it ended one way or the other — collected cents are counted in settledCents
+ * instead, and a dropped checkout never spent anything.
+ *
+ * A hold with no timestamp fails CLOSED (treated as fresh): losing an owner a credit for a day is
+ * the small mistake; handing the same $50 to two checkouts is the big one.
+ */
+export function liveHoldCents(r: CreditRowState): number {
+  if (r.hold !== 'waiting') return 0
+  const held = Math.max(0, Math.round(r.heldCents || 0))
+  if (held <= 0) return 0
+  const age = r.heldAtMs == null ? 0 : r.nowMs - r.heldAtMs
+  return age >= CREDIT_HOLD_MS ? 0 : held
+}
+
+/**
+ * What a checkout may take off a bill right now: the face value, minus what has really been
+ * spent, minus whatever a live hold is sitting on. Never below zero and never above the face
+ * value, so a ledger that somehow double-counted cannot hand money back.
+ */
+export function creditAvailableCents(r: CreditRowState): number {
+  const cents = Math.max(0, Math.round(r.cents || 0))
+  const settled = Math.max(0, Math.round(r.settledCents || 0))
+  return Math.min(cents, Math.max(0, cents - settled - liveHoldCents(r)))
+}

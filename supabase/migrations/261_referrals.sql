@@ -130,6 +130,13 @@ alter table public.campaign_payments add column if not exists client_credit_id u
 comment on column public.campaign_payments.friend_credit_cents is
   'The friend credit taken off this bill BEFORE the service fee and the tax. 0 on every order that had none.';
 
+-- THE LEDGER IS WHAT SAYS A CREDIT IS SPENT. claimFriendCredit adds up friend_credit_cents across
+-- the COLLECTED payments that name a credit, rather than trusting the credit row's own cache, so
+-- an owner cannot hold a credit on one checkout, abandon it, spend it on a second and then go back
+-- and pay the first. This index is the read behind that sum.
+create index if not exists idx_campaign_payments_credit
+  on public.campaign_payments (client_credit_id) where client_credit_id is not null;
+
 -- ── 6. RLS: an owner sees their own rows and nothing else ────────────────────
 -- Every write in the product goes through the service-role client, which bypasses RLS. These
 -- policies exist so that a signed-in owner reading the tables directly (or a bug in a future
