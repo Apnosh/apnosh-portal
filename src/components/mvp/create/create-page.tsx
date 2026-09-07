@@ -597,7 +597,7 @@ export default function CreatePage() {
     // says when it is ready. "Fee inside" is true: chargedPriceLabel folds the service fee in.
     const monthly = c.price.includes('/mo') && !c.price.includes('+')
     const priceSub = monthly ? T('monthly, cancel any time') : c.price === 'Quote' ? c.ready : `${c.ready} · ${T('fee inside')}`
-    const lanes = lanesFor(c.id)
+    const lanes = lanesFor(c.id, client?.tier === 'Pro')
     const count = renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T)
     // The glyph and the Order button take the card's goal colour, or mint, per the switch above.
     const chrome: HueKey = SHELF_CHROME_MINT ? 'mint' : c.goal

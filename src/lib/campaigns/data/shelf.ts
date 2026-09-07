@@ -221,9 +221,14 @@ export interface ShelfLane { kind: 'diy' | 'ai' | 'team'; price: string; what: s
  * Read off the setup-card engine, never written here: the labels are the lane's own `label` and
  * the prices come from the lane's price, its Pro flag, or (for done-for-you) the card's charged
  * price. A card with no lanes returns nothing, so the ladder appears only where three real
- * choices exist. 'Free' and 'In Pro' are words, not numbers, because that is what they are.
+ * choices exist. 'Free', 'In Pro' and 'Included' are words, not numbers, because that is what
+ * they are.
+ *
+ * `isPro` is clients.tier === 'Pro'. "In Pro" is an offer to join, so on a client who already
+ * IS Pro it read as an upsell for something they had already bought; for them the lane says
+ * Included, which is what it is. Defaults to false, the state of nearly every client.
  */
-export function lanesFor(id: string): ShelfLane[] {
+export function lanesFor(id: string, isPro = false): ShelfLane[] {
   const card = SETUP_CARDS.find((c) => c.id === id)
   if (!card) return []
   const shelf = shelfCards()[id]
@@ -233,7 +238,7 @@ export function lanesFor(id: string): ShelfLane[] {
     if (!lane) continue
     const price = lane.price
       ? `$${lane.price.amount.toLocaleString()}${lane.price.kind === 'monthly' ? '/mo' : ''}`
-      : lane.proOnly ? 'In Pro'
+      : lane.proOnly ? (isPro ? 'Included' : 'In Pro')
         : kind === 'team' ? (shelf?.price ?? 'Quote')
           : 'Free'
     out.push({ kind, price, what: lane.label })

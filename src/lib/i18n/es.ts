@@ -360,6 +360,7 @@ export const ES: Record<string, string> = {
   'monthly, cancel any time': 'al mes, cancelas cuando quieras',
   'Free': 'Gratis',
   'In Pro': 'Con Pro',
+  'Included': 'Incluido',
   'Start': 'Empezar',
   'Ask': 'Preguntar',
   'Quote': 'Cotización',
