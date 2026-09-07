@@ -1,9 +1,24 @@
 /**
  * Stripe webhook -- Apnosh billing v2.
  *
- * Handles the 11 events the spec requires plus 2 legacy events
+ * Handles the 14 events the spec requires plus 2 legacy events
  * (checkout.session.completed, invoice.payment_succeeded) needed by the
  * existing /dashboard/orders self-serve flow.
+ *
+ * REQUIRED EVENTS ON THE STRIPE ENDPOINT. Three of these are money going BACKWARDS, and if the
+ * endpoint is not subscribed to them nothing here ever runs: the campaign keeps its 'paid' row, the
+ * work keeps minting, the subscription keeps billing, and nobody is told. Add all three in the
+ * Stripe dashboard (Developers -> Webhooks -> this endpoint -> Select events):
+ *
+ *   charge.refunded         a refund, ours or one taken by hand in the dashboard
+ *   charge.dispute.created  a chargeback opened
+ *   charge.dispute.closed   the bank decided (won -> restore the status; lost -> settle as a
+ *                           full refund, without calling Stripe refunds)
+ *
+ * The rest: customer.subscription.created/updated/deleted, invoice.created, invoice.finalized,
+ * invoice.paid, invoice.payment_failed, invoice.voided, invoice.marked_uncollectible,
+ * customer.updated, payment_method.attached, payment_intent.succeeded,
+ * payment_intent.payment_failed, payment_intent.processing.
  *
  * Every event is:
  *   1. Verified via STRIPE_WEBHOOK_SECRET
