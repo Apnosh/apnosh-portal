@@ -40,7 +40,17 @@ function fmt(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 }
 
-interface Breakdown { subtotalCents: number; serviceFeeCents: number; taxCents: number; totalCents: number }
+interface Breakdown {
+  subtotalCents: number; serviceFeeCents: number; taxCents: number; totalCents: number
+  /** A friend credit already taken off this bill, in cents (Move 8). Absent on every bill without
+   *  one, so a receipt with no credit prints exactly the lines it always has. */
+  friendCreditCents?: number
+}
+
+/** "$50" for the credit sentences, so the line and the receipt row cannot say different numbers. */
+function creditLine(cents?: number): string | null {
+  return cents && cents > 0 ? fmt(cents) : null
+}
 interface SavedCard { brand: string; last4: string }
 interface PrepareResult {
   free?: boolean
@@ -282,7 +292,11 @@ function BillCard({ b, monthlyCents, monthlyTaxCents, taxPending, costNotes, set
   return (
     <ReceiptFrame style={{ marginBottom: 16 }}>
       <ReceiptRow label="Subtotal" amount={fmt(b.subtotalCents)} />
-      <ReceiptRow label="Service fee (10%)" amount={fmt(b.serviceFeeCents)} />
+      {/* THE FRIEND CREDIT (Move 8), where it really sits: off the subtotal, above the fee and the
+          tax, because that is the order the server charged it in. Without this row the receipt
+          added up to a bigger number than the card was charged and nothing said why. */}
+      {creditLine(b.friendCreditCents) && <ReceiptRow label="Friend credit" amount={`−${creditLine(b.friendCreditCents)}`} you />}
+      <ReceiptRow label={creditLine(b.friendCreditCents) ? 'Service fee (10% after credit)' : 'Service fee (10%)'} amount={fmt(b.serviceFeeCents)} />
       <ReceiptRow label="Tax" amount={taxPending ? 'Enter address' : fmt(b.taxCents)} muted={taxPending} />
       {monthlyCents > 0 && <ReceiptRow label="Monthly services" amount={`${fmt(monthlyCents)}/mo`} muted />}
       {monthlyCents > 0 && <ReceiptRow label="Tax on monthly" amount={monthlyTaxCents == null ? 'Added on your bill' : fmt(monthlyTaxCents)} muted />}
@@ -862,7 +876,7 @@ function PayForm({ clientId, draft, desk, restaurant, producerChoices, initialGa
         >
           {busy ? (status ?? 'Working…') : gateBlocking ? (blockReason ?? 'Complete the steps above') : setupOnly ? `Place order · ${monthlyPhrase(monthlyCents, monthlyTaxCents)}` : `Place order · ${fmt(bill.totalCents)}`}
         </button>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>{setupOnly ? 'Your monthly services bill to this card starting today. Your campaign starts right after.' : (() => { const t = draft.targetDate ? String(draft.targetDate).slice(0, 10) : null; const wk = new Date(); wk.setUTCDate(wk.getUTCDate() + 7); return t && t > wk.toISOString().slice(0, 10) ? `Your card is charged now. Work is scheduled back from ${new Date(`${t}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}; nothing posts before then.` : 'Your card is charged now. Your campaign starts right after.' })()}</div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>{setupOnly ? 'Your monthly services bill to this card starting today. Your campaign starts right after.' : (() => { const t = draft.targetDate ? String(draft.targetDate).slice(0, 10) : null; const wk = new Date(); wk.setUTCDate(wk.getUTCDate() + 7); const credit = creditLine(bill.friendCreditCents); const charge = credit ? `${fmt(bill.totalCents)} today, with your ${credit} friend credit already off.` : 'Your card is charged now.'; return t && t > wk.toISOString().slice(0, 10) ? `${charge} Work is scheduled back from ${new Date(`${t}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}; nothing posts before then.` : `${charge} Your campaign starts right after.` })()}</div>
       </div>
     </>
   )
@@ -1079,7 +1093,8 @@ export function Confirmation({ restaurant, draft, deskLabel, breakdown, monthlyT
           ) : (
             <>
               <ReceiptRow label="Subtotal" amount={fmt(breakdown.subtotalCents)} />
-              {breakdown.serviceFeeCents > 0 && <ReceiptRow label="Service fee (10%)" amount={fmt(breakdown.serviceFeeCents)} />}
+              {creditLine(breakdown.friendCreditCents) && <ReceiptRow label="Friend credit" amount={`−${creditLine(breakdown.friendCreditCents)}`} you />}
+              {breakdown.serviceFeeCents > 0 && <ReceiptRow label={creditLine(breakdown.friendCreditCents) ? 'Service fee (10% after credit)' : 'Service fee (10%)'} amount={fmt(breakdown.serviceFeeCents)} />}
               {breakdown.taxCents > 0 && <ReceiptRow label="Tax" amount={fmt(breakdown.taxCents)} />}
               <ReceiptRule />
               <ReceiptTotal label="Paid today" big={fmt(breakdown.totalCents)} small={monthlyCents > 0 ? `then ${monthlyPhrase(monthlyCents, monthlyTaxCents)}` : undefined} />
