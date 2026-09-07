@@ -546,11 +546,11 @@ export async function completeOnboardingCRM(
   //     them. Best-effort: before the migration runs, the column is missing and the product
   //     keeps working on the storefront default.
   try {
-    const { inferClientShape, isClientShape } = await import('@/lib/clients/shape')
+    const { inferShelfShape, isShelfShape } = await import('@/lib/clients/shape')
     const picked = data.shape
-    const shapeValue = isClientShape(picked)
+    const shapeValue = isShelfShape(picked)
       ? picked
-      : inferClientShape({
+      : inferShelfShape({
           service_styles: (data.service_styles as string[]) || null,
           location_count: (data.location_count as string) || null,
           locations: (data.locations as unknown[]) || null,

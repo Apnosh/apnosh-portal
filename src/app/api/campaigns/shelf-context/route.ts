@@ -18,7 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { getClientShape, DEFAULT_SHAPE } from '@/lib/clients/shape'
+import { getClientShelfShape, DEFAULT_SHAPE } from '@/lib/clients/shape'
 import { hasGoogle } from '@/lib/promises/metrics'
 import { chipForGoalSlug } from '@/lib/goals/defaults'
 
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
   const [goalRows, bizRow, shape, google] = await Promise.allSettled([
     admin.from('client_goals').select('goal_slug, priority').eq('client_id', clientId).eq('status', 'active').order('priority'),
     admin.from('businesses').select('monthly_budget').eq('client_id', clientId).limit(1),
-    getClientShape(clientId),
+    getClientShelfShape(clientId),
     hasGoogle(clientId),
   ])
 

@@ -28,7 +28,7 @@ import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from 
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
-import { SHAPE_LABEL, DEFAULT_SHAPE, type ClientShape } from '@/lib/clients/shape'
+import { SHAPE_LABEL, DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
 
 const C = { ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', fill: '#f5f5f7', mint: '#4abd98', mintDk: '#2e9a78', mintSoft: '#eaf7f3', amberInk: '#8a5a0c', amberBg: '#fbf3e4' }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
@@ -227,7 +227,7 @@ type View = { name: 'browse' } | { name: 'search' } | { name: 'guide' } | { name
 interface Signals { views30d?: number; actions30d?: { directions: number; calls: number; websiteClicks: number }; rating?: number; ratingCount?: number; unrepliedReviews?: number; listingGaps?: string[] }
 interface Describe { ok: boolean; reason?: string; situation: string | null; summary: string; unsupported: string[]; when?: string | null }
 /** The four facts about THIS client the shelf is drawn from (/api/campaigns/shelf-context). */
-interface ShelfCtx { goals: string[]; monthlyBudget: number | null; shape: ClientShape; hasGoogle: boolean }
+interface ShelfCtx { goals: string[]; monthlyBudget: number | null; shape: ShelfShape; hasGoogle: boolean }
 
 /* One glyph and one colour per goal chip, the same pair the owner saw on the setup tiles and
  * the same hue family the cards wear. Keys are the exact GOAL_CHIPS strings (stored values). */
@@ -248,7 +248,7 @@ const CHIP_HUE: Record<string, HueKey> = {
   'Reach a younger crowd': 'brand',
 }
 /** What the "For you" shelf is called for this shape, in the owner's words (from the mockups). */
-const SHELF_TITLE_FOR_SHAPE: Record<ClientShape, string> = {
+const SHELF_TITLE_FOR_SHAPE: Record<ShelfShape, string> = {
   storefront: 'For you',
   truck: 'For a truck',
   delivery_only: 'For delivery only',
@@ -323,7 +323,7 @@ export default function CreatePage() {
   /* ── the owner's own shelf ──
    * The chip they picked in setup opens the page. Until their goals arrive we show the second
    * chip ("More foot traffic overall"), because it is the one whose shelf is true for anyone. */
-  const shape: ClientShape = ctx?.shape ?? DEFAULT_SHAPE
+  const shape: ShelfShape = ctx?.shape ?? DEFAULT_SHAPE
   const activeChip = chip ?? ctx?.goals[0] ?? CHIP_ORDER[1]
   const cap = ctx?.monthlyBudget ?? null
   /** What this card asks for on the first payment (the one-time amount, or the first month). */

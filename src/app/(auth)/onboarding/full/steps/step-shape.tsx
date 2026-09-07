@@ -4,7 +4,7 @@ import { type ReactNode } from 'react'
 import { Store } from 'lucide-react'
 import { type OnboardingData } from '../data'
 import { Question, OptionCard, FieldLabel } from '../ui'
-import { CLIENT_SHAPES, SHAPE_LABEL, inferClientShape } from '@/lib/clients/shape'
+import { SHELF_SHAPES, SHAPE_LABEL, inferShelfShape } from '@/lib/clients/shape'
 
 interface Props {
   data: OnboardingData
@@ -19,7 +19,7 @@ interface Props {
  * The answer decides what the store may show them: a truck gets the where-are-you card and no
  * "get directions" promise, a delivery kitchen gets no Reserve button. */
 export default function StepShape({ data, update, nav }: Props) {
-  const suggested = inferClientShape({
+  const suggested = inferShelfShape({
     service_styles: data.service_styles,
     location_count: data.location_count,
     locations: data.locations,
@@ -38,7 +38,7 @@ export default function StepShape({ data, update, nav }: Props) {
       <div className="mt-4">
         <FieldLabel>Pick the closest one</FieldLabel>
         <div className="flex flex-col gap-2">
-          {CLIENT_SHAPES.map((s) => {
+          {SHELF_SHAPES.map((s) => {
             const selected = picked === s
             return (
               <OptionCard key={s} selected={selected} hue="newfaces" onClick={() => update('shape', s)}>

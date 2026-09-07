@@ -13,7 +13,7 @@
 import { CHIP_ORDER, CHIP_SHELF, SHAPE_OVERRIDES, KNOWN_SHELF_IDS, shelfForChip, liveForChip, laterForChip } from '../src/lib/campaigns/data/chip-shelf'
 import { GOAL_CHIPS } from '../src/app/(auth)/onboarding/full/data'
 import { sellable, notSellableReason } from '../src/lib/campaigns/data/catalog-availability'
-import { CLIENT_SHAPES, type ClientShape } from '../src/lib/clients/shape'
+import { SHELF_SHAPES, type ShelfShape } from '../src/lib/clients/shape'
 import { goalSlugForChip, chipForGoalSlug, legacyGoalSlugForChip, ALL_GOAL_SLUGS } from '../src/lib/goals/defaults'
 
 let fail = 0
@@ -100,10 +100,10 @@ ok(silent.length === 0, `every held card has a reason${silent.length ? ` (${sile
 // 8) Every shape resolves a non-empty shelf for every chip, including after drops.
 console.log('\n== no shape empties a shelf ==')
 const emptied: string[] = []
-for (const shape of CLIENT_SHAPES as readonly ClientShape[]) {
+for (const shape of SHELF_SHAPES as readonly ShelfShape[]) {
   for (const chip of chips) if (shelfForChip(chip, shape).length === 0) emptied.push(`${shape}:${chip}`)
 }
-ok(emptied.length === 0, `all ${CLIENT_SHAPES.length} shapes keep every shelf populated${emptied.length ? ` (${emptied.join(', ')})` : ''}`)
+ok(emptied.length === 0, `all ${SHELF_SHAPES.length} shapes keep every shelf populated${emptied.length ? ` (${emptied.join(', ')})` : ''}`)
 
 // 9) The truck leads with the truck card, which is the whole point of having shapes.
 console.log('\n== the shape overrides actually change the shelf ==')

@@ -8,17 +8,24 @@
  * Six values, because six is what the shelf actually branches on (migration 256's CHECK). The
  * column is read everywhere and written once, at onboarding.
  *
- * CLIENT-SAFE at the top: the values, the labels and the inference are pure. getClientShape does
+ * CLIENT-SAFE at the top: the values, the labels and the inference are pure. getClientShelfShape does
  * the database read and imports the admin client lazily, so importing this file from a client
  * component never pulls the service-role key into the browser bundle.
+ *
+ * NAMED FOR THE SHELF ON PURPOSE. @/lib/goals/queries already exports a getClientShape, and it
+ * returns something else entirely: the four-dimension RestaurantShape (footprint, concept,
+ * customer mix, digital maturity) the playbook engine matches on. Two exported functions with
+ * one name and two return types is an import away from a silent bug, so this one is
+ * getClientShelfShape returning a ShelfShape, and it says which question it answers.
+ * The clients.shape COLUMN keeps its name; only the code names changed.
  */
 
-export type ClientShape = 'storefront' | 'truck' | 'delivery_only' | 'two_locations' | 'catering' | 'seasonal'
+export type ShelfShape = 'storefront' | 'truck' | 'delivery_only' | 'two_locations' | 'catering' | 'seasonal'
 
-export const CLIENT_SHAPES: readonly ClientShape[] = ['storefront', 'truck', 'delivery_only', 'two_locations', 'catering', 'seasonal']
+export const SHELF_SHAPES: readonly ShelfShape[] = ['storefront', 'truck', 'delivery_only', 'two_locations', 'catering', 'seasonal']
 
 /** What the owner sees, in their words. Used by the onboarding question and the shelf header. */
-export const SHAPE_LABEL: Record<ClientShape, { title: string; sub: string }> = {
+export const SHAPE_LABEL: Record<ShelfShape, { title: string; sub: string }> = {
   storefront: { title: 'A place people come to', sub: 'One dining room, counter or shop' },
   truck: { title: 'A truck or a pop-up', sub: 'The spot changes' },
   delivery_only: { title: 'Delivery only', sub: 'No dining room. The food goes out.' },
@@ -28,10 +35,10 @@ export const SHAPE_LABEL: Record<ClientShape, { title: string; sub: string }> = 
 }
 
 /** The shape we assume when nobody has said otherwise. Every shelf works for it. */
-export const DEFAULT_SHAPE: ClientShape = 'storefront'
+export const DEFAULT_SHAPE: ShelfShape = 'storefront'
 
-export function isClientShape(v: unknown): v is ClientShape {
-  return typeof v === 'string' && (CLIENT_SHAPES as readonly string[]).includes(v)
+export function isShelfShape(v: unknown): v is ShelfShape {
+  return typeof v === 'string' && (SHELF_SHAPES as readonly string[]).includes(v)
 }
 
 /**
@@ -40,11 +47,11 @@ export function isClientShape(v: unknown): v is ClientShape {
  * style. Delivery-only and seasonal cannot be inferred from anything we ask, so they are the two
  * the owner picks by hand. Pure.
  */
-export function inferClientShape(data: {
+export function inferShelfShape(data: {
   service_styles?: string[] | null
   location_count?: string | null
   locations?: unknown[] | null
-}): ClientShape {
+}): ShelfShape {
   const styles = (data.service_styles ?? []).map((s) => String(s))
   if (styles.some((s) => /food truck|pop-up/i.test(s))) return 'truck'
 
@@ -70,7 +77,7 @@ export function inferClientShape(data: {
  * comes back as 42703 (or PostgREST's PGRST204) and we return the storefront default rather than
  * failing the page. Never throws.
  */
-export async function getClientShape(clientId: string): Promise<ClientShape> {
+export async function getClientShelfShape(clientId: string): Promise<ShelfShape> {
   if (!clientId) return DEFAULT_SHAPE
   try {
     const { createAdminClient } = await import('@/lib/supabase/admin')
@@ -81,16 +88,16 @@ export async function getClientShape(clientId: string): Promise<ClientShape> {
       .maybeSingle()
     if (error) {
       if (error.code === '42703' || error.code === 'PGRST204') {
-        console.warn('[getClientShape] clients.shape is missing; run migration 256. Using storefront.')
+        console.warn('[getClientShelfShape] clients.shape is missing; run migration 256. Using storefront.')
       } else {
-        console.warn('[getClientShape] read failed:', error.message)
+        console.warn('[getClientShelfShape] read failed:', error.message)
       }
       return DEFAULT_SHAPE
     }
     const v = (data as { shape?: unknown } | null)?.shape
-    return isClientShape(v) ? v : DEFAULT_SHAPE
+    return isShelfShape(v) ? v : DEFAULT_SHAPE
   } catch (e) {
-    console.warn('[getClientShape] threw:', e)
+    console.warn('[getClientShelfShape] threw:', e)
     return DEFAULT_SHAPE
   }
 }

@@ -23,7 +23,7 @@
 import { CREATE_CATALOG, CREATE_CATALOG_IDS } from './create-catalog'
 import { REQUEST_TYPES } from '@/lib/requests/catalog'
 import { availabilityFor, sellable, type VisibilityOverrideMap } from './catalog-availability'
-import type { ClientShape } from '@/lib/clients/shape'
+import type { ShelfShape } from '@/lib/clients/shape'
 
 /** The fourteen onboarding chips, verbatim (GOAL_CHIPS in onboarding/full/data.ts). These are
  *  STORED VALUES on the goal rows, so the strings must never change. */
@@ -124,7 +124,7 @@ export const CHIP_SHELF: Record<string, readonly string[]> = {
  *
  * A shape with nothing to change is absent, and its shelf is the plain one above.
  */
-export const SHAPE_OVERRIDES: Partial<Record<ClientShape, { lead?: Record<string, readonly string[]>; drop?: readonly string[] }>> = {
+export const SHAPE_OVERRIDES: Partial<Record<ShelfShape, { lead?: Record<string, readonly string[]>; drop?: readonly string[] }>> = {
   truck: {
     lead: {
       'Stay top of mind': ['trucklocation'],
@@ -158,7 +158,7 @@ export const KNOWN_SHELF_IDS: ReadonlySet<string> = new Set([
 
 /** The chip's shelf for a shape, ordered: the shape's leads first, then the plain list,
  *  minus anything that shape drops. Unknown chip → empty (the caller shows nothing, honestly). */
-export function shelfForChip(chip: string, shape: ClientShape = 'storefront'): string[] {
+export function shelfForChip(chip: string, shape: ShelfShape = 'storefront'): string[] {
   const base = CHIP_SHELF[chip.trim()]
   if (!base) return []
   const ov = SHAPE_OVERRIDES[shape]
@@ -173,14 +173,14 @@ export function shelfForChip(chip: string, shape: ClientShape = 'storefront'): s
 }
 
 /** The cards on this chip's shelf that can actually be bought today, in order. */
-export function liveForChip(chip: string, shape: ClientShape = 'storefront', overrides?: VisibilityOverrideMap): string[] {
+export function liveForChip(chip: string, shape: ShelfShape = 'storefront', overrides?: VisibilityOverrideMap): string[] {
   return shelfForChip(chip, shape).filter((id) => sellable(id, overrides).ok)
 }
 
 /** The cards on this chip's shelf that cannot be bought today, in order. Includes the ones
  *  hidden from browse (the email cards), because the store lists those by name rather than
  *  pretending they do not exist. */
-export function laterForChip(chip: string, shape: ClientShape = 'storefront', overrides?: VisibilityOverrideMap): string[] {
+export function laterForChip(chip: string, shape: ShelfShape = 'storefront', overrides?: VisibilityOverrideMap): string[] {
   return shelfForChip(chip, shape).filter((id) => !sellable(id, overrides).ok)
 }
 

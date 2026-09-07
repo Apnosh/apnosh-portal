@@ -433,7 +433,7 @@ export interface OnboardingData {
   cuisine: string
   cuisine_other: string
   service_styles: string[]
-  /** How the business runs (ClientShape). Decides what the Create shelf may show. */
+  /** How the business runs (ShelfShape). Decides what the Create shelf may show. */
   shape: string
   price_range: string
   signature_items: string[]
