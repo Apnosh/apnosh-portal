@@ -41,6 +41,12 @@ export const C = {
   faint: '#aeaeb2',
   line: '#e6e6ea',
   bg: '#f5f5f7',
+  /** The grey of a block that has not loaded yet. Not a new colour: it is already on five owner
+   *  screens as the literal #ececef (settings, settings/notifications, both agreements pages,
+   *  billing). Named here so the waiting state has one colour rather than five copies of one
+   *  colour, and so MvpSkeleton can read it instead of retyping it. Sits darker than `bg` on
+   *  purpose, because a skeleton is read against a white card. */
+  skel: '#ececef',
 
   /* something is wrong. `red` and `coral` are the same colour under two names, kept because 41
    * files between them already say one or the other; new code should prefer `coral`. */

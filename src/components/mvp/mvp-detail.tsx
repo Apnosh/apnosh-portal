@@ -174,3 +174,55 @@ export function MvpEmpty({ icon, title, text }: { icon?: React.ReactNode; title?
     </div>
   )
 }
+
+/**
+ * The waiting state. Grey blocks in the shape of what is about to arrive.
+ *
+ * WHY THIS EXISTS. Every screen that loads writes its own version of this, and five of them are
+ * already the same three lines character for character (settings, settings/notifications, both
+ * agreements pages, billing): same grey, same corner, same beat, retyped. Nobody chose to have
+ * five copies. It is what happens when there is nothing to import. The next time the grey or the
+ * beat changes it would have to change in five places, and it would change in one.
+ *
+ * `heights` is the only thing a page genuinely picks, and it is worth picking: pass the heights of
+ * the cards the page is about to render, so the wait is the shape of the answer rather than a
+ * generic bar. A page that shows three cards passes three numbers.
+ *
+ * THE KEYFRAMES TRAVEL WITH IT, on purpose. This gets used from loading.tsx files, which render
+ * on their own outside MvpShell, so a rule that lived in the shell would quietly do nothing there
+ * and the skeleton would sit still. Repeating an identical @keyframes costs nothing. The
+ * reduced-motion line is here for the same reason: the shell guards its other animations, and a
+ * pulse an owner cannot turn off is the one that makes people feel sick.
+ */
+export function MvpSkeleton({ heights }: { heights: number[] }) {
+  return (
+    <>
+      {heights.map((h, i) => (
+        <div key={i} className="mvp-skel" style={{ height: h, background: C.skel, borderRadius: 16, marginBottom: 14 }} />
+      ))}
+      <style>{`.mvp-skel{animation:mvpPulse 1.2s ease-in-out infinite}@keyframes mvpPulse{0%,100%{opacity:1}50%{opacity:.55}}@media(prefers-reduced-motion:reduce){.mvp-skel{animation:none}}`}</style>
+    </>
+  )
+}
+
+/**
+ * The one line that answers "did that save?".
+ *
+ * WHY THIS EXISTS. Every form in the app writes its own answer, and every one picks its own green,
+ * its own red, its own corner and its own weight. An owner should learn one shape, not twenty, and
+ * the shape should say which of the two things happened before they read a word of it: green means
+ * it saved, coral means it did not. Both colours come from C, so changing the palette changes every
+ * form at once instead of the ones somebody remembers.
+ *
+ * The words stay with the caller. That is deliberate: the sentence has to go through T() where it
+ * is written, and only the page knows what actually failed.
+ *
+ * aria-live, because a result that only exists as a colour is not a result for everyone.
+ */
+export function MvpMsg({ ok, text }: { ok: boolean; text: string }) {
+  return (
+    <div role="status" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, background: ok ? C.greenSoft : C.coralSoft, color: ok ? C.greenDk : C.coral, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>
+      {text}
+    </div>
+  )
+}

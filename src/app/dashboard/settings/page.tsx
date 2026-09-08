@@ -24,7 +24,7 @@ import { useEffect, useState } from 'react'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import MvpShell from '@/components/mvp/mvp-shell'
-import { MvpDetailHeader, MvpGroup, MvpPill, C } from '@/components/mvp/mvp-detail'
+import { MvpDetailHeader, MvpGroup, MvpPill, MvpSkeleton, MvpMsg, C } from '@/components/mvp/mvp-detail'
 import { EditorField } from '../business-info/editor-shell'
 import { useClient } from '@/lib/client-context'
 import { useLang } from '@/components/mvp/mvp-language'
@@ -131,8 +131,8 @@ export default function SettingsPage() {
       <div style={{ background: '#fff', minHeight: '100%', padding: '14px 14px 28px', fontFamily: "'Inter',system-ui,sans-serif", boxSizing: 'border-box' }}>
         {loading ? (
           <div style={{ marginTop: 4 }}>
-            {[140, 180, 200].map((h, i) => <div key={i} style={{ height: h, background: '#ececef', borderRadius: 16, marginBottom: 14, animation: 'mvpPulse 1.2s ease-in-out infinite' }} />)}
-            <style>{`@keyframes mvpPulse{0%,100%{opacity:1}50%{opacity:.55}}`}</style>
+            {/* three blocks, the shape of the three cards below */}
+            <MvpSkeleton heights={[140, 180, 200]} />
           </div>
         ) : (
           <>
@@ -152,7 +152,7 @@ export default function SettingsPage() {
                     <MvpPill tone="good" label={T('Verified')} />
                   </div>
                 </div>
-                {profileMsg && <Msg msg={profileMsg} />}
+                {profileMsg && <MvpMsg {...profileMsg} />}
                 <button type="button" onClick={handleSaveProfile} disabled={profileSaving} style={btn(profileSaving)}>
                   {profileSaving && <Loader2 size={16} className="mvp-spin" />}{T('Save')}
                 </button>
@@ -190,7 +190,7 @@ export default function SettingsPage() {
                   </div>
                 )}
                 <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>{T('Some screens are still in English. We are working on the rest.')}</div>
-                {langMsg && <Msg msg={langMsg} />}
+                {langMsg && <MvpMsg {...langMsg} />}
               </div>
             </MvpGroup>
 
@@ -201,7 +201,7 @@ export default function SettingsPage() {
                 <PwField label={T('Current password')} value={currentPw} onChange={setCurrentPw} show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} placeholder={T('Current password')} showLabel={T('Show password')} hideLabel={T('Hide password')} />
                 <PwField label={T('New password')} value={newPw} onChange={setNewPw} show={showNew} onToggle={() => setShowNew((v) => !v)} placeholder={T('At least 8 characters')} showLabel={T('Show password')} hideLabel={T('Hide password')} />
                 <PwField label={T('Confirm new password')} value={confirmPw} onChange={setConfirmPw} show={showConfirm} onToggle={() => setShowConfirm((v) => !v)} placeholder={T('Re-enter new password')} showLabel={T('Show password')} hideLabel={T('Hide password')} />
-                {pwMsg && <Msg msg={pwMsg} />}
+                {pwMsg && <MvpMsg {...pwMsg} />}
                 <button type="button" onClick={handleChangePassword} disabled={pwSaving} style={btn(pwSaving)}>
                   {pwSaving && <Loader2 size={16} className="mvp-spin" />}{T('Update password')}
                 </button>
@@ -219,15 +219,6 @@ export default function SettingsPage() {
 
 /** The save message must read in the language they just picked, not the one they just left. */
 function t2(lang: Lang, key: string): string { return tRaw(key, lang) }
-
-function Msg({ msg }: { msg: { ok: boolean; text: string } }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, background: msg.ok ? C.greenSoft : C.coralSoft, color: msg.ok ? C.greenDk : C.coral, border: `0.5px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>
-      {msg.text}
-    </div>
-  )
-}
-
 
 function PwField({ label, value, onChange, show, onToggle, placeholder, showLabel, hideLabel }: { label: string; value: string; onChange: (v: string) => void; show: boolean; onToggle: () => void; placeholder?: string; showLabel: string; hideLabel: string }) {
   return (
