@@ -24,6 +24,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'Awareness', 'Interest', 'Actions', 'Orders', 'Retention',
     'times you showed up on Google', 'times you showed up on Google and social',
     'website visits & clicks', 'directions & calls', 'walk-in orders from Google', 'came back for more',
+    'orders on your register', 'connect your register to see this',
     'Your numbers show here', 'Connect accounts',
     'Last 7 days', 'Last 30 days', 'Last 90 days', 'Last year', 'Custom',
     '7 days', '30 days', '90 days', '1 year',
@@ -33,7 +34,8 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     '{n} pieces of work',
     // the tags on each stage, the conversion line under it, and the four stat labels
     'Real · Google', 'Real · Google + Social', '~ about · your math', 'Repeat visits',
-    '{n} in 100 engaged', '{n}% took a step', '~{n}% of directions ordered',
+    'Real · your register', 'Not connected',
+    '{n} in 100 engaged', '{n}% took a step', '~{n}% of directions ordered', '{n}% of directions ordered',
     'Engaged', 'Revenue',
     // the chrome around the funnel: the compare line, the date pickers, the two icon buttons
     'the year before', 'the {n} days before', 'change vs {when}',

@@ -190,8 +190,10 @@ export const ayrshareAdapter: ChannelAdapter = {
       if (!raw) continue
       const m = mapSocialAnalytics(raw)
 
-      // followers_gained: today's total minus the last stored total, never negative,
-      // and only when both sides are real numbers (no fabricated growth).
+      // followers_gained: today's total minus the last stored total, SIGNED, and
+      // only when both sides are real numbers (no fabricated growth). It used to
+      // be floored at zero, which made a summed window a one-way ratchet that
+      // could never show an account losing followers.
       const { data: prev } = await admin
         .from('social_metrics')
         .select('followers_total')
@@ -202,7 +204,7 @@ export const ayrshareAdapter: ChannelAdapter = {
         .limit(1)
         .maybeSingle()
       const prevTotal = num(prev?.followers_total)
-      const gained = m.followers_total > 0 && prevTotal > 0 ? Math.max(0, m.followers_total - prevTotal) : 0
+      const gained = m.followers_total > 0 && prevTotal > 0 ? m.followers_total - prevTotal : 0
 
       const { error } = await admin.from('social_metrics').upsert(
         {

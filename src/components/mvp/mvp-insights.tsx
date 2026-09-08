@@ -1359,6 +1359,11 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
       <div style={{ ...LIST, padding: '0 8px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}>
           <span style={H3}>All stages</span>
+          {/* The other half of the contradiction fix: these percentages compare this
+              range against the one before it, while the chart caption below compares
+              the end of this range against its start. Both were unlabelled, so one
+              screen could read "up 785%" here and "down 86%" there. */}
+          <span style={{ fontSize: 11.5, color: C.faint }}>change vs the period before</span>
         </div>
         {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
       </div>
@@ -1568,15 +1573,24 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
         <span style={H2}>{title}</span>
         {isCustom && <span style={{ fontSize: 12.5, color: C.faint }}>{`${fmtPinDate(startMs)} – ${fmtPinDate(endMs)}`}</span>}
       </div>
-      {/* the read, in one line: where the line is heading, and what was launched into it */}
+      {/* the read, in one line: where the line is heading, and what was launched into it.
+          THE SCOPE IS PART OF THE SENTENCE. This line compares the END of the selected
+          range against its START. The stage headline a few lines above compares this
+          whole range against the PREVIOUS one. They answer different questions, so a
+          month carrying one viral day reads "up 785%" at the top and "down 86%" here,
+          both correct and, unlabelled, an apparent contradiction on one screen. An owner
+          named that as their reason to cancel, so the qualifier is not optional. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         {trendPct == null ? (
           <span style={{ fontSize: 13.5, color: C.mute }}>Not enough days to call a direction yet.</span>
         ) : (
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? C.greenDk : C.coral }}>
-            {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
-            {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
-          </span>
+          <>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? C.greenDk : C.coral }}>
+              {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
+              {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
+            </span>
+            <span style={{ fontSize: 12.5, color: C.faint }}>end of this range vs its start</span>
+          </>
         )}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', touchAction: 'pan-y' }} role="img" aria-label="Stage trend: every day, the 7-day average, the prior period, and campaign go-live markers"

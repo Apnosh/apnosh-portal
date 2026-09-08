@@ -74,7 +74,7 @@ export async function getCachedThemes(
 interface ReviewRow {
   rating: number
   review_text: string | null
-  created_at: string
+  posted_at: string
 }
 
 /* Generate fresh themes, write to cache, return result. Errors
@@ -90,12 +90,19 @@ export async function generateThemesForClient(
   const startYmd = start.toISOString().slice(0, 10)
   const endYmd = end.toISOString().slice(0, 10)
 
+  /* WINDOW ON posted_at, NOT created_at. `created_at` is the row-insert
+     timestamp (DEFAULT now()), so on a first sync or a re-sync an entire
+     multi-year backfill lands inside "the last 90 days" and the themes describe
+     reviews from years ago; ninety days later the whole backfill leaves the
+     window in one lump and the themes collapse. `posted_at` is the date the
+     customer actually wrote it, and it is what every other consumer in this
+     repo already uses. */
   let q = admin
     .from('reviews')
-    .select('rating, review_text, created_at')
+    .select('rating, review_text, posted_at')
     .eq('client_id', clientId)
-    .gte('created_at', start.toISOString())
-    .order('created_at', { ascending: false })
+    .gte('posted_at', start.toISOString())
+    .order('posted_at', { ascending: false })
     .limit(MAX_REVIEWS_TO_SAMPLE)
   if (locationId) q = q.eq('location_id', locationId)
   const { data: reviews } = await q

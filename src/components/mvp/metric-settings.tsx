@@ -62,7 +62,12 @@ export function MetricSettingsPage() {
     if (!r.success) {
       setErr(r.error)
       setGroups(groups) // roll the optimistic flip back
+      return
     }
+    /* Drop the client-side router cache too, so leaving by the back button or
+       the tab bar shows the new number rather than the one rendered before the
+       switch was flipped. */
+    router.refresh()
   }
 
   const done = () => {

@@ -470,7 +470,12 @@ async function upsertInstagramDay(
       impressions,
       profile_visits: profileVisits,
       followers_total: followersTotal,
-      followers_gained: Math.max(0, followersGained),
+      /* SIGNED. Flooring this at zero made the metric a one-way ratchet: the
+         daily rows are summed downstream, so an account that lost 40 followers
+         over a month still displayed the sum of its good days as a gain. A
+         follower loss is real information -- store it and let the surface
+         decide how to word a negative number. */
+      followers_gained: followersGained,
       engagement,
       posts_published: postsPublished,
       top_post_id: topPostId,
@@ -608,7 +613,12 @@ async function syncFacebook(
         impressions: impressionsRes.perDay?.[dayStr] ?? 0,
         profile_visits: 0,
         followers_total: followersTotal,
-        followers_gained: Math.max(0, followersGained),
+        /* SIGNED. Flooring this at zero made the metric a one-way ratchet: the
+           daily rows are summed downstream, so an account that lost 40 followers
+           over a month still displayed the sum of its good days as a gain. A
+           follower loss is real information -- store it and let the surface
+           decide how to word a negative number. */
+        followers_gained: followersGained,
         engagement: engagementRes.perDay?.[dayStr] ?? 0,
         posts_published: 0,
         raw_data: {

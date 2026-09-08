@@ -11,6 +11,7 @@
  * for the client (client_users link, business ownership, or staff role).
  */
 
+import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { SUMMABLE, OPTIONAL } from '@/lib/insights/compute-stages'
@@ -158,5 +159,12 @@ export async function setMetricToggle(
     { onConflict: 'client_id' },
   )
   if (error) return { success: false, error: error.message }
+  /* Every surface that sums `counted` sources has to forget what it already
+     rendered, or the owner flips a switch and the number does not move. Insights
+     AND Home both read these prefs through computeStages, and the settings screen
+     can be left by the browser back button or the tab bar, not just its own Done
+     button, so the invalidation belongs here rather than on one exit path. */
+  revalidatePath('/dashboard')
+  revalidatePath('/dashboard/insights')
   return { success: true }
 }

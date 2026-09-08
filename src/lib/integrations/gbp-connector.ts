@@ -138,7 +138,13 @@ async function upsertReview(
     author_name: r.reviewer?.displayName ?? 'Anonymous',
     author_avatar_url: r.reviewer?.profilePhotoUrl ?? null,
     review_text: r.comment ?? null,
-    review_url: null,
+    /* The full v4 path, so the reply endpoint can derive (account, location,
+       review) without re-enumerating the GBP API. This writer previously wrote
+       null here and UPDATEd existing rows with it, so the 13:00 fetch-reviews
+       cron wiped the address every day and the 15:00 gbp-client-sync put it
+       back -- leaving every review unreplyable in between, and permanently for
+       any client the 15:00 job did not reach. Must match gbp-client-sync. */
+    review_url: r.name,
     response_text: r.reviewReply?.comment ?? null,
     responded_at: r.reviewReply?.updateTime ?? null,
     posted_at: r.createTime,
