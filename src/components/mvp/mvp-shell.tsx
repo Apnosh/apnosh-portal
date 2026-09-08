@@ -64,6 +64,10 @@ const SHELL_CSS = `
 @keyframes mvpspin{to{transform:rotate(360deg)}}
 .mvp-input{transition:border-color .12s ease}
 .mvp-input:focus{border-color:#4abd98}
+/* the glass search capsule: the ring goes on the capsule, because the input inside it has no
+   border of its own to colour (top-row.tsx TopSearch). Same mint, same beat as .mvp-input. */
+.mvp-search{transition:border-color .12s ease}
+.mvp-search:focus-within{border-color:#4abd98}
 `
 
 // `header` replaces the default AppHeader — detail pages reached from a tab

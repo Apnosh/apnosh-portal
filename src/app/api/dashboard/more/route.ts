@@ -2,7 +2,15 @@
  * GET  /api/dashboard/more?clientId=…  — everything the More tab shows about this business:
  *      the profile facts (logo, cuisine, city, hours, goals), the owner's settings
  *      (approve-first, favorites), the people they have worked with, delivered work still
- *      waiting for a rating, and how many counted promises are on their wins shelf.
+ *      waiting for a rating, how many counted promises are on their wins shelf, and the LIVE
+ *      VALUE behind each row on the hub (2026-09-08) — the login email, the Google listing's
+ *      own name and links, how many accounts are connected, and the counts behind Your team,
+ *      Your requests, Your bookings and Guest list.
+ *
+ *      EVERY ONE OF THOSE EXTRA READS IS BEST-EFFORT AND ITS OWN. A missing column (42703) or a
+ *      missing table or relationship (PGRST200 / 42P01) leaves ONE row without a sub-line; it
+ *      never takes the hub down and never takes the profile down with it, because an owner who
+ *      cannot load a count still needs every door on this page and the way out.
  * POST /api/dashboard/more            — { clientId, approveFirst?, favorites? } saves those
  *      two settings. Favorites live in businesses.preferences (jsonb), approve-first in
  *      businesses.approval_preferences.auto_approve (the same flag the old Settings toggle
@@ -21,10 +29,18 @@ import { creatorNamesByIds } from '@/lib/campaigns/vendor-supply'
 import { isLang } from '@/lib/i18n/t'
 import { getClientLanguage } from '@/lib/i18n/language'
 import { WIN_TYPE } from '@/lib/love/win'
+import { referralsEnabled } from '@/lib/referral-gate'
+import { hasCountedPromise } from '@/lib/referrals/server'
 
 export const dynamic = 'force-dynamic'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Which channels count as "a social account is connected" on the hub's status tile. */
+const SOCIAL_CHANNELS = new Set(['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube', 'zernio', 'ayrshare'])
+
+/** The links a Google listing carries, as the business-info editor writes them. */
+interface ListingLinks { ordering?: unknown[]; reservations?: unknown[]; social?: Record<string, unknown> }
 
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')
@@ -33,6 +49,54 @@ export async function GET(req: NextRequest) {
   if (!access.authorized) return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
 
   const admin = createAdminClient()
+
+  /* ── THE SUB-LINES ────────────────────────────────────────────────────────────────────────────
+   * The hub's grammar is business-info's: a row previews what it holds, so the owner can read the
+   * page without opening anything. These are the reads behind those previews. They are started
+   * here so they run beside the block below rather than after it, and every one of them answers
+   * `null` — "we could not read it" — instead of throwing, because the sub-line is the ONE part of
+   * a row that is allowed to be missing. A null shows no sub-line at all; it never shows a
+   * placeholder, and it never shows a zero we are not sure about. */
+  const extras = Promise.all([
+    // the login email, for the "Your login" row. profiles.email may simply not be filled in.
+    access.userId
+      ? admin.from('profiles').select('email').eq('id', access.userId).maybeSingle()
+        .then((r) => (r.error ? null : ((r.data?.email as string | null) ?? null)), () => null)
+      : Promise.resolve(null),
+    // The listing's own name and the links on it (order buttons, social profiles). Deliberately a
+    // SECOND read of gbp_locations rather than three more columns on the one below: PostgREST
+    // fails the whole select on one unknown column, and hours and address must not be lost to a
+    // column that only decorates a row.
+    admin.from('gbp_locations').select('location_name, store_code, links').eq('client_id', clientId).limit(1).maybeSingle()
+      .then((r) => (r.error ? null : (r.data as { location_name: string | null; store_code: string | null; links: ListingLinks | null } | null)), () => null),
+    // every account this client has linked, so the hub can say how many and which kinds
+    admin.from('channel_connections').select('channel, status').eq('client_id', clientId)
+      .then((r) => (r.error ? null : ((r.data ?? []) as Array<{ channel: string | null; status: string | null }>)), () => null),
+    // who is on their team. One row per capability, so the people are de-duped below.
+    admin.from('role_assignments').select('person_id').eq('client_id', clientId)
+      .is('ended_at', null).neq('scope', 'global').not('role', 'in', '(client_owner,client_manager)')
+      .then((r) => (r.error ? null : ((r.data ?? []) as Array<{ person_id: string | null }>)), () => null),
+    // the request desk
+    admin.from('creative_requests').select('id', { count: 'exact', head: true }).eq('client_id', clientId)
+      .then((r) => (r.error ? null : (r.count ?? 0)), () => null),
+    // creator bookings still ahead of them, read the same way /dashboard/bookings reads them
+    admin.from('bookings').select('id', { count: 'exact', head: true }).eq('client_id', clientId)
+      .like('note', '%"kind":"creator"%').in('status', ['held', 'confirmed', 'needs_reschedule'])
+      .then((r) => (r.error ? null : (r.count ?? 0)), () => null),
+    // the guest list, minus the people who left. They stay in the table and are never emailed
+    // again, so counting them would tell the owner they have an audience they do not have.
+    admin.from('guest_contacts').select('id', { count: 'exact', head: true }).eq('client_id', clientId).is('unsubscribed_at', null)
+      .then((r) => (r.error ? null : (r.count ?? 0)), () => null),
+    // when the newest win landed, so the Wins row can say the month
+    admin.from('proof_cards').select('fired_at').eq('client_id', clientId).eq('card_type', WIN_TYPE).eq('is_sample', false)
+      .order('fired_at', { ascending: false }).limit(1).maybeSingle()
+      .then((r) => (r.error ? null : ((r.data?.fired_at as string | null) ?? null)), () => null),
+    // Whether Tell a friend has a door at all: the switch, then the one law — we do not ask an
+    // owner to vouch for us before we have kept a promise to them. Read-only on purpose; minting
+    // their code is the referral page's job, not a side effect of opening a hub.
+    (referralsEnabled() ? hasCountedPromise(clientId).catch(() => false) : Promise.resolve(false)),
+  ])
+
   const [client, biz, gbp, goals, catalog, orders, language, wins] = await Promise.all([
     // The three columns this screen has always read, and NOT preferred_language: PostgREST
     // fails a select on the name of a column that is not there, so asking for it here would
@@ -76,6 +140,10 @@ export async function GET(req: NextRequest) {
   // favorites the owner picked that have no delivered work yet still count as people
   for (const id of favorites) if (!peopleMap.has(id)) peopleMap.set(id, { id, name: names.get(id) ?? 'Your creator', discipline: '', pieces: 0, last: '' })
 
+  const [email, listing, conns, teamRows, requests, bookings, guests, winsLatestAt, referral] = await extras
+  const live = (conns ?? []).filter((c) => c.status === 'connected')
+  const listingLinks = (listing?.links && typeof listing.links === 'object') ? listing.links : null
+
   return NextResponse.json({
     profile: {
       name: (client.data?.name as string | null) ?? 'Your restaurant',
@@ -90,6 +158,34 @@ export async function GET(req: NextRequest) {
     wins: typeof wins === 'number' ? wins : 0,
     people: [...peopleMap.values()],
     toRate,
+
+    /* ── the sub-lines. `null` anywhere here means "we could not read it", and the row says
+     *    nothing rather than guessing a zero. ─────────────────────────────────────────────── */
+    email,
+    /** the Google listing: its own name, whether it is really linked, and the links on it */
+    listing: listing
+      ? {
+        name: listing.location_name || null,
+        connected: !!listing.store_code,
+        orderLinks: (listingLinks?.ordering?.length ?? 0) + (listingLinks?.reservations?.length ?? 0),
+        socialProfiles: Object.values(listingLinks?.social ?? {}).filter(Boolean).length,
+      }
+      : null,
+    connections: conns
+      ? {
+        count: live.length,
+        google: live.some((c) => c.channel === 'google_business_profile'),
+        social: live.some((c) => SOCIAL_CHANNELS.has(c.channel ?? '')),
+      }
+      : null,
+    team: teamRows ? new Set(teamRows.map((r) => r.person_id).filter(Boolean)).size : null,
+    requests,
+    bookings,
+    guests,
+    /** when the newest win fired, so the Wins row can name its month in the owner's own locale */
+    winsLatestAt,
+    /** the referral loop is open AND this owner has had a promise counted */
+    referral: referral === true,
   }, { headers: { 'Cache-Control': 'no-store' } })
 }
 

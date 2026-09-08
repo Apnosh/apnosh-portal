@@ -73,9 +73,12 @@ export default function TopRow({ middle, title, count, back, right }: { middle?:
 /** the middle slot's search: one glass capsule, the placeholder says WHAT it searches */
 export function TopSearch({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
   return (
-    <label style={{ ...GLASS, display: 'flex', alignItems: 'center', gap: 8, borderRadius: 999, height: 40, padding: '0 10px 0 14px', width: '100%', boxSizing: 'border-box', cursor: 'text' }}>
+    <label className="mvp-search" style={{ ...GLASS, display: 'flex', alignItems: 'center', gap: 8, borderRadius: 999, height: 40, padding: '0 10px 0 14px', width: '100%', boxSizing: 'border-box', cursor: 'text' }}>
       <Search size={16} color={C.mute} style={{ flexShrink: 0 }} />
-      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', outline: 'none', fontSize: 14.5, color: C.ink, fontFamily: 'inherit', padding: 0 }} />
+      {/* 16, never smaller: iOS Safari zooms the whole page when a field under 16px takes focus,
+          and this one is on the tab an owner taps most. The capsule wears the focus ring
+          (.mvp-search:focus-within in mvp-shell.tsx) because the input itself has no border. */}
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} aria-label={placeholder} className="mvp-input" style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', outline: 'none', fontSize: 16, color: C.ink, fontFamily: 'inherit', padding: 0 }} />
       {value && (
         <button type="button" onClick={() => onChange('')} aria-label="Clear search" style={{ border: 'none', background: C.line, color: C.mute, width: 20, height: 20, borderRadius: 99, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0, flexShrink: 0 }}><X size={12} /></button>
       )}

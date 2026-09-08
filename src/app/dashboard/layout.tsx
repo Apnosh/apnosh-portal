@@ -109,6 +109,8 @@ const MVP_EXACT = new Set([
   '/dashboard/more', '/dashboard/billing', '/dashboard/bookings',
   '/dashboard/assets', '/dashboard/goals', '/dashboard/help', '/dashboard/google-profile',
   '/dashboard/order-buttons', '/dashboard/review-replies', '/dashboard/listings', '/dashboard/measure',
+  '/dashboard/social-profiles', // renders its own MvpShell; unregistered it drew a second header
+                                // on top of it, which nobody saw while the More hub had no door to it
   '/dashboard/team', // the team page moved onto the mobile kit (portal redesign 2026-09-04)
   '/dashboard/preferences', '/dashboard/people', '/dashboard/get-help', '/dashboard/whats-new', // the More tab's pages (owner 2026-09-05)
   '/dashboard/guests', // the guest list (send-rail audience) owns its full-screen chrome
