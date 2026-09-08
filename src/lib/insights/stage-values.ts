@@ -217,7 +217,7 @@ export async function loadStageValues(
   try {
     const { data, error } = await capDate(admin
       .from('social_metrics')
-      .select('platform, reach, impressions, followers_gained, profile_visits, engagement, raw_data')
+      .select('platform, date, reach, impressions, followers_total, followers_gained, profile_visits, engagement, raw_data')
       .eq('client_id', clientId)
       .gte('date', otherStart))
     if (!error && data) {
@@ -225,6 +225,8 @@ export async function loadStageValues(
       const imprBy: Record<string, number> = {}
       const engBy: Record<string, number> = {}
       const folBy: Record<string, number> = {}
+      /* earliest + latest KNOWN follower total per platform inside the window */
+      const folSpan: Record<string, { firstDay: string; firstTotal: number; lastDay: string; lastTotal: number }> = {}
       const ssBy: Record<string, number> = {}
       let gained = 0, visits = 0, linkClicks = 0, savesShares = 0
       for (const r of data as Record<string, unknown>[]) {
@@ -232,8 +234,30 @@ export async function loadStageValues(
         reachBy[p] = (reachBy[p] ?? 0) + num(r.reach)
         imprBy[p] = (imprBy[p] ?? 0) + num(r.impressions)
         engBy[p] = (engBy[p] ?? 0) + num(r.engagement)
-        folBy[p] = (folBy[p] ?? 0) + num(r.followers_gained)
-        gained += num(r.followers_gained)
+        /* FOLLOWER CHANGE IS AN ENDPOINT DIFFERENCE, NOT A SUM OF DELTAS.
+           Summing followers_gained was wrong three ways at once: the deltas were
+           floored at zero so a losing account still showed a gain; the Instagram
+           and Facebook writer compares against YESTERDAY specifically, so any day
+           a sync was missed silently dropped that day's growth; and neither
+           writer has any data from before the account was connected, so a
+           "last 90 days" figure on an account linked ten days ago was really ten
+           days of growth wearing a ninety-day label.
+
+           followers_total is a stored absolute, so the honest change over a
+           window is simply the last one minus the first one. That is immune to
+           missed days, it shows losses, and it cannot invent growth. A total of
+           0 or null means "we did not know the count that day" (the backfill
+           placeholder), never "no followers", so those rows are skipped. */
+        const ft = num(r.followers_total)
+        const day = typeof r.date === 'string' ? r.date : ''
+        if (ft > 0 && day) {
+          const seen = folSpan[p]
+          if (!seen) folSpan[p] = { firstDay: day, firstTotal: ft, lastDay: day, lastTotal: ft }
+          else {
+            if (day < seen.firstDay) { seen.firstDay = day; seen.firstTotal = ft }
+            if (day > seen.lastDay) { seen.lastDay = day; seen.lastTotal = ft }
+          }
+        }
         visits += num(r.profile_visits)
         /* per-post link clicks + saves + shares live in the day row's raw_data.totals */
         const totals = (r.raw_data as { totals?: { clicks?: unknown; saves?: unknown; shares?: unknown } } | null)?.totals
@@ -245,6 +269,30 @@ export async function loadStageValues(
       /* Platforms report differently: IG/FB have reach; TikTok and LinkedIn report
        * views/impressions and no reach. Each chip shows the platform's real number
        * instead of a false 0 — views first for TikTok (that IS its number). */
+      /* Resolve the follower change per platform from the stored endpoints, and
+         total it. A platform with only ONE known day inside the window has no
+         change to report (one point is not a difference), so it contributes
+         nothing rather than a zero that reads as "you gained nobody". */
+      for (const [pl, span] of Object.entries(folSpan)) {
+        if (span.lastDay === span.firstDay) continue
+        folBy[pl] = span.lastTotal - span.firstTotal
+      }
+      gained = Object.values(folBy).reduce((a, b) => a + b, 0)
+      /* HOW MUCH OF THE WINDOW WE ACTUALLY KNOW, in days. The vendors hand us a
+         CURRENT follower count and no history, so an account linked ten days ago
+         has ten days of followers no matter what range is selected, and the old
+         code labelled that as the full ninety. This lets the surface say "since
+         you connected on the 12th" rather than quietly overstating the range.
+         Null when there is no follower history at all. */
+      const folFirstDay = Object.values(folSpan).map(x => x.firstDay).sort()[0] ?? null
+      if (folFirstDay) {
+        const startMs = Date.parse(otherStart + 'T00:00:00Z')
+        const firstMs = Date.parse(folFirstDay + 'T00:00:00Z')
+        const endMs = Date.parse((otherEnd ?? ymd(new Date())) + 'T00:00:00Z')
+        const dayMs = 86400000
+        out.social_follows_known_days = Math.max(0, Math.round((endMs - Math.max(startMs, firstMs)) / dayMs) + 1)
+      }
+
       const best = (p: string) => (reachBy[p] ?? 0) > 0 ? (reachBy[p] ?? 0) : (imprBy[p] ?? 0)
       out.ig_reach = best('instagram')
       out.facebook_reach = best('facebook')
