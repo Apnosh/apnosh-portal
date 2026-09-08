@@ -25,7 +25,7 @@ import 'server-only'
  * IT COMES BACK IN PIECES, NOT AS A FINISHED STRING. Ten of the twenty owners read Spanish, and a
  * sentence glued together here could only ever be English. So the reader returns the i18n KEY plus
  * the two raw numbers, and whoever draws it fills the holes in the owner's own language and their
- * own number grouping (src/components/mvp/weekly-sentence.tsx). weeklySentence() below keeps the
+ * own number grouping. weeklySentence() below keeps the
  * finished English for the places that are English by definition — the staff love table.
  */
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -97,8 +97,15 @@ export async function weeklyLine(clientId: string): Promise<WeeklyLine | null> {
     const sum = (from: string, to: string | null) => posts
       .filter((p) => String(p.posted_at) >= from && (to === null || String(p.posted_at) < to))
       .reduce((t, p) => t + Math.max(p.reach ?? 0, p.video_views ?? 0), 0)
+    const count = (from: string, to: string | null) => posts
+      .filter((p) => String(p.posted_at) >= from && (to === null || String(p.posted_at) < to))
+      .length
     const thisWeek = sum(cut, null)
     const lastWeek = sum(since, cut)
+    /* BOTH weeks need posts before the two numbers can be compared. Nothing posted last week
+     * sums to 0, and "Last week it was 0" reads as "your posts reached nobody" when the truth
+     * is that there were no posts to reach anyone. A week with no posts has no comparison. */
+    if (!count(cut, null) || !count(since, cut)) return null
     if (thisWeek + lastWeek === 0) return null
     return { key: WEEKLY_SOCIAL_KEY, vars: { n: thisWeek, prev: lastWeek } }
   } catch (e) {

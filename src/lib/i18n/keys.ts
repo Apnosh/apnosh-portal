@@ -248,8 +248,9 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* ── Move 7b ────────────────────────────────────────────────────────────────────────
      The weekly sentence, the monthly report, and the win card. */
 
-  /* the one line under the Home funnel (src/components/mvp/weekly-sentence.tsx). The reader
-     returns the KEY, so the two sentences it can pick live here and in love/sentence.ts. */
+  /* The week in one line. It had a row under the Home funnel until Home went back to one
+     screen; the lib still produces these two keys (love/sentence.ts, read by /admin/love), so
+     they stay here for whichever screen takes the sentence next. */
   weekly: [
     'This week your Google listing got {n} taps: calls, directions, and website visits. Last week it was {prev}.',
     'This week your posts reached {n} people. Last week it was {prev}.',

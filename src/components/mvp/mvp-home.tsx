@@ -1,7 +1,6 @@
 'use client'
 import CountedStrip from './counted-strip'
 import PeopleRow from './people-row'
-import WeeklySentence from './weekly-sentence'
 import TellAFriendCard from './tell-a-friend-card'
 
 /**
@@ -31,7 +30,6 @@ import type { UpcomingWorkItem } from '@/lib/dashboard/get-upcoming-work'
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { selectHomeOrders } from '@/lib/campaigns/home-cards'
 import { HomeFunnelLive, type FunnelRange, type FunnelYoY } from './home-funnel'
-import { usePullToRefresh, PullIndicator } from './pull-to-refresh'
 import { useMvpTheme } from './mvp-theme'
 
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
@@ -99,15 +97,6 @@ export interface MetricView {
   lastDataDate: string      // freshest day with data (data frontier); '' if none
 }
 
-/** The monthly-report nudge: last month has something to report, and this is where it lives. */
-export interface HomeReview {
-  prevMonthLabel: string
-  cycleLabel: string
-  /** whole dollars paid last month; 0 means they paid nothing, and the copy drops the number */
-  budget: number
-  href: string
-}
-
 export interface MvpHomeData {
   greeting: string
   avatarText: string
@@ -118,7 +107,6 @@ export interface MvpHomeData {
   /** Tailored "stack" cards shown at the top of Home (one reads as "Do this next"). */
   suggestions?: Suggestion[]
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
-  review: HomeReview | null
   planner?: { id: string; day: string; mon: string; daysLabel: string; label: string; hook: string; planned: boolean }[]
   /** Recent activity timeline (since-you-last-checked): posts live, reviews, replies, milestones. */
   activity?: TimelineEvent[]
@@ -188,33 +176,10 @@ export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean
 function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = true, referralsOn = false }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean; referralsOn?: boolean }) {
   const { C } = useMvpTheme()
   const metrics = data.metrics ?? []
-  const [reviewHidden, setReviewHidden] = useState(false)
   // Whether the funnel hero actually rendered. Without Google data it hides, and Home
   // shows an honest connect card in its place — never a blank screen (the sim's most-hit
   // defect: 6 of 20 owners finished onboarding onto an empty white page).
   const [funnelVis, setFunnelVis] = useState<'loading' | 'shown' | 'empty'>('loading')
-  /* Pull down to refresh, on the shell's own scroller. Home does not own its scroll container
-   * (MvpShell does), so it is found by class rather than by ref — the alternative was threading
-   * a ref through the shell for every screen that will eventually want this gesture.
-   * force=1 skips the routine 90 minute interval: a deliberate tug means "right now". */
-  const [pulls, setPulls] = useState(0)
-  const onPullRefresh = useCallback(async () => {
-    if (!clientId) return { ok: false, changed: false }
-    try {
-      const r = await fetch(`/api/dashboard/social-refresh?clientId=${clientId}&force=1`, { cache: 'no-store' })
-      const j = await r.json().catch(() => ({}))
-      /* Remount the funnel so it refetches: it owns its own data and range state, and this is
-       * cheaper and less brittle than lifting all of that up just to force a reload. */
-      setPulls((n) => n + 1)
-      return { ok: true, changed: !!j?.synced }
-    } catch {
-      return { ok: false, changed: false }
-    }
-  }, [clientId])
-  const { pull, phase } = usePullToRefresh(
-    useCallback(() => (typeof document === 'undefined' ? null : document.querySelector<HTMLElement>('.mvp-frame-scroll')), []),
-    onPullRefresh,
-  )
   /* HOW MUCH SCREEN THE ROWS UNDER THE HERO NEED.
    *
    * The funnel is a `fill` hero: it sizes itself to the whole scroll viewport. Every row that
@@ -287,45 +252,14 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
       )}
 
       <div style={{ padding: '16px 18px 0' }}>
-        {/* monthly review nudge */}
-        {data.review && !reviewHidden && (
-          <div className="mvp-rise mvp-reviewGlow" style={{ position: 'relative', overflow: 'hidden', marginBottom: 12, borderRadius: 18, padding: '13px 16px', color: '#fff' }}>
-            {/* drifting / spinning shapes, ported from the design */}
-            <i aria-hidden className="mvp-driftB" style={{ position: 'absolute', width: 118, height: 118, top: -44, right: -28, borderRadius: '50%', background: 'rgba(255,255,255,.10)' }} />
-            <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 66, height: 66, bottom: -26, left: 40, borderRadius: '50%', border: '2px solid rgba(255,255,255,.18)' }} />
-            <i aria-hidden className="mvp-spin" style={{ position: 'absolute', width: 22, height: 22, top: 34, right: 30, borderRadius: 6, background: 'rgba(255,255,255,.12)' }} />
-            <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 11, height: 11, bottom: 18, right: 78, borderRadius: '50%', background: 'rgba(255,255,255,.3)' }} />
-            {/* the whole row opens the report; the X sits above it (zIndex 3) so hiding still works */}
-            <Link href={data.review.href} style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11, color: '#fff', textDecoration: 'none' }}>
-              <div className="mvp-floaty" style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} /><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .92 }}>New this month</span></div>
-                <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>Your {data.review.prevMonthLabel} review is ready</div>
-                {/* the dollar line only when they actually paid us last month */}
-                <div style={{ fontSize: 12.5, opacity: .9, marginTop: 1 }}>
-                  {data.review.budget > 0
-                    ? `See what last month's $${data.review.budget} did, then plan ${data.review.cycleLabel}.`
-                    : `See what last month did, then plan ${data.review.cycleLabel}.`}
-                </div>
-              </div>
-              <ChevronRight size={20} />
-            </Link>
-            <button onClick={() => setReviewHidden(true)} aria-label="Hide review" style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.22)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
-          </div>
-        )}
-
-        {/* Everything below the banner cascades in on load (staggered rise). */}
+        {/* The rows cascade in on load (staggered rise). */}
         <div className="mvp-stagger">
         {/* THE MARKETING FUNNEL — the whole-business hero: your real Google
             funnel (Awareness → Interest → Customer actions → Orders → Retention)
             in the glass-vessel view. Renders only when the business has Google data. */}
         <div id="home-funnel-hero" style={{ margin: '-16px -18px 0' }}>
-          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill fillReserve={belowH} onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
+          <HomeFunnelLive clientId={clientId} height={620} fill fillReserve={belowH} onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} />
         </div>
-        {/* THIS WEEK, IN ONE LINE — the love sentence. Renders nothing when the week has
-            nothing true to say. */}
-        <WeeklySentence clientId={clientId} />
-
         {/* THE PEOPLE ON YOUR WORK — the staff actually assigned to the orders still running,
             then the one Get help door, in ONE row. Renders just the door when nothing is
             running; never placeholder faces. */}

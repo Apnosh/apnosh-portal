@@ -44,7 +44,7 @@ export default function DashboardHomePage() {
       })
       .then((json) => {
         if (!live) return
-        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp, json.review ?? null)
+        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp)
         d.activity = json.sinceLastChecked ?? []
         d.upcomingWork = json.upcomingWork ?? []
         setData(d)
@@ -76,11 +76,11 @@ export default function DashboardHomePage() {
   // immediately, in parallel with /api/dashboard/load, instead of waiting behind
   // it. The load's extras (review banner, approvals badge, suggestions) fill in
   // when it lands; only the parts that were pending ever swap.
-  const placeholder: MvpHomeData = { greeting: '', avatarText: '·', metrics: [], signal: { state: 'ontrack' }, approvals: [], review: null }
+  const placeholder: MvpHomeData = { greeting: '', avatarText: '·', metrics: [], signal: { state: 'ontrack' }, approvals: [] }
   const view: MvpHomeData = data ? (aiSuggestions !== null ? { ...data, suggestions: aiSuggestions } : data) : placeholder
 
   return (
-    <MvpShell active="home" unread={data?.approvals?.length ?? 0} noHeader>
+    <MvpShell active="home" unread={data?.approvals?.length ?? 0} noHeader fit>
       {clientLoading ? (
         /* client context still resolving — show the funnel's shape, not a bare
            line of text, so the seconds right after onboarding never look broken */

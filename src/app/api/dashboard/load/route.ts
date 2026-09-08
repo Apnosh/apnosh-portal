@@ -36,7 +36,6 @@ import { getSinceLastChecked } from '@/lib/dashboard/get-since-last-checked'
 import { getUpcomingWork } from '@/lib/dashboard/get-upcoming-work'
 import { getPrimaryStrategist } from '@/lib/dashboard/get-primary-strategist'
 import { getInboxThreads } from '@/lib/dashboard/get-inbox-threads'
-import { getReviewNudge } from '@/lib/report/review-nudge'
 import { referralsEnabled } from '@/lib/referral-gate'
 
 export const maxDuration = 15
@@ -56,7 +55,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
 
   // Parallel: fire every query at once.
-  const [pulse, metricHistory, homeMetrics, homeSections, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, inboxThreads, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow, upcomingWork, reviewNudge] = await Promise.all([
+  const [pulse, metricHistory, homeMetrics, homeSections, weekly, agenda, services, goalCards, strategist, playbooks, todayHero, recentReviews, sinceLastChecked, primaryStrategist, inboxThreads, shapeRow, reviewsRow, briefRow, unansweredCountRow, approvalsCountRow, tasksRow, calendarQueuedRow, upcomingWork] = await Promise.all([
     getPulseData(clientId),
     getMetricHistory(clientId),
     getHomeMetrics(clientId),
@@ -124,7 +123,6 @@ export async function GET(req: NextRequest) {
     // What the team is actively working on + what's going live next.
     getUpcomingWork(clientId),
     /* "Your August review is ready" — null unless last month has something to report. */
-    getReviewNudge(clientId),
   ])
 
   // Filter out snoozed tasks
@@ -180,7 +178,6 @@ export async function GET(req: NextRequest) {
     },
     comingUp,
     upcomingWork,
-    review: reviewNudge,
     reviews: reviewsRow.data ?? [],
     brief: briefRow.data ? {
       text: briefRow.data.raw_text,
