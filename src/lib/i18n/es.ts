@@ -76,7 +76,7 @@ export const ES: Record<string, string> = {
   /* ── Home: the funnel's tags, its conversion lines and the chrome around it ────────────── */
   'Real · Google': 'Medido · Google',
   'Real · your register': 'Medido · tu caja',
-  'Not connected': 'Sin conectar',
+  'Not connected': 'Sin conectar',  // shared: the Home funnel's Orders tag and the More hub's channel rows
   'Real · Google + Social': 'Medido · Google + redes',
   '~ about · your math': '~ aprox · tu cuenta',
   'Repeat visits': 'Visitas repetidas',
@@ -742,7 +742,6 @@ export const ES: Record<string, string> = {
   'Nothing here is called “{word}”. Try a shorter word.': 'Aquí nada se llama “{word}”. Prueba una palabra más corta.',
   'Sign in with the account your restaurant is on.': 'Entra con la cuenta donde está tu restaurante.',
   'Pick your goals': 'Elige tus metas',
-  'Not connected': 'Sin conectar',
   'Social': 'Redes',
   /* the groups */
   'Where you show up': 'Dónde apareces',
