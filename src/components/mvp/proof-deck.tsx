@@ -11,6 +11,8 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
 import ProofCard, { type ProofCardData } from './proof-card'
+import { useLang } from './mvp-language'
+import { isWin, metricKeyOf } from '@/lib/love/win'
 
 function deckDepth(pos: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, opacity: 1 }
@@ -20,14 +22,15 @@ function deckDepth(pos: number): React.CSSProperties {
 }
 
 const SAMPLE_CARDS: ProofCardData[] = [
-  { id: 'example-gbp', label: 'Example · a week on Google', big: '9 calls · 31 direction taps', context: 'Up from 4 calls and 12 taps the week before.', attribution: 'Since your menu photos went live, Aug 21.', spark: [9, 12, 10, 13, 17, 22, 31] },
+  { id: 'example-gbp', label: 'Example · a week on Google', big: '9 calls · 31 direction taps', context: 'Calls: 9, up from 4. Direction taps: 31, up from 12.', attribution: 'Since your menu photos went live, Aug 21.', spark: [9, 12, 10, 13, 17, 22, 31] },
   { id: 'example-post', label: 'Example · a post that landed', big: '2,418 people saw it', context: '86 saved or shared it.', attribution: 'You approved it Monday. It published Tuesday at 5 pm.' },
   { id: 'example-reviews', label: 'Example · a review month', big: '6 new reviews · 4.7 average', context: 'Every one got a reply within a day.', attribution: 'Since the review kit went up by your register, Aug 2.' },
-  { id: 'example-down', label: 'Example · a quieter week', big: '3 calls · 14 direction taps', context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
+  { id: 'example-down', label: 'Example · a quieter week', big: '3 calls · 14 direction taps', context: 'Calls: 3, down from 7. Direction taps: 14, down from 24. Worth a push this week.', tone: 'heads_up', cta: { label: 'Plan the push', href: '/campaigns/new' } },
   { id: 'example-start', label: 'Example · grow', big: 'Start your first campaign', context: 'A plan built from your numbers, ready in a few minutes.', tone: 'heads_up', cta: { label: 'Start a campaign', href: '/campaigns/new' } },
 ]
 
 export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: string; mute?: string }) {
+  const { T } = useLang()
   const [cards, setCards] = useState<ProofCardData[]>([])
   const [examples, setExamples] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -95,6 +98,11 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
             spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
             firedAt: (c.fired_at as string) ?? undefined,
             tone: (c.tone as ProofCardData['tone']) ?? 'win',
+            cardType: String(c.card_type ?? ''),
+            // both facts the win rules need beyond the big line: a seeded demo card is never a
+            // win, and a rating's line is a pair whose second half is the number that is true now
+            isSample: c.is_sample === true,
+            metricKey: metricKeyOf(c.metadata),
             cta: (c.cta as ProofCardData['cta']) ?? undefined,
           }))
         // a real account never sees samples (owner 2026-09-03): every client has at least one
@@ -106,7 +114,7 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
     return () => { alive = false }
   }, [clientId])
 
-  const act = (id: string, action: 'read' | 'dismiss') => {
+  const act = (id: string, action: 'read' | 'open' | 'dismiss') => {
     if (!clientId || id.startsWith('example-')) return
     // State cards are not stored: a dismissal rests on this device for 7 days.
     if (id.startsWith('state-')) {
@@ -159,8 +167,13 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
             ...(pos === 0 && (dx !== 0 || flying !== 0) ? { transform: flying !== 0 ? `translateX(${flying * 120}%) rotate(${flying * 8}deg)` : `translateX(${dx}px) rotate(${dx / 22}deg)`, opacity: flying !== 0 ? 0 : 1, transition: flying !== 0 ? 'transform .22s ease-in, opacity .22s ease-in' : 'none' } : {}) }}>
             {pos === 0 ? (
               <ProofCard
-                card={c}
+                /* a win gets its second door: the page where it becomes something to send
+                   somebody. The same rules the share route enforces decide which cards get it. */
+                card={!examples && isWin({ cardKey: c.id, cardType: c.cardType ?? '', big: c.big, isSample: c.isSample, metricKey: c.metricKey })
+                  ? { ...c, share: { label: T('Show someone'), href: `/dashboard/wins/${encodeURIComponent(c.id)}` } }
+                  : c}
                 defaultOpen
+                onOpen={() => act(c.id, 'open')}
                 onDismiss={() => {
                   if (examples) { setStep((p) => (p + 1) % cards.length); return }
                   act(c.id, 'dismiss'); setCards((prev) => prev.filter((x) => x.id !== c.id))

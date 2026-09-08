@@ -12,9 +12,10 @@
 import { NextResponse } from 'next/server'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { REQUEST_STATUSES, STATUS_LABEL, requestTypeById, type RequestStatus } from '@/lib/requests/catalog'
+import { ADMIN_SETTABLE_STATUSES, STATUS_LABEL, requestTypeById, type RequestStatus } from '@/lib/requests/catalog'
 import { notifyClientOwners } from '@/lib/notifications'
-import { sendEmailIfConfigured, ownerEmailsForClient } from '@/lib/email/send'
+import { markHandover, handoverGuard, handoverFor, handoverProgress } from '@/lib/campaigns/handover'
+import { adminStatusBlockedByPayment } from '@/lib/requests/desk-guards'
 
 export const runtime = 'nodejs'
 
@@ -34,7 +35,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const me = await adminUser(user.id)
   if (!me.isAdmin) return NextResponse.json({ error: 'Admins only' }, { status: 403 })
 
-  let body: { status?: string; team_note?: string; quote_cents?: unknown; claim?: boolean }
+  let body: { status?: string; team_note?: string; quote_cents?: unknown; claim?: boolean; handover?: { id?: unknown; done?: unknown; note?: unknown } }
   try {
     body = await req.json()
   } catch {
@@ -43,7 +44,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (body.status !== undefined) {
-    if (!REQUEST_STATUSES.includes(body.status as RequestStatus)) {
+    /* 'awaiting_payment' is missing from this list on purpose: it is the till's, and a person
+     * moving a request into it by hand would say "not paid" about an order nobody is charging. */
+    if (!ADMIN_SETTABLE_STATUSES.includes(body.status as RequestStatus)) {
       return NextResponse.json({ error: `Bad status: ${body.status}` }, { status: 400 })
     }
     update.status = body.status
@@ -65,11 +68,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     update.assigned_to = user.id
     update.assigned_name = me.email ? me.email.split('@')[0] : 'admin'
   }
-  if (Object.keys(update).length === 1) {
-    return NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+  const admin = createAdminClient()
+
+  /* THE HANDOVER (a website order): what has to change hands before this is delivered, ticked by
+   * the person who moved it. It lives on the order's work order, not on the request row, because
+   * that is the row the delivery is made from. Best-effort on the write (pre-258 the column is
+   * absent) but NEVER on the guard below — the guard is the promise. */
+  // select('*') so paid_at being absent (pre-258) reads as "not paid", never as an error.
+  const { data: reqRow } = await admin.from('creative_requests').select('*').eq('id', id).maybeSingle()
+  const serviceKey = `request:${String((reqRow as { type?: string } | null)?.type ?? '')}`
+  const woKey = `request:${id}`
+
+  /* MONEY MAKES A STATUS ONE-WAY. A paid order sent back to 'quoted' would offer the owner a
+   * second yes on money already taken, and the accept route's paid_at check reads that as "nothing
+   * due" and mints the work for free. The wrong price is a refund, not a re-quote. */
+  const paidBlock = adminStatusBlockedByPayment(
+    update.status as string | undefined,
+    (reqRow as { paid_at?: string | null } | null)?.paid_at ?? null,
+  )
+  if (paidBlock) return NextResponse.json({ error: paidBlock }, { status: 409 })
+  if (body.handover && typeof body.handover.id === 'string') {
+    const { data: wo } = await admin.from('creator_work_orders').select('id, handover').eq('campaign_piece_key', woKey).limit(1).maybeSingle()
+    if (wo) {
+      const next = markHandover((wo as { handover?: unknown }).handover, {
+        id: body.handover.id,
+        done: body.handover.done === undefined ? undefined : body.handover.done === true,
+        note: typeof body.handover.note === 'string' ? body.handover.note : undefined,
+      }, new Date().toISOString())
+      const { error: hErr } = await admin.from('creator_work_orders').update({ handover: next }).eq('id', (wo as { id: string }).id)
+      if (hErr) console.warn('[requests] handover not saved (apply migration 258):', hErr.message)
+    }
   }
 
-  const admin = createAdminClient()
+  /* Delivered means the owner HOLDS it. A site whose domain is still in an Apnosh account is not
+   * delivered, whatever the screen says, so the flip is refused until every required row is
+   * ticked. Enforced here and not only in the UI. */
+  if (update.status === 'delivered' && handoverFor(serviceKey).length > 0) {
+    const { data: wo } = await admin.from('creator_work_orders').select('handover').eq('campaign_piece_key', woKey).limit(1).maybeSingle()
+    const guard = handoverGuard(serviceKey, (wo as { handover?: unknown } | null)?.handover ?? null)
+    if (!guard.ok) return NextResponse.json({ error: guard.reason }, { status: 400 })
+  }
+
+  // A tick on its own is a real save, not "nothing to update".
+  if (Object.keys(update).length === 1) {
+    return body.handover
+      ? NextResponse.json({ ok: true })
+      : NextResponse.json({ error: 'Nothing to update' }, { status: 400 })
+  }
+
   let { data: row, error } = await admin
     .from('creative_requests')
     .update(update)
@@ -120,22 +166,55 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         title,
         body: row.team_note ? String(row.team_note).slice(0, 300) : undefined,
         link: '/dashboard/requests',
+        // Two moments are worth a phone buzzing: the work landing, and a person answering.
+        // Every other status move stays an in-app row.
+        email: body.status === 'delivered' || (noteChanged && body.status === undefined),
+        // Delivered is their work landing; a note is a person answering them. Different switches.
+        emailCategory: body.status === 'delivered' ? 'content' : 'messages',
       })
     } catch (e) {
       console.error('[requests] owner notify failed (update still saved)', e)
     }
-    /* Email leaves the portal only for the moment that needs a yes: the quote. */
+    /* Email leaves the portal only for the moment that needs a yes: the quote. Through
+     * emailClientOwners so the owner's email settings decide here too — this was the last
+     * owner email that wrote straight to the address and skipped the page. */
     if (body.status === 'quoted') {
       try {
-        const emails = await ownerEmailsForClient(row.client_id)
-        await sendEmailIfConfigured({
-          to: emails,
+        const { emailClientOwners } = await import('@/lib/notifications')
+        await emailClientOwners(row.client_id, {
           subject: `Your ${type?.label?.toLowerCase() ?? 'request'} price is ready`,
-          text: `${row.team_note ?? 'Your price and plan are ready.'}\n\nSay yes in the portal and we start: https://portal.apnosh.com/dashboard/requests`,
+          body: `${row.team_note ?? 'Your price and plan are ready.'}\n\nSay yes in the portal and we start.`,
+          link: '/dashboard/requests',
+          category: 'billing',
         })
       } catch { /* best-effort */ }
     }
   }
 
   return NextResponse.json({ ok: true, request: row })
+}
+
+/**
+ * GET /api/requests/:id/… the handover state for ONE desk order (admins only).
+ *
+ * The admin board reads creative_requests; the handover lives on the order's work order, and it
+ * needs both to show staff what still has to change hands before they can mark it delivered.
+ * Returns an empty list for work that hands nothing over, so the board renders nothing there.
+ */
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const supabase = await createServerClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 })
+  const me = await adminUser(user.id)
+  if (!me.isAdmin) return NextResponse.json({ error: 'Admins only' }, { status: 403 })
+
+  const admin = createAdminClient()
+  const { data: reqRow } = await admin.from('creative_requests').select('type').eq('id', id).maybeSingle()
+  const serviceKey = `request:${String((reqRow as { type?: string } | null)?.type ?? '')}`
+  if (handoverFor(serviceKey).length === 0) return NextResponse.json({ handover: { items: [], doneCount: 0, requiredOpen: [] } })
+  // select('*') so the handover column being absent (pre-258) reads as "nothing ticked yet"
+  // instead of erroring the board.
+  const { data: wo } = await admin.from('creator_work_orders').select('*').eq('campaign_piece_key', `request:${id}`).limit(1).maybeSingle()
+  return NextResponse.json({ handover: handoverProgress(serviceKey, (wo as { handover?: unknown } | null)?.handover ?? null) })
 }

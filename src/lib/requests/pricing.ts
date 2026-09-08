@@ -8,7 +8,7 @@
  *   - Standard is the default; the tier choice is never a required decision
  *   - own-words scope (the Something-else hatch) prices at the tier base, never a guessed
  *     upcharge; anything bigger is agreed in the thread BEFORE work starts
- *   - open scope (new website, Something else) is a STARTS-AT floor with a 1-business-day
+ *   - open scope (new website, Something else) is a STARTS-AT floor with the one reply-promise
  *     answer clock, never silence
  *   - the graphic has its own engine (design-pricing.ts): this sheet returns null for it
  *
@@ -18,26 +18,36 @@
  */
 
 import { splitMulti, type RequestAnswers } from './catalog'
+import { feeCentsOn, SERVICE_FEE_RATE } from '@/lib/campaigns/checkout-bill'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 /** THE SERVICE FEE (owner call 2026-08-10: fees stay). The sim's law: a fee that
  * appears late is a trust crack, so the fee is a VISIBLE LINE inside every total from
- * the first screen a total appears on. Listed total = charged total, always. */
-export const SERVICE_FEE_RATE = 0.10
-export const feeOn = (subtotalCents: number): number => Math.round(subtotalCents * SERVICE_FEE_RATE)
+ * the first screen a total appears on. Listed total = charged total, always.
+ *
+ * ONE FEE MODEL: the rate and the arithmetic come from the cart's own function
+ * (checkout-bill.feeCentsOn) — the desk used to keep a second copy, which is how the same
+ * 10% could mean two different numbers. 10% on one-time work; NEVER on a monthly price. */
+export { SERVICE_FEE_RATE }
+export const feeOn = feeCentsOn
 
 export interface CreativePriceLine {
   label: string
   amountCents: number
   /** the answer that created this line, said to the owner */
   why: string
+  /** true when this line is a MONTHLY price. Monthly lines carry no service fee. */
+  monthly?: boolean
 }
 
 export interface CreativePrice {
   lines: CreativePriceLine[]
   totalCents: number
   /** open scope: this total is the agreed FLOOR; the final number is agreed in the
-   *  thread before work starts, answered within 1 business day */
+   *  thread before work starts, answered within the one reply promise */
   startsAt?: boolean
+  /** every priced line repeats monthly, so the total is a monthly total (and carries no fee) */
+  monthly?: boolean
 }
 
 /** The two-level choice shown on review screens. Promises are countable. */
@@ -86,6 +96,12 @@ const line = (label: string, dollars: number, why: string): CreativePriceLine =>
   why,
 })
 
+/** A line that repeats every month. The service fee never touches one. */
+const monthlyLine = (label: string, dollars: number, why: string): CreativePriceLine => ({
+  ...line(label, dollars, why),
+  monthly: true,
+})
+
 const works = (a: RequestAnswers): boolean => (a.level ?? '').trim() === 'The works'
 
 /**
@@ -129,9 +145,12 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
     }
 
     case 'social': {
-      if (a.count === '8 a month') lines.push(line('Posts, 8 a month', 560, 'You picked 8 posts a month. This is a monthly price.'))
-      else if (a.count === '12 or more') lines.push(line('Posts, 12 a month', 780, 'You picked 12 or more posts a month. This is a monthly price.'))
-      else lines.push(line('Posts, 4 a month', 320, 'The starter batch: 4 posts a month. This is a monthly price.'))
+      // Monthly lines. Marked so the shared fee function never touches them — the cart takes no
+      // fee on monthly, so neither can the desk. The desk bills ONE month at a time today (no
+      // subscription), so the wording says the first month, not "every month".
+      if (a.count === '8 a month') lines.push(monthlyLine('Posts, 8 a month', 560, 'You picked 8 posts a month. This price is for one month; we ask again before the next one.'))
+      else if (a.count === '12 or more') lines.push(monthlyLine('Posts, 12 a month', 780, 'You picked 12 or more posts a month. This price is for one month; we ask again before the next one.'))
+      else lines.push(monthlyLine('Posts, 4 a month', 320, 'The starter batch: 4 posts a month. This price is for one month; we ask again before the next one.'))
       break
     }
 
@@ -157,7 +176,7 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
 
     case 'website': {
       if (a.scope === 'Brand new website') {
-        lines.push(line('New website, starting point', 1500, 'The floor for a new build. The final number is agreed in your thread before work starts. We answer within 1 business day.'))
+        lines.push(line('New website, starting point', 1500, `The floor for a new build. The final number is agreed in your thread before work starts. We reply ${REPLY_PROMISE}.`))
         startsAt = true
       } else if (a.scope === 'Redesign my website') {
         lines.push(line('Website redesign', 900, 'Your pages, redesigned end to end, 2 revisions.'))
@@ -188,7 +207,7 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
       break
 
     case 'other':
-      lines.push(line('Open request, starting point', 150, 'The floor to start. Anything bigger is agreed in your thread before work starts. We answer within 1 business day.'))
+      lines.push(line('Open request, starting point', 150, `The floor to start. Anything bigger is agreed in your thread before work starts. We reply ${REPLY_PROMISE}.`))
       startsAt = true
       break
 
@@ -196,17 +215,41 @@ export function priceCreativeRequest(typeId: string, a: RequestAnswers): Creativ
       return null
   }
 
-  const subtotal = lines.reduce((n, l) => n + l.amountCents, 0)
-  lines.push({
-    label: 'Service fee',
-    amountCents: feeOn(subtotal),
-    why: '10% covers coordination, revision handling, and your team. It is inside every total you see, never added later.',
-  })
-  return { lines, totalCents: subtotal + feeOn(subtotal), ...(startsAt ? { startsAt: true } : {}) }
+  // The fee rides on one-time work only (the cart's rule, the cart's function). A monthly-only
+  // order gets no fee line at all, so the printed total IS the monthly price.
+  const oneTimeSubtotal = lines.reduce((n, l) => n + (l.monthly ? 0 : l.amountCents), 0)
+  const fee = feeCentsOn(oneTimeSubtotal)
+  if (fee > 0) {
+    lines.push({
+      label: 'Service fee',
+      amountCents: fee,
+      why: '10% covers coordination, revision handling, and your team. It is inside every total you see, never added later.',
+    })
+  }
+  // The printed total is the SUM OF THE LINES, so the claim above stays true by construction.
+  const monthlyOnly = oneTimeSubtotal === 0 && lines.some((l) => l.monthly)
+  return {
+    lines,
+    totalCents: lines.reduce((n, l) => n + l.amountCents, 0),
+    ...(startsAt ? { startsAt: true } : {}),
+    ...(monthlyOnly ? { monthly: true } : {}),
+  }
 }
 
 /** "$250" / "$1,200" for whole-dollar sheet prices. */
 export const fmtCents = (cents: number): string => `$${Math.round(cents / 100).toLocaleString()}`
+
+/**
+ * The total, said the way it is really billed.
+ *
+ * This said "for the first month" for as long as it was true: the desk stored one quote, minted one
+ * work order and nothing ever billed a second month, so "a month" would have promised a
+ * subscription that did not exist. The desk now goes through the till — a monthly desk line saves
+ * the card and starts a real Stripe subscription with automatic_tax on it — so "a month" is the
+ * true word again, and the tax rides with it, because the subscription really does add tax to
+ * every invoice.
+ */
+export const fmtTotal = (p: CreativePrice): string => `${fmtCents(p.totalCents)}${p.monthly ? ' a month, plus tax' : ''}`
 
 /** The valve, said the way Tony needs to hear it (persona guardrail). */
 export const VALVE_LINE =

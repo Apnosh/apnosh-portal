@@ -45,8 +45,10 @@ export interface RestaurantShape {
   capturedBy: string | null
 }
 
-// The 8 goals from PRODUCT-SPEC.md. Source of truth is the
-// goals_catalog table; this union is the compile-time mirror.
+// The goals from PRODUCT-SPEC.md, plus the eight added in migration 256 so every
+// onboarding chip keeps its own words instead of six of them collapsing into
+// 'be_known_for'. Source of truth is the goals_catalog table; this union is the
+// compile-time mirror.
 export type GoalSlug =
   | 'more_foot_traffic'
   | 'regulars_more_often'
@@ -56,6 +58,15 @@ export type GoalSlug =
   | 'be_known_for'
   | 'fill_slow_times'
   | 'grow_catering'
+  // migration 256 — one slug per onboarding chip
+  | 'local_awareness'
+  | 'promote_offering'
+  | 'grow_social'
+  | 'launch_something'
+  | 'stay_top_of_mind'
+  | 'beat_nearby'
+  | 'better_photos'
+  | 'younger_crowd'
 
 export interface CatalogGoal {
   slug: GoalSlug

@@ -34,6 +34,10 @@ export const C = {
   /* type + rules */
   ink: '#1d1d1f',
   mute: '#6e6e73',
+  /** HAIRLINES AND DISABLED CHROME ONLY. #aeaeb2 measures 2.2:1 on white — a chevron reads at that
+   *  contrast, a sentence does not, and body text was wearing it on six owner surfaces (the reply
+   *  clock, Home's promise line, the proof footnote, message timestamps, two settings notes).
+   *  Anything an owner is meant to READ uses `mute` (5.7:1). */
   faint: '#aeaeb2',
   line: '#e6e6ea',
   bg: '#f5f5f7',

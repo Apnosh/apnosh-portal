@@ -8,15 +8,35 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import BottomNav, { type NavKey } from './bottom-nav'
+import { usePathname } from 'next/navigation'
+import BottomNav, { NAV_RESERVE, NAV_HEIGHT, NAV_BOTTOM, NAV_GAP, type NavKey } from './bottom-nav'
 import TopRow from './top-row'
+import { useClient } from '@/lib/client-context'
+
+/* The scroller's tail is the NAV'S OWN footprint, imported from the nav (bottom-nav.tsx), never a
+   number typed here. The short tail said 42px while the nav takes 64, so the last row of Home,
+   the last campaign card and the "Not sure? Guide me" row on Create all sat under the glass and
+   could not be scrolled clear. One reserve now, for both tails:
+
+     NAV_RESERVE = 54 (nav) + 10 (its bottom offset) + 12 (breathing room) = 76px
+                   + env(safe-area-inset-bottom) for a phone with a chin.
+
+   The tall tail keeps its extra room for the floating top row. */
+/* The nav sits at max(10px, safe-area) from the bottom AND grows by the safe area (its minHeight
+   is 54px + inset), so on a phone with a chin the footprint is inset + 54 + inset + 12, not
+   76 + inset. Written the same way the nav writes it, so the two cannot drift. NAV_RESERVE stays
+   the no-chin number for anyone who needs a plain px. */
+void NAV_RESERVE
+const SAB = 'env(safe-area-inset-bottom)'
+const TAIL = `calc(${NAV_HEIGHT + NAV_GAP}px + max(${NAV_BOTTOM}px, ${SAB}) + ${SAB})`
+const TAIL_TALL = `calc(${NAV_HEIGHT + NAV_GAP + 8}px + max(${NAV_BOTTOM}px, ${SAB}) + ${SAB})`
 
 const SHELL_CSS = `
 .mvp-shell{position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:60;background:#f0f0f3;display:flex;justify-content:center;overflow:hidden}
 .mvp-frame{width:100%;max-width:none;background:#fff;display:flex;flex-direction:column;min-height:0;position:relative}
-.mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
+.mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:${TAIL_TALL}}
 .mvp-frame-scroll.mvp-under-top{padding-top:58px}
-.mvp-frame-scroll.mvp-short-tail{padding-bottom:calc(42px + env(safe-area-inset-bottom))}
+.mvp-frame-scroll.mvp-short-tail{padding-bottom:${TAIL}}
 .mvp-frame-top{position:absolute;top:0;left:0;right:0;z-index:6;transition:transform .28s cubic-bezier(.32,.72,.35,1),opacity .22s}
 .mvp-frame.mvp-scrolling .mvp-frame-top,.mvp-frame.mvp-scrolling .mvp-home-bar{transform:translateY(-115%);opacity:0;pointer-events:none}
 .mvp-home-bar{transition:transform .28s cubic-bezier(.32,.72,.35,1),opacity .22s}
@@ -65,9 +85,48 @@ export function useHideOnScroll(getEl: () => HTMLElement | null): boolean {
   return tucked
 }
 
+/**
+ * The owner session log, written from the one place every owner screen already passes through.
+ *
+ * Every screen in the app is inside this shell, so a screen change here IS the owner being
+ * here. The log only ever asks "were they here today", so ONE post per client per UTC day is
+ * all it needs — a busy morning was firing a write on every tap of the bottom nav. The day is
+ * remembered in localStorage; when storage is off we fall back to once per screen, which is
+ * the old behaviour and still correct, just chattier.
+ *
+ * Fired and forgotten: the log is a nice-to-have and must never slow a screen down or break
+ * one when the table is not there yet.
+ */
+function useSeenLog(clientId: string | undefined) {
+  const pathname = usePathname()
+  const lastLogged = useRef<string>('')
+  useEffect(() => {
+    if (!clientId || !pathname) return
+    const day = new Date().toISOString().slice(0, 10)
+    // one key per client holding the last day logged, so this never grows a key a day
+    const dayKey = `apnosh-seen-${clientId}`
+    try {
+      if (localStorage.getItem(dayKey) === day) return
+      localStorage.setItem(dayKey, day)
+    } catch {
+      // storage off (private window): keep the old one-per-screen guard so we still log the day
+      const key = `${clientId}|${pathname}`
+      if (lastLogged.current === key) return
+      lastLogged.current = key
+    }
+    void fetch('/api/dashboard/seen', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId }),
+      keepalive: true,
+    }).catch(() => { /* best effort */ })
+  }, [clientId, pathname])
+}
+
 export default function MvpShell({ active, unread, header, children, wide, noHeader, middle, title, back, right }: { /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; /** replaces the bell (a page's own action) */ right?: React.ReactNode; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const tucked = useHideOnScroll(() => scrollRef.current)
+  const { client } = useClient()
+  useSeenLog(client?.id)
   return (
     <div className="mvp-shell">
       <style>{SHELL_CSS}</style>

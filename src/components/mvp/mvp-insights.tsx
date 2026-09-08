@@ -37,6 +37,8 @@ import { HUES, STAGE_HUES, type HueKey } from './hues'
 import { Mark } from './mark'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
+import { isShelfShape, type ShelfShape } from '@/lib/clients/shape'
+import { stageLabelFor, stageExplainFor } from '@/lib/clients/shape-words'
 import { isProTier } from '@/lib/entitlements'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, deltaSub, bucketsFor, type MetricView, type ChartRange } from './mvp-home'
 import { TopSegmented } from './top-row'
@@ -328,40 +330,31 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 }
 
 const ANALYST_HREF = '/dashboard/insights/analyst'
+const REPORT_HREF = '/dashboard/insights/impact'
 
 /**
- * The AI Analyst entry, top right of the Insights header.
+ * A 36px glass circle that NAVIGATES, used by the two tools on the stage row.
  *
- * Two things it has to get right, both reported by the owner:
- *
- * 1. IT MUST ALWAYS DO SOMETHING. It was a bare <Link>, and a tap could land on a
- *    screen that never appeared, with no feedback at all. A control that sometimes
- *    does nothing is the worst possible state, because there is no way to tell a
- *    broken app from a slow one. So: an explicit push, a pressed state so the tap is
- *    always acknowledged, and a hard fallback to a full page load if the client-side
- *    navigation has not moved us anywhere after a beat. A slow navigation beats a
- *    silent one.
- *
- * 2. IT MUST BE HONEST ABOUT THE PRO GATE. The server only ever generates a read for
- *    Pro (and Internal) clients; everyone else was invited to tap a full-price-looking
- *    button and only then told they could not use it. The lock now shows on the button
- *    itself, so the gate is visible before the tap, and the page explains it.
+ * It must always do something. It was a bare <Link>, and a tap could land on a screen that
+ * never appeared, with no feedback at all. A control that sometimes does nothing is the worst
+ * possible state, because there is no way to tell a broken app from a slow one. So: an explicit
+ * push, a pressed state so the tap is always acknowledged, and a hard fallback to a full page
+ * load if the client-side navigation has not moved us anywhere after a beat. A slow navigation
+ * beats a silent one.
  */
-function AnalystButton() {
+function PushCircle({ href, label, lit, children }: { href: string; label: string; /** the green "this is yours" state */ lit: boolean; children: React.ReactNode }) {
   const router = useRouter()
-  const { client } = useClient()
-  const pro = isProTier(client?.tier)
   const [pressed, setPressed] = useState(false)
 
   const go = () => {
     setPressed(true)
     const from = typeof window !== 'undefined' ? window.location.pathname : ''
-    router.push(ANALYST_HREF)
+    router.push(href)
     // Safety net: if we are still on exactly the same path shortly after, the client
     // router did not take us anywhere, so force a real navigation instead.
     setTimeout(() => {
       if (typeof window !== 'undefined' && window.location.pathname === from) {
-        window.location.assign(ANALYST_HREF)
+        window.location.assign(href)
       }
     }, 700)
   }
@@ -370,12 +363,41 @@ function AnalystButton() {
     <button
       type="button"
       onClick={go}
-      aria-label={pro ? 'Your report' : 'Your report, Pro plan only'}
-      title={pro ? 'Your report' : 'Your report (Pro)'}
-      style={{ ...GLASS_CIRCLE, background: pro ? C.greenSoft : GLASS_CIRCLE.background, color: pro ? C.greenDk : C.mute, border: `1px solid ${pro ? C.greenLine : 'rgba(255,255,255,0.75)'}`, opacity: pressed ? 0.55 : 1, transition: 'opacity .12s ease' }}
+      aria-label={label}
+      title={label}
+      style={{ ...GLASS_CIRCLE, background: lit ? C.greenSoft : GLASS_CIRCLE.background, color: lit ? C.greenDk : C.mute, border: `1px solid ${lit ? C.greenLine : 'rgba(255,255,255,0.75)'}`, opacity: pressed ? 0.55 : 1, transition: 'opacity .12s ease' }}
     >
-      {pro ? <FileText size={16} /> : <Lock size={14} />}
+      {children}
     </button>
+  )
+}
+
+/**
+ * "Your report" — the monthly report built from the account's own numbers
+ * (/dashboard/insights/impact). It was pointed at the AI analyst, which is Pro only, so the
+ * one control called "your report" opened a lock for most owners while the real report,
+ * already built, was reachable from nothing at all. Every client gets this one.
+ */
+function ReportButton() {
+  return <PushCircle href={REPORT_HREF} label="Your monthly report" lit><FileText size={16} /></PushCircle>
+}
+
+/**
+ * The AI analyst, its own entry beside the report.
+ *
+ * IT MUST BE HONEST ABOUT THE PRO GATE. The server only ever generates a read for Pro (and
+ * paying) clients; everyone else was invited to tap a full-price-looking button and only then
+ * told they could not use it. The lock shows on the button itself, so the gate is visible
+ * before the tap, and the page explains it. The tap still goes through: a client who pays but
+ * whose tier was never switched gets the read from the server anyway.
+ */
+function AnalystButton() {
+  const { client } = useClient()
+  const pro = isProTier(client?.tier)
+  return (
+    <PushCircle href={ANALYST_HREF} label={pro ? 'Ask the analyst' : 'Ask the analyst, Pro plan only'} lit={pro}>
+      {pro ? <Sparkles size={16} /> : <Lock size={14} />}
+    </PushCircle>
   )
 }
 // The five funnel stages, in funnel order — the swipeable header moves through
@@ -449,6 +471,8 @@ function ConvChip({ c, open, onToggle }: { c: { pct: number; band: HealthBand };
     </button>
   )
 }
+/** The funnel keys shape-words is keyed on — the same five this page already uses. */
+type StageWordKey = 'shown' | 'engaged' | 'moved' | 'camein' | 'back'
 const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'shown', label: 'Awareness' },
   { key: 'engaged', label: 'Interest' },
@@ -465,6 +489,11 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
   // re-render to match. The URL follows (replaceState) so a refresh or share
   // keeps the same stage.
   const [sel, setSel] = useState<string | undefined>(focusKey)
+  /* The shape of the business, so a truck's stage does not say "walk-in". Words only: the five
+   * stages, their order, their dots and their colours are untouched (no icon tiles here — the
+   * stage colour stays the dot). */
+  const { client: shapeClient } = useClient()
+  const shape: ShelfShape | null = isShelfShape(shapeClient?.shape) ? shapeClient.shape : null
   const [explain, setExplain] = useState(false)
   const [convOpen, setConvOpen] = useState(false)
   useEffect(() => { if (focusKey) setSel(focusKey) }, [focusKey])
@@ -526,6 +555,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
       <div onTouchStart={onCardTouchStart} onTouchMove={onCardTouchMove} onTouchEnd={onCardTouchEnd} onTouchCancel={onCardTouchEnd} style={{ margin: '8px 0 0', padding: '10px 0 4px', overflow: 'hidden', position: 'relative', touchAction: 'pan-y' }}>
       {/* the page's two tools ride the stage row, top right, over every slide */}
       <div style={{ position: 'absolute', top: 12, right: 14, display: 'flex', gap: 8, zIndex: 2 }}>
+        <ReportButton />
         <AnalystButton />
         <Link href="/dashboard/insights/metrics" aria-label="Choose your metrics" title="Choose your metrics" style={GLASS_CIRCLE}><SlidersHorizontal size={16} /></Link>
       </div>
@@ -540,13 +570,13 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
               {/* stage name + ⓘ (tap: what this counts); the tools sit to the right */}
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '0 10px', maxWidth: 'calc(100% - 88px)', minHeight: 36, margin: '2px 0 0' }}>
               <button type="button" onClick={() => setExplain((v) => !v)} aria-expanded={explain} style={{ display: 'inline-flex', alignItems: 'center', gap: 7, border: 'none', background: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', color: C.ink, maxWidth: '100%', height: 36 }}>
-                <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.label}</span>
+                <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{stageLabelFor(s.key as StageWordKey, shape, s.label)}</span>
                 <Info size={16} color={explain ? STAGE_ACCENT[s.key].dark : C.faint} style={{ flexShrink: 0 }} />
                 {refreshing && <span className="mvp-spin" style={{ width: 11, height: 11, border: `2px solid ${C.line}`, borderTopColor: STAGE_ACCENT[s.key].main, borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />}
               </button>
               {conv && <ConvChip c={conv} open={convOpen} onToggle={() => setConvOpen((v) => !v)} />}
               </div>
-              {explain && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, margin: '2px 0 4px' }}>{STAGE_EXPLAIN[s.key]}</div>}
+              {explain && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, margin: '2px 0 4px' }}>{stageExplainFor(s.key as StageWordKey, shape, STAGE_EXPLAIN[s.key])}</div>}
               {convOpen && conv && <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.45, margin: '4px 0 6px', padding: '8px 11px', borderRadius: 12, background: conv.band === 'veryLow' || conv.band === 'low' ? C.coralBg : C.bg }}>{convExplain(s.key, conv)}</div>}
               <StageTop stageKey={s.key} detail={detail} mv={smv} clientId={clientId} onRange={rangeFor(s.key)} accent={STAGE_ACCENT[s.key].main} />
             </div>

@@ -4,6 +4,7 @@ import { type ReactNode } from 'react'
 import { UtensilsCrossed } from 'lucide-react'
 import { type OnboardingData, CUISINES, SERVICE_STYLES, PRICE_TIERS } from '../data'
 import { Question, OptionCard, Input, ChipGroup, FieldLabel } from '../ui'
+import { useLang } from '@/components/mvp/mvp-language'
 
 interface Props {
   data: OnboardingData
@@ -14,7 +15,14 @@ interface Props {
 // Combined "what you serve" screen: cuisine + service style + price point.
 // The lookup often fills cuisine and price already, so for many owners this
 // reads as a quick confirm rather than three separate questions.
+//
+// EVERY WORD GOES THROUGH T(). What is SAVED stays English — data.cuisine is 'Mexican' whichever
+// language drew the tile — because the planner, the shelf and the catalog all read those strings.
+// Only the label the owner reads changes. A name that is the same in both languages (Korean BBQ)
+// has no dictionary entry and falls through to its English, which is the right word anyway.
 export default function StepServe({ data, update, nav }: Props) {
+  const { T } = useLang()
+
   function toggleStyle(val: string) {
     const arr = [...data.service_styles]
     const idx = arr.indexOf(val)
@@ -25,16 +33,16 @@ export default function StepServe({ data, update, nav }: Props) {
 
   return (
     <>
-      <Question title="What you serve" icon={<UtensilsCrossed size={26} strokeWidth={2} />} />
+      <Question title={T('What you serve')} icon={<UtensilsCrossed size={26} strokeWidth={2} />} />
 
       {/* Cuisine */}
       <div className="mt-5">
-        <FieldLabel>Primary cuisine</FieldLabel>
+        <FieldLabel>{T('Primary cuisine')}</FieldLabel>
         <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
           {CUISINES.map((c) => (
             <OptionCard key={c} selected={data.cuisine === c} onClick={() => update('cuisine', c)}>
               <div className="text-[13px] font-medium" style={{ color: data.cuisine === c ? '#1c6b52' : '#1d1d1f' }}>
-                {c}
+                {T(c)}
               </div>
             </OptionCard>
           ))}
@@ -44,7 +52,7 @@ export default function StepServe({ data, update, nav }: Props) {
             <Input
               value={data.cuisine_other}
               onChange={(v) => update('cuisine_other', v)}
-              placeholder="Hawaiian poke, Ethiopian..."
+              placeholder={T('Hawaiian poke, Ethiopian…')}
             />
           </div>
         )}
@@ -52,13 +60,13 @@ export default function StepServe({ data, update, nav }: Props) {
 
       {/* Service style */}
       <div className="mt-6">
-        <FieldLabel>Service style (pick all that apply)</FieldLabel>
-        <ChipGroup options={SERVICE_STYLES} selected={data.service_styles} onToggle={toggleStyle} />
+        <FieldLabel>{T('Service style (pick all that apply)')}</FieldLabel>
+        <ChipGroup options={SERVICE_STYLES} selected={data.service_styles} onToggle={toggleStyle} label={T} />
       </div>
 
       {/* Price point */}
       <div className="mt-6">
-        <FieldLabel>Price point</FieldLabel>
+        <FieldLabel>{T('Price point')}</FieldLabel>
         <div className="flex flex-col gap-2">
           {PRICE_TIERS.map((p) => {
             const selected = data.price_range === p.id
@@ -71,7 +79,7 @@ export default function StepServe({ data, update, nav }: Props) {
                   >
                     {p.title}
                   </span>
-                  <span className="text-[13px]" style={{ color: '#777' }}>{p.desc}</span>
+                  <span className="text-[13px]" style={{ color: '#6e6e73' }}>{T(p.desc)}</span>
                 </div>
               </OptionCard>
             )

@@ -26,12 +26,14 @@ import { SERVICE_CHANNELS } from '@/lib/campaigns/data/service-channels'
 import { CAMPAIGN_CONTENT } from '@/lib/campaigns/data/campaign-content'
 import { SERVICE_PLAYBOOKS, playbookNeedKeys } from '@/lib/campaigns/data/service-playbooks'
 import { assetGatesForDraft, resolveGates } from '@/lib/campaigns/gates/config'
-import { goalSlugForChip, budgetCapForChip } from '@/lib/goals/defaults'
+import { goalSlugForChip, budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, UNBUNDLED_TODAY, unbundleFor } from '@/lib/campaigns/data/live-alternatives'
 import { isBuyable, isHidden, BUILTIN_AVAILABILITY, FULLY_BUILT_LIVE, RETIRED_IDS } from '@/lib/campaigns/data/catalog-availability'
 import { GOAL_CHIPS, BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { fitsBudget, isSellable, filterRecsByFacts, deliveryLedShape } from '@/lib/campaigns/planning/rank-facts'
 import { ITEM_PRICES } from '@/lib/campaigns/builder/item-prices'
+import { handoverFor, handoverProgress, handoverGuard, markHandover, readHandover, WEBSITE_HANDOVER } from '@/lib/campaigns/handover'
+import { lineFor, PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState } from '@/lib/promises/lines'
 import { Suite, pick } from './lib'
 
 // Fixed "ship moment" so every run is deterministic.
@@ -740,7 +742,13 @@ s.group('Availability: merged carts carry all source ids; coming-soon ids get fl
   const soonEg = Object.keys(BUILTIN_AVAILABILITY).find((id) => !isBuyable(id))!
   s.check('the coming-soon item is flagged even behind a live first item',
     JSON.stringify(unbuyableCatalogIds([liveEg, soonEg])) === JSON.stringify([soonEg]), `${liveEg} + ${soonEg}`)
-  s.eq('an all-live cart is clean', unbuyableCatalogIds([...FULLY_BUILT_LIVE]).length, 0)
+  // EMAIL OFF wins over the allowlist: 'creative-email' is on the allowlist (the desk's ids are
+  // generated from the request catalog) and hidden anyway, because the send rail is not armed.
+  // So the cart to test is the allowlist MINUS what is hidden, which is what verify-sellable
+  // checks too. Testing the raw allowlist tested the email decision, not the buy guard.
+  const allLiveCart = FULLY_BUILT_LIVE.filter((id) => !isHidden(id))
+  s.eq('an all-live cart is clean', unbuyableCatalogIds(allLiveCart).length, 0)
+  s.check('an email-off card stays unbuyable even though it is on the allowlist', !isBuyable('creative-email'))
   // A card removed from the catalog must NOT slip through as buyable (it composes to an empty $0
   // campaign). 'delivery' did exactly that until it was retired.
   s.eq('a retired card is refused by the buy guard', unbuyableCatalogIds(['delivery']).length, 1)
@@ -770,17 +778,17 @@ s.group('Edit-footage intake: edit fires in ANY cart position (readiness keys of
 // ── Owner-sim fix 1b: a monthly-only cart is BILLABLE (never the free path) ──
 s.group('Ship gate: monthly-only carts must pay (card + consent), never the free path')
 {
-  const MODERN = '2026-07-16T00:00:00Z'
   s.eq('monthly-only, no intent → REFUSE (must go through checkout)',
-    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false, createdAtISO: MODERN }), 'refuse')
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false }), 'refuse')
   s.eq('monthly-only, SetupIntent presented → verify',
-    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: true, createdAtISO: MODERN }), 'verify')
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: true }), 'verify')
   s.eq('truly free ($0 one-time, $0 monthly) still ships freely',
-    shipBillingGate({ preTaxCents: 0, perMonthCents: 0, hasPaymentIntent: false, createdAtISO: MODERN }), 'allow')
-  s.eq('legacy pre-checkout campaign keeps its carve-out',
-    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false, createdAtISO: '2026-07-01T00:00:00Z' }), 'allow')
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 0, hasPaymentIntent: false }), 'allow')
+  // The dated legacy carve-out is gone (money move 1): an old draft is billed like a new one.
+  s.eq('an old draft gets no carve-out — billable, unpaid → REFUSE',
+    shipBillingGate({ preTaxCents: 0, perMonthCents: 16500, hasPaymentIntent: false }), 'refuse')
   s.eq('omitted perMonthCents behaves as before (back-compat)',
-    shipBillingGate({ preTaxCents: 0, hasPaymentIntent: false, createdAtISO: MODERN }), 'allow')
+    shipBillingGate({ preTaxCents: 0, hasPaymentIntent: false }), 'allow')
 }
 
 // ── Owner-sim fixes 1f + 1i: fee-included display + plain-words pass-through ──
@@ -836,10 +844,99 @@ s.group('Intake rail: playbook needsInput keys reach the owner (recurring includ
   s.eq('delivery-opt declares pos-vendor (rendered as delivery logins)', playbookNeedKeys('delivery-opt').includes('pos-vendor'), true)
   s.eq('unknown service → no keys, no fake asks', playbookNeedKeys('nope').length, 0)
   // Drift guard: every needsInput key any playbook declares has a consumer in service-needs.ts.
-  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact'])
+  // 'analytics-access' is here because service-needs.ts really does ask for it — the Google
+  // connect, who runs the website, and the two links that turn a click into a countable result.
+  // The set had simply not been told, so the drift guard reported an orphan that was not one.
+  const HANDLED = new Set(['gbp-access', 'listing-access', 'menu-source', 'pos-vendor', 'gbp-photos', 'ad-access', 'onSiteContact', 'truck-schedule', 'analytics-access'])
   const declared = new Set(Object.keys(SERVICE_PLAYBOOKS).flatMap((id) => playbookNeedKeys(id)))
   const orphans = [...declared].filter((k) => !HANDLED.has(k))
   s.check(`every declared needsInput key has an owner-facing ask (orphans: ${orphans.join(',') || 'none'})`, orphans.length === 0)
+}
+
+// ── Move 4: the seven states an order lives, said the same way everywhere ──
+s.group('Seven states: one pill, one line, one action, from one table')
+{
+  const STATES: PromiseState[] = ['ordered', 'production', 'held', 'delivered', 'counting', 'counted', 'stopped', 'not_counted']
+  const row = (state: PromiseState, over: Partial<{ sub: string; value: string; small: string; showsOn: string }> = {}) =>
+    ({ state, sub: 'Ordered Sep 1 · taps on your Google card', value: '—', small: 'counting from Sep 12', showsOn: '2026-10-08', ...over })
+
+  // Every state is spelled out in all four tables. A state missing from one of them is a card that
+  // renders undefined, or sorts to the bottom for no reason.
+  for (const st of STATES) {
+    s.check(`${st}: has a pill entry`, st in PILL_FOR)
+    s.check(`${st}: has an action entry`, st in ACTION_FOR)
+    s.check(`${st}: has a rank`, typeof STATE_RANK[st] === 'number')
+    s.check(`${st}: has a line, and it is never empty`, lineFor(row(st)).trim().length > 0)
+  }
+
+  s.eq('Ordered says the team has not started', lineFor(row('ordered', { small: 'nobody on it yet' })), 'Ordered · your team starts it next')
+  // The other honest "ordered": picked up, and PAUSED waiting on the owner. It must not read as
+  // "your team is on it" with "Waiting on you" underneath — two opposite sentences on one card.
+  s.eq('an order waiting on the owner says so instead', lineFor(row('ordered', { small: 'waiting on you' })), 'Ordered · waiting on you')
+  s.eq('In production says somebody is on it', lineFor(row('production')), 'Being made · your team is on it')
+  s.eq('Held names the day work starts', lineFor(row('held', { value: 'Jan 20' })), 'Held · work starts Jan 20 · then counted')
+  s.eq('Delivered names the day the count starts', lineFor(row('delivered')), 'Delivered · your count starts Sep 12')
+  s.eq('a delivered DELIVERABLE has no count coming, so it just says done', lineFor(row('delivered', { value: 'Done', small: 'Your photo library' })), 'Done · Your photo library')
+  s.eq('Counting names the day it shows on Home', lineFor(row('counting')), 'Counted after: taps on your Google card · on Home Oct 8')
+  s.eq('Counted is the number and what it was before', lineFor(row('counted', { value: '41', small: '▲ was 13 in the same 14 days before' })), '41 · ▲ was 13 in the same 14 days before')
+  s.eq('Stopped says what happened to the money', lineFor(row('stopped', { sub: 'Stopped · $120.00 sent back to your card' })), 'Stopped · $120.00 sent back to your card')
+  s.eq('and says so honestly when none moved', lineFor(row('stopped', { sub: 'Stopped · nothing new is running' })), 'Stopped · nothing new is running')
+  s.check('Not counted leads with the reason, not with a zero',
+    lineFor(row('not_counted', { sub: 'Ordered Sep 1 · The delivery apps give us no way to read your orders.' })).startsWith('Not counted: The delivery apps'))
+
+  // No line may print a number the row does not have.
+  for (const st of STATES) s.check(`${st}: never prints "undefined"`, !lineFor(row(st)).includes('undefined'))
+
+  s.eq('only Counted and Stopped are history', [...DONE_STATES].sort(), ['counted', 'stopped'])
+  s.check('a card being MADE has no action, because there is nothing for the owner to do',
+    ACTION_FOR.production === null && ACTION_FOR.held === null)
+  s.eq('a delivered order opens the thing', ACTION_FOR.delivered, 'Open what landed')
+  s.check('a counted row outranks everything still waiting',
+    STATE_RANK.counted < STATE_RANK.counting && STATE_RANK.counting < STATE_RANK.held)
+  s.check('and a stopped order sinks below all of it', STATE_RANK.stopped === Math.max(...STATES.map((x) => STATE_RANK[x])))
+}
+
+// ── Move 4: a website order ends in a domain the owner holds ──
+s.group('Handover: an account that changes hands is a checklist, not a promise')
+{
+  s.eq('a website order has a checklist', handoverFor('request:website').length, WEBSITE_HANDOVER.length)
+  s.eq('so does the site-and-menu service', handoverFor('site-menu').length, WEBSITE_HANDOVER.length)
+  // A photo library hands over too, and it has no domain, no DNS and no hosting login. Four rows
+  // that never apply are rows a person learns to tick without reading.
+  s.eq('a photo library gets NO domain checklist', handoverFor('photo-library').length, 0)
+  s.eq('nor does a Google setup', handoverFor('gbp-setup').length, 0)
+  s.eq('nor does nothing at all', handoverFor(null).length, 0)
+
+  s.check('the domain, the DNS and the hosting login are all required',
+    ['domain', 'dns', 'hosting'].every((id) => WEBSITE_HANDOVER.find((i) => i.id === id)?.required === true))
+  s.check('analytics is NOT, because some owners genuinely have none',
+    WEBSITE_HANDOVER.find((i) => i.id === 'analytics')?.required === false)
+
+  // The guard: delivery is refused until every required row is ticked.
+  s.check('an empty checklist blocks delivery', handoverGuard('request:website', null).ok === false)
+  s.check('and says which rows are open', (handoverGuard('request:website', null) as { reason: string }).reason.includes('domain'))
+  s.check('work that hands nothing over is never blocked', handoverGuard('photo-library', null).ok === true)
+
+  const NOW = '2026-09-07T10:00:00.000Z'
+  let state: unknown = null
+  for (const id of ['domain', 'dns', 'hosting', 'owner']) state = markHandover(state, { id, done: true }, NOW)
+  s.check('every required row ticked → delivery is allowed', handoverGuard('request:website', state).ok === true)
+  s.eq('and the optional row is still honestly open', handoverProgress('request:website', state).doneCount, 4)
+
+  const unticked = markHandover(state, { id: 'domain', done: false }, NOW)
+  s.check('un-ticking a required row blocks it again', handoverGuard('request:website', unticked).ok === false)
+  s.check('and clears the date, because an untrue date is worse than none',
+    readHandover(unticked).find((m) => m.id === 'domain')?.doneAt === undefined)
+
+  const withNote = markHandover(state, { id: 'domain', note: "in Mia's GoDaddy" }, NOW)
+  s.eq('a note says where it went and survives a re-tick', readHandover(withNote).find((m) => m.id === 'domain')?.note, "in Mia's GoDaddy")
+  s.eq('and the day it changed hands is stamped once, not moved', readHandover(withNote).find((m) => m.id === 'domain')?.doneAt, NOW)
+
+  // The stored column is jsonb: it can hold anything, including nothing.
+  for (const junk of [null, undefined, 'nope', 42, {}, { items: 'no' }, { items: [1, 2] }]) {
+    s.eq(`garbage in the column (${JSON.stringify(junk) ?? 'undefined'}) reads as no ticks`, readHandover(junk).length, 0)
+  }
+  s.check('and garbage never accidentally allows a delivery', handoverGuard('request:website', { items: [{ id: 'domain' }] }).ok === false)
 }
 
 // ── Owner-sim fix, Phase 3: pre-checkout asset checks ──
@@ -879,19 +976,23 @@ s.group('Goal chips: every chip maps to a real goal slug (the #1 priority is fin
   s.check(`every GOAL_CHIP maps to a slug (unmapped: ${unmapped.join(',') || 'none'})`, unmapped.length === 0)
   s.eq('the new regulars chip maps', goalSlugForChip('Turn first-timers into regulars'), 'regulars_more_often')
   s.eq('the new catering chip maps', goalSlugForChip('Grow catering orders'), 'grow_catering')
-  s.eq('the new photos chip maps', goalSlugForChip('Better photos of my food'), 'be_known_for')
-  s.eq('the new younger-crowd chip maps', goalSlugForChip('Reach a younger crowd'), 'be_known_for')
+  // One chip, one slug (migration 256): the six chips that used to collapse into be_known_for
+  // each read back as what the owner actually picked.
+  s.eq('the new photos chip maps', goalSlugForChip('Better photos of my food'), 'better_photos')
+  s.eq('the new younger-crowd chip maps', goalSlugForChip('Reach a younger crowd'), 'younger_crowd')
   s.eq('slow days chip → fill_slow_times', goalSlugForChip('More customers on slow days'), 'fill_slow_times')
   s.eq('an unknown chip maps to null (shape defaults stand)', goalSlugForChip('Something else entirely'), null)
 }
 
 s.group('Budget chips: one question feeds the guard + the ranker')
 {
-  const known = BUDGET_CHIPS.filter((c) => c !== 'Not sure yet')
-  s.check('every dollar chip maps to a cap', known.every((c) => (budgetCapForChip(c) ?? 0) > 0))
+  // The two open-ended chips assert no cap at all; every banded chip caps at the top of its band.
+  const known = BUDGET_CHIPS.filter((c) => !NO_CAP_BUDGET_CHIPS.includes(c))
+  s.check('every banded chip maps to a cap', known.every((c) => (budgetCapForChip(c) ?? 0) > 0))
   s.eq('Under $200/mo → 200', budgetCapForChip('Under $200/mo'), 200)
   s.eq('$500 to $1,000/mo → 1000 (top of range, never under-sold)', budgetCapForChip('$500 to $1,000/mo'), 1000)
   s.eq('"Not sure yet" asserts NO cap', budgetCapForChip('Not sure yet'), null)
+  s.eq('"Over $2,500/mo" asserts NO cap (never an invented $5,000)', budgetCapForChip('Over $2,500/mo'), null)
   s.eq('unknown text asserts NO cap', budgetCapForChip('whatever'), null)
 }
 
@@ -950,15 +1051,25 @@ s.group('Coming-soon cards live in ONE section, never inside a category')
 {
   const rows = [
     { id: 'aware', ids: ['gbp', 'listings', 'creator'] },                       // mixed → keeps only the live ones
-    { id: 'orders', ids: ['promoevent', 'launch', 'ticket', 'catering', 'giftcard', 'slowoffer'] },  // all dark → drops
+    // Mixed too, since the owner call of 2026-08-09 put promoevent, launch and catering on sale
+    // with their email leg held. It used to be all dark, and the expectations below are DERIVED
+    // from isBuyable now so the next card that goes on sale does not fail this group again.
+    { id: 'orders', ids: ['promoevent', 'launch', 'ticket', 'catering', 'giftcard', 'slowoffer'] },
     { id: 'back', ids: ['welcome', 'news', 'birthday', 'winback'] },            // all dark → drops
   ]
   const { liveRows, soonIds } = collapseDarkShelves(rows, { buyable: (id) => isBuyable(id), hidden: () => false })
-  s.eq('the shelf with live cards survives', JSON.stringify(liveRows.map((r) => r.id)), JSON.stringify(['aware']))
+  const wantLive = rows.filter((r) => r.ids.some((id) => isBuyable(id))).map((r) => r.id)
+  const wantSoon = [...new Set(rows.flatMap((r) => r.ids))].filter((id) => !isBuyable(id))
+  s.eq('a shelf with any live card survives, an all-dark shelf drops', JSON.stringify(liveRows.map((r) => r.id)), JSON.stringify(wantLive))
+  s.check('the all-dark shelf really did drop', !liveRows.some((r) => r.id === 'back'))
   // The crux: a MIXED shelf keeps only what can be bought. Its unbuyable card moves to the bottom.
-  s.check('a mixed shelf shows only buyable cards', liveRows[0].ids.every((id) => isBuyable(id)), JSON.stringify(liveRows[0].ids))
+  // The length is asked FIRST: if the allowlist ever tightens until every card is dark, liveRows
+  // is empty and reading liveRows[0].ids would throw the harness instead of failing this check.
+  s.check('a mixed shelf shows only buyable cards',
+    liveRows.length > 0 && liveRows[0].ids.every((id) => isBuyable(id)),
+    JSON.stringify(liveRows[0]?.ids ?? []))
   s.check("the mixed shelf's coming-soon card moved to the soon section", soonIds.includes('creator'))
-  s.eq('every unbuyable card across all shelves is gathered, deduped', soonIds.length, 11)
+  s.eq('every unbuyable card across all shelves is gathered, deduped', soonIds.length, wantSoon.length)
   s.check('every gathered id is unbuyable (nothing live gets buried)', soonIds.every((id) => !isBuyable(id)))
   s.check('no id is both on a shelf and in the soon list', liveRows.every((r) => r.ids.every((id) => !soonIds.includes(id))))
   // A card that cannot be bought must never headline the store as a top pick either.
@@ -1027,9 +1138,16 @@ s.group('Retired cards leave nothing behind; TikTok off the sell surfaces')
     s.check(`${id}: cannot be bought`, !isBuyable(id))
     s.check(`${id}: dropped from the browse`, isHidden(id))
   }
-  // TikTok is unsellable until the rail exists — no sell surface may promise it.
-  const surfaces = JSON.stringify({ t: CAMPAIGN_TEMPLATES, c: SERVICE_CHANNELS, cc: CAMPAIGN_CONTENT })
-  s.check('no sell surface mentions TikTok', !/tiktok/i.test(surfaces))
+  // POSTING to TikTok is unsellable until the publish rail exists, so no channel list and no sell
+  // copy may promise a post there. ONE mention is allowed and it is not a posting promise: the
+  // social-profiles card sells a per-platform checklist the OWNER applies (social-profiles-fix.tsx
+  // carries TikTok's own steps and a link to its settings screen). It never posts anything, and
+  // striking the word out of that card would make the card lie about what it covers.
+  const tiktokChannels = Object.entries(SERVICE_CHANNELS).filter(([, v]) => v.some((x) => /tiktok/i.test(x))).map(([k]) => k)
+  s.check('no service claims TikTok as a channel it posts to', tiktokChannels.length === 0, tiktokChannels.join(','))
+  const surfaces = JSON.stringify({ t: CAMPAIGN_TEMPLATES, cc: { ...CAMPAIGN_CONTENT, socialprofiles: undefined } })
+  s.check('no sell copy promises TikTok outside the owner-applied profile checklist', !/tiktok/i.test(surfaces))
+  s.check('the profile checklist is the card that names it', /tiktok/i.test(JSON.stringify(CAMPAIGN_CONTENT.socialprofiles)))
 }
 
 const ok = s.report('Lifecycle simulator — pure logic')

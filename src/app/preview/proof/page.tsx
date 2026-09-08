@@ -12,7 +12,7 @@ const SAMPLES = [
   {
     id: 'sample-gbp', label: 'This week on Google',
     big: '9 calls · 31 direction taps',
-    context: 'Up from 4 calls and 12 taps the week before.',
+    context: 'Calls: 9, up from 4. Direction taps: 31, up from 12.',
     attribution: 'Since your menu photos went live, Aug 21.',
     spark: [9, 12, 10, 13, 17, 22, 31],
   },
@@ -54,7 +54,7 @@ const SAMPLES = [
   {
     id: 'sample-down', label: 'Quieter week on Google',
     big: '3 calls · 14 direction taps',
-    context: 'Down from 7 calls and 24 taps the week before. A push this week turns it around.',
+    context: 'Calls: 3, down from 7. Direction taps: 14, down from 24. Worth a push this week.',
     tone: 'heads_up' as const,
     cta: { label: 'Plan the push', href: '/campaigns/new' },
   },

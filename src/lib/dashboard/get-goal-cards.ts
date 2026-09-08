@@ -38,6 +38,15 @@ const GOAL_TO_SIGNAL: Record<GoalSlug, SignalSource> = {
   more_reservations: { kind: 'unmapped' },      // needs reservation data
   fill_slow_times: { kind: 'unmapped' },        // needs daypart data
   grow_catering: { kind: 'unmapped' },          // needs catering inquiry data
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: { kind: 'pulse_reach' },
+  promote_offering: { kind: 'pulse_customers' },
+  grow_social: { kind: 'pulse_reach' },
+  launch_something: { kind: 'pulse_reach' },
+  stay_top_of_mind: { kind: 'pulse_reach' },
+  beat_nearby: { kind: 'pulse_customers' },
+  better_photos: { kind: 'unmapped' },          // a deliverable, not a signal
+  younger_crowd: { kind: 'pulse_reach' },
 }
 
 const GOAL_SIGNAL_LABEL: Record<GoalSlug, string> = {
@@ -49,6 +58,15 @@ const GOAL_SIGNAL_LABEL: Record<GoalSlug, string> = {
   more_reservations: 'Booked covers',
   fill_slow_times: 'Slow-time daypart traffic',
   grow_catering: 'Catering inquiries',
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: 'Reach across social',
+  promote_offering: 'Calls, directions, bookings',
+  grow_social: 'Reach across social',
+  launch_something: 'Reach across social',
+  stay_top_of_mind: 'Reach across social',
+  beat_nearby: 'Calls, directions, bookings',
+  better_photos: 'Photos in your library',
+  younger_crowd: 'Reach across social',
 }
 
 const GOAL_HREF: Record<GoalSlug, string> = {
@@ -60,6 +78,15 @@ const GOAL_HREF: Record<GoalSlug, string> = {
   more_reservations: '/dashboard/insights',
   fill_slow_times: '/dashboard/insights',
   grow_catering: '/dashboard/insights',
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: '/dashboard/insights',
+  promote_offering: '/dashboard/insights',
+  grow_social: '/dashboard/insights/social',
+  launch_something: '/dashboard/insights',
+  stay_top_of_mind: '/dashboard/insights',
+  beat_nearby: '/dashboard/insights',
+  better_photos: '/dashboard/insights',
+  younger_crowd: '/dashboard/insights/social',
 }
 
 export async function getGoalCards(clientId: string): Promise<GoalCardData[]> {
@@ -201,6 +228,14 @@ function displayName(slug: GoalSlug): string {
     be_known_for: 'Be known as the spot',
     fill_slow_times: 'Fill slow times',
     grow_catering: 'Grow catering',
+    local_awareness: 'Be known nearby',
+    promote_offering: 'Promote one thing',
+    grow_social: 'Grow social following',
+    launch_something: 'Launch something new',
+    stay_top_of_mind: 'Stay top of mind',
+    beat_nearby: 'Win the block',
+    better_photos: 'Better photos of the food',
+    younger_crowd: 'Reach a younger crowd',
   }
   return map[slug]
 }

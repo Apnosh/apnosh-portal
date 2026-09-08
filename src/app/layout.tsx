@@ -22,8 +22,8 @@ export const viewport: Viewport = {
 }
 
 export const metadata: Metadata = {
-  title: 'Apnosh — Client Portal',
-  description: 'Manage your marketing, approve content, and track results — all in one place.',
+  title: 'Apnosh Client Portal',
+  description: 'Manage your marketing, approve content, and track results, all in one place.',
   /* Prevent iOS from auto-linking phone numbers / emails / addresses
      that appear in the UI (e.g., a customer review or a vendor profile
      contact line). The dashboard surfaces these as visual content, not

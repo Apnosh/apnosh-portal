@@ -16,6 +16,7 @@ import {
 import MvpShell from '@/components/mvp/mvp-shell'
 import { MvpDetailHeader, C } from '@/components/mvp/mvp-detail'
 import { FAQS, type FaqCategory, type FaqIcon, type FaqItem } from '@/lib/help/faqs'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 const ICONS: Record<FaqIcon, typeof Compass> = {
   start: Compass, alerts: Bell, reviews: Star, business: Store,
@@ -121,7 +122,7 @@ export default function HelpPage() {
         {/* Human escape hatch */}
         <div style={{ background: C.greenSoft, border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 16, marginTop: 6 }}>
           <div style={{ fontSize: 15, fontWeight: 600, color: C.ink }}>Still need help?</div>
-          <div style={{ fontSize: 13, color: C.mute, marginTop: 2 }}>Message your team. We usually reply within a few hours.</div>
+          <div style={{ fontSize: 13, color: C.mute, marginTop: 2 }}>Message your team. We reply {REPLY_PROMISE}.</div>
           <Link
             href="/dashboard/messages"
             className="mvp-row"

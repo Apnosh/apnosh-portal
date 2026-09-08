@@ -55,7 +55,7 @@ export function Segmented<K extends string>({ items, value, onChange, counts, ho
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
             {n != null && n > 0 && (hot?.includes(k)
               ? <span style={{ minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: '#d99a1e', color: '#fff', fontSize: 10.5, fontWeight: 800, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n}</span>
-              : <span style={{ fontSize: 11, fontWeight: 700, color: on ? C.greenDk : C.faint }}>{n}</span>)}
+              : <span style={{ fontSize: 11, fontWeight: 700, color: on ? C.greenDk : C.mute }}>{n}</span>)}
           </button>
         )
       })}

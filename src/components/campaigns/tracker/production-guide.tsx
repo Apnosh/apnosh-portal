@@ -70,9 +70,9 @@ export function ProductionSummary({ phase, goLive, whenLine, progress, awaitingY
   const s = (() => {
     if (phase === 'live') return { chip: 'Live', tone: 'green' as const, now: 'It’s live and running', next: 'We track how it does and share a recap', est: 'Live now' }
     if (phase === 'done') return { chip: 'Done', tone: 'green' as const, now: 'All wrapped up', next: 'Your results are below', est: null as string | null }
-    if (phase === 'setup') return { chip: 'Getting set up', tone: 'amber' as const, now: awaitingYou > 0 ? 'We’re on it — and waiting on a few things from you' : 'We’re getting everything set up', next: 'We make it, then it goes live', est }
+    if (phase === 'setup') return { chip: 'Getting set up', tone: 'amber' as const, now: awaitingYou > 0 ? 'We are on it. We are waiting on a few things from you.' : 'We are getting everything set up.', next: 'We make it, then it goes live', est }
     // production
-    const madePart = progress && progress.total > 0 ? ` — ${progress.live} of ${progress.total} done` : ''
+    const madePart = progress && progress.total > 0 ? `: ${progress.live} of ${progress.total} done` : ''
     return { chip: 'In production', tone: 'green' as const, now: `Your team is making your campaign${madePart}`, next: 'It goes live', est }
   })()
   const chipBg = s.tone === 'amber' ? C.amberBg : C.greenSoft
@@ -104,9 +104,9 @@ export function ProductionSummary({ phase, goLive, whenLine, progress, awaitingY
  *  Each row NAVIGATES to that item's own detail page via onOpenItem(id). */
 export function ProductionGuide({ items, onOpenItem }: { items: DetailItem[]; onOpenItem: (id: string) => void }) {
   const faqs = [
-    { q: 'What if I want a change?', a: 'Message your team any time and tell us what to tweak — we’ll adjust before it goes out.' },
+    { q: 'What if I want a change?', a: 'Message your team any time and tell us what to tweak. We’ll adjust before it goes out.' },
     { q: 'How will I know when it’s live?', a: 'This page updates on its own, and we’ll give you a heads-up. You don’t have to check back.' },
-    { q: 'Do I owe anything else?', a: 'No — you paid at checkout. Nothing else bills for this order.' },
+    { q: 'Do I owe anything else?', a: 'No. You paid at checkout. Nothing else bills for this order.' },
   ]
 
   return (
@@ -130,7 +130,9 @@ export function ProductionGuide({ items, onOpenItem }: { items: DetailItem[]; on
                 <CheckCircle2 size={15} color={C.green} style={{ flexShrink: 0 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>{it.name}</div>
-                  {it.does && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.does}</div>}
+                  {/* Wrapped and clamped at a LINE, never mid-word: this used to end
+                      "hours, menu lin…" on one nowrap line, which reads as a broken page. */}
+                  {it.does && <div style={{ fontSize: 11.5, color: C.faint, marginTop: 1, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.does}</div>}
                 </div>
                 <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
               </button>

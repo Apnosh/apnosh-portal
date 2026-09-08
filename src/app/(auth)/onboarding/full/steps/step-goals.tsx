@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { type OnboardingData, GOAL_CHIPS } from '../data'
 import { Question, hueOf, gradOf, DISPLAY, CARD_SHADOW } from '../ui'
+import { useLang } from '@/components/mvp/mvp-language'
 
 interface Props {
   data: OnboardingData
@@ -47,6 +48,7 @@ const GOAL_META: Record<string, { icon: LucideIcon; hue: string; sub: string }> 
  * counter chip. No alert, no silent swap: changing your mind means un-picking a tile first.
  */
 export default function StepGoals({ data, update, nav }: Props) {
+  const { T } = useLang()
   const picked = data.top_goals.length ? data.top_goals : (data.primary_goal ? [data.primary_goal] : [])
   const full = picked.length >= MAX
 
@@ -71,8 +73,8 @@ export default function StepGoals({ data, update, nav }: Props) {
     <>
       <style>{'@media (prefers-reduced-motion: no-preference) { @keyframes goalCounterPulse { 0% { transform: scale(1) } 40% { transform: scale(1.14) } 100% { transform: scale(1) } } }'}</style>
       <Question
-        title="What matters most right now?"
-        subtitle="Pick up to three."
+        title={T('What matters most right now?')}
+        subtitle={T('Pick up to three.')}
         icon={<Target size={28} strokeWidth={2} />}
         hue="event"
       />
@@ -127,8 +129,8 @@ export default function StepGoals({ data, update, nav }: Props) {
               <span aria-hidden className="flex items-center justify-center" style={{ width: 36, height: 36, borderRadius: 12, background: gradOf(meta.hue), color: '#fff', boxShadow: `0 6px 14px ${deep}59` }}>
                 <Icon size={18} strokeWidth={2.2} />
               </span>
-              <span className="block text-[14.5px] leading-tight" style={{ fontFamily: DISPLAY, fontWeight: 600, color: '#1d1d1f', marginTop: 'auto' }}>{g}</span>
-              {meta.sub && <span className="block text-[11.5px]" style={{ color: '#6e6e73', marginTop: -4 }}>{meta.sub}</span>}
+              <span className="block text-[14.5px] leading-tight" style={{ fontFamily: DISPLAY, fontWeight: 600, color: '#1d1d1f', marginTop: 'auto' }}>{T(g)}</span>
+              {meta.sub && <span className="block text-[11.5px]" style={{ color: '#6e6e73', marginTop: -4 }}>{T(meta.sub)}</span>}
             </button>
           )
         })}

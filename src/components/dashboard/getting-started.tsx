@@ -20,6 +20,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 import {
   Plug, ShoppingBag, MessageSquare, Sparkles, ArrowRight, Check,
   Camera, Globe, Search, ListChecks,
@@ -201,7 +202,7 @@ export default function GettingStarted({ clientName }: { clientName: string }) {
           icon={MessageSquare}
           tint="bg-sky-50 ring-sky-100 text-sky-700"
           title="Meet your strategist"
-          summary="Once you subscribe to a service, your strategist reaches out within 24 hours. You can also message us any time."
+          summary={`Once you subscribe to a service, your strategist reaches out ${REPLY_PROMISE}. You can also message us any time.`}
           actionLabel="Send a message"
           actionHref="/dashboard/messages"
           details={

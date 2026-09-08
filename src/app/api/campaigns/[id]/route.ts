@@ -18,6 +18,7 @@ import { shipBillingGate, SHIP_NEEDS_PAYMENT } from '@/lib/campaigns/ship-guard'
 import { beatsFromLines } from '@/lib/campaigns/catalog'
 import { deriveSchedule } from '@/lib/campaigns/schedule'
 import { notifyStaffForClient } from '@/lib/notifications'
+import { ensureClientStrategist } from '@/lib/team/assign'
 import type { LineItem, PieceProducer } from '@/lib/campaigns/types'
 
 async function authorize(id: string) {
@@ -58,7 +59,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   ])
   // Additive: only the owner-safe columns ride out — never steps, assignees, or internal notes.
   const serviceOrders: ItemServiceOrder[] | null = svcOrders
-    ? svcOrders.map((o) => ({ lineItemId: o.lineItemId, serviceId: o.serviceId, status: o.status, dueDate: o.dueDate, deliveredAt: o.deliveredAt }))
+    // proof_url and handover ride out because they are the owner's OWN order: the thing they
+    // bought, and the list of what they now hold. Steps, assignees and internal notes never do.
+    ? svcOrders.map((o) => ({ lineItemId: o.lineItemId, serviceId: o.serviceId, status: o.status, dueDate: o.dueDate, deliveredAt: o.deliveredAt, proofUrl: o.proofUrl, handover: o.handover ?? null }))
     : null
   return NextResponse.json({ campaign, progress, charges, outcomes, pieces, activity, readiness, payment, booking, serviceOrders, since })
 }
@@ -101,7 +104,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // which re-runs the diagnosis server-side and stamps only on a fresh all-good read.
     // Known keys, plus owner-defined custom asks (id `custom-<slug>` from the campaign builder).
     // Custom keys still pass the same string + 2000-char cap, so nothing unbounded/injected accretes.
-    const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'bookingLink', 'orderButtonsSelfDoneAt', 'reviewRepliesSelfDoneAt', 'citationsFixed', 'citationsSelfDoneAt', 'socialProfilesFixed', 'socialProfilesSelfDoneAt', 'setupNotes', 'vendorInfo', 'menuSource', 'footageUrls', 'setupSkipped', 'deliveryAccess', 'siteAccess', 'adAccess', 'adTargeting', 'brandVoice', 'photoUrls'])
+    const KNOWN = new Set(['featuring', 'offerText', 'mustSay', 'avoid', 'postNotes', 'shootTimes', 'blackoutDates', 'onSiteContact', 'accessNotes', 'bestReach', 'filmStaff', 'socialHandles', 'orderingLink', 'bookingLink', 'orderButtonsSelfDoneAt', 'reviewRepliesSelfDoneAt', 'citationsFixed', 'citationsSelfDoneAt', 'socialProfilesFixed', 'socialProfilesSelfDoneAt', 'setupNotes', 'vendorInfo', 'menuSource', 'footageUrls', 'setupSkipped', 'deliveryAccess', 'siteAccess', 'adAccess', 'adTargeting', 'brandVoice', 'photoUrls', 'truckSchedule'])
     // footageUrls/photoUrls hold comma-joined lists of uploaded-file URLs, so they get a larger cap
     // than the free-text intake fields (which stay tight to keep injected text out of the brief AI).
     const capFor = (k: string) => (k === 'footageUrls' || k === 'photoUrls' ? 8000 : 2000)
@@ -150,7 +153,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // ── G7 (hardened for the ONE pay-first model, owner decision B): payment-aware ship.
   // Every billable campaign ships through the upfront checkout, which threads the paid PaymentIntent
   // into this PATCH. shipBillingGate decides:
-  //   'allow'  → free/DIY $0 order, or a genuinely legacy pre-checkout campaign (dated carve-out)
+  //   'allow'  → free/DIY $0 order, or the invoice lane (there is no legacy carve-out any more)
   //   'verify' → a PaymentIntent was presented → confirm the charge succeeded + covers the bill, or 402
   //   'refuse' → a billable, non-legacy ship with NO payment → block (it must go through checkout)
   // THE INVOICE LANE. While card checkout is shut, a billable order used to die at prepare with a
@@ -162,11 +165,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const invoiceLane = wantsShip && body.billing === 'invoice' && !campaignCheckoutEnabled()
   let invoiceBill: { preTaxCents: number; perMonthCents: number } | null = null
   if (wantsShip) {
-    const { preTaxCents, perMonthCents } = checkoutBill({ items: campaign.draft.items })
+    // Bill the items this ship will ACTUALLY leave behind. body.items replaces the whole line-item
+    // set (replaceLineItems, below), so gating on campaign.draft.items priced the plan as it was
+    // before the request — a ship that adds paid pieces in the same call would have been gated on
+    // the cheaper old cart. Same merge the allocation record uses further down.
+    const shipItems = (Array.isArray(body.items) ? (body.items as LineItem[]) : campaign.draft.items)
+    const { preTaxCents, perMonthCents } = checkoutBill({ items: shipItems })
     const paymentIntentId = typeof body.paymentIntentId === 'string' ? body.paymentIntentId : undefined
-    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, createdAtISO: campaign.createdAt, invoiceLane })
+    const gate = shipBillingGate({ preTaxCents, perMonthCents, hasPaymentIntent: !!paymentIntentId, invoiceLane })
     if (invoiceLane && gate === 'allow' && (preTaxCents > 0 || perMonthCents > 0)) invoiceBill = { preTaxCents, perMonthCents }
-    if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT }, { status: 402 })
+    // A machine-readable code, not just the sentence: the legacy ship buttons (the campaign detail
+    // page, the Content Menu) used to show this as a plain error with a "Try again" that could never
+    // succeed. They read the code and send the owner to checkout instead.
+    if (gate === 'refuse') return NextResponse.json({ error: SHIP_NEEDS_PAYMENT, code: 'SHIP_NEEDS_PAYMENT' }, { status: 402 })
     if (gate === 'verify') {
       const verified = await verifyAndLinkCheckoutPayment({ paymentIntentId: paymentIntentId!, clientId: campaign.clientId, campaignId: id, preTaxCents })
       if (!verified.ok) return NextResponse.json({ error: verified.reason }, { status: 402 })
@@ -174,7 +185,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       ;(async () => {
         const { notifyClientOwners } = await import('@/lib/notifications')
         const dollars = `$${(preTaxCents / 100).toFixed(2)}`
-        await notifyClientOwners(campaign.clientId, { kind: 'client_signoff', title: 'Order placed', body: `${dollars}${perMonthCents > 0 ? ` today, then $${(perMonthCents / 100).toFixed(2)}/mo` : ''} charged to your card for "${campaign.draft.name}". A receipt is on its way from Stripe.`, link: `/dashboard/campaigns/${id}` })
+        await notifyClientOwners(campaign.clientId, { kind: 'client_signoff', title: 'Order placed', body: `${dollars}${perMonthCents > 0 ? ` today, then $${(perMonthCents / 100).toFixed(2)}/mo` : ''} charged to your card for "${campaign.draft.name}". A receipt is on its way from Stripe.`, link: `/dashboard/campaigns/${id}`, email: true, emailCategory: 'billing' })
       })().catch(() => {})
     }
   }
@@ -280,6 +291,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    // SOMEONE OWNS THIS ORDER. Written before anything mints, so the work orders below carry a
+    // name and the staff handoff at the end of this block reaches a named person instead of
+    // paging every admin. A client onboarded before this existed gets their strategist here, the
+    // first time they ship. Best-effort; a client with no staff to pick just behaves as before.
+    await ensureClientStrategist(campaign.clientId).catch(() => null)
     // HELD means "work starts later": only when the OWNER picked a date (plan-ahead) and the
     // schedule's first piece lands more than a week out. Captured BEFORE the estimate-mode
     // anchor below stamps a future first-post date onto target_date, which is not a hold.
@@ -399,6 +415,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           body: `${campaign.draft.name}. The owner approved it to go live. Build and run the pieces.`,
           link: `/work/drafts?focus=${id}`,
         },
+        // An order just got placed. Admins stay on this one alongside the strategist, so one
+        // person's day off cannot be the reason a paid campaign sits unseen.
+        { alsoAdmins: true },
       ).catch(() => ({ notified: 0 }))
     } else if (teamWork) {
       // A service-only plan (SEO, listings, ads — the system goals sell mostly services,
@@ -417,6 +436,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           body: `${campaign.draft.name}. ${n} ${n === 1 ? 'service' : 'services'} to set up and run. No content pieces to build.`,
           link: `/work/today?focus=${id}`,
         },
+        { alsoAdmins: true },
       ).catch(() => ({ notified: 0 }))
     }
     // Dead-letter: the campaign had TEAM pieces to produce but made none (the

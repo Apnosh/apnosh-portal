@@ -17,6 +17,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Loader2, Check, ShieldCheck, FileText, X } from 'lucide-react'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 import {
   recordSubscribeIntent, signAgreement, activateService,
 } from '@/lib/dashboard/subscribe-to-service'
@@ -94,7 +95,7 @@ export default function SubscribeFlow({
         <div>
           <p className="text-[13px] font-semibold text-emerald-700">Subscribed!</p>
           <p className="text-[11.5px] text-emerald-700/80 mt-0.5">
-            Your strategist is notified. They&apos;ll reach out within 24 hours.
+            Your strategist is notified. They&apos;ll reach out {REPLY_PROMISE}.
           </p>
         </div>
       </div>

@@ -23,7 +23,10 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const CRON_SECRET = process.env.CRON_SECRET
-const IMPACT_LINK = '/dashboard/insights'
+/* the report itself, not the Insights tab: the notification says the recap is ready, so it has
+   to open the recap. The month rides along in ?m= so the link still opens the month the
+   notification names when it is read in the first days of the next one. */
+const IMPACT_LINK = '/dashboard/insights/impact'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
@@ -42,6 +45,7 @@ export async function GET(req: Request) {
   const admin = createAdminClient()
   const now = new Date()
   const monthStartIso = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+  const monthLink = `${IMPACT_LINK}?m=${monthStartIso.slice(0, 7)}`
 
   let q = admin.from('clients').select('id, name').neq('status', 'churned')
   if (onlyClientId) q = q.eq('id', onlyClientId)
@@ -58,13 +62,16 @@ export async function GET(req: Request) {
     const userIds = await getClientOwnerUserIds(admin, c.id)
     let sentForClient = 0
     for (const userId of userIds) {
-      // Idempotency: did this user already get this month's recap?
+      // Idempotency: did this user already get this month's recap? Keyed on the month and the
+      // page, NOT the exact link — the link now carries ?m=, and an exact match would have sent
+      // a second copy to everyone the first time it changed. The link prefix is still here
+      // because a staff-published report writes report_ready too, at /dashboard/reports.
       const { count } = await admin
         .from('notifications')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userId)
         .eq('type', 'report_ready')
-        .eq('link', IMPACT_LINK)
+        .like('link', `${IMPACT_LINK}%`)
         .gte('created_at', monthStartIso)
       if ((count ?? 0) > 0) { skippedAlready++; continue }
 
@@ -75,7 +82,7 @@ export async function GET(req: Request) {
           type: 'report_ready',
           title: `Your ${summary.monthLabel} recap is ready`,
           body: 'See what your Google presence drove this month: profile views, calls, directions, and new reviews.',
-          link: IMPACT_LINK,
+          link: monthLink,
         })
       }
       notified++; sentForClient++

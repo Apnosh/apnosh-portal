@@ -16,13 +16,16 @@
 import { useState } from 'react'
 import { ChevronLeft } from 'lucide-react'
 import WalkCalendar from '@/components/campaigns/monthly/walk-calendar'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 import {
   DESK, paperGround, DeskKeyframes, Ticket, Stamp, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, ConfirmButton,
 } from '@/components/campaigns/desk/ui'
 import RequestBoard from '@/components/requests/request-boards'
 import { requestTypeById, questionsFor, type RequestAnswers } from '@/lib/requests/catalog'
-import { priceCreativeRequest, fmtCents, CREATIVE_LEVELS, VALVE_LINE, REVISION_LINE } from '@/lib/requests/pricing'
+import { priceCreativeRequest, fmtCents, fmtTotal, CREATIVE_LEVELS, VALVE_LINE, REVISION_LINE } from '@/lib/requests/pricing'
 import { flowFor, bucketForDate, type FlowControl, type TicketOption } from '@/lib/requests/flows'
+import { useClient } from '@/lib/client-context'
+import DeskCheckout from '@/components/requests/desk-checkout'
 
 const fmtDay = (s: string) => new Date(`${s}T12:00:00`).toLocaleDateString(undefined, { month: 'long', day: 'numeric' })
 
@@ -99,6 +102,10 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
   /* the cart screen between Add to cart and Confirm order */
   const [cart, setCart] = useState(false)
   const [orderAmount, setOrderAmount] = useState<number | null>(null)
+  /* THE TILL. The order is saved and priced; this is the request id it is waiting to be paid for.
+     Nothing is made until it is. */
+  const [payFor, setPayFor] = useState<string | null>(null)
+  const { client } = useClient()
 
   if (!type || !flow) return null
   const today = new Date().toISOString().slice(0, 10)
@@ -168,9 +175,9 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
     setUploading(false)
   }
 
-  /* Confirm order: the brief goes down the ORDER lane at the price sheet's number
-   * (the server computes its own and never trusts ours); the work order mints on
-   * the house team right away. */
+  /* Confirm order: the brief goes down the ORDER lane at the price sheet's number (the server
+   * computes its own and never trusts ours). NOTHING IS MADE YET — the row lands priced and
+   * waiting, and the next screen is the card. Work follows money. */
   const send = async () => {
     if (sending) return
     setSending(true)
@@ -188,10 +195,13 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           order: true,
         }),
       })
-      const j = (await r.json().catch(() => ({}))) as { error?: string; order?: { amount_cents?: number } }
+      const j = (await r.json().catch(() => ({}))) as { error?: string; request?: { id?: string }; order?: { amount_cents?: number; needs_payment?: boolean } }
       if (!r.ok) throw new Error(typeof j.error === 'string' ? j.error : 'Could not send. Try again.')
       if (typeof j.order?.amount_cents === 'number') setOrderAmount(j.order.amount_cents)
-      setSubmitted(true)
+      // Straight to the till. A saved order with no payment is not an order yet, so the "Order
+      // placed" screen only ever appears on the far side of the card.
+      if (j.order?.needs_payment && typeof j.request?.id === 'string') setPayFor(j.request.id)
+      else setSubmitted(true)
     } catch (e) {
       setSendError(e instanceof Error ? e.message : 'Could not send. Try again.')
     }
@@ -199,6 +209,19 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
   }
 
   const ground = { ...paperGround, minHeight: '100dvh', padding: '16px 16px 40px', fontFamily: DESK.body, boxSizing: 'border-box' as const }
+
+  /* ── the till: the ONE card form this app has, wrapped for one desk order ── */
+  if (payFor && client?.id) {
+    return (
+      <DeskCheckout
+        clientId={client.id}
+        requestId={payFor}
+        label={type.label}
+        onDone={() => { setPayFor(null); setSubmitted(true) }}
+        onCancel={() => setPayFor(null)}
+      />
+    )
+  }
 
   /* ── done: the stamped board ── */
   if (submitted) {
@@ -236,18 +259,18 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
         <DeskKeyframes />
         <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.14em', textTransform: 'uppercase', color: DESK.mute, margin: '4px 0 10px' }}>Your cart</div>
         <RequestBoard typeId={type.id} answers={answers} />
-        <div style={{ fontSize: 13, color: DESK.ink2, margin: '10px 0 12px', lineHeight: 1.5 }}>One more look, then confirm. Work starts right away.</div>
+        <div style={{ fontSize: 13, color: DESK.ink2, margin: '10px 0 12px', lineHeight: 1.5 }}>One more look, then pay. Work starts the moment your card clears.</div>
         {price && (
           <ReceiptFrame>
             {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
             <ReceiptRule />
-            <ReceiptTotal label="Total" big={fmtCents(price.totalCents)} />
+            <ReceiptTotal label="Total" big={fmtTotal(price)} />
           </ReceiptFrame>
         )}
         <div style={{ background: DESK.card, border: `1px solid ${DESK.line}`, borderRadius: 14, padding: '12px 14px', margin: '12px 0' }}>
           <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 4 }}>Assigned to</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: DESK.ink }}>Your Apnosh creative team</div>
-          <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.45 }}>A named creator picks it up within 1 business day. You can follow it in Your requests.</div>
+          <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 3, lineHeight: 1.45 }}>{`A named creator picks it up ${REPLY_PROMISE}. You can follow it in Your requests.`}</div>
         </div>
         {sendError && (
           <div style={{ background: DESK.amberWash, color: DESK.amber, border: `1px solid ${DESK.amberLine}`, borderRadius: 12, padding: '9px 13px', fontSize: 12.5, fontWeight: 600, marginBottom: 12, lineHeight: 1.45 }}>
@@ -255,8 +278,8 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           </div>
         )}
         <ConfirmButton
-          label={sending ? 'Placing your order...' : `Confirm order${price ? ` · ${price.startsAt ? 'from ' : ''}${fmtCents(price.totalCents)}` : ''}`}
-          sub="Goes on your Apnosh bill. Nothing else to do."
+          label={sending ? 'Placing your order...' : `Confirm order${price ? ` · ${price.startsAt ? 'from ' : ''}${fmtTotal(price)}` : ''}`}
+          sub="Next: your card. Nothing is made until it clears."
           disabled={sending}
           onClick={() => { void send() }}
         />
@@ -455,7 +478,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
             <div style={{ padding: '10px 0' }}>
               <div style={{ fontFamily: DESK.mono, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', fontWeight: 700, color: DESK.mute, marginBottom: 3 }}>Assigned to</div>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: DESK.ink }}>Your Apnosh creative team</div>
-              <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>A named creator picks it up within 1 business day. You can follow it in Your requests.</div>
+              <div style={{ fontSize: 11.5, color: DESK.ink2, marginTop: 2, lineHeight: 1.45 }}>{`A named creator picks it up ${REPLY_PROMISE}. You can follow it in Your requests.`}</div>
             </div>
           </div>
           {CREATIVE_LEVELS[type.id] && (() => {
@@ -475,14 +498,14 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
                     on={!isWorks}
                     name={<span>Standard <span style={{ fontFamily: DESK.mono, fontSize: 10, fontWeight: 700, color: DESK.mintDeep }}>most owners pick this</span></span>}
                     sub={CREATIVE_LEVELS[type.id].standard}
-                    price={std ? fmtCents(std.totalCents) : undefined}
+                    price={std ? fmtTotal(std) : undefined}
                     onClick={() => setA('level', 'Standard')}
                   />
                   <Ticket
                     on={isWorks}
                     name="The works"
                     sub={CREATIVE_LEVELS[type.id].works}
-                    price={wrk ? fmtCents(wrk.totalCents) : undefined}
+                    price={wrk ? fmtTotal(wrk) : undefined}
                     onClick={() => setA('level', 'The works')}
                   />
                 </div>
@@ -539,11 +562,11 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
                 <ReceiptFrame>
                   {price.lines.map((l, i) => <ReceiptRow key={i} label={l.label} amount={fmtCents(l.amountCents)} />)}
                   <ReceiptRule />
-                  <ReceiptTotal label={price.startsAt ? 'Starts at' : 'Total'} big={fmtCents(price.totalCents)} />
+                  <ReceiptTotal label={price.startsAt ? 'Starts at' : 'Total'} big={fmtTotal(price)} />
                 </ReceiptFrame>
                 {price.startsAt && (
                   <div style={{ fontSize: 12, color: DESK.ink2, marginTop: 8, lineHeight: 1.5 }}>
-                    This is the starting point. The final number is agreed in your thread before work starts. We answer within 1 business day.
+                    {`This is the starting point. The final number is agreed in your thread before work starts. We reply ${REPLY_PROMISE}.`}
                   </div>
                 )}
                 <div style={{ fontSize: 11.5, color: DESK.mute, marginTop: 8, lineHeight: 1.5 }}>{REVISION_LINE}</div>
@@ -557,7 +580,7 @@ export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { ty
           )}
           <div style={{ marginTop: 16 }}>
             <ConfirmButton
-              label={`Add to cart${priceCreativeRequest(type.id, answers) ? ` · ${fmtCents(priceCreativeRequest(type.id, answers)!.totalCents)}` : ''}`}
+              label={`Add to cart${priceCreativeRequest(type.id, answers) ? ` · ${fmtTotal(priceCreativeRequest(type.id, answers)!)}` : ''}`}
               onClick={() => { setSendError(null); setCart(true) }}
             />
           </div>

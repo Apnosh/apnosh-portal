@@ -8,9 +8,9 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { notifyStaffForClient, notifyClientOwners } from '@/lib/notifications'
 import { creatorById, rankCreators, type Disc } from './creators'
-import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
+import { buildWorkOrderRows, buildBridgeDraftRow, buildChargeRow, buildPayoutRow, billNoticeDue, billNoticeLines, findUnaccrued, planCampaignPieces, workOrderRowForPiece, teamDraftRowForPiece, reconcileProductionPlan, validateTransition, IllegalTransition, PLAN_REMOVED_NOTE, STOP_NOTE, type WorkOrderStatus, type WorkOrderRow } from './work-orders-core'
 import { feePercentForCreator, assignVendorsToOrderRows, notifyVendorsOfNewWork, notifyVendorOfWork, bestVendorForDiscipline, creatorNamesByIds } from './vendor-supply'
-import { isCampaignCheckoutPaid } from './campaign-payments-server'
+import { isCampaignCheckoutPaid, isRequestCheckoutPaid } from './campaign-payments-server'
 import type { SavedCampaign, CampaignCharges, CreatorEarnings, CreatorPayoutLine } from './view'
 
 export type { WorkOrderStatus }
@@ -97,6 +97,22 @@ export async function mintWorkOrders(campaign: SavedCampaign, shipISO: string): 
     ;({ error } = await admin.from('creator_work_orders').insert(stripped))
   }
   if (error) return 0
+  // A NAME ON THE HOUSE WORK. A craft with an empty vendor bench stays with the Apnosh team, and
+  // creator_work_orders has no staff-owner column to put a person in — so the person who owns it
+  // is written on the campaign instead, where getOrderPeople reads it to answer "who is on my
+  // order". Best-effort; a failure leaves the order exactly as it mints today.
+  if (rows.some((r) => !(r as { vendor_id?: string }).vendor_id)) {
+    try {
+      const { ensureClientStrategist } = await import('@/lib/team/assign')
+      const strategistId = await ensureClientStrategist(campaign.clientId)
+      if (strategistId && campaign.execution?.strategistId !== strategistId) {
+        const { updateCampaignFields } = await import('./server')
+        await updateCampaignFields(campaign.draft.id, { execution: { strategistId } })
+      }
+    } catch (e) {
+      console.warn('[work-orders] strategist stamp failed:', (e as Error)?.message)
+    }
+  }
   // Real vendors get told there is work waiting (the internal team already has
   // the staff rails); only after the insert actually landed.
   await notifyVendorsOfNewWork(rows, assigned, campaign.draft.name).catch(() => undefined)
@@ -228,12 +244,14 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
   // note matching one verbatim would hide the decline from the owner's tracker
   // and re-arm the reconcile's revive machinery, so it is quoted, not trusted.
   if (patch.note === PLAN_REMOVED_NOTE || patch.note === STOP_NOTE) patch = { ...patch, note: `"${patch.note}"` }
-  type CurOrder = { status: string; campaign_id: string | null; client_id: string; title: string | null }
+  // campaign_piece_key carries the desk order's request id ('request:<uuid>') on a work order with
+  // no campaign row — that is how a delivery finds the promise it has to re-anchor.
+  type CurOrder = { status: string; campaign_id: string | null; client_id: string; title: string | null; campaign_piece_key: string | null; delivered_url: string | null }
   let cur: CurOrder | null = null
   if (patch.status) {
     const { data, error: readErr } = await admin
       .from('creator_work_orders')
-      .select('status, delivered_url, concept_status, campaign_id, client_id, title')
+      .select('status, delivered_url, concept_status, campaign_id, client_id, title, campaign_piece_key')
       .eq('id', id)
       .single()
     if (readErr || !data) throw new IllegalTransition('work order not found')
@@ -267,15 +285,54 @@ export async function updateWorkOrder(id: string, patch: { status?: WorkOrderSta
   // Delivered work is the OWNER's turn — this transition previously notified nobody,
   // so finished pieces sat invisible until the owner happened to open the campaign
   // (the silent stall). Tell them; the campaign page has Approve / Ask-for-changes.
-  if (patch.status === 'delivered' && cur) {
-    // Campaign pieces point the owner at the campaign; a marketplace booking (no campaign) points at
-    // the bookings list, where the same Approve / Ask-for-changes gate lives.
-    const reviewLink = cur.campaign_id ? `/dashboard/campaigns/${cur.campaign_id}` : '/dashboard/bookings'
+  //
+  // ONCE PER DELIVERY, and only on the way IN. Everything in this block has a side effect that
+  // should happen when work lands and not when a delivered row is written again: a library row, a
+  // moved count window, an email. ALLOWED_TRANSITIONS already refuses delivered→delivered, so this
+  // is defence in depth — a future transition, or a hand-written status write, must not replay it.
+  //
+  // revision→delivered DOES run all of it, on purpose: the owner asked for changes, the fixed file
+  // is the one they keep, and the count starts when the working thing actually existed.
+  if (patch.status === 'delivered' && cur && cur.status !== 'delivered') {
+    // A DESK order's work order carries 'request:<id>' and no campaign. That is the id its promise
+    // is filed under, and the link the owner should follow.
+    const requestId = cur.campaign_piece_key?.startsWith('request:') ? cur.campaign_piece_key.slice('request:'.length) : null
+    // Campaign pieces point the owner at the campaign; a desk order at its own order page; a
+    // marketplace booking (no campaign) at the bookings list, where the same Approve /
+    // Ask-for-changes gate lives.
+    const reviewLink = cur.campaign_id ? `/dashboard/campaigns/${cur.campaign_id}`
+      : requestId ? `/dashboard/requests/${requestId}`
+      : '/dashboard/bookings'
+
+    // THE FILE THE OWNER KEEPS. A delivered link is a thing they bought; it belongs in their own
+    // Photos & files library, not only on a work order row. Best-effort, idempotent on the link.
+    const deliveredUrl = patch.delivered_url ?? cur.delivered_url
+    try {
+      const { recordDeliveredAsset } = await import('./delivered-assets')
+      await recordDeliveredAsset({ clientId: cur.client_id, name: cur.title || 'Delivered work', url: deliveredUrl })
+    } catch (e) { console.warn('[work-orders] library write failed', (e as Error)?.message) }
+
+    // THE PROMISE, RE-ANCHORED (desk orders). The count starts the day the work landed, not the day
+    // it was ordered. Awaited so the ONE email below can carry the new dates — a second "your date
+    // moved" email a second later reads like the system is broken.
+    let moved: import('@/lib/promises/record').ReanchoredWindow | null = null
+    if (requestId) {
+      try {
+        const { reanchorPromise } = await import('@/lib/promises/record')
+        moved = await reanchorPromise({ requestId, deliveredISO: new Date().toISOString() })
+      } catch (e) { console.warn('[work-orders] re-anchor failed', (e as Error)?.message) }
+    }
+
     await notifyClientOwners(cur.client_id, {
       kind: 'client_signoff',
       title: `${cur.title || 'A piece'} is ready for your review`,
-      body: 'The finished work was delivered. Take a look and approve it, or ask for changes.',
+      body: moved
+        ? `The finished work was delivered. Take a look and approve it, or ask for changes. Your count starts ${moved.countFromDay} and shows on Home ${moved.showsOnDay}.`
+        : 'The finished work was delivered. Take a look and approve it, or ask for changes.',
       link: reviewLink,
+      // Worth a phone buzzing: the thing they bought landed and it is their turn.
+      email: true,
+      emailCategory: 'content',
     }).catch(() => ({ notified: 0 }))
   }
   // A creator saying no used to be terminal (the signal WAS the recovery). Now
@@ -843,7 +900,13 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
   // already covered — record the charge for the ledger but as 'covered_by_checkout', so
   // the invoicing path (which claims only 'accrued' rows) can never bill it a second time.
   const campaignId = (o.campaign_id as string | null) ?? null
-  const covered = campaignId ? await isCampaignCheckoutPaid(campaignId) : false
+  // A DESK order has no campaign row: its checkout money is keyed to the request its piece key
+  // names. Without this the desk paid at the till AND was invoiced again on approval.
+  const pieceKey = String((o.campaign_piece_key as string | null) ?? '')
+  const requestId = pieceKey.startsWith('request:') ? pieceKey.slice('request:'.length) : ''
+  const covered = campaignId
+    ? await isCampaignCheckoutPaid(campaignId)
+    : requestId ? await isRequestCheckoutPaid(requestId) : false
   const row = buildChargeRow({
     id: o.id as string,
     client_id: o.client_id as string,
@@ -881,6 +944,28 @@ export async function accrueChargeForApprovedOrder(orderId: string): Promise<boo
       link: `/work/today?focus=${row.campaign_id ?? ''}`,
     }).catch(() => ({ notified: 0 }))
     return false
+  }
+
+  // KEEP THE PROMISE THE SCREEN MAKES. A graphic order takes no card: the cart says "No charge
+  // today. After you approve the work, we send you the bill." The only thing that turns this
+  // accrued row into a real invoice is an admin button on the client's billing card, and nobody
+  // knew to press it — so the bill was never sent. Now the accrual tells a person, by name and
+  // amount, with the link. Best-effort and once per charge (a re-accrual returns above on 23505).
+  if (billNoticeDue({ requestId, covered, amountCents: row.amount_cents })) {
+    try {
+      const { data: client } = await admin.from('clients').select('name, slug').eq('id', row.client_id).maybeSingle()
+      const name = ((client as { name?: string } | null)?.name) ?? 'A client'
+      const slug = (client as { slug?: string } | null)?.slug ?? ''
+      const words = billNoticeLines(name, String(o.title ?? 'a piece'), row.amount_cents)
+      await notifyStaffForClient(row.client_id, ['strategist', 'designer'], {
+        kind: 'client_signoff',
+        title: words.title,
+        body: words.body,
+        link: slug ? `/admin/clients/${slug}#stripe-billing-card` : '/admin/billing',
+      }, { alsoAdmins: true }).catch(() => ({ notified: 0 }))
+    } catch (e) {
+      console.warn('[accrueCharge] send-the-bill notice failed', (e as Error)?.message)
+    }
   }
   return true
 }
@@ -946,6 +1031,76 @@ export async function accrueChargeForPublishedDraft(draftId: string): Promise<bo
     return false
   }
   return true
+}
+
+/**
+ * Money-in, SERVICE lane: when a service work order is DELIVERED (with proof — the route's own
+ * guard), accrue the owner charge for the line they bought.
+ *
+ * Services minted real work and had a real "done", but wrote NO money row at all. Only creator
+ * pieces and team-published drafts ever reached campaign_charges. That hole is why a stopped
+ * prepaid campaign told the owner "Nothing is owed" while we held their money: the ledger could
+ * not see a single delivered service. This is the third writer into campaign_charges, anchored on
+ * the purchased line (line_item_id) instead of a piece.
+ *
+ * The price is the price on the line the owner bought (campaign_line_items.price, in dollars),
+ * never re-derived from the catalog. MONTHLY lines are skipped on purpose: those bill on the
+ * campaign's Stripe subscription, so a charge row for one would bill it twice.
+ *
+ * Idempotent via the (campaign_id, line_item_id) unique index from migration 254. Best-effort:
+ * degrades to a logged no-op until 254 is applied, and never blocks the delivery.
+ */
+export async function accrueChargeForDeliveredService(serviceOrderId: string): Promise<boolean> {
+  const admin = createAdminClient()
+  const { data: o, error } = await admin
+    .from('service_work_orders')
+    .select('id, campaign_id, client_id, line_item_id, status, title')
+    .eq('id', serviceOrderId)
+    .maybeSingle()
+  if (error || !o) return false
+  if (o.status !== 'delivered') return false
+  const campaignId = (o.campaign_id as string | null) ?? null
+  const lineItemId = (o.line_item_id as string | null) ?? null
+  if (!campaignId || !lineItemId) return false   // an unanchored order has no price to bill
+
+  // select('*') so a column added by a later migration (producer, owner_mode) can't error the read.
+  const { data: line } = await admin.from('campaign_line_items').select('*').eq('id', lineItemId).maybeSingle()
+  if (!line) return false                        // the line was rewritten by a post-ship edit
+  const cadence = (line.cadence ?? {}) as { kind?: string; every?: string }
+  // Monthly services bill on the subscription — a charge row here would bill them a second time.
+  if (cadence.kind === 'recurring' && cadence.every === 'monthly') return false
+  if (line.producer === 'diy' || line.opt_out) return false   // the owner does it; there is nothing to bill
+  const qty = cadence.kind === 'per-occurrence' ? Math.max(1, Number(line.qty) || 1) : 1
+  const amountCents = Math.max(0, Math.round((Number(line.price) || 0) * 100)) * qty
+  if (amountCents <= 0) return false             // free/DIY by design → nothing to bill, no dead-letter
+
+  // G1 double-billing gate, same as the creator + team lanes: a checkout-paid campaign's work is
+  // already covered, so the row is a LEDGER record ('covered_by_checkout'), never invoiceable.
+  const covered = await isCampaignCheckoutPaid(campaignId)
+  const { error: insErr } = await admin.from('campaign_charges').insert({
+    client_id: o.client_id as string,
+    campaign_id: campaignId,
+    line_item_id: lineItemId,
+    source: 'service',
+    amount_cents: amountCents,
+    status: covered ? 'covered_by_checkout' : 'accrued',
+  })
+  if (!insErr) return true
+  if (insErr.code === '23505') return true       // already accrued (idempotent)
+  // Pre-migration 254: the 'service' source or the line_item_id column is not there yet. Log and
+  // skip — the delivery still lands, and the row can be backfilled once the SQL is run.
+  if (insErr.code === '23514' || insErr.code === '42703' || insErr.code === 'PGRST204' || insErr.code === '42P01') {
+    console.warn(`accrueChargeForDeliveredService: skipped service charge row (apply migration 254) order=${serviceOrderId} (${insErr.message})`)
+    return false
+  }
+  // A real failure must never silently lose money — dead-letter it for a human.
+  await notifyStaffForClient(o.client_id as string, ['strategist'], {
+    kind: 'client_signoff',
+    title: 'Service charge failed to record',
+    body: `Delivering "${(o.title as string) || 'a service'}" didn't record its $${Math.round(amountCents / 100)} charge (${insErr.message}). Record it by hand.`,
+    link: `/work/today?focus=${campaignId}`,
+  }).catch(() => ({ notified: 0 }))
+  return false
 }
 
 /**

@@ -6,6 +6,11 @@
  */
 import 'server-only'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
+import { COLLECTED_STATUSES } from './refund-math'
+
+// The status sets live in refund-math (pure, no server-only) so a script can prove them without a
+// database. Re-exported here because this is where every money READ reaches for them.
+export { COLLECTED_STATUSES, SETTLED_STATUSES } from './refund-math'
 
 export interface CampaignPaymentInfo {
   totalCents: number
@@ -13,6 +18,12 @@ export interface CampaignPaymentInfo {
   serviceFeeCents: number
   taxCents: number
   paidAt: string | null
+  /** How much of this charge has gone back, and the day it went. The stopped campaign page reads
+   *  these when the stop happened before the settlement was ever written down, so an owner still
+   *  sees what their money did. 0 / null pre-254, which reads as "nothing went back" — true, since
+   *  pre-254 nothing could be recorded as sent back. */
+  refundedCents: number
+  refundedAt: string | null
 }
 
 function admin() {
@@ -26,17 +37,23 @@ function toInfo(row: Record<string, unknown>): CampaignPaymentInfo {
     serviceFeeCents: Number(row.service_fee_cents) || 0,
     taxCents: Number(row.tax_cents) || 0,
     paidAt: (row.paid_at as string | null) ?? null,
+    refundedCents: Number(row.refunded_cents) || 0,
+    refundedAt: (row.refunded_at as string | null) ?? null,
   }
 }
 
-/** The upfront payment for one campaign (latest paid row), or null. */
+/** The upfront payment for one campaign (latest COLLECTED row), or null. This is the RECEIPT: a
+ *  partly refunded or disputed order still has one, and hiding it is how an owner loses the record
+ *  of a charge that is still on their card. */
 export async function getCampaignPayment(campaignId: string): Promise<CampaignPaymentInfo | null> {
   try {
     const { data, error } = await admin()
       .from('campaign_payments')
-      .select('total_cents, subtotal_cents, service_fee_cents, tax_cents, paid_at')
+      // select('*') so refunded_cents/refunded_at being absent (pre-254) reads as "nothing went
+      // back" rather than erroring the whole receipt away.
+      .select('*')
       .eq('campaign_id', campaignId)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .order('paid_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -48,7 +65,7 @@ export async function getCampaignPayment(campaignId: string): Promise<CampaignPa
 }
 
 /**
- * True when this campaign was paid IN FULL at checkout (a 'paid' campaign_payments row exists).
+ * True when this campaign's checkout money was COLLECTED (see COLLECTED_STATUSES).
  * The G1 gate: when true, the per-piece accrual records its charge as 'covered_by_checkout'
  * instead of 'accrued', so the invoicing path can never bill the same work a second time.
  * Degrades to FALSE on any failure (missing table pre-215, no env) — a read hiccup must never
@@ -61,7 +78,7 @@ export async function isCampaignCheckoutPaid(campaignId: string): Promise<boolea
       .from('campaign_payments')
       .select('id')
       .eq('campaign_id', campaignId)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .limit(1)
     if (error || !data) return false
     return data.length > 0
@@ -70,16 +87,43 @@ export async function isCampaignCheckoutPaid(campaignId: string): Promise<boolea
   }
 }
 
-/** Upfront payments for many campaigns → { campaignId: info } (paid rows only; latest wins). */
+/**
+ * The same G1 gate for a DESK order, keyed on request_id.
+ *
+ * The Request Desk now takes the card at checkout, and its work order then runs the ordinary
+ * creator rail: delivered, approved, and approval accrues an owner charge. With no gate here that
+ * charge lands 'accrued' and an invoice bills the owner a SECOND time for the order they already
+ * paid for at the till. Same law as the campaign lane, same words on the row.
+ *
+ * Degrades to FALSE (pre-258 there is no request_id column to filter on) — and that is honest:
+ * pre-258 no desk order can take a card, so there is no checkout money to be covered by.
+ */
+export async function isRequestCheckoutPaid(requestId: string): Promise<boolean> {
+  if (!requestId) return false
+  try {
+    const { data, error } = await admin()
+      .from('campaign_payments')
+      .select('id')
+      .eq('request_id', requestId)
+      .in('status', COLLECTED_STATUSES)
+      .limit(1)
+    if (error || !data) return false
+    return data.length > 0
+  } catch {
+    return false
+  }
+}
+
+/** Upfront payments for many campaigns → { campaignId: info } (collected rows only; latest wins). */
 export async function getCampaignPaymentsBatch(campaignIds: string[]): Promise<Record<string, CampaignPaymentInfo>> {
   const ids = campaignIds.filter(Boolean)
   if (!ids.length) return {}
   try {
     const { data, error } = await admin()
       .from('campaign_payments')
-      .select('campaign_id, total_cents, subtotal_cents, service_fee_cents, tax_cents, paid_at')
+      .select('*')   // pre-254 tolerant, same reason as the single read above
       .in('campaign_id', ids)
-      .eq('status', 'paid')
+      .in('status', COLLECTED_STATUSES)
       .order('paid_at', { ascending: false })
     if (error || !data) return {}
     const map: Record<string, CampaignPaymentInfo> = {}

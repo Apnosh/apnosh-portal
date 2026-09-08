@@ -13,6 +13,7 @@ import 'server-only'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { turnaroundFor } from './data/service-turnaround'
 import { seedSteps, type WorkOrderStep } from './data/service-playbooks'
+import { ensureClientStrategist } from '@/lib/team/assign'
 import type { SavedCampaign } from './view'
 
 export type ServiceWorkOrderStatus = 'queued' | 'claimed' | 'in_progress' | 'blocked_client' | 'blocked_gate' | 'ready_for_client' | 'delivered'
@@ -35,6 +36,9 @@ export interface ServiceWorkOrder {
   proofNote: string | null
   startedAt: string | null
   deliveredAt: string | null
+  /** The handover checklist, for work that hands an account over (see lib/campaigns/handover.ts).
+   *  Undefined until migration 258 is applied — the shape is owned there, not here. */
+  handover?: unknown
 }
 
 /** A service line is anything the plan sells that is NOT a content piece (those go through the content
@@ -80,6 +84,7 @@ function rowToSWO(r: Record<string, unknown>): ServiceWorkOrder {
     proofNote: (r.proof_note as string | null) ?? null,
     startedAt: (r.started_at as string | null) ?? null,
     deliveredAt: (r.delivered_at as string | null) ?? null,
+    handover: r.handover ?? null,
   }
 }
 
@@ -98,6 +103,13 @@ export async function mintServiceWorkOrders(campaign: SavedCampaign, shipISO: st
   const items = (campaign.draft.items ?? []).filter(mintableServiceLine)
   if (!items.length) return { minted: 0, expected: 0 }
 
+  // A NAME ON EVERY ORDER. Until now assignee_id was only ever written when a staffer claimed a
+  // row, so a fresh order sat in a queue belonging to nobody and the owner had no person to ask.
+  // The client's strategist owns it from the minute it mints; a staffer claiming it later still
+  // overwrites this (that PATCH is a person taking the work, which is the stronger signal).
+  // Best-effort: no strategist means we mint exactly as before, unassigned, never blocked.
+  const strategistId = await ensureClientStrategist(campaign.clientId).catch(() => null)
+
   const rows = items.map((it) => {
     const t = turnaroundFor(it.serviceId)
     // Due date honors the turnaround CLASS: a recurring service starts within a few days (no finish
@@ -115,6 +127,7 @@ export async function mintServiceWorkOrders(campaign: SavedCampaign, shipISO: st
       service_id: it.serviceId,
       title: it.plain || it.name,
       status: 'queued' as const,
+      assignee_id: strategistId,
       due_date: isNaN(due.getTime()) ? null : due.toISOString().slice(0, 10),
       gate_kind: gate?.kind ?? null,
       steps: seedSteps(it.serviceId),

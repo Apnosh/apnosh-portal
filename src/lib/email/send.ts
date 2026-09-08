@@ -45,8 +45,21 @@ export async function sendEmailIfConfigured(args: {
   }
 }
 
-/** The email addresses behind a client's owner users (client_users + businesses). */
-export async function ownerEmailsForClient(clientId: string): Promise<string[]> {
+/** One owner: the auth user id we can look their preferences up by, and where to write to. */
+export interface OwnerEmailTarget {
+  userId: string
+  email: string
+}
+
+/**
+ * The client's owner users WITH their ids, so a caller can ask each person's notification
+ * preferences before writing to them. The id half is the whole point: an address on its own
+ * cannot be checked against "do not send me any emails".
+ *
+ * The five getUserById calls go out together — one round trip's worth of wait instead of five,
+ * because this sits in front of an owner-facing write.
+ */
+export async function ownerEmailTargetsForClient(clientId: string): Promise<OwnerEmailTarget[]> {
   try {
     const { createAdminClient } = await import('@/lib/supabase/admin')
     const admin = createAdminClient()
@@ -57,13 +70,19 @@ export async function ownerEmailsForClient(clientId: string): Promise<string[]> 
     const ids = new Set<string>()
     for (const r of cuRes.data ?? []) if (r.auth_user_id) ids.add(r.auth_user_id as string)
     for (const r of bizRes.data ?? []) if (r.owner_id) ids.add(r.owner_id as string)
-    const emails: string[] = []
-    for (const id of [...ids].slice(0, 5)) {
-      const { data } = await admin.auth.admin.getUserById(id)
-      if (data?.user?.email) emails.push(data.user.email)
-    }
-    return emails
+    const found = await Promise.all(
+      [...ids].slice(0, 5).map(async (id) => {
+        const { data } = await admin.auth.admin.getUserById(id)
+        return data?.user?.email ? { userId: id, email: data.user.email } : null
+      }),
+    )
+    return found.filter((t): t is OwnerEmailTarget => t !== null)
   } catch {
     return []
   }
+}
+
+/** The email addresses behind a client's owner users (client_users + businesses). */
+export async function ownerEmailsForClient(clientId: string): Promise<string[]> {
+  return (await ownerEmailTargetsForClient(clientId)).map((t) => t.email)
 }

@@ -21,6 +21,9 @@ import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgres
 import { upcomingOccasions } from '@/lib/design/occasions'
 import { RATE_CARD } from '@/lib/design/rate-card'
 import { campaignHue, gradOf, hueOf, tint, type HueKey } from './hues'
+/* ONE PILL, ONE ACTION, ONE LINE PER STATE — from src/lib/promises/lines.ts, the same table the
+   server writes the card's line with. A card must never invent its own word for a state. */
+import { PILL_FOR, ACTION_FOR, DONE_STATES, STATE_RANK, type PromiseState } from '@/lib/promises/lines'
 import { Mark } from './mark'
 import { Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Sparkles, FileText, AlertCircle } from 'lucide-react'
 
@@ -29,9 +32,12 @@ const GLYPH: Record<HueKey, typeof Megaphone> = {
   mint: Sparkles, announce: Megaphone, event: Ticket, deal: Tag, nights: Moon, newfaces: MapPin, regulars: Heart,
   reviews: Star, online: ShoppingCart, catering: Users, brand: Share2, amber: Clock, grey: FileText, red: AlertCircle,
 }
-type HuedCard = CampCard & { hue: HueKey; promise?: string | null }
-type LedgerRow = { id: string; label: string; line: string; state: string; campaignId: string | null; requestId: string | null; showsOn: string }
-type DeskRow = { id: string; type: string; label: string; orderedOn: string; status: string; dueDate: string | null; workStatus: string | null; line: string | null }
+type HuedCard = CampCard & { hue: HueKey; promise?: string | null; openUrl?: string | null; /** the seven-state row behind this card, when it has one. The pill, the line, the action AND the tab all read it. */ state?: PromiseState | null; /** where a card with no ledger state sits; desk orders set it so a thing still being made never reads Live */ tab?: 'production' | 'live' | 'done' }
+/** The seven states an order lives. The words come from the same table the server reads. */
+type OrderState = PromiseState
+type LedgerRow = { id: string; label: string; line: string; state: OrderState; campaignId: string | null; requestId: string | null; showsOn: string; openUrl: string | null }
+type DeskRow = { id: string; type: string; label: string; orderedOn: string; status: string; dueDate: string | null; workStatus: string | null; line: string | null; state: OrderState | null; openUrl: string | null }
+
 
 const C = {
   green: '#4abd98', greenDk: '#2e9a78', greenSoft: '#eaf7f3',
@@ -49,6 +55,34 @@ const ANIM = `
 `
 
 type Tab = 'all' | 'live' | 'production' | 'done'
+
+/**
+ * WHICH TAB a card belongs on. One function, read by the tab's NUMBER and by the cards behind it,
+ * so the two can never disagree — "Live 1" sat above ten cards that all read Stopped, because the
+ * count asked `kind === 'live'` while the pill asked the seven-state row (lines.ts).
+ *
+ * The states, in the owner's terms:
+ *   Counted, Stopped   history
+ *   Ordered, Held, In production   we are on it, nothing to see yet
+ *   Delivered, Counting   it landed; it is out there working
+ *
+ * A card with no ledger row behind it (an owner-run plan, an order placed before the ledger) falls
+ * back to what the card worked out for itself, which is the old behaviour. A draft is neither Live
+ * nor history and never reaches here — campaignCards filters it — but saying so costs one line.
+ */
+function tabOf(c: HuedCard): Exclude<Tab, 'all'> | null {
+  if (c.kind === 'draft') return null
+  // not_counted is a ledger row the product cannot count yet, not a place on the shelf: the card
+  // keeps its progress words, so the tab must read those too or the count and the pill disagree.
+  if (c.state && c.state !== 'not_counted') {
+    if (DONE_STATES.has(c.state)) return 'done'
+    if (c.state === 'ordered' || c.state === 'held' || c.state === 'production') return 'production'
+    return 'live'
+  }
+  if (c.tab) return c.tab
+  if (c.pill === 'In production') return 'production'
+  return c.kind === 'done' ? 'done' : 'live'
+}
 
 export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'calendar' } = {}) {
   const { client, loading: clientLoading } = useClient()
@@ -87,7 +121,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
 
   // Drafts (unshipped plans) live on the Orders tab now — Campaigns shows only shipped/live/done.
   // One line per card: the row with a number wins, then counting, then held, then not counted.
-  const rowRank = (r: LedgerRow) => (r.state === 'counted' ? 0 : r.state === 'done' ? 1 : r.state === 'counting' ? 2 : r.state === 'held' ? 3 : 4)
+  const rowRank = (r: LedgerRow) => STATE_RANK[r.state] ?? 8
   const promiseByCampaign = new Map<string, LedgerRow>()
   for (const r of promises.rows) {
     if (!r.campaignId) continue
@@ -99,37 +133,55 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
     const line = o ? outcomeLine(o) : null
     const vm = campaignCardVM(c, progress[c.draft.id], line ? { ...line, spark: o.spark } : null)
     const pr = promiseByCampaign.get(c.draft.id)
-    const hued: HuedCard = { ...vm, hue: campaignHue({ goalKey: c.draft.goalKey, templateId: c.draft.sourceCatalogId, name: c.draft.name }), promise: pr?.line ?? null }
-    // A held order (plan-ahead: work starts on a future date) reads Held, not In production.
-    if (pr?.state === 'held') return { ...hued, pill: 'Held', pillIcon: 'calendar' as const, action: null, promise: pr.line }
-    // Done waits for the count: a delivered service whose promise is still counting stays under Live.
-    if (vm.kind === 'done' && pr && pr.state === 'counting') return { ...hued, kind: 'live' as const, pill: 'Counting', pillIcon: 'dot' as const, action: 'See results' }
-    return hued
+    const hued: HuedCard = { ...vm, hue: campaignHue({ goalKey: c.draft.goalKey, templateId: c.draft.sourceCatalogId, name: c.draft.name }), promise: pr?.line ?? null, openUrl: pr?.openUrl ?? null, state: pr?.state ?? null }
+    // THE SEVEN STATES. Where a promise row exists it is the truth about where this order stands —
+    // one pill, one line, one action, all three from the same row. A card with no ledger row (an
+    // owner-run plan, an order placed before the ledger existed) keeps the progress-derived words.
+    if (!pr || pr.state === 'not_counted') return hued
+    return {
+      ...hued,
+      state: pr.state,
+      kind: DONE_STATES.has(pr.state) ? 'done' as const : pr.state === 'delivered' ? hued.kind : 'live' as const,
+      pill: PILL_FOR[pr.state] ?? hued.pill,
+      pillIcon: pr.state === 'held' ? 'calendar' as const : pr.state === 'counted' ? 'check' as const : 'dot' as const,
+      action: ACTION_FOR[pr.state],
+      promise: pr.line,
+    }
   }).filter((c) => c.kind !== 'draft')
-  /* Desk orders as cards: one row each, in the Create card's own words, linking to the request. */
+  /* Desk orders as cards: one row each, in the Create card's own words, linking to the request.
+     They read the SAME seven states; the work-order fallback is only for an order with no ledger
+     row behind it (a type with no promise spec, or a row written before the ledger existed). */
   const deskCards: HuedCard[] = promises.desk.map((d) => {
     const done = d.workStatus === 'delivered' || d.workStatus === 'approved' || d.status === 'delivered' || d.status === 'closed'
     const making = d.workStatus === 'in_progress' || d.status === 'in_progress'
+    const st = d.state
+    // Staff see "Overdue" on the same order; the owner must not read "due Aug 21" three weeks later
+    // as if it were still ahead of them.
+    const today = new Date().toISOString().slice(0, 10)
+    const late = !!d.dueDate && !done && d.dueDate < today
+    const day = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
     return {
-      key: `desk:${d.id}`, kind: done ? 'done' : 'live', title: d.label,
-      pill: done ? 'Done' : making ? 'Making' : 'Ordered', pillIcon: done ? 'check' : 'dot',
+      key: `desk:${d.id}`,
+      kind: st ? (DONE_STATES.has(st) ? 'done' : done && st === 'delivered' ? 'done' : 'live') : done ? 'done' : 'live',
+      title: d.label,
+      pill: (st && st !== 'not_counted' ? PILL_FOR[st] : null) ?? (done ? 'Done' : late ? 'Late' : making ? 'Making' : 'Ordered'),
+      tab: done ? 'done' : 'production',
+      pillIcon: st === 'held' ? 'calendar' : st === 'counted' || (!st && done) ? 'check' : 'dot',
       blurb: '', cost: null, recurring: false, perf: null, review: false,
-      href: `/dashboard/requests/${d.id}`, action: done ? 'See it' : null,
-      when: `Ordered ${new Date(`${d.orderedOn}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${d.dueDate && !done ? ` · due ${new Date(`${d.dueDate}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}` : ''}`,
-      hue: 'mint', promise: d.line,
+      href: `/dashboard/requests/${d.id}`,
+      action: st ? ACTION_FOR[st] : done ? 'See it' : null,
+      when: `Ordered ${day(d.orderedOn)}${d.dueDate && !done ? (late ? ` · was due ${day(d.dueDate)}. We owe you this.` : ` · due ${day(d.dueDate)}`) : ''}`,
+      hue: 'mint', promise: d.line, openUrl: d.openUrl, state: st,
     }
   })
   const cards: HuedCard[] = [...campaignCards, ...deskCards]
   const counts: Record<Tab, number> = {
     all: cards.length,
-    live: cards.filter((c) => c.kind === 'live').length,
-    production: cards.filter((c) => c.pill === 'In production').length,
-    done: cards.filter((c) => c.kind === 'done').length,
+    live: cards.filter((c) => tabOf(c) === 'live').length,
+    production: cards.filter((c) => tabOf(c) === 'production').length,
+    done: cards.filter((c) => tabOf(c) === 'done').length,
   }
-  const shown = tab === 'all' ? cards
-    : tab === 'live' ? cards.filter((c) => c.kind === 'live')
-    : tab === 'production' ? cards.filter((c) => c.pill === 'In production')
-    : cards.filter((c) => c.kind === 'done')
+  const shown = tab === 'all' ? cards : cards.filter((c) => tabOf(c) === tab)
 
   const loading = clientLoading || saved === null
   const empty = !loading && cards.length === 0 && !error
@@ -217,20 +269,29 @@ function CampaignCard({ c }: { c: HuedCard }) {
   const needsYou = c.kind !== 'draft' && c.review   // shipped but waiting on the owner's setup
   const [h1, h2] = hueOf(c.hue)
   const Glyph = GLYPH[c.hue] ?? Sparkles
+  // Waiting on us reads amber; a thing that landed or is counting reads mint; history reads grey.
+  const WAITING = c.pill === 'Ordered' || c.pill === 'In production' || c.pill === 'Held'
   const pill = c.kind === 'done'
     ? { bg: '#eef0ef', fg: C.mute }
-    : needsYou || c.pill === 'In production'
+    : c.pill === 'Late'
+      ? { bg: '#fbeaea', fg: '#c92d32' } // the kit's red: a promise we missed, said plainly
+    : needsYou || WAITING
       ? { bg: '#FEF4E4', fg: '#8A5A12' }
       : { bg: C.greenSoft, fg: C.greenDk }
+  // A delivered order's action OPENS THE THING. It has to be its own link (a file, on someone
+  // else's host), which is why the action row sits outside the card's link to the order instead
+  // of being nested inside it.
+  const openable = !!c.openUrl && c.action === 'Open what landed'
   const ts = (t: 'up' | 'down' | 'flat') => t === 'up' ? { c: C.greenDk, I: TrendingUp } : t === 'down' ? { c: C.red, I: TrendingDown } : { c: C.mute, I: Minus }
   const strip: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 14, margin: '10px 0 0', padding: '8px 10px', borderRadius: 12, background: '#f5f5f7' }
   const big: React.CSSProperties = { display: 'block', fontFamily: DISPLAY, fontSize: 15, fontWeight: 600, color: C.ink, fontVariantNumeric: 'normal', lineHeight: 1.1 }
   const small: React.CSSProperties = { fontSize: 11, color: C.mute }
 
   return (
-    <Link href={c.href} className="mvp-row" style={{ display: 'flex', textDecoration: 'none', color: 'inherit', borderRadius: 14, marginBottom: 14 }}>
+    <div className="mvp-row" style={{ display: 'flex', borderRadius: 14, marginBottom: 14 }}>
       <div style={{ width: 4, flexShrink: 0, borderRadius: 2, background: `linear-gradient(${h1}, ${h2})` }} />
       <div style={{ flex: 1, minWidth: 0, padding: '2px 4px 2px 12px' }}>
+        <Link href={c.href} style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Mark hue={c.hue} size={38}><Glyph size={18} /></Mark>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -267,18 +328,32 @@ function CampaignCard({ c }: { c: HuedCard }) {
         {/* THE PROMISE, CARRIED: the same line Create printed under the price and Home prints on
             the strip, through its life: "Counted after: …" → "Counting · …" → "41 · was 13". */}
         {c.promise && (
-          <div style={{ marginTop: 8, fontSize: 12, color: c.promise.startsWith('Not counted') ? C.mute : C.greenDk, lineHeight: 1.4 }}>{c.promise}</div>
+          <div style={{ marginTop: 8, fontSize: 12, color: c.promise.startsWith('Not counted') || c.promise.startsWith('Stopped') ? C.mute : C.greenDk, lineHeight: 1.4 }}>{c.promise}</div>
         )}
+        </Link>
 
         {c.action && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 10 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 14px', borderRadius: 16, fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: needsYou ? '#fff' : C.ink, background: needsYou ? gradOf(c.hue) : '#f0f0f2', boxShadow: needsYou ? `0 6px 16px ${tint(c.hue, 0.4, 1)}` : 'none' }}>{c.action} <ArrowRight size={14} /></span>
+            {openable ? (
+              <a href={c.openUrl as string} target="_blank" rel="noopener noreferrer" style={ACTION_STYLE(needsYou, c.hue)}>{c.action} <ArrowRight size={14} /></a>
+            ) : (
+              <Link href={c.href} style={ACTION_STYLE(needsYou, c.hue)}>{c.action} <ArrowRight size={14} /></Link>
+            )}
           </div>
         )}
       </div>
-    </Link>
+    </div>
   )
 }
+
+/* One action button, whichever link it turns out to be. */
+const ACTION_STYLE = (needsYou: boolean, hue: HueKey): React.CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center', gap: 5, height: 32, padding: '0 14px', borderRadius: 16,
+  fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, textDecoration: 'none',
+  color: needsYou ? '#fff' : C.ink,
+  background: needsYou ? gradOf(hue) : '#f0f0f2',
+  boxShadow: needsYou ? `0 6px 16px ${tint(hue, 0.4, 1)}` : 'none',
+})
 
 /* Month calendar: campaign target dates as dots. */
 function CampaignCalendar({ saved }: { saved: SavedCampaign[] }) {

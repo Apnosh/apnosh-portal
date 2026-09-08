@@ -13,6 +13,8 @@ import Link from 'next/link'
 import { ArrowLeft, Check, ChevronDown, ExternalLink, Loader2, MessageSquare, RefreshCw, Send, UploadCloud, X } from 'lucide-react'
 import { classifySteps, pileCounts, type PiledStep } from '@/lib/gbp-apply/piles'
 import type { WorkOrderStep } from '@/lib/campaigns/data/service-playbooks'
+import { handoverProgress } from '@/lib/campaigns/handover'
+import { DISPLAY } from '@/components/mvp/tokens'
 
 type StepX = WorkOrderStep & {
   prepared?: { proposed: string; at: string }
@@ -31,6 +33,8 @@ export interface InboxSWO {
   proofUrl: string | null
   proofNote: string | null
   steps: Record<string, unknown>[]
+  /** The handover checklist state, for work that hands an account over. */
+  handover?: unknown
 }
 
 function fmtShort(iso?: string | null): string {
@@ -154,7 +158,7 @@ export default function WorkOrderInbox({ swo, clientName, deliverableLabel }: { 
         <Link href={`/admin/campaign-orders/${swo.campaignId}`} className="inline-flex items-center gap-1.5 text-sm text-ink-3 hover:text-ink mb-3"><ArrowLeft className="w-4 h-4" /> Back to the order</Link>
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
-            <h1 className="font-[family-name:var(--font-display)] text-2xl text-ink">{clientName} · {swo.title}</h1>
+            <h1 className="text-2xl text-ink" style={{ fontFamily: DISPLAY }}>{clientName} · {swo.title}</h1>
             <p className="text-sm text-ink-3 mt-0.5">{counts.yourTurn} your turn · {counts.waiting} waiting · {counts.done} done{swo.dueDate ? ` · due ${fmtShort(swo.dueDate)}` : ''}</p>
           </div>
           <div className="text-right">
@@ -179,6 +183,10 @@ export default function WorkOrderInbox({ swo, clientName, deliverableLabel }: { 
         <section className="space-y-2.5">
           <h2 className="text-[13px] font-semibold text-ink-2 uppercase tracking-wide">Your turn</h2>
           {yourTurn.length === 0 && !readyToDeliverNoStep && <div className="rounded-xl border border-ink-6 bg-white p-4 text-sm text-ink-4">Nothing needs you right now. It is all with the client or Google.</div>}
+          {/* THE HANDOVER. A website order is not delivered when the site is live — it is delivered
+              when the owner holds the domain. Every required row has to be ticked by the person who
+              actually moved it, and the API refuses the delivery until they are. */}
+          <HandoverCard swoId={swo.id} serviceId={swo.serviceId} handover={swo.handover} busy={busyId !== null || pending || syncing} onDone={() => router.refresh()} onError={setErr} />
           {readyToDeliverNoStep && (
             <div className="rounded-xl border border-brand/40 border-l-4 border-l-brand bg-white p-4">
               <div className="text-sm font-semibold text-ink">Everything is done. Deliver it.</div>
@@ -436,4 +444,82 @@ function YourTurnCard({ p, next, busy, edits, setEdits, onPush, onToggle, onSign
 
 function NextBadge() {
   return <div className="inline-flex items-center rounded-full bg-brand-tint text-brand-dark text-[10px] font-semibold px-2 py-0.5 mb-1.5">Next up</div>
+}
+
+/**
+ * The handover checklist for work that hands an account over (a site, a landing page).
+ *
+ * Renders nothing at all for work that hands nothing over, so it never becomes four rows a person
+ * learns to tick without reading. The note beside each row is where it went in plain words —
+ * "in Mia's GoDaddy", "mia@ is the owner" — because a tick with no note is a memory, not a record.
+ */
+function HandoverCard({ swoId, serviceId, handover, busy, onDone, onError }: {
+  swoId: string
+  serviceId: string
+  handover?: unknown
+  busy: boolean
+  onDone: () => void
+  onError: (m: string | null) => void
+}) {
+  const [saving, setSaving] = useState<string | null>(null)
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const state = handoverProgress(serviceId, handover)
+  if (state.items.length === 0) return null
+
+  const mark = async (id: string, done: boolean) => {
+    if (saving || busy) return
+    setSaving(id); onError(null)
+    try {
+      const res = await fetch(`/api/admin/service-work-orders/${swoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ handover: { id, done, ...(notes[id] !== undefined ? { note: notes[id] } : {}) } }),
+      })
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || 'Could not save that.')
+      onDone()
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Could not save that.')
+    }
+    setSaving(null)
+  }
+
+  return (
+    <div className="rounded-xl border border-ink-6 bg-white p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-sm font-semibold text-ink">What the owner has to hold</div>
+        <div className="text-[11px] text-ink-4">{state.doneCount} of {state.items.length} done</div>
+      </div>
+      <div className="mt-1 text-[12px] text-ink-3">This order cannot be delivered until every required row is ticked.</div>
+      <div className="mt-3 space-y-2.5">
+        {state.items.map((it) => (
+          <div key={it.id} className="rounded-lg border border-ink-6 p-2.5">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={it.done}
+                disabled={saving !== null || busy}
+                onChange={(e) => { void mark(it.id, e.target.checked) }}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-ink-5 text-brand focus:ring-brand/40"
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-ink">
+                  {it.label}
+                  {!it.required && <span className="ml-1.5 text-[11px] font-normal text-ink-4">optional</span>}
+                </span>
+                <span className="block text-[11.5px] text-ink-3 leading-snug">{it.why}</span>
+              </span>
+            </label>
+            <input
+              type="text"
+              defaultValue={it.note ?? ''}
+              onChange={(e) => setNotes((n) => ({ ...n, [it.id]: e.target.value }))}
+              onBlur={() => { if (notes[it.id] !== undefined && notes[it.id] !== (it.note ?? '')) void mark(it.id, it.done) }}
+              placeholder="Where it went, e.g. in Mia's GoDaddy, mia@ is the owner"
+              className="mt-2 w-full rounded-md border border-ink-6 bg-white px-2.5 py-1.5 text-[12.5px] text-ink placeholder:text-ink-4 focus:outline-none focus:ring-2 focus:ring-brand/40"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

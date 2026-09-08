@@ -24,6 +24,7 @@ import { passthroughNotesForLines, plainCostNote, passthroughMonthlyMinimumCents
 import { goLivePhraseFor } from '@/components/campaigns/plan-flow/receipt-view'
 import { draftNeedsShoot } from '@/lib/campaigns/gates/derive'
 import { summarize, type CampaignDraft, type PieceProducer } from '@/lib/campaigns/types'
+import { monthlyPhrase } from '@/lib/campaigns/checkout-bill'
 import type { ResolvedGates, CustomGate } from '@/lib/campaigns/gates/config'
 import { DeskKeyframes, Stamp, ConfirmButton, ReceiptFrame, ReceiptRow, ReceiptRule, ReceiptTotal, paperGround } from '@/components/campaigns/desk/ui'
 
@@ -39,7 +40,17 @@ function fmt(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 }
 
-interface Breakdown { subtotalCents: number; serviceFeeCents: number; taxCents: number; totalCents: number }
+interface Breakdown {
+  subtotalCents: number; serviceFeeCents: number; taxCents: number; totalCents: number
+  /** A friend credit already taken off this bill, in cents (Move 8). Absent on every bill without
+   *  one, so a receipt with no credit prints exactly the lines it always has. */
+  friendCreditCents?: number
+}
+
+/** "$50" for the credit sentences, so the line and the receipt row cannot say different numbers. */
+function creditLine(cents?: number): string | null {
+  return cents && cents > 0 ? fmt(cents) : null
+}
 interface SavedCard { brand: string; last4: string }
 interface PrepareResult {
   free?: boolean
@@ -47,20 +58,46 @@ interface PrepareResult {
   invoice?: boolean
   /** Monthly-only cart: a SetupIntent saves the card (no charge today); the subscription bills it. */
   setupOnly?: boolean
+  /** A desk order that has already been paid for. Never a second charge, never a second work order. */
+  alreadyPaid?: boolean
   paymentIntentId?: string
   clientSecret?: string
   publishableKey?: string | null
   breakdown: Breakdown
   monthlyCents?: number
+  /** Stripe Tax's estimate on the MONTHLY line, in cents. null = we could not work one out (no tax
+   *  location on the customer, Tax off, Stripe unreachable) — the screen says "plus tax" instead. */
+  monthlyTaxCents?: number | null
   savedCard?: SavedCard | null
   gates?: ResolvedGates
   /** Law 5: what this client has already given us — held requirement ids (hollow = owner-word). */
   vault?: { held: string[]; hollow: string[] }
 }
 
+/**
+ * A REQUEST DESK order paying through this same screen.
+ *
+ * The desk sells one priced row (creative_requests), not a plan, so there is no draft to compose,
+ * no campaign to ship and no gates to resolve — but it is the same money: the same 10% fee, the
+ * same Stripe Tax, the same kill switch, the same card form. Building a second card form for it
+ * would mean two places where a charge can be got wrong.
+ *
+ * The caller passes a placeholder draft with no items, which makes every plan-shaped helper on this
+ * screen (the needs panel, the shoot gate, the go-live phrase) resolve to nothing on its own.
+ */
+export interface DeskOrder {
+  requestId: string
+  /** The owner's own name for what they bought, e.g. "Photos". */
+  label: string
+  /** Called when the owner leaves the confirmation. */
+  onDone: (requestId: string) => void
+}
+
 export interface CampaignCheckoutProps {
   clientId: string
   draft: CampaignDraft
+  /** Present = this is a desk order, not a campaign. See DeskOrder. */
+  desk?: DeskOrder
   restaurant?: string
   /** Per-piece producer picks (single-campaign "Buy now" carries these; the cart pre-merges them onto
    *  line items and passes none). Applied via a PATCH before ship, same as the old direct rail. */
@@ -83,7 +120,7 @@ function stripePromiseFor(key: string) {
   return _stripePromise
 }
 
-export default function CampaignCheckout({ clientId, draft, restaurant, producerChoices, initialGateAnswers, onSuccess, onCancel }: CampaignCheckoutProps) {
+export default function CampaignCheckout({ clientId, draft, desk, restaurant, producerChoices, initialGateAnswers, onSuccess, onCancel }: CampaignCheckoutProps) {
   const [prep, setPrep] = useState<PrepareResult | null>(null)
   const checkoutNeeds = useMemo(() => needsForDraftItems(draft.items), [draft.items])
   const [error, setError] = useState<string | null>(null)
@@ -115,7 +152,9 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
         const res = await fetch('/api/checkout/prepare', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ clientId, draft }),
+          // A desk order names its request; the server prices it from the row it already stored,
+          // never from anything this screen sends.
+          body: JSON.stringify(desk ? { clientId, requestId: desk.requestId } : { clientId, draft }),
         })
         const j = (await res.json().catch(() => ({}))) as PrepareResult & { error?: string }
         if (!res.ok) throw new Error(j.error || 'Could not start checkout.')
@@ -124,7 +163,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
         setError(e instanceof Error ? e.message : 'Could not start checkout.')
       }
     })()
-  }, [clientId, draft])
+  }, [clientId, draft, desk])
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 60, ...paperGround, display: 'flex', justifyContent: 'center' }}>
@@ -134,12 +173,17 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
           <Confirmation
             restaurant={restaurant}
             draft={draft}
+            deskLabel={desk?.label}
             invoice={prep?.invoice === true}
             breakdown={placed.breakdown}
+            monthlyTaxCents={prep?.monthlyTaxCents ?? null}
+            // The SERVER's monthly whenever it worked one out: a desk order and an invoice order
+            // both carry theirs there, not on a draft line. Absent, the draft answers.
+            monthlyCents={prep?.monthlyCents}
             setupOnly={!!prep?.setupOnly}
             bookedSlot={placed.bookedSlot}
-            onSetup={() => onSuccess(placed.campaignId, 'setup')}
-            onViewCampaign={() => onSuccess(placed.campaignId, 'campaign')}
+            onSetup={() => (desk ? desk.onDone(placed.campaignId) : onSuccess(placed.campaignId, 'setup'))}
+            onViewCampaign={() => (desk ? desk.onDone(placed.campaignId) : onSuccess(placed.campaignId, 'campaign'))}
           />
         ) : (
           <>
@@ -154,15 +198,23 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
                 <WhatItTakes needs={checkoutNeeds} held={prep.vault?.held ?? []} heldHollow={prep.vault?.hollow ?? []} />
               </div>
             )}
-            {prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} onPlaced={onPlaced} />}
-            {prep?.invoice && !prep.free && <InvoiceCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} breakdown={prep.breakdown} monthlyCents={prep.monthlyCents ?? 0} onPlaced={onPlaced} />}
-            {prep && !prep.free && !prep.invoice && prep.clientSecret && prep.publishableKey && (
+            {/* THE TILL IS SHUT. A desk order has nowhere to go from here: its row is already saved,
+                and placing it "on invoice" would mean shipping a campaign that does not exist. So it
+                says the same sentence a campaign says and stops. Nothing was minted. */}
+            {desk && prep?.invoice && <ErrorBox message="Card checkout is not open yet. Your order is saved, and your team will send an invoice for this." onBack={onCancel} />}
+            {/* Paid already — a reopened tab, a back button, a double tap. Say so plainly rather
+                than let it fall through to the missing-keys message and read as a fault. */}
+            {desk && prep?.alreadyPaid && <ErrorBox message="This order is already paid. Your team has it." onBack={onCancel} />}
+            {!desk && prep?.free && <FreeCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} onPlaced={onPlaced} />}
+            {!desk && prep?.invoice && !prep.free && <InvoiceCheckout clientId={clientId} draft={draft} producerChoices={producerChoices} gates={prep.gates} initialGateAnswers={initialGateAnswers} breakdown={prep.breakdown} monthlyCents={prep.monthlyCents ?? 0} onPlaced={onPlaced} />}
+            {prep && !prep.free && !prep.invoice && !prep.alreadyPaid && prep.clientSecret && prep.publishableKey && (
               <Elements
                 stripe={stripePromiseFor(prep.publishableKey)}
                 options={{ clientSecret: prep.clientSecret, appearance: { theme: 'flat', variables: { colorPrimary: MINT, fontFamily: 'Inter, sans-serif', borderRadius: '12px' } } }}
               >
                 <PayForm
                   clientId={clientId}
+                  desk={desk}
                   initialGateAnswers={initialGateAnswers}
                   draft={draft}
                   restaurant={restaurant}
@@ -170,6 +222,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
                   paymentIntentId={prep.paymentIntentId!}
                   initialBreakdown={prep.breakdown}
                   monthlyCents={prep.monthlyCents ?? 0}
+                  monthlyTaxCents={prep.monthlyTaxCents ?? null}
                   setupOnly={!!prep.setupOnly}
                   savedCard={prep.savedCard ?? null}
                   gates={prep.gates}
@@ -177,7 +230,7 @@ export default function CampaignCheckout({ clientId, draft, restaurant, producer
                 />
               </Elements>
             )}
-            {prep && !prep.free && !prep.invoice && (!prep.clientSecret || !prep.publishableKey) && (
+            {prep && !prep.free && !prep.invoice && !prep.alreadyPaid && (!prep.clientSecret || !prep.publishableKey) && (
               <ErrorBox message="Payments aren’t configured yet (missing Stripe keys). Add the Stripe keys and try again." onBack={onCancel} />
             )}
           </>
@@ -217,7 +270,7 @@ function ErrorBox({ message, onBack }: { message: string; onBack: () => void }) 
   )
 }
 
-function BillCard({ b, monthlyCents, taxPending, costNotes, setupOnly, adSpendMinCents = 0 }: { b: Breakdown; monthlyCents: number; taxPending: boolean; costNotes?: string[]; setupOnly?: boolean; adSpendMinCents?: number }) {
+export function BillCard({ b, monthlyCents, monthlyTaxCents, taxPending, costNotes, setupOnly, adSpendMinCents = 0 }: { b: Breakdown; monthlyCents: number; monthlyTaxCents?: number | null; taxPending: boolean; costNotes?: string[]; setupOnly?: boolean; adSpendMinCents?: number }) {
   // ONE real monthly total including known ad-spend minimums — never a surprise later.
   const adTotalLine = monthlyCents > 0 && adSpendMinCents > 0
     ? <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, fontWeight: 600, color: INK, marginTop: 6 }}>With ad spend, about {fmt(monthlyCents + adSpendMinCents)}+/mo.</div>
@@ -227,12 +280,13 @@ function BillCard({ b, monthlyCents, taxPending, costNotes, setupOnly, adSpendMi
     return (
       <ReceiptFrame style={{ marginBottom: 16 }}>
         <ReceiptRow label="Monthly services" amount={`${fmt(monthlyCents)}/mo`} />
+        <ReceiptRow label="Tax" amount={monthlyTaxCents == null ? 'Added on your bill' : fmt(monthlyTaxCents)} muted={monthlyTaxCents == null} />
         {(costNotes ?? []).map((n) => (
           <div key={n} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, padding: '2px 0 4px' }}>Plus {n}</div>
         ))}
         <ReceiptRule />
-        <ReceiptTotal label="Today" big={fmt(monthlyCents)} small="first month" />
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Your card is billed {fmt(monthlyCents)} each month starting today. Cancel anytime.</div>
+        <ReceiptTotal label="Today" big={monthlyTaxCents == null ? `${fmt(monthlyCents)} + tax` : fmt(monthlyCents + monthlyTaxCents)} small="first month" />
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Your card is billed {monthlyPhrase(monthlyCents, monthlyTaxCents)} each month starting today. Cancel anytime.</div>
         {adTotalLine}
       </ReceiptFrame>
     )
@@ -240,17 +294,22 @@ function BillCard({ b, monthlyCents, taxPending, costNotes, setupOnly, adSpendMi
   return (
     <ReceiptFrame style={{ marginBottom: 16 }}>
       <ReceiptRow label="Subtotal" amount={fmt(b.subtotalCents)} />
-      <ReceiptRow label="Service fee (10%)" amount={fmt(b.serviceFeeCents)} />
+      {/* THE FRIEND CREDIT (Move 8), where it really sits: off the subtotal, above the fee and the
+          tax, because that is the order the server charged it in. Without this row the receipt
+          added up to a bigger number than the card was charged and nothing said why. */}
+      {creditLine(b.friendCreditCents) && <ReceiptRow label="Friend credit" amount={`−${creditLine(b.friendCreditCents)}`} you />}
+      <ReceiptRow label={creditLine(b.friendCreditCents) ? 'Service fee (10% after credit)' : 'Service fee (10%)'} amount={fmt(b.serviceFeeCents)} />
       <ReceiptRow label="Tax" amount={taxPending ? 'Enter address' : fmt(b.taxCents)} muted={taxPending} />
       {monthlyCents > 0 && <ReceiptRow label="Monthly services" amount={`${fmt(monthlyCents)}/mo`} muted />}
+      {monthlyCents > 0 && <ReceiptRow label="Tax on monthly" amount={monthlyTaxCents == null ? 'Added on your bill' : fmt(monthlyTaxCents)} muted />}
       {/* Pass-through costs in plain words, from the catalog's own notes — the consent
           below must be informed, so real extra spend is on the bill, not in fine print. */}
       {(costNotes ?? []).map((n) => (
         <div key={n} style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, padding: '2px 0 4px' }}>Plus {n}</div>
       ))}
       <ReceiptRule />
-      <ReceiptTotal label="Due today" big={fmt(b.totalCents)} small={monthlyCents > 0 ? `then ${fmt(monthlyCents)}/mo` : undefined} />
-      {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Monthly services bill {fmt(monthlyCents)}/mo to this card starting today, as a separate charge. Cancel anytime.</div>}
+      <ReceiptTotal label="Due today" big={fmt(b.totalCents)} small={monthlyCents > 0 ? `then ${monthlyPhrase(monthlyCents, monthlyTaxCents)}` : undefined} />
+      {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, marginTop: 6 }}>Monthly services bill {monthlyPhrase(monthlyCents, monthlyTaxCents)} to this card starting today, as a separate charge. Cancel anytime.</div>}
       {adTotalLine}
     </ReceiptFrame>
   )
@@ -560,15 +619,18 @@ function gateExecutionPatch(gates: CustomGate[], answers: Record<string, string>
   return out
 }
 
-function PayForm({ clientId, draft, restaurant, producerChoices, initialGateAnswers, paymentIntentId, initialBreakdown, monthlyCents, setupOnly, savedCard, gates, onPlaced }: {
+function PayForm({ clientId, draft, desk, restaurant, producerChoices, initialGateAnswers, paymentIntentId, initialBreakdown, monthlyCents, monthlyTaxCents, setupOnly, savedCard, gates, onPlaced }: {
   clientId: string
   initialGateAnswers?: Record<string, string>
   draft: CampaignDraft
+  desk?: DeskOrder
   restaurant?: string
   producerChoices?: Record<string, PieceProducer>
   paymentIntentId: string
   initialBreakdown: Breakdown
   monthlyCents: number
+  /** Stripe Tax's estimate on the monthly line, or null when there is no answer to print. */
+  monthlyTaxCents?: number | null
   /** Monthly-only order: the clientSecret is a SetupIntent (save the card, no charge today). */
   setupOnly?: boolean
   savedCard: SavedCard | null
@@ -630,12 +692,35 @@ function PayForm({ clientId, draft, restaurant, producerChoices, initialGateAnsw
 
   // Ship the campaign (once) + link the payment, then hand off. Shared by both charge paths.
   const finishOrder = async () => {
+    // A DESK order has nothing to ship: the row exists, and its work order is minted by
+    // /api/checkout/complete once it has verified the charge with Stripe. So this is the whole of
+    // it — verify, mint, done — and a retry lands on the same idempotent call.
+    if (desk) {
+      setStatus('Finishing up…')
+      try {
+        const res = await fetch('/api/checkout/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentIntentId, requestId: desk.requestId }),
+        })
+        const j = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string }
+        if (!res.ok || j.ok === false) {
+          setError(j.error || 'Your card was charged but we could not start the work. Tap Finish to try again. You will not be charged twice.')
+          setBusy(false); setStatus('Finish placing your order'); return
+        }
+      } catch {
+        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again. You will not be charged twice.')
+        setBusy(false); setStatus('Finish placing your order'); return
+      }
+      onPlaced(desk.requestId, bill, null)
+      return
+    }
     if (!shippedIdRef.current) {
       setStatus('Placing your order…')
       try {
         shippedIdRef.current = await saveAndShip({ clientId, draft, producerChoices, paymentIntentId })
       } catch {
-        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again — you will not be charged twice.')
+        setError('Your card was charged but we hit a snag placing the order. Tap Finish to try again. You will not be charged twice.')
         setBusy(false); setStatus('Finish placing your order'); return
       }
       // Record the answered custom gates onto the campaign so the team sees them. Best-effort.
@@ -732,12 +817,12 @@ function PayForm({ clientId, draft, restaurant, producerChoices, initialGateAnsw
         {restaurant && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: SUB, marginBottom: 10 }}>Placing your order for <span style={{ fontWeight: 600, color: INK }}>{restaurant}</span></div>}
         <BookingGate clientId={clientId} paymentIntentId={paymentIntentId} booking={gates?.booking ?? null} targetDate={draft.targetDate ?? null} onBlockingChange={setBookingBlocking} onHold={setHeldSlot} />
         <CustomGates gates={customGates} answers={gateAnswers} onChange={(id, value) => setGateAnswers((a) => ({ ...a, [id]: value }))} />
-        <BillCard b={bill} monthlyCents={monthlyCents} taxPending={mode === 'new' && taxPending} costNotes={costNotes} setupOnly={setupOnly} adSpendMinCents={adSpendMinCents} />
+        <BillCard b={bill} monthlyCents={monthlyCents} monthlyTaxCents={monthlyTaxCents} taxPending={mode === 'new' && taxPending} costNotes={costNotes} setupOnly={setupOnly} adSpendMinCents={adSpendMinCents} />
         {needsMonthlyConsent && (
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, cursor: 'pointer', background: '#fff', border: `1px solid ${LINE}`, borderRadius: 14, padding: '12px 14px', marginBottom: 16 }}>
             <input type="checkbox" checked={monthlyConsent} onChange={(e) => setMonthlyConsent(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: MINT, flexShrink: 0 }} />
             <span style={{ fontFamily: 'Inter, sans-serif', fontSize: 12.5, color: INK, lineHeight: 1.5 }}>
-              I agree to <b style={{ fontWeight: 700 }}>{fmt(monthlyCents)}/mo</b> for monthly services starting today, billed to this card each month. Cancel anytime.
+              I agree to <b style={{ fontWeight: 700 }}>{monthlyPhrase(monthlyCents, monthlyTaxCents)}</b> for monthly services starting today, billed to this card each month. Cancel anytime.
               {adSpendMinCents > 0 && (
                 <span style={{ display: 'block', color: SUB, marginTop: 3 }}>
                   Ad money is extra, paid at cost. With ad spend, plan on about <b style={{ fontWeight: 700, color: INK }}>{fmt(monthlyCents + adSpendMinCents)}+/mo</b>.
@@ -791,9 +876,9 @@ function PayForm({ clientId, draft, restaurant, producerChoices, initialGateAnsw
           disabled={busy || !stripe || gateBlocking}
           style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: busy || !stripe || gateBlocking ? 'default' : 'pointer', background: busy ? MINT_DARK : (gateBlocking ? FAINT : MINT), color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, boxShadow: gateBlocking ? 'none' : '0 8px 22px rgba(74,189,152,0.42)' }}
         >
-          {busy ? (status ?? 'Working…') : gateBlocking ? (blockReason ?? 'Complete the steps above') : setupOnly ? `Place order · ${fmt(monthlyCents)}/mo` : `Place order · ${fmt(bill.totalCents)}`}
+          {busy ? (status ?? 'Working…') : gateBlocking ? (blockReason ?? 'Complete the steps above') : setupOnly ? `Place order · ${monthlyPhrase(monthlyCents, monthlyTaxCents)}` : `Place order · ${fmt(bill.totalCents)}`}
         </button>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>{setupOnly ? 'Your monthly services bill to this card starting today. Your campaign starts right after.' : (() => { const t = draft.targetDate ? String(draft.targetDate).slice(0, 10) : null; const wk = new Date(); wk.setUTCDate(wk.getUTCDate() + 7); return t && t > wk.toISOString().slice(0, 10) ? `Your card is charged now. Work is scheduled back from ${new Date(`${t}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}; nothing posts before then.` : 'Your card is charged now. Your campaign starts right after.' })()}</div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>{setupOnly ? 'Your monthly services bill to this card starting today. Your campaign starts right after.' : (() => { const t = draft.targetDate ? String(draft.targetDate).slice(0, 10) : null; const wk = new Date(); wk.setUTCDate(wk.getUTCDate() + 7); const credit = creditLine(bill.friendCreditCents); const charge = credit ? `${fmt(bill.totalCents)} today, with your ${credit} friend credit already off.` : 'Your card is charged now.'; return t && t > wk.toISOString().slice(0, 10) ? `${charge} Work is scheduled back from ${new Date(`${t}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}; nothing posts before then.` : `${charge} Your campaign starts right after.` })()}</div>
       </div>
     </>
   )
@@ -905,10 +990,21 @@ export function FreeCheckout({ clientId, draft, producerChoices, gates, initialG
  * what was actually paid, and the handoff into the "A few things from you" setup page. The go-live
  * estimate is the real one (goLivePhraseFor over the ordered items), not an invented date.
  */
-export function Confirmation({ restaurant, draft, breakdown, setupOnly, invoice, bookedSlot, onSetup, onViewCampaign }: {
+export function Confirmation({ restaurant, draft, deskLabel, breakdown, monthlyTaxCents, monthlyCents: monthlyCentsProp, setupOnly, invoice, bookedSlot, onSetup, onViewCampaign }: {
   restaurant?: string
   draft: CampaignDraft
+  /** Present = a Request Desk order. The plan words ("campaign", "goes live") do not fit one
+   *  bought thing, and its monthly comes from the server's bill, not from a draft with no items. */
+  deskLabel?: string
+  /** The monthly the SERVER billed, in cents — the same prop InvoiceCheckout takes. Given, it
+   *  wins; the draft is only the fallback for the plan rail that has real priced items on it.
+   *  Deriving it from the draft dropped the "$115/mo" off every receipt for an order whose
+   *  monthly lives on the server bill rather than on a line item (a desk order, an invoice). */
+  monthlyCents?: number
   breakdown: Breakdown
+  /** Stripe's estimate of the tax on the monthly, or null when it did not answer. Same source as
+   *  the checkout screen, so the receipt repeats the number the owner already agreed to. */
+  monthlyTaxCents?: number | null
   /** Placed on invoice (card checkout shut): nothing paid today, the team bills when the work lands. */
   invoice?: boolean
   /** Monthly-only order: nothing paid today, the subscription bills the saved card. */
@@ -920,7 +1016,7 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, invoice,
 }) {
   const today = new Date().toISOString().slice(0, 10)
   const billSum = summarize(draft.items)
-  const monthlyCents = Math.round(billSum.perMonth * 100)
+  const monthlyCents = monthlyCentsProp ?? Math.round(billSum.perMonth * 100)
   const goLive = goLivePhraseFor(draft, { creatives: [], services: draft.items, bill: billSum }, today)
   const goLiveShort = goLive.replace(/^Live in /, '').replace(/^Starts in /, '')
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -945,7 +1041,10 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, invoice,
     ownerRunOnly
       ? { state: 'active', title: 'Over to you', sub: 'Your steps are waiting whenever you are' }
       : { state: 'active', title: 'We get to work', sub: 'Your team starts right away' },
-    { state: 'todo', title: 'Goes live', sub: goLiveShort || 'We confirm the date once we start' },
+    deskLabel
+      // A bought thing does not "go live" — it lands, and the count starts the day it does.
+      ? { state: 'todo' as const, title: 'It lands', sub: 'You get it in Photos and files, and your count starts then' }
+      : { state: 'todo' as const, title: 'Goes live', sub: goLiveShort || 'We confirm the date once we start' },
     ...(invoice ? [{ state: 'todo' as const, title: 'Invoice comes', sub: 'When the work lands. No card today.' }] : []),
   ]
 
@@ -956,7 +1055,7 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, invoice,
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <div style={{ marginBottom: 14 }}><Stamp mint>Approved</Stamp></div>
           <div style={{ fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 24, fontWeight: 700, color: INK, letterSpacing: -0.4 }}>Order confirmed</div>
-          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: SUB, marginTop: 4 }}>{restaurant ? `${restaurant}’s campaign is on the way.` : 'Your campaign is on the way.'}{invoice ? ' Your team sends the invoice when the work lands.' : ''}</div>
+          <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, color: SUB, marginTop: 4 }}>{deskLabel ? `Your ${deskLabel.toLowerCase()} order is on the way.` : restaurant ? `${restaurant}’s campaign is on the way.` : 'Your campaign is on the way.'}{invoice ? ' Your team sends the invoice when the work lands.' : ''}</div>
         </div>
 
         {/* timeline */}
@@ -984,8 +1083,9 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, invoice,
           {setupOnly ? (
             <>
               <ReceiptRow label="Monthly services" amount={`${fmt(monthlyCents)}/mo`} />
+              <ReceiptRow label="Tax" amount={monthlyTaxCents == null ? 'Added on your bill' : fmt(monthlyTaxCents)} muted={monthlyTaxCents == null} />
               <ReceiptRule />
-              <ReceiptTotal label="Billed today" big={fmt(monthlyCents)} small="first month" />
+              <ReceiptTotal label="Billed today" big={monthlyTaxCents == null ? `${fmt(monthlyCents)} + tax` : fmt(monthlyCents + monthlyTaxCents)} small="first month" />
             </>
           ) : invoice ? (
             <>
@@ -999,20 +1099,22 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, invoice,
           ) : (
             <>
               <ReceiptRow label="Subtotal" amount={fmt(breakdown.subtotalCents)} />
-              {breakdown.serviceFeeCents > 0 && <ReceiptRow label="Service fee (10%)" amount={fmt(breakdown.serviceFeeCents)} />}
+              {creditLine(breakdown.friendCreditCents) && <ReceiptRow label="Friend credit" amount={`−${creditLine(breakdown.friendCreditCents)}`} you />}
+              {breakdown.serviceFeeCents > 0 && <ReceiptRow label={creditLine(breakdown.friendCreditCents) ? 'Service fee (10% after credit)' : 'Service fee (10%)'} amount={fmt(breakdown.serviceFeeCents)} />}
               {breakdown.taxCents > 0 && <ReceiptRow label="Tax" amount={fmt(breakdown.taxCents)} />}
               <ReceiptRule />
-              <ReceiptTotal label="Paid today" big={fmt(breakdown.totalCents)} small={monthlyCents > 0 ? `then ${fmt(monthlyCents)}/mo` : undefined} />
+              <ReceiptTotal label="Paid today" big={fmt(breakdown.totalCents)} small={monthlyCents > 0 ? `then ${monthlyPhrase(monthlyCents, monthlyTaxCents)}` : undefined} />
             </>
           )}
           {/* Every path with a monthly took a card + consent at checkout (paid orders save the card
               on the charge; monthly-only orders save it on a SetupIntent) — say exactly what bills. */}
-          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{invoice ? `Plus ${fmt(monthlyCents)}/mo in monthly services, on the same invoice. Tax is added on the invoice.` : setupOnly ? 'Billed to your card each month starting today. Cancel anytime.' : `Plus ${fmt(monthlyCents)}/mo in monthly services, billed to this card starting today.`}</div>}
+          {monthlyCents > 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>{invoice ? `Plus ${fmt(monthlyCents)}/mo in monthly services, on the same invoice. Tax is added on the invoice.` : setupOnly ? 'Billed to your card each month starting today. Cancel anytime.' : `Plus ${monthlyPhrase(monthlyCents, monthlyTaxCents)} in monthly services, billed to this card starting today.`}</div>}
           {invoice && monthlyCents <= 0 && <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11.5, color: SUB, marginTop: 8 }}>Card checkout is not open yet. Tax is added on the invoice.</div>}
         </ReceiptFrame>
 
-        {/* needs-you handoff */}
-        <div style={{ background: MINT_TINT, borderRadius: 16, padding: '13px 15px', display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+        {/* needs-you handoff. A desk order has no setup page to send them to — they already told us
+            what they wanted in the flow — so it does not promise one. */}
+        {!deskLabel && <div style={{ background: MINT_TINT, borderRadius: 16, padding: '13px 15px', display: 'flex', gap: 11, alignItems: 'flex-start' }}>
           <div style={{ width: 32, height: 32, borderRadius: 9, background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={MINT_DARK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
           </div>
@@ -1020,15 +1122,15 @@ export function Confirmation({ restaurant, draft, breakdown, setupOnly, invoice,
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: 600, color: INK }}>A few things from you help us start faster</div>
             <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 12, color: '#3f7d6a', marginTop: 2, lineHeight: 1.5 }}>{setupBlurb}</div>
           </div>
-        </div>
+        </div>}
       </div>
 
       <div style={{ flexShrink: 0, background: '#fff', borderTop: `1px solid ${LINE}`, boxShadow: '0 -10px 28px rgba(20,40,30,0.10)', padding: '11px 18px calc(12px + env(safe-area-inset-bottom))' }}>
         <button onClick={onSetup} style={{ width: '100%', height: 52, borderRadius: 26, border: 'none', cursor: 'pointer', background: MINT, color: '#fff', fontFamily: "'Cal Sans', Poppins, sans-serif", fontSize: 16, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxShadow: '0 8px 22px rgba(74,189,152,0.42)' }}>
-          A few things from you
+          {deskLabel ? 'See your order' : 'A few things from you'}
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
         </button>
-        <button onClick={onViewCampaign} style={{ display: 'block', width: '100%', height: 44, marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: 600, color: SUB }}>View campaign</button>
+        {!deskLabel && <button onClick={onViewCampaign} style={{ display: 'block', width: '100%', height: 44, marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif', fontSize: 13.5, fontWeight: 600, color: SUB }}>View campaign</button>}
       </div>
     </div>
   )

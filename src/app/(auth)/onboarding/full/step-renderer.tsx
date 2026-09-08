@@ -1,9 +1,11 @@
 'use client'
 
 import { type ReactNode } from 'react'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Globe } from 'lucide-react'
 import { type OnboardingData, type StepId } from './data'
 import { PrimaryPill } from './ui'
+import { LanguageProvider, useStandaloneLang } from '@/components/mvp/mvp-language'
+import { LANG_LABEL, type Lang } from '@/lib/i18n/t'
 import StepRole from './steps/step-role'
 import StepBizName from './steps/step-biz-name'
 import StepConfirm from './steps/step-confirm'
@@ -21,6 +23,8 @@ import StepStory from './steps/step-story'
 import StepAbout from './steps/step-about'
 import StepAudience from './steps/step-audience'
 import StepGoals from './steps/step-goals'
+import StepBudget from './steps/step-budget'
+import StepShape from './steps/step-shape'
 import StepPromote from './steps/step-promote'
 import StepBrandVoice from './steps/step-brand-voice'
 import StepApproval from './steps/step-approval'
@@ -71,12 +75,18 @@ export interface OnboardingFrameProps {
   hideAction?: boolean
   /** Optional slim strip rendered ABOVE the top bar (preview chrome). */
   topSlot?: ReactNode
+  /** Told when the owner switches language in the top bar, so the wizard can carry the answer
+   *  to the client row at the end. Setup has no client row yet, so this is the only way the
+   *  choice survives past the last screen. */
+  onLanguage?: (l: Lang) => void
 }
 
 const quietTextButton: React.CSSProperties = {
   border: 'none',
   background: 'none',
-  color: '#aeaeb2',
+  /* #aeaeb2 is 2.2:1 on this ground: fine for a hairline, not for a word somebody has to read.
+     These are the two words in the top bar (the language switch, Finish later / Exit). */
+  color: '#6e6e73',
   fontSize: 13,
   fontWeight: 500,
   padding: '6px 2px',
@@ -103,10 +113,22 @@ export function OnboardingFrame({
   continueLabel,
   hideAction,
   topSlot,
+  onLanguage,
 }: OnboardingFrameProps) {
   const barHidden = !!isSuccess || !!hideAction
+  /* Setup runs before a client row exists, so there is no clients.preferred_language to read
+     yet. The standalone hook reads the browser's remembered answer, which is what a returning
+     Spanish owner has, and English otherwise. The answer is written to the client row at the
+     end of setup like every other answer.
+
+     ONE copy for the whole flow. The frame builds it and hands it down through LanguageProvider,
+     so the questions, the tiles and this bar all read the same lang and all re-render together
+     when the switch is tapped. Every screen below calls useLang(). */
+  const langCtx = useStandaloneLang()
+  const { T, lang, setLang } = langCtx
 
   return (
+    <LanguageProvider value={langCtx}>
     <div
       className="ob-frame"
       style={{
@@ -137,7 +159,7 @@ export function OnboardingFrame({
         <button
           type="button"
           onClick={onBack}
-          aria-label="Back"
+          aria-label={T('Back')}
           aria-hidden={!showBack}
           tabIndex={showBack ? 0 : -1}
           disabled={saving}
@@ -166,7 +188,7 @@ export function OnboardingFrame({
           aria-valuemin={0}
           aria-valuemax={100}
           aria-valuenow={pct}
-          aria-label={`Setup progress: screen ${step} of ${totalSteps}`}
+          aria-label={T('Setup progress: screen {n} of {total}', { n: step, total: totalSteps })}
           style={{ flex: 1, height: 4, borderRadius: 2, overflow: 'hidden', background: '#ededec' }}
         >
           <div
@@ -180,15 +202,31 @@ export function OnboardingFrame({
           />
         </div>
 
+        {/* The language switch, in the language it switches TO — the only label a reader who
+            cannot read this screen yet can be sure of. Setup is where a Spanish-speaking owner
+            meets us, so it has to be here and not only in Settings.
+            The globe is why the word is not read as a heading: on a Spanish screen a bare
+            "English" up in the corner looks like a label for the page, not a door off it. */}
+        <button
+          type="button"
+          onClick={() => { const next: Lang = lang === 'es' ? 'en' : 'es'; setLang(next); onLanguage?.(next) }}
+          style={{ ...quietTextButton, display: 'flex', alignItems: 'center', gap: 4 }}
+          aria-label={LANG_LABEL[lang === 'es' ? 'en' : 'es']}
+          title={LANG_LABEL[lang === 'es' ? 'en' : 'es']}
+        >
+          <Globe size={14} aria-hidden />
+          {LANG_LABEL[lang === 'es' ? 'en' : 'es']}
+        </button>
+
         {canSkip ? (
           <button
             type="button"
             onClick={onSkipForNow}
             disabled={saving}
             style={quietTextButton}
-            title="Save your answers and finish setup later from the dashboard."
+            title={T('Save your answers and finish setup later from the dashboard.')}
           >
-            Finish later
+            {T('Finish later')}
           </button>
         ) : onExit ? (
           <button
@@ -196,9 +234,9 @@ export function OnboardingFrame({
             onClick={onExit}
             disabled={saving}
             style={quietTextButton}
-            title="Leave setup. Your progress is saved."
+            title={T('Leave setup. Your progress is saved.')}
           >
-            Exit
+            {T('Exit')}
           </button>
         ) : null}
       </div>
@@ -213,7 +251,10 @@ export function OnboardingFrame({
             display: 'flex',
             flexDirection: 'column',
             justifyContent: 'center',
-            padding: '12px 20px 24px',
+            /* The pinned Continue bar is ~68px of glass at the bottom of the frame. 24px of tail
+               left the next heading of a long screen (What you serve) sitting right on top of it,
+               so the screen read as if it ended mid-question. */
+            padding: '12px 20px 40px',
             maxWidth: 480,
             width: '100%',
             margin: '0 auto',
@@ -238,13 +279,14 @@ export function OnboardingFrame({
         >
           <div style={{ maxWidth: 520, margin: '0 auto' }}>
             <PrimaryPill onClick={onNext} disabled={!valid || saving} grow>
-              {saving ? 'Saving...' : continueLabel || 'Continue'}
+              {saving ? T('Saving…') : continueLabel ? T(continueLabel) : T('Continue')}
             </PrimaryPill>
           </div>
         </div>
       )}
       </div>
     </div>
+    </LanguageProvider>
   )
 }
 
@@ -311,6 +353,7 @@ export default function StepRenderer(props: Props) {
       case 'confirm': return <StepConfirm data={data} update={update} nav={null} />
       case 'biz_type': return <StepBizType data={data} update={update} nav={null} onAnswered={solo ? props.onAutoAdvance : undefined} />
       case 'serve': return <StepServe data={data} update={update} nav={null} />
+      case 'shape': return <StepShape data={data} update={update} nav={null} />
       case 'menu_details': return <StepMenuDetails data={data} update={update} nav={null} />
       case 'ordering': return <StepOrdering data={data} update={update} nav={null} />
       case 'menu': return <StepMenu data={data} update={update} nav={null} />
@@ -322,6 +365,7 @@ export default function StepRenderer(props: Props) {
       case 'story': return <StepStory data={data} update={update} nav={null} />
       case 'audience': return <StepAudience data={data} update={update} nav={null} />
       case 'goals': return <StepGoals data={data} update={update} nav={null} />
+      case 'budget': return <StepBudget data={data} update={update} nav={null} onAnswered={solo ? props.onAutoAdvance : undefined} />
       case 'promote': return <StepPromote data={data} update={update} nav={null} />
       case 'brand_voice': return <StepBrandVoice data={data} update={update} nav={null} />
       case 'discovery': return <StepDiscovery data={data} update={update} nav={null} />
@@ -340,7 +384,7 @@ export default function StepRenderer(props: Props) {
       <ScreenKeyframes />
       {screen === 'success' || !screen ? (
         <div key="success" className="ob-screen">
-          <StepDone bizName={data.biz_name} goals={data.top_goals} />
+          <StepDone bizName={data.biz_name} goals={data.top_goals} shape={data.shape} />
         </div>
       ) : (
         /* Keyed to the screen number so every advance replays the entrance. */

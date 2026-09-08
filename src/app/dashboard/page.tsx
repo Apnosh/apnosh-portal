@@ -29,6 +29,9 @@ export default function DashboardHomePage() {
   // holds off on "all caught up" until this is true so it never flashes the
   // message while a real card is still on its way.
   const [suggestionsReady, setSuggestionsReady] = useState(false)
+  // MOVE 8 — is the referral loop open? It comes off the load payload Home already waits for, so
+  // the tell-a-friend card never asks a route of its own while the switch is off.
+  const [referralsOn, setReferralsOn] = useState(false)
 
   useEffect(() => {
     if (!client?.id) return
@@ -41,10 +44,11 @@ export default function DashboardHomePage() {
       })
       .then((json) => {
         if (!live) return
-        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp)
+        const d = transformHome(json.homeMetrics, json.agenda, client.name ?? '·', undefined, json.comingUp, json.review ?? null)
         d.activity = json.sinceLastChecked ?? []
         d.upcomingWork = json.upcomingWork ?? []
         setData(d)
+        setReferralsOn(json.referralsOn === true)
       })
       .catch((e) => { if (live) setError(e.message) })
     return () => { live = false }
@@ -84,7 +88,7 @@ export default function DashboardHomePage() {
       ) : error && !data ? (
         <Centered>Couldn&apos;t load: {error}</Centered>
       ) : client ? (
-        <MvpHome data={view} showHeader={false} clientId={client.id} suggestionsReady={suggestionsReady} />
+        <MvpHome data={view} showHeader={false} clientId={client.id} suggestionsReady={suggestionsReady} referralsOn={referralsOn} />
       ) : (
         <Centered>No client found for this account.</Centered>
       )}

@@ -11,6 +11,7 @@ import 'server-only'
 import type Stripe from 'stripe'
 import { createClient as createAdminClient } from '@supabase/supabase-js'
 import { stripe, getOrCreateStripeCustomerForClient } from '@/lib/stripe'
+import { paymentMatchesLane, type PaymentLane } from '@/lib/requests/desk-guards'
 
 export interface BillingAddress {
   line1?: string
@@ -105,6 +106,57 @@ export async function computeTaxCents(opts: {
   }
 }
 
+/**
+ * A TAX ESTIMATE for the monthly half of the bill, in cents, or null when we cannot work one out.
+ *
+ * The subscription charges automatic_tax (src/lib/stripe.ts), so the monthly line the owner agrees
+ * to at checkout is not the whole monthly charge. This runs the SAME Stripe Tax calculation the
+ * one-time half runs (computeTaxCents), against the monthly amount, so the consent can say the real
+ * number instead of a number we know is short.
+ *
+ * NEVER COMMITTED. It is a quote for the screen; the invoice does its own tax at billing time, and
+ * rates can change between now and next month.
+ *
+ * null (not 0) when there is no answer — no address on the customer, Tax not enabled, Stripe
+ * unreachable. 0 means Stripe really said "no tax here". The screen says "plus tax" for null and
+ * nothing extra for 0, so we never print a number we did not get.
+ */
+export async function estimateMonthlyTaxCents(opts: {
+  perMonthCents: number
+  customerId?: string
+  address?: BillingAddress
+}): Promise<number | null> {
+  if (opts.perMonthCents <= 0) return null
+  const hasAddr = !!(opts.address && (opts.address.postal_code || opts.address.state))
+  if (!hasAddr && !opts.customerId) return null
+  try {
+    const calc = await stripe.tax.calculations.create({
+      currency: 'usd',
+      line_items: [{ amount: opts.perMonthCents, reference: 'apnosh-campaign-monthly', tax_behavior: 'exclusive' }],
+      ...(hasAddr
+        ? {
+            customer_details: {
+              address: {
+                line1: opts.address!.line1,
+                line2: opts.address!.line2,
+                city: opts.address!.city,
+                state: opts.address!.state,
+                postal_code: opts.address!.postal_code,
+                country: opts.address!.country ?? 'US',
+              },
+              address_source: 'billing',
+            },
+          }
+        : { customer: opts.customerId! }),
+    })
+    return calc.tax_amount_exclusive ?? 0
+  } catch {
+    // No tax location on the customer is the common case here, and it is not an error worth
+    // failing checkout over — the screen just says "plus tax".
+    return null
+  }
+}
+
 /** The customer's card on file (default payment method, else the most recent card), or null.
  *  Reads Stripe directly so it never depends on webhook-mirror timing. */
 export async function getSavedCard(customerId: string): Promise<{ id: string; brand: string; last4: string } | null> {
@@ -156,22 +208,39 @@ export function paymentsTable() {
  * confirm the charge really succeeded, then bind the payment row to the campaign so /checkout/complete
  * (and the webhook backstop) are idempotent.
  *
- * Checks, in order: the PaymentIntent has a payment row → the row belongs to THIS client → the charge
- * is captured (row already 'paid', else the live PI is 'succeeded') → the amount paid covers the bill.
- * On success, links campaign_id + marks paid/shipped (first-write-wins). Returns a discriminated result;
- * the caller turns `!ok` into a 402 and NEVER ships. Degrades honestly: a missing table / unreadable
- * row / Stripe error is a verification FAILURE (we never ship a billable order we can't prove was paid).
+ * Checks, in order: the PaymentIntent has a payment row → the row belongs to THIS client → the row
+ * and Stripe both say the money was for THIS lane and THIS order (paymentMatchesLane) → the charge
+ * is captured (row already 'paid', else the live intent is 'succeeded') → the amount paid covers
+ * the bill. On success, links campaign_id + marks paid/shipped (first-write-wins). Returns a
+ * discriminated result; the caller turns `!ok` into a 402 and NEVER ships. Degrades honestly: a
+ * missing table / unreadable row / Stripe error is a verification FAILURE (we never ship a billable
+ * order we can't prove was paid).
+ *
+ * THE LANE CHECK IS THE POINT. Before it, this function only ever asked "is there a paid row on this
+ * account for this intent" — so a DESK order's own paid row (campaign_id null forever, because the
+ * desk never binds one) sailed through the campaign lane and shipped a whole campaign for free. The
+ * two lanes now ask the same pure question, in desk-guards.ts, from the same row and the same intent.
  */
 export async function verifyAndLinkCheckoutPayment(opts: {
   paymentIntentId: string
   clientId: string
-  campaignId: string
+  /** The campaign this charge paid for. Omitted for a DESK order, which has no campaign row. */
+  campaignId?: string
+  /** A Request Desk order's creative_requests id. Exactly one of the two is given. */
+  requestId?: string
   preTaxCents: number
 }): Promise<{ ok: true } | { ok: false; reason: string }> {
-  let row: { client_id?: string; status?: string; campaign_id?: string | null; subtotal_cents?: number; service_fee_cents?: number } | null = null
+  const lane: PaymentLane = opts.requestId ? 'desk' : 'campaign'
+  const orderId = opts.requestId ?? opts.campaignId ?? ''
+  // Neither id given is a programming mistake, and in money code that fails closed.
+  if (!orderId) return { ok: false, reason: 'Could not verify your payment. Please try again.' }
+
+  // select('*') so a column this database has not got yet (request_id arrives with 258) cannot
+  // error the read — an absent key reads as undefined below, which the guard treats as null.
+  let row: Record<string, unknown> | null = null
   try {
     const { data } = await paymentsTable()
-      .select('client_id, status, campaign_id, subtotal_cents, service_fee_cents')
+      .select('*')
       .eq('stripe_payment_intent_id', opts.paymentIntentId)
       .maybeSingle()
     row = data
@@ -181,39 +250,72 @@ export async function verifyAndLinkCheckoutPayment(opts: {
   if (!row) return { ok: false, reason: 'No payment on file for this order.' }
   if (row.client_id !== opts.clientId) return { ok: false, reason: 'This payment belongs to a different account.' }
 
-  // Captured? Trust a 'paid' row (webhook/complete already reconciled). Otherwise ask Stripe directly,
+  // Stripe's own copy of what this money was for, read BEFORE anything is believed. A read we
+  // cannot make is a failure, never a pass: this is the money path, and the alternative is
+  // trusting a row whose two pointers a bug in the other lane could have left blank.
+  let intentKind: string | null = null
+  let intentRequestId: string | null = null
+  let intentSucceeded = false
+  try {
+    if (opts.paymentIntentId.startsWith('seti_')) {
+      const si = await stripe.setupIntents.retrieve(opts.paymentIntentId)
+      intentKind = si.metadata?.kind ?? null
+      intentRequestId = si.metadata?.requestId ?? null
+      intentSucceeded = si.status === 'succeeded'
+    } else {
+      const pi = await stripe.paymentIntents.retrieve(opts.paymentIntentId)
+      intentKind = pi.metadata?.kind ?? null
+      intentRequestId = pi.metadata?.requestId ?? null
+      intentSucceeded = pi.status === 'succeeded'
+    }
+  } catch {
+    return { ok: false, reason: 'Could not verify your payment. Please try again.' }
+  }
+
+  const matches = paymentMatchesLane(
+    { requestId: (row.request_id as string | null) ?? null, campaignId: (row.campaign_id as string | null) ?? null },
+    { kind: intentKind, requestId: intentRequestId },
+    lane,
+    orderId,
+  )
+  if (!matches) return { ok: false, reason: 'That payment is not for this order.' }
+
+  // Captured? Trust a 'paid' row (webhook/complete already reconciled). Otherwise the live intent,
   // because the ship can land before the webhook flips the row (the card cleared client-side first).
   // A monthly-only order keys its row to a SetupIntent (seti_...): "paid" there means the card
   // setup succeeded — the subscription bills it right after ship.
-  let paid = row.status === 'paid'
-  if (!paid) {
-    try {
-      if (opts.paymentIntentId.startsWith('seti_')) {
-        const si = await stripe.setupIntents.retrieve(opts.paymentIntentId)
-        paid = si.status === 'succeeded'
-      } else {
-        const pi = await stripe.paymentIntents.retrieve(opts.paymentIntentId)
-        paid = pi.status === 'succeeded'
-      }
-    } catch {
-      return { ok: false, reason: 'Could not verify your payment. Please try again.' }
-    }
-  }
+  const paid = row.status === 'paid' || intentSucceeded
   if (!paid) return { ok: false, reason: 'Your payment has not completed yet.' }
 
   // The amount actually billed must cover this campaign's pre-tax bill (recomputed from its
   // line items). Both were computed server-side from the same draft, so this is defense-in-depth
   // against a swapped/stale PaymentIntent, never expected to trip on the happy path.
-  const paidPreTax = (row.subtotal_cents ?? 0) + (row.service_fee_cents ?? 0)
+  const paidPreTax = ((row.subtotal_cents as number | null) ?? 0) + ((row.service_fee_cents as number | null) ?? 0)
   if (paidPreTax < opts.preTaxCents) return { ok: false, reason: 'The amount paid does not cover this order.' }
 
-  // Bind the payment to the campaign (idempotent with /checkout/complete + the webhook backstop).
+  // Bind the payment to the order (idempotent with /checkout/complete + the webhook backstop).
+  // A desk order binds on request_id, which prepare already wrote, so there is nothing to link —
+  // only the paid stamp. It is NOT re-written here: writing it was how a payment for one order
+  // could be re-pointed at another. The filter is the guard instead, and it is the desk's own
+  // "first write wins": a row already bound to a campaign, or to a different request, is not
+  // touched. The campaign lane keeps the same guard on campaign_id, AND the mirror of the desk's:
+  // request_id must still be null, so a desk order's row can never be re-pointed at a campaign even
+  // if the guard above were ever loosened.
   const nowISO = new Date().toISOString()
   try {
-    await paymentsTable()
-      .update({ status: 'paid', campaign_id: opts.campaignId, paid_at: nowISO, shipped_at: nowISO })
-      .eq('stripe_payment_intent_id', opts.paymentIntentId)
-      .is('campaign_id', null)
+    if (opts.requestId) {
+      await paymentsTable()
+        .update({ status: 'paid', paid_at: nowISO, shipped_at: nowISO })
+        .eq('stripe_payment_intent_id', opts.paymentIntentId)
+        .eq('request_id', opts.requestId)
+        .is('campaign_id', null)
+    } else {
+      await paymentsTable()
+        .update({ status: 'paid', campaign_id: opts.campaignId, paid_at: nowISO, shipped_at: nowISO })
+        .eq('stripe_payment_intent_id', opts.paymentIntentId)
+        .is('campaign_id', null)
+        .is('request_id', null)
+    }
   } catch {
     /* the charge is verified paid; a link hiccup is reconciled by /complete + the webhook */
   }

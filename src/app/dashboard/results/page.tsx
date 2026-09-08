@@ -43,7 +43,7 @@ export default function ResultsPage() {
           spark: Array.isArray(c.spark) ? (c.spark as number[]) : undefined,
           fired_at: String(c.fired_at ?? ''),
           is_sample: !!c.is_sample,
-          ...presentCardType(String(c.card_type)),
+          ...presentCardType(String(c.card_type), c.metadata),
         })))
       })
       .catch(() => { if (alive) setRows([]) })

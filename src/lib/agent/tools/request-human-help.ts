@@ -18,6 +18,7 @@
  */
 
 import { createAdminClient } from '@/lib/supabase/admin'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 import { registerToolHandler } from '../registry'
 import type { ToolExecutionContext } from '../types'
 
@@ -119,7 +120,9 @@ async function handler(
 
   return {
     request_id: inserted.id as string,
-    message_to_owner: `Got it — I've passed this to your account manager (${input.urgency === 'high' ? 'high urgency, expect a reply within a few hours' : 'they typically reply within 1 business day'}). I'll be quiet while they pick it up so you don't get duplicate messages.`,
+    // ONE reply promise, urgent or not (src/lib/reply-promise.ts). The old high-urgency branch
+    // promised "a few hours", which no rota, rule or timer in the codebase can keep.
+    message_to_owner: `Got it — I've passed this to your account manager (${input.urgency === 'high' ? 'marked urgent, and they reply' : 'they reply'} ${REPLY_PROMISE}). I'll be quiet while they pick it up so you don't get duplicate messages.`,
   }
 }
 

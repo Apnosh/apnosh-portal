@@ -19,10 +19,20 @@
 
 import { cache } from 'react'
 import { createClient as createServerClient } from '@/lib/supabase/server'
+import { isStaffRole } from './roles'
 
 export interface ResolvedClient {
   user: { id: string; email?: string | null } | null
   isAdmin: boolean
+  /**
+   * Apnosh staff, by profiles.role: 'admin' OR 'super_admin' (src/lib/auth/roles.ts).
+   *
+   * isAdmin above is the narrower flag every dashboard page already runs on — it is what decides
+   * whether ?clientId= picks the client — and it is left exactly as it was. Use isStaff for the
+   * other question: "is the person looking at this screen the owner, or one of us?" A super_admin
+   * reading a client's monthly report is not that client reading it.
+   */
+  isStaff: boolean
   /** The resolved client id. For admins, comes from the URL ?clientId=
       query param (caller passes it in via resolveCurrentClient(clientIdParam)).
       For non-admins, resolved from businesses/client_users. */
@@ -43,7 +53,7 @@ async function _resolve(clientIdParam: string | null): Promise<ResolvedClient> {
   const supabase = await createServerClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
-    return { user: null, isAdmin: false, clientId: null, needsClientPick: false }
+    return { user: null, isAdmin: false, isStaff: false, clientId: null, needsClientPick: false }
   }
 
   // All three lookups in parallel. Most pages need profile.role plus
@@ -55,7 +65,8 @@ async function _resolve(clientIdParam: string | null): Promise<ResolvedClient> {
     supabase.from('client_users').select('client_id').eq('auth_user_id', user.id).maybeSingle(),
   ])
 
-  const isAdmin = (profileRes.data?.role as string | null) === 'admin'
+  const role = (profileRes.data?.role as string | null) ?? null
+  const isAdmin = role === 'admin'
 
   let clientId: string | null = null
   if (isAdmin) {
@@ -70,6 +81,7 @@ async function _resolve(clientIdParam: string | null): Promise<ResolvedClient> {
   return {
     user: { id: user.id, email: user.email ?? null },
     isAdmin,
+    isStaff: isStaffRole(role),
     clientId,
     needsClientPick: !clientId && !!user,
   }

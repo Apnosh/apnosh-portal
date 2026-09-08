@@ -6,9 +6,13 @@
  * window plus the surface ("This week on Google"). Renders in the Home
  * banner slot, one at a time, dismissible. Every number comes from the
  * ledger; this component never invents or estimates.
+ *
+ * A WIN — mint, with a real number in it (src/lib/love/win.ts) — can also carry a `share` link,
+ * drawn in the same CTA style as the move a heads-up card carries. It goes to the page where the
+ * card becomes a square the owner can send somebody. Nothing else about the card changes.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { X, ChevronRight, ChevronDown } from 'lucide-react'
 
 export interface ProofCardData {
@@ -28,20 +32,33 @@ export interface ProofCardData {
   firedAt?: string
   /** 'win' (mint, default) or 'heads_up' (gray) — the down-week material. */
   tone?: 'win' | 'heads_up'
+  /** proof_cards.card_type, kept so a caller can ask whether this card is a WIN (lib/love/win.ts). */
+  cardType?: string
+  /** proof_cards.is_sample — a seeded demo card is never a win, and never gets a public page. */
+  isSample?: boolean
+  /** proof_cards.metadata.metricKey — a rating's line is a pair, so the reader needs to know. */
+  metricKey?: string
   /** The move a heads-up card carries. Renders as the card's one action. */
   cta?: { label: string; href: string }
+  /** A WIN's second door: the page where it becomes something to send somebody. Same CTA style. */
+  share?: { label: string; href: string }
 }
 
 export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen = false }: {
   card: ProofCardData
   onDismiss: () => void
   onSee?: () => void
-  /** Fired once when the strip expands — Home marks the card read. */
+  /** Fired once when the owner opens the win: the strip expands, they tap the card, or its link. */
   onOpen?: () => void
   /** Home renders the slim strip first so the funnel hero keeps its height. */
   defaultOpen?: boolean
 }) {
   const [open, setOpen] = useState(defaultOpen)
+  /* One "they opened it" per card. The deck renders the front card already expanded, so without
+     a tap on the card itself the only way to open a WIN was a link most wins do not have — and
+     the mark that says a win landed was never written. Once, so a link tap does not double it. */
+  const opened = useRef(false)
+  const markOpen = () => { if (!opened.current) { opened.current = true; onOpen?.() } }
   const headsUp = card.tone === 'heads_up'
   const dotColor = headsUp ? '#aeaeb2' : '#4abd98'
   const labelColor = headsUp ? '#6e6e73' : '#2e9a78'
@@ -49,7 +66,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   if (!open) {
     return (
       <button
-        onClick={() => { setOpen(true); onOpen?.() }}
+        onClick={() => { setOpen(true); markOpen() }}
         className="mvp-rise"
         style={{
           display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
@@ -67,6 +84,9 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   return (
     <div
       className="mvp-rise"
+      /* a tap anywhere on the card counts as opening the win (the X and the link handle their
+         own clicks); nothing about how the card looks changes */
+      onClick={markOpen}
       style={{
         position: 'relative', borderRadius: 18, padding: '16px 16px 15px', marginBottom: 12,
         background: '#fff',
@@ -74,7 +94,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       }}
     >
       <button
-        onClick={onDismiss} aria-label="Hide this"
+        onClick={(e) => { e.stopPropagation(); onDismiss() }} aria-label="Hide this"
         style={{ position: 'absolute', top: 8, right: 8, width: 24, height: 24, borderRadius: 99, border: 'none', background: '#f1f1f4', color: '#8e8e93', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
       >
         <X size={13} />
@@ -105,21 +125,34 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
           {card.attribution}
         </div>
       )}
-      {card.cta ? (
-        <a
-          href={card.cta.href}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}
-        >
-          {card.cta.label} <ChevronRight size={13} />
-        </a>
-      ) : onSee && (
-        <button
-          onClick={onSee}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-        >
-          See the week <ChevronRight size={13} />
-        </button>
-      )}
+      {/* one row, so a win with both a move and a share link does not grow a second stack */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        {card.cta ? (
+          <a
+            href={card.cta.href}
+            onClick={markOpen}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}
+          >
+            {card.cta.label} <ChevronRight size={13} />
+          </a>
+        ) : onSee && (
+          <button
+            onClick={(e) => { e.stopPropagation(); markOpen(); onSee() }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+          >
+            See the week <ChevronRight size={13} />
+          </button>
+        )}
+        {card.share && (
+          <a
+            href={card.share.href}
+            onClick={markOpen}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 12.5, fontWeight: 700, color: '#0f6e56', marginTop: 10, textDecoration: 'none' }}
+          >
+            {card.share.label} <ChevronRight size={13} />
+          </a>
+        )}
+      </div>
     </div>
   )
 }

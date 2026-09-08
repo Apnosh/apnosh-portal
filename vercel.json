@@ -53,6 +53,10 @@
       "schedule": "0 16 * * *"
     },
     {
+      "path": "/api/cron/count-is-in",
+      "schedule": "0 17 * * *"
+    },
+    {
       "path": "/api/cron/reconcile-accruals",
       "schedule": "0 */6 * * *"
     },
@@ -127,6 +131,10 @@
     {
       "path": "/api/cron/review-themes-refresh",
       "schedule": "45 15 * * *"
+    },
+    {
+      "path": "/api/cron/monthly-report",
+      "schedule": "0 16 1-5 * *"
     }
   ]
 }

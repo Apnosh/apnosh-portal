@@ -105,6 +105,15 @@ const GOAL_LABEL: Record<GoalSlug, string> = {
   be_known_for: 'be known as the spot',
   fill_slow_times: 'filling slow times',
   grow_catering: 'growing catering',
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: 'being known nearby',
+  promote_offering: 'promoting one thing',
+  grow_social: 'growing your following',
+  launch_something: 'launching something new',
+  stay_top_of_mind: 'staying top of mind',
+  beat_nearby: 'winning the block',
+  better_photos: 'better photos of your food',
+  younger_crowd: 'reaching a younger crowd',
 }
 
 const PRIMARY_CONNECTION_FOR_GOAL: Record<GoalSlug, { channel: string; label: string; href: string }> = {
@@ -116,6 +125,15 @@ const PRIMARY_CONNECTION_FOR_GOAL: Record<GoalSlug, { channel: string; label: st
   more_reservations: { channel: 'website', label: 'Connect your reservation system', href: '/dashboard/connected-accounts' },
   fill_slow_times: { channel: 'email', label: 'Connect your customer list', href: '/dashboard/connected-accounts' },
   grow_catering: { channel: 'website', label: 'Connect your catering inquiry form', href: '/dashboard/connected-accounts' },
+  /* migration 256: one slug per onboarding chip, so the owner's own words survive. */
+  local_awareness: { channel: 'gbp', label: 'Connect Google Business Profile', href: '/dashboard/connected-accounts' },
+  promote_offering: { channel: 'gbp', label: 'Connect Google Business Profile', href: '/dashboard/connected-accounts' },
+  grow_social: { channel: 'instagram', label: 'Connect Instagram', href: '/dashboard/connected-accounts' },
+  launch_something: { channel: 'instagram', label: 'Connect Instagram', href: '/dashboard/connected-accounts' },
+  stay_top_of_mind: { channel: 'gbp', label: 'Connect Google Business Profile', href: '/dashboard/connected-accounts' },
+  beat_nearby: { channel: 'gbp', label: 'Connect Google Business Profile', href: '/dashboard/connected-accounts' },
+  better_photos: { channel: 'gbp', label: 'Connect Google Business Profile', href: '/dashboard/connected-accounts' },
+  younger_crowd: { channel: 'instagram', label: 'Connect Instagram', href: '/dashboard/connected-accounts' },
 }
 
 export async function getTodayHero(clientId: string): Promise<TodayHeroData> {

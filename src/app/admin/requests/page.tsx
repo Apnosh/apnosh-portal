@@ -18,7 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Inbox, Loader2, Paperclip } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  REQUEST_TYPES, REQUEST_STATUSES, STATUS_LABEL, requestTypeById, questionsFor,
+  REQUEST_TYPES, ADMIN_SETTABLE_STATUSES, STATUS_LABEL, requestTypeById, questionsFor,
   type RequestStatus,
 } from '@/lib/requests/catalog'
 
@@ -53,13 +53,14 @@ const STATUS_CLASS: Record<RequestStatus, string> = {
   requested: 'bg-amber-50 text-amber-700',
   in_review: 'bg-blue-50 text-blue-700',
   quoted: 'bg-violet-50 text-violet-700',
+  awaiting_payment: 'bg-amber-50 text-amber-700',
   in_progress: 'bg-emerald-50 text-emerald-700',
   delivered: 'bg-emerald-50 text-emerald-700',
   closed: 'bg-gray-50 text-gray-500',
   declined: 'bg-red-50 text-red-600',
 }
 
-const OPEN_STATUSES: RequestStatus[] = ['requested', 'in_review', 'quoted', 'in_progress', 'delivered']
+const OPEN_STATUSES: RequestStatus[] = ['requested', 'in_review', 'quoted', 'awaiting_payment', 'in_progress', 'delivered']
 
 const V2_SELECT = 'id, client_id, type, brief, status, team_note, created_at, updated_at, due_date, attachments, quote_cents, assigned_to, assigned_name, accepted_at, work_order_id, notes:creative_request_notes(id, author_role, body, created_at), clients(name)'
 const V1_SELECT = 'id, client_id, type, brief, status, team_note, created_at, updated_at, clients(name)'
@@ -328,6 +329,11 @@ export default function AdminRequestsPage() {
                       )}
                     </div>
 
+                    {/* THE HANDOVER. A website order is not delivered when the site is live — it is
+                        delivered when the owner holds the domain. Marking it delivered is refused
+                        by the API until every required row is ticked, so the rows live here. */}
+                    <HandoverBoard requestId={row.id} busy={saving === row.id} onSaved={() => void load()} onError={setError} />
+
                     <div className="flex flex-wrap gap-2">
                       {!v1Only && (
                         <>
@@ -352,7 +358,9 @@ export default function AdminRequestsPage() {
                           )}
                         </>
                       )}
-                      {REQUEST_STATUSES.filter((s) => s !== row.status).map((s) => (
+                      {/* awaiting_payment is the till's own status: a person never sets it by
+                          hand, because the only thing that clears it is the card. */}
+                      {ADMIN_SETTABLE_STATUSES.filter((s) => s !== row.status).map((s) => (
                         <button
                           key={s}
                           type="button"
@@ -372,6 +380,93 @@ export default function AdminRequestsPage() {
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The handover checklist for one desk order, on the board where staff move its status.
+ *
+ * Renders nothing for work that hands nothing over (every type but a website today), so it never
+ * becomes a row a person learns to tick without reading. The note beside each row is where it went
+ * in plain words, because a tick with no note is a memory, not a record.
+ */
+function HandoverBoard({ requestId, busy, onSaved, onError }: {
+  requestId: string
+  busy: boolean
+  onSaved: () => void
+  onError: (m: string | null) => void
+}) {
+  const [state, setState] = useState<{ items: { id: string; label: string; why: string; required: boolean; done: boolean; note?: string }[]; doneCount: number } | null>(null)
+  const [saving, setSaving] = useState<string | null>(null)
+  const [notes, setNotes] = useState<Record<string, string>>({})
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/requests/${requestId}`)
+      const d = await r.json().catch(() => ({}))
+      if (r.ok && d.handover) setState(d.handover)
+    } catch { /* the board still works; the checklist just does not show */ }
+  }, [requestId])
+  useEffect(() => { void load() }, [load])
+
+  if (!state || state.items.length === 0) return null
+
+  const mark = async (id: string, done: boolean) => {
+    if (saving || busy) return
+    setSaving(id); onError(null)
+    try {
+      const r = await fetch(`/api/requests/${requestId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ handover: { id, done, ...(notes[id] !== undefined ? { note: notes[id] } : {}) } }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(typeof d.error === 'string' ? d.error : 'Could not save that.')
+      await load(); onSaved()
+    } catch (e) {
+      onError(e instanceof Error ? e.message : 'Could not save that.')
+    }
+    setSaving(null)
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <div className="text-sm font-semibold text-gray-900">What the owner has to hold</div>
+        <div className="text-[11px] text-gray-500">{state.doneCount} of {state.items.length} done</div>
+      </div>
+      <div className="mt-1 text-xs text-gray-500">This order cannot be marked delivered until every required row is ticked.</div>
+      <div className="mt-2.5 space-y-2">
+        {state.items.map((it) => (
+          <div key={it.id} className="rounded-lg border border-gray-100 p-2.5">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={it.done}
+                disabled={saving !== null || busy}
+                onChange={(e) => { void mark(it.id, e.target.checked) }}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <span className="min-w-0">
+                <span className="block text-[13px] font-medium text-gray-900">
+                  {it.label}
+                  {!it.required && <span className="ml-1.5 text-[11px] font-normal text-gray-400">optional</span>}
+                </span>
+                <span className="block text-[11.5px] text-gray-500 leading-snug">{it.why}</span>
+              </span>
+            </label>
+            <input
+              type="text"
+              defaultValue={it.note ?? ''}
+              onChange={(e) => setNotes((n) => ({ ...n, [it.id]: e.target.value }))}
+              onBlur={() => { if (notes[it.id] !== undefined && notes[it.id] !== (it.note ?? '')) void mark(it.id, it.done) }}
+              placeholder="Where it went, e.g. in Mia's GoDaddy, mia@ is the owner"
+              className="mt-2 w-full border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

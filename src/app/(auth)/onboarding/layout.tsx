@@ -1,3 +1,8 @@
+// The kit's display face, from the token file rather than the setup ui module: this layout
+// is a server component, and every export of a 'use client' module crosses the boundary as a
+// reference, not as the string it looks like.
+import { DISPLAY } from '@/components/mvp/tokens'
+
 export default function OnboardingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: '#f5f5f7' }}>
@@ -8,7 +13,7 @@ export default function OnboardingLayout({ children }: { children: React.ReactNo
       >
         <span
           className="text-[22px] font-semibold tracking-tight"
-          style={{ fontFamily: 'Playfair Display, serif', color: '#2e9a78', letterSpacing: '-0.02em' }}
+          style={{ fontFamily: DISPLAY, color: '#2e9a78', letterSpacing: '-0.02em' }}
         >
           Apnosh
         </span>

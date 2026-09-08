@@ -21,6 +21,7 @@ import { reconcileBeatsToLines } from '@/lib/campaigns/catalog'
 import { vibeForCampaign, creativeRolesForCampaign } from '@/lib/campaigns/creators'
 import { planCampaignPieces } from '@/lib/campaigns/work-orders-core'
 import { shippedStatus, ownerSetupComplete, servicesSettingUp, ownerRunWorkDone, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
+import { settlementFromPayment, type StoppedPaymentRow } from '@/lib/campaigns/stop-settlement'
 import { AUDIENCES, CHANNELS } from '@/lib/campaigns/data/campaign-templates'
 import PlayCard from '@/components/campaigns/play-card'
 import LineCard from '@/components/campaigns/line-card'
@@ -55,10 +56,17 @@ export default function CampaignDetailPage() {
   const [readiness, setReadiness] = useState<ReadinessReport | null>(null)
   // The shoot booking (Checkout Gates): confirmed date, needs_reschedule, or request-mode — never faked.
   const [booking, setBooking] = useState<CampaignBooking | null>(null)
+  /* The upfront receipt. Read here only for the stop settlement: a campaign stopped before the
+   * stop route began writing its words down has no summary, and the payment row is the one place
+   * that still knows a refund was sent (S3). */
+  const [payment, setPayment] = useState<StoppedPaymentRow | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Ship-only failure, shown inline over the footer (the footer's Ship button is the retry).
   const [shipError, setShipError] = useState<string | null>(null)
+  // The ship was refused for money (402 SHIP_NEEDS_PAYMENT). "Try again" can never clear that, so
+  // the footer swaps the retry for the one thing that can: paying for the order.
+  const [needsPayment, setNeedsPayment] = useState(false)
   // The stop settlement, straight from the server — what stopped, what still bills, and that
   // the MONEY stopped. Shown as a banner after a stop (the server also sends it to the inbox).
   const [stopNote, setStopNote] = useState<{ summary: string; cancelFailed: boolean } | null>(null)
@@ -78,6 +86,7 @@ export default function CampaignDetailPage() {
       setActivity((j.activity as ActivityEvent[]) ?? [])
       setReadiness((j.readiness as ReadinessReport) ?? null)
       setBooking((j.booking as CampaignBooking) ?? null)
+      setPayment((j.payment as StoppedPaymentRow) ?? null)
     } catch (e) { setError(e instanceof Error ? e.message : 'Load failed') }
   }, [id])
   useEffect(() => { load() }, [load])
@@ -140,11 +149,20 @@ export default function CampaignDetailPage() {
     const shippedAt = new Date().toISOString()
     // Re-send the owner's last-seen creator picks so mint dispatches to exactly
     // who they chose, even if an incremental save earlier failed.
+    setNeedsPayment(false)
     const r = await fetch(`/api/campaigns/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { status: 'shipped', phase: 'monitor', shipped_at: shippedAt, creator_choices: camp.creatorChoices ?? {} } }) }).catch(() => null)
     if (!r || !r.ok) {
       // The status flip never landed: the campaign is still a draft, so no optimistic
       // "shipped" state and no navigation — a false success would hide an unplaced order.
-      setShipError("That didn't go through. Nothing was ordered. Try again.")
+      // 402 SHIP_NEEDS_PAYMENT is not a hiccup: this plan costs money and money is paid at
+      // checkout, so retrying here is a dead end. Say why, and offer the door that works.
+      const body = r ? ((await r.json().catch(() => ({}))) as { code?: string }) : {}
+      if (r?.status === 402 && body.code === 'SHIP_NEEDS_PAYMENT') {
+        setNeedsPayment(true)
+        setShipError('This order needs payment first. Nothing was ordered.')
+      } else {
+        setShipError("That didn't go through. Nothing was ordered. Try again.")
+      }
       setBusy(false)
       return
     }
@@ -165,9 +183,16 @@ export default function CampaignDetailPage() {
   async function stop() {
     if (!camp) return
     const monthly = summarize(camp.draft.items).perMonth
+    // The money half is said up front: a prepaid owner gets back what they paid for work we have
+    // not delivered. The exact number comes back with the settlement (the server does the math).
+    const moneyBack = ' If you paid upfront for work we have not delivered, we send that money back.'
+    // Work already being made keeps going (only unstarted work is voided), but it is part of what
+    // the refund above sends back, so it does not bill again. Saying "bills as normal" here and
+    // refunding it one screen later were two different promises about the same pieces.
+    const inFlight = ' Work already being made finishes.'
     const confirmMsg = monthly > 0
-      ? `Stop this campaign? Nothing new will start or post. Your $${Math.round(monthly)}/mo billing is canceled right away. Work already being made finishes and bills as normal. This cannot be undone.`
-      : 'Stop this campaign? Nothing new will start or post. Work already being made finishes and bills as normal. This cannot be undone.'
+      ? `Stop this campaign? Nothing new will start or post. Your $${Math.round(monthly)}/mo billing is canceled right away.${inFlight}${moneyBack} This cannot be undone.`
+      : `Stop this campaign? Nothing new will start or post.${inFlight}${moneyBack} This cannot be undone.`
     if (typeof window !== 'undefined' && !window.confirm(confirmMsg)) return
     setBusy(true)
     const r = await fetch(`/api/campaigns/${id}/stop`, { method: 'POST' }).catch(() => null)
@@ -176,8 +201,10 @@ export default function CampaignDetailPage() {
       // Show the server's own settlement — including "Monthly billing is canceled." — instead of
       // discarding it. subscriptionCancelFailed surfaces honestly (staff finishes it by hand).
       const j = await r.json().catch(() => null)
-      const s = j?.settlement as { summary?: string; subscriptionCancelFailed?: number } | undefined
-      if (s?.summary) setStopNote({ summary: s.summary, cancelFailed: (s.subscriptionCancelFailed ?? 0) > 0 })
+      const s = j?.settlement as { summary?: string; subscriptionCancelFailed?: number; refundFailed?: boolean } | undefined
+      // A refund we owe but could not send reads amber too — the owner should see that a person
+      // is finishing it, not a calm green "all done".
+      if (s?.summary) setStopNote({ summary: s.summary, cancelFailed: (s.subscriptionCancelFailed ?? 0) > 0 || s.refundFailed === true })
       void load()
     }
     else if (typeof window !== 'undefined') window.alert('Could not stop the campaign. Try again.')
@@ -205,13 +232,16 @@ export default function CampaignDetailPage() {
               </div>
             )
             : <>
-                {stopNote && (
+                {/* ONE SETTLEMENT, ONCE. The banner is the answer to the tap, and it holds only
+                    until the reload brings back the settlement the stop route SAVED, which is the
+                    one that stays. Both on screen at once printed the refund sentence twice. */}
+                {stopNote && !camp.execution?.stopSummary && (
                   <div role="status" style={{ background: stopNote.cancelFailed ? '#fdf6e9' : '#eaf7f3', border: `1px solid ${stopNote.cancelFailed ? '#f0dfb8' : '#cdeae0'}`, borderRadius: 14, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: stopNote.cancelFailed ? '#854f0b' : '#2e6b57', lineHeight: 1.55 }}>
                     <div style={{ fontWeight: 700, marginBottom: 2 }}>Campaign stopped</div>
                     {stopNote.summary}
                   </div>
                 )}
-                <Detail camp={camp} progress={progress} outcomes={outcomes} since={since} pieces={pieces} activity={activity} readiness={readiness} booking={booking} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />
+                <Detail camp={camp} progress={progress} outcomes={outcomes} since={since} pieces={pieces} activity={activity} readiness={readiness} booking={booking} payment={payment} onReload={load} onToggleOptOut={toggleOptOut} onToggleInclude={toggleInclude} onRemove={remove} onSetQty={setQty} onSetStart={setStartDate} onChooseCreator={chooseCreator} onSetCreativeControl={setCreativeControl} onSetProducer={setProducer} onStop={stop} />
               </>}
         </div>
 
@@ -219,17 +249,24 @@ export default function CampaignDetailPage() {
             state — a third status voice down here would just repeat them. */}
         {camp && !shipped && (
           <>
-            <HonestBillBar items={camp.draft.items} note={path === 'strategist' ? 'Approving is free. Each piece bills only when it ships.' : 'Nothing is charged until a piece ships.'} />
+            <HonestBillBar items={camp.draft.items} note="A plan that costs money is paid at checkout before your team starts." />
             <div style={{ flexShrink: 0, borderTop: `1px solid ${C.line}`, padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', background: '#fff' }}>
               {shipError && <div style={{ fontSize: 12.5, color: C.red, textAlign: 'center', marginBottom: 8 }}>{shipError}</div>}
               <div style={{ display: 'flex', gap: 10 }}>
                 <button onClick={() => router.push('/dashboard/campaigns')} disabled={busy} style={{ flex: '0 0 auto', minWidth: 104, height: 48, background: '#fff', color: C.ink, borderRadius: 12, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}>Save draft</button>
-                <button onClick={ship} disabled={busy} className="cw-press" style={{ flex: 1, height: 48, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.7 : 1 }}>
-                  {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
-                  {path === 'strategist' ? 'Approve & ship' : path === 'diy' ? 'Schedule it' : 'Ship it'}
-                </button>
+                {needsPayment ? (
+                  <button onClick={() => router.push('/dashboard/campaigns/new')} className="cw-press" style={{ flex: 1, height: 48, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Rocket size={17} />
+                    Go to checkout
+                  </button>
+                ) : (
+                  <button onClick={ship} disabled={busy} className="cw-press" style={{ flex: 1, height: 48, background: GRAD, color: '#fff', border: 'none', borderRadius: 12, padding: '0 14px', fontWeight: 600, fontSize: 15, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: busy ? 0.7 : 1 }}>
+                    {busy ? <Loader2 size={17} className="animate-spin" /> : <Rocket size={17} />}
+                    {path === 'strategist' ? 'Approve & ship' : path === 'diy' ? 'Schedule it' : 'Ship it'}
+                  </button>
+                )}
               </div>
-              <div style={{ fontSize: 11.5, color: C.faint, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>Saved as a draft already. Save to come back later, or approve to hand it to your team.</div>
+              <div style={{ fontSize: 11.5, color: C.mute, textAlign: 'center', marginTop: 8, lineHeight: 1.4 }}>{needsPayment ? 'Rebuild this plan in checkout to pay. This draft stays here.' : 'Saved as a draft already. Save to come back later, or approve to hand it to your team.'}</div>
             </div>
           </>
         )}
@@ -238,7 +275,7 @@ export default function CampaignDetailPage() {
   )
 }
 
-function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, booking, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
+function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, booking, payment, onReload, onToggleOptOut, onToggleInclude, onRemove, onSetQty, onSetStart, onChooseCreator, onSetCreativeControl, onSetProducer, onStop }: {
   camp: SavedCampaign
   progress: CampaignProgress | null
   outcomes: CampaignOutcomes | null
@@ -247,6 +284,7 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
   activity: ActivityEvent[]
   readiness: ReadinessReport | null
   booking: CampaignBooking | null
+  payment: StoppedPaymentRow | null
   onReload: () => Promise<void> | void
   onToggleOptOut: (id: string, r: OptOutReason) => void
   onToggleInclude: (id: string) => void
@@ -347,19 +385,19 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
                 <div key={i} style={{ padding: '6px 0', borderTop: i === 0 ? 'none' : `1px solid ${C.line}` }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', fontSize: 12.5 }}>
                     <span style={{ flexShrink: 0, width: 86, fontSize: 11.5, fontWeight: 700, color: C.greenDk }}>{b.postLabel}</span>
-                    <span style={{ flex: 1, minWidth: 0, color: C.ink }}>{b.label}<span style={{ color: C.faint }}> · {b.relLabel}</span></span>
-                    {b.channel && <span style={{ flexShrink: 0, fontSize: 11, color: C.faint }}>{b.channel}</span>}
+                    <span style={{ flex: 1, minWidth: 0, color: C.ink }}>{b.label}<span style={{ color: C.mute }}> · {b.relLabel}</span></span>
+                    {b.channel && <span style={{ flexShrink: 0, fontSize: 11, color: C.mute }}>{b.channel}</span>}
                   </div>
                   {showProducer && piece && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginTop: 5, paddingLeft: 96 }}>
                       {piece.discipline && cand ? (
                         <>
-                          <span style={{ fontSize: 10.5, color: C.faint, flexShrink: 0 }}>Made by</span>
+                          <span style={{ fontSize: 10.5, color: C.mute, flexShrink: 0 }}>Made by</span>
                           <ProducerSeg active={piece.producer === 'team'} onClick={() => onSetProducer(piece.key!, 'team')}>Your team</ProducerSeg>
                           <ProducerSeg active={piece.producer === 'creator'} onClick={() => onSetProducer(piece.key!, 'creator')}>{cand.name}</ProducerSeg>
                         </>
                       ) : (
-                        <span style={{ fontSize: 10.5, color: C.faint }}>Made by your team</span>
+                        <span style={{ fontSize: 10.5, color: C.mute }}>Made by your team</span>
                       )}
                     </div>
                   )}
@@ -406,21 +444,34 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
       {/* path/lifecycle banner (strategist draft awaiting the owner's OK) */}
       {inReview && camp.draft.path === 'strategist' && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: C.greenSoft, color: C.greenDk, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
-          <span style={{ fontSize: 14 }}>◆</span><span>Apnosh is building every piece you kept. Review the plan below, then tap <b>Approve &amp; ship</b> when it looks right. Approving doesn’t charge you.</span>
+          <span style={{ fontSize: 14 }}>◆</span><span>Apnosh is building every piece you kept. Review the plan below, then tap <b>Approve &amp; ship</b> when it looks right. A plan that costs money goes to checkout first, so nothing starts until you pay.</span>
         </div>
       )}
 
       {shipped && st && sv ? (
         <div className="cw-stagger">
-          {/* stopped: the terminal banner leads — history and billing stay visible below */}
+          {/* STOPPED IS ONE STORY, TOLD ONCE. The banner, the settlement (what was stopped and the
+              money going back), then what actually landed. Everything below that implies motion —
+              the running card, the phase rail, the timeline, a shoot still to book, the "we need a
+              thing from you" button — is gone, because a stopped campaign is not moving and a page
+              that says both is a page an owner cannot believe. */}
           {stopped && (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#f4f4f6', color: C.ink, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, fontWeight: 600, lineHeight: 1.45 }}>
-              <Ban size={14} style={{ flexShrink: 0, marginTop: 1, color: C.mute }} />
-              <span>This campaign is stopped. Nothing new starts or posts. Anything already in flight finished and billed as normal.</span>
+            <div style={{ background: '#f4f4f6', color: C.ink, borderRadius: 12, padding: '11px 12px', marginBottom: 14, fontSize: 12.5, lineHeight: 1.45 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontWeight: 600 }}>
+                <Ban size={14} style={{ flexShrink: 0, marginTop: 1, color: C.mute }} />
+                <span>This campaign is stopped. Nothing new starts or posts. Anything already in flight was finished.</span>
+              </div>
+              {/* The settlement the stop route wrote: the refund, the monthly billing, what stopped.
+                  A campaign stopped before it wrote any of that down has no summary — so the line
+                  is derived from its payment row instead, which still knows what went back. */}
+              {(() => {
+                const line = camp.execution?.stopSummary || settlementFromPayment(payment)
+                return line ? <div style={{ marginTop: 8, paddingLeft: 22, color: C.mute, fontWeight: 500 }}>{line}</div> : null
+              })()}
             </div>
           )}
           {/* the interrupt/result card: a piece needing your OK (any phase), or the live/done story */}
-          {(st.phase === 'live' || st.phase === 'done' || sv.readyCount > 0) && (
+          {!stopped && (st.phase === 'live' || st.phase === 'done' || sv.readyCount > 0) && (
             <CampaignNowCard
               diy={diy}
               phase={st.phase}
@@ -441,17 +492,17 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
           <div id="campaign-results"><CampaignResults outcomes={outcomes} pieces={pieces} /></div>
           {/* Shoot booking (Checkout Gates): confirmed date, a needs-reschedule prompt, or request-mode —
               real state, with a live reschedule picker. Never a faked date. */}
-          {booking && <BookingCard clientId={camp.clientId} booking={booking} onReload={onReload} />}
+          {!stopped && booking && <BookingCard clientId={camp.clientId} booking={booking} onReload={onReload} />}
           {/* One-look status above the timeline: what's happening now, what's next, when it goes live */}
-          <ProductionSummary
+          {!stopped && <ProductionSummary
             phase={st.phase}
             goLive={sv.goLive}
             whenLine={sv.whenLine}
             progress={progress ? { live: progress.live, total: progress.total } : null}
             awaitingYou={readiness ? setupOwed(readiness).length : 0}
-          />
+          />}
           {/* THE HERO: the timeline, with the pulsing needs-you button right under it */}
-          <CampaignWork
+          {!stopped && <CampaignWork
             pieces={pieces}
             nowPieceId={sv.nowPiece?.id ?? null}
             items={camp.draft.items}
@@ -468,13 +519,16 @@ function Detail({ camp, progress, outcomes, since, pieces, activity, readiness, 
             whenLine={sv.whenLine}
             onFinishSetup={() => router.push(`/dashboard/campaigns/${camp.draft.id}/ready`)}
             onRequestChange={() => router.push('/dashboard/messages?to=strategist')}
-          />
+          />}
           {/* who handles everything: Apnosh runs setup + makes the creative. The Send Message
-              button lives on this card and goes straight to the team (Apnosh for now). */}
-          <CampaignTeamCard camp={camp} onMessage={() => router.push('/dashboard/messages?to=strategist')} />
+              button lives on this card and goes straight to the team (Apnosh for now).
+              Gone once the campaign is stopped: it is the last block on the page that still says
+              somebody is running this, which is the contradiction the whole stopped view exists
+              to end. Get help is one tap away on every screen. */}
+          {!stopped && <CampaignTeamCard camp={camp} onMessage={() => router.push('/dashboard/messages?to=strategist')} />}
           {/* Below the timeline: the ordered items as tappable Campaign-details rows — each opens
               that item's own detail page (one row per line item; two items can share a name) */}
-          {st.phase !== 'done' && (
+          {!stopped && st.phase !== 'done' && (
             <ProductionGuide
               items={(camp.draft.items ?? [])
                 .filter((it) => it.included && !it.optOut && (it.plain || it.name))
@@ -563,11 +617,15 @@ function SinceLaunch({ o }: { o: CampaignOutcome | null }) {
     <div style={{ marginTop: 24 }}>
       <div style={{ ...EYEBROW, marginBottom: 8 }}>On Google since launch</div>
       <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', padding: '13px 15px' }}>
-        <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color, letterSpacing: '-.01em', fontVariantNumeric: 'tabular-nums' }}>{line.text}</div>
+        {/* Left, explicitly. A proof line stretched to both margins reads as a paragraph of
+            justified body text and puts holes between the words that carry the number. */}
+        {/* No tabular-nums: this is a sentence with a number in it, not a column of figures, and
+            monospaced digits inside Cal Sans put gaps around the very word that carries it. */}
+        <div style={{ fontFamily: DISPLAY, fontSize: 18, fontWeight: 700, color, letterSpacing: '-.01em', textAlign: 'left', textWrap: 'pretty' }}>{line.text}</div>
         {o.pct != null && (
-          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4 }}>{o.after.toLocaleString('en-US')} in the two weeks after, against {o.before.toLocaleString('en-US')} the two before.</div>
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 4, textAlign: 'left' }}>{o.after.toLocaleString('en-US')} in the two weeks after, against {o.before.toLocaleString('en-US')} the two before.</div>
         )}
-        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 6, lineHeight: 1.4 }}>It shows what happened, not proof of cause.</div>
+        <div style={{ fontSize: 11.5, color: C.mute, marginTop: 6, lineHeight: 1.4 }}>It shows what happened, not proof of cause.</div>
       </div>
     </div>
   )

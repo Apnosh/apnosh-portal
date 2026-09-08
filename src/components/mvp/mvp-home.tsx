@@ -1,5 +1,8 @@
 'use client'
 import CountedStrip from './counted-strip'
+import PeopleRow from './people-row'
+import WeeklySentence from './weekly-sentence'
+import TellAFriendCard from './tell-a-friend-card'
 
 /**
  * MVP Home — ported from the apnosh-mvp design (yejukim/apnosh-mvp,
@@ -96,6 +99,15 @@ export interface MetricView {
   lastDataDate: string      // freshest day with data (data frontier); '' if none
 }
 
+/** The monthly-report nudge: last month has something to report, and this is where it lives. */
+export interface HomeReview {
+  prevMonthLabel: string
+  cycleLabel: string
+  /** whole dollars paid last month; 0 means they paid nothing, and the copy drops the number */
+  budget: number
+  href: string
+}
+
 export interface MvpHomeData {
   greeting: string
   avatarText: string
@@ -106,7 +118,7 @@ export interface MvpHomeData {
   /** Tailored "stack" cards shown at the top of Home (one reads as "Do this next"). */
   suggestions?: Suggestion[]
   approvals: { id: string; tag: string; timing: string; title: string; subtitle: string; emoji?: string; image?: string }[]
-  review: { prevMonthLabel: string; cycleLabel: string; budget: number } | null
+  review: HomeReview | null
   planner?: { id: string; day: string; mon: string; daysLabel: string; label: string; hook: string; planned: boolean }[]
   /** Recent activity timeline (since-you-last-checked): posts live, reviews, replies, milestones. */
   activity?: TimelineEvent[]
@@ -164,7 +176,7 @@ const LEGACY_HOME = false
 // new owner with no Google data sees an empty home until the funnel has data.
 const SHOW_HOME_BODY = false
 
-export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
+export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean; referralsOn?: boolean }) {
   // The theme provider now lives in the dashboard layout (the toggle moved to
   // Settings and skins the whole platform); Home just reads it like everyone
   // else. Its palette is genuinely theme-aware, so the root below carries
@@ -173,7 +185,7 @@ export default function MvpHome(props: { data: MvpHomeData; showHeader?: boolean
   return <MvpHomeInner {...props} />
 }
 
-function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = true }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean }) {
+function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = true, referralsOn = false }: { data: MvpHomeData; showHeader?: boolean; clientId?: string; suggestionsReady?: boolean; referralsOn?: boolean }) {
   const { C } = useMvpTheme()
   const metrics = data.metrics ?? []
   const [reviewHidden, setReviewHidden] = useState(false)
@@ -203,6 +215,35 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
     useCallback(() => (typeof document === 'undefined' ? null : document.querySelector<HTMLElement>('.mvp-frame-scroll')), []),
     onPullRefresh,
   )
+  /* HOW MUCH SCREEN THE ROWS UNDER THE HERO NEED.
+   *
+   * The funnel is a `fill` hero: it sizes itself to the whole scroll viewport. Every row that
+   * follows it — the weekly sentence, the people row, Counted as promised — therefore started a
+   * full screen below the fold, and with the old short tail the last of them sat under the nav
+   * with no way to scroll it clear. So the hero now gets the viewport MINUS what those rows
+   * actually measure, and they land on the first screen with it.
+   *
+   * Measured off the DOM rather than a wrapper div, so a row added below later is included
+   * without anyone remembering to move it inside something. Loop-free: only the siblings AFTER
+   * the hero are read, so a taller hero can never grow this number. When nothing renders (a new
+   * business with no orders and no week worth a sentence) it is 0 and the funnel is the whole
+   * page again, exactly as before. */
+  const [belowH, setBelowH] = useState(0)
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return
+    const hero = document.getElementById('home-funnel-hero')
+    const stack = hero?.parentElement
+    if (!hero || !stack) return
+    const measure = () => {
+      let h = 0
+      for (let el = hero.nextElementSibling; el; el = el.nextElementSibling) h += el.getBoundingClientRect().height
+      setBelowH((prev) => (Math.abs(prev - h) < 1 ? prev : Math.round(h)))
+    }
+    const ro = new ResizeObserver(measure)
+    ro.observe(stack)
+    measure()
+    return () => ro.disconnect()
+  }, [])
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeIdx, setActiveIdx] = useState(0)
   const onScroll = () => {
@@ -254,15 +295,21 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 66, height: 66, bottom: -26, left: 40, borderRadius: '50%', border: '2px solid rgba(255,255,255,.18)' }} />
             <i aria-hidden className="mvp-spin" style={{ position: 'absolute', width: 22, height: 22, top: 34, right: 30, borderRadius: 6, background: 'rgba(255,255,255,.12)' }} />
             <i aria-hidden className="mvp-driftA" style={{ position: 'absolute', width: 11, height: 11, bottom: 18, right: 78, borderRadius: '50%', background: 'rgba(255,255,255,.3)' }} />
-            <div style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11 }}>
+            {/* the whole row opens the report; the X sits above it (zIndex 3) so hiding still works */}
+            <Link href={data.review.href} style={{ position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 11, color: '#fff', textDecoration: 'none' }}>
               <div className="mvp-floaty" style={{ width: 38, height: 38, borderRadius: 11, background: 'rgba(255,255,255,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Receipt size={19} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Sparkles size={13} /><span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', opacity: .92 }}>New this month</span></div>
                 <div style={{ fontWeight: 700, fontSize: 15, marginTop: 2 }}>Your {data.review.prevMonthLabel} review is ready</div>
-                <div style={{ fontSize: 12.5, opacity: .9, marginTop: 1 }}>See what last month&apos;s ${data.review.budget} did, then set {data.review.cycleLabel} in one decision.</div>
+                {/* the dollar line only when they actually paid us last month */}
+                <div style={{ fontSize: 12.5, opacity: .9, marginTop: 1 }}>
+                  {data.review.budget > 0
+                    ? `See what last month's $${data.review.budget} did, then plan ${data.review.cycleLabel}.`
+                    : `See what last month did, then plan ${data.review.cycleLabel}.`}
+                </div>
               </div>
               <ChevronRight size={20} />
-            </div>
+            </Link>
             <button onClick={() => setReviewHidden(true)} aria-label="Hide review" style={{ position: 'absolute', top: 8, right: 8, zIndex: 3, width: 24, height: 24, borderRadius: 99, border: 'none', background: 'rgba(255,255,255,.22)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}><X size={14} /></button>
           </div>
         )}
@@ -273,12 +320,26 @@ function MvpHomeInner({ data, showHeader = true, clientId, suggestionsReady = tr
             funnel (Awareness → Interest → Customer actions → Orders → Retention)
             in the glass-vessel view. Renders only when the business has Google data. */}
         <div id="home-funnel-hero" style={{ margin: '-16px -18px 0' }}>
-          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
+          <><PullIndicator pull={pull} phase={phase} /><HomeFunnelLive key={pulls} clientId={clientId} height={620} fill fillReserve={belowH} onVisibility={setFunnelVis} tickFor={tickFor} bar={{ initial: ((data.avatarText || '').trim().charAt(0) || 'A').toUpperCase(), image: data.avatarImage, unread: data.approvals?.length ?? 0 }} /></>
         </div>
+        {/* THIS WEEK, IN ONE LINE — the love sentence. Renders nothing when the week has
+            nothing true to say. */}
+        <WeeklySentence clientId={clientId} />
+
+        {/* THE PEOPLE ON YOUR WORK — the staff actually assigned to the orders still running,
+            then the one Get help door, in ONE row. Renders just the door when nothing is
+            running; never placeholder faces. */}
+        <PeopleRow clientId={clientId} />
+
         {/* COUNTED, AS PROMISED — one row per order: the count its Create card named, the day it
             started, the number before. Renders nothing when there are no orders, so the funnel
             stays the whole page. Outside the SHOW_HOME_BODY guard on purpose. */}
         <CountedStrip clientId={clientId} />
+
+        {/* TELL A FRIEND (Move 8) — a proof-deck card, and the only place Home asks for a
+            referral. It draws NOTHING unless the server says the loop is open and this owner has
+            had a promise counted, so it sits right under the counted strip it depends on. */}
+        <TellAFriendCard clientId={clientId} on={referralsOn} />
 
         {/* HOME BODY parked (SHOW_HOME_BODY) — the funnel is the whole home per
             the owner. Flip the flag to bring back the suggestions, orders, and

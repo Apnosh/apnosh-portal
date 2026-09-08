@@ -4,14 +4,16 @@
  * /dashboard/more — the owner's More tab (owner 2026-09-05: "make it simple").
  *
  * The profile owns the business facts: logo, name, what and where, open now, their goals,
- * and five quick buttons (Info, Hours, Menu, Photos, Brand). Under it, six rows and Sign out.
+ * and five quick buttons (Info, Hours, Menu, Photos, Brand). Under it, six rows and Sign out —
+ * seven once there is a win to look at, because the deck only carries one for 14 days.
  * Every row says what is inside it or what it is set to. Words stay at a fifth-grade level.
  */
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, LogOut } from 'lucide-react'
+import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, Trophy, LogOut } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
+import { useLang } from './mvp-language'
 import { gradOf, hueOf, type HueKey } from './hues'
 import { Mark } from './mark'
 
@@ -34,6 +36,8 @@ interface MoreData {
   settings: { approveFirst: boolean; favorites: string[] }
   people: { id: string; name: string }[]
   toRate: { id: string }[]
+  /** how many counted promises are on the wins shelf. 0 = the shelf is empty, so there is no row. */
+  wins: number
 }
 
 /* "Open now · closes 9 pm" from the weekly hours on the Google listing, read on the phone's clock.
@@ -73,6 +77,7 @@ function openLine(hours: unknown): { open: boolean; text: string } | null {
 }
 
 export default function MvpMore({ name, tier, query = '', clientId }: { name: string; location?: string | null; tier?: string | null; query?: string; clientId?: string | null }) {
+  const { T } = useLang()
   const [data, setData] = useState<MoreData | null>(null)
   useEffect(() => {
     if (!clientId) return
@@ -87,9 +92,13 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
   const open = useMemo(() => openLine(p?.hours), [p?.hours])
   const toRate = data?.toRate.length ?? 0
   const favs = data?.settings.favorites.length ?? 0
+  const wins = data?.wins ?? 0
 
   const rows: { label: string; sub?: string; href: string; Icon: typeof Store; hue: HueKey; pill?: { text: string; tone: 'amber' | 'good' | 'plain' } }[] = [
     { label: 'Your settings', href: '/dashboard/preferences', Icon: SlidersHorizontal, hue: 'mint' },
+    // The wins shelf. Only once there IS one: the deck drops a counted promise after 14 days and
+    // there is no other way back to it, but a row that opens an empty page is worse than no row.
+    ...(wins > 0 ? [{ label: 'Wins', href: '/dashboard/wins', Icon: Trophy, hue: 'brand' as HueKey, pill: { text: String(wins), tone: 'good' as const } }] : []),
     { label: 'People you have worked with', href: '/dashboard/people', Icon: Heart, hue: 'catering', pill: toRate ? { text: `${toRate} to rate`, tone: 'amber' } : favs ? { text: `${favs}`, tone: 'plain' } : undefined },
     { label: 'Plan and billing', href: '/dashboard/billing', Icon: CreditCard, hue: 'nights' },
     { label: 'Connected accounts', href: '/dashboard/connected-accounts', Icon: Plug, hue: 'nights' },
@@ -97,9 +106,10 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
     { label: "What's new", href: '/dashboard/whats-new', Icon: Sparkles, hue: 'brand' },
   ]
   const q = query.trim().toLowerCase()
-  const shown = q ? rows.filter((r) => r.label.toLowerCase().includes(q)) : rows
+  // Search on both words: the row is drawn in the owner's language, and they type what they see.
+  const shown = q ? rows.filter((r) => r.label.toLowerCase().includes(q) || T(r.label).toLowerCase().includes(q)) : rows
   const groups: { title: string; hue: HueKey; keys: string[] }[] = [
-    { title: 'You', hue: 'mint', keys: ['Your settings', 'People you have worked with'] },
+    { title: 'You', hue: 'mint', keys: ['Your settings', 'Wins', 'People you have worked with'] },
     { title: 'Account', hue: 'nights', keys: ['Plan and billing', 'Connected accounts'] },
     { title: 'Help', hue: 'grey', keys: ['Get help', "What's new"] },
   ]
@@ -161,7 +171,9 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
             {list.map((r) => (
               <Link key={r.href} href={r.href} className="mvp-press" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px 6px 8px', minHeight: 50, marginBottom: 6, boxSizing: 'border-box', textDecoration: 'none', color: 'inherit', borderRadius: 14, background: '#f5f5f7' }}>
                 <Mark hue={r.hue} size={36}><r.Icon size={18} /></Mark>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.label}</span>
+                {/* t() answers an unknown key with its own English, so the rows nobody has
+                    translated yet read exactly as they always have. */}
+                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{T(r.label)}</span>
                 {r.pill && <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '3px 8px', flexShrink: 0, ...pillStyle(r.pill.tone) }}>{r.pill.text}</span>}
                 <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
               </Link>

@@ -72,7 +72,7 @@ export default function ResetPasswordPage() {
           type={showPw ? 'text' : 'password'} autoComplete="new-password"
           hint={confirmPw.length > 0 && confirmPw !== password ? 'These do not match yet' : undefined}
         />
-        <PillButton loading={loading}>{loading ? 'Saving...' : 'Save new password'}</PillButton>
+        <PillButton loading={loading}>{loading ? 'Saving…' : 'Save new password'}</PillButton>
       </form>
     </AuthCard>
   )

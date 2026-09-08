@@ -24,6 +24,7 @@ import { usePathname } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { ToastProvider } from '@/components/ui/toast'
 import { MvpThemeProvider } from '@/components/mvp/mvp-theme'
+import { MvpLanguageProvider } from '@/components/mvp/mvp-language'
 import { RealtimeProvider } from '@/lib/realtime'
 import { ClientProvider, useClient } from '@/lib/client-context'
 import SentryUserContext from '@/components/sentry-user-context'
@@ -44,11 +45,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               so it must sit inside a Suspense boundary. */}
           <Suspense fallback={null}>
             <ClientProvider>
-              <SentryUserContext />
-              <LocationLoader>
-                <DashboardShell>{children}</DashboardShell>
-                <AgentChat />
-              </LocationLoader>
+              {/* Language sits beside the theme, but INSIDE ClientProvider: the owner's answer
+                  rides on the client row the provider already resolved (migration 259), so it
+                  is per business and costs no extra fetch. */}
+              <MvpLanguageProvider>
+                <SentryUserContext />
+                <LocationLoader>
+                  <DashboardShell>{children}</DashboardShell>
+                  <AgentChat />
+                </LocationLoader>
+              </MvpLanguageProvider>
             </ClientProvider>
           </Suspense>
         </RealtimeProvider>
@@ -106,6 +112,8 @@ const MVP_EXACT = new Set([
   '/dashboard/team', // the team page moved onto the mobile kit (portal redesign 2026-09-04)
   '/dashboard/preferences', '/dashboard/people', '/dashboard/get-help', '/dashboard/whats-new', // the More tab's pages (owner 2026-09-05)
   '/dashboard/guests', // the guest list (send-rail audience) owns its full-screen chrome
+  '/dashboard/wins', // the wins shelf renders its own MvpShell (Move 7b)
+  '/dashboard/tell-a-friend', // the referral page renders its own MvpShell (Move 8)
 ])
 const MVP_PREFIX = [
   '/dashboard/insights', // insights + its sub-routes (e.g. /insights/analyst) own their full-screen chrome
@@ -117,6 +125,9 @@ const MVP_PREFIX = [
   '/dashboard/design', // the graphic Drafting Table (/design/order) owns its full-screen chrome
   '/dashboard/delivery-menu', // delivery-menu setup tool, mobile-first
   '/dashboard/email', // email deliverability setup tool, mobile-first
+  '/dashboard/wins', // the shelf and one win (/wins/[id]) own their full-screen chrome; the card
+                     // is a square somebody screenshots, so a back-header on top of it is a second
+                     // header in the picture
 ]
 function isMvpRoute(path: string): boolean {
   return MVP_EXACT.has(path) || MVP_PREFIX.some(p => path === p || path.startsWith(p + '/'))

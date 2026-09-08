@@ -255,14 +255,27 @@ export function summaryLine(typeId: string, answers: RequestAnswers): string {
   return [type.label, first, when].filter(Boolean).join(' · ')
 }
 
-/** The status vocabulary, in lifecycle order. quoted carries the price note back to the owner. */
-export const REQUEST_STATUSES = ['requested', 'in_review', 'quoted', 'in_progress', 'delivered', 'closed', 'declined'] as const
+/**
+ * The status vocabulary, in lifecycle order.
+ *
+ * TWO WAYS AN ORDER GETS PRICED, and they are not the same status on purpose:
+ *   quoted           a person set the price. The owner's yes is what starts it.
+ *   awaiting_payment the owner placed it and the till priced it. The card is what starts it.
+ *
+ * They used to share 'quoted', so an owner could place a priced order and then tap "say yes" on
+ * their own order and get the work made for nothing. Only a person may put a request in 'quoted'.
+ */
+export const REQUEST_STATUSES = ['requested', 'in_review', 'quoted', 'awaiting_payment', 'in_progress', 'delivered', 'closed', 'declined'] as const
 export type RequestStatus = (typeof REQUEST_STATUSES)[number]
+
+/** The statuses a person may set by hand. The till owns awaiting_payment; nobody else writes it. */
+export const ADMIN_SETTABLE_STATUSES: readonly RequestStatus[] = REQUEST_STATUSES.filter((s) => s !== 'awaiting_payment')
 
 export const STATUS_LABEL: Record<RequestStatus, string> = {
   requested: 'Sent',
   in_review: 'Being reviewed',
   quoted: 'Price ready',
+  awaiting_payment: 'Not paid yet',
   in_progress: 'In the works',
   delivered: 'Delivered',
   closed: 'Done',
@@ -274,6 +287,7 @@ export const STATUS_OWNER_LINE: Record<RequestStatus, string> = {
   requested: 'We got it. A real person reads every request.',
   in_review: 'The team is reading your request now.',
   quoted: 'Your price and plan are ready. Check your inbox.',
+  awaiting_payment: 'Your order is saved. Pay for it and your team starts.',
   in_progress: 'The work is underway.',
   delivered: 'Your work is ready to review.',
   closed: 'All wrapped up.',

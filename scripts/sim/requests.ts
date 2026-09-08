@@ -20,6 +20,7 @@ import {
 import { priceCreativeRequest, CREATIVE_LEVELS, VALVE_LINE, REVISION_LINE } from '@/lib/requests/pricing'
 import { FULLY_BUILT_LIVE, EMAIL_OFF_IDS, availabilityFor } from '@/lib/campaigns/data/catalog-availability'
 import { CREATIVE_FLOWS, flowFor, bucketForDate } from '@/lib/requests/flows'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 config({ path: '.env.local' })
 
@@ -239,7 +240,7 @@ s.group('The TIERED price sheet (persona-tested, owner call 2026-08-09)')
   s.check('open scope is a STARTS-AT floor with the answer clock in its why',
     priceCreativeRequest('website', { scope: 'Brand new website' })!.startsAt === true
     && priceCreativeRequest('other', {})!.startsAt === true
-    && /1 business day/.test(priceCreativeRequest('other', {})!.lines[0].why))
+    && priceCreativeRequest('other', {})!.lines[0].why.includes(REPLY_PROMISE))
   s.check('logo and website scope answers ARE the tiers (kit > new > refresh)',
     priceCreativeRequest('logo', { scope: 'Full brand kit' })!.totalCents > priceCreativeRequest('logo', {})!.totalCents
     && priceCreativeRequest('logo', {})!.totalCents > priceCreativeRequest('logo', { scope: 'Refresh my logo' })!.totalCents)

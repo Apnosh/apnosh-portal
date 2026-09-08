@@ -274,9 +274,28 @@ export function deriveServiceNeeds(
             value: exec.bookingLink ?? '', done: !!exec.bookingLink, optional: true,
           })
           break
+        case 'truck-schedule':
+          // The truck card's whole service is posting where the truck is, every morning. Its
+          // playbook opens by asking for the calendar, and until this case existed the key fell
+          // through and the paid order went to the team with nowhere for the stops to arrive.
+          // Free text on purpose: a real week is "Tue 11 to 2 at 5th and Pine, Wed we are at a
+          // brewery", and a day/time/place grid would turn one minute into ten.
+          push({
+            id: 'truck-schedule', kind: 'input', group: 'Info', field: 'truckSchedule', inputType: 'textarea',
+            title: 'Where the truck will be',
+            why: 'One line per stop: the day, the hours and the place. We post it every morning, so a blank calendar is a blank morning. Send at least one, and tell us the rest as you book them.',
+            placeholder: 'e.g. Tue 11am to 2pm, 5th and Pine\nWed 5pm to 9pm, Ballard Brewing',
+            value: exec.truckSchedule ?? '', done: !!(exec.truckSchedule && exec.truckSchedule.trim()),
+          })
+          break
         case 'onSiteContact':
           // Covered by the shoot rail below (same field, richer group) — nothing extra to ask here.
           break
+        default:
+          // A playbook can name a needsInput key that nothing here consumes, and that is how the
+          // truck card shipped with no way to send its stops: the switch just fell through and
+          // /ready said all set. It must never be silent again, so an unhandled key says so.
+          console.warn(`[service-needs] ${id}: playbook asks for "${key}" and nothing renders it. Add a case here.`)
       }
     }
     // Asks the playbook words inside a broader intake step (no dedicated needsInput key):

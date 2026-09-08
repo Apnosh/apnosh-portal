@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { stripe } from '@/lib/stripe'
-import { checkoutBill } from '@/lib/campaigns/checkout-bill'
-import { ensureCheckoutCustomer, computeTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
+import { randomUUID } from 'crypto'
+import { checkoutBill, applyFriendCredit, preTaxFromRow, type CheckoutBill } from '@/lib/campaigns/checkout-bill'
+import { claimFriendCredit, releaseFriendCredit, stampCreditIntent } from '@/lib/referrals/server'
+import { ensureCheckoutCustomer, computeTaxCents, estimateMonthlyTaxCents, getSavedCard, paymentsTable } from '@/lib/campaigns/checkout-server'
 import { resolveGatesForDraft } from '@/lib/campaigns/gates/config-server'
 import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data/catalog-availability'
 import { getContentOverrides } from '@/lib/campaigns/content-overrides-server'
 import { shapeFor } from '@/lib/campaigns/builder/compose-plan'
 import type { CampaignDraft } from '@/lib/campaigns/types'
 import { campaignCheckoutEnabled } from '@/lib/checkout-gate'
+import { createAdminClient } from '@/lib/supabase/admin'
+import { deskBill, deskQuoteOrigin } from '@/lib/requests/desk-bill'
+import { COLLECTED_STATUSES } from '@/lib/campaigns/refund-math'
 
 /** Plain owner-facing name for a catalog id (falls back to the id itself). */
 function cardName(id: string): string {
@@ -30,7 +35,17 @@ function denied(reason: string | undefined) {
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const clientId = body.clientId as string | undefined
+  const requestId = typeof body.requestId === 'string' ? body.requestId : undefined
   const draft = body.draft as CampaignDraft | undefined
+  // A DESK order pays here too. It has no draft — the order is one priced row in
+  // creative_requests — so it takes its own lane through the same Stripe machinery, the same fee,
+  // the same tax and the same kill switch. Everything below this line is the cart's lane.
+  if (requestId) {
+    if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 })
+    const access = await checkClientAccess(clientId)
+    if (!access.authorized) return denied(access.reason)
+    return prepareDeskOrder(clientId, requestId)
+  }
   if (!clientId || !draft || !Array.isArray(draft.items)) {
     return NextResponse.json({ error: 'clientId and draft required' }, { status: 400 })
   }
@@ -75,6 +90,7 @@ export async function POST(req: NextRequest) {
       free: true,
       breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
       monthlyCents: 0,
+      monthlyTaxCents: null,
       gates,
       ...(vault ? { vault } : {}),
     })
@@ -101,6 +117,7 @@ export async function POST(req: NextRequest) {
       checkoutClosed: true,
       breakdown: { subtotalCents: bill.subtotalCents, serviceFeeCents: bill.serviceFeeCents, taxCents: 0, totalCents: bill.preTaxCents },
       monthlyCents: bill.perMonthCents,
+      monthlyTaxCents: null,          // the invoice does its own tax; we do not quote it here
       gates,
       ...(vault ? { vault } : {}),
     })
@@ -135,6 +152,10 @@ export async function POST(req: NextRequest) {
         await stripe.setupIntents.cancel(si.id).catch(() => {})
         return NextResponse.json({ error: 'Checkout is not set up yet (payments table missing). Apply migration 215 and try again.' }, { status: 500 })
       }
+      // THE MONTHLY HALF IS TAXED TOO. The subscription runs automatic_tax, so a screen that says
+      // "$X/mo" and nothing else is short by the tax. Estimate it the same way the one-time half
+      // does; null when the customer has no tax location, and the screen says "plus tax".
+      const monthlyTaxCents = await estimateMonthlyTaxCents({ perMonthCents: bill.perMonthCents, customerId: cust.customerId })
       const savedCard = await getSavedCard(cust.customerId)
       return NextResponse.json({
         setupOnly: true,
@@ -143,6 +164,7 @@ export async function POST(req: NextRequest) {
         publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
         breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
         monthlyCents: bill.perMonthCents,
+        monthlyTaxCents,
         savedCard,
         gates,
         ...(vault ? { vault } : {}),
@@ -152,9 +174,37 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // MOVE 8 — THE FRIEND CREDIT, and the only place in the cart it touches the money.
+  //
+  // It is claimed HERE, on the far side of the kill switch and just before the PaymentIntent, for
+  // two reasons: the intent's amount has to already have the credit in it (or the card is charged
+  // the wrong number), and nothing above this line takes a card, so a free or invoiced order never
+  // spends a credit. claimFriendCredit returns null whenever REFERRALS_ENABLED is off or migration
+  // 261 has not run, and applyFriendCredit is a no-op on null — so with the switch off every line
+  // below is byte-for-byte the order this route has always placed.
+  const holdKey = `hold:${randomUUID()}`
+  const claim = await claimFriendCredit(clientId, holdKey, bill.subtotalCents)
+  const billed = claim ? applyFriendCredit(bill, claim.cents) : bill
+  // The row this checkout is about to be saved as. The amount the card is charged is read back OUT
+  // of it with preTaxFromRow — the same function the tax route uses when the owner enters an
+  // address — so the two can never disagree about what a credited bill costs.
+  const storedBill = {
+    subtotal_cents: billed.subtotalCents,
+    service_fee_cents: billed.serviceFeeCents,
+    friend_credit_cents: claim ? claim.cents : 0,
+  }
+  const preTaxCents = preTaxFromRow(storedBill)
+  // The key the credit is actually held under. It starts as the hold and becomes the PaymentIntent
+  // id once Stripe answers; a release must name the key that is really on the row, or a failed
+  // checkout would hand back a credit some other checkout has since taken.
+  let creditIntentKey = holdKey
+
   try {
-    const tax = await computeTaxCents({ preTaxCents: bill.preTaxCents, customerId: cust.customerId })
-    const totalCents = bill.preTaxCents + tax.taxCents
+    const tax = await computeTaxCents({ preTaxCents, customerId: cust.customerId })
+    const totalCents = preTaxCents + tax.taxCents
+    // Same calculation, run on the monthly line, because the subscription is taxed too (stripe.ts
+    // sets automatic_tax on it). Estimate only — never committed, never charged from here.
+    const monthlyTaxCents = await estimateMonthlyTaxCents({ perMonthCents: bill.perMonthCents, customerId: cust.customerId })
 
     const pi = await stripe.paymentIntents.create({
       amount: totalCents,
@@ -172,22 +222,32 @@ export async function POST(req: NextRequest) {
       ...('email' in cust && cust.email ? { receipt_email: cust.email } : {}),
     })
 
+    // The credit now belongs to a real checkout. Before this stamp it is held against nothing,
+    // which is what lets an abandoned attempt hand the money back.
+    if (claim && await stampCreditIntent(claim.creditId, holdKey, pi.id)) creditIntentKey = pi.id
+
     const { error: insErr } = await paymentsTable().insert({
       client_id: clientId,
       stripe_payment_intent_id: pi.id,
       stripe_customer_id: cust.customerId,
-      subtotal_cents: bill.subtotalCents,
-      service_fee_cents: bill.serviceFeeCents,
+      // The FULL items subtotal, not the discounted one: it is what delivered work is measured
+      // against if this order is ever stopped (refund-math.ts).
+      subtotal_cents: billed.subtotalCents,
+      service_fee_cents: billed.serviceFeeCents,
       tax_cents: tax.taxCents,
       total_cents: totalCents,
       status: 'pending',
       stripe_tax_calculation_id: tax.calculationId,
       draft,
+      // Only written when there IS a credit, so a database without migration 261 is never sent a
+      // column it does not have.
+      ...(claim ? { friend_credit_cents: claim.cents, client_credit_id: claim.creditId } : {}),
     })
     // If we can't record the payment (e.g. migration 215 not applied), don't leave a chargeable
     // PaymentIntent with no matching row — cancel it and surface a clear error.
     if (insErr) {
       await stripe.paymentIntents.cancel(pi.id).catch(() => {})
+      if (claim) await releaseFriendCredit(claim.creditId, creditIntentKey)
       return NextResponse.json({ error: 'Checkout is not set up yet (payments table missing). Apply migration 215 and try again.' }, { status: 500 })
     }
 
@@ -200,16 +260,239 @@ export async function POST(req: NextRequest) {
       ...(vault ? { vault } : {}),
       publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
       breakdown: {
-        subtotalCents: bill.subtotalCents,
-        serviceFeeCents: bill.serviceFeeCents,
+        subtotalCents: billed.subtotalCents,
+        serviceFeeCents: billed.serviceFeeCents,
         taxCents: tax.taxCents,
         totalCents,
+        // Absent on every bill without one, so the pay screen's own lines are unchanged until
+        // there is a credit to name.
+        ...(billed.friendCreditCents ? { friendCreditCents: billed.friendCreditCents } : {}),
       },
-      monthlyCents: bill.perMonthCents,
+      monthlyCents: billed.perMonthCents,
+      monthlyTaxCents,
       savedCard,
       gates,
     })
   } catch (e) {
+    // The charge never started, so the credit was never spent. Hand it back.
+    if (claim) await releaseFriendCredit(claim.creditId, creditIntentKey)
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })
+  }
+}
+
+/* ── The desk lane ───────────────────────────────────────────────────────────
+   A Request Desk order used to mint its work order the second it was placed, with no charge and
+   with "Goes on your Apnosh bill" printed under a bill that did not exist. It now pays first,
+   through this route, with the SAME fee (feeCentsOn, inside the stored quote), the SAME Stripe Tax,
+   the SAME kill switch and the SAME PaymentIntent shape the cart uses. Nothing is minted here —
+   the mint waits for /api/checkout/complete to verify the money. */
+async function prepareDeskOrder(clientId: string, requestId: string) {
+  const admin = createAdminClient()
+  // select('*') so the paid_at / payment_id columns being absent (pre-258) cannot error the read.
+  const { data: rowRaw, error: readErr } = await admin.from('creative_requests').select('*').eq('id', requestId).maybeSingle()
+  if (readErr) return NextResponse.json({ error: 'Could not read this order. Try again.' }, { status: 500 })
+  const row = rowRaw as Record<string, unknown> | null
+  if (!row) return NextResponse.json({ error: 'That order does not exist.' }, { status: 404 })
+  // Tenancy: the access check above proved the caller may act for THIS client; the order must be
+  // this client's too, or an id from another account would be payable from here.
+  if (String(row.client_id ?? '') !== clientId) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+
+  // Already paid: never a second charge, and never a second work order. The screen shows the
+  // confirmation instead.
+  //
+  // creative_requests.paid_at is NOT enough on its own. It is stamped by finalizePaidDeskOrder,
+  // which runs after the charge — so an owner whose tab closed between the card clearing and the
+  // stamp comes back to a page that cheerfully makes them a SECOND PaymentIntent for an order
+  // Stripe has already collected. The payment ledger is the truth about money; the order row is
+  // only its echo. Either one saying paid is enough to stop.
+  if (row.paid_at || (await hasCollectedPayment(requestId))) {
+    return NextResponse.json({ alreadyPaid: true, requestId })
+  }
+
+  const cadence = row.cadence === 'monthly' ? 'monthly' as const : 'once' as const
+  const bill = deskBill(row.quote_cents as number | null, cadence, deskQuoteOrigin(row.brief))
+  // FAIL CLOSED on a price we do not have. A desk order with no number is not a free order — it is
+  // an order we could not price, and charging $0 for work a person will do is the wrong mistake.
+  if (bill.preTaxCents <= 0 && bill.perMonthCents <= 0) {
+    return NextResponse.json({ error: 'We could not price this order. Your team will get in touch.' }, { status: 409 })
+  }
+
+  // The kill switch, same words the cart shows. Nothing is charged and — because the mint moved to
+  // /complete — nothing is made either, which is the point: a closed till makes no work.
+  if (!campaignCheckoutEnabled()) {
+    return NextResponse.json({
+      invoice: true,
+      checkoutClosed: true,
+      breakdown: { subtotalCents: bill.subtotalCents, serviceFeeCents: bill.serviceFeeCents, taxCents: 0, totalCents: bill.preTaxCents },
+      monthlyCents: bill.perMonthCents,
+      monthlyTaxCents: null,
+      gates: { booking: null, custom: [] },
+    })
+  }
+
+  const cust = await ensureCheckoutCustomer(clientId)
+  if ('error' in cust) return NextResponse.json({ error: cust.error }, { status: 500 })
+  const label = `Apnosh — ${String(row.type ?? 'creative')} order`
+
+  try {
+    // Monthly-only desk line (a social posting package): take the card with a SetupIntent and let
+    // the subscription bill it. Nothing is charged today, so the screen must not say a number is.
+    if (bill.preTaxCents <= 0) {
+      const si = await stripe.setupIntents.create({
+        customer: cust.customerId,
+        usage: 'off_session',
+        automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+        description: `${label} (monthly)`,
+        metadata: { clientId, requestId, kind: 'desk_checkout_setup' },
+      })
+      // No chargeable intent may outlive a failed row: cancel it rather than leave money reachable.
+      const failed = await insertDeskPayment({ clientId, requestId, intentId: si.id, customerId: cust.customerId, bill, taxCents: 0, calculationId: null })
+      if (failed) { await stripe.setupIntents.cancel(si.id).catch(() => {}); return failed }
+      const monthlyTaxCents = await estimateMonthlyTaxCents({ perMonthCents: bill.perMonthCents, customerId: cust.customerId })
+      return NextResponse.json({
+        setupOnly: true,
+        requestId,
+        paymentIntentId: si.id,
+        clientSecret: si.client_secret,
+        publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
+        breakdown: { subtotalCents: 0, serviceFeeCents: 0, taxCents: 0, totalCents: 0 },
+        monthlyCents: bill.perMonthCents,
+        monthlyTaxCents,
+        savedCard: await getSavedCard(cust.customerId),
+        gates: { booking: null, custom: [] },
+      })
+    }
+
+    // MOVE 8 — ONE LAW FOR THE CREDIT. A desk order is an order: the page promises "$50 off your
+    // first order", and a friend whose first purchase is a set of photos would otherwise be told
+    // the credit was for some other kind of order. Same claim, same pure applyFriendCredit, same
+    // preTaxFromRow the cart charges through, so the two tills cannot price a credit differently.
+    // Claimed here, on the far side of the kill switch and just before the intent, and only on the
+    // one-time lane — a monthly-only desk line has nothing to take a credit off.
+    const holdKey = `hold:${randomUUID()}`
+    const claim = await claimFriendCredit(clientId, holdKey, bill.subtotalCents)
+    // applyFriendCredit takes a CheckoutBill; a DeskBill is the same four numbers, which is the
+    // point of doing it here rather than writing the desk its own arithmetic.
+    const billed: CheckoutBill = claim ? applyFriendCredit(bill, claim.cents) : bill
+    const storedBill = {
+      subtotal_cents: billed.subtotalCents,
+      service_fee_cents: billed.serviceFeeCents,
+      friend_credit_cents: claim ? claim.cents : 0,
+    }
+    const preTaxCents = preTaxFromRow(storedBill)
+    let creditIntentKey = holdKey
+    try {
+      const tax = await computeTaxCents({ preTaxCents, customerId: cust.customerId })
+      const totalCents = preTaxCents + tax.taxCents
+      const pi = await stripe.paymentIntents.create({
+        amount: totalCents,
+        currency: 'usd',
+        customer: cust.customerId,
+        setup_future_usage: 'off_session',
+        automatic_payment_methods: { enabled: true, allow_redirects: 'never' },
+        description: label,
+        metadata: { clientId, requestId, kind: 'desk_checkout' },
+        ...('email' in cust && cust.email ? { receipt_email: cust.email } : {}),
+      })
+      if (claim && await stampCreditIntent(claim.creditId, holdKey, pi.id)) creditIntentKey = pi.id
+      const failed = await insertDeskPayment({
+        clientId, requestId, intentId: pi.id, customerId: cust.customerId,
+        bill: { ...billed, preTaxCents }, taxCents: tax.taxCents, calculationId: tax.calculationId,
+        credit: claim ? { cents: claim.cents, creditId: claim.creditId } : null,
+      })
+      if (failed) {
+        await stripe.paymentIntents.cancel(pi.id).catch(() => {})
+        if (claim) await releaseFriendCredit(claim.creditId, creditIntentKey)
+        return failed
+      }
+      return NextResponse.json({
+        requestId,
+        paymentIntentId: pi.id,
+        clientSecret: pi.client_secret,
+        publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? null,
+        breakdown: {
+          subtotalCents: billed.subtotalCents,
+          serviceFeeCents: billed.serviceFeeCents,
+          taxCents: tax.taxCents,
+          totalCents,
+          ...(billed.friendCreditCents ? { friendCreditCents: billed.friendCreditCents } : {}),
+        },
+        monthlyCents: 0,
+        monthlyTaxCents: null,
+        savedCard: await getSavedCard(cust.customerId),
+        gates: { booking: null, custom: [] },
+      })
+    } catch (e) {
+      // The charge never started, so the credit was never spent. Hand it back.
+      if (claim) await releaseFriendCredit(claim.creditId, creditIntentKey)
+      throw e
+    }
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not start checkout.' }, { status: 500 })
+  }
+}
+
+/**
+ * Write the pending payment row for a desk order. Returns NULL on success, or the error response
+ * the caller must return (after cancelling the intent it just created).
+ *
+ * FAILS CLOSED on a missing request_id column. Everywhere else in this app a missing column is
+ * swallowed so the product keeps working, but a charge we cannot tie back to the order it paid for
+ * is money with no receipt: nothing could mint the work, refund it, or say what it was. So a
+ * pre-258 database refuses the charge and says which SQL to run, rather than taking it.
+ */
+async function insertDeskPayment(args: {
+  clientId: string; requestId: string; intentId: string; customerId: string
+  bill: { subtotalCents: number; serviceFeeCents: number; perMonthCents: number; preTaxCents: number }
+  taxCents: number; calculationId: string | null
+  /** a friend credit on this desk order, or null. Written only when there is one, so a database
+   *  without migration 261 is never sent a column it does not have. */
+  credit?: { cents: number; creditId: string } | null
+}): Promise<NextResponse | null> {
+  const { error } = await paymentsTable().insert({
+    client_id: args.clientId,
+    request_id: args.requestId,
+    stripe_payment_intent_id: args.intentId,
+    stripe_customer_id: args.customerId,
+    subtotal_cents: args.bill.subtotalCents,
+    service_fee_cents: args.bill.serviceFeeCents,
+    tax_cents: args.taxCents,
+    total_cents: args.bill.preTaxCents + args.taxCents,
+    status: 'pending',
+    stripe_tax_calculation_id: args.calculationId,
+    ...(args.credit ? { friend_credit_cents: args.credit.cents, client_credit_id: args.credit.creditId } : {}),
+  })
+  if (!error) return null
+  const missingColumn = (error as { code?: string }).code === '42703'
+  return NextResponse.json({
+    error: missingColumn
+      ? 'Card checkout for the desk is not set up yet (apply migration 258). Nothing was charged.'
+      : 'Could not start checkout. Nothing was charged.',
+  }, { status: 500 })
+}
+
+/**
+ * Has a card already been collected for this desk order?
+ *
+ * Reads the payment ledger, which is written the moment Stripe confirms, rather than the order row,
+ * which is stamped a step later. COLLECTED_STATUSES, not 'paid' alone: a partly refunded or
+ * disputed charge is still money that was taken, and offering a fresh PaymentIntent on top of it
+ * would charge the same order twice.
+ *
+ * FALSE on an unreadable read (pre-258 there is no request_id column to filter on). That is the
+ * honest degrade: pre-258 insertDeskPayment fails closed and no card is ever taken, so there is no
+ * collected payment to miss.
+ */
+async function hasCollectedPayment(requestId: string): Promise<boolean> {
+  try {
+    const { data, error } = await paymentsTable()
+      .select('status')
+      .eq('request_id', requestId)
+      .in('status', COLLECTED_STATUSES)
+      .limit(1)
+    if (error || !Array.isArray(data)) return false
+    return data.length > 0
+  } catch {
+    return false
   }
 }

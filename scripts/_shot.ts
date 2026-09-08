@@ -34,6 +34,22 @@ async function main() {
   ws.on('message', (m: any) => { const j = JSON.parse(String(m)); if (j.id && pending.has(j.id)) { pending.get(j.id)!(j.result); pending.delete(j.id) } })
   const send = (method: string, params: any = {}) => new Promise<any>((res) => { const i = ++id; pending.set(i, res); ws.send(JSON.stringify({ id: i, method, params })) })
   await send('Network.enable'); await send('Page.enable')
+  /* DUMP_CONSOLE=1 — every console message and uncaught exception the page produces, printed at
+     the end. This is how you find out what is behind the Next dev-tools "N Issues" pill without
+     opening the panel by hand: the pill only counts them, it does not name them. */
+  const consoleLines: string[] = []
+  if (process.env.DUMP_CONSOLE) {
+    await send('Runtime.enable'); await send('Log.enable')
+    ws.on('message', (m: any) => {
+      const j = JSON.parse(String(m))
+      if (j.method === 'Runtime.consoleAPICalled') {
+        const t = (j.params.args ?? []).map((a: any) => a.value ?? a.description ?? a.type).join(' ')
+        consoleLines.push(`[${j.params.type}] ${t}`.slice(0, 600))
+      }
+      if (j.method === 'Runtime.exceptionThrown') consoleLines.push(`[exception] ${j.params.exceptionDetails?.text} ${j.params.exceptionDetails?.exception?.description ?? ''}`.slice(0, 600))
+      if (j.method === 'Log.entryAdded' && j.params.entry?.level === 'error') consoleLines.push(`[log] ${j.params.entry.text}`.slice(0, 600))
+    })
+  }
   await send('Emulation.setDeviceMetricsOverride', { width: W, height: Number(process.env.SHOT_H || 1000), deviceScaleFactor: 2, mobile: W < 700 })
   await send('Network.setCookies', { cookies: Object.entries(jar).map(([name, value]) => ({ name, value, domain: 'localhost', path: '/' })) })
   for (const p of PATHS) {
@@ -90,12 +106,34 @@ async function main() {
       const r = await send('Runtime.evaluate', { expression: `document.body.innerText.replace(/\\s+/g, ' ').slice(0, 600)`, returnByValue: true })
       console.log('TEXT:', r.result?.value)
     }
+    /* MEASURE_NAV=1 — the proof for "nothing hides under the bottom nav". Scrolls the app scroller
+       all the way down, then compares the bottom of the LAST thing in it against the top of the
+       floating nav. A pass is a positive gap; the bug this exists to catch was a gap of -21. */
+    if (process.env.MEASURE_NAV) {
+      const r = await send('Runtime.evaluate', { expression: `(async () => {
+        const el = document.querySelector('.mvp-frame-scroll'); if (!el) return 'no scroller'
+        el.scrollTop = el.scrollHeight
+        await new Promise((r) => setTimeout(r, 900))
+        const nav = document.querySelector('.mvp-frame nav'); if (!nav) return 'no nav'
+        const kids = [...el.children].filter((c) => c.getBoundingClientRect().height > 0)
+        const last = kids[kids.length - 1]
+        const deep = [...last.querySelectorAll('*')].filter((c) => c.getBoundingClientRect().height > 0)
+        const bottom = Math.max(last.getBoundingClientRect().bottom, ...deep.map((c) => c.getBoundingClientRect().bottom))
+        const navTop = nav.getBoundingClientRect().top
+        return JSON.stringify({ lastBottom: Math.round(bottom), navTop: Math.round(navTop), gap: Math.round(navTop - bottom), pad: getComputedStyle(el).paddingBottom, atEnd: Math.round(el.scrollHeight - el.clientHeight - el.scrollTop) })
+      })()`, returnByValue: true, awaitPromise: true })
+      console.log('NAVGAP:', p, r.result?.value ?? r.exceptionDetails?.text)
+    }
     const m = await send('Page.getLayoutMetrics')
     const h = Math.min(6000, Math.ceil(m.cssContentSize?.height ?? m.contentSize?.height ?? 1000))
     const shot = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip: { x: 0, y: 0, width: W, height: h, scale: 1 } })
     const name = p.replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '') || 'root'
     writeFileSync(`${OUT}/${name}.png`, Buffer.from(shot.data, 'base64'))
     console.log('saved', name, W, 'x', h)
+  }
+  if (process.env.DUMP_CONSOLE) {
+    console.log(`\nCONSOLE (${consoleLines.length}):`)
+    for (const l of consoleLines) console.log('  ' + l)
   }
   ws.close(); chrome.kill()
   await js.auth.signOut()

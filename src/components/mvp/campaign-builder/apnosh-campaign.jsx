@@ -11,7 +11,7 @@ import { serviceById, cadenceOf, plainNameOf } from "@/lib/campaigns/catalog";
 import { etaLabelFor, SERVICE_TURNAROUND } from "@/lib/campaigns/data/service-turnaround";
 import { CREATE_CATALOG, STAGE_TAG_LABEL } from "@/lib/campaigns/data/create-catalog";
 import { contentFor } from "@/lib/campaigns/data/content-overrides";
-import { isBuyable, isHidden, comingSoonReason } from "@/lib/campaigns/data/catalog-availability";
+import { isBuyable, isHidden, notSellableReason } from "@/lib/campaigns/data/catalog-availability";
 import { REQUEST_TYPES } from "@/lib/requests/catalog";
 import { liveAlternativesFor, liveAlternativesForStage, collapseDarkShelves, unbundleFor } from "@/lib/campaigns/data/live-alternatives";
 import { requirementsFor } from "@/lib/campaigns/data/campaign-requirements";
@@ -1422,7 +1422,7 @@ function StrategistBrief({ restaurant, onBack, onSent }) {
         </div>
         <h1 style={{ fontFamily: "'Cal Sans', Poppins, system-ui, sans-serif", fontWeight: 600, fontSize: 24, lineHeight: 1.12, color: TOKENS.ink, margin: "0 0 9px", letterSpacing: -0.2 }}>Hand it to a marketer</h1>
         <p style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, color: TOKENS.sub, lineHeight: 1.45, margin: "0 0 20px" }}>
-          They get this whole draft, plus {restaurant}'s goal and budget. Add anything else and a real person refines it, then sends it back for you to approve, usually within a few hours.
+          They get this whole draft, plus {restaurant}'s goal and budget. Add anything else and a real person refines it, then sends it back for you to approve, usually within one business day.
         </p>
 
         <label style={{ fontFamily: "Inter, sans-serif", fontSize: 13.5, fontWeight: 600, color: TOKENS.ink, marginBottom: 8 }}>Anything you really want included?</label>
@@ -2171,6 +2171,11 @@ const CATALOG = [
 
   { id: "winback", type: "automation", icon: "heart", title: "Win back quiet guests", sub: "One email and one text to guests you haven't seen lately", cad: "once", hot: true },
   { id: "direct", type: "task", icon: "cart", title: "Get orders direct", sub: "Delivery apps take a cut of every order. Move regulars to direct", cad: "once", hot: true },
+
+  { id: "trucklocation", type: "task", icon: "pin", title: "Where's the truck today", sub: "A post each morning with today's spot", cad: "recurring" },
+  { id: "barnights", type: "task", icon: "moon", title: "Weekly bar nights", sub: "Trivia, league night, watch parties, run as a program", cad: "recurring" },
+  { id: "seasonplan", type: "task", icon: "chart", title: "A season plan and a call", sub: "The quarter mapped out, with a planning call", cad: "recurring" },
+  { id: "cateringengine", type: "task", icon: "people", title: "Catering page and follow-ups", sub: "A page, proposals, and follow-up on every inquiry", cad: "recurring" },
 ];
 // Admin CMS overlay (Phase C1): the sparse override map the wrapper fetched, set by
 // ApnoshCampaign each render. Only card title/tagline overlay HERE (catGet feeds every
@@ -2221,7 +2226,10 @@ export const catGet = (id) => {
 // a buy the server would reject.
 const buyableId = (id) => isBuyable(id, CONTENT_OVERRIDES);
 const hiddenId = (id) => isHidden(id, CONTENT_OVERRIDES);
-const soonReason = (id) => comingSoonReason(id, CONTENT_OVERRIDES);
+// notSellableReason, not comingSoonReason: the footer has to explain whatever buyableId just
+// refused, and the law refuses more than the allowlist does. Reading the narrower one would
+// leave a held card saying a bare "Coming soon." while the store's own shelf said why.
+const soonReason = (id) => notSellableReason(id, CONTENT_OVERRIDES);
 // Drop hidden ids and push coming-soon ids to the END of a shelf's id list (bookmarked cards still
 // render, with a badge, but never crowd out what the owner can actually buy).
 const orderIds = (ids) => {
@@ -2398,7 +2406,11 @@ function planTags(p) {
   // One-time amounts show WITH the 10% checkout service fee folded in ("fee included"), so the
   // number on the shelf is the number the card is charged (pre-tax) — never a cart surprise.
   const oneTimeShown = pr ? withServiceFee(pr.oneTime) : 0;
-  if (pr && (pr.oneTime > 0 || pr.perMonth > 0)) {
+  // A HELD CARD PRINTS NO PRICE, here as on the store's own shelf. A price is an offer, and a
+  // card the law holds back has nothing to offer yet; the Soon ribbon and the disabled footer
+  // are the whole story. The pass-through and cadence chips stay, since they describe the work.
+  const soon = !buyableId(p.id);
+  if (!soon && pr && (pr.oneTime > 0 || pr.perMonth > 0)) {
     if (pr.oneTime > 0 && pr.perMonth > 0) {
       t.push({ label: `Setup $${oneTimeShown.toLocaleString()}`, accent: true });
       t.push({ label: `$${pr.perMonth.toLocaleString()}/mo`, accent: true });

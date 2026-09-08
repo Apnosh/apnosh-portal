@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Calendar, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { requestMarketplaceBooking } from './actions'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 interface Props {
   vendorSlug: string
@@ -43,8 +44,8 @@ export default function BookButton({ vendorSlug, listingSlug, listingType, isApn
           </p>
           <p className="text-[12px] text-ink-2">
             {isApnosh && listingType === 'subscription'
-              ? "Your Account Manager will reach out within 24 hours to set up your subscription, schedule your onboarding shoot, and start the work."
-              : "Apnosh will coordinate with this vendor and follow up within 1-2 business days."}
+              ? `Your Account Manager will reach out ${REPLY_PROMISE} to set up your subscription, schedule your onboarding shoot, and start the work.`
+              : `Apnosh will coordinate with this vendor and follow up ${REPLY_PROMISE}.`}
           </p>
         </div>
       </div>

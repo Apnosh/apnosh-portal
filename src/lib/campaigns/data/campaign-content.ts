@@ -19,6 +19,7 @@
  */
 
 import type { CreateCatalogId, FunnelStage } from './create-catalog'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 import type { CampaignLane, CampaignRush, CampaignNeedsConfig } from './content-overrides'
 
 export interface CampaignContent {
@@ -326,7 +327,7 @@ export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
     description: "One desk for anything you need made: a new menu, a logo refresh, website changes, short videos, a photo shoot, social posts, an email, ad creative, print, or writing. Answer a few plain questions and send it. Sending is free.",
     promise: "A real person reads your request and answers with a plan and a price. Work starts only after you say yes.",
     why: "Most owners do not need another app. They need to ask for the thing and have it handled. This is that.",
-    expectation: "You hear back with a plan and a price within one business day.",
+    expectation: `You hear back with a plan and a price ${REPLY_PROMISE}.`,
     heroImage: null,
   },
   gbp: {
@@ -467,6 +468,49 @@ export const CAMPAIGN_CONTENT: Record<CreateCatalogId, CampaignContent> = {
     promise: "Move your regulars from delivery apps to ordering direct.",
     why: "Delivery apps take a cut of every order. Direct orders keep it with you.",
     expectation: "The switch happens one regular at a time.",
+    heroImage: null,
+  },
+
+  /* The four doorless services. Every line here is what the work IS, not what we wish it
+     were: three of them are held by the playbook law and the store says so. */
+  trucklocation: {
+    id: 'trucklocation',
+    title: "Where's the truck today",
+    tagline: "A post each morning with today's spot",
+    description: "Your spot changes daily and Google's pin does not. Every morning we post where you are, from the schedule of stops you keep.",
+    promise: "People find you without having to ask.",
+    why: "For a truck, the daily where-are-you post is the whole marketing job.",
+    expectation: "It works from day one and only as well as your schedule is true.",
+    heroImage: null,
+  },
+  barnights: {
+    id: 'barnights',
+    title: "Weekly bar nights",
+    tagline: "Trivia, league night, watch parties, run as a program",
+    description: "A weekly night with a reason to come: the plan, the graphics and the posts, run month after month.",
+    promise: "A reason to come in on the nights nobody comes in.",
+    why: "A room with a night on it fills better than a room with a discount on it.",
+    expectation: "A weekly night takes about a month before regulars build around it.",
+    heroImage: null,
+  },
+  seasonplan: {
+    id: 'seasonplan',
+    title: "A season plan and a call",
+    tagline: "The quarter mapped out, with a planning call",
+    description: "Your next quarter mapped out: the dates that matter for your place, what to promote each week, and a call to walk it through.",
+    promise: "You know what you are promoting for the next three months.",
+    why: "A season you planned beats a season you reacted to.",
+    expectation: "The plan lands in a week; the results come from running it.",
+    heroImage: null,
+  },
+  cateringengine: {
+    id: 'cateringengine',
+    title: "Catering page and follow-ups",
+    tagline: "A page, proposals, and follow-up on every inquiry",
+    description: "A catering page offices can order from, a proposal to send back, and a follow-up on every inquiry so none of them go cold.",
+    promise: "Catering inquiries land somewhere and get answered.",
+    why: "One catering order is worth a full night of tables, and most are lost to silence.",
+    expectation: "Inquiries build slowly, then in batches around holidays.",
     heroImage: null,
   },
 }

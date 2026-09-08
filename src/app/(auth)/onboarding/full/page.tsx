@@ -14,6 +14,10 @@ import {
 } from './data'
 import StepRenderer, { OnboardingFrame } from './step-renderer'
 import { completeOnboardingCRM } from '@/lib/onboarding-actions'
+import { readStoredLang, useLang } from '@/components/mvp/mvp-language'
+import { DEFAULT_LANG, isLang } from '@/lib/i18n/t'
+import { budgetCapForChip, budgetChipForCap } from '@/lib/goals/defaults'
+import { creditWords } from '@/lib/referrals/model'
 
 export default function OnboardingPage() {
   const router = useRouter()
@@ -27,6 +31,12 @@ export default function OnboardingPage() {
   const [saving, setSaving] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [logoUrl, setLogoUrl] = useState<string>('')
+  /* MOVE 8 — a friend sent them. The code arrives as ?ref= on the link they tapped, and as a
+     cookie set by /r/<code>, because signing up moves them here and a query param does not
+     survive that hop. Both are read; neither is trusted for anything but a lookup. Empty for
+     everybody else, which is everybody while REFERRALS_ENABLED is off. */
+  const [refCode, setRefCode] = useState('')
+  const [friend, setFriend] = useState<{ name: string; cents: number } | null>(null)
 
   // Derived screen info. The wizard groups each phase's questions onto one
   // scrollable screen, so navigation moves screen-by-screen, not step-by-step.
@@ -38,6 +48,16 @@ export default function OnboardingPage() {
   // The review screen carries its own Complete-setup pill (it sits next to the
   // terms checkbox it depends on), so the frame's bottom bar steps aside there.
   const isReviewScreen = !!currentScreen && currentScreen.includes('review')
+
+  /* The code they arrived with, read once. Nothing is looked up here: the finish line is drawn
+     only from the answer to the WRITE below, so a code that turns out not to be real — or a loop
+     that is shut — can never put a promise of $50 on the screen. */
+  useEffect(() => {
+    try {
+      setRefCode(new URLSearchParams(window.location.search).get('ref')
+        || (document.cookie.match(/(?:^|;\s*)apnosh_ref=([^;]+)/)?.[1] ?? ''))
+    } catch { /* no window */ }
+  }, [])
 
   // Load existing data on mount
   useEffect(() => {
@@ -73,6 +93,9 @@ export default function OnboardingPage() {
           cuisine: biz.cuisine || '',
           cuisine_other: biz.cuisine_other || '',
           service_styles: biz.service_styles || [],
+          // businesses.shape is the draft mirror of clients.shape (migration 256); absent
+          // before it runs, which reads as "not answered yet" and re-suggests from the styles.
+          shape: biz.shape || '',
           price_range: biz.price_range || '',
           signature_items: biz.signature_items || [],
           dietary_options: biz.dietary_options || [],
@@ -110,6 +133,9 @@ export default function OnboardingPage() {
           goal_detail: biz.goal_detail || '',
           success_signs: biz.success_signs || [],
           timeline: biz.timeline || '',
+          /* The budget chip is stored as a number (monthly_budget), so read it back to the
+             chip the owner tapped rather than showing an empty screen on resume. */
+          marketing_budget: budgetChipForCap(biz.monthly_budget),
           main_offerings: biz.main_offerings || '',
           upcoming: biz.upcoming || '',
           tones: Array.isArray(biz.brand_voice_words) ? biz.brand_voice_words as string[] : [],
@@ -234,6 +260,7 @@ export default function OnboardingPage() {
       onboarding_step: screenToStepIndex(data.biz_type, nextScreen),
     }
 
+    let bizId = businessId
     if (businessId) {
       await supabase.from('businesses').update(payload).eq('id', businessId)
     } else {
@@ -242,7 +269,29 @@ export default function OnboardingPage() {
         .insert({ ...payload, owner_id: userId })
         .select('id')
         .single()
-      if (newBiz) setBusinessId(newBiz.id)
+      if (newBiz) { bizId = newBiz.id; setBusinessId(newBiz.id) }
+    }
+
+    /* The one money answer in setup. The Create shelf draws its "above what you set" line from
+       it, so it saves on every screen rather than only at completion.
+
+       WRITTEN ONLY WHEN THEY ACTUALLY PICKED A CHIP. It used to ride the payload above, so an
+       owner who had typed a budget on /dashboard/profile and then walked back through setup had
+       it nulled on the very first screen, before the budget question was even asked. Same guard
+       as onboarding-actions.ts (completeOnboardingCRM): no answer means no write, not a clear.
+       "Not sure yet" is a real answer that asserts no cap, and it leaves the number alone too. */
+    const budgetCap = budgetCapForChip(data.marketing_budget)
+    if (bizId && budgetCap != null) {
+      const { error } = await supabase.from('businesses').update({ monthly_budget: budgetCap }).eq('id', bizId)
+      if (error) console.warn('[onboarding] budget not saved:', error.message)
+    }
+
+    /* businesses.shape arrives with migration 256. Kept OUT of the payload above and written
+       on its own so that, before the migration runs, a missing column costs one warning
+       instead of throwing away every other answer on the screen. */
+    if (bizId && data.shape) {
+      const { error } = await supabase.from('businesses').update({ shape: data.shape }).eq('id', bizId)
+      if (error) console.warn('[onboarding] shape not saved (run migration 256):', error.message)
     }
     setSaving(false)
   }
@@ -295,7 +344,26 @@ export default function OnboardingPage() {
       avoid_list: data.avoid_list,
       connected: data.connected,
       logo_url: logoUrl,
+      /* The language they actually READ setup in. data.preferred_language only holds an answer
+         when the switch was tapped in THIS session, and a returning Spanish owner has it
+         remembered in the browser instead — they would have finished setup in Spanish and
+         landed on an English dashboard. The browser's answer is the fallback, English last. */
+      preferred_language: isLang(data.preferred_language) ? data.preferred_language : (readStoredLang() ?? DEFAULT_LANG),
     })
+
+    /* MOVE 8 — the referral is written AFTER the client row exists, because it is a row about two
+       clients. Best-effort and awaited only so the finish screen can name the friend: a referral
+       that cannot be saved must never stop somebody finishing setup. */
+    if (refCode) {
+      await fetch('/api/referrals/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: refCode }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => { if (j?.ok) setFriend({ name: (j.fromName as string) || '', cents: (j.creditCents as number) || 0 }) })
+        .catch(() => { /* the switch is off, or the tables are not there yet */ })
+    }
 
     setSaving(false)
     setShowSuccess(true)
@@ -399,32 +467,19 @@ export default function OnboardingPage() {
       onExit={!loading && !showSuccess ? handleExit : undefined}
       valid={valid}
       saving={saving}
+      onLanguage={(l) => update('preferred_language', l)}
       onNext={goNext}
       isSuccess={showSuccess}
       hideAction={loading || isReviewScreen}
     >
       {loading ? (
-        /* A small breathing mint orb while the saved draft loads, echoing the
-           portal's loading screen. CSS only; still for reduced motion. The
-           frame's content zone centers it in the viewport. */
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-          <style>{`
-            @media (prefers-reduced-motion: no-preference) {
-              .ob-load-orb { animation: obLoadBreathe 3.2s ease-in-out infinite }
-              @keyframes obLoadBreathe {
-                0%,100% { transform: scale(1); box-shadow: 0 0 26px rgba(74,189,152,.28), 0 0 70px rgba(74,189,152,.12) }
-                50% { transform: scale(1.06); box-shadow: 0 0 38px rgba(74,189,152,.42), 0 0 95px rgba(74,189,152,.18) }
-              }
-            }
-          `}</style>
-          <div aria-hidden className="ob-load-orb" style={{
-            width: 64, height: 64, borderRadius: '50%',
-            border: '1.5px solid rgba(74,189,152,.45)',
-            background: 'radial-gradient(circle at 32% 26%, rgba(255,255,255,.6), rgba(74,189,152,.20) 58%, rgba(74,189,152,.10))',
-          }} />
-          <span style={{ color: '#6e6e73', fontSize: 13 }}>Getting your setup ready</span>
-        </div>
+        <OnboardingLoading />
       ) : (
+        <>
+        {/* MOVE 8 — said once, on the finish screen, and ONLY when the credit is really on the
+            account (the write above answered ok). It renders inside the frame so it reads in the
+            owner's own language. */}
+        {showSuccess && friend && <FriendCreditLine name={friend.name} cents={friend.cents} />}
         <StepRenderer
           screen={showSuccess ? 'success' : currentScreen}
           data={data}
@@ -439,8 +494,55 @@ export default function OnboardingPage() {
           businessId={businessId}
           onSaveBeforeRedirect={() => saveData(screenNo)}
         />
+        </>
       )}
     </OnboardingFrame>
   )
 }
 
+/* The one line a referred owner reads at the end of setup. Kit tokens, no new colours: the mint
+   card the rest of the flow already uses. The amount comes from the write, not from a constant on
+   this screen, so the sentence cannot say $50 while the ledger says something else. */
+function FriendCreditLine({ name, cents }: { name: string; cents: number }) {
+  const { T } = useLang()
+  if (cents <= 0) return null
+  const amount = creditWords(cents)
+  return (
+    <div style={{
+      margin: '0 0 14px', padding: '11px 14px', borderRadius: 14,
+      background: '#eaf7f3', border: '1px solid rgba(74,189,152,0.30)',
+      fontFamily: "'Inter',system-ui,sans-serif", fontSize: 13.5, color: '#1c6b52', lineHeight: 1.45,
+    }}>
+      <strong style={{ fontWeight: 700 }}>
+        {name ? T('Your friend {name} sent you.', { name }) : T('A friend sent you.')}
+      </strong>{' '}
+      {T('{amount} off your first order.', { amount })}
+    </div>
+  )
+}
+
+/* A small breathing mint orb while the saved draft loads, echoing the portal's loading screen.
+   CSS only; still for reduced motion. It is its own component so it renders INSIDE the frame's
+   language provider — the line under it is the first thing a Spanish owner reads. */
+function OnboardingLoading() {
+  const { T } = useLang()
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+      <style>{`
+        @media (prefers-reduced-motion: no-preference) {
+          .ob-load-orb { animation: obLoadBreathe 3.2s ease-in-out infinite }
+          @keyframes obLoadBreathe {
+            0%,100% { transform: scale(1); box-shadow: 0 0 26px rgba(74,189,152,.28), 0 0 70px rgba(74,189,152,.12) }
+            50% { transform: scale(1.06); box-shadow: 0 0 38px rgba(74,189,152,.42), 0 0 95px rgba(74,189,152,.18) }
+          }
+        }
+      `}</style>
+      <div aria-hidden className="ob-load-orb" style={{
+        width: 64, height: 64, borderRadius: '50%',
+        border: '1.5px solid rgba(74,189,152,.45)',
+        background: 'radial-gradient(circle at 32% 26%, rgba(255,255,255,.6), rgba(74,189,152,.20) 58%, rgba(74,189,152,.10))',
+      }} />
+      <span style={{ color: '#6e6e73', fontSize: 13 }}>{T('Getting your setup ready')}</span>
+    </div>
+  )
+}

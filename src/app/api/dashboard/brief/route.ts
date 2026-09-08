@@ -17,6 +17,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { logGeneration } from '@/lib/ai/log-generation'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getActiveClientGoals, getClientShape } from '@/lib/goals/queries'
+import { REPLY_PROMISE } from '@/lib/reply-promise'
 
 const GOAL_LABEL: Record<string, string> = {
   more_foot_traffic: 'more foot traffic',
@@ -44,7 +45,7 @@ Anchor every claim in the data block. Never invent numbers. If a metric is missi
 Tone examples:
 - "Reach is up 12% — last Tuesday's reel hit 4,300 views. Sarah K.'s 3-star review is the main thing on the docket today. Mother's Day content drops Monday; we'll send it for your approval tonight."
 - "Quiet week on search — calls down 8% vs prior 7d. Worth checking your hours are accurate. Reputation's holding at 4.6 stars."
-- "Just getting started. Your top goal is foot traffic, so the highest-leverage move is connecting Google Business Profile — it unlocks 70% of the data behind it. Your strategist will reach out within 24 hours."`.trim()
+- "Just getting started. Your top goal is foot traffic, so the highest-leverage move is connecting Google Business Profile — it unlocks 70% of the data behind it. Your strategist will reach out ${REPLY_PROMISE}."`.trim()
 
 interface BriefRequest {
   clientId: string
