@@ -29,6 +29,8 @@ export const ES: Record<string, string> = {
   'website visits & clicks': 'visitas y clics a tu página',
   'directions & calls': 'cómo llegar y llamadas',
   'walk-in orders from Google': 'pedidos en el local que llegaron por Google',
+  'orders on your register': 'pedidos en tu caja',
+  'connect your register to see this': 'conecta tu caja para ver esto',
   'came back for more': 'volvieron por más',
 
   /* ── Home: the same five stages, in the words of a truck, a kitchen, a caterer ─────────── */
@@ -73,12 +75,15 @@ export const ES: Record<string, string> = {
 
   /* ── Home: the funnel's tags, its conversion lines and the chrome around it ────────────── */
   'Real · Google': 'Medido · Google',
+  'Real · your register': 'Medido · tu caja',
+  'Not connected': 'Sin conectar',
   'Real · Google + Social': 'Medido · Google + redes',
   '~ about · your math': '~ aprox · tu cuenta',
   'Repeat visits': 'Visitas repetidas',
   '{n} in 100 engaged': '{n} de cada 100 miraron más',
   '{n}% took a step': '{n}% dio el paso',
   '~{n}% of directions ordered': '~{n}% de los que buscaron cómo llegar pidieron',
+  '{n}% of directions ordered': '{n}% de los que buscaron cómo llegar pidieron',
   'Engaged': 'Miraron más',
   'Revenue': 'Ventas',
   'the year before': 'el año pasado',

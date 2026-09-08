@@ -270,7 +270,14 @@ function drawEmblem(ctx: CanvasRenderingContext2D, ox: number, oy: number, r: nu
 /** The honest per-stage headlines, straight from computeStages, so the animated
  *  funnel shows the SAME numbers as the Insights page. When absent (older payload)
  *  computeHome falls back to deriving them from the raw actions. */
-export interface StageCounts { interest?: number; actions?: number; retention?: number }
+export interface StageCounts {
+  interest?: number; actions?: number; retention?: number
+  /** Stage 4's real headline: orders on the register. undefined = no register
+   *  connected, which must render as a dash, never as an estimate. */
+  orders?: number
+  /** Stage 4's real revenue, in whole currency units. Same rule. */
+  revenue?: number
+}
 
 export function computeHome(views: Views, actions: Actions, walkInRate: number, avgTicket: number | null, cur: string, yoy: FunnelYoY | null, counts?: StageCounts, yoyAbs?: FunnelYoYAbs | null, /** the business's shape, so a truck is not told about its walk-ins. Undefined = storefront words. */ shape?: ShelfShape | null, /** the owner's language; the shape map runs first, then the words are translated. */ lang?: Lang) {
 
@@ -291,10 +298,24 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   // clicks, Actions = directions + calls.
   const engaged = counts?.interest ?? websiteClicks
   const acted = counts?.actions ?? (directions + calls)
-  const cameIn = Math.round(directions * walkInRate)
-  const revenue = avgTicket != null && avgTicket > 0 ? round100(cameIn * avgTicket) : null
+  /* ORDERS AND REVENUE ARE THE REGISTER'S, OR THEY ARE NOTHING.
+     This used to be Math.round(directions * walkInRate), and revenue was that
+     figure multiplied by an assumed average ticket -- a dollar amount derived
+     from direction requests and two dials, printed whether or not a register
+     was ever connected. Square and Clover both sync real daily sales and
+     Insights already reads them, so Home now takes stage 4's honest headline
+     and shows a dash when there is nothing behind it. A missing number is a
+     question the owner can act on; an invented one is not. */
+  const cameIn = counts?.orders ?? null
+  const revenue = counts?.revenue ?? null
+  const hasRegister = cameIn != null
   const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0)
+  /* The Actions stage used to caption itself "~N% of directions ordered", where
+     N was the same assumed walk-in dial that produced the invented Orders count.
+     With a real register we can state the true ratio; without one we say nothing
+     rather than guess. ratePct is still returned for callers that read it. */
   const ratePct = Math.round(walkInRate * 100)
+  const orderedPct = hasRegister && directions > 0 ? Math.round(((cameIn as number) / directions) * 100) : null
   // Retention = the Insights Retention headline (repeat guests once a register
   // connects, else new reviews this month). Falls back to 0 (a plain 0, never a
   // lock) when no count is provided.
@@ -311,15 +332,15 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
   const stages: HStage[] = [
     { key: 'shown', label: L('shown', 'Awareness'), sub: S('shown', awareSub), count: total, zone: 'measured', tag: awareTag, split: awareSplit, conv: t('{n} in 100 engaged', lang, { n: pct(engaged, total) }), emblem: 'eye', deltaYoY: yoy?.awareness ?? null, deltaAbs: yoyAbs?.awareness ?? null, insightsStage: 'discovery' },
     { key: 'engaged', label: L('engaged', 'Interest'), sub: S('engaged', 'website visits & clicks'), count: engaged, zone: 'measured', tag: t('Real · Google', lang), conv: t('{n}% took a step', lang, { n: pct(acted, engaged) }), emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
-    { key: 'moved', label: L('moved', 'Actions'), sub: S('moved', 'directions & calls'), count: acted, zone: 'measured', tag: t('Real · Google', lang), conv: t('~{n}% of directions ordered', lang, { n: ratePct }), emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
-    { key: 'camein', label: L('camein', 'Orders'), sub: S('camein', 'walk-in orders from Google'), count: cameIn, zone: 'estimate', tag: t('~ about · your math', lang), emblem: 'door', deltaYoY: yoy?.orders ?? null, deltaAbs: yoyAbs?.orders != null ? Math.round(yoyAbs.orders * walkInRate) : null, insightsStage: 'conversion' },
+    { key: 'moved', label: L('moved', 'Actions'), sub: S('moved', 'directions & calls'), count: acted, zone: 'measured', tag: t('Real · Google', lang), conv: orderedPct != null ? t('{n}% of directions ordered', lang, { n: orderedPct }) : undefined, emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
+    { key: 'camein', label: L('camein', 'Orders'), sub: S('camein', hasRegister ? 'orders on your register' : 'connect your register to see this'), count: cameIn, zone: 'measured', tag: t(hasRegister ? 'Real · your register' : 'Not connected', lang), emblem: 'door', deltaYoY: hasRegister ? (yoy?.orders ?? null) : null, deltaAbs: hasRegister ? (yoyAbs?.orders ?? null) : null, insightsStage: 'conversion' },
     { key: 'back', label: L('back', 'Retention'), sub: S('back', 'came back for more'), count: retention, zone: 'measured', tag: t('Repeat visits', lang), emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
   ]
   const stats = [
     { value: total.toLocaleString(), label: t('Awareness', lang) },
     { value: engaged.toLocaleString(), label: t('Engaged', lang) },
-    { value: '~' + cameIn.toLocaleString(), label: t('Orders', lang) },
-    { value: revenue != null ? '~' + money(revenue, cur) : '—', label: t('Revenue', lang) },
+    { value: cameIn != null ? cameIn.toLocaleString() : '—', label: t('Orders', lang) },
+    { value: revenue != null ? money(revenue, cur) : '—', label: t('Revenue', lang) },
   ]
   return { stages, stats, revenue, cameIn, ratePct, engaged, total }
 }
@@ -1331,10 +1352,20 @@ function fromStages(stages: WireStage[] | undefined): { views: Views; actions: A
   }
   // the animated Interest / Actions / Retention counts ARE the Insights stage
   // headlines, so the two surfaces never disagree
+  /* Stage 4 is the register. Its headline was on the wire all along and Home
+     never read it, which is why Home printed an estimate while Insights printed
+     the real thing for the same month. undefined here means no register, which
+     computeHome renders as a dash. */
+  const or = stages.find((s) => s.stage === 4)
   const counts: StageCounts = {
     interest: it?.headline ?? undefined,
     actions: ac?.headline ?? undefined,
     retention: rt?.headline ?? undefined, // null headline (empty stage) → undefined → falls back to 0
+    orders: or?.headline ?? undefined,
+    revenue: (() => {
+      const s = or?.sources.find((x) => x.id === 'pos_revenue')
+      return s && s.counted && s.value != null ? s.value : undefined
+    })(),
   }
   return { views, actions, counts }
 }
