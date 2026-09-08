@@ -793,7 +793,7 @@ function PayForm({ clientId, draft, restaurant, producerChoices, initialGateAnsw
         >
           {busy ? (status ?? 'Working…') : gateBlocking ? (blockReason ?? 'Complete the steps above') : setupOnly ? `Place order · ${fmt(monthlyCents)}/mo` : `Place order · ${fmt(bill.totalCents)}`}
         </button>
-        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>{setupOnly ? 'Your monthly services bill to this card starting today. Your campaign starts right after.' : 'Your card is charged now. Your campaign starts right after.'}</div>
+        <div style={{ fontFamily: 'Inter, sans-serif', fontSize: 11, color: SUB, textAlign: 'center', marginTop: 8 }}>{setupOnly ? 'Your monthly services bill to this card starting today. Your campaign starts right after.' : (() => { const t = draft.targetDate ? String(draft.targetDate).slice(0, 10) : null; const wk = new Date(); wk.setUTCDate(wk.getUTCDate() + 7); return t && t > wk.toISOString().slice(0, 10) ? `Your card is charged now. Work is scheduled back from ${new Date(`${t}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}; nothing posts before then.` : 'Your card is charged now. Your campaign starts right after.' })()}</div>
       </div>
     </>
   )

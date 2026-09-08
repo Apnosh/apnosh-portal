@@ -26,7 +26,7 @@ function admin() {
 }
 
 /** Ensure a Stripe customer exists for the client; returns its id (+ the billing email used). */
-export async function ensureCheckoutCustomer(clientId: string): Promise<{ customerId: string } | { error: string }> {
+export async function ensureCheckoutCustomer(clientId: string): Promise<{ customerId: string; email: string } | { error: string }> {
   const a = admin()
   const { data: client } = await a
     .from('clients')
@@ -42,6 +42,15 @@ export async function ensureCheckoutCustomer(clientId: string): Promise<{ custom
     const withEmail = (users ?? []).filter((u): u is { email: string; role: string } => typeof u?.email === 'string' && u.email.length > 0)
     email = (withEmail.find((u) => u.role === 'owner')?.email) || withEmail[0]?.email || null
   }
+  if (!email) {
+    // Three production accounts carry no email on the client or its users. The person at the
+    // checkout is signed in; their login email is a real receipt address. Last resort only.
+    try {
+      const { createClient } = await import('@/lib/supabase/server')
+      const { data: { user } } = await (await createClient()).auth.getUser()
+      if (user?.email) email = user.email
+    } catch { /* not in a request context */ }
+  }
   if (!email) return { error: 'No billing email on file for this account.' }
   try {
     const customerId = await getOrCreateStripeCustomerForClient({
@@ -50,7 +59,7 @@ export async function ensureCheckoutCustomer(clientId: string): Promise<{ custom
       name: (client.name as string) || 'Apnosh client',
       phone: (client.phone as string | null) ?? undefined,
     })
-    return { customerId }
+    return { customerId, email }
   } catch (e) {
     return { error: e instanceof Error ? e.message : 'Could not reach payment provider.' }
   }

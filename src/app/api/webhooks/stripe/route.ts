@@ -726,11 +726,26 @@ async function handleCampaignPaymentSucceeded(
 ) {
   if (pi.metadata?.kind !== 'campaign_checkout') return
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (supabase as any)
+  const { data: rows } = await (supabase as any)
     .from('campaign_payments')
     .update({ status: 'paid', paid_at: unixToIso(pi.created) })
     .eq('stripe_payment_intent_id', pi.id)
     .eq('status', 'pending')
+    .select('id, client_id, campaign_id, total_cents')
+  // A charged card with no shipped order is real money with nobody's name on it. The happy path
+  // links the campaign at ship; when the tab closed first, this row lands paid and orphaned. Page
+  // every admin so a person ships it from the draft snapshot. Best-effort.
+  const row = Array.isArray(rows) ? rows[0] as { id: string; client_id: string; campaign_id: string | null; total_cents: number } | undefined : undefined
+  if (row && !row.campaign_id) {
+    try {
+      const { getAdminUserIds, createNotification } = await import('@/lib/notify')
+      const { data: client } = await supabase.from('clients').select('name').eq('id', row.client_id).maybeSingle()
+      const name = ((client as { name?: string } | null)?.name) ?? 'A client'
+      for (const adminId of await getAdminUserIds(supabase)) {
+        await createNotification({ supabase, userId: adminId, type: 'order_confirmed', title: 'Paid, not shipped', body: `${name} was charged $${(row.total_cents / 100).toFixed(2)} and the order did not ship (tab closed before checkout finished). Ship it from the payment's draft snapshot.`, link: '/admin/campaign-orders' })
+      }
+    } catch (e) { console.warn('[stripe] orphan-payment page failed', (e as Error)?.message) }
+  }
 }
 
 async function handleCampaignPaymentFailed(
