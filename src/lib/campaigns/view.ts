@@ -84,6 +84,11 @@ export interface CampaignExecution {
   // via service-needs.ts). Operational only:
   // gathered to help the team start fast, never fed to the brief AI. go-live date lives on the
   // campaign's target_date column, not here.
+  /** How this order is billed. 'invoice': placed while card checkout was shut; delivered work
+   *  accrues as invoiceable charges and the team sends the invoice. Absent = card / free. */
+  billingLane?: 'invoice'
+  invoiceCents?: number         // what the invoice will be for (one-time, fee inside), at order time
+  invoiceMonthlyCents?: number  // the monthly line, if any
   shootTimes?: string    // best days/times for an on-site shoot
   blackoutDates?: string // busy dates to avoid
   onSiteContact?: string // who to ask for on arrival

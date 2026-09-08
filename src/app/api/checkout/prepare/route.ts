@@ -8,7 +8,7 @@ import { draftSourceCatalogIds, unbuyableCatalogIds } from '@/lib/campaigns/data
 import { getContentOverrides } from '@/lib/campaigns/content-overrides-server'
 import { shapeFor } from '@/lib/campaigns/builder/compose-plan'
 import type { CampaignDraft } from '@/lib/campaigns/types'
-import { campaignCheckoutEnabled, CHECKOUT_CLOSED_MESSAGE } from '@/lib/checkout-gate'
+import { campaignCheckoutEnabled } from '@/lib/checkout-gate'
 
 /** Plain owner-facing name for a catalog id (falls back to the id itself). */
 function cardName(id: string): string {
@@ -92,7 +92,18 @@ export async function POST(req: NextRequest) {
   // Everything below takes a card. So the guard sits on the boundary it actually
   // guards, still on the server, still before any Stripe call, and still fail-closed.
   if (!campaignCheckoutEnabled()) {
-    return NextResponse.json({ error: CHECKOUT_CLOSED_MESSAGE, checkoutClosed: true }, { status: 503 })
+    // THE INVOICE LANE. Card checkout is shut, so nothing here may take a card. The order is still
+    // an order: the client places it on invoice, the ship route (which re-checks this same switch)
+    // ships it, delivered work accrues as invoiceable charges, and the admins are paged to bill.
+    // This replaces a 503 whose message claimed the plan was saved while nothing was.
+    return NextResponse.json({
+      invoice: true,
+      checkoutClosed: true,
+      breakdown: { subtotalCents: bill.subtotalCents, serviceFeeCents: bill.serviceFeeCents, taxCents: 0, totalCents: bill.preTaxCents },
+      monthlyCents: bill.perMonthCents,
+      gates,
+      ...(vault ? { vault } : {}),
+    })
   }
 
   const cust = await ensureCheckoutCustomer(clientId)
