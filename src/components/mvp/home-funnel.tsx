@@ -334,7 +334,7 @@ export function computeHome(views: Views, actions: Actions, walkInRate: number, 
     { key: 'engaged', label: L('engaged', 'Interest'), sub: S('engaged', 'website visits & clicks'), count: engaged, zone: 'measured', tag: t('Real · Google', lang), conv: t('{n}% took a step', lang, { n: pct(acted, engaged) }), emblem: 'spark', deltaYoY: yoy?.interest ?? null, deltaAbs: yoyAbs?.interest ?? null, insightsStage: 'intent' },
     { key: 'moved', label: L('moved', 'Actions'), sub: S('moved', 'directions & calls'), count: acted, zone: 'measured', tag: t('Real · Google', lang), conv: orderedPct != null ? t('{n}% of directions ordered', lang, { n: orderedPct }) : undefined, emblem: 'tap', deltaYoY: yoy?.actions ?? null, deltaAbs: yoyAbs?.actions ?? null, insightsStage: 'intent' },
     { key: 'camein', label: L('camein', 'Orders'), sub: S('camein', hasRegister ? 'orders on your register' : 'connect your register to see this'), count: cameIn, zone: 'measured', tag: t(hasRegister ? 'Real · your register' : 'Not connected', lang), emblem: 'door', deltaYoY: hasRegister ? (yoy?.orders ?? null) : null, deltaAbs: hasRegister ? (yoyAbs?.orders ?? null) : null, insightsStage: 'conversion' },
-    { key: 'back', label: L('back', 'Retention'), sub: S('back', 'came back for more'), count: retention, zone: 'measured', tag: t('Repeat visits', lang), emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
+    { key: 'back', label: L('back', 'Reputation'), sub: S('back', 'what people say about you'), count: retention, zone: 'measured', tag: t('Real · reviews', lang), emblem: 'heart', deltaYoY: null, insightsStage: 'retention' },
   ]
   const stats = [
     { value: total.toLocaleString(), label: t('Awareness', lang) },

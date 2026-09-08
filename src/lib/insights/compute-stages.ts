@@ -195,15 +195,14 @@ const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds:
     { key: 'delivery', label: 'Delivery', sourceIds: ['delivery_orders'] },
     { key: 'ticket', label: 'Avg ticket', sourceIds: ['pos_avg_ticket'] },
   ],
+  /* REPUTATION (was Retention). Returning website visits and follower growth have
+     left for stage 2 -- neither is reputation, and zero of twenty owners kept
+     them here. Repeat guests and loyalty redemptions stay in the registry as
+     visible, honestly-empty rows: the comeback question needs a register, and
+     naming the empty shelf is better than filling it with a proxy. They are not
+     GROUPS any more, because a card that can never have a number is furniture. */
   5: [
-    { key: 'repeat', label: 'Repeat guests', sourceIds: ['pos_repeat_customers'] },
     { key: 'reviews', label: 'New reviews', sourceIds: ['gbp_review_count'] },
-    { key: 'returning', label: 'Returning visits', sourceIds: ['ga4_returning_users'] },
-    /* ig_follower_growth used to sit here, so owners were shown their Instagram
-       follower count under the word "Loyalty", beside loyalty-card redemptions.
-       A follow is not loyalty. It stays a by-source row under this stage until
-       the Reputation rework moves it beside the posts that earned it. */
-    { key: 'loyalty', label: 'Loyalty', sourceIds: ['loyalty_redemptions'] },
   ],
 }
 
@@ -215,8 +214,11 @@ const STAGE_UNIT: Partial<Record<FunnelStage, string>> = {
   5: 'guests',
 }
 
-const RETENTION_FALLBACK_NOTE =
-  'Repeat guests need a register. Showing new reviews this month instead.'
+/* The stage is Reputation now, so "showing reviews instead" is no longer an
+   apology for missing something -- reviews ARE the subject. The note only has a
+   job when there is nothing to show at all. */
+const REPUTATION_EMPTY_NOTE =
+  'No reviews yet in this window. Connect Google or Yelp and they appear here.'
 const SALES_EMPTY_NOTE =
   'We cannot see sales yet. Connect your register to measure guests and revenue.'
 
@@ -336,22 +338,16 @@ export function computeStagesFrom(
       }
       if (!sources.some(s => s.counted)) note = SALES_EMPTY_NOTE
     } else if (stage === 5) {
-      // RETENTION: repeat customers preferred; else fall back to new reviews this
-      // month (gbp_review_count). Rating trend / follower growth / returning users
-      // ride along as CONTEXT, never summed.
-      const repeat = byId('pos_repeat_customers')
-      if (repeat && usable(repeat)) {
-        repeat.counted = true
-      } else {
-        const reviews = byId('gbp_review_count')
-        if (reviews && usable(reviews)) {
-          reviews.counted = true
-          note = RETENTION_FALLBACK_NOTE
-        } else {
-          // no register AND no reviews -> still document the intended fallback
-          note = RETENTION_FALLBACK_NOTE
-        }
-      }
+      /* REPUTATION: the headline is the reviews that arrived in this window. It
+         used to prefer repeat customers from a register and treat reviews as a
+         consolation prize, which was backwards once the stage is about what
+         people say. The star rating rides along as context and is never the
+         headline, because a rating is an average and cannot reconcile to a sum.
+         Yelp's count is a LIFETIME total from its API, not a window figure, so
+         it is context too. */
+      const reviews = byId('gbp_review_count')
+      if (reviews && usable(reviews)) reviews.counted = true
+      else note = REPUTATION_EMPTY_NOTE
     } else {
       // AWARENESS / INTEREST / ACTIONS: sum the CONNECTED summable sources.
       for (const id of SUMMABLE[stage]) {

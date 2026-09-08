@@ -56,7 +56,7 @@ export const STAGE_NAMES: Record<FunnelStage, string> = {
   2: 'Interest',
   3: 'Actions',
   4: 'Sales',
-  5: 'Retention',
+  5: 'Reputation',
 }
 
 export type SourceAuthType = 'oauth' | 'api_key' | 'manual' | 'none'
@@ -202,6 +202,10 @@ export const SOURCES: SourceDef[] = [
     notes: 'Real metric — the social vendor sync writes linkedin rows into social_metrics; stage-values splits reach per platform.',
     wired: true,
   },
+  /* ig_follower_growth was removed here. It was a THIRD copy of this number:
+     the per-platform *_follows sources roll up into the "New followers" group,
+     social_follows below is that same roll-up, and ig_follower_growth carried it
+     a third time under a name that said Instagram. One number, one row. */
   {
     id: 'social_follows',
     displayName: 'New followers',
@@ -905,7 +909,13 @@ export const SOURCES: SourceDef[] = [
     id: 'ga4_returning_users',
     displayName: 'Website visitors who came back',
     provider: 'google_analytics',
-    stage: 5,
+    /* Stage 2, not 5. Twenty owners were asked where this belongs when Retention
+       became Reputation; ZERO kept it there. Three defend the signal and all
+       three read it as CONSIDERATION, not comeback: "he is not a regular, he is
+       the guy still deciding". Context only -- Interest SUMS its sources and
+       returning users are a subset of ga4_website_visits, so counting it would
+       double-count the same arrivals the file already de-dupes elsewhere. */
+    stage: 2,
     metricKeys: ['returningUsers'],
     baseStatus: 'CONNECTED',
     authType: 'oauth',
@@ -966,24 +976,6 @@ export const SOURCES: SourceDef[] = [
     authType: 'oauth',
     docsUrl: null,
     notes: 'Real GBP metric — average rating from the places/reviews sync.',
-    wired: true,
-  },
-  {
-    id: 'ig_follower_growth',
-    displayName: 'New followers',
-    provider: 'social',
-    stage: 5,
-    metricKeys: ['followers_gained', 'followers_count'],
-    baseStatus: 'CONNECTED',
-    authType: 'oauth',
-    docsUrl: null,
-    notes:
-      'The follower change ACROSS EVERY connected platform, not Instagram. The id is '
-      + 'historical. It was labelled "New Instagram followers" while carrying the '
-      + 'cross-platform total, so a TikTok business that gained 275 followers on TikTok '
-      + 'and 26 on Instagram read 304 under Instagram\'s name — the product measuring '
-      + 'somebody else\'s business. Per-platform splits live in stage 2 (instagram_follows, '
-      + 'tiktok_follows, ...); this is their roll-up.',
     wired: true,
   },
 ]

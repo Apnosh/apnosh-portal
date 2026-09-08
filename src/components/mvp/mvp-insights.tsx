@@ -165,7 +165,7 @@ const JOURNEY: { key: string; label: string; icon: React.ComponentType<{ size?: 
   { key: 'engagement', label: 'Engagement', icon: Heart },
   { key: 'intent', label: 'Intent', icon: MousePointerClick, metric: 'interactions' },
   { key: 'conversion', label: 'Conversion', icon: ShoppingBag },
-  { key: 'retention', label: 'Retention', icon: Repeat },
+  { key: 'retention', label: 'Reputation', icon: Star },
 ]
 const STAGE_SUB: Record<string, string> = {
   journey: '',
@@ -187,7 +187,7 @@ function resolveFocus(key?: string): { title: string; metric: string; sub: strin
     case 'engaged': case 'engagement': return { title: 'Interest', metric: 'engagement', sub: 'People who looked closer at your posts and profile', stageKey: 'engaged' }
     case 'moved': case 'intent': return { title: 'Actions', metric: 'interactions', sub: 'Calls, directions, clicks, and likes', stageKey: 'moved' }
     case 'camein': case 'conversion': return { title: 'Orders', metric: 'bookings', sub: 'Tables booked and orders placed', stageKey: 'camein' }
-    case 'back': case 'retention': return { title: 'Retention', metric: 'reputation', sub: 'Reviews and how people rate you', stageKey: 'back' }
+    case 'back': case 'retention': return { title: 'Reputation', metric: 'reputation', sub: 'Reviews and how people rate you', stageKey: 'back' }
     default: return { title: 'Awareness', metric: 'reach', sub: 'People who saw you on Google and social', stageKey: 'shown' }
   }
 }
@@ -478,7 +478,7 @@ const STAGE_ORDER: Array<{ key: string; label: string }> = [
   { key: 'engaged', label: 'Interest' },
   { key: 'moved', label: 'Actions' },
   { key: 'camein', label: 'Orders' },
-  { key: 'back', label: 'Retention' },
+  { key: 'back', label: 'Reputation' },
 ]
 
 function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = 'insights' }: { tab?: 'insights' | 'trends'; data: InsightsData; focusKey?: string; summary: ReviewSummary | null; topicsData: ReviewTopicsData | null; topicsLoading: boolean; detail: InsightsDetail | null; clientId?: string; refreshing?: boolean; campaigns: Record<string, StageCampaign[]> | null }) {
@@ -644,11 +644,11 @@ function StageTop({ stageKey, detail, mv, clientId, onRange, accent }: { stageKe
       const cs = computedStage(detail, 5)
       if (cs && !cs.isEmpty) {
         const registerLive = cs.sources.some((s) => s.id === 'pos_repeat_customers' && s.counted)
-        if (mv && !registerLive) return <StageWithChart mv={mv} label="New reviews" cs={cs} stageNumber={5} clientId={clientId} unit="Came back" showBreakdown={false} onRange={onRange} accent={accent} />
+        if (mv && !registerLive) return <StageWithChart mv={mv} label="New reviews" cs={cs} stageNumber={5} clientId={clientId} unit="Reviews" showBreakdown={false} onRange={onRange} accent={accent} />
         const feed = stageFeedFrom(cs)
         return <StageHero total={feed.headline} label="Guests who came back" caption={feed.caption} />
       }
-      return mv ? <MetricCard mv={mv} /> : <NoMetricYet title="Retention" />
+      return mv ? <MetricCard mv={mv} /> : <NoMetricYet title="Reputation" />
     }
     default: return null
   }
@@ -695,7 +695,7 @@ function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; 
     }
     case 'back': {
       const cs = computedStage(detail, 5)
-      return cs ? <RangeSources cs={cs} stageNumber={5} clientId={clientId} unit="Came back" title="Retention by source" range={range} /> : null
+      return cs ? <RangeSources cs={cs} stageNumber={5} clientId={clientId} unit="Reviews" title="Reputation by source" range={range} /> : null
     }
     default: return null
   }

@@ -149,7 +149,7 @@ const METRIC_STAGE: Record<string, { key: string; label: string }> = {
   reach: { key: 'shown', label: 'Awareness' },
   interactions: { key: 'moved', label: 'Actions' },
   bookings: { key: 'camein', label: 'Orders' },
-  reputation: { key: 'back', label: 'Retention' },
+  reputation: { key: 'back', label: 'Reputation' },
 }
 
 // The funnel (the people animation) IS the home now. The old chart-home below it — the swipeable metric/chart

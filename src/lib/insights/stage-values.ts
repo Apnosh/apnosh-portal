@@ -280,12 +280,6 @@ export async function loadStageValues(
       out.linkedin_reach = best('linkedin')
       /* YouTube reports views (mapped to impressions by the sync), never reach */
       out.youtube_views = (imprBy.youtube ?? 0) > 0 ? (imprBy.youtube ?? 0) : (reachBy.youtube ?? 0)
-      /* Provisional: the sum of daily followers_gained deltas. The audience-delta
-         block below overwrites this with the honest number once it has resolved
-         social_follows, because summing deltas cannot survive a missed sync day
-         and, before this pass, could not go down either. Left here so the value
-         is never undefined if that block throws. */
-      out.ig_follower_growth = gained
       /* profile visits only when the vendor actually provides them (ayrshare does,
        * zernio does not) — a permanent 0 would read as data for a missing metric */
       if (visits > 0) out.ig_profile_visits = visits
@@ -388,11 +382,6 @@ export async function loadStageValues(
           .map((pl) => out[`${pl}_follows`])
           .filter((v): v is number => typeof v === 'number')
         out.social_follows = known.length ? known.reduce((a, b) => a + b, 0) : null
-        /* ig_follower_growth is the funnel's follower source and it was still
-           reading the summed deltas, so it disagreed with the very number
-           computed three lines above. One audience delta, one answer, and a dash
-           rather than a fabricated zero when we do not know yet. */
-        out.ig_follower_growth = out.social_follows
       } catch { /* keep the per-post numbers if the audience read fails */ }
     }
   } catch { /* social unavailable */ }

@@ -21,9 +21,9 @@
 export const SCREEN_KEYS: Record<string, readonly string[]> = {
   /* /dashboard — the funnel hero, the people row, Counted as promised */
   home: [
-    'Awareness', 'Interest', 'Actions', 'Orders', 'Retention',
+    'Awareness', 'Interest', 'Actions', 'Orders', 'Reputation',
     'times you showed up on Google', 'times you showed up on Google and social',
-    'website visits & clicks', 'directions & calls', 'walk-in orders from Google', 'came back for more',
+    'website visits & clicks', 'directions & calls', 'walk-in orders from Google', 'what people say about you',
     'orders on your register', 'connect your register to see this',
     'Your numbers show here', 'Connect accounts',
     'Last 7 days', 'Last 30 days', 'Last 90 days', 'Last year', 'Custom',
@@ -33,7 +33,7 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     'The people on your work', 'Get help', 'We reply within one business day.',
     '{n} pieces of work',
     // the tags on each stage, the conversion line under it, and the four stat labels
-    'Real · Google', 'Real · Google + Social', '~ about · your math', 'Repeat visits',
+    'Real · Google', 'Real · Google + Social', '~ about · your math', 'Real · reviews',
     'Real · your register', 'Not connected',
     '{n} in 100 engaged', '{n}% took a step', '~{n}% of directions ordered', '{n}% of directions ordered',
     'Engaged', 'Revenue',

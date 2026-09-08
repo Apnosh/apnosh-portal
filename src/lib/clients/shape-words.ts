@@ -43,25 +43,27 @@ interface StageOverride {
  * should not have to relearn the funnel — so what changes here is the line underneath, which is
  * where the storefront assumption actually lives.
  */
+/* The `back` stage used to carry per-shape comeback wording ('found you again',
+   'ordered again', 'booked you again'). That stage is Reputation now: what people
+   say about you reads the same whether you are a truck, a dining room or a
+   ghost kitchen, so there is nothing shape-specific left to say and the single
+   fallback wins for everyone. */
 const SHAPE_WORDS: Partial<Record<ShelfShape, Partial<Record<StageKey, StageOverride>>>> = {
   truck: {
     moved: { sub: 'directions & calls to the truck' },
     camein: { sub: 'orders at the truck from Google', explain: 'Orders you took at the truck, counted from the people Google sent you.' },
-    back: { sub: 'found you again' },
   },
   delivery_only: {
     // No dining room, so no walk-in and no foot traffic. Directions are not the move here;
     // a call or a tap on the order button is.
     moved: { sub: 'calls & clicks' },
     camein: { sub: 'delivery orders from Google', explain: 'Delivery orders that started on Google, from your own site or your delivery apps.' },
-    back: { sub: 'ordered again' },
   },
   two_locations: {
     camein: { sub: 'walk-in orders from Google, this shop' },
   },
   catering: {
     camein: { sub: 'catering orders that started on Google', explain: 'Catering jobs that started with someone finding you on Google.' },
-    back: { sub: 'booked you again' },
   },
   seasonal: {
     camein: { sub: 'walk-in orders from Google this season' },
