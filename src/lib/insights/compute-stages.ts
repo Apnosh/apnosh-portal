@@ -364,9 +364,29 @@ export function computeStagesFrom(
       if (stage === 3) heroSourceId = 'gbp_direction_requests'
     }
 
-    // feedRole: a source reads as a 'sum' box when it either counts toward the
-    // headline or is a canonical candidate (shown "Not connected" so the owner
-    // sees the whole recipe). Drill-downs stay drilldown; everything else context.
+    /* CLIENT TOGGLES LAST, so they override every per-stage counting rule.
+       Off = GONE (owner call 2026-08-18: "I feel like it should disappear") —
+       removed from the headline, the groups AND the visible breakdown.
+       Optional metrics count only when switched on; the likes+comments five
+       are invisible until then (new cards must not appear uninvited). */
+    const optionalHere = new Set(OPTIONAL[stage] ?? [])
+    for (const s of sources) {
+      if (optionalHere.has(s.id) && on.has(s.id) && usable(s)) s.counted = true
+      if (off.has(s.id)) { s.counted = false; s.disabledByClient = true }
+    }
+
+    /* feedRole is decided AFTER the toggles, and that ordering is the whole
+       point. It reads a source as a 'sum' box when it counts toward the headline
+       or is a canonical candidate (shown "Not connected" so the owner sees the
+       whole recipe); everything else is context, which the breakdown files under
+       "Also tracked - not part of this number".
+
+       This used to run BEFORE the toggle block above, so an optional metric the
+       owner had just switched on was still counted=false when its role was
+       chosen. The headline went up by its value and the very same row appeared
+       in the breakdown labelled as not part of that number. Reported from the
+       outside: enabling Instagram likes and comments moved Interest from 4,988
+       to 5,988 and the 1,000 was nowhere to be found in the breakdown. */
     const summableIds = SUMMABLE[stage]
     for (const s of sources) {
       if (s.isDrilldown) { s.feedRole = 'drilldown'; continue }
@@ -380,17 +400,6 @@ export function computeStagesFrom(
       const gc = byId('gbp_website_clicks')
       const web = byId('ga4_website_visits')
       if (gc && !gc.counted && web?.counted) gc.feedRole = 'context'
-    }
-
-    /* CLIENT TOGGLES LAST, so they override every per-stage counting rule.
-       Off = GONE (owner call 2026-08-18: "I feel like it should disappear") —
-       removed from the headline, the groups AND the visible breakdown.
-       Optional metrics count only when switched on; the likes+comments five
-       are invisible until then (new cards must not appear uninvited). */
-    const optionalHere = new Set(OPTIONAL[stage] ?? [])
-    for (const s of sources) {
-      if (optionalHere.has(s.id) && on.has(s.id) && usable(s)) s.counted = true
-      if (off.has(s.id)) { s.counted = false; s.disabledByClient = true }
     }
     const visible = sources.filter(s =>
       !s.disabledByClient && !(OPTIONAL_HIDDEN.has(s.id) && !on.has(s.id)))
