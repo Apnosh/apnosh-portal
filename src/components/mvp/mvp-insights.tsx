@@ -44,7 +44,7 @@ import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, 
 import { TopSegmented } from './top-row'
 import ProofDeck from './proof-deck'
 import { bandFor, BAND_WORD, BAND_INK, type HealthBand } from './home-funnel'
-import { deriveStandouts } from '@/lib/insights/analyst-derive'
+import { deriveStandouts, deriveRhythm } from '@/lib/insights/analyst-derive'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
@@ -1371,6 +1371,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
         {cur.mv && !cur.locked
           ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
+        {cur.mv && !cur.locked && <RhythmCard mv={cur.mv} />}
         {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
       </AccentCtx.Provider>
     </div>
@@ -1754,6 +1755,66 @@ function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: 
 }
 
 /* ── Highlights: only the days that were abnormally high or low against their own week ── */
+/* ── Your week ──────────────────────────────────────────────────────────────
+ * The weekday rhythm was already being computed -- deriveRhythm averages every
+ * weekday over the last eight weeks and names the strongest and the weakest --
+ * and the only thing that ever read it was the analyst's PROMPT. It was written
+ * into a paragraph for a language model and never put on a screen, while three
+ * owners in testing said the one thing they wanted to know was which nights are
+ * dead. Same function, same series the chart above already draws, on the page.
+ */
+function RhythmCard({ mv }: { mv: MetricView }) {
+  const A = useAccent()
+  const series = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0).map((d) => ({ date: d.date, value: d.value ?? 0 }))
+  const r = deriveRhythm(series)
+  if (!r) return null
+  const max = Math.max(1, ...r.byDay.map((d) => d.avg))
+  /* A weekday pattern is only worth showing when it is bigger than the noise.
+     One test account averages 2-4 views a day, where "Thursdays are strongest"
+     means one extra person looked on a Thursday. Require a day the owner could
+     act on: at least ten on the strongest day, and a strongest at least a
+     quarter above the weakest. Otherwise there is no rhythm here to report. */
+  const lows = r.byDay.map((d) => d.avg).filter((v) => v > 0)
+  const min = lows.length ? Math.min(...lows) : 0
+  if (max < 10 || min <= 0 || (max - min) / min < 0.25) return null
+  const flat = r.strongestDay === r.weakestDay
+  return (
+    <div style={LIST}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
+        <span style={H3}>Your week</span>
+        <span style={{ fontSize: 11.5, color: C.faint }}>average day, last 8 weeks</span>
+      </div>
+      {/* The chart directly above is already titled with the stage, so naming it
+          again here read as "strongest for awareness views". Two short sentences. */}
+      {!flat && (
+        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45, padding: '2px 2px 10px' }}>
+          <b style={{ fontWeight: 600 }}>{r.strongestDay}s</b> are your strongest.{' '}
+          <b style={{ fontWeight: 600 }}>{r.weakestDay}s</b> are your quietest.
+        </div>
+      )}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, alignItems: 'end', padding: '0 2px' }}>
+        {r.byDay.map((d) => {
+          const strong = d.day === r.strongestDay.slice(0, 3)
+          const weak = !flat && d.day === r.weakestDay.slice(0, 3)
+          const col = strong ? A.main : weak ? C.coral : C.line
+          return (
+            <div key={d.day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: strong ? A.main : weak ? C.coral : C.faint, fontVariantNumeric: 'tabular-nums' }}>{d.avg.toLocaleString()}</span>
+              <span aria-hidden style={{ width: '100%', height: Math.max(3, Math.round((d.avg / max) * 54)), background: col, borderRadius: 5 }} />
+              <span style={{ fontSize: 11, fontWeight: strong || weak ? 700 : 500, color: strong ? A.main : weak ? C.coral : C.mute }}>{d.day}</span>
+            </div>
+          )
+        })}
+      </div>
+      {r.weekendVsWeekdayPct != null && Math.abs(r.weekendVsWeekdayPct) >= 10 && (
+        <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, padding: '10px 2px 0' }}>
+          Weekends run {Math.abs(r.weekendVsWeekdayPct)}% {r.weekendVsWeekdayPct > 0 ? 'above' : 'below'} your weekdays.
+        </div>
+      )}
+    </div>
+  )
+}
+
 function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days: number; label: string; smooth?: number }) {
   const win_n = Math.max(3, smooth)
   const raw = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0).map((d) => ({ date: d.date, value: d.value ?? 0 }))
