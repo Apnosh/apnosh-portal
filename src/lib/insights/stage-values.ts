@@ -319,16 +319,41 @@ export async function loadStageValues(
          * "last 30 days" heading, replacing a real 30-day count of 8. A two-day change
          * presented as a thirty-day change is exactly the kind of false number this whole
          * pass exists to remove, so the history must reach back to the window's start. */
-        const spanFrom = new Date(new Date(otherStart).getTime() + 2 * 86400000).toISOString().slice(0, 10)
+        /* THE FALLBACK USED TO DEFEAT THE GUARD ABOVE. When the history did not
+           reach the window's start this dropped through to the per-post/summed
+           number and printed THAT as the window's figure, so an account whose
+           follower history began 23 days ago showed the same 304 whether the
+           owner asked for 30 days or 90. Picking a longer range changing nothing
+           is exactly the tell that the number is not the range's.
+
+           The endpoint delta is the truth for the days we actually hold, so use
+           it whenever there are two of them, and report how many days that is
+           (social_follows_known_days) so the surface can say "since the 17th"
+           rather than let a 23-day change wear a 90-day label. The vendors give
+           a current follower count and no history, so a recently connected
+           account will always know less than the range asks for. */
         for (const pl of ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const) {
           const pts = series[pl] ?? []
           const days = new Set(pts.map((x) => x.date))
-          const spansWindow = pts.length > 0 && pts[0].date <= spanFrom
-          if (days.size >= 2 && spansWindow) {
+          if (days.size >= 2) {
             out[`${pl}_follows`] = pts[pts.length - 1].total - pts[0].total
           } else if ((folBy[pl] ?? 0) === 0) {
             out[`${pl}_follows`] = null
           }
+        }
+        /* How much of the asked-for range the follower numbers actually cover,
+           in days, taken from the earliest point we hold on any platform. */
+        const firstDay = Object.values(series).map((pts) => pts[0]?.date).filter(Boolean).sort()[0]
+        if (firstDay) {
+          const endMs = Date.parse((otherEnd ?? ymd(new Date())) + 'T00:00:00Z')
+          const winStartMs = Date.parse(otherStart + 'T00:00:00Z')
+          const startMs = Math.max(winStartMs, Date.parse(firstDay + 'T00:00:00Z'))
+          const known = Math.max(1, Math.round((endMs - startMs) / 86400000) + 1)
+          const asked = Math.max(1, Math.round((endMs - winStartMs) / 86400000) + 1)
+          /* Only set when we know LESS than was asked for. Its presence is the
+             signal that the follower number covers a shorter span than the
+             selected range, and its value is how many days it does cover. */
+          if (known < asked - 1) out.social_follows_known_days = known
         }
         /* the roll-up follows the same rule: sum only what we actually know */
         const known = (['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const)

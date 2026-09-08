@@ -174,6 +174,13 @@ const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds:
   2: [
     { key: 'follows', label: 'New followers', sourceIds: ['instagram_follows', 'facebook_follows', 'tiktok_follows', 'linkedin_follows', 'youtube_follows'] },
     { key: 'saves', label: 'Saves + shares', sourceIds: ['instagram_saves_shares', 'facebook_saves_shares', 'tiktok_saves_shares', 'linkedin_saves_shares', 'youtube_saves_shares'] },
+    /* The likes+comments five had no group, so switching one on raised the
+       headline while the grouped cards below stayed where they were -- the four
+       totals stopped reconciling to the number they are supposed to add up to,
+       and the owner saw 1,000 appear in the total with nothing on screen to
+       explain it. The group disappears on its own for anyone who has not enabled
+       these (the filter below drops a group whose sources are all hidden). */
+    { key: 'likes', label: 'Likes + comments', sourceIds: ['ig_likes_comments', 'facebook_likes_comments', 'tiktok_likes_comments', 'linkedin_likes_comments', 'youtube_likes_comments'] },
     { key: 'website', label: 'Website', sourceIds: ['ga4_website_visits', 'gbp_website_clicks'] },
   ],
   3: [
@@ -400,6 +407,14 @@ export function computeStagesFrom(
       const gc = byId('gbp_website_clicks')
       const web = byId('ga4_website_visits')
       if (gc && !gc.counted && web?.counted) gc.feedRole = 'context'
+      /* The platforms hand us a CURRENT follower count and no history, so a
+         recently connected account can only ever know followers back to the day
+         it connected. Say so, rather than let a 23-day change sit under a
+         90-day heading and look identical at every range. */
+      const knownDays = values.social_follows_known_days
+      if (knownDays != null && knownDays > 0) {
+        note = `Followers counted over the last ${knownDays} days, which is as far back as we have them.`
+      }
     }
     const visible = sources.filter(s =>
       !s.disabledByClient && !(OPTIONAL_HIDDEN.has(s.id) && !on.has(s.id)))
