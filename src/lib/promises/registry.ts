@@ -41,7 +41,7 @@ export interface PromiseSpec {
 
 const GOOGLE_TAPS: PromiseSpec = { metric: 'gbp_card_taps', label: 'taps on your Google card', takenBy: 'google', lagDays: 7, windowDays: 14 }
 const GOOGLE_VIEWS: PromiseSpec = { metric: 'gbp_impressions', label: 'views of your Google card', takenBy: 'google', lagDays: 3, windowDays: 14 }
-const POSTS: PromiseSpec = { metric: 'post_reach', label: 'views on the posts, where they go', takenBy: 'social', lagDays: 7, windowDays: 14 }
+const POSTS: PromiseSpec = { metric: 'post_reach', label: 'views per post, where they go', takenBy: 'social', lagDays: 7, windowDays: 14 }
 const FILES: PromiseSpec = { metric: 'delivered_files', label: 'the files in your library', takenBy: 'apnosh', lagDays: 0, windowDays: 0 }
 
 /** By the service line the plan composes to (LineItem.serviceId). */
@@ -61,6 +61,7 @@ export const PROMISE_BY_SERVICE: Record<string, PromiseSpec[]> = {
   'paid-ads': [{ metric: 'gbp_impressions', label: 'ad results', takenBy: 'apnosh', lagDays: 0, windowDays: 0, notCountedReason: 'Ad numbers live in the ad account and are not read into Home yet.' }],
   'delivery-opt': [{ metric: 'gbp_food_orders', label: 'app orders', takenBy: 'you', lagDays: 0, windowDays: 0, notCountedReason: 'The delivery apps give us no way to read your orders.' }],
   'photo-library': [FILES],
+  'social-profiles': [{ metric: 'delivered_files', label: 'your five profiles, set up', takenBy: 'apnosh', lagDays: 0, windowDays: 0 }],
   'capture-kit': [FILES],
   'graphic': [FILES],
   'reel-1': [POSTS],
@@ -96,6 +97,7 @@ export const PROMISE_BY_CARD: Record<string, PromiseSpec[]> = {
   reach: PROMISE_BY_SERVICE['paid-ads'],
   deliverymenu: PROMISE_BY_SERVICE['delivery-opt'],
   shoot: [FILES],
+  socialprofiles: PROMISE_BY_SERVICE['social-profiles'],
   design: [FILES],
   graphic: [FILES],
   reel: [POSTS], story: [POSTS], dish: [POSTS], creative: [POSTS], socialmgmt: [POSTS],
@@ -127,6 +129,10 @@ export const PROMISE_BY_REQUEST_TYPE: Record<string, PromiseSpec[]> = {
   writing: [FILES],
   video: [POSTS],
   social: [POSTS],
+  // The desk's own ids for three more types (the shelf calls one of them 'writing').
+  copy: [FILES],
+  ads: [FILES],
+  other: [FILES],
 }
 
 export const TAKEN_BY_WORD: Record<TakenBy, string> = {
@@ -147,5 +153,11 @@ export function promiseSentence(specs: PromiseSpec[]): string | null {
   if (s.metric === 'delivered_files') return `Counted after: ${s.label} · marked Done the day they land`
   const days = s.lagDays + s.windowDays
   const when = days <= 7 ? 'about a week' : days <= 14 ? 'about two weeks' : days <= 24 ? 'about three weeks' : 'about a month'
-  return `Counted after: ${s.label} · ${TAKEN_BY_WORD[s.takenBy]} · shows on Home ${when} after you order`
+  // A Google count only runs once Google is connected; say so before the money, not after.
+  const taken = s.takenBy === 'google' ? 'Taken by Google, once your Google profile is connected' : TAKEN_BY_WORD[s.takenBy]
+  return `Counted after: ${s.label} · ${taken} · shows on Home ${when} after you order`
 }
+
+/** The Creatives shelf builds its cards as `creative-<type>` and orders through the desk, so the
+ *  product page prints the same promise the desk order will write. */
+for (const [type, specs] of Object.entries(PROMISE_BY_REQUEST_TYPE)) PROMISE_BY_CARD[`creative-${type}`] = specs

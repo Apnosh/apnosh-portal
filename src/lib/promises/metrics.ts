@@ -46,7 +46,9 @@ async function postReach(clientId: string, campaignId: string | null, from: stri
   const { data: posts } = await a.from('social_posts').select('reach, video_views, posted_at').eq('client_id', clientId).in('id', ids).gte('posted_at', from).lte('posted_at', `${to}T23:59:59Z`)
   const rows = (posts ?? []) as { reach: number | null; video_views: number | null }[]
   if (!rows.length) return { value: null, reportedDays: 0 }
-  return { value: rows.reduce((n, p) => n + Math.max(p.reach ?? 0, p.video_views ?? 0), 0), reportedDays: rows.length }
+  // Per post, so the comparison against "your usual post" is like for like; reportedDays = posts.
+  const total = rows.reduce((n, p) => n + Math.max(p.reach ?? 0, p.video_views ?? 0), 0)
+  return { value: Math.round(total / rows.length), reportedDays: rows.length }
 }
 
 /** The client's usual post: mean reach of the last 10 posts before `before`. */
@@ -58,9 +60,12 @@ async function usualPost(clientId: string, before: string): Promise<Measured> {
   return { value: Math.round(mean), reportedDays: rows.length }
 }
 
+/** A count of reviews over [from, to]; reportedDays is the window length, so the matched baseline
+ *  compares the same number of days before, never a single day. */
 async function reviewCount(clientId: string, col: 'posted_at' | 'responded_at', from: string, to: string): Promise<Measured> {
   const { count } = await createAdminClient().from('reviews').select('id', { count: 'exact', head: true }).eq('client_id', clientId).gte(col, from).lte(col, `${to}T23:59:59Z`)
-  return { value: count ?? 0, reportedDays: 1 }
+  const days = Math.max(1, Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86400000) + 1)
+  return { value: count ?? 0, reportedDays: days }
 }
 
 /** Cumulative Google rating of every review posted up to `to`. */
@@ -79,6 +84,24 @@ async function siteSessions(clientId: string, from: string, to: string): Promise
     if (!rows.length) return { value: null, reportedDays: 0 }
     return { value: rows.reduce((n, r) => n + (r.sessions ?? r.visitors ?? 0), 0), reportedDays: rows.length }
   } catch { return { value: null, reportedDays: 0 } }
+}
+
+/** Has this client ever had a reported Google day? A Google promise for a client with no Google is
+ *  "connect Google", never "0 so far". */
+export async function hasGoogle(clientId: string): Promise<boolean> {
+  const rows = await gbpRows(clientId, shiftDays(today(), -365), today())
+  return rows.length > 0
+}
+/** Has Google ever reported a food order for this client? The column exists but most syncs never
+ *  fill it; a promise on it must say "not reported" rather than print a zero. */
+export async function hasFoodOrders(clientId: string): Promise<boolean> {
+  const { data } = await createAdminClient().from('gbp_metrics').select('food_orders').eq('client_id', clientId).gt('food_orders', 0).limit(1)
+  return !!(data && data.length)
+}
+/** More than one location on the client: every Google count here is both shops added together. */
+export async function locationCount(clientId: string): Promise<number> {
+  const { count } = await createAdminClient().from('client_locations').select('id', { count: 'exact', head: true }).eq('client_id', clientId)
+  return count ?? 0
 }
 
 /** Measure one metric over [from, to] (YYYY-MM-DD, inclusive). `campaignId` scopes post_reach. */

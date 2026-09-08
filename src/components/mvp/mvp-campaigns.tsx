@@ -86,8 +86,14 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
   }, [client?.id])
 
   // Drafts (unshipped plans) live on the Orders tab now — Campaigns shows only shipped/live/done.
+  // One line per card: the row with a number wins, then counting, then held, then not counted.
+  const rowRank = (r: LedgerRow) => (r.state === 'counted' ? 0 : r.state === 'done' ? 1 : r.state === 'counting' ? 2 : r.state === 'held' ? 3 : 4)
   const promiseByCampaign = new Map<string, LedgerRow>()
-  for (const r of promises.rows) if (r.campaignId && !promiseByCampaign.has(r.campaignId)) promiseByCampaign.set(r.campaignId, r)
+  for (const r of promises.rows) {
+    if (!r.campaignId) continue
+    const cur = promiseByCampaign.get(r.campaignId)
+    if (!cur || rowRank(r) < rowRank(cur)) promiseByCampaign.set(r.campaignId, r)
+  }
   const campaignCards: HuedCard[] = (saved ?? []).map((c) => {
     const o = outcomes[c.draft.id]
     const line = o ? outcomeLine(o) : null

@@ -66,32 +66,52 @@ async function build(clientId: string, spec: PromiseSpec, label: string, ordered
 
 /** Every included, non-opted-out line becomes its promise rows; a plan with no matching line
  *  falls back to the store card it came from. Returns the number of rows written. */
-export async function recordCampaignPromises(campaign: SavedCampaign, campaignId: string, shipISO: string): Promise<number> {
+export async function recordCampaignPromises(campaign: SavedCampaign, campaignId: string, shipISO: string, opts: { heldFrom?: string | null } = {}): Promise<number> {
   const orderedOn = shipISO.slice(0, 10)
-  // A held order (target date in the future, the owner chose plan-ahead) counts from when work starts.
-  const target = campaign.draft.targetDate ? String(campaign.draft.targetDate).slice(0, 10) : null
-  const startOn = target && target > orderedOn ? target : null
+  // HELD is decided by the caller: the ship block knows whether the owner picked a date and when
+  // the first piece lands. The estimate-mode anchor it stamps onto target_date is a first-post
+  // date, not a hold, so target_date is never read here.
+  const startOn = opts.heldFrom && opts.heldFrom > orderedOn ? opts.heldFrom : null
   const rows: Row[] = []
   const seen = new Set<string>()
   const items = (campaign.draft.items ?? []).filter((it) => it.included && !it.optOut)
   for (const it of items) {
+    // Every content piece of a campaign is one post set, counted together: one row keyed
+    // 'content', not one identical row per piece.
+    const serviceKey = it.serviceId.startsWith('content-') ? 'content' : it.serviceId
     for (const spec of specsForService(it.serviceId)) {
-      const key = `${it.serviceId}:${spec.metric}`
+      const key = `${serviceKey}:${spec.metric}`
       if (seen.has(key)) continue
       seen.add(key)
-      rows.push(await build(campaign.clientId, spec, it.plain || it.name || campaign.draft.name, orderedOn, startOn, { campaignId, serviceId: it.serviceId, catalogId: campaign.draft.sourceCatalogId ?? null }))
+      const label = serviceKey === 'content' ? campaign.draft.name : (it.plain || it.name || campaign.draft.name)
+      rows.push(await build(campaign.clientId, spec, label, orderedOn, startOn, { campaignId, serviceId: serviceKey, catalogId: campaign.draft.sourceCatalogId ?? null }))
     }
   }
   if (!rows.length) {
     const cardId = campaign.draft.sourceCatalogId ?? null
     for (const spec of (cardId ? PROMISE_BY_CARD[cardId] : undefined) ?? []) {
-      rows.push(await build(campaign.clientId, spec, campaign.draft.name, orderedOn, startOn, { campaignId, serviceId: null, catalogId: cardId }))
+      rows.push(await build(campaign.clientId, spec, campaign.draft.name, orderedOn, startOn, { campaignId, serviceId: `card:${cardId}`, catalogId: cardId }))
     }
   }
   if (!rows.length) return 0
-  const { error } = await createAdminClient().from('order_promises').upsert(rows, { onConflict: 'campaign_id,service_id,metric_key', ignoreDuplicates: true })
-  if (error) { console.warn('[promises] campaign write skipped:', error.message); return 0 }
-  return rows.length
+  return insertMissing(rows, (r) => `${r.campaign_id}|${r.service_id}|${r.metric_key}`, async (a) => {
+    const { data } = await a.from('order_promises').select('campaign_id, service_id, metric_key').eq('campaign_id', campaignId)
+    return new Set(((data ?? []) as { campaign_id: string; service_id: string | null; metric_key: string }[]).map((r) => `${r.campaign_id}|${r.service_id}|${r.metric_key}`))
+  })
+}
+
+/** Idempotence without ON CONFLICT: the migration's unique indexes are partial, and PostgREST's
+ *  on_conflict cannot name a partial index's predicate, so an upsert would fail on every write
+ *  and be swallowed as "no orders yet". Read what exists, insert only the rest. A duplicate that
+ *  slips through a race is caught by the index and reported, never silently doubled. */
+async function insertMissing(rows: Row[], keyOf: (r: Row) => string, existing: (a: ReturnType<typeof createAdminClient>) => Promise<Set<string>>): Promise<number> {
+  const a = createAdminClient()
+  const have = await existing(a).catch(() => new Set<string>())
+  const fresh = rows.filter((r) => !have.has(keyOf(r)))
+  if (!fresh.length) return 0
+  const { error } = await a.from('order_promises').insert(fresh)
+  if (error) { console.warn('[promises] write failed:', error.message); return 0 }
+  return fresh.length
 }
 
 /** A creative desk order has no campaign row: anchor on the request id. */
@@ -101,9 +121,10 @@ export async function recordRequestPromise(args: { clientId: string; requestId: 
   const orderedOn = (args.orderedISO ?? new Date().toISOString()).slice(0, 10)
   const rows: Row[] = []
   for (const spec of specs) rows.push(await build(args.clientId, spec, args.label, orderedOn, null, { requestId: args.requestId, serviceId: `request:${args.type}`, catalogId: `creative-${args.type}` }))
-  const { error } = await createAdminClient().from('order_promises').upsert(rows, { onConflict: 'creative_request_id,metric_key', ignoreDuplicates: true })
-  if (error) { console.warn('[promises] request write skipped:', error.message); return 0 }
-  return rows.length
+  return insertMissing(rows, (r) => `${r.creative_request_id}|${r.metric_key}`, async (a) => {
+    const { data } = await a.from('order_promises').select('creative_request_id, metric_key').eq('creative_request_id', args.requestId)
+    return new Set(((data ?? []) as { creative_request_id: string; metric_key: string }[]).map((r) => `${r.creative_request_id}|${r.metric_key}`))
+  })
 }
 
 /** When a service work order is delivered, move the count window to start from delivery (plus the

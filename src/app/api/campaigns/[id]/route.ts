@@ -241,13 +241,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
     ;(async () => {
       const { recordCampaignPromises } = await import('@/lib/promises/record')
-      await recordCampaignPromises(campaign, id, shipISO)
+      await recordCampaignPromises(campaign, id, shipISO, { heldFrom: null })
     })().catch(() => {})
   }
   if (justShipped && campaign.draft.path !== 'diy') {
     // Turn the campaign's content calendar into real production work items, and
     // tell the team. Both best-effort: a successful ship must never 500 here.
     const shipISO = typeof body.fields?.shipped_at === 'string' ? body.fields.shipped_at : new Date().toISOString()
+    // HELD means "work starts later": only when the OWNER picked a date (plan-ahead) and the
+    // schedule's first piece lands more than a week out. Captured BEFORE the estimate-mode
+    // anchor below stamps a future first-post date onto target_date, which is not a hold.
+    const heldFrom: string | null = (() => {
+      if (!campaign.draft.targetDate) return null
+      const beats = campaign.draft.brief?.contentBeats ?? []
+      const first = beats.length ? deriveSchedule({ contentBeats: beats }, shipISO).firstPostISO : null
+      const start = (first ?? String(campaign.draft.targetDate)).slice(0, 10)
+      const weekOut = new Date(shipISO); weekOut.setUTCDate(weekOut.getUTCDate() + 7)
+      return start > weekOut.toISOString().slice(0, 10) ? start : null
+    })()
     // The slot HELD at checkout feeds the content schedule (deriveSchedule's not-before
     // clamp): the mint below must never date a piece before the shoot that produces it.
     // Best-effort; confirmBookingForPayment re-stamps the confirmed date after pay.
@@ -314,7 +325,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     // Best-effort; pre-migration-253 the insert fails and is swallowed.
     ;(async () => {
       const { recordCampaignPromises } = await import('@/lib/promises/record')
-      await recordCampaignPromises(campaign, id, shipISO)
+      await recordCampaignPromises(campaign, id, shipISO, { heldFrom })
     })().catch(() => {})
     // Work this ship hands to Apnosh: any included, non-opted-out line the owner is NOT
     // running themselves. A pure owner-run plan (every line producer 'diy', e.g. the free
