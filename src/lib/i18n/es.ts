@@ -76,7 +76,7 @@ export const ES: Record<string, string> = {
   /* ── Home: the funnel's tags, its conversion lines and the chrome around it ────────────── */
   'Real · Google': 'Medido · Google',
   'Real · your register': 'Medido · tu caja',
-  'Not connected': 'Sin conectar',
+  'Not connected': 'Sin conectar',  // shared: the Home funnel's Orders tag and the More hub's channel rows
   'Real · Google + Social': 'Medido · Google + redes',
   '~ about · your math': '~ aprox · tu cuenta',
   'Repeat visits': 'Visitas repetidas',
@@ -727,4 +727,67 @@ export const ES: Record<string, string> = {
   /* the reply clock's third state: the day we owed ran out and nobody answered */
   'we owed you a reply by': 'te debíamos respuesta el',
   'we missed it.': 'no cumplimos.',
+
+  /* ── More hub ─────────────────────────────────────────────────────────────────────────────
+     /dashboard/more, rebuilt on the business-info pattern (2026-09-08). The rows were drawn
+     through t() before this and simply had no entries, so a Spanish owner read Spanish groups
+     over English rows. Every string the hub draws is here now, including its sub-lines — a row
+     that says what is inside it in English is the same bug one level down. */
+  'Search settings and tools': 'Busca ajustes y herramientas',
+  'Everything about your business, in one place': 'Todo sobre tu negocio, en un solo lugar',
+  '{n} waiting for your rating': '{n} esperan tu calificación',
+  'We could not load your details.': 'No pudimos cargar tus datos.',
+  'Check your connection, then open More again.': 'Revisa tu conexión y abre Más otra vez.',
+  'Nothing matches': 'Nada coincide',
+  'Nothing here is called “{word}”. Try a shorter word.': 'Aquí nada se llama “{word}”. Prueba una palabra más corta.',
+  'Sign in with the account your restaurant is on.': 'Entra con la cuenta donde está tu restaurante.',
+  'Pick your goals': 'Elige tus metas',
+  'Social': 'Redes',
+  /* the groups */
+  'Where you show up': 'Dónde apareces',
+  'Account': 'Cuenta',
+  'Help': 'Ayuda',
+  /* the rows */
+  'Info': 'Datos',
+  'Hours': 'Horario',
+  'Your brand': 'Tu marca',
+  'Your Google profile': 'Tu ficha de Google',
+  'Google order buttons': 'Botones de pedido en Google',
+  'Your other listings': 'Tus otras fichas',
+  'Your social profiles': 'Tus perfiles en redes',
+  'Land in the inbox': 'Llega a la bandeja de entrada',
+  'Price your delivery menu': 'Pon precios a tu menú de reparto',
+  'Your settings': 'Tus ajustes',
+  'Your team': 'Tu equipo',
+  'Your requests': 'Tus solicitudes',
+  'Your bookings': 'Tus citas',
+  'People you have worked with': 'Gente con la que has trabajado',
+  'Your login': 'Tu acceso',
+  'Plan and billing': 'Plan y pagos',
+  'Connected accounts': 'Cuentas conectadas',
+  'Guest list': 'Lista de clientes',
+  "What's new": 'Lo nuevo',
+  'Sign out': 'Cerrar sesión',
+  /* the sub-lines under them */
+  'We ask you first': 'Te preguntamos primero',
+  'We post for you': 'Publicamos por ti',
+  '{n} link': '{n} enlace',
+  '{n} links': '{n} enlaces',
+  '{n} profile': '{n} perfil',
+  '{n} profiles': '{n} perfiles',
+  '{n} on your team': '{n} en tu equipo',
+  '{n} request': '{n} solicitud',
+  '{n} requests': '{n} solicitudes',
+  '{n} coming up': '{n} por venir',
+  '{n} person': '{n} persona',
+  '{n} to rate': '{n} por calificar',
+  '{n} guest': '{n} cliente',
+  '{n} guests': '{n} clientes',
+  '{n} connected': '{n} conectadas',
+  'Newest in {month}': 'El último en {month}',
+  'Newest: {date}': 'Lo último: {date}',
+  /* the plan word, from the one mapper (never a raw tier string) */
+  'Basic plan': 'Plan básico',
+  'Standard plan': 'Plan estándar',
+  'Pro plan': 'Plan Pro',
 }

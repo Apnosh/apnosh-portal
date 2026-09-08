@@ -355,6 +355,40 @@ export const SCREEN_KEYS: Record<string, readonly string[]> = {
     // shared with other screens, drawn here too
     'Loading…', 'Saved.', 'Could not save. Try again.', 'Saving…',
   ],
+
+  /* /dashboard/more — the More hub, rebuilt on the business-info pattern (2026-09-08). Every
+     string it draws: the group titles, every row, and every sub-line under a row. The shared
+     ones ('Get help', 'Connected', 'Photos'…) are listed here too, so this screen's manifest
+     reads as the whole screen rather than the half nobody else had already claimed. */
+  more: [
+    // the header and the two states that are not the page
+    'Search settings and tools', 'Everything about your business, in one place',
+    '{n} waiting for your rating',
+    'We could not load your details.', 'Check your connection, then open More again.',
+    'Nothing matches', 'Nothing here is called “{word}”. Try a shorter word.',
+    'No business linked yet', 'Sign in with the account your restaurant is on.',
+    // the identity block and its two connection tiles
+    'Your profile', 'Pick your goals', 'Connected', 'Not connected', 'Social',
+    // the groups
+    'Your business', 'Where you show up', 'You', 'Account', 'Help',
+    // every row
+    'Info', 'Hours', 'Menu', 'Photos', 'Your brand',
+    'Your Google profile', 'Google order buttons', 'Your other listings', 'Your social profiles',
+    'Land in the inbox', 'Price your delivery menu',
+    'Your settings', 'Wins', 'Your team', 'Your requests', 'Your bookings',
+    'People you have worked with', 'Tell a friend',
+    'Your login', 'Plan and billing', 'Connected accounts', 'Guest list',
+    'Get help', "What's new", 'Sign out',
+    // every sub-line and pill under one of them
+    'We ask you first', 'We post for you',
+    '{n} link', '{n} links', '{n} profile', '{n} profiles',
+    '{n} on your team', '{n} request', '{n} requests', '{n} coming up',
+    '{n} person', '{n} people', '{n} to rate',
+    '{n} guest', '{n} guests', '{n} connected',
+    'Newest in {month}', 'Newest: {date}',
+    'Basic plan', 'Standard plan', 'Pro plan',
+    'We reply within one business day.',
+  ],
 }
 
 /** Every key across every translated screen, once each. */
