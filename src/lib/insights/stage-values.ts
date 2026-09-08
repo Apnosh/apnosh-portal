@@ -170,19 +170,36 @@ export async function loadStageValues(
   } catch { /* GBP unavailable -> its sources stay null */ }
 
   // ── Reviews (reviews + local_reviews) -> review count + rating trend ────
+  /* THE SAME GOOGLE REVIEW ARRIVES TWICE. `reviews` is written by the GBP v4
+     path (source 'google'); `local_reviews` is written by the Places stopgap
+     (source 'gbp') AND by the Yelp adapter (source 'yelp'). Adding both tables
+     together, as this block used to, counted every Google review twice for any
+     client synced through both paths and averaged the rating over doubled rows.
+
+     The rule: `reviews` is canonical for Google. Take Yelp (and any other
+     non-Google source) from local_reviews always, and take local_reviews' 'gbp'
+     rows ONLY for a client who has no canonical Google reviews at all -- i.e. a
+     Places-only client, for whom that table is the sole record. The existence
+     check is deliberately un-windowed: a quiet month is not the same as a
+     client who never had the v4 connection. */
   try {
     let count = 0
     let ratingSum = 0
     let ratingN = 0
-    const [rev, local] = await Promise.all([
+    const [rev, local, canonicalProbe] = await Promise.all([
       capTs(admin.from('reviews').select('rating, posted_at').eq('client_id', clientId).gte('posted_at', otherStart + 'T00:00:00'), 'posted_at'),
-      capTs(admin.from('local_reviews').select('rating, created_at_platform').eq('client_id', clientId).gte('created_at_platform', otherStart + 'T00:00:00'), 'created_at_platform'),
+      capTs(admin.from('local_reviews').select('rating, source, created_at_platform').eq('client_id', clientId).gte('created_at_platform', otherStart + 'T00:00:00'), 'created_at_platform'),
+      admin.from('reviews').select('id').eq('client_id', clientId).eq('source', 'google').limit(1),
     ])
+    // A read error on the probe must not silently promote the duplicates, so
+    // treat "unknown" as "canonical exists" and drop the Places rows.
+    const hasCanonicalGoogle = canonicalProbe.error != null || (canonicalProbe.data ?? []).length > 0
     for (const r of (rev.data ?? []) as Record<string, unknown>[]) {
       count++
       if (r.rating != null) { ratingSum += num(r.rating); ratingN++ }
     }
     for (const r of (local.data ?? []) as Record<string, unknown>[]) {
+      if (r.source === 'gbp' && hasCanonicalGoogle) continue  // duplicate of a `reviews` row
       count++
       if (r.rating != null) { ratingSum += num(r.rating); ratingN++ }
     }
@@ -354,20 +371,53 @@ export async function loadStageValues(
       .eq('client_id', clientId)
       .gte('date', otherStart))
     if (!error && data) {
-      let visits = 0, menu = 0, order = 0, ret = 0
-      let sawSessions = false, sawReturning = false
+      let visits = 0, menu = 0, order = 0
+      let sawSessions = false
       for (const r of data as Record<string, unknown>[]) {
         if (r.sessions != null) { visits += num(r.sessions); sawSessions = true }
         menu += num(r.menu_views)
         order += num(r.order_clicks)
-        if (r.returning_users != null) { ret += num(r.returning_users); sawReturning = true }
       }
       out.ga4_website_visits = sawSessions ? visits : null
       out.ga4_menu_views = menu
       out.ga4_order_clicks = order
-      out.ga4_returning_users = sawReturning ? ret : null
     }
   } catch { /* website metrics unavailable */ }
+
+  /* ── Returning visitors: NEVER summed from the daily table ──────────────
+     This used to add up website_metrics.returning_users across the window.
+     Migration 047 states outright why that is wrong: GA4 counts each distinct
+     user once PER DAY regardless of repeat visits, so summing inflates the
+     figure by the cross-day return rate. It also meant this surface and the
+     website page printed different numbers for the same thing, and the website
+     page had the right one.
+
+     The authoritative figure is a separately-computed monthly aggregate, and it
+     only exists per CALENDAR month. A rolling 30-day window has no correct
+     value, and two months cannot be added together either (the same person
+     visiting in both months is one unique, not two). So: report it only when
+     the window covers exactly one whole calendar month, and otherwise report
+     nothing. An absent number is honest; an inflated one is not. */
+  try {
+    if (otherEnd) {
+      const [sy, sm, sd] = otherStart.split('-').map(Number)
+      const [ey, em, ed] = otherEnd.split('-').map(Number)
+      const lastDay = new Date(Date.UTC(ey, em, 0)).getUTCDate()
+      const spansExactlyOneMonth = sy === ey && sm === em && sd === 1 && ed === lastDay
+      if (spansExactlyOneMonth) {
+        const { data: m, error: mErr } = await admin
+          .from('website_metrics_monthly')
+          .select('unique_returning_users')
+          .eq('client_id', clientId)
+          .eq('year', sy)
+          .eq('month', sm)
+          .maybeSingle()
+        if (!mErr && m?.unique_returning_users != null) {
+          out.ga4_returning_users = num(m.unique_returning_users)
+        }
+      }
+    }
+  } catch { /* monthly aggregate unavailable -> stays null */ }
 
   // ── Search Console (search_metrics) -> site impressions (drill-down) ────
   try {

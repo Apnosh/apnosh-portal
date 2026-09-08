@@ -192,7 +192,11 @@ const STAGE_GROUPS: Record<FunnelStage, { key: string; label: string; sourceIds:
     { key: 'repeat', label: 'Repeat guests', sourceIds: ['pos_repeat_customers'] },
     { key: 'reviews', label: 'New reviews', sourceIds: ['gbp_review_count'] },
     { key: 'returning', label: 'Returning visits', sourceIds: ['ga4_returning_users'] },
-    { key: 'loyalty', label: 'Loyalty', sourceIds: ['loyalty_redemptions', 'ig_follower_growth'] },
+    /* ig_follower_growth used to sit here, so owners were shown their Instagram
+       follower count under the word "Loyalty", beside loyalty-card redemptions.
+       A follow is not loyalty. It stays a by-source row under this stage until
+       the Reputation rework moves it beside the posts that earned it. */
+    { key: 'loyalty', label: 'Loyalty', sourceIds: ['loyalty_redemptions'] },
   ],
 }
 
