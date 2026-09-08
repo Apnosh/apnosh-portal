@@ -926,6 +926,37 @@ export const SOURCES: SourceDef[] = [
     wired: true,
   },
   {
+    id: 'yelp_rating',
+    displayName: 'Your Yelp star rating',
+    provider: 'yelp',
+    stage: 5,
+    metricKeys: ['rating'],
+    baseStatus: 'AVAILABLE_NOT_CONNECTED',
+    authType: 'api_key',
+    docsUrl: null,
+    notes:
+      'Real Yelp metric. The Yelp adapter has been syncing the rating and the review '
+      + 'count into channel_connections.metadata on a schedule; nothing read them, so '
+      + 'an owner whose damage is on Yelp could not see it. Context, never summed: a '
+      + 'rating is an average, not a count, and adding it to anything is meaningless.',
+    wired: true,
+  },
+  {
+    id: 'yelp_review_count',
+    displayName: 'Number of Yelp reviews',
+    provider: 'yelp',
+    stage: 5,
+    metricKeys: ['review_count'],
+    baseStatus: 'AVAILABLE_NOT_CONNECTED',
+    authType: 'api_key',
+    docsUrl: null,
+    notes:
+      'Real Yelp metric, the business\'s TOTAL review count from the same sync. Yelp\'s '
+      + 'API exposes only ~3 review excerpts and no reply endpoint, so this is a number '
+      + 'to watch, not a queue to work. Replying stays a guide lane.',
+    wired: true,
+  },
+  {
     id: 'gbp_rating_trend',
     displayName: 'Your star rating over time',
     provider: 'google_business_profile',
@@ -939,14 +970,20 @@ export const SOURCES: SourceDef[] = [
   },
   {
     id: 'ig_follower_growth',
-    displayName: 'New Instagram followers',
-    provider: 'instagram',
+    displayName: 'New followers',
+    provider: 'social',
     stage: 5,
     metricKeys: ['followers_gained', 'followers_count'],
     baseStatus: 'CONNECTED',
     authType: 'oauth',
     docsUrl: null,
-    notes: 'Real IG metric — followers_count / gained pulled by our sync.',
+    notes:
+      'The follower change ACROSS EVERY connected platform, not Instagram. The id is '
+      + 'historical. It was labelled "New Instagram followers" while carrying the '
+      + 'cross-platform total, so a TikTok business that gained 275 followers on TikTok '
+      + 'and 26 on Instagram read 304 under Instagram\'s name — the product measuring '
+      + 'somebody else\'s business. Per-platform splits live in stage 2 (instagram_follows, '
+      + 'tiktok_follows, ...); this is their roll-up.',
     wired: true,
   },
 ]
@@ -1064,6 +1101,12 @@ export const PROVIDER_CHANNELS: Partial<Record<SourceProvider, (ConnectorChannel
   social: ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'],
   pos: ['square', 'clover'],
   delivery: ['statements'],
+  /* Yelp had no entry, so every yelp source resolved COMING_SOON no matter what
+     -- even though connectYelp() writes a channel='yelp' row and the adapter has
+     been syncing against it. yelp_views keeps its COMING_SOON base (no adapter
+     for page views), so this only lights up the rating and review count that are
+     genuinely being fetched. */
+  yelp: ['yelp'],
 }
 
 /**

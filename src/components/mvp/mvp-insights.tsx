@@ -621,7 +621,7 @@ function StageTop({ stageKey, detail, mv, clientId, onRange, accent }: { stageKe
     }
     case 'engaged': {
       const cs = computedStage(detail, 2)
-      if (cs?.isEmpty) return <EmptyStageHero label="People who looked closer" note="Connect Instagram (or add your menu link) to measure this." />
+      if (cs?.isEmpty) return <EmptyStageHero label="People who looked closer" note="Connect a social account (or add your menu link) to measure this." />
       const feed = cs ? stageFeedFrom(cs) : buildInterestFeed(toFeedInput(detail))
       return mv && cs
         ? <StageWithChart mv={mv} label="People who looked closer" cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" showBreakdown={false} onRange={onRange} accent={accent} />
@@ -2235,7 +2235,7 @@ function ConnectSocial({ connected }: { connected: boolean }) {
       <Link href="/dashboard/connect-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14, textDecoration: 'none', color: 'inherit' }}>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Share2 size={18} color={C.greenDk} /></div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Connect Instagram</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>Connect your socials</div>
           <div style={{ fontSize: 12, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>Right now this counts Google only. Connect your socials to add their reach here.</div>
         </div>
         <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />

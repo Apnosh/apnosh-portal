@@ -200,6 +200,11 @@ export async function loadStageValues(
     }
     for (const r of (local.data ?? []) as Record<string, unknown>[]) {
       if (r.source === 'gbp' && hasCanonicalGoogle) continue  // duplicate of a `reviews` row
+      /* Yelp has its own rating and review-count sources now, read from the real
+         totals the adapter stores. Its ~3 API excerpts must not be folded into a
+         number the owner reads as "Number of Google reviews", and three excerpts
+         were never the Yelp count either. */
+      if (r.source === 'yelp') continue
       count++
       if (r.rating != null) { ratingSum += num(r.rating); ratingN++ }
     }
@@ -209,6 +214,29 @@ export async function loadStageValues(
       out.gbp_rating_trend = ratingN > 0 ? Math.round((ratingSum / ratingN) * 10) / 10 : null
     }
   } catch { /* reviews unavailable */ }
+
+  /* ── Yelp: the rating and the review count the adapter already syncs ──────
+     src/lib/channels/adapters/yelp.ts has been writing the business's rating and
+     total review count into channel_connections.metadata on every sync, and
+     nothing has ever read them. An owner whose damage is on Yelp rather than
+     Google could not see it anywhere in the product. Neither is summed: a rating
+     is an average, and a lifetime review count is not a thing that happened in
+     this window. */
+  try {
+    const { data: yc, error: yErr } = await admin
+      .from('channel_connections')
+      .select('metadata, status')
+      .eq('client_id', clientId)
+      .eq('channel', 'yelp')
+      .maybeSingle()
+    const meta = (!yErr && yc?.metadata) as Record<string, unknown> | null | undefined
+    if (meta) {
+      const rating = num(meta.rating)
+      const count = num(meta.review_count)
+      if (rating > 0) out.yelp_rating = Math.round(rating * 10) / 10
+      if (count > 0) out.yelp_review_count = count
+    }
+  } catch { /* yelp unavailable -> its sources stay null */ }
 
   // ── Socials (social_metrics) -> per-PLATFORM reach, plus follower growth /
   //    profile visits / engagement. Written daily by the social vendor sync.
