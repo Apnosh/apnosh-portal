@@ -135,8 +135,8 @@ console.log('\n3. Nothing English left on a screen we call Spanish')
     // the product page). Its count line was English on a Spanish page for exactly as long as
     // nobody read this file, so the scanner reads it.
     promises: ['src/lib/promises/registry.ts'],
-    // Move 7b: the weekly sentence, the report and the win card.
-    weekly: ['src/components/mvp/weekly-sentence.tsx'],
+    // Move 7b: the report and the win card. The weekly sentence has no screen of its own since
+    // Home became one screen; its keys stay in the manifest, ready for wherever it lands next.
     report: ['src/components/report/report-view.tsx'],
     wins: [
       'src/components/mvp/win-card.tsx',

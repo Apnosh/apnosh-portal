@@ -111,6 +111,11 @@ export default function PeopleRow({ clientId }: { clientId?: string }) {
     textDecoration: 'none', color: 'inherit',
   }
 
+  /* NOBODY ON YOUR WORK MEANS NO ROW. This used to draw the Get help door on its own, which
+   * cost a strip of the first screen to say something More and the header already say. Home is
+   * one screen; a row earns its place by naming a real person. */
+  if (!people.length) return null
+
   return (
     <section aria-label={T('The people on your work')} style={{ margin: '10px 0 0' }}>
       <div className="mvp-swipe" style={{ display: 'flex', gap: 14, overflowX: 'auto', padding: '2px 2px 4px' }}>

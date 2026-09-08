@@ -37,6 +37,11 @@ const SHELL_CSS = `
 .mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:${TAIL_TALL}}
 .mvp-frame-scroll.mvp-under-top{padding-top:58px}
 .mvp-frame-scroll.mvp-short-tail{padding-bottom:${TAIL}}
+/* ONE SCREEN, HELD STILL. Home is a fixed view: the funnel sizes itself to what is left after
+   the rows under it, so there is nothing to scroll to. overscroll-behavior stops the rubber-band
+   that made a page with no scroll still slide under a finger. Overflow stays auto on purpose —
+   if a client ever has more counted rows than the screen holds, they can still be reached. */
+.mvp-frame-scroll.mvp-fit{overscroll-behavior:none}
 .mvp-frame-top{position:absolute;top:0;left:0;right:0;z-index:6;transition:transform .28s cubic-bezier(.32,.72,.35,1),opacity .22s}
 .mvp-frame.mvp-scrolling .mvp-frame-top,.mvp-frame.mvp-scrolling .mvp-home-bar{transform:translateY(-115%);opacity:0;pointer-events:none}
 .mvp-home-bar{transition:transform .28s cubic-bezier(.32,.72,.35,1),opacity .22s}
@@ -122,7 +127,7 @@ function useSeenLog(clientId: string | undefined) {
   }, [clientId, pathname])
 }
 
-export default function MvpShell({ active, unread, header, children, wide, noHeader, middle, title, back, right }: { /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; /** replaces the bell (a page's own action) */ right?: React.ReactNode; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean }) {
+export default function MvpShell({ active, unread, header, children, wide, noHeader, fit, middle, title, back, right }: { /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; /** replaces the bell (a page's own action) */ right?: React.ReactNode; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean; /** a screen that fits on one screen and must not slide under a drag (Home) */ fit?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const tucked = useHideOnScroll(() => scrollRef.current)
   const { client } = useClient()
@@ -133,7 +138,7 @@ export default function MvpShell({ active, unread, header, children, wide, noHea
       <div className={`${wide ? 'mvp-frame mvp-frame-wide' : 'mvp-frame'}${tucked ? ' mvp-scrolling' : ''}`}>
         {/* the standard app bar floats over the scroll (glass); a page's own header stays in flow */}
         {noHeader ? null : header ? header : <div className="mvp-frame-top"><TopRow middle={middle} title={title} count={unread} back={back} right={right} /></div>}
-        <div ref={scrollRef} className={noHeader ? 'mvp-frame-scroll mvp-short-tail' : header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}>{children}</div>
+        <div ref={scrollRef} className={`${noHeader ? 'mvp-frame-scroll mvp-short-tail' : header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}${fit ? ' mvp-fit' : ''}`}>{children}</div>
         <BottomNav active={active} />
       </div>
     </div>
