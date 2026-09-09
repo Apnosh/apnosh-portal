@@ -28,6 +28,9 @@ export interface PostView {
   likes: number
   saves: number
   postedAt: string | null
+  /** Identifies ONE piece of content posted to several platforms on the same
+   *  day. Null when the row has no caption to match on. See crossPostKey. */
+  crossKey: string | null
 }
 
 /**
@@ -64,6 +67,7 @@ type Row = {
   likes?: number | null
   saves?: number | null
   posted_at?: string | null
+  caption?: string | null
   raw_data?: unknown
 }
 
@@ -89,7 +93,44 @@ export function toPostView(p: Row): PostView {
     likes: p.likes ?? 0,
     saves: p.saves ?? 0,
     postedAt: p.posted_at ?? null,
+    crossKey: crossPostKey(p.caption ?? null, p.posted_at ?? null),
   }
+}
+
+/**
+ * THE ONE THING NO FREE TOOL CAN SHOW THEM.
+ * ==========================================
+ * A restaurant posts the same thing to four platforms on the same day and gets
+ * four wildly different results. Every platform's own dashboard sees only
+ * itself, so nobody can put those four numbers side by side. This product holds
+ * all four and has never known they were related -- they sit in the list as
+ * separate rows, ordered by time, and the connection is invisible.
+ *
+ * The key is the posting DAY plus a normalised caption. Platforms rarely carry
+ * a shared id, and captions are edited per platform (hashtags moved, a mention
+ * added, an emoji swapped), so this strips what varies and keeps the words:
+ * lowercase, hashtags and mentions and urls removed, punctuation and emoji
+ * dropped, whitespace collapsed, then the first sixty characters.
+ *
+ * Deliberately conservative. Too short a caption is not evidence of anything --
+ * "New today" posted twice in a week is not one piece of content -- so anything
+ * under twenty characters of real words returns null and stays an ordinary row.
+ * A missed grouping is invisible; a wrong one tells the owner two different
+ * posts are the same, and that is the kind of error this codebase keeps finding.
+ */
+export function crossPostKey(caption: string | null, postedAt: string | null): string | null {
+  if (!caption || !postedAt) return null
+  const day = String(postedAt).slice(0, 10)
+  if (day.length !== 10) return null
+  const words = caption
+    .toLowerCase()
+    .replace(/https?:\/\/\S+/g, ' ')      // links differ per platform
+    .replace(/[#@][\p{L}\p{N}_]+/gu, ' ')  // hashtags and mentions are platform habits
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')    // punctuation and emoji
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (words.length < 20) return null
+  return `${day}:${words.slice(0, 60)}`
 }
 
 /** Newest first. Shared so the summary's five are literally the first five of the full list. */

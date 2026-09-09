@@ -98,7 +98,7 @@ interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
 // Lazy-fetched from /api/dashboard/insights-detail.
-export interface InsightsPost { id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; /** this post kind never reports reach (e.g. a Story) — an absence, not a zero */ unreported?: boolean; likes: number; saves: number; postedAt: string | null }
+export interface InsightsPost { /** one piece of content posted to several platforms the same day; null when it stands alone */ crossKey?: string | null; id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; /** this post kind never reports reach (e.g. a Story) — an absence, not a zero */ unreported?: boolean; likes: number; saves: number; postedAt: string | null }
 interface InsightsDetail {
   findYou: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } | null
   topQueries: { query: string; impressions: number }[]
@@ -2282,6 +2282,94 @@ function TopSearches({ queries }: { queries: { query: string; impressions: numbe
  * drifts. The honesty rules below live here once: a re-implementation on the full list would
  * be the next place a false zero or a dead link comes back.
  */
+/**
+ * THE SAME POST, EVERYWHERE IT WENT.
+ * ===================================
+ * A restaurant puts one piece of content on four platforms on the same day and
+ * gets four wildly different results. Every platform's own dashboard sees only
+ * itself, so there is nowhere an owner can put those four numbers side by side.
+ * This product holds all four and, until now, listed them as four unrelated rows
+ * in date order -- the single most useful comparison it owns, invisible.
+ *
+ * Live example from one account: identical content on 2 September did 186 on
+ * Facebook, 175 on Instagram and 10,031 on TikTok. That is not a small
+ * difference in a chart, it is where the whole audience actually is.
+ *
+ * Grouped rows are ordered best-first, because the point of the card is which
+ * platform carried it. Distinct PLATFORMS are counted, not rows: the same
+ * content can appear twice on one platform as a feed post and a reel, and
+ * calling that "4 platforms" would be a small lie in a card whose entire job is
+ * an honest comparison.
+ */
+export function CrossPostCard({ posts }: { posts: InsightsPost[] }) {
+  const ranked = posts.slice().sort((a, b) => b.reach - a.reach)
+  const best = ranked[0]
+  const platforms = new Set(ranked.map((p) => p.platform))
+  const date = best?.postedAt ? reviewDate(best.postedAt) : ''
+  const max = Math.max(1, ...ranked.map((p) => p.reach))
+  return (
+    <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 16, padding: 14, marginBottom: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+        <div style={{ width: 44, height: 44, borderRadius: 10, flexShrink: 0, backgroundColor: best?.thumbnailUrl ? '#000' : '#eeeef1', backgroundImage: best?.thumbnailUrl ? `url(${best.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          {!best?.thumbnailUrl && <ImageIcon size={16} color={C.faint} />}
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>One post, {platforms.size} places</div>
+          <div style={{ fontSize: 12, color: C.mute, marginTop: 1 }}>{date ? `${date} · ` : ''}same content, same day</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {ranked.map((p) => {
+          const top = p.reach === max && p.reach > 0
+          const w = p.reach > 0 ? Math.max(4, Math.round((p.reach / max) * 100)) : 0
+          const label = p.platform ? p.platform.charAt(0).toUpperCase() + p.platform.slice(1) : ''
+          const body = (
+            <>
+              <span style={{ width: 78, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: top ? C.ink : C.mute, fontWeight: top ? 600 : 500 }}>
+                <BrandOrMark provider={p.platform} size={13} />{label}
+              </span>
+              <span style={{ flex: 1, height: 8, borderRadius: 99, background: C.bg, overflow: 'hidden' }}>
+                <span style={{ display: 'block', width: `${w}%`, height: '100%', borderRadius: 99, background: top ? C.greenDk : C.line }} />
+              </span>
+              <span style={{ width: 66, textAlign: 'right', flexShrink: 0, fontSize: 12.5, fontVariantNumeric: 'tabular-nums', color: top ? C.ink : C.mute, fontWeight: top ? 700 : 500 }}>
+                {p.unreported || p.pending ? '—' : p.reach.toLocaleString()}
+              </span>
+            </>
+          )
+          return p.permalink
+            ? <a key={p.id} href={p.permalink} target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', color: 'inherit' }}>{body}</a>
+            : <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{body}</div>
+        })}
+      </div>
+      {best && best.reach > 0 && ranked.length > 1 && ranked[ranked.length - 1].reach > 0 && (
+        <div style={{ fontSize: 12, color: C.mute, marginTop: 10, lineHeight: 1.45 }}>
+          {best.platform.charAt(0).toUpperCase() + best.platform.slice(1)} carried it
+          {Math.round(best.reach / Math.max(1, ranked[ranked.length - 1].reach)) > 2
+            ? `, ${Math.round(best.reach / Math.max(1, ranked[ranked.length - 1].reach))} times the smallest.`
+            : '.'}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Fold a date-ordered list into cross-post groups, keeping the original order
+ *  by each group's first appearance. A key with only one post stays a plain row. */
+export function groupCrossPosts(posts: InsightsPost[]): Array<InsightsPost | InsightsPost[]> {
+  const counts = new Map<string, number>()
+  for (const p of posts) if (p.crossKey) counts.set(p.crossKey, (counts.get(p.crossKey) ?? 0) + 1)
+  const out: Array<InsightsPost | InsightsPost[]> = []
+  const placed = new Set<string>()
+  for (const p of posts) {
+    const k = p.crossKey
+    if (!k || (counts.get(k) ?? 0) < 2) { out.push(p); continue }
+    if (placed.has(k)) continue
+    placed.add(k)
+    out.push(posts.filter((q) => q.crossKey === k))
+  }
+  return out
+}
+
 export function PostRow({ p, first = true }: { p: InsightsPost; first?: boolean }) {
   const date = p.postedAt ? reviewDate(p.postedAt) : ''
   const platform = p.platform ? p.platform.charAt(0).toUpperCase() + p.platform.slice(1) : ''

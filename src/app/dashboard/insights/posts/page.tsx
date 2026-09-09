@@ -19,7 +19,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
-import { PostRow, POSTS_FOOTNOTE, type InsightsPost } from '@/components/mvp/mvp-insights'
+import { PostRow, CrossPostCard, groupCrossPosts, POSTS_FOOTNOTE, type InsightsPost } from '@/components/mvp/mvp-insights'
 import { usePullToRefresh, PullIndicator } from '@/components/mvp/pull-to-refresh'
 
 const C = { ink: '#16181d', mute: '#6b7280', faint: '#9aa1ab', line: '#e8e9ec', bg: '#f7f7f9', greenDk: '#2f8f70' }
@@ -111,7 +111,14 @@ export default function AllPostsPage() {
           {posts && posts.length > 0 && (
             <>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {posts.map((p, i) => <PostRow key={p.id} p={p} first={i === 0} />)}
+                {/* One piece of content posted to several platforms on the same day
+                    collapses into a single comparison card. Everything else is an
+                    ordinary row, in the same date order as before. */}
+                {groupCrossPosts(posts).map((item, i) =>
+                  Array.isArray(item)
+                    ? <CrossPostCard key={item[0].crossKey ?? item[0].id} posts={item} />
+                    : <PostRow key={item.id} p={item} first={i === 0} />,
+                )}
               </div>
               {hasMore && (
                 <button

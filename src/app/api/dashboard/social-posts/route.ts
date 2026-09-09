@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
    * to the top of "newest first". */
   const { data, count, error } = await db
     .from('social_posts')
-    .select('id, platform, permalink, thumbnail_url, media_type, media_product_type, reach, video_views, likes, saves, posted_at, raw_data', { count: 'exact' })
+    .select('id, platform, permalink, thumbnail_url, media_type, media_product_type, reach, video_views, likes, saves, posted_at, caption, raw_data', { count: 'exact' })
     .eq('client_id', clientId)
     .order('posted_at', { ascending: false, nullsFirst: false })
     .range(offset, offset + limit - 1)
