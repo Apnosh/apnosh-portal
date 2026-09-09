@@ -12,7 +12,7 @@
  * Under "All" the feed still leads with "Needs you" so urgent items surface
  * first. Wired to real data (/api/dashboard/inbox).
  */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { CARD_SHADOW, Segmented } from './kit'
 import Link from 'next/link'
 import { Bell, CalendarDays, Check, Clapperboard, CreditCard, FileText, Flag, Hourglass, Loader2, MoreHorizontal, Palette, PartyPopper, Plug, Rocket, Search, Star, ThumbsUp, TrendingUp } from 'lucide-react'
@@ -35,7 +35,8 @@ interface InboxData { items: Item[]; wins: Win[]; counts: { needsYou: number; to
 // Single LinkedIn-style pill row (active = filled).
 const FILTERS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' }, { key: 'needsyou', label: 'Needs you' },
-  { key: 'reviews', label: 'Reviews' }, { key: 'activity', label: 'Activity' },
+  { key: 'reviews', label: 'Reviews' }, { key: 'comments', label: 'Comments' },
+  { key: 'activity', label: 'Activity' },
 ]
 const COUNTED = new Set(['needsyou', 'reviews', 'activity'])
 // Which item chips each filter shows. "Needs you" folds in the old Fix-its
@@ -94,10 +95,140 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
         <Segmented items={FILTERS.map((f) => [f.key, f.label] as [typeof f.key, string])} value={filter} onChange={setFilter} counts={Object.fromEntries(FILTERS.filter((f) => COUNTED.has(f.key)).map((f) => [f.key, countFor(f.key)]))} hot={['needsyou']} />
       </div>
 
-      <ListView filter={filter} items={items} wins={data.wins} q={q} onDismiss={onDismiss} />
+      {/* Comments come from the social vendor rather than the inbox feed, so this
+          filter swaps the list for its own pane instead of filtering Items. */}
+      {filter === 'comments'
+        ? <CommentsPane clientId={clientId} />
+        : <ListView filter={filter} items={items} wins={data.wins} q={q} onDismiss={onDismiss} />}
 
       <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .26s ease both}.mvp-swipe-x{scrollbar-width:none}.mvp-swipe-x::-webkit-scrollbar{display:none}`}</style>
     </Shell>
+  )
+}
+
+interface CommentRow { id: string; platform: string; postId: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean }
+
+/**
+ * COMMENTS ON THEIR POSTS, with the reply in the same place.
+ * ==========================================================
+ * Several owners in testing said their customers talk to them in comments rather
+ * than reviews, and one has no website at all, so Instagram IS her storefront.
+ * None of it reached the product until now.
+ *
+ * Unanswered first, because this is a queue to work rather than a feed to read.
+ * An error says so out loud: an empty list would read as "nobody commented",
+ * which is a different and much worse claim than "we could not load them".
+ */
+function CommentsPane({ clientId }: { clientId: string }) {
+  const [rows, setRows] = useState<CommentRow[] | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+
+  const load = useCallback(async () => {
+    setErr(null)
+    try {
+      const r = await fetch(`/api/dashboard/social-comments?clientId=${clientId}`, { cache: 'no-store' })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Could not load comments')
+      setRows((j.comments ?? []) as CommentRow[])
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not load comments')
+      setRows([])
+    }
+  }, [clientId])
+
+  useEffect(() => { void load() }, [load])
+
+  async function send(id: string) {
+    const text = draft.trim()
+    if (!text || sending) return
+    setSending(true)
+    try {
+      const r = await fetch('/api/dashboard/social-comments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, commentId: id, text }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || 'Could not post the reply')
+      /* Mark it answered here rather than refetching: the vendor may not show the
+         reply for a moment, and a row springing back to unanswered reads as a
+         failed send. */
+      setRows((cur) => (cur ?? []).map((c) => (c.id === id ? { ...c, replied: true } : c)))
+      setOpenId(null); setDraft('')
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not post the reply')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  if (rows === null) return <Centered>Loading comments…</Centered>
+  if (err && rows.length === 0) {
+    return (
+      <div style={{ padding: '24px 20px', textAlign: 'center', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}>
+        <div style={{ fontWeight: 600, color: C.ink, marginBottom: 4 }}>Comments did not load</div>
+        {err}
+      </div>
+    )
+  }
+  if (rows.length === 0) {
+    return <InboxEmpty icon={Check} title="No comments yet" sub="When someone comments on your posts, it lands here and you can answer without leaving." />
+  }
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      {err && <div style={{ padding: '10px 14px', fontSize: 12.5, color: C.coral }}>{err}</div>}
+      {rows.map((c) => (
+        <div key={c.id} style={{ borderBottom: `1px solid ${C.line}`, padding: '12px 14px', background: c.replied ? 'transparent' : C.greenSoft }}>
+          <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
+            <div style={{ width: 36, height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <BrandOrMark provider={c.platform} size={22} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.ink }}>
+                <b style={{ fontWeight: 700 }}>{c.authorName}</b>{' '}
+                <span style={{ color: C.mute }}>{c.text}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                {c.replied
+                  ? <span style={{ fontSize: 11.5, fontWeight: 700, color: C.greenDk }}>Answered</span>
+                  : (
+                    <button
+                      type="button"
+                      onClick={() => { setOpenId(openId === c.id ? null : c.id); setDraft('') }}
+                      style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, color: C.greenDk, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                    >{openId === c.id ? 'Cancel' : 'Reply'}</button>
+                  )}
+              </div>
+              {openId === c.id && (
+                <div style={{ marginTop: 8 }}>
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    rows={3}
+                    maxLength={1000}
+                    placeholder="Write a reply…"
+                    style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: 10, padding: 9, fontSize: 13.5, fontFamily: 'inherit', color: C.ink, resize: 'vertical' }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
+                    <button
+                      type="button"
+                      disabled={!draft.trim() || sending}
+                      onClick={() => void send(c.id)}
+                      style={{ font: 'inherit', fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 99, border: 'none', cursor: draft.trim() && !sending ? 'pointer' : 'default', background: draft.trim() && !sending ? C.ink : C.line, color: draft.trim() && !sending ? '#fff' : C.faint }}
+                    >{sending ? 'Posting…' : 'Post reply'}</button>
+                    <span style={{ fontSize: 11.5, color: C.faint }}>Posts publicly as your business.</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
   )
 }
 

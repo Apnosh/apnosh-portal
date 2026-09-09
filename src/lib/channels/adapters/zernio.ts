@@ -12,6 +12,11 @@
  *               (standard mode: Zernio hosts any page/board selection step)
  *   analytics — per-POST unified shape (GET /v1/analytics: impressions/reach/likes/
  *               comments/shares/saves/clicks/views/follows) + /v1/accounts/follower-stats
+ *   comments  — GET /v1/inbox/comments and POST /v1/inbox/comments/{id}/reply.
+ *               MISSED IN THE AUGUST DOCS READ, which is why the product spent a
+ *               month believing comment text needed a direct Meta app. It does
+ *               not: the vendor already connected carries comments across every
+ *               linked platform. See listComments below.
  *
  * So the nightly sync builds our daily account rows from two reads: followers from
  * follower-stats, and the day's content totals aggregated from post analytics. NOTE:
@@ -166,6 +171,82 @@ async function zer(path: string, init: RequestInit = {}): Promise<Record<string,
 }
 
 /** Create (or reuse) the client's Zernio profile; returns the profileId. */
+export interface SocialCommentRow {
+  id: string
+  platform: string
+  postId: string | null
+  authorName: string
+  text: string
+  createdAt: string | null
+  /** true once someone has answered it, when the vendor tells us */
+  replied: boolean
+}
+
+/** The client's Zernio profile id, or null when they have no live connection. */
+async function profileIdFor(clientId: string): Promise<string | null> {
+  const admin = createAdminClient()
+  const { data } = await admin
+    .from('channel_connections')
+    .select('platform_account_id, status')
+    .eq('client_id', clientId)
+    .eq('channel', 'zernio')
+    .maybeSingle()
+  const id = (data as { platform_account_id?: string | null } | null)?.platform_account_id
+  return typeof id === 'string' && id ? id : null
+}
+
+/**
+ * COMMENTS ON THIS CLIENT'S POSTS, across every platform they have linked.
+ *
+ * The one thing the product could not do and several owners said they needed:
+ * a food truck's regulars, a cafe's brunch crowd and a business with no website
+ * at all all talk to the owner in comments rather than reviews, and none of it
+ * reached the product.
+ *
+ * SHAPE NOTE, and it is the honest caveat on this whole function. The response
+ * fields below come from Zernio's published reference, not from a call we have
+ * watched: ZERNIO_API_KEY lives only in Vercel, so the shape could not be
+ * observed while writing this. Every field is therefore read defensively through
+ * several plausible names, an unknown shape yields an empty list rather than a
+ * crash, and the diagnostic route reports what actually came back so the FIRST
+ * real run confirms or corrects this in one look.
+ */
+export async function listComments(clientId: string, limit = 50): Promise<SocialCommentRow[]> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  const q = new URLSearchParams({ profileId, limit: String(Math.min(100, Math.max(1, limit))) })
+  const res = await zer(`/inbox/comments?${q.toString()}`)
+  const rows = unwrapList(res, 'comments', 'items', 'results')
+  return rows.map((c) => {
+    const id = str(c._id) || str(c.id) || str(c.commentId)
+    const author = c.author && typeof c.author === 'object' ? (c.author as Record<string, unknown>) : {}
+    return {
+      id,
+      platform: (str(c.platform) || 'instagram').toLowerCase(),
+      postId: str(c.postId) || str(c.post_id) || null,
+      authorName: str(c.authorName) || str(c.author_name) || str(author.name) || str(author.username) || 'Someone',
+      text: str(c.text) || str(c.message) || str(c.comment),
+      createdAt: str(c.createdAt) || str(c.created_at) || str(c.timestamp) || null,
+      /* Only true when the vendor says so. An unknown status is NOT "answered":
+         showing a comment as handled when it is not is the one error this queue
+         cannot make. */
+      replied: str(c.status).toLowerCase() === 'replied' || c.replied === true,
+    }
+  }).filter((c) => c.id && c.text)
+}
+
+/** Post a reply to one comment, on whatever platform it came from. */
+export async function replyToComment(clientId: string, commentId: string, text: string): Promise<void> {
+  const body = text.trim()
+  if (!body) throw new ChannelError('upstream', 'A reply cannot be empty')
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
+  await zer(`/inbox/comments/${encodeURIComponent(commentId)}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ text: body, profileId }),
+  })
+}
+
 async function ensureProfile(clientId: string, userId?: string): Promise<string> {
   const admin = createAdminClient()
   const { data: existing } = await admin
