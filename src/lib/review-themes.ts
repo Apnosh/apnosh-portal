@@ -106,12 +106,39 @@ export async function generateThemesForClient(
     .limit(MAX_REVIEWS_TO_SAMPLE)
   if (locationId) q = q.eq('location_id', locationId)
   const { data: reviews } = await q
-  const rows = (reviews ?? []) as ReviewRow[]
+  let rows = (reviews ?? []) as ReviewRow[]
+
+  /* A FILTER THAT CANNOT MATCH MUST NOT LOOK LIKE AN EMPTY RESULT.
+     reviews.location_id is declared and indexed but NO WRITER EVER SETS IT --
+     checked against production: 0 of 188 rows carry one, because the two GBP
+     review syncs both omit it from their payload. So asking for one location's
+     themes filtered to exactly nothing, found fewer than five reviews, and then
+     CACHED that emptiness for seven days. The owner of a two-site business got a
+     permanently blank card that looked like "we read your reviews and there was
+     nothing to say".
+     Until reviews carry a location, a location filter that matches nothing while
+     the client plainly has reviews is treated as not-applicable: fall back to
+     everything and let the caller label it. An honest whole-business answer beats
+     a blank card that implies silence from customers. */
+  let locationIgnored = false
+  if (locationId && rows.length === 0) {
+    const { data: any_ } = await admin
+      .from('reviews')
+      .select('rating, review_text, posted_at')
+      .eq('client_id', clientId)
+      .gte('posted_at', start.toISOString())
+      .order('posted_at', { ascending: false })
+      .limit(MAX_REVIEWS_TO_SAMPLE)
+    const all = (any_ ?? []) as ReviewRow[]
+    if (all.length > 0) { rows = all; locationIgnored = true }
+  }
   const withText = rows.filter(r => (r.review_text ?? '').trim().length >= 10)
 
   if (withText.length < 5) {
     /* Not enough text to extract meaningful themes. Cache an empty
-       result so we don't keep retrying on every page load. */
+       result so we don't keep retrying on every page load -- EXCEPT when the
+       location filter was the reason we fell back, because caching that would
+       freeze a wrong answer in place for a week. */
     const empty: ReviewThemesResult = {
       generatedAt: new Date().toISOString(),
       windowStart: startYmd,
@@ -119,7 +146,7 @@ export async function generateThemesForClient(
       reviewCount: rows.length,
       themes: [],
     }
-    await upsertCache(clientId, locationId, empty)
+    if (!locationIgnored) await upsertCache(clientId, locationId, empty)
     return empty
   }
 
