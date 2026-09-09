@@ -93,6 +93,33 @@ export async function buildWeeklyNote(clientId: string, lang: Lang = 'en', asOf?
     }
   } catch { /* no reviews candidate */ }
 
+  /* ── Comments waiting on an answer ──────────────────────────────────────
+     Several owners said their customers talk to them in comments rather than
+     reviews, and one has no website at all. An unanswered comment is the same
+     shape of thing as an unanswered bad review: small, specific, and it goes
+     stale. It ranks just under a critical review because a bad review left
+     hanging is public damage, and a comment is usually a conversation. */
+  try {
+    const { listComments } = await import('@/lib/channels/adapters/zernio')
+    const comments = await listComments(clientId, 50)
+    const waiting = comments.filter((c) => !c.replied && c.canReply)
+    if (waiting.length) {
+      const n = waiting.length
+      /* Quote the oldest one. A number is a chore; somebody's actual words are a
+         reason to open the app. Trimmed so a long comment cannot run away with
+         a text message. */
+      const oldest = waiting[waiting.length - 1]
+      const quote = oldest.text.length > 80 ? oldest.text.slice(0, 78).trimEnd() + '…' : oldest.text
+      cands.push({
+        rank: 85,
+        headline: es
+          ? `${n === 1 ? 'Un comentario sin responder' : `${n} comentarios sin responder`} en tus publicaciones.`
+          : `${n === 1 ? 'One comment' : `${n} comments`} on your posts still waiting for an answer.`,
+        line: es ? `${oldest.authorName} escribió: "${quote}"` : `${oldest.authorName} wrote: "${quote}"`,
+      })
+    }
+  } catch { /* no comments candidate — a vendor hiccup must not lose the note */ }
+
   /* ── Google: calls and directions, this week against last ──────────────── */
   try {
     const { data } = await admin
