@@ -601,7 +601,7 @@ export async function describeEndpoint(clientId: string, path: string): Promise<
     const text = await r.text()
     let json: Record<string, unknown> | null = null
     try { json = JSON.parse(text) as Record<string, unknown> } catch { /* not json */ }
-    const arr = json ? unwrapList(json, 'data', 'conversations', 'messages', 'items', 'results') : []
+    const arr = json ? unwrapList(json, 'data', 'conversations', 'messages', 'items', 'results', 'accounts', 'slots') : []
     return {
       path,
       status: r.status,

@@ -28,6 +28,11 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const MIN_POSTS_FOR_A_RECOMMENDATION = 3
 /** How many recommended slots to offer at once. */
 const MOST_RECOMMENDATIONS = 3
+/* Waking hours, in the owner's own timezone. The vendor's strongest slot for one
+   account here is 08:00 UTC, which is 1am in Seattle: a real number about a post
+   that happened to go up overnight, and useless as advice to a restaurant. */
+const EARLIEST = 7
+const LATEST = 20
 
 /** The next time it will be `dayOfWeek` at `hourUtc`, as an instant. */
 function nextOccurrence(dayOfWeek: number, hourUtc: number): Date {
@@ -56,20 +61,37 @@ export async function GET(req: NextRequest) {
        has to take it or leave it, and the second-best hour is usually nearly as
        good and lands on a day that suits them better. Three is where the chips
        stop being a choice and start being a list. */
-    const good = slots
-      .filter((s) => s.posts >= MIN_POSTS_FOR_A_RECOMMENDATION)
+    /* Everything below is decided in the OWNER'S day, not the vendor's. Its slots
+       are UTC, and two of them can be the same evening where the owner lives:
+       Monday 23:00 and Tuesday 04:00 UTC are both Monday night in Seattle. Ranked
+       and cut on the vendor's own day numbers, "three best times" came back as
+       Monday, Monday and Monday. */
+    const named = slots
+      .filter((sl) => sl.posts >= MIN_POSTS_FOR_A_RECOMMENDATION)
+      .map((sl) => {
+        const at = nextOccurrence(sl.dayOfWeek, sl.hourUtc)
+        let label = `${DAYS[sl.dayOfWeek]} at ${sl.hourUtc}:00 UTC`
+        let localDay = `utc-${sl.dayOfWeek}`
+        let localHour = sl.hourUtc
+        try {
+          label = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long', hour: 'numeric' }).format(at)
+          const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', hour: 'numeric', hour12: false }).formatToParts(at)
+          localDay = parts.find((x) => x.type === 'weekday')?.value ?? localDay
+          localHour = Number(parts.find((x) => x.type === 'hour')?.value ?? sl.hourUtc) % 24
+        } catch { /* the fallback labels above stand */ }
+        return { iso: at.toISOString(), label, posts: sl.posts, localDay, localHour }
+      })
+      .filter((x) => x.localHour >= EARLIEST && x.localHour <= LATEST)
       .sort((a, b) => b.posts - a.posts)
+
+    /* One per day, so three recommendations are three real choices. Strongest
+       first, and the rest of that day's hours drop: an owner picking between
+       Monday 4pm and Monday 9pm is not picking between days. */
+    const seenDays = new Set<string>()
+    const bests = named
+      .filter((x) => (seenDays.has(x.localDay) ? false : (seenDays.add(x.localDay), true)))
       .slice(0, MOST_RECOMMENDATIONS)
-    const bests = good.map((g) => {
-      const at = nextOccurrence(g.dayOfWeek, g.hourUtc)
-      let label = ''
-      try {
-        label = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long', hour: 'numeric' }).format(at)
-      } catch {
-        label = `${DAYS[g.dayOfWeek]} at ${g.hourUtc}:00 UTC`
-      }
-      return { iso: at.toISOString(), label, posts: g.posts }
-    })
+      .map(({ iso, label, posts }) => ({ iso, label, posts }))
     /* `best` stays for anything still reading the old shape. */
     return NextResponse.json({ targets, bests, best: bests[0] ?? null, limits, timezone: tz }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
