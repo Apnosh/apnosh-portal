@@ -84,7 +84,7 @@ export interface InsightsData {
 interface ReviewSummary {
   split: { positive: number; neutral: number; negative: number; total: number }
   stars: Record<string, number>
-  byMonth: { ym: string; count: number }[]
+  byMonth: { ym: string; count: number; avg: number | null }[]
   reply: { total: number; replied: number; unanswered: number; unansweredNegative: number; ratePct?: number | null; medianHours?: number | null; timedCount?: number }
   sources: Record<string, number>
   recent: { rating: number; date: string }[]
@@ -2791,7 +2791,53 @@ function TrendPill({ dir }: { dir: 'up' | 'down' | 'flat' }) {
 }
 
 // ── Rating trend (recent review scores) + review volume ──
-function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: number }[]; recent: { rating: number; date: string }[] }) {
+function MonthlyRating({ months }: { months: { ym: string; count: number; avg: number | null }[] }) {
+  const withData = months.filter((m) => m.avg != null)
+  if (withData.length < 3) return null
+  const first = withData[0].avg!, last = withData[withData.length - 1].avg!
+  const move = Math.round((last - first) * 10) / 10
+  /* The scale starts at the worst month, not at zero. On a 0-5 axis every
+     restaurant's line is a flat band near the top and a fall from 4.6 to 3.9 is
+     invisible, which is exactly the fall worth seeing. Floor of one star of range
+     so a steady business does not get a dramatic-looking wobble. */
+  const lo = Math.min(...withData.map((m) => m.avg!)), hi = Math.max(...withData.map((m) => m.avg!))
+  const pad = Math.max(0.5, (1 - (hi - lo)) / 2)
+  const min = Math.max(0, lo - pad), max = Math.min(5, hi + pad)
+  const span = Math.max(0.2, max - min)
+  const card: React.CSSProperties = { background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }
+  return (
+    <div style={{ ...card, marginBottom: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <span style={{ display: 'flex', alignItems: 'baseline', gap: 7 }}>
+          <span style={{ fontSize: 12.5, color: C.mute, fontWeight: 600 }}>Rating a month</span>
+          <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, color: C.ink }}>{last.toFixed(1)}&#9733;</span>
+        </span>
+        {Math.abs(move) >= 0.2 && (
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: move > 0 ? C.greenDk : C.coral }}>
+            {move > 0 ? '▲' : '▼'}{Math.abs(move).toFixed(1)} since {monLabel(withData[0].ym + '-01')}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 56 }}>
+        {months.map((m) => {
+          if (m.avg == null) return <div key={m.ym} style={{ flex: 1 }} />
+          const h = Math.max(4, Math.round(((m.avg - min) / span) * 52))
+          const col = m.avg >= 4.5 ? C.green : m.avg >= 4 ? C.greenDk : m.avg >= 3 ? C.amber : C.coral
+          return (
+            <div key={m.ym} title={`${m.ym}: ${m.avg.toFixed(1)} from ${m.count}`} style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: '100%' }}>
+              <div style={{ height: h, borderRadius: 4, background: col }} />
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 10.5, color: C.faint, marginTop: 6 }}>
+        Scaled {min.toFixed(1)} to {max.toFixed(1)}, so a real move is visible. Months with no reviews are blank.
+      </div>
+    </div>
+  )
+}
+
+function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: number; avg: number | null }[]; recent: { rating: number; date: string }[] }) {
   const months = byMonth.map((m) => m.ym)
   const total12 = byMonth.reduce((s, m) => s + m.count, 0)
   const avgPerMonth = byMonth.length ? Math.round((total12 / byMonth.length) * 10) / 10 : 0
@@ -2829,6 +2875,15 @@ function RatingOverTime({ byMonth, recent }: { byMonth: { ym: string; count: num
           </div>
         </div>
       )}
+
+      {/* THE RATING ITSELF, month by month. 'Reviews a month' below says how many
+          arrived; this says whether they were any good, which is the actual
+          question behind "is what we are doing working". Built from each review's
+          own date and score -- the location's rating field is overwritten on every
+          sync and can never give a trend. A month with no reviews draws no bar
+          rather than a zero, because a zero reads as the worst month they ever
+          had. Needs at least three months with reviews to say anything. */}
+      <MonthlyRating months={byMonth} />
 
       {/* New reviews — last 12 months, each bar a month (tap for the count) */}
       <div style={{ ...card, marginTop: scores.length > 0 ? 10 : 0 }}>

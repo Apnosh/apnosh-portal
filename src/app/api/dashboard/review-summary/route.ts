@@ -89,14 +89,30 @@ export async function GET(req: NextRequest) {
   // Reviews per month, then the trailing 12 months (rolling, ending this month),
   // zero-filled so months with no reviews still show — the honest cadence with
   // its gaps.
+  /* THE AVERAGE PER MONTH, which this file's own header has promised since it was
+     written and which nothing ever computed. Only the count existed, so the
+     product could show how MANY reviews arrived each month and never whether they
+     were getting better or worse -- the actual question behind "is the repair
+     working". Every review carries its own date and score, so the series is
+     reconstructible from rows already stored; the single overwritten rating field
+     on the location was never going to give a trend. */
   const monthCount = new Map<string, number>()
-  for (const r of rows) { const ym = ymKey(r.at); if (ym) monthCount.set(ym, (monthCount.get(ym) ?? 0) + 1) }
+  const monthSum = new Map<string, number>()
+  for (const r of rows) {
+    const ym = ymKey(r.at)
+    if (!ym) continue
+    monthCount.set(ym, (monthCount.get(ym) ?? 0) + 1)
+    monthSum.set(ym, (monthSum.get(ym) ?? 0) + r.rating)
+  }
   const nowD = new Date()
-  const byMonth: { ym: string; count: number }[] = []
+  const byMonth: { ym: string; count: number; avg: number | null }[] = []
   for (let i = 11; i >= 0; i--) {
     const d = new Date(nowD.getFullYear(), nowD.getMonth() - i, 1)
     const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    byMonth.push({ ym, count: monthCount.get(ym) ?? 0 })
+    const n = monthCount.get(ym) ?? 0
+    /* null, not zero, for a month with no reviews. A zero would draw as the worst
+       month this business ever had. */
+    byMonth.push({ ym, count: n, avg: n > 0 ? Math.round((monthSum.get(ym)! / n) * 10) / 10 : null })
   }
 
   const repliedCount = rows.filter((r) => r.replied).length
