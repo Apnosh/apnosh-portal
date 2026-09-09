@@ -44,6 +44,14 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
    is 24 buttons where 14 would do. */
 const HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`
+/* NINE RADII AND NINE TYPE SIZES were doing the work of four and six, which is
+   why parts of this screen looked more finished than others: a 13px panel beside
+   a 15px one beside a 14px one is not a decision anybody made, it is the residue
+   of writing each section on a different day. Four radii and six sizes, each with
+   one job, and nothing on this screen outside them. */
+const R = { cell: 12, box: 14, card: 20, pill: 99 } as const
+const T = { note: 11.5, label: 12.5, control: 13.5, body: 14, write: 15, hero: 22 } as const
+
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 /* How far ahead a post may be parked. The vendor holds it and sends it at the
    time, so no platform's own scheduling window applies; this is a horizon that
@@ -56,25 +64,49 @@ const DAYS_AHEAD = 90
 function Head({ hue, children, note }: { hue: HueKey; children: React.ReactNode; note?: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '26px 2px 9px' }}>
-      <span style={{ width: 3, height: 13, borderRadius: 99, background: gradOf(hue, 180), flexShrink: 0 }} />
-      <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>{children}</span>
-      {note != null && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.mute }}>{note}</span>}
+      <span style={{ width: 3, height: 13, borderRadius: R.pill, background: gradOf(hue, 180), flexShrink: 0 }} />
+      <span style={{ fontSize: T.label, fontWeight: 600, color: C.mute }}>{children}</span>
+      {note != null && <span style={{ marginLeft: 'auto', fontSize: T.note, color: C.mute }}>{note}</span>}
     </div>
   )
 }
 
+/* Roughly where each feed stops showing a caption and puts a "more" behind the
+   rest. Approximate on purpose and shown as a line in the preview rather than a
+   number in a sentence: the exact count moves whenever a platform reflows its
+   feed, and the useful thing is not the number, it is seeing which half of what
+   you wrote a scrolling customer will actually read. */
+const FOLD: Record<string, number> = { instagram: 125, tiktok: 100, linkedin: 140, facebook: 250, youtube: 157 }
+
 const platformName = (p: string) => (p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : p === 'youtube' ? 'YouTube' : p.charAt(0).toUpperCase() + p.slice(1))
 const midnight = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+/* ONE CHIP. There were five geometries on this screen -- 9x15, 9x14, 8x13, 7x12
+   and 4x9 -- one per section, each written on a different day. Nobody chose to
+   have five, and it is most of why some rows looked more finished than others.
+   Everything that toggles is now the same object; only its colour changes. */
+const CHIP: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: 8, font: 'inherit', fontFamily: DISPLAY,
+  fontSize: T.control, padding: '9px 14px', borderRadius: R.pill, cursor: 'pointer', lineHeight: 1,
+  border: '1px solid transparent',
+}
 /* One colour per thing, which is the kit's own law and was being ignored here:
    four different additions all lit up the same mint, so the row read as one
    switch with four positions rather than four separate things. */
 const addChip = (on: boolean, hue: HueKey = 'mint'): React.CSSProperties => ({
-  display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13,
-  fontWeight: on ? 600 : 500, padding: '8px 13px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
+  ...CHIP,
+  fontWeight: on ? 600 : 500,
   color: on ? hueOf(hue)[1] : C.mute, background: on ? tint(hue, 0.1) : '#fff',
-  border: `1px solid ${on ? hueOf(hue)[0] : C.line}`,
+  borderColor: on ? hueOf(hue)[0] : C.line,
   boxShadow: on ? `0 3px 12px ${tint(hue, 0.2, 1)}` : 'none',
+})
+/* The same chip wearing a network's own colour rather than a hue key. */
+const brandChip = (on: boolean, solid: string): React.CSSProperties => ({
+  ...CHIP,
+  fontWeight: on ? 600 : 500,
+  color: on ? C.ink : C.mute, background: on ? alpha(solid, 0.09) : '#fff',
+  borderColor: on ? solid : C.line,
+  boxShadow: on ? `0 3px 12px ${alpha(solid, 0.22)}` : 'none',
 })
 
 export default function MvpComposer({ clientId }: { clientId: string }) {
@@ -101,6 +133,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
      can say which of the two happened. */
   const [handed, setHanded] = useState<{ messaged: boolean } | null>(null)
   const [handing, setHanding] = useState(false)
+  /* They pressed Post and something the platform requires was missing. */
+  const [tried, setTried] = useState(false)
   /* The extras. Each one is hidden until asked for: a composer that shows every
      option at once is a cockpit, and four owners asked for their content handled
      rather than to be handed more controls. */
@@ -113,6 +147,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   /* platform -> its own caption. Absent means "use the one above". */
   const [perPlatform, setPerPlatform] = useState<Record<string, string>>({})
   const [openCaption, setOpenCaption] = useState<string | null>(null)
+  /* null = the post as one thing; a platform = how it will look there. */
+  const [previewPick, setPreviewPick] = useState<string | null>(null)
   /* What each platform will actually accept, from the vendor rather than from
      memory: Instagram stops at 2,200, LinkedIn at 3,000, X at 280. */
   const [limits, setLimits] = useState<Record<string, number>>({})
@@ -153,6 +189,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
 
   const toggle = useCallback((id: string) => {
     setChosen((cur) => { const n = new Set(cur); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setTried(false)
   }, [])
 
   /* Which of the chosen accounts will refuse this post as it stands. Named, not
@@ -197,9 +234,10 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   const canSend = useMemo(() => {
     if (busy || uploading || handing) return false
     if (tooLong) return false
-    return chosen.size > 0 && blocked.length === 0
-      && (text.trim().length > 0 || !!media) && (when !== 'pick' || hour != null)
-  }, [busy, uploading, handing, chosen, blocked, text, media, when, hour, tooLong])
+    /* `blocked` is deliberately NOT here. A missing photo is told about when they
+       try to post, not held over them while they write -- see `tried`. */
+    return chosen.size > 0 && (text.trim().length > 0 || !!media) && (when !== 'pick' || hour != null)
+  }, [busy, uploading, handing, chosen, text, media, when, hour, tooLong])
 
   /* The client's own Facebook page, which is the only thing Instagram accepts as
      a location and the only one obtainable without a place search. When they have
@@ -209,7 +247,18 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   /* The preview mirrors whichever caption is in front of the owner: opening the
      LinkedIn box and still seeing the Instagram caption below it is the exact
      confusion a preview exists to remove. */
-  const shownText = openCaption ? (perPlatform[openCaption] ?? text) : text
+  /* Which platform the preview is showing. Editing a platform's own caption
+     switches it there, because looking at Instagram while typing LinkedIn is the
+     confusion a preview exists to remove; otherwise the owner drives it. */
+  /* A platform they were previewing can be switched off underneath them, which
+     would leave the card showing a feed this post no longer reaches. */
+  const previewOf = (() => {
+    const pick = openCaption ?? previewPick
+    return pick && platformsInPlay.includes(pick) ? pick : null
+  })()
+  const shownText = previewOf ? (perPlatform[previewOf] ?? text) : text
+  const shownAccount = previewOf ? (targets ?? []).find((t) => chosen.has(t.accountId) && t.platform === previewOf) : null
+  const fold = previewOf ? FOLD[previewOf] ?? 0 : 0
 
   const pickedBest = bests[bestIdx] ?? null
   /* Where the recommended slots fall, so the calendar and the time grid can mark
@@ -253,6 +302,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
       const put = await fetch(j.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
       if (!put.ok) throw new Error('The upload did not finish. Try again.')
       setMedia({ url: j.fileUrl, preview: URL.createObjectURL(file), isVideo: file.type.startsWith('video/') })
+      setTried(false)
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not upload that file')
     } finally { setUploading(false) }
@@ -265,6 +315,11 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
      shoot the photo and pick the account. */
   async function send(handoff = false) {
     if (handoff ? !canHand : !canSend) return
+    /* A platform that needs a photo is a real stop, but only at the moment they
+       actually try. Told up front it is a scolding for something they may be
+       about to do anyway, on a screen they have only just opened. */
+    if (!handoff && blocked.length > 0) { setTried(true); return }
+    setTried(false)
     if (handoff) setHanding(true); else setBusy(true)
     setErr(null)
     try {
@@ -305,10 +360,10 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           <div style={{ width: 60, height: 60, borderRadius: '50%', background: C.greenSoft, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
             <Check size={28} color={C.greenDk} />
           </div>
-          <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', marginBottom: 7 }}>
+          <div style={{ fontFamily: DISPLAY, fontSize: T.hero, fontWeight: 600, letterSpacing: '-.01em', marginBottom: 7 }}>
             {handed ? 'Sent to your team' : when === 'now' ? 'It is live' : 'It is scheduled'}
           </div>
-          <div style={{ fontSize: 14, color: C.mute, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
+          <div style={{ fontSize: T.body, color: C.mute, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
             {handed
               ? `${handed.messaged ? 'It is in your messages and in their queue. ' : 'It is in their queue. '}Nothing goes out until you have said yes.`
               : done.length ? done.join(', ') : 'Your accounts'}
@@ -327,19 +382,20 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   /* The networks this post is actually going to, in the order they appear, as a
      rail and as the glow under the card. One stop is a solid bar rather than a
      gradient to nowhere. */
-  const railTones = (openCaption ? [openCaption] : platformsInPlay).map((pl) => brandTone(pl)?.solid).filter(Boolean) as string[]
+  const railOf = previewOf ? [previewOf] : platformsInPlay
+  const railTones = railOf.map((pl) => brandTone(pl)?.solid).filter(Boolean) as string[]
   const previewRail = railTones.length === 0 ? C.line
-    : railTones.length === 1 ? (brandTone(openCaption ?? platformsInPlay[0])?.grad ?? railTones[0])
+    : railTones.length === 1 ? (brandTone(railOf[0])?.grad ?? railTones[0])
     : `linear-gradient(90deg, ${railTones.map((c, i) => `${c} ${Math.round((i / railTones.length) * 100)}%, ${c} ${Math.round(((i + 1) / railTones.length) * 100)}%`).join(', ')})`
   const previewGlow = railTones.length ? alpha(railTones[0], 0.2) : null
-  const previewAvatar = railTones.length === 1 ? (brandTone(openCaption ?? platformsInPlay[0])?.grad ?? gradOf('mint')) : gradOf('mint')
+  const previewAvatar = railTones.length === 1 ? (brandTone(railOf[0])?.grad ?? gradOf('mint')) : gradOf('mint')
 
   return (
     <MvpShell active="home" back="/dashboard" title="New post">
       <style>{`
         @keyframes cmpspin{to{transform:rotate(360deg)}}
         .mvp-spin{animation:cmpspin .8s linear infinite}
-        .cmp-in{width:100%;border:1px solid ${C.line};border-radius:13px;padding:11px 12px;font-size:15px;font-family:inherit;color:${C.ink};background:#fff;outline:none;box-sizing:border-box}
+        .cmp-in{width:100%;border:1px solid ${C.line};border-radius:${R.box}px;padding:11px 12px;font-size:${T.write}px;font-family:inherit;color:${C.ink};background:#fff;outline:none;box-sizing:border-box}
         .cmp-in:focus{border-color:${C.green}}
         .cmp-in::placeholder{color:${C.faint}}
         .cmp-x{transition:transform .12s ease}
@@ -356,10 +412,33 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             was neither a clear form nor an honest picture of the result. This
             only ever shows what the post will be. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 2px 9px' }}>
-          <span style={{ width: 3, height: 13, borderRadius: 99, background: previewRail, flexShrink: 0 }} />
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Preview</span>
+          <span style={{ width: 3, height: 13, borderRadius: R.pill, background: previewRail, flexShrink: 0 }} />
+          <span style={{ fontSize: T.label, fontWeight: 600, color: C.mute }}>Preview</span>
+          {/* ONE TAB PER PLACE IT LANDS. The same words look different in every
+              feed -- LinkedIn shows a paragraph, TikTok shows a line -- and a
+              single preview quietly implied they were all the same post. */}
+          {platformsInPlay.length > 1 && (
+            <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button type="button" className="cmp-x" onClick={() => setPreviewPick(null)} aria-pressed={previewOf === null}
+                style={{ font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, padding: '4px 9px', borderRadius: R.pill, cursor: 'pointer',
+                  border: 'none', color: previewOf === null ? C.ink : C.mute, background: previewOf === null ? '#fff' : 'transparent',
+                  boxShadow: previewOf === null ? '0 1px 3px rgba(0,0,0,.10)' : 'none' }}>All</button>
+              {platformsInPlay.map((pl) => {
+                const on = previewOf === pl
+                const c = brandTone(pl)?.solid ?? C.green
+                return (
+                  <button key={pl} type="button" className="cmp-x" aria-label={platformName(pl)} aria-pressed={on}
+                    onClick={() => { setPreviewPick(on ? null : pl); setOpenCaption(null) }}
+                    style={{ display: 'flex', alignItems: 'center', padding: 4, borderRadius: R.pill, cursor: 'pointer', border: 'none',
+                      background: on ? alpha(c, 0.14) : 'transparent', opacity: on ? 1 : .5 }}>
+                    <BrandOrMark provider={pl} size={15} />
+                  </button>
+                )
+              })}
+            </span>
+          )}
         </div>
-        <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden',
+        <div style={{ background: '#fff', borderRadius: R.card, overflow: 'hidden',
           /* The card is lit from underneath by the networks it is going to, so
              the whole screen changes colour as they toggle accounts on and off.
              Falls back to the card shadow when it is going nowhere yet. */
@@ -369,22 +448,23 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           <div style={{ height: 4, background: previewRail }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
             <span style={{ width: 32, height: 32, borderRadius: '50%', background: previewAvatar, boxShadow: `0 6px 14px ${previewGlow ?? tint('mint', .28, 1)}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 700, color: '#fff' }}>{(targets?.[0]?.name ?? 'A').trim().charAt(0).toUpperCase()}</span>
+              <span style={{ fontFamily: DISPLAY, fontSize: T.control, fontWeight: 700, color: '#fff' }}>{(targets?.[0]?.name ?? 'A').trim().charAt(0).toUpperCase()}</span>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
+              <span style={{ display: 'block', fontSize: T.control, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
                 {targets === null ? 'Loading…' : chosen.size === 0 ? 'Nowhere yet'
-                  : openCaption ? `On ${platformName(openCaption)}`
+                  : shownAccount ? shownAccount.name
+                  : previewOf ? platformName(previewOf)
                   : chosen.size === 1 ? (targets.find((t) => chosen.has(t.accountId))?.name ?? 'One account') : `${chosen.size} accounts`}
               </span>
               {tagLocation && ownPageName && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, color: C.greenDk, marginTop: 1 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: T.note, color: C.greenDk, marginTop: 1 }}>
                   <MapPin size={11} />{ownPageName}
                 </span>
               )}
             </span>
             <span style={{ display: 'flex', alignItems: 'center' }}>
-              {(targets ?? []).filter((t) => chosen.has(t.accountId) && (!openCaption || t.platform === openCaption)).slice(0, 5).map((t, i) => (
+              {(targets ?? []).filter((t) => chosen.has(t.accountId) && (!previewOf || t.platform === previewOf)).slice(0, 5).map((t, i) => (
                 <span key={t.accountId} style={{ marginLeft: i ? -6 : 0, width: 22, height: 22, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <BrandOrMark provider={t.platform} size={13} />
                 </span>
@@ -397,25 +477,36 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               ? <video src={media.preview} muted playsInline style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', background: '#000' }} />
               : <img src={media.preview} alt="" style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', background: '#000' }} />
           ) : (
-            <div style={{ minHeight: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13,
+            <div style={{ minHeight: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: T.control,
               background: `linear-gradient(160deg, ${tint('mint', .08)}, ${tint('brand', .08)})`, borderTop: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}` }}>
               <ImageIcon size={16} /> No photo yet
             </div>
           )}
 
-          <div style={{ padding: '11px 14px 13px' }}>
-            <div style={{ fontSize: 14, lineHeight: 1.5, color: shownText.trim() ? C.ink : C.faint, whiteSpace: 'pre-wrap', maxHeight: 92, overflow: 'hidden' }}>
-              {shownText.trim() || 'Your caption will show here.'}
+          <div style={{ padding: '12px 14px 14px' }}>
+            <div style={{ fontSize: T.body, lineHeight: 1.5, color: shownText.trim() ? C.ink : C.faint, whiteSpace: 'pre-wrap' }}>
+              {shownText.trim().slice(0, fold || undefined) || 'Your caption will show here.'}
+              {/* Everything past the fold, greyed, with the "more" the feed will
+                  actually show. Not hidden: they should be able to see what they
+                  wrote AND see that a scrolling customer will not. */}
+              {fold > 0 && shownText.trim().length > fold && (
+                <>
+                  <span style={{ color: C.faint, fontWeight: 600 }}> … more</span>
+                  <span style={{ display: 'block', marginTop: 6, paddingTop: 6, borderTop: `1px dashed ${C.line}`, color: C.faint, fontSize: T.label, lineHeight: 1.45 }}>
+                    {shownText.trim().slice(fold)}
+                  </span>
+                </>
+              )}
             </div>
             {taggedList.length > 0 && (
-              <div style={{ fontSize: 12.5, color: C.greenDk, marginTop: 6 }}>with {taggedList.map((h) => '@' + h).join(' ')}</div>
+              <div style={{ fontSize: T.label, color: C.greenDk, marginTop: 6 }}>with {taggedList.map((h) => '@' + h).join(' ')}</div>
             )}
             {firstComment.trim() && (
-              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
+              <div style={{ fontSize: T.label, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
                 <b style={{ fontWeight: 600, color: C.ink }}>First comment</b> {firstComment.trim()}
               </div>
             )}
-            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 9 }}>{whenWords}</div>
+            <div style={{ fontSize: T.note, color: C.mute, marginTop: 8 }}>{whenWords}</div>
           </div>
         </div>
 
@@ -423,19 +514,19 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         <Head hue="announce">Photo or video</Head>
         {media ? (
           <button type="button" onClick={() => setMedia(null)} className="cmp-x"
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: 11, borderRadius: 14, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
-            <span style={{ width: 42, height: 42, borderRadius: 10, background: `center/cover url(${media.preview})`, flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 13.5, color: C.ink }}>{media.isVideo ? 'Video attached' : 'Photo attached'}</span>
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: 11, borderRadius: R.box, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
+            <span style={{ width: 42, height: 42, borderRadius: R.cell, background: `center/cover url(${media.preview})`, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: T.control, color: C.ink }}>{media.isVideo ? 'Video attached' : 'Photo attached'}</span>
             <X size={16} color={C.mute} />
           </button>
         ) : (
-          <label className="cmp-x" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: 11, borderRadius: 14, border: `1px dashed ${C.line}`, background: '#fff', cursor: uploading ? 'default' : 'pointer' }}>
-            <span style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0, background: uploading ? C.bg : gradOf('mint'), boxShadow: uploading ? 'none' : glow('mint', .26), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+          <label className="cmp-x" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 11, borderRadius: R.box, border: `1px dashed ${C.line}`, background: '#fff', cursor: uploading ? 'default' : 'pointer' }}>
+            <span style={{ width: 42, height: 42, borderRadius: R.cell, flexShrink: 0, background: uploading ? C.bg : gradOf('mint'), boxShadow: uploading ? 'none' : glow('mint', .26), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
               {uploading ? <Loader2 size={18} className="mvp-spin" color={C.greenDk} /> : <ImagePlus size={18} />}
             </span>
             <span style={{ flex: 1 }}>
-              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{uploading ? 'Uploading…' : 'Add a photo or video'}</span>
-              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 1 }}>Instagram and TikTok need one</span>
+              <span style={{ display: 'block', fontSize: T.control, fontWeight: 600, color: C.ink }}>{uploading ? 'Uploading…' : 'Add a photo or video'}</span>
+              <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>Instagram and TikTok need one</span>
             </span>
             <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" disabled={uploading}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickFile(f); e.target.value = '' }} style={{ display: 'none' }} />
@@ -453,7 +544,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           style={{ lineHeight: 1.55, resize: 'vertical' }}
         />
         {sharedLimit && text.length > sharedLimit.n * 0.8 && (
-          <div style={{ fontSize: 11.5, marginTop: 5, textAlign: 'right', color: text.length > sharedLimit.n ? C.coral : C.mute }}>
+          <div style={{ fontSize: T.note, marginTop: 6, textAlign: 'right', color: text.length > sharedLimit.n ? C.coral : C.mute }}>
             {text.length > sharedLimit.n
               ? `${(text.length - sharedLimit.n).toLocaleString()} over what ${platformName(sharedLimit.pl)} takes`
               : `${(sharedLimit.n - text.length).toLocaleString()} left on ${platformName(sharedLimit.pl)}`}
@@ -467,7 +558,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             its own without leaving the screen. */}
         {platformsInPlay.length > 1 && (
           <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 11 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
               {platformsInPlay.map((pl) => {
                 const own = !!perPlatform[pl]?.trim()
                 const isOpen = openCaption === pl
@@ -481,10 +572,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                          tailoring what they wrote, not starting over. */
                       if (!isOpen && perPlatform[pl] === undefined) setPerPlatform((cur) => ({ ...cur, [pl]: text }))
                     }}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 12.5,
-                      fontWeight: lit ? 600 : 500, padding: '7px 12px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
-                      color: lit ? C.ink : C.mute, background: lit ? alpha(c, 0.09) : '#fff',
-                      border: `1px solid ${lit ? c : C.line}` }}>
+                    style={brandChip(lit, c)}>
                     <span style={{ opacity: lit ? 1 : .45, display: 'flex' }}><BrandOrMark provider={pl} size={13} /></span>
                     {own ? `${platformName(pl)} has its own` : `Different for ${platformName(pl)}`}
                   </button>
@@ -498,16 +586,16 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               const tone = brandTone(pl)
               const c = tone?.solid ?? C.green
               return (
-                <div style={{ marginTop: 10, borderRadius: 15, background: alpha(c, 0.05), border: `1px solid ${alpha(c, 0.35)}`, overflow: 'hidden' }}>
+                <div style={{ marginTop: 10, borderRadius: R.box, background: alpha(c, 0.05), border: `1px solid ${alpha(c, 0.35)}`, overflow: 'hidden' }}>
                   <div style={{ height: 3, background: tone?.grad ?? gradOf('mint') }} />
                   <div style={{ padding: 11 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 7 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: C.ink }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: T.label, fontWeight: 700, color: C.ink }}>
                       <BrandOrMark provider={pl} size={13} />On {platformName(pl)}
                     </span>
                     <button type="button" className="cmp-x"
                       onClick={() => { setPerPlatform((c) => { const n = { ...c }; delete n[pl]; return n }); setOpenCaption(null) }}
-                      style={{ font: 'inherit', fontSize: 11.5, fontWeight: 600, color: c, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      style={{ font: 'inherit', fontSize: T.note, fontWeight: 600, color: c, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                       Use the same one
                     </button>
                   </div>
@@ -516,7 +604,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                     placeholder={`How it should read on ${platformName(pl)}…`}
                     style={{ lineHeight: 1.55, resize: 'vertical' }} />
                   {lim > 0 && val.length > lim * 0.8 && (
-                    <div style={{ fontSize: 11.5, marginTop: 5, textAlign: 'right', color: val.length > lim ? C.coral : C.mute }}>
+                    <div style={{ fontSize: T.note, marginTop: 6, textAlign: 'right', color: val.length > lim ? C.coral : C.mute }}>
                       {val.length > lim ? `${(val.length - lim).toLocaleString()} over` : `${(lim - val.length).toLocaleString()} left`}
                     </div>
                   )}
@@ -551,28 +639,28 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           })}
         </div>
         {open.has('tag') && (
-          <div style={{ marginTop: 9 }}>
+          <div style={{ marginTop: 8 }}>
             <input className="cmp-in" value={tagged} onChange={(e) => setTagged(e.target.value)} placeholder="@handles, separated by spaces" />
-            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 5 }}>Tags the people in the picture. Instagram only.</div>
+            <div style={{ fontSize: T.note, color: C.mute, marginTop: 6 }}>Tags the people in the picture. Instagram only.</div>
           </div>
         )}
         {open.has('collab') && (
-          <div style={{ marginTop: 9 }}>
+          <div style={{ marginTop: 8 }}>
             <input className="cmp-in" value={collabs} onChange={(e) => setCollabs(e.target.value)} placeholder="@handle" />
-            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 5 }}>Up to three. It appears on their feed too, once they accept.</div>
+            <div style={{ fontSize: T.note, color: C.mute, marginTop: 6 }}>Up to three. It appears on their feed too, once they accept.</div>
           </div>
         )}
         {open.has('first') && (
-          <div style={{ marginTop: 9 }}>
+          <div style={{ marginTop: 8 }}>
             <textarea className="cmp-in" rows={2} value={firstComment} onChange={(e) => setFirstComment(e.target.value)} placeholder="#hashtags go here" style={{ resize: 'vertical' }} />
-            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 5 }}>Posted underneath, so hashtags stay out of the caption.</div>
+            <div style={{ fontSize: T.note, color: C.mute, marginTop: 6 }}>Posted underneath, so hashtags stay out of the caption.</div>
           </div>
         )}
 
         {/* ── WHERE ────────────────────────────────────────────────────────── */}
         <Head hue="event" note={chosen.size ? `${chosen.size} on` : null}>Where it goes</Head>
         {targets === null ? (
-          <div style={{ fontSize: 13.5, color: C.mute, padding: '2px' }}>Loading your accounts…</div>
+          <div style={{ fontSize: T.control, color: C.mute, padding: '2px' }}>Loading your accounts…</div>
         ) : targets.length === 0 ? (
           <MvpEmpty text="No accounts are connected yet, so there is nowhere to post. Connect one under More, then come back." />
         ) : (
@@ -589,10 +677,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               const c = tone?.solid ?? C.green
               return (
                 <button key={t.accountId} type="button" onClick={() => toggle(t.accountId)} aria-pressed={on} className="cmp-x"
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500,
-                    fontFamily: DISPLAY, padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? C.ink : C.mute,
-                    background: on ? alpha(c, 0.09) : '#fff',
-                    border: `1px solid ${on ? c : C.line}`, boxShadow: on ? `0 3px 12px ${alpha(c, 0.22)}` : 'none' }}>
+                  style={brandChip(on, c)}>
                   <span style={{ opacity: on ? 1 : .4, display: 'flex' }}><BrandOrMark provider={t.platform} size={16} /></span>
                   {t.name}
                 </button>
@@ -601,9 +686,9 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           </div>
         )}
         {chosen.size > 0 && [...chosen].some((id) => targets?.find((t) => t.accountId === id)?.platform === 'tiktok') && (
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 11, cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={tiktokDraft} onChange={(e) => setTiktokDraft(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: C.greenDk }} />
-            <span style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
+            <span style={{ fontSize: T.label, color: C.mute, lineHeight: 1.45 }}>
               <b style={{ color: C.ink, fontWeight: 600 }}>Send TikTok to drafts instead.</b> It waits in your TikTok app so you can add a trending sound before posting, which the app will not let us do for you.
             </span>
           </label>
@@ -614,9 +699,10 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {(() => {
             const chipStyle = (on: boolean, smart: boolean): React.CSSProperties => ({
-              display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500,
-              padding: '9px 15px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? '#fff' : C.mute,
-              background: on ? (smart ? gradOf('brand') : C.ink) : '#fff', border: `1px solid ${on ? 'transparent' : C.line}`,
+              ...CHIP,
+              fontWeight: on ? 600 : 500, color: on ? '#fff' : C.mute,
+              background: on ? (smart ? gradOf('brand') : C.ink) : '#fff',
+              borderColor: on ? 'transparent' : C.line,
               boxShadow: on && smart ? glow('brand', .3) : 'none',
             })
             return (
@@ -641,7 +727,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           })()}
         </div>
         {when === 'best' && bests.length === 1 && (
-          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45, padding: '0 2px' }}>
+          <div style={{ fontSize: T.label, color: C.mute, marginTop: 10, lineHeight: 1.45, padding: '0 2px' }}>
             Your posts have done best then, across {bests[0].posts} of them.
           </div>
         )}
@@ -650,21 +736,21 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             better. Each says what it rests on: a slot built on four posts and one
             built on forty are not the same recommendation. */}
         {when === 'best' && bests.length > 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
             {bests.map((b, i) => {
               const on = bestIdx === i
               return (
                 <button key={b.iso} type="button" className="cmp-x" aria-pressed={on} onClick={() => setBestIdx(i)}
                   style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit',
-                    padding: '10px 12px', borderRadius: 13, cursor: 'pointer',
+                    padding: '10px 12px', borderRadius: R.box, cursor: 'pointer',
                     background: on ? tint('brand', .07) : '#fff', border: `1px solid ${on ? C.green : C.line}` }}>
                   <span style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     border: `1px solid ${on ? 'transparent' : C.line}`, background: on ? gradOf('brand') : '#fff' }}>
                     {on && <Check size={10} color="#fff" strokeWidth={3} />}
                   </span>
                   <span style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: on ? 600 : 500, color: C.ink }}>{b.label}</span>
-                    <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 1 }}>
+                    <span style={{ display: 'block', fontSize: T.control, fontWeight: on ? 600 : 500, color: C.ink }}>{b.label}</span>
+                    <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>
                       {i === 0 ? 'Your strongest, ' : ''}across {b.posts} post{b.posts === 1 ? '' : 's'}
                     </span>
                   </span>
@@ -688,17 +774,17 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           const canNext = nextMonth.getTime() <= horizon.getTime()
           const spentToday = new Date().getHours() >= HOURS[HOURS.length - 1]
           const arrow: React.CSSProperties = {
-            width: 30, height: 30, borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 30, height: 30, borderRadius: R.cell, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             background: '#fff', border: `1px solid ${C.line}`, cursor: 'pointer', font: 'inherit', color: C.mute,
           }
           return (
-            <div style={{ marginTop: 12 }}>
+            <div style={{ marginTop: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
                 <button type="button" className="cmp-x" disabled={!canPrev} aria-label="Previous month"
                   onClick={() => setMonthAt(prevMonth)} style={{ ...arrow, opacity: canPrev ? 1 : .35 }}>
                   <ChevronLeft size={16} />
                 </button>
-                <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600 }}>
+                <span style={{ fontFamily: DISPLAY, fontSize: T.write, fontWeight: 600 }}>
                   {MONTHS[first.getMonth()]} {first.getFullYear()}
                 </span>
                 <button type="button" className="cmp-x" disabled={!canNext} aria-label="Next month"
@@ -708,7 +794,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 5 }}>
                 {DAY_NAMES.map((d) => (
-                  <span key={d} style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 600, color: C.faint, letterSpacing: '.03em' }}>
+                  <span key={d} style={{ textAlign: 'center', fontSize: T.note, fontWeight: 600, color: C.faint, letterSpacing: '.03em' }}>
                     {d.slice(0, 1)}
                   </span>
                 ))}
@@ -729,8 +815,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                         /* An hour picked on a later day can be in the past on this one. */
                         if (sameDay(d, today) && hour != null && hour <= new Date().getHours()) setHour(null)
                       }}
-                      style={{ position: 'relative', aspectRatio: '1', borderRadius: 11, cursor: shut ? 'default' : 'pointer',
-                        font: 'inherit', fontFamily: DISPLAY, fontSize: 14, fontWeight: on ? 700 : 500,
+                      style={{ position: 'relative', aspectRatio: '1', borderRadius: R.cell, cursor: shut ? 'default' : 'pointer',
+                        font: 'inherit', fontFamily: DISPLAY, fontSize: T.body, fontWeight: on ? 700 : 500,
                         border: `1px solid ${on ? 'transparent' : C.line}`, background: on ? C.ink : '#fff',
                         color: shut ? C.faint : on ? '#fff' : C.ink, opacity: shut ? .35 : 1 }}>
                       {i + 1}
@@ -742,15 +828,15 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                   )
                 })}
               </div>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '18px 2px 8px' }}>{dayWords}</div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7 }}>
+              <div style={{ fontSize: T.label, fontWeight: 600, color: C.mute, margin: '18px 2px 8px' }}>{dayWords}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
                 {HOURS.map((h) => {
                   const on = hour === h
                   const past = sameDay(dayAt, today) && h <= new Date().getHours()
                   const isBest = bestHoursOnDay.has(h)
                   return (
                     <button key={h} type="button" disabled={past} onClick={() => setHour(h)} aria-pressed={on} className="cmp-x"
-                      style={{ padding: '9px 0', borderRadius: 12, cursor: past ? 'default' : 'pointer', font: 'inherit', fontFamily: DISPLAY, fontSize: 13,
+                      style={{ padding: '9px 0', borderRadius: R.cell, cursor: past ? 'default' : 'pointer', font: 'inherit', fontFamily: DISPLAY, fontSize: T.control,
                         fontWeight: on ? 700 : 500, border: `1px solid ${on ? 'transparent' : isBest ? C.green : C.line}`,
                         background: on ? C.ink : '#fff', color: past ? C.faint : on ? '#fff' : C.ink, opacity: past ? .45 : 1 }}>
                       {hourLabel(h)}{isBest && !on ? ' ★' : ''}
@@ -759,7 +845,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                 })}
               </div>
               {bests.length > 0 && (
-                <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8 }}>
+                <div style={{ fontSize: T.note, color: C.mute, marginTop: 8 }}>
                   A dot, and a ★, mark when your posts have done best.
                 </div>
               )}
@@ -772,24 +858,22 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             <MvpMsg ok={false} text={`That caption is ${tooLong.over.toLocaleString()} characters too long for ${platformName(tooLong.platform)}, which stops at ${tooLong.limit.toLocaleString()}. Shorten it, or give ${platformName(tooLong.platform)} its own.`} />
           </div>
         )}
-        {blocked.length > 0 && (
+        {tried && blocked.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <MvpMsg ok={false} text={`${blocked.join(' and ')} ${blocked.length === 1 ? 'needs' : 'need'} a photo or video. Add one, or switch ${blocked.length === 1 ? 'it' : 'them'} off above.`} />
           </div>
         )}
-        {err && <div style={{ marginTop: 12 }}><MvpMsg ok={false} text={err} /></div>}
+        {err && <div style={{ marginTop: 10 }}><MvpMsg ok={false} text={err} /></div>}
 
         {/* AT THE END OF THE PAGE, not floating over it. The sticky bar put a
             second white plane above the bottom nav, so the screen finished with
             two stacked strips of chrome and the thing being written was clipped
             behind them. A composer is not a settings form: it is finished when
             you reach the bottom. */}
-        <MvpActions
-          /* The decision, restated in words before they commit to it. A button
-             that says Post is not the same as being told what is about to happen. */
-          hint={chosen.size === 0 ? 'Pick where it goes.'
-            : `${when === 'now' ? 'Posting' : 'Scheduled'} to ${chosen.size} account${chosen.size === 1 ? '' : 's'}${when === 'best' && pickedBest ? `, ${pickedBest.label}` : ''}. Public, as your business.`}
-        >
+        {/* No sentence above the button restating what the button says. The
+            preview is directly above it, the button names the accounts, and the
+            "When" heading carries the time: a third telling was clutter. */}
+        <MvpActions>
           <MvpButton full busy={busy} disabled={!canSend} onClick={() => void send(false)}
             label={when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'} />
           {/* THE WAY OUT, and deliberately quiet. This was a tab at the top of
