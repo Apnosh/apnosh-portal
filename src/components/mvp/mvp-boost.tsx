@@ -58,9 +58,15 @@ function previewSrc(html: string | null): string | null {
     return u.toString()
   } catch { return null }
 }
+interface PlatformState {
+  platform: 'meta' | 'tiktok'; name: string; available: boolean
+  minDaily: number; cityRadius: boolean; reachEstimate: boolean; previews: boolean
+  ownLogin: boolean; note: string
+  accounts: AdAccount[]; ads: RunningAd[]; payer: string | null
+}
 interface Candidate {
   /* Zernio's post id, whatever the database column is called. */
-  zernioPostId: string; platform: string; caption: string
+  zernioPostId: string; platform: string; adPlatform: 'meta' | 'tiktok' | null; caption: string
   image: string | null; permalink: string | null; postedAt: string
   interactions: number; reach: number; timesMedian: number | null
 }
@@ -86,9 +92,15 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [connected, setConnected] = useState(false)
+  /* Set up one platform and the setup screen goes away, which would leave no
+     way to add the second. This forces it back. */
+  const [addingPlatform, setAddingPlatform] = useState(false)
   const [accounts, setAccounts] = useState<AdAccount[]>([])
   const [ads, setAds] = useState<RunningAd[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [platforms, setPlatforms] = useState<PlatformState[]>([])
+  /* Which platform the connect step is setting up. */
+  const [setupOf, setSetupOf] = useState<'meta' | 'tiktok'>('meta')
   const [limits, setLimits] = useState({ maxUsd: 500, maxDays: 30, minDaily: 1 })
 
   const [pickedAccount, setPickedAccount] = useState<string | null>(null)
@@ -121,6 +133,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         setAccounts((j.accounts ?? []) as AdAccount[])
         setAds((j.ads ?? []) as RunningAd[])
         setCandidates((j.candidates ?? []) as Candidate[])
+        setPlatforms((j.platforms ?? []) as PlatformState[])
         if (j.limits) setLimits(j.limits)
         /* The stored choice, or nothing. Not "the only one we can see": the
            point of the picker is that seeing three ad accounts and paying from
@@ -149,8 +162,32 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     } finally { setBusy(false) }
   }
 
+  /* Only posts on a platform that has an account set up to pay. Offering a
+     TikTok video before TikTok ads are connected is offering a button that
+     cannot work. */
+  const liveCandidates = useMemo(
+    () => candidates.filter((c) => c.adPlatform && platforms.some((p) => p.platform === c.adPlatform && p.payer)),
+    [candidates, platforms],
+  )
+  const setupRules = useMemo(() => platforms.find((p) => p.platform === setupOf) ?? null, [platforms, setupOf])
+  const setupAccounts = setupRules?.accounts ?? []
   const totalRunning = useMemo(() => ads.filter((a) => a.status?.toUpperCase() === 'ACTIVE').length, [ads])
   const total = daily * days
+
+  /* THE POST DECIDES THE PLATFORM. Picking a TikTok video is choosing TikTok,
+     and every rule below follows from that rather than from a separate switch
+     the owner has to keep in sync with what they picked. */
+  const ad = picked?.adPlatform ?? 'meta'
+  const rules = useMemo(() => platforms.find((p) => p.platform === ad) ?? null, [platforms, ad])
+  const minDaily = rules?.minDaily ?? 1
+  /* TikTok's floor is $20, so its cheapest choices are not $5 and $10. */
+  const dailyChoices = useMemo(() => DAILY.filter((d) => d >= minDaily).slice(0, 4).length >= 3
+    ? DAILY.filter((d) => d >= minDaily).slice(0, 4)
+    : [minDaily, minDaily * 2, minDaily * 3, minDaily * 5], [minDaily])
+
+  /* A TikTok post picked after a Meta one must not inherit a $10 a day that
+     TikTok will simply refuse. */
+  useEffect(() => { setDaily((d) => (d < minDaily ? dailyChoices[0] : d)) }, [minDaily, dailyChoices])
 
   /* Look up a place as they type. Debounced, because this is a network call per
      keystroke otherwise and the answer is not urgent. */
@@ -166,19 +203,19 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   /* HOW MANY PEOPLE, before any money. Re-asked whenever the audience changes,
      because an estimate that lags the controls is worse than none. */
   useEffect(() => {
-    if (!picked || !place) { setReach(null); return }
+    if (!picked || !place || !rules?.reachEstimate) { setReach(null); return }
     let live = true
     setReaching(true)
     const id = setTimeout(() => {
       void fetch('/api/dashboard/ads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, action: 'estimate', targeting: { geoKey: place.key, geoType: place.type, radiusMiles: radius, ageMin, ageMax } }),
+        body: JSON.stringify({ clientId, action: 'estimate', adPlatform: ad, targeting: { geoKey: place.key, geoType: place.type, radiusMiles: radius, ageMin, ageMax } }),
       }).then((r) => r.json()).then((j) => { if (live) setReach(j as Reach) })
         .catch(() => { if (live) setReach(null) })
         .finally(() => { if (live) setReaching(false) })
     }, 260)
     return () => { live = false; clearTimeout(id) }
-  }, [clientId, picked, place, radius, ageMin, ageMax])
+  }, [clientId, picked, place, radius, ageMin, ageMax, ad, rules])
 
   /* ── Spent ──────────────────────────────────────────────────────────────── */
   if (done) {
@@ -211,7 +248,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
             One ad account, chosen explicitly. Not "connect everything you can
             see": an owner who has ever helped run another business's page can
             reach ad accounts they did not mean to hand over. */}
-        {!loading && !connected && (
+        {!loading && (!connected || addingPlatform) && (
           <>
             <div style={{ background: '#fff', borderRadius: R.card, boxShadow: CARD_SHADOW, padding: 20, marginTop: 8 }}>
               <div style={{ width: 42, height: 42, borderRadius: R.cell, background: gradOf('brand'), display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
@@ -224,15 +261,50 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
               </div>
             </div>
 
-            {accounts.length === 0 ? (
+            {/* ONE SETUP PER PLATFORM, because they are genuinely separate:
+                Meta rides on the Facebook token we already hold, TikTok needs
+                its own login. */}
+            {platforms.filter((p) => p.available).length > 1 && (
+              <>
+                <Head hue="brand">Set up</Head>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {platforms.filter((p) => p.available).map((p) => {
+                    const on = setupOf === p.platform
+                    return (
+                      <button key={p.platform} type="button" onClick={() => setSetupOf(p.platform)}
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '11px 0', borderRadius: R.box,
+                          cursor: 'pointer', font: 'inherit', fontFamily: DISPLAY, fontSize: T.control, fontWeight: on ? 700 : 500,
+                          color: on ? '#fff' : C.ink, background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
+                        <BrandOrMark provider={p.platform === 'meta' ? 'facebook' : 'tiktok'} size={14} />
+                        {p.name}
+                        {p.payer && <Check size={12} color={on ? '#fff' : C.greenDk} />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            {setupAccounts.length === 0 ? (
               <div style={{ marginTop: 16 }}>
-                <MvpEmpty text="No ad account was found on your Facebook connection. You need a Facebook Page with an ad account attached." />
+                <MvpEmpty text={setupRules?.ownLogin
+                  ? `No ${setupRules.name} advertiser account was found. TikTok ads need their own login, which happens when you press below.`
+                  : 'No ad account was found on your Facebook connection. You need a Facebook Page with an ad account attached.'} />
+                {setupRules?.ownLogin && (
+                  <MvpActions>
+                    <MvpButton full busy={busy} label={`Log in to ${setupRules.name} ads`}
+                      onClick={() => void (async () => {
+                        const j = await act({ action: 'connect', adPlatform: setupOf, adAccountIds: ['pending'], returnTo: '/dashboard/boost' })
+                        if (j && typeof j.authUrl === 'string' && j.authUrl) window.location.href = j.authUrl
+                      })()} />
+                  </MvpActions>
+                )}
               </div>
             ) : (
               <>
                 <Head hue="brand">Which ad account pays</Head>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {accounts.map((a) => {
+                  {setupAccounts.map((a) => {
                     const on = pickedAccount === a.id
                     return (
                       <button key={a.id} type="button" disabled={!a.selectable} onClick={() => setPickedAccount(a.id)}
@@ -254,12 +326,12 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                   })}
                 </div>
                 <MvpActions>
-                  <MvpButton full busy={busy} disabled={!pickedAccount} label="Turn on ads"
+                  <MvpButton full busy={busy} disabled={!pickedAccount} label={`Turn on ${setupRules?.name ?? ''} ads`}
                     onClick={() => void (async () => {
-                      const j = await act({ action: 'connect', adAccountIds: [pickedAccount], returnTo: '/dashboard/boost' })
+                      const j = await act({ action: 'connect', adPlatform: setupOf, adAccountIds: [pickedAccount], returnTo: '/dashboard/boost' })
                       if (!j) return
                       if (typeof j.authUrl === 'string' && j.authUrl) window.location.href = j.authUrl
-                      else void load()
+                      else { setAddingPlatform(false); void load() }
                     })()} />
                 </MvpActions>
               </>
@@ -268,8 +340,26 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         )}
 
         {/* ── PICK A POST ───────────────────────────────────────────────────── */}
-        {!loading && connected && !picked && (
+        {!loading && connected && !addingPlatform && !picked && (
           <>
+            {/* The platform that is set up, and the one that is not. */}
+            {platforms.some((p) => p.available && !p.payer) && (
+              <button type="button"
+                onClick={() => { const next = platforms.find((p) => p.available && !p.payer); if (next) { setSetupOf(next.platform); setAddingPlatform(true) } }}
+                style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', font: 'inherit', marginTop: 10,
+                  padding: '12px 14px', borderRadius: R.box, cursor: 'pointer', background: '#fff', border: `1px dashed ${C.line}` }}>
+                <BrandOrMark provider={platforms.find((p) => p.available && !p.payer)?.platform === 'tiktok' ? 'tiktok' : 'facebook'} size={15} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>
+                    Turn on {platforms.find((p) => p.available && !p.payer)?.name} too
+                  </span>
+                  <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>
+                    So those posts can be boosted as well
+                  </span>
+                </span>
+              </button>
+            )}
+
             {ads.length > 0 && (
               <>
                 <Head hue="mint" note={totalRunning ? `${totalRunning} running` : null}>Already boosted</Head>
@@ -333,11 +423,11 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
             )}
 
             <Head hue="brand">Your posts, best first</Head>
-            {candidates.length === 0 ? (
+            {liveCandidates.length === 0 ? (
               <MvpEmpty text="Nothing to boost yet. Once a few posts have some likes and comments on them, the strongest will show up here." />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {candidates.map((p) => {
+                {liveCandidates.map((p) => {
                   const c = brandTone(p.platform)?.solid ?? C.green
                   return (
                     <button key={p.zernioPostId} type="button" onClick={() => setPicked(p)}
@@ -392,6 +482,13 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 expensive omission possible: with no area, the platform decides,
                 and for a single-location restaurant that is people who will
                 never walk in. */}
+            {rules?.note && (
+              <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 12, padding: '11px 13px', borderRadius: R.box, background: tint('mint', .06), border: `1px solid ${tint('mint', .3)}` }}>
+                <span style={{ marginTop: 1, flexShrink: 0 }}><BrandOrMark provider={picked.platform} size={14} /></span>
+                <span style={{ fontSize: T.label, color: C.ink, lineHeight: 1.5 }}>{rules.note}</span>
+              </div>
+            )}
+
             <Head hue="mint">Who sees it</Head>
             {place ? (
               <button type="button" onClick={() => { setPlace(null); setPlaceQ('') }}
@@ -400,7 +497,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 <MapPin size={15} color={C.greenDk} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>
-                    Within {radius} miles of {place.name}
+                    {rules?.cityRadius ? `Within ${radius} miles of ${place.name}` : place.name}
                   </span>
                   <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>
                     {place.region ? `${place.region} · ` : ''}Tap to change
@@ -430,6 +527,13 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
 
             {place && (
               <>
+                {/* THE RADIUS IS META ONLY, and the vendor says so: "radius is
+                    only honoured on platforms whose capability map allows city
+                    radius (Meta)". Showing this slider on TikTok would promise a
+                    ring around the restaurant and quietly deliver the whole
+                    city, which is exactly the kind of lie a screen should not
+                    tell about somebody's money. */}
+                {rules?.cityRadius ? (
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                   {RADII.map((r) => {
                     const on = radius === r
@@ -443,8 +547,16 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     )
                   })}
                 </div>
+                ) : (
+                  <div style={{ marginTop: 10, fontSize: T.label, color: C.mute, lineHeight: 1.5, padding: '0 2px' }}>
+                    {rules?.name} targets the whole city rather than a ring around you. There is no
+                    radius to set.
+                  </div>
+                )}
 
-                {/* HOW MANY PEOPLE, BEFORE ANY MONEY. Meta's own estimate. */}
+                {/* HOW MANY PEOPLE, BEFORE ANY MONEY. Meta's own estimate, and
+                    a plain "no" where the platform has no such API. */}
+                {rules?.reachEstimate ? (
                 <div style={{ marginTop: 10, padding: '13px 15px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}` }}>
                   {reaching ? (
                     <span style={{ fontSize: T.control, color: C.mute }}>Checking how many people…</span>
@@ -464,6 +576,14 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     </span>
                   )}
                 </div>
+                ) : (
+                  <div style={{ marginTop: 10, padding: '13px 15px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}` }}>
+                    <span style={{ fontSize: T.label, color: C.mute, lineHeight: 1.5 }}>
+                      {rules?.name} cannot say how many people that reaches before you pay. Meta can;
+                      TikTok has no such tool, and a made-up number would be worse than none.
+                    </span>
+                  </div>
+                )}
               </>
             )}
 
@@ -472,9 +592,9 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 decides whether an ad delivers at all. The old screen offered
                 "$20 over 5 days" and never mentioned that this is $4 a day,
                 which on Meta reaches almost nobody. */}
-            <Head hue="brand" note={`$${limits.minDaily} a day minimum`}>How much a day</Head>
+            <Head hue="brand" note={`$${minDaily} a day minimum on ${rules?.name ?? 'this'}`}>How much a day</Head>
             <div style={{ display: 'flex', gap: 8 }}>
-              {DAILY.map((a) => {
+              {dailyChoices.map((a) => {
                 const on = daily === a
                 return (
                   <button key={a} type="button" onClick={() => setDaily(a)}
@@ -523,7 +643,8 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 onClick={() => void (async () => {
                   const j = await act({
                     action: 'boost', platformPostId: picked.zernioPostId,
-                    adAccountId: pickedAccount,
+                    adPlatform: ad,
+                    adAccountId: rules?.payer ?? pickedAccount,
                     amount: total, days,
                     targeting: { geoKey: place?.key, geoType: place?.type, geoName: place?.name, radiusMiles: radius, ageMin, ageMax },
                   })

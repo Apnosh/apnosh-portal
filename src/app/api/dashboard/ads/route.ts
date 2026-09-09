@@ -23,6 +23,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
+import { AD_RULES, adPlatformFor, CONNECT_SLUG, type AdPlatform } from '@/lib/channels/ad-rules'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
   listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate, adPreviews,
@@ -38,11 +39,16 @@ import {
  * who will walk in, and the result is a higher price for a smaller room.
  * Distance from the door is the targeting that matters for a restaurant.
  */
-function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string }): Record<string, unknown> {
+function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string }, ad: AdPlatform = 'meta'): Record<string, unknown> {
   const spec: Record<string, unknown> = {}
   const radius = Math.max(1, Math.min(50, Number(t.radiusMiles) || 10))
   if (t.geoKey && (t.geoType === 'city' || !t.geoType)) {
-    spec.cities = [{ key: t.geoKey, radius, distanceUnit: 'mile' }]
+    /* The radius is dropped where the platform ignores it, rather than sent and
+       silently discarded. A field the vendor throws away is a field the screen
+       must not have promised. */
+    spec.cities = AD_RULES[ad].cityRadius
+      ? [{ key: t.geoKey, radius, distanceUnit: 'mile' }]
+      : [{ key: t.geoKey }]
   } else if (t.geoKey && t.geoType === 'region') {
     spec.regions = [{ key: t.geoKey }]
   } else if (t.geoKey && t.geoType === 'zip') {
@@ -66,8 +72,33 @@ export const dynamic = 'force-dynamic'
    mid-flight and report a failure for an ad that was still being created. */
 export const maxDuration = 120
 
-/** Boosting is Meta only for now: Facebook and Instagram is where this audience is. */
-const BOOSTABLE = new Set(['facebook', 'instagram'])
+/** Every posting platform we can put money behind. */
+const BOOSTABLE = new Set(Object.values(AD_RULES).flatMap((r) => r.posts))
+
+/**
+ * The account that posts on this ad platform, which is also the account its ad
+ * calls are made through. TikTok needs its own; Meta rides on Facebook.
+ */
+function posterFor(targets: Array<{ platform: string; accountId: string }>, ad: AdPlatform) {
+  const want = AD_RULES[ad].posts
+  for (const p of want) {
+    const t = targets.find((x) => x.platform === p)
+    if (t) return t
+  }
+  return null
+}
+
+/** Where each platform's chosen payer lives on the connection. */
+function payerOf(metadata: unknown, ad: AdPlatform): string | null {
+  const m = (metadata ?? {}) as Record<string, unknown>
+  const perPlatform = (m.ad_accounts ?? {}) as Record<string, unknown>
+  const v = perPlatform[ad]
+  if (typeof v === 'string' && v) return v
+  /* The first version stored one id under ad_account_id, before there was more
+     than one platform to store. Still honoured, as Meta's. */
+  if (ad === 'meta' && typeof m.ad_account_id === 'string' && m.ad_account_id) return m.ad_account_id
+  return null
+}
 
 /** A post has to have done something before it is worth money. */
 const MIN_INTERACTIONS = 1
@@ -80,7 +111,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   }
 
-  /* ?preview=<adId> — Meta's own rendering of a running ad, per placement. */
+  /* ?preview=<adId> — Meta's own rendering of a running ad, per placement.
+     Meta only: /generatepreviews has no TikTok equivalent. */
   const previewAd = req.nextUrl.searchParams.get('preview')
   if (previewAd) {
     const targets = await listPostTargets(clientId)
@@ -104,15 +136,35 @@ export async function GET(req: NextRequest) {
 
   try {
     const targets = await listPostTargets(clientId)
-    const meta = targets.find((t) => t.platform === 'facebook') ?? targets.find((t) => t.platform === 'instagram')
-    if (!meta) {
-      return NextResponse.json({ connected: false, reason: 'no_meta_account', accounts: [], ads: [], candidates: [] })
-    }
+    const adminRead0 = createAdminClient()
+    const { data: conn0 } = await adminRead0.from('channel_connections')
+      .select('metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
 
-    const [accounts, ads] = await Promise.all([
-      listAdAccounts(clientId, meta.accountId).catch(() => []),
-      listAds(clientId, meta.accountId).catch(() => []),
-    ])
+    /* ONE ENTRY PER AD PLATFORM. Meta and TikTok differ in ways that change what
+       the screen may honestly offer -- TikTok's floor is twenty times Meta's, it
+       ignores a city radius, and it cannot size an audience before you pay -- so
+       each reports its own state rather than sharing one. */
+    const platforms = await Promise.all((Object.keys(AD_RULES) as AdPlatform[]).map(async (ad) => {
+      const poster = posterFor(targets, ad)
+      const rules = AD_RULES[ad]
+      if (!poster) return { platform: ad, ...rules, available: false, accounts: [], ads: [], payer: null }
+      const [accounts, ads] = await Promise.all([
+        listAdAccounts(clientId, poster.accountId).catch(() => []),
+        listAds(clientId, poster.accountId).catch(() => []),
+      ])
+      const stored = payerOf(conn0?.metadata, ad)
+      return {
+        platform: ad, ...rules, available: true, accounts, ads,
+        payer: stored && accounts.some((a) => a.id === stored) ? stored : null,
+      }
+    }))
+
+    const meta = posterFor(targets, 'meta')
+    if (!meta && !posterFor(targets, 'tiktok')) {
+      return NextResponse.json({ connected: false, reason: 'no_account', platforms, accounts: [], ads: [], candidates: [] })
+    }
+    const accounts = platforms.find((p) => p.platform === 'meta')?.accounts ?? []
+    const ads = platforms.flatMap((p) => p.ads)
 
     /* WHICH ACCOUNT PAYS IS A CHOICE, NOT A DEFAULT.
        The first version treated "we can see ad accounts" as "connected", which
@@ -121,13 +173,7 @@ export async function GET(req: NextRequest) {
        someone's own name. Defaulting to whichever we happened to see first, on
        the one screen that spends money, is exactly the wrong instinct. So the
        choice is stored, and until it is there is nothing to boost with. */
-    const adminRead = createAdminClient()
-    const { data: conn } = await adminRead.from('channel_connections')
-      .select('metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
-    const chosenAdAccount = (conn?.metadata as Record<string, unknown> | null)?.ad_account_id
-    const payer = typeof chosenAdAccount === 'string' && accounts.some((a) => a.id === chosenAdAccount)
-      ? chosenAdAccount
-      : null
+    const payer = platforms.find((p) => p.platform === 'meta')?.payer ?? null
 
     /* THE CANDIDATES ARE THE WHOLE PITCH. Ranked against this client's OWN
        median, not an industry number, because "four times your usual" is a
@@ -155,6 +201,7 @@ export async function GET(req: NextRequest) {
             /* Named external_id in the table, but it holds ZERNIO's post id. */
           zernioPostId: String(p.external_id),
           platform: String(p.platform),
+          adPlatform: adPlatformFor(String(p.platform)),
           caption: String(p.caption ?? '').slice(0, 160),
           image: p.thumbnail_url ?? p.media_url ?? null,
           permalink: p.permalink ?? null,
@@ -170,11 +217,12 @@ export async function GET(req: NextRequest) {
       .slice(0, 12)
 
     return NextResponse.json({
-      /* Connected means "an ad account has been chosen to pay", not "an ad
-         account is visible". */
-      connected: payer !== null,
+      /* Connected means "at least one ad platform has an account chosen to
+         pay", not "an ad account is visible". */
+      connected: platforms.some((p) => p.payer !== null),
+      platforms,
       payer,
-      metaAccountId: meta.accountId,
+      metaAccountId: meta?.accountId ?? null,
       accounts, ads, candidates,
       limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS, minDaily: MIN_DAILY_USD },
     }, { headers: { 'Cache-Control': 'no-store' } })
@@ -189,6 +237,7 @@ export async function POST(req: NextRequest) {
     adAccountIds?: string[]; returnTo?: string
     platformPostId?: string; adAccountId?: string; amount?: number; days?: number; name?: string
     targeting?: { geoKey?: string; geoType?: string; geoName?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string }
+    adPlatform?: string
     adId?: string
   }
   const clientId = body.clientId
@@ -200,28 +249,46 @@ export async function POST(req: NextRequest) {
 
   try {
     const targets = await listPostTargets(clientId)
-    const meta = targets.find((t) => t.platform === 'facebook') ?? targets.find((t) => t.platform === 'instagram')
-    if (!meta) return NextResponse.json({ error: 'No Facebook or Instagram account is connected' }, { status: 400 })
+    const ad: AdPlatform = body.adPlatform === 'tiktok' ? 'tiktok' : 'meta'
+    const rules = AD_RULES[ad]
+    const meta = posterFor(targets, ad)
+    if (!meta) {
+      return NextResponse.json({ error: `No ${rules.name} account is connected` }, { status: 400 })
+    }
 
     if (body.action === 'connect') {
       /* Scoped on purpose. Without adAccountIds this connection can reach every
          ad account the login can see, which for anyone who has ever managed
          another business is more than they meant to hand over. */
       const ids = (body.adAccountIds ?? []).map(String).filter((x) => /^[A-Za-z0-9_]{3,64}$/.test(x))
-      if (!ids.length) return NextResponse.json({ error: 'Pick which ad account to use' }, { status: 400 })
+      const reachable = await listAdAccounts(clientId, meta.accountId).catch(() => [])
+
+      /* TIKTOK'S FIRST CALL HAS NOTHING TO NAME YET. It is a separate-token
+         platform, so until its own OAuth is done there are no advertiser
+         accounts to choose between. That first call exists to get the login
+         URL; the choice happens on the way back. */
+      if (!ids.length || ids[0] === 'pending') {
+        if (!rules.ownLogin && reachable.length) {
+          return NextResponse.json({ error: 'Pick which ad account to use' }, { status: 400 })
+        }
+        const started = await connectAds(clientId, CONNECT_SLUG[ad], { accountId: meta.accountId, returnTo: body.returnTo })
+        return NextResponse.json({ ok: true, ...started })
+      }
+
       /* Reachable is not the same as chosen, and only one of them is a
          decision. Verify it is really theirs, then remember it. */
-      const reachable = await listAdAccounts(clientId, meta.accountId)
       if (!reachable.some((a) => a.id === ids[0])) {
         return NextResponse.json({ error: 'That ad account is not on this connection' }, { status: 400 })
       }
-      const r = await connectAds(clientId, meta.platform, { accountId: meta.accountId, adAccountIds: ids, returnTo: body.returnTo })
+      const r = await connectAds(clientId, CONNECT_SLUG[ad], { accountId: meta.accountId, adAccountIds: ids, returnTo: body.returnTo })
       const adminW = createAdminClient()
       const { data: row } = await adminW.from('channel_connections')
         .select('id, metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
       if (row?.id) {
+        const m = (row.metadata as Record<string, unknown>) ?? {}
+        const existing = (m.ad_accounts ?? {}) as Record<string, unknown>
         await adminW.from('channel_connections')
-          .update({ metadata: { ...(row.metadata as Record<string, unknown> ?? {}), ad_account_id: ids[0], ad_account_chosen_at: new Date().toISOString() } })
+          .update({ metadata: { ...m, ad_accounts: { ...existing, [ad]: ids[0] }, ad_account_chosen_at: new Date().toISOString() } })
           .eq('id', row.id)
       }
       return NextResponse.json({ ok: true, ...r })
@@ -233,10 +300,13 @@ export async function POST(req: NextRequest) {
     if (body.action === 'estimate') {
       const { data: connRow } = await createAdminClient().from('channel_connections')
         .select('metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
-      const payer = (connRow?.metadata as Record<string, unknown> | null)?.ad_account_id
-      if (typeof payer !== 'string') return NextResponse.json({ available: false })
+      const payer = payerOf(connRow?.metadata, ad)
+      if (!payer) return NextResponse.json({ available: false })
+      /* TikTok has no pre-flight reach API at all, so this says so rather than
+         asking and reporting an empty answer as if it were a small audience. */
+      if (!rules.reachEstimate) return NextResponse.json({ available: false })
       const r = await reachEstimate(clientId, {
-        accountId: meta.accountId, adAccountId: payer, spec: buildSpec(body.targeting ?? {}),
+        accountId: meta.accountId, adAccountId: payer, spec: buildSpec(body.targeting ?? {}, ad),
       })
       return NextResponse.json(r)
     }
@@ -262,8 +332,11 @@ export async function POST(req: NextRequest) {
       /* Meta will accept a budget it cannot actually deliver on. Below a dollar
          a day it simply does not show the ad, which looks like the money
          vanished. */
-      if (amount / days < MIN_DAILY_USD) {
-        return NextResponse.json({ error: `That works out under $${MIN_DAILY_USD} a day, which is too thin to deliver. Spend more or run it for fewer days.` }, { status: 400 })
+      /* Per platform, not one number. TikTok will not deliver under $20 a day
+         and Meta will run on one, so a single floor would either block real
+         Meta boosts or wave through TikTok ones that never show. */
+      if (amount / days < rules.minDaily) {
+        return NextResponse.json({ error: `${rules.name} needs at least $${rules.minDaily} a day. That works out at $${(amount / days).toFixed(2)}.` }, { status: 400 })
       }
       if (!Number.isFinite(days) || days < 1 || days > MAX_BOOST_DAYS) {
         return NextResponse.json({ error: `A boost runs between 1 and ${MAX_BOOST_DAYS} days` }, { status: 400 })
@@ -278,15 +351,18 @@ export async function POST(req: NextRequest) {
         .select('external_id, caption, platform')
         .eq('client_id', clientId).eq('external_id', body.platformPostId).maybeSingle()
       if (!owned) return NextResponse.json({ error: 'That post is not one of yours' }, { status: 404 })
+      if (adPlatformFor(String(owned.platform)) !== ad) {
+        return NextResponse.json({ error: `That post is not on ${rules.name}` }, { status: 400 })
+      }
 
       /* AND IT PAYS FROM THE ACCOUNT THEY CHOSE, not one the browser names.
          The request body is what an attacker controls, and "which account pays"
          is the field where that matters most. */
       const { data: connRow } = await admin.from('channel_connections')
         .select('metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
-      const payer = (connRow?.metadata as Record<string, unknown> | null)?.ad_account_id
-      if (typeof payer !== 'string' || !payer) {
-        return NextResponse.json({ error: 'Choose which ad account pays before boosting' }, { status: 400 })
+      const payer = payerOf(connRow?.metadata, ad)
+      if (!payer) {
+        return NextResponse.json({ error: `Choose which ${rules.name} ad account pays before boosting` }, { status: 400 })
       }
       if (body.adAccountId !== payer) {
         return NextResponse.json({ error: 'That is not the ad account set up to pay' }, { status: 400 })
@@ -310,7 +386,7 @@ export async function POST(req: NextRequest) {
         accountId: meta.accountId,
         adAccountId: payer,
         amount, days,
-        targeting: buildSpec(body.targeting),
+        targeting: buildSpec(body.targeting, ad),
         name: (body.name || `Apnosh boost · ${new Date().toISOString().slice(0, 10)}`).slice(0, 120),
       })
 
