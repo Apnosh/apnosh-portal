@@ -113,6 +113,7 @@ const MVP_EXACT = new Set([
   '/dashboard/preferences', '/dashboard/people', '/dashboard/get-help', '/dashboard/whats-new', // the More tab's pages (owner 2026-09-05)
   '/dashboard/post', // the composer: one job, its own back arrow, no nav underneath
   '/dashboard/scheduled', // what is going out and what your team is holding
+  '/dashboard/boost', // the one ads screen: spends money, so it gets a clean room
   '/dashboard/guests', // the guest list (send-rail audience) owns its full-screen chrome
   '/dashboard/wins', // the wins shelf renders its own MvpShell (Move 7b)
   '/dashboard/tell-a-friend', // the referral page renders its own MvpShell (Move 8)

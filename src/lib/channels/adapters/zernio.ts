@@ -1394,3 +1394,197 @@ export async function platformTextLimits(): Promise<Record<string, number>> {
     return limitsCache?.value ?? {}
   }
 }
+
+/* ── ADS ─────────────────────────────────────────────────────────────────────
+ *
+ * THIS IS THE ONLY PART OF THIS FILE THAT SPENDS THE CLIENT'S MONEY, and it is
+ * written like it. Every other integration here moves data; a mistake costs a
+ * wrong number on a screen. A mistake here costs real money out of a restaurant's
+ * ad account, and there is no undo.
+ *
+ * Four rules, enforced in code rather than trusted to a caller:
+ *
+ *   1. LIFETIME BUDGETS ONLY, with an end date. A daily budget runs until
+ *      somebody stops it, which means a forgotten boost bills every day
+ *      forever. A lifetime budget with an end date is bounded by construction:
+ *      the worst case is the number the owner already agreed to.
+ *   2. A HARD CEILING no request can exceed, checked here and not only in the UI.
+ *   3. IDEMPOTENT. A double tap, a retry, or a flaky connection must not buy the
+ *      same ad twice. The key is derived from the post, the amount and the days,
+ *      so the same boost replays and a genuinely different one goes through.
+ *   4. NEVER AUTOMATIC. There is no scheduled boost, no auto-renew, and no
+ *      "boost anything over N views" rule in this file, deliberately.
+ *
+ * Zernio's boost endpoint has no validateOnly and no dryRun, so the first real
+ * call is the one that spends. There is no rehearsal.
+ */
+
+/** The most a single boost may ever be, whatever the caller asks for. */
+export const MAX_BOOST_USD = 50
+/** And the longest it may run, so a cheap boost cannot be stretched indefinitely. */
+export const MAX_BOOST_DAYS = 14
+
+export interface AdAccount {
+  id: string
+  name: string
+  currency: string
+  selectable: boolean
+  status: string
+  minimumDailyBudget: number
+}
+
+/** The ad accounts a connected posting account can reach. Read-only. */
+export async function listAdAccounts(clientId: string, accountId: string): Promise<AdAccount[]> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  const res = await zer(`/ads/accounts?accountId=${encodeURIComponent(accountId)}`)
+  return unwrapList(res, 'accounts', 'data', 'items').map((a) => ({
+    id: str(a.id),
+    name: str(a.name) || str(a.businessName) || 'Ad account',
+    currency: str(a.currency) || 'USD',
+    selectable: a.selectable !== false,
+    status: str(a.accountStatus) || 'unknown',
+    minimumDailyBudget: num(a.minimumDailyBudget),
+  })).filter((a) => a.id)
+}
+
+/**
+ * Turn on ads for a platform.
+ *
+ * A GET, and idempotent: it either reports the ads account already exists or
+ * hands back a login URL. Nothing is charged and nothing is created on the ad
+ * platform. `adAccountIds` PINS the connection to specific ad accounts, which is
+ * the difference between "we can reach one account you chose" and "we can reach
+ * every ad account this login can see". Always pass it.
+ */
+export async function connectAds(
+  clientId: string,
+  platform: string,
+  opts: { accountId?: string; adAccountIds?: string[]; returnTo?: string },
+): Promise<{ alreadyConnected: boolean; authUrl: string | null; accountId: string | null; scoped: string[] }> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
+  const q = new URLSearchParams({ profileId })
+  if (opts.accountId) q.set('accountId', opts.accountId)
+  for (const id of opts.adAccountIds ?? []) q.append('adAccountIds', id)
+  q.set('redirect_url', redirectUrl(opts.returnTo))
+  const res = await zer(`/connect/${platform}/ads?${q.toString()}`)
+  const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+  return {
+    alreadyConnected: d.alreadyConnected === true,
+    authUrl: str(d.authUrl) || null,
+    accountId: str(d.accountId) || null,
+    scoped: unwrapList({ data: d.scopedAdAccountIds }, 'data').map((x) => String(x)).filter(Boolean),
+  }
+}
+
+export interface BoostResult { id: string | null; status: string }
+
+/**
+ * Put money behind a post that already exists.
+ *
+ * Boosting rather than creating an ad from scratch is the whole point for this
+ * audience: the creative is a post whose organic numbers we already hold, so
+ * "this one did four times your average" is the entire pitch, and the ad keeps
+ * the post's existing likes and comments rather than starting cold.
+ */
+export async function boostPost(clientId: string, args: {
+  /** the post on the platform, which is what we hold for natively-made posts */
+  platformPostId: string
+  accountId: string
+  adAccountId: string
+  /** whole currency units, e.g. 20 for $20. Capped here, not by the caller. */
+  amount: number
+  days: number
+  name: string
+  /** where a tap on the ad goes; omitted means the post itself */
+  linkUrl?: string
+  callToAction?: string
+}): Promise<BoostResult> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
+
+  const amount = Math.round(Number(args.amount) * 100) / 100
+  if (!Number.isFinite(amount) || amount < 1) {
+    throw new ChannelError('upstream', 'A boost has to be at least $1')
+  }
+  if (amount > MAX_BOOST_USD) {
+    throw new ChannelError('upstream', `A single boost is capped at $${MAX_BOOST_USD}. Run two if you mean it.`)
+  }
+  const days = Math.round(Number(args.days))
+  if (!Number.isFinite(days) || days < 1 || days > MAX_BOOST_DAYS) {
+    throw new ChannelError('upstream', `A boost runs between 1 and ${MAX_BOOST_DAYS} days`)
+  }
+  if (!args.platformPostId || !args.adAccountId || !args.accountId) {
+    throw new ChannelError('upstream', 'A boost needs a post and an ad account')
+  }
+
+  const start = new Date()
+  const end = new Date(start.getTime() + days * 86400000)
+
+  /* The same post, the same money, the same window is the same purchase. */
+  let h = 0
+  const seed = `${args.platformPostId}:${amount}:${days}:${start.toISOString().slice(0, 13)}`
+  for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) | 0 }
+
+  const res = await zer('/ads/boost', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `apnosh-boost-${(h >>> 0).toString(36)}` },
+    body: JSON.stringify({
+      platformPostId: args.platformPostId,
+      accountId: args.accountId,
+      adAccountId: args.adAccountId,
+      name: args.name.slice(0, 255),
+      /* Engagement, because a restaurant boosting a dish photo wants people to
+         see and react to it. Traffic and conversions need a website and a pixel
+         that most of these clients do not have. */
+      goal: 'engagement',
+      /* LIFETIME, never daily. This is the safety rail, not a preference. */
+      budget: { amount, type: 'lifetime' },
+      schedule: { startDate: start.toISOString(), endDate: end.toISOString() },
+      ...(args.linkUrl ? { linkUrl: args.linkUrl } : {}),
+      ...(args.callToAction ? { callToAction: args.callToAction } : {}),
+    }),
+  })
+  const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+  return { id: str(d.id) || str(d._id) || str(d.adId) || null, status: str(d.status) || 'created' }
+}
+
+export interface RunningAd {
+  id: string
+  name: string
+  status: string
+  spend: number
+  impressions: number
+  clicks: number
+}
+
+/** What is running and what it has cost. Read-only. */
+export async function listAds(clientId: string, accountId: string): Promise<RunningAd[]> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  try {
+    const res = await zer(`/ads?accountId=${encodeURIComponent(accountId)}&limit=25`)
+    return unwrapList(res, 'ads', 'data', 'items').map((a) => {
+      const m = (a.metrics && typeof a.metrics === 'object' ? a.metrics : {}) as Record<string, unknown>
+      return {
+        id: str(a.id) || str(a._id),
+        name: str(a.name) || 'Boost',
+        status: str(a.status) || 'unknown',
+        spend: num(m.spend),
+        impressions: num(m.impressions),
+        clicks: num(m.clicks),
+      }
+    }).filter((a) => a.id)
+  } catch { return [] }
+}
+
+/** Stop one. The only write here that costs nothing and can only ever help. */
+export async function stopAd(clientId: string, adId: string): Promise<void> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
+  await zer(`/ads/${encodeURIComponent(adId)}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status: 'PAUSED' }),
+  })
+}
