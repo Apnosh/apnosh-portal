@@ -282,23 +282,36 @@ export async function listPostTargets(clientId: string): Promise<PostTarget[]> {
   if (!profileId) return []
   const q = new URLSearchParams({ profileId, page: '1', limit: '25' })
   const res = await zer(`/accounts?${q.toString()}`)
-  return unwrapList(res, 'accounts', 'data', 'items')
+  const rows = unwrapList(res, 'accounts', 'data', 'items')
     .map((a) => ({
       accountId: str(a._id) || str(a.id),
       platform: (str(a.platform) || '').toLowerCase(),
       name: str(a.username) || str(a.name) || str(a.displayName) || str(a.platform),
-      /* Instagram's locationId is a FACEBOOK PAGE ID with location data, digits
-         only, and Zernio has no place search. So a general location picker is not
-         buildable. What IS buildable is the case that covers almost everyone:
-         tagging their own restaurant, using the page id their own Facebook
-         connection already carries. Empty when we cannot find one, and then the
-         option is simply not offered rather than offered broken. */
-      pageId: (() => {
-        const raw = str(a.pageId) || str(a.page_id) || str(a.platformAccountId) || str(a.externalId)
-        return /^\d{6,}$/.test(raw) ? raw : null
-      })(),
+      pageId: null as string | null,
     }))
     .filter((a) => a.accountId && a.platform)
+
+  /* Instagram's locationId is a FACEBOOK PAGE ID with location data, digits only,
+     and Zernio has no place search. So a general location picker is not buildable.
+     What IS buildable is the case that covers almost everyone: tagging their own
+     restaurant, using the page their own Facebook connection already carries.
+
+     THE ACCOUNT ROW DOES NOT CARRY IT. The first version read pageId, page_id,
+     platformAccountId and externalId off the account and got null every time,
+     because none of those fields exist -- the option was dead on every screen it
+     shipped to and looked fine. The page lives behind its own endpoint. */
+  const fb = rows.filter((r) => r.platform === 'facebook')
+  if (fb.length) {
+    await Promise.allSettled(fb.map(async (row) => {
+      const r = await zer(`/accounts/${encodeURIComponent(row.accountId)}/facebook-page`)
+      const d = (r.data && typeof r.data === 'object' ? r.data : r) as Record<string, unknown>
+      const pages = unwrapList(d, 'pages')
+      const selected = str(d.selectedPageId)
+      const id = /^\d{6,}$/.test(selected) ? selected : str(pages[0]?.id)
+      if (/^\d{6,}$/.test(id)) row.pageId = id
+    }))
+  }
+  return rows
 }
 
 /**
