@@ -101,6 +101,12 @@ export default function AllPostsPage() {
             <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>All posts</div>
             {total > 0 && <div style={{ fontSize: 11.5, color: C.faint }}>{total} across your connected accounts</div>}
           </div>
+          {/* The one place an owner is already looking at their posts is the one
+              place they will think of making another. */}
+          <a
+            href="/dashboard/post"
+            style={{ marginLeft: 'auto', flexShrink: 0, textDecoration: 'none', font: 'inherit', fontSize: 13, fontWeight: 600, color: '#fff', background: C.ink, borderRadius: 99, padding: '8px 15px' }}
+          >New post</a>
         </div>
 
         <div ref={scroller} style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch', background: C.bg, padding: '10px 12px 26px' }}>

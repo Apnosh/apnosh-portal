@@ -263,6 +263,110 @@ async function profileIdFor(clientId: string): Promise<string | null> {
  * crash, and the diagnostic route reports what actually came back so the FIRST
  * real run confirms or corrects this in one look.
  */
+export interface PostTarget { accountId: string; platform: string; name: string }
+export interface BestSlot { dayOfWeek: number; hourUtc: number; posts: number }
+
+/**
+ * The accounts this client can actually publish to.
+ *
+ * `page` and `limit` must be sent TOGETHER -- the API rejects one without the
+ * other, which is the sort of thing only a live call tells you.
+ */
+export async function listPostTargets(clientId: string): Promise<PostTarget[]> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  const q = new URLSearchParams({ profileId, page: '1', limit: '25' })
+  const res = await zer(`/accounts?${q.toString()}`)
+  return unwrapList(res, 'accounts', 'data', 'items')
+    .map((a) => ({
+      accountId: str(a._id) || str(a.id),
+      platform: (str(a.platform) || '').toLowerCase(),
+      name: str(a.username) || str(a.name) || str(a.displayName) || str(a.platform),
+    }))
+    .filter((a) => a.accountId && a.platform)
+}
+
+/**
+ * When this account's posts have actually done best, from its own history.
+ *
+ * Returned raw, in UTC, with the number of posts each slot is based on, because
+ * the caller has to be able to refuse a recommendation built on two posts. One
+ * account here has a slot averaging 6,561 engagements off six posts, and that
+ * average is one viral video wearing a timeslot's name.
+ */
+export async function bestSlots(clientId: string): Promise<BestSlot[]> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  try {
+    const res = await zer(`/analytics/best-time?profileId=${encodeURIComponent(profileId)}`)
+    return unwrapList(res, 'slots', 'data', 'items')
+      .map((x) => ({ dayOfWeek: num(x.day_of_week), hourUtc: num(x.hour), posts: num(x.post_count) }))
+      .filter((x) => x.posts > 0)
+  } catch {
+    return []
+  }
+}
+
+/** A publicly reachable URL to upload one file to, plus the URL it will live at. */
+export async function presignMedia(filename: string, contentType: string, size?: number): Promise<{ uploadUrl: string; fileUrl: string }> {
+  const res = await zer('/media/presign', {
+    method: 'POST',
+    body: JSON.stringify({ filename, contentType, ...(size ? { size } : {}) }),
+  })
+  const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+  const uploadUrl = str(d.uploadUrl) || str(d.url) || str(d.signedUrl)
+  const fileUrl = str(d.fileUrl) || str(d.publicUrl) || str(d.mediaUrl) || str(d.accessUrl)
+  if (!uploadUrl) throw new ChannelError('upstream', 'The vendor did not return an upload URL')
+  return { uploadUrl, fileUrl }
+}
+
+/**
+ * PUBLISH, or schedule for later.
+ *
+ * `publishNow` and `scheduledFor` are alternatives, not companions -- sending
+ * both is asking for two different things. Scheduling carries an IANA timezone,
+ * because "Tuesday at 9" without one is a different moment for the owner than it
+ * is for the server, and this is exactly the class of bug that made a UTC server
+ * and a Pacific browser disagree about which day a campaign settled on.
+ *
+ * Idempotent for the same reason the replies are: this publishes in public under
+ * a business's name, and a double tap must not post twice.
+ */
+export async function createPost(clientId: string, args: {
+  content: string
+  targets: Array<{ accountId: string; platform: string }>
+  mediaUrls?: string[]
+  when: { kind: 'now' } | { kind: 'at'; iso: string; timezone: string }
+}): Promise<{ id: string | null }> {
+  const content = args.content.trim()
+  if (!content && !(args.mediaUrls ?? []).length) {
+    throw new ChannelError('upstream', 'A post needs something in it')
+  }
+  if (!args.targets.length) throw new ChannelError('upstream', 'Pick at least one account to post to')
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
+
+  let h = 0
+  const seed = `${content}:${args.targets.map((t) => t.accountId).sort().join(',')}:${args.when.kind === 'at' ? args.when.iso : 'now'}`
+  for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) | 0 }
+
+  const body: Record<string, unknown> = {
+    content,
+    platforms: args.targets.map((t) => ({ platform: t.platform, accountId: t.accountId })),
+    ...(args.mediaUrls?.length ? { mediaItems: args.mediaUrls.map((url) => ({ url })) } : {}),
+    ...(args.when.kind === 'now'
+      ? { publishNow: true }
+      : { scheduledFor: args.when.iso, timezone: args.when.timezone }),
+  }
+  const res = await zer('/posts', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `apnosh-post-${(h >>> 0).toString(36)}` },
+    body: JSON.stringify(body),
+  })
+  const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+  return { id: str(d._id) || str(d.id) || str(d.postId) || null }
+}
+
 export interface SocialConversation {
   id: string
   accountId: string
