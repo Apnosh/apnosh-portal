@@ -285,10 +285,14 @@ export async function POST(req: NextRequest) {
        connected Facebook account carries, or it is not sent. */
     const ownPage = targets.find((t) => t.pageId)?.pageId ?? null
 
+    /* Sanitised once and used for both the send and the record, so what we log
+       is exactly what we sent. */
+    const media = Array.isArray(mediaUrls) ? mediaUrls.filter((u) => typeof u === 'string' && u.startsWith('https://')) : []
+
     const r = await createPost(clientId, {
       content: content ?? '',
       targets: targets.map((t) => ({ accountId: t.accountId, platform: t.platform })),
-      mediaUrls: Array.isArray(mediaUrls) ? mediaUrls.filter((u) => typeof u === 'string' && u.startsWith('https://')) : [],
+      mediaUrls: media,
       when: w,
       firstComment: typeof body.firstComment === 'string' ? body.firstComment.slice(0, 2200) : undefined,
       collaborators: handles(body.collaborators).slice(0, 3),
@@ -296,7 +300,42 @@ export async function POST(req: NextRequest) {
       locationId: body.tagLocation ? ownPage : null,
       tiktokDraft: body.tiktokDraft === true,
       perPlatform,
+      /* Stamped on the vendor's copy so a post we sent is tellable from one the
+         owner made in the app. */
+      metadata: { source: 'apnosh_composer', clientId, userId: access.userId ?? null },
     })
+
+    /* AND RECORDED HERE, which it never was. The publish path called the vendor
+       and returned, so this feature had no trace in our own database at all:
+       zero rows, no attribution, and every question about whether anyone uses it
+       unanswerable. content_drafts is the right home rather than a new table --
+       it already carries published_post_id, published_at, proposed_by and
+       proposed_via, and putting composer output there makes it the same object
+       as staff-written content instead of a parallel one.
+
+       Never fatal. The post is already live at this point; failing the response
+       because a logging insert failed would tell the owner their post did not go
+       out when it did. */
+    try {
+      const admin = createAdminClient()
+      const { error: logErr } = await admin.from('content_drafts').insert({
+        client_id: clientId,
+        status: 'published',
+        idea: (content ?? '').trim().slice(0, 300) || 'A post sent from the composer',
+        caption: (content ?? '').trim() || null,
+        target_platforms: targets.map((t) => t.platform),
+        media_urls: media,
+        proposed_by: access.userId ?? null,
+        proposed_via: 'owner_composer',
+        published_post_id: r.id,
+        published_at: w.kind === 'now' ? new Date().toISOString() : null,
+        scheduled_for: w.kind === 'at' ? w.iso : null,
+      })
+      if (logErr) console.error('[social-publish] could not record the post:', logErr.message)
+    } catch (e) {
+      console.error('[social-publish] could not record the post:', e)
+    }
+
     return NextResponse.json({ ok: true, id: r.id, posted: targets.map((t) => t.platform) })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not publish' }, { status: 502 })

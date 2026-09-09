@@ -90,9 +90,30 @@ function redirectUrl(returnTo?: string): string {
   return `${base}${path}${path.includes('?') ? '&' : '?'}connected=social`
 }
 
-/** The platforms our canonical table accepts (same constraint as the ayrshare adapter). */
+/** The platforms our canonical METRICS table accepts (same constraint as the
+ *  ayrshare adapter). Deliberately unchanged: these five are what social_posts
+ *  and social_metrics carry. */
 export const ZERNIO_PLATFORMS = ['instagram', 'facebook', 'tiktok', 'linkedin', 'youtube'] as const
 export type ZernioPlatform = (typeof ZERNIO_PLATFORMS)[number]
+
+/**
+ * The platforms we let a client CONNECT and POST to, which is a longer list than
+ * the one we hold metrics for.
+ *
+ * Google Business Profile is the addition, and it is the highest-value posting
+ * surface we were not offering: it takes topicType STANDARD | EVENT | OFFER with
+ * a call-to-action button, which for a restaurant is a "2 for 1 Tuesday" with an
+ * Order button attached to the listing people actually search. Zernio's own
+ * capability matrix lists it as Post: yes, Inbox: yes.
+ *
+ * KEPT OUT OF ZERNIO_PLATFORMS ON PURPOSE. normalizePlatform() matches by prefix
+ * and feeds the metrics fold, and our EXISTING direct Google connection stores
+ * channel 'google_business_profile' -- which would start matching 'googlebusiness'
+ * and quietly reroute GBP rows into the social metrics path. Two lists, because
+ * they answer two different questions.
+ */
+export const ZERNIO_POSTABLE = [...ZERNIO_PLATFORMS, 'googlebusiness'] as const
+export type ZernioPostable = (typeof ZERNIO_POSTABLE)[number]
 
 const num = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.round(v) : 0)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
@@ -380,6 +401,12 @@ export async function createPost(clientId: string, args: {
    *  LinkedIn reads as a paragraph and Instagram as a line and a wall of tags,
    *  and one caption cannot be both. */
   perPlatform?: Record<string, string>
+  /** Stamped on the vendor's copy of the post so a post we sent is
+   *  distinguishable from one the owner made in the app. Without it, every
+   *  usage question about this feature is unanswerable -- which is exactly the
+   *  state we were in: 33 posts observed in 30 days and no way to tell whether
+   *  any of them came from here. */
+  metadata?: Record<string, unknown>
 }): Promise<{ id: string | null }> {
   const content = args.content.trim()
   const everyTargetHasItsOwn = args.targets.length > 0
@@ -425,6 +452,7 @@ export async function createPost(clientId: string, args: {
     ...(args.when.kind === 'now'
       ? { publishNow: true }
       : { scheduledFor: args.when.iso, timezone: args.when.timezone }),
+    ...(args.metadata && Object.keys(args.metadata).length ? { metadata: args.metadata } : {}),
   }
   const res = await zer('/posts', {
     method: 'POST',
@@ -923,7 +951,7 @@ export const zernioAdapter: ChannelAdapter = {
   async connectStart(clientId: string, opts?: { platform?: string; returnTo?: string; userId?: string }): Promise<ConnectStart> {
     if (!this.isConfigured()) throw new ChannelError('not_configured', 'ZERNIO_API_KEY is not set')
     const platform = (opts?.platform ?? 'instagram').toLowerCase()
-    if (!(ZERNIO_PLATFORMS as readonly string[]).includes(platform)) {
+    if (!(ZERNIO_POSTABLE as readonly string[]).includes(platform)) {
       throw new ChannelError('upstream', `Unsupported platform: ${platform}`)
     }
     const profileId = await ensureProfile(clientId, opts?.userId)
