@@ -11,7 +11,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, Trophy, LogOut, PenLine } from 'lucide-react'
+import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, Trophy, LogOut, PenLine, CalendarClock } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 import { useLang } from './mvp-language'
 import { gradOf, hueOf, type HueKey } from './hues'
@@ -99,6 +99,7 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
        screen and draws its own top bar, which leaves nowhere on it for a create
        action; this is one tap from the nav bar and the first thing on the page. */
     { label: 'Write a post', sub: 'Send it now or at your best time', href: '/dashboard/post', Icon: PenLine, hue: 'brand' },
+    { label: 'Coming up', sub: 'What is still to go out', href: '/dashboard/scheduled', Icon: CalendarClock, hue: 'nights' },
     { label: 'Your settings', href: '/dashboard/preferences', Icon: SlidersHorizontal, hue: 'mint' },
     // The wins shelf. Only once there IS one: the deck drops a counted promise after 14 days and
     // there is no other way back to it, but a row that opens an empty page is worse than no row.
@@ -117,7 +118,7 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
      composer the first time. Its own group, first, because it is the only thing
      on this page you DO rather than set. */
   const groups: { title: string; hue: HueKey; keys: string[] }[] = [
-    { title: 'Post', hue: 'brand', keys: ['Write a post'] },
+    { title: 'Post', hue: 'brand', keys: ['Write a post', 'Coming up'] },
     { title: 'You', hue: 'mint', keys: ['Your settings', 'Wins', 'People you have worked with'] },
     { title: 'Account', hue: 'nights', keys: ['Plan and billing', 'Connected accounts'] },
     { title: 'Help', hue: 'grey', keys: ['Get help', "What's new"] },

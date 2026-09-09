@@ -367,6 +367,67 @@ export async function createPost(clientId: string, args: {
   return { id: str(d._id) || str(d.id) || str(d.postId) || null }
 }
 
+export interface ScheduledPost {
+  id: string
+  content: string
+  status: string
+  scheduledFor: string | null
+  platforms: string[]
+  mediaUrl: string | null
+  /** the vendor's own words when a platform refused it */
+  failure: string | null
+}
+
+/**
+ * WHAT IS GOING OUT, AND WHAT DIDN'T.
+ *
+ * The composer could schedule a post and then there was nowhere to see it, change
+ * it or stop it. Scheduling something you cannot then look at is worse than not
+ * scheduling it: the owner has handed over a promise and has no way to check it
+ * was kept.
+ *
+ * Failures are carried deliberately. A post that silently did not publish is the
+ * single worst outcome here, because the owner believes it went out.
+ */
+export async function listScheduledPosts(clientId: string, limit = 40): Promise<ScheduledPost[]> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  const q = new URLSearchParams({ profileId, limit: String(Math.min(100, Math.max(1, limit))), sortBy: 'scheduledFor' })
+  const res = await zer(`/posts?${q.toString()}`)
+  return unwrapList(res, 'posts', 'data', 'items')
+    .map((p) => {
+      const plats = Array.isArray(p.platforms) ? (p.platforms as Record<string, unknown>[]) : []
+      /* accountId arrives as a populated object here, not the bare id it is on
+         the way in. */
+      const names = plats.map((x) => {
+        const acct = x.accountId && typeof x.accountId === 'object' ? (x.accountId as Record<string, unknown>) : {}
+        return (str(x.platform) || str(acct.platform) || '').toLowerCase()
+      }).filter(Boolean)
+      const failed = plats.find((x) => str(x.status).toLowerCase() === 'failed')
+      const media = Array.isArray(p.mediaItems) ? (p.mediaItems as Record<string, unknown>[])[0] : null
+      return {
+        id: str(p._id) || str(p.id),
+        content: str(p.content) || str(p.title),
+        status: (str(p.status) || 'unknown').toLowerCase(),
+        scheduledFor: str(p.scheduledFor) || str(p.publishedAt) || null,
+        platforms: [...new Set(names)],
+        mediaUrl: media ? str(media.url) || null : null,
+        failure: failed ? (str(failed.error) || str(failed.message) || 'This one did not go out') : null,
+      }
+    })
+    .filter((p) => p.id)
+}
+
+/** Call off a post that has not gone out yet. */
+export async function cancelScheduledPost(clientId: string, postId: string): Promise<void> {
+  if (!postId) throw new ChannelError('upstream', 'No post to cancel')
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
+  /* Ownership is checked before this is called: the post must have come back in
+     THIS client's own list, so one client can never cancel another's. */
+  await zer(`/posts/${encodeURIComponent(postId)}`, { method: 'DELETE' })
+}
+
 export interface SocialConversation {
   id: string
   accountId: string

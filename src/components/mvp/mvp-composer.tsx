@@ -153,9 +153,9 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               : done.length ? done.join(', ') : 'Your accounts'}
             {mode === 'apnosh' ? '' : when === 'best' && best ? ` · ${best.label}` : when === 'pick' && pickAt ? ` · ${new Date(pickAt).toLocaleString()}` : ''}
           </div>
-          <button type="button" onClick={() => router.push('/dashboard/insights/posts')}
+          <button type="button" onClick={() => router.push(mode === 'apnosh' || when !== 'now' ? '/dashboard/scheduled' : '/dashboard/insights/posts')}
             style={{ marginTop: 22, font: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '11px 22px', borderRadius: 99, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer' }}>
-            See your posts
+            {mode === 'apnosh' || when !== 'now' ? 'See what is coming up' : 'See your posts'}
           </button>
         </div>
       </MvpShell>
