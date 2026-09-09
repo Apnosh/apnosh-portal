@@ -134,10 +134,15 @@ export function MvpButton({ label, onClick, variant = 'primary', disabled, busy,
  * here: it floated a second white plane over the bottom nav, so a screen with
  * two rows of chrome under it read as three, and it clipped the last thing the
  * owner was working on. This just ends the page.
+ *
+ * NO RULE ABOVE IT. A hairline there drew a line between the last thing the
+ * owner touched and the button that acts on it, which is the one place on the
+ * page those two should read as continuous. Space separates them; a border
+ * divides them. Space is what was wanted.
  */
 export function MvpActions({ children, hint }: { children: React.ReactNode; hint?: string }) {
   return (
-    <div style={{ marginTop: 30, paddingTop: 20, borderTop: `1px solid ${C.line}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{ marginTop: 34, display: 'flex', flexDirection: 'column', gap: 10 }}>
       {hint && <div style={{ fontSize: 12.5, color: C.mute, textAlign: 'center', lineHeight: 1.45 }}>{hint}</div>}
       {children}
     </div>
