@@ -27,6 +27,8 @@ import MvpShell from './mvp-shell'
 import { MvpGroup, MvpSaveBar, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark } from './mvp-insights'
 import { C, DISPLAY } from './tokens'
+import { gradOf, tint, glow } from './hues'
+import { CARD_SHADOW } from './kit'
 
 interface Target { accountId: string; platform: string; name: string }
 interface Best { iso: string; label: string; posts: number }
@@ -138,7 +140,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           </div>
           <div style={{ fontSize: 14, color: C.mute, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
             {done.length ? done.join(', ') : 'Your accounts'}
-            {when === 'best' && best ? ` · ${best.label.toLowerCase()}` : when === 'pick' && pickAt ? ` · ${new Date(pickAt).toLocaleString()}` : ''}
+            {when === 'best' && best ? ` · ${best.label}` : when === 'pick' && pickAt ? ` · ${new Date(pickAt).toLocaleString()}` : ''}
           </div>
           <button type="button" onClick={() => router.push('/dashboard/insights/posts')}
             style={{ marginTop: 22, font: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '11px 22px', borderRadius: 99, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer' }}>
@@ -156,108 +158,172 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
 
   return (
     <MvpShell active="home" back="/dashboard" title="New post">
-      {/* mvp-spin lives inside another component's own style block, so it is
-          declared here rather than borrowed and silently not animating. */}
-      <style>{`@keyframes cmpspin{to{transform:rotate(360deg)}}.mvp-spin{animation:cmpspin .8s linear infinite}`}</style>
-      <div style={{ padding: '10px 18px 132px' }}>
+      <style>{`
+        @keyframes cmpspin{to{transform:rotate(360deg)}}
+        .mvp-spin{animation:cmpspin .8s linear infinite}
+        .cmp-cap{width:100%;border:none;outline:none;resize:none;background:transparent;font-family:inherit}
+        .cmp-cap::placeholder{color:${C.faint}}
+        .cmp-drop{transition:background .18s ease, border-color .18s ease}
+        .cmp-chip{transition:background .16s ease, border-color .16s ease, color .16s ease, transform .12s ease}
+        .cmp-chip:active{transform:scale(.97)}
+      `}</style>
 
-        <MvpGroup title="Photo or video">
+      <div style={{ padding: '6px 16px 140px' }}>
+
+        {/* ── THE POST ITSELF ──────────────────────────────────────────────
+            Not a form with a preview beside it: the thing on screen IS the post.
+            The owner is looking at what they are making, which is the difference
+            between filling in fields and writing something. */}
+        <div style={{ background: '#fff', borderRadius: 22, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
+
+          {/* who it goes out as */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 15px 11px' }}>
+            <span style={{ width: 34, height: 34, borderRadius: '50%', background: gradOf('mint'), boxShadow: glow('mint', .3), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <span style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 700, color: '#fff' }}>
+                {(targets?.[0]?.name ?? 'A').trim().charAt(0).toUpperCase()}
+              </span>
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
+                {targets === null ? 'Loading…' : chosen.size === 0 ? 'Nowhere yet'
+                  : chosen.size === 1 ? (targets.find((t) => chosen.has(t.accountId))?.name ?? 'One account')
+                  : `${chosen.size} accounts`}
+              </span>
+              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 1 }}>
+                {when === 'now' ? 'Posting now' : when === 'best' && best ? best.label : pickAt ? new Date(pickAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : 'Scheduled'}
+              </span>
+            </span>
+            {/* the marks of everywhere it lands, on the post itself */}
+            <span style={{ display: 'flex', alignItems: 'center', gap: -4, flexShrink: 0 }}>
+              {(targets ?? []).filter((t) => chosen.has(t.accountId)).slice(0, 5).map((t, i) => (
+                <span key={t.accountId} style={{ marginLeft: i ? -6 : 0, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BrandOrMark provider={t.platform} size={14} />
+                </span>
+              ))}
+            </span>
+          </div>
+
+          {/* the picture */}
           {media ? (
-            <div style={{ position: 'relative', borderRadius: 16, overflow: 'hidden', border: `1px solid ${C.line}`, background: '#000' }}>
+            <div style={{ position: 'relative', background: '#0d0d0f' }}>
               {media.isVideo
-                ? <video src={media.preview} controls playsInline style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'contain' }} />
-                : <img src={media.preview} alt="" style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'contain' }} />}
-              <button type="button" onClick={() => setMedia(null)} aria-label="Remove"
-                style={{ position: 'absolute', top: 9, right: 9, width: 30, height: 30, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,.55)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                <X size={15} />
+                ? <video src={media.preview} controls playsInline style={{ display: 'block', width: '100%', maxHeight: 400, objectFit: 'contain' }} />
+                : <img src={media.preview} alt="" style={{ display: 'block', width: '100%', maxHeight: 400, objectFit: 'contain' }} />}
+              <button type="button" onClick={() => setMedia(null)} aria-label="Remove photo"
+                style={{ position: 'absolute', top: 10, right: 10, width: 32, height: 32, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <X size={16} />
               </button>
             </div>
           ) : (
-            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, minHeight: 96, borderRadius: 16, border: `1px dashed ${C.line}`, background: '#fff', color: C.mute, fontSize: 14, cursor: uploading ? 'default' : 'pointer' }}>
-              {uploading ? <><Loader2 size={17} className="mvp-spin" /> Uploading…</> : <><ImagePlus size={18} /> Add a photo or video</>}
+            <label className="cmp-drop" style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 9,
+              minHeight: 178, cursor: uploading ? 'default' : 'pointer',
+              background: `linear-gradient(160deg, ${tint('mint', .10)}, ${tint('brand', .10)})`,
+              borderTop: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}`,
+            }}>
+              <span style={{ width: 46, height: 46, borderRadius: '50%', background: uploading ? 'transparent' : gradOf('mint'), boxShadow: uploading ? 'none' : glow('mint', .32), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                {uploading ? <Loader2 size={22} className="mvp-spin" color={C.greenDk} /> : <ImagePlus size={21} />}
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>
+                {uploading ? 'Uploading…' : 'Add a photo or video'}
+              </span>
+              {!uploading && <span style={{ fontSize: 11.5, color: C.mute }}>Instagram and TikTok need one</span>}
               <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" disabled={uploading}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickFile(f); e.target.value = '' }}
                 style={{ display: 'none' }} />
             </label>
           )}
-        </MvpGroup>
 
-        <MvpGroup title="Caption">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows={7}
-            maxLength={2200}
-            placeholder="Write it the way you would say it."
-            autoFocus
-            style={{
-              width: '100%', border: `1px solid ${C.line}`, borderRadius: 16, padding: 14,
-              fontSize: 16, lineHeight: 1.55, fontFamily: 'inherit', color: C.ink,
-              background: '#fff', resize: 'vertical', outline: 'none',
-            }}
-          />
-          {/* A counter on an empty box is noise. It appears near the edge. */}
-          {text.length > 1800 && (
-            <div style={{ fontSize: 12, color: text.length > 2100 ? C.coral : C.faint, marginTop: 6, textAlign: 'right' }}>
-              {2200 - text.length} left
-            </div>
-          )}
-        </MvpGroup>
+          {/* the words, written straight onto the post */}
+          <div style={{ padding: '13px 15px 15px' }}>
+            <textarea
+              className="cmp-cap"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={media ? 3 : 5}
+              maxLength={2200}
+              placeholder="Write it the way you would say it…"
+              style={{ fontSize: 15.5, lineHeight: 1.55, color: C.ink, minHeight: 62 }}
+            />
+            {text.length > 1800 && (
+              <div style={{ fontSize: 11.5, color: text.length > 2100 ? C.coral : C.faint, textAlign: 'right' }}>
+                {2200 - text.length} left
+              </div>
+            )}
+          </div>
+        </div>
 
-        <MvpGroup title="Where it goes">
-          {targets === null ? (
-            <div style={{ fontSize: 13.5, color: C.faint, padding: '4px 2px' }}>Loading your accounts…</div>
-          ) : targets.length === 0 ? (
-            <MvpEmpty text="No accounts are connected yet, so there is nowhere to post. Connect one under More, then come back." />
-          ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {targets.map((t) => {
-                const on = chosen.has(t.accountId)
-                return (
-                  <button key={t.accountId} type="button" onClick={() => toggle(t.accountId)} aria-pressed={on}
-                    style={{ ...chipBase, fontWeight: on ? 600 : 500, color: on ? C.ink : C.mute, background: on ? C.greenSoft : '#fff', border: `1px solid ${on ? C.green : C.line}` }}>
-                    <BrandOrMark provider={t.platform} size={15} />
-                    {t.name}
-                    {on && <Check size={13} color={C.greenDk} />}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </MvpGroup>
-
-        <MvpGroup title="When">
+        {/* ── WHERE ───────────────────────────────────────────────────────── */}
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>Where it goes</div>
+        {targets === null ? (
+          <div style={{ fontSize: 13.5, color: C.faint, padding: '2px' }}>Loading your accounts…</div>
+        ) : targets.length === 0 ? (
+          <MvpEmpty text="No accounts are connected yet, so there is nowhere to post. Connect one under More, then come back." />
+        ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {([
-              ['now', 'Now', <Send key="s" size={13} />],
-              ...(best ? [['best', best.label, <Sparkles key="b" size={13} />] as [string, string, React.ReactNode]] : []),
-              ['pick', 'Pick a time', <Clock key="c" size={13} />],
-            ] as [string, string, React.ReactNode][]).map(([k, label, icon]) => {
-              const on = when === k
+            {targets.map((t) => {
+              const on = chosen.has(t.accountId)
               return (
-                <button key={k} type="button" onClick={() => setWhen(k as 'now' | 'best' | 'pick')} aria-pressed={on}
-                  style={{ ...chipBase, fontWeight: on ? 600 : 500, color: on ? '#fff' : C.mute, background: on ? C.ink : '#fff', border: `1px solid ${on ? C.ink : C.line}` }}>
-                  {icon}{label}
+                <button key={t.accountId} type="button" onClick={() => toggle(t.accountId)} aria-pressed={on} className="cmp-chip"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 8, font: 'inherit', fontSize: 13.5,
+                    fontWeight: on ? 600 : 500, padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
+                    color: on ? C.ink : C.mute, background: on ? '#fff' : '#fff',
+                    border: `1px solid ${on ? C.green : C.line}`,
+                    boxShadow: on ? `0 2px 10px ${tint('mint', .22, 1)}` : 'none',
+                  }}>
+                  <span style={{ opacity: on ? 1 : .45, display: 'flex' }}><BrandOrMark provider={t.platform} size={16} /></span>
+                  {t.name}
                 </button>
               )
             })}
           </div>
-          {when === 'best' && best && (
-            <div style={{ fontSize: 12.5, color: C.mute, marginTop: 9, lineHeight: 1.45, padding: '0 2px' }}>
-              Your posts have done best then, across {best.posts} of them.
-            </div>
-          )}
-          {when === 'pick' && (
-            <input type="datetime-local" value={pickAt} onChange={(e) => setPickAt(e.target.value)}
-              min={new Date(Date.now() + 5 * 60000).toISOString().slice(0, 16)}
-              style={{ marginTop: 10, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', fontSize: 14.5, fontFamily: 'inherit', color: C.ink, background: '#fff' }} />
-          )}
-        </MvpGroup>
+        )}
+
+        {/* ── WHEN ────────────────────────────────────────────────────────── */}
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>When</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {([
+            ['now', 'Now', <Send key="s" size={14} />],
+            ...(best ? [['best', best.label, <Sparkles key="b" size={14} />] as [string, string, React.ReactNode]] : []),
+            ['pick', 'Pick a time', <Clock key="c" size={14} />],
+          ] as [string, string, React.ReactNode][]).map(([k, label, icon]) => {
+            const on = when === k
+            /* The best time is the recommendation, so it wears the brand gradient
+               when chosen. The other two are plain choices and stay plain. */
+            const smart = k === 'best'
+            return (
+              <button key={k} type="button" onClick={() => setWhen(k as 'now' | 'best' | 'pick')} aria-pressed={on} className="cmp-chip"
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13.5,
+                  fontWeight: on ? 600 : 500, padding: '9px 15px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
+                  color: on ? '#fff' : C.mute,
+                  background: on ? (smart ? gradOf('brand') : C.ink) : '#fff',
+                  border: `1px solid ${on ? 'transparent' : C.line}`,
+                  boxShadow: on && smart ? glow('brand', .3) : 'none',
+                }}>
+                {icon}{label}
+              </button>
+            )
+          })}
+        </div>
+        {when === 'best' && best && (
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45, padding: '0 2px' }}>
+            Your posts have done best then, across {best.posts} of them.
+          </div>
+        )}
+        {when === 'pick' && (
+          <input type="datetime-local" value={pickAt} onChange={(e) => setPickAt(e.target.value)}
+            min={new Date(Date.now() + 5 * 60000).toISOString().slice(0, 16)}
+            style={{ marginTop: 10, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', fontSize: 14.5, fontFamily: 'inherit', color: C.ink, background: '#fff' }} />
+        )}
 
         {blocked.length > 0 && (
-          <MvpMsg ok={false} text={`${blocked.join(' and ')} ${blocked.length === 1 ? 'needs' : 'need'} a photo or video. Add one, or switch ${blocked.length === 1 ? 'it' : 'them'} off above.`} />
+          <div style={{ marginTop: 16 }}>
+            <MvpMsg ok={false} text={`${blocked.join(' and ')} ${blocked.length === 1 ? 'needs' : 'need'} a photo or video. Add one, or switch ${blocked.length === 1 ? 'it' : 'them'} off above.`} />
+          </div>
         )}
-        {err && <MvpMsg ok={false} text={err} />}
+        {err && <div style={{ marginTop: 12 }}><MvpMsg ok={false} text={err} /></div>}
       </div>
 
       <MvpSaveBar
@@ -265,7 +331,12 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         disabled={!canSend}
         saving={busy}
         label={when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'}
-        hint="Goes out publicly as your business."
+        /* The decision, restated in words before they commit to it. A button
+           that says Post is not the same as being told what is about to happen. */
+        hint={
+          chosen.size === 0 ? 'Pick where it goes.'
+            : `${when === 'now' ? 'Posting' : 'Scheduled'} to ${chosen.size} account${chosen.size === 1 ? '' : 's'}${when === 'best' && best ? `, ${best.label}` : ''}. Public, as your business.`
+        }
       />
     </MvpShell>
   )
