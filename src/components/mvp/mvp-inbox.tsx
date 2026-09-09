@@ -106,7 +106,7 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
   )
 }
 
-interface CommentRow { id: string; platform: string; postId: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean }
+interface CommentRow { id: string; platform: string; postId: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean; canReply?: boolean; url?: string | null }
 
 /**
  * COMMENTS ON THEIR POSTS, with the reply in the same place.
@@ -195,13 +195,16 @@ function CommentsPane({ clientId }: { clientId: string }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
                 {c.replied
                   ? <span style={{ fontSize: 11.5, fontWeight: 700, color: C.greenDk }}>Answered</span>
-                  : (
+                  : c.canReply === false
+                    ? <span style={{ fontSize: 11.5, color: C.faint }}>Cannot be answered here</span>
+                    : (
                     <button
                       type="button"
                       onClick={() => { setOpenId(openId === c.id ? null : c.id); setDraft('') }}
                       style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, color: C.greenDk, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                    >{openId === c.id ? 'Cancel' : 'Reply'}</button>
-                  )}
+                      >{openId === c.id ? 'Cancel' : 'Reply'}</button>
+                    )}
+                {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, color: C.mute, textDecoration: 'none' }}>See it</a>}
               </div>
               {openId === c.id && (
                 <div style={{ marginTop: 8 }}>

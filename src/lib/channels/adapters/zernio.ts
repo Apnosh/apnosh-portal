@@ -180,6 +180,10 @@ export interface SocialCommentRow {
   createdAt: string | null
   /** true once someone has answered it, when the vendor tells us */
   replied: boolean
+  /** the vendor's own word on whether this one can be answered at all */
+  canReply: boolean
+  /** link to the comment on the platform */
+  url: string | null
 }
 
 /** The client's Zernio profile id, or null when they have no live connection. */
@@ -331,20 +335,30 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
          not createdAt), so the comment level is read the same defensive way. */
       const text = str(c.content) || str(c.text) || str(c.message) || str(c.comment)
       if (!id || !text) continue
-      const author = c.author && typeof c.author === 'object' ? (c.author as Record<string, unknown>) : {}
+      /* `from` is an OBJECT, not a string -- every comment read "Someone" until a
+         live response showed it. Handle both, and try the author-ish keys on
+         whichever of the two shapes turns up. */
+      const fromObj = (v: unknown): Record<string, unknown> =>
+        v && typeof v === 'object' ? (v as Record<string, unknown>) : {}
+      const who = { ...fromObj(c.author), ...fromObj(c.from) }
       out.push({
         id,
         platform: (str(post.platform) || str(c.platform) || 'instagram').toLowerCase(),
         postId,
         authorName:
-          str(c.username) || str(c.from) || str(c.authorName) || str(c.author_name) ||
-          str(author.username) || str(author.name) || 'Someone',
+          str(c.from) || str(c.username) || str(c.authorName) || str(c.author_name) ||
+          str(who.username) || str(who.name) || str(who.displayName) || 'Someone',
         text,
         createdAt: str(c.createdTime) || str(c.createdAt) || str(c.created_at) || str(c.timestamp) || null,
         /* Only true when the vendor says so. An unknown status is NOT "answered":
            showing a comment as handled when it is not is the one error this queue
            cannot make. */
         replied: str(c.status).toLowerCase() === 'replied' || c.replied === true || num(c.replyCount) > 0,
+        /* The vendor states this per comment. Trust it: offering a Reply button
+           on something the platform will refuse is a promise the product cannot
+           keep. Absent means yes, since older responses did not carry it. */
+        canReply: c.canReply !== false,
+        url: str(c.url) || str(c.permalink) || null,
       })
     }
     if (out.length >= limit) break
