@@ -100,8 +100,15 @@ function payerOf(metadata: unknown, ad: AdPlatform): string | null {
   return null
 }
 
-/** A post has to have done something before it is worth money. */
-const MIN_INTERACTIONS = 1
+/**
+ * Zernio reports the kind of media in whatever case the platform used: this
+ * client's rows carry `video`, `image`, `IMAGE` and `REELS` in the same column.
+ * Normalised once here rather than case-insensitively compared in three places.
+ */
+function mediaKind(raw: unknown): 'video' | 'image' {
+  const v = String(raw ?? '').toLowerCase()
+  return v === 'video' || v === 'reels' || v === 'reel' || v === 'carousel_video' ? 'video' : 'image'
+}
 
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')
@@ -180,21 +187,22 @@ export async function GET(req: NextRequest) {
        claim we can actually stand behind and "above average engagement" is not.
        Read from social_posts, which the nightly sync fills whether or not the
        post came from us -- so a photo the owner put up themselves is boostable. */
+    /* EVERY POST, not a recent dozen. The first version kept 60 days and the
+       top twelve, which for this account meant a third of what exists was
+       simply not offerable -- and the one an owner wants to put money behind is
+       often an older one they remember doing well. */
     const admin = createAdminClient()
-    const since = new Date(Date.now() - 60 * 864e5).toISOString()
     const { data: posts } = await admin.from('social_posts')
-      .select('external_id, platform, caption, media_url, thumbnail_url, permalink, posted_at, total_interactions, reach, likes, comments')
+      .select('external_id, platform, caption, media_type, media_url, thumbnail_url, permalink, posted_at, total_interactions, reach, likes, comments')
       .eq('client_id', clientId)
-      .gte('posted_at', since)
       .order('posted_at', { ascending: false })
-      .limit(60)
+      .limit(200)
 
     const usable = (posts ?? []).filter((p) => BOOSTABLE.has(String(p.platform)) && p.external_id)
     const scores = usable.map((p) => Number(p.total_interactions ?? 0)).filter((n) => n > 0).sort((a, b) => a - b)
     const median = scores.length ? scores[Math.floor(scores.length / 2)] : 0
 
     const candidates = usable
-      .filter((p) => Number(p.total_interactions ?? 0) >= MIN_INTERACTIONS)
       .map((p) => {
         const n = Number(p.total_interactions ?? 0)
         return {
@@ -203,7 +211,10 @@ export async function GET(req: NextRequest) {
           platform: String(p.platform),
           adPlatform: adPlatformFor(String(p.platform)),
           caption: String(p.caption ?? '').slice(0, 160),
+          /* thumbnail_url is the reliable one: 29 of this client's 32 posts
+             have no media_url at all. */
           image: p.thumbnail_url ?? p.media_url ?? null,
+          isVideo: mediaKind(p.media_type) === 'video',
           permalink: p.permalink ?? null,
           postedAt: p.posted_at,
           interactions: n,
@@ -214,7 +225,6 @@ export async function GET(req: NextRequest) {
         }
       })
       .sort((a, b) => b.interactions - a.interactions)
-      .slice(0, 12)
 
     return NextResponse.json({
       /* Connected means "at least one ad platform has an account chosen to

@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, TrendingUp, Square, MapPin, Eye } from 'lucide-react'
+import { Check, TrendingUp, Square, MapPin, Eye, Play, Image as ImageIcon } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
@@ -67,7 +67,7 @@ interface PlatformState {
 interface Candidate {
   /* Zernio's post id, whatever the database column is called. */
   zernioPostId: string; platform: string; adPlatform: 'meta' | 'tiktok' | null; caption: string
-  image: string | null; permalink: string | null; postedAt: string
+  image: string | null; isVideo: boolean; permalink: string | null; postedAt: string
   interactions: number; reach: number; timesMedian: number | null
 }
 
@@ -95,6 +95,9 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   /* Set up one platform and the setup screen goes away, which would leave no
      way to add the second. This forces it back. */
   const [addingPlatform, setAddingPlatform] = useState(false)
+  /* Best first is the pitch; newest first is how somebody looks for the post
+     they are actually thinking of. */
+  const [order, setOrder] = useState<'best' | 'new'>('best')
   const [accounts, setAccounts] = useState<AdAccount[]>([])
   const [ads, setAds] = useState<RunningAd[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
@@ -165,10 +168,12 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   /* Only posts on a platform that has an account set up to pay. Offering a
      TikTok video before TikTok ads are connected is offering a button that
      cannot work. */
-  const liveCandidates = useMemo(
-    () => candidates.filter((c) => c.adPlatform && platforms.some((p) => p.platform === c.adPlatform && p.payer)),
-    [candidates, platforms],
-  )
+  const liveCandidates = useMemo(() => {
+    const list = candidates.filter((c) => c.adPlatform && platforms.some((p) => p.platform === c.adPlatform && p.payer))
+    return order === 'best'
+      ? list
+      : [...list].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime())
+  }, [candidates, platforms, order])
   const setupRules = useMemo(() => platforms.find((p) => p.platform === setupOf) ?? null, [platforms, setupOf])
   const setupAccounts = setupRules?.accounts ?? []
   const totalRunning = useMemo(() => ads.filter((a) => a.status?.toUpperCase() === 'ACTIVE').length, [ads])
@@ -422,37 +427,84 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
               </>
             )}
 
-            <Head hue="brand">Your posts, best first</Head>
+            <Head hue="brand" note={liveCandidates.length ? `${liveCandidates.length} posts` : null}>Pick a post</Head>
+            {/* TWO COLUMNS AND A REAL SHAPE. The first version showed a 76px
+                SQUARE crop, on an account where three quarters of the posts are
+                vertical video: a Reel became a slice of its own middle and the
+                owner could not tell one from another. Portrait thumbnails at
+                4:5, which is the tallest an Instagram feed accepts and the
+                closest honest frame for both a photo and a Reel. */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+              {([['best', 'Best first'], ['new', 'Newest first']] as const).map(([k, label]) => {
+                const on = order === k
+                return (
+                  <button key={k} type="button" onClick={() => setOrder(k)}
+                    style={{ font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, padding: '6px 12px',
+                      borderRadius: R.pill, cursor: 'pointer', color: on ? '#fff' : C.mute,
+                      background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
             {liveCandidates.length === 0 ? (
-              <MvpEmpty text="Nothing to boost yet. Once a few posts have some likes and comments on them, the strongest will show up here." />
+              <MvpEmpty text="Nothing to boost yet. Posts show up here once they have been synced." />
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
                 {liveCandidates.map((p) => {
                   const c = brandTone(p.platform)?.solid ?? C.green
+                  const strong = p.timesMedian != null && p.timesMedian >= 1.5
                   return (
                     <button key={p.zernioPostId} type="button" onClick={() => setPicked(p)}
-                      style={{ display: 'flex', alignItems: 'stretch', gap: 0, width: '100%', textAlign: 'left', font: 'inherit', padding: 0,
-                        borderRadius: R.box, overflow: 'hidden', cursor: 'pointer', background: '#fff', border: `1px solid ${C.line}` }}>
-                      {p.image
-                        ? <img src={p.image} alt="" style={{ width: 76, height: 76, objectFit: 'cover', flexShrink: 0, background: '#eee' }} />
-                        : <span style={{ width: 76, height: 76, flexShrink: 0, background: `linear-gradient(160deg, ${tint('mint', .12)}, ${tint('brand', .12)})` }} />}
-                      <span style={{ flex: 1, minWidth: 0, padding: '11px 13px' }}>
-                        <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                          <BrandOrMark provider={p.platform} size={13} />
-                          {p.timesMedian && p.timesMedian >= 1.5 && (
-                            <span style={{ fontFamily: DISPLAY, fontSize: T.note, fontWeight: 700, color: '#fff', background: gradOf('brand'), padding: '2px 8px', borderRadius: R.pill }}>
-                              {p.timesMedian}× your usual
-                            </span>
-                          )}
+                      style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', font: 'inherit', padding: 0,
+                        borderRadius: R.box, overflow: 'hidden', cursor: 'pointer', background: '#fff',
+                        /* Grid items stretch to the tallest in their row by
+                           default, and a flex column will spend that height on
+                           the picture -- so a two-line caption next door made
+                           this thumbnail taller than 4:5 and the crops stopped
+                           matching. Start-aligned, and the picture does not
+                           give any height away. */
+                        alignSelf: 'start',
+                        border: `1px solid ${strong ? alpha(c, .55) : C.line}` }}>
+                      <span style={{ position: 'relative', display: 'block', width: '100%', aspectRatio: '4 / 5', flexShrink: 0, background: `linear-gradient(160deg, ${tint('mint', .12)}, ${tint('brand', .12)})` }}>
+                        {p.image ? (
+                          <img src={p.image} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        ) : (
+                          /* Four of this client's posts have no thumbnail at all.
+                             An empty tinted box reads as a loading failure. */
+                          <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.faint }}>
+                            <ImageIcon size={20} />
+                          </span>
+                        )}
+                        {/* A play badge, because a still frame of a video looks
+                            exactly like a photo and they cost different things
+                            to boost. */}
+                        {p.isVideo && (
+                          <span style={{ position: 'absolute', left: 8, top: 8, width: 22, height: 22, borderRadius: '50%',
+                            background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Play size={10} color="#fff" fill="#fff" />
+                          </span>
+                        )}
+                        <span style={{ position: 'absolute', right: 8, top: 8, width: 22, height: 22, borderRadius: '50%',
+                          background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 1px 3px rgba(0,0,0,.2)' }}>
+                          <BrandOrMark provider={p.platform} size={12} />
                         </span>
-                        <span style={{ fontSize: T.label, color: C.ink, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as React.CSSProperties}>
+                        {strong && (
+                          <span style={{ position: 'absolute', left: 8, bottom: 8, fontFamily: DISPLAY, fontSize: T.note, fontWeight: 700,
+                            color: '#fff', background: gradOf('brand'), padding: '3px 9px', borderRadius: R.pill }}>
+                            {p.timesMedian}× your usual
+                          </span>
+                        )}
+                      </span>
+                      <span style={{ padding: '9px 11px 11px' }}>
+                        <span style={{ fontSize: T.note, color: C.ink, lineHeight: 1.4, overflow: 'hidden',
+                          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as React.CSSProperties}>
                           {p.caption || 'No caption'}
                         </span>
-                        <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 4 }}>
-                          {p.interactions.toLocaleString()} likes and comments{p.reach ? ` · ${p.reach.toLocaleString()} reached` : ''}
+                        <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 5 }}>
+                          {p.interactions.toLocaleString()} likes and comments
                         </span>
                       </span>
-                      <span style={{ width: 3, background: alpha(c, .5), flexShrink: 0 }} />
                     </button>
                   )
                 })}
@@ -465,7 +517,19 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         {!loading && connected && picked && (
           <>
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: R.box, border: `1px solid ${C.line}`, overflow: 'hidden', marginTop: 8 }}>
-              {picked.image && <img src={picked.image} alt="" style={{ width: 64, height: 64, objectFit: 'cover', flexShrink: 0 }} />}
+              {/* Same 4:5 as the grid, so the thing they tapped still looks like
+                  the thing they tapped. */}
+              {picked.image && (
+                <span style={{ position: 'relative', width: 64, flexShrink: 0, aspectRatio: '4 / 5', display: 'block' }}>
+                  <img src={picked.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                  {picked.isVideo && (
+                    <span style={{ position: 'absolute', left: 5, top: 5, width: 18, height: 18, borderRadius: '50%',
+                      background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Play size={8} color="#fff" fill="#fff" />
+                    </span>
+                  )}
+                </span>
+              )}
               <span style={{ flex: 1, minWidth: 0, padding: '10px 12px 10px 0' }}>
                 <span style={{ fontSize: T.label, color: C.ink, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as React.CSSProperties}>
                   {picked.caption || 'No caption'}
