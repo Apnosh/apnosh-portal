@@ -25,7 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate,
+  listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate, adPreviews,
   listPostTargets, MAX_BOOST_USD, MAX_BOOST_DAYS, MIN_DAILY_USD,
 } from '@/lib/channels/adapters/zernio'
 
@@ -61,6 +61,10 @@ function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number;
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+/* A boost can take minutes: Zernio re-hosts an Instagram video through Meta
+   before the ad exists. The default function timeout would cut the request off
+   mid-flight and report a failure for an ad that was still being created. */
+export const maxDuration = 120
 
 /** Boosting is Meta only for now: Facebook and Instagram is where this audience is. */
 const BOOSTABLE = new Set(['facebook', 'instagram'])
@@ -74,6 +78,18 @@ export async function GET(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized) {
     return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
+  }
+
+  /* ?preview=<adId> — Meta's own rendering of a running ad, per placement. */
+  const previewAd = req.nextUrl.searchParams.get('preview')
+  if (previewAd) {
+    const targets = await listPostTargets(clientId)
+    const meta = targets.find((t) => t.platform === 'facebook') ?? targets.find((t) => t.platform === 'instagram')
+    if (!meta) return NextResponse.json({ previews: [] })
+    /* Theirs, verified, before we render anything. */
+    const mine = await listAds(clientId, meta.accountId)
+    if (!mine.some((a) => a.id === previewAd)) return NextResponse.json({ previews: [] })
+    return NextResponse.json({ previews: await adPreviews(clientId, previewAd) })
   }
 
   /* ?places=seattle — resolve a typed place to the platform's own id, which is
@@ -136,7 +152,8 @@ export async function GET(req: NextRequest) {
       .map((p) => {
         const n = Number(p.total_interactions ?? 0)
         return {
-          platformPostId: String(p.external_id),
+            /* Named external_id in the table, but it holds ZERNIO's post id. */
+          zernioPostId: String(p.external_id),
           platform: String(p.platform),
           caption: String(p.caption ?? '').slice(0, 160),
           image: p.thumbnail_url ?? p.media_url ?? null,
@@ -289,7 +306,7 @@ export async function POST(req: NextRequest) {
       }
 
       const r = await boostPost(clientId, {
-        platformPostId: body.platformPostId,
+        zernioPostId: body.platformPostId,
         accountId: meta.accountId,
         adAccountId: payer,
         amount, days,

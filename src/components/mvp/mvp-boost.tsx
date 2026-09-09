@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, TrendingUp, Square, MapPin } from 'lucide-react'
+import { Check, TrendingUp, Square, MapPin, Eye } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
@@ -35,8 +35,32 @@ interface AdAccount { id: string; name: string; currency: string; selectable: bo
 interface RunningAd { id: string; name: string; status: string; spend: number; impressions: number; clicks: number }
 interface GeoOption { key: string; name: string; type: string; region?: string; country?: string }
 interface Reach { available: boolean; lower: number | null; upper: number | null; daily: number | null }
+interface AdPreview { format: string; html: string | null }
+
+/**
+ * TAKE THE URL, NOT THE HTML.
+ *
+ * Meta returns its preview as an <iframe> snippet "embeddable directly", and
+ * dangerouslySetInnerHTML would do exactly that -- putting third-party markup
+ * into our page and trusting it forever. Pulling out the src and rendering our
+ * own sandboxed iframe means only a URL crosses the boundary, and only if it is
+ * really Facebook's. Costs nothing and closes the hole.
+ */
+function previewSrc(html: string | null): string | null {
+  if (!html) return null
+  const m = /<iframe[^>]*\ssrc=["']([^"']+)["']/i.exec(html)
+  if (!m) return null
+  const raw = m[1].replace(/&amp;/g, '&')
+  try {
+    const u = new URL(raw, 'https://www.facebook.com')
+    if (u.protocol !== 'https:') return null
+    if (!/(^|\.)facebook\.com$/i.test(u.hostname)) return null
+    return u.toString()
+  } catch { return null }
+}
 interface Candidate {
-  platformPostId: string; platform: string; caption: string
+  /* Zernio's post id, whatever the database column is called. */
+  zernioPostId: string; platform: string; caption: string
   image: string | null; permalink: string | null; postedAt: string
   interactions: number; reach: number; timesMedian: number | null
 }
@@ -82,6 +106,9 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [place, setPlace] = useState<GeoOption | null>(null)
   const [reach, setReach] = useState<Reach | null>(null)
   const [reaching, setReaching] = useState(false)
+  /* Meta's own rendering of a running ad, fetched only when asked for. */
+  const [previewOf, setPreviewOf] = useState<string | null>(null)
+  const [previews, setPreviews] = useState<AdPreview[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<{ spent: number; days: number } | null>(null)
 
@@ -255,6 +282,18 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                           ${a.spend.toFixed(2)} spent · {a.impressions.toLocaleString()} seen · {a.status.toLowerCase()}
                         </span>
                       </span>
+                      <button type="button"
+                        onClick={() => void (async () => {
+                          if (previewOf === a.id) { setPreviewOf(null); setPreviews(null); return }
+                          setPreviewOf(a.id); setPreviews(null)
+                          const r = await fetch(`/api/dashboard/ads?clientId=${clientId}&preview=${encodeURIComponent(a.id)}`, { cache: 'no-store' })
+                          const j = await r.json().catch(() => ({}))
+                          setPreviews((j.previews ?? []) as AdPreview[])
+                        })()}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600,
+                          color: C.mute, background: '#f0f1f0', border: 'none', padding: '7px 12px', borderRadius: R.pill, cursor: 'pointer' }}>
+                        <Eye size={11} /> {previewOf === a.id ? 'Hide' : 'See it'}
+                      </button>
                       {a.status?.toUpperCase() === 'ACTIVE' && (
                         <button type="button" disabled={busy}
                           onClick={() => void (async () => { if (await act({ action: 'stop', adId: a.id })) void load() })()}
@@ -266,6 +305,30 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     </div>
                   ))}
                 </div>
+                {/* META'S OWN RENDERING, not our approximation of it. The same
+                    post reads differently in a feed and in a Story, and somebody
+                    who has just spent money should be able to see both. */}
+                {previewOf && (
+                  <div style={{ marginTop: 10 }}>
+                    {previews === null ? (
+                      <div style={{ fontSize: T.control, color: C.mute, padding: '10px 2px' }}>Asking Meta how it looks…</div>
+                    ) : previews.length === 0 ? (
+                      <MvpEmpty text="Meta did not return a preview for this one. It usually means the ad is still being reviewed." />
+                    ) : (
+                      <div className="bst-scroll" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+                        {previews.map((p) => ({ ...p, src: previewSrc(p.html) })).filter((p) => p.src).map((p) => (
+                          <div key={p.format} style={{ flexShrink: 0, borderRadius: R.box, overflow: 'hidden', border: `1px solid ${C.line}`, background: '#fff' }}>
+                            <div style={{ fontSize: T.note, fontWeight: 600, color: C.mute, padding: '8px 12px', borderBottom: `1px solid ${C.line}` }}>
+                              {p.format.replace(/_/g, ' ').toLowerCase()}
+                            </div>
+                            <iframe src={p.src as string} title={p.format} sandbox="allow-scripts allow-same-origin"
+                              style={{ width: 340, height: 520, border: 'none', display: 'block' }} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
 
@@ -277,7 +340,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 {candidates.map((p) => {
                   const c = brandTone(p.platform)?.solid ?? C.green
                   return (
-                    <button key={p.platformPostId} type="button" onClick={() => setPicked(p)}
+                    <button key={p.zernioPostId} type="button" onClick={() => setPicked(p)}
                       style={{ display: 'flex', alignItems: 'stretch', gap: 0, width: '100%', textAlign: 'left', font: 'inherit', padding: 0,
                         borderRadius: R.box, overflow: 'hidden', cursor: 'pointer', background: '#fff', border: `1px solid ${C.line}` }}>
                       {p.image
@@ -459,7 +522,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
               <MvpButton full busy={busy} disabled={!place || total > limits.maxUsd} label={place ? `Spend $${total}` : 'Pick an area first'}
                 onClick={() => void (async () => {
                   const j = await act({
-                    action: 'boost', platformPostId: picked.platformPostId,
+                    action: 'boost', platformPostId: picked.zernioPostId,
                     adAccountId: pickedAccount,
                     amount: total, days,
                     targeting: { geoKey: place?.key, geoType: place?.type, geoName: place?.name, radiusMiles: radius, ageMin, ageMax },

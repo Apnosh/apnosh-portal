@@ -211,14 +211,19 @@ export function aggregateZernioPosts(rows: ZernioPostRow[] | null | undefined): 
   return out
 }
 
-async function zer(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
+async function zer(path: string, init: RequestInit & { timeoutMs?: number } = {}): Promise<Record<string, unknown>> {
   const key = process.env.ZERNIO_API_KEY
   if (!key) throw new ChannelError('not_configured', 'ZERNIO_API_KEY is not set')
   /* A vendor call with no deadline is a page that never loads. One slow response
      used to hold the whole comments queue open, because that queue fans out over
      several posts and every one of them waited on this. */
   const r = await fetch(`${API}${path}`, {
-    signal: AbortSignal.timeout(12000),
+    /* Twelve seconds suits a read. It does NOT suit a boost: Zernio's own docs
+       say one "can take minutes when Meta requires re-hosting an Instagram
+       video", and in the same breath "do not retry on client timeout". Aborting
+       at 12s would have shown the owner a failure for an ad that was still being
+       created. Callers that need longer say so. */
+    signal: AbortSignal.timeout(init.timeoutMs ?? 12000),
     ...init,
     headers: {
       Authorization: `Bearer ${key}`,
@@ -1555,8 +1560,17 @@ export async function reachEstimate(
  * the post's existing likes and comments rather than starting cold.
  */
 export async function boostPost(clientId: string, args: {
-  /** the post on the platform, which is what we hold for natively-made posts */
-  platformPostId: string
+  /**
+   * ZERNIO'S post id, not the platform's.
+   *
+   * This was wrong first time and would have failed on the first real spend.
+   * social_posts.external_id is named as though it holds a Meta or Instagram id;
+   * it does not. The sync fills it from `_id` on Zernio's own analytics rows, so
+   * every value in that column is a 24-hex Zernio ObjectId. Zernio's boost takes
+   * `postId` OR `platformPostId` and they are different fields; we were sending
+   * ours in the wrong one.
+   */
+  zernioPostId: string
   accountId: string
   adAccountId: string
   /** whole currency units, e.g. 20 for $20. Capped here, not by the caller. */
@@ -1585,7 +1599,7 @@ export async function boostPost(clientId: string, args: {
   if (!Number.isFinite(days) || days < 1 || days > MAX_BOOST_DAYS) {
     throw new ChannelError('upstream', `A boost runs between 1 and ${MAX_BOOST_DAYS} days`)
   }
-  if (!args.platformPostId || !args.adAccountId || !args.accountId) {
+  if (!args.zernioPostId || !args.adAccountId || !args.accountId) {
     throw new ChannelError('upstream', 'A boost needs a post and an ad account')
   }
 
@@ -1594,14 +1608,18 @@ export async function boostPost(clientId: string, args: {
 
   /* The same post, the same money, the same window is the same purchase. */
   let h = 0
-  const seed = `${args.platformPostId}:${amount}:${days}:${start.toISOString().slice(0, 13)}`
+  const seed = `${args.zernioPostId}:${amount}:${days}:${start.toISOString().slice(0, 13)}`
   for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) | 0 }
 
   const res = await zer('/ads/boost', {
     method: 'POST',
+    /* Long, because Meta may re-host an Instagram video before the ad exists.
+       The Idempotency-Key above is what makes the eventual retry safe; the
+       timeout is what stops us claiming failure while it is still working. */
+    timeoutMs: 110_000,
     headers: { 'Idempotency-Key': `apnosh-boost-${(h >>> 0).toString(36)}` },
     body: JSON.stringify({
-      platformPostId: args.platformPostId,
+      postId: args.zernioPostId,
       accountId: args.accountId,
       adAccountId: args.adAccountId,
       name: args.name.slice(0, 255),
@@ -1658,4 +1676,35 @@ export async function stopAd(clientId: string, adId: string): Promise<void> {
     method: 'PUT',
     body: JSON.stringify({ status: 'PAUSED' }),
   })
+}
+
+
+export interface AdPreview { format: string; html: string | null }
+
+/**
+ * WHAT THE AD ACTUALLY LOOKS LIKE, rendered by Meta.
+ *
+ * Meta returns an <iframe> snippet per placement, which is the real thing rather
+ * than our approximation of it: the same post reads differently in a Facebook
+ * feed, an Instagram feed and a Reel, and an owner who has just spent money
+ * should be able to see all three.
+ *
+ * Rendered from the AD, not from a creative spec we build. Building the spec
+ * ourselves would mean guessing Meta's object_story_id format for an Instagram
+ * post, and guessing a vendor's shape is exactly what has gone wrong on this
+ * project before.
+ */
+export async function adPreviews(clientId: string, adId: string, formats?: string[]): Promise<AdPreview[]> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  const want = (formats?.length ? formats : ['MOBILE_FEED_STANDARD', 'INSTAGRAM_STANDARD', 'INSTAGRAM_STORY'])
+  const q = new URLSearchParams()
+  for (const f of want) q.append('formats', f)
+  try {
+    const res = await zer(`/ads/${encodeURIComponent(adId)}/preview?${q.toString()}`)
+    const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+    return unwrapList({ data: d.previews }, 'data')
+      .map((x) => ({ format: str(x.format), html: str(x.html) || null }))
+      .filter((x) => x.format)
+  } catch { return [] }
 }
