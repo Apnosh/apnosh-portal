@@ -20,7 +20,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const maxDuration = 10
 
-interface RevRow { rating: number; at: string; replied: boolean; source: string }
+interface RevRow { rating: number; at: string; replied: boolean; /** when the reply went out; '' when the table does not record it */ repliedAt: string; source: string }
 
 // Page through a review table so every aggregate reflects all collected reviews.
 async function fetchAll(admin: SupabaseClient, table: string, cols: string, dateCol: string, clientId: string): Promise<Record<string, unknown>[]> {
@@ -64,13 +64,15 @@ export async function GET(req: NextRequest) {
 
   const admin = createAdminClient()
   const [g, l] = await Promise.all([
-    fetchAll(admin, 'reviews', 'rating, posted_at, response_text, source', 'posted_at', clientId),
+    fetchAll(admin, 'reviews', 'rating, posted_at, response_text, responded_at, source', 'posted_at', clientId),
     fetchAll(admin, 'local_reviews', 'rating, created_at_platform, reply_text, source', 'created_at_platform', clientId),
   ])
 
   const rows: RevRow[] = [
-    ...g.map((r) => ({ rating: Number(r.rating ?? 0), at: String(r.posted_at ?? ''), replied: !!(r.response_text && String(r.response_text).trim()), source: String(r.source ?? '') })),
-    ...l.map((r) => ({ rating: Number(r.rating ?? 0), at: String(r.created_at_platform ?? ''), replied: !!(r.reply_text && String(r.reply_text).trim()), source: String(r.source ?? '') })),
+    ...g.map((r) => ({ rating: Number(r.rating ?? 0), at: String(r.posted_at ?? ''), replied: !!(r.response_text && String(r.response_text).trim()), repliedAt: String(r.responded_at ?? ''), source: String(r.source ?? '') })),
+    /* local_reviews carries no reply timestamp, so those rows count toward the
+       rate and simply cannot contribute to the speed. */
+    ...l.map((r) => ({ rating: Number(r.rating ?? 0), at: String(r.created_at_platform ?? ''), replied: !!(r.reply_text && String(r.reply_text).trim()), repliedAt: '', source: String(r.source ?? '') })),
   ].filter((r) => r.rating > 0)
 
   // Ranges, not equality, so every rating in [1,5] lands in exactly one bucket.
@@ -98,11 +100,30 @@ export async function GET(req: NextRequest) {
   }
 
   const repliedCount = rows.filter((r) => r.replied).length
+  /* HOW FAST, not just how many. Both timestamps are stored and neither was ever
+     read, so the one number that proves the reply service is doing its job -- and
+     the one an owner paying for it would ask for -- did not exist on any screen.
+     The MEDIAN, not the mean: a single review answered eleven months late would
+     drag an average into nonsense and describe nobody's experience. Negative or
+     absurd gaps (a backfilled reply stamped before its review) are dropped
+     rather than clamped, because they are bad data, not fast replies. */
+  const gapsH = rows
+    .filter((r) => r.replied && r.at && r.repliedAt)
+    .map((r) => (Date.parse(r.repliedAt) - Date.parse(r.at)) / 3600000)
+    .filter((h) => Number.isFinite(h) && h >= 0 && h <= 24 * 365)
+    .sort((a, b) => a - b)
+  const medianHours = gapsH.length ? Math.round(gapsH[Math.floor(gapsH.length / 2)] * 10) / 10 : null
   const reply = {
     total: rows.length,
     replied: repliedCount,
     unanswered: rows.length - repliedCount,
     unansweredNegative: rows.filter((r) => !r.replied && r.rating < 3).length,
+    /** share of reviews answered, 0-100; null when there is nothing to answer */
+    ratePct: rows.length ? Math.round((repliedCount / rows.length) * 100) : null,
+    /** median hours from a review appearing to the reply going out */
+    medianHours,
+    /** how many replies that median is measured over */
+    timedCount: gapsH.length,
   }
 
   const sources: Record<string, number> = {}

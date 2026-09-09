@@ -98,6 +98,7 @@ Rules:
 ${greet}
 ${voiceLines ? voiceLines + '\n' : ''}- For a positive review (4 or 5 stars), be warm and specific, and invite them back.
 - For a critical review (3 stars or fewer), take it seriously, apologize where fair, and offer to make it right. Never be defensive.
+- REPLY IN THE LANGUAGE THE REVIEW IS WRITTEN IN. If they wrote in Spanish, answer in Spanish; the same for any other language. A guest who writes in their own language and is answered in English has been answered by a machine. Match their register too: usted or tu as they addressed you.
 - No em dashes. Short, plain sentences. Sound like a real person, not a form letter.
 - Return ONLY the reply text, with no preamble or quotation marks.${voiceExamples}`
   const user = `The review (${rating} of 5 stars) from ${author}:

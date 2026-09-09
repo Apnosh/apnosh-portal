@@ -76,9 +76,12 @@ const ANALYSIS_SCHEMA = {
   },
 }
 
-async function analyze(items: { rating: number; text: string }[], counts: { positive: number; neutral: number; negative: number; total: number }, apiKey: string | null): Promise<{ summary: string; rawTopics: { name?: string; positive?: number[]; negative?: number[]; quotePos?: string; quoteNeg?: string }[] } | null> {
+async function analyze(items: { rating: number; text: string }[], counts: { positive: number; neutral: number; negative: number; total: number }, apiKey: string | null, lang: 'en' | 'es'): Promise<{ summary: string; rawTopics: { name?: string; positive?: number[]; negative?: number[]; quotePos?: string; quoteNeg?: string }[] } | null> {
   if (!apiKey || items.length === 0) return null
   const list = items.map((r, i) => `${i + 1}. [${r.rating}-star] ${r.text}`).join('\n')
+  /* The prompt used to end 'owner-facing English', so a Spanish-reading owner got
+     Spanish reviews summarised into English topic names. The owner's language is
+     recorded; the quotes stay in the guest's words either way. */
   const system = `You read a restaurant's customer reviews and break down what guests say by TOPIC, for the owner.
 Rules:
 - Use ONLY what actually appears in the reviews below. Never invent a topic, a dish, or a complaint.
@@ -87,7 +90,8 @@ Rules:
 - Only include a topic that at least two reviews mention.
 - quotePos / quoteNeg: a few words a guest actually wrote about the topic, verbatim — one where they praise it, one where they knock it. Leave a side empty if there's no such mention.
 - summary must match the OVERALL picture from the rating counts you are given.
-- Warm, plain, owner-facing English. No em dashes. Never mention AI.`
+- Warm, plain and owner-facing. No em dashes. Never mention AI.
+- WRITE THE TOPIC NAMES AND THE SUMMARY IN ${lang === 'es' ? 'SPANISH' : 'ENGLISH'}, whatever language the reviews themselves are in. This is the owner's own reading language. Quotes stay exactly as the guest wrote them, in their language, never translated.`
   const user = `Overall across all ${counts.total} reviews: ${counts.positive} positive, ${counts.neutral} neutral, ${counts.negative} negative.
 
 Reviews, newest first (number, star rating, text):
@@ -183,9 +187,19 @@ export async function GET(req: NextRequest) {
   // Signature of the review set — changes only when a new review arrives (count
   // grows) or the newest date moves. Lets us skip the model call when nothing
   // changed since we last analyzed.
+  const lang = await (async () => {
+    try {
+      const { getClientLanguage } = await import('@/lib/i18n/language')
+      return await getClientLanguage(clientId)
+    } catch { return 'en' as const }
+  })()
   // v2: bump when the analysis payload shape changes (added negQuote) so cached
   // rows recompute even though the reviews are unchanged.
-  const sig = `v2:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
+  // The LANGUAGE is part of the signature: the topic names and the summary are
+  // now written in the owner's reading language, so a cached English breakdown
+  // must not be served to an owner who reads Spanish. Switching the language
+  // recomputes once and then caches per language.
+  const sig = `v2:${lang}:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
 
   // Cache hit → return the stored breakdown instantly, no model call. Wrapped so
   // a missing cache table (migration not applied) just falls through to live.
@@ -214,7 +228,7 @@ export async function GET(req: NextRequest) {
     .slice(0, 50)
   const items = withTextRows.map((r) => ({ rating: r.rating, text: redact(r.text!.trim()).slice(0, 400) }))
 
-  const ai = items.length >= 3 ? await analyze(items, counts, readApiKey()) : null
+  const ai = items.length >= 3 ? await analyze(items, counts, readApiKey(), lang) : null
   const topics = ai ? buildTopics(ai.rawTopics, items) : []
 
   // Only cache a real (successful) analysis, so a transient model failure isn't

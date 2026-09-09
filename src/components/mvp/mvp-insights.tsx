@@ -85,7 +85,7 @@ interface ReviewSummary {
   split: { positive: number; neutral: number; negative: number; total: number }
   stars: Record<string, number>
   byMonth: { ym: string; count: number }[]
-  reply: { total: number; replied: number; unanswered: number; unansweredNegative: number }
+  reply: { total: number; replied: number; unanswered: number; unansweredNegative: number; ratePct?: number | null; medianHours?: number | null; timedCount?: number }
   sources: Record<string, number>
   recent: { rating: number; date: string }[]
   placeRating: number | null
@@ -1942,6 +1942,7 @@ function RetentionView({ data, summary, topicsData, topicsLoading }: { data: Ins
   return (
     <>
       <ReviewHero avgRating={data.avgRating} summary={summary} />
+      {summary && <ReplyPerformance reply={summary.reply} />}
       {summary && <ReviewSources sources={summary.sources} googleCount={summary.placeRatingCount} />}
       <ReviewSentiment topics={topicsData} loading={topicsLoading} />
       {summary && summary.byMonth.length >= 2 && <RatingOverTime byMonth={summary.byMonth} recent={summary.recent ?? []} />}
@@ -2484,6 +2485,55 @@ function RecentVsLifetime({ summary, shownAvg }: { summary: ReviewSummary | null
         </div>
       )}
     </div>
+  )
+}
+
+/* ── How you answer ─────────────────────────────────────────────────────────
+ * Both halves of this were already stored and neither was ever read. The reply
+ * counts were computed by the summary route and displayed nowhere, and the
+ * timestamps needed to say how FAST are on every review row. For an owner
+ * paying for a reply service, this is the one number that shows the service
+ * working -- and the one they would ask for first.
+ *
+ * The speed is a MEDIAN. One review answered eleven months late drags a mean
+ * into nonsense and describes nobody's experience. */
+function ReplyPerformance({ reply }: { reply: ReviewSummary['reply'] }) {
+  const rate = reply.ratePct
+  if (rate == null || reply.total === 0) return null
+  const h = reply.medianHours ?? null
+  const speed = h == null ? null
+    : h < 1 ? 'under an hour'
+      : h < 48 ? `${Math.round(h)} hour${Math.round(h) === 1 ? '' : 's'}`
+        : `${Math.round(h / 24)} days`
+  const good = rate >= 80
+  const col = good ? C.greenDk : rate >= 50 ? C.amber : C.coral
+  return (
+    <Section title="How you answer">
+      <div style={{ display: 'grid', gridTemplateColumns: speed ? '1fr 1fr' : '1fr', gap: 8 }}>
+        <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }}>
+          <div style={{ fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, color: col, lineHeight: 1.1 }}>{rate}%</div>
+          <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.35 }}>
+            answered{reply.unanswered > 0 ? ` · ${reply.unanswered} waiting` : ''}
+          </div>
+          {reply.unansweredNegative > 0 && (
+            <div style={{ fontSize: 11.5, color: C.coral, marginTop: 5, fontWeight: 600 }}>
+              {reply.unansweredNegative} critical {reply.unansweredNegative === 1 ? 'review has' : 'reviews have'} no reply
+            </div>
+          )}
+        </div>
+        {speed && (
+          <div style={{ background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14, padding: 14 }}>
+            <div style={{ fontFamily: DISPLAY, fontSize: 26, fontWeight: 600, color: C.ink, lineHeight: 1.1 }}>{speed}</div>
+            <div style={{ fontSize: 12.5, color: C.mute, marginTop: 3, lineHeight: 1.35 }}>
+              typical wait for a reply
+            </div>
+            {reply.timedCount != null && (
+              <div style={{ fontSize: 11, color: C.faint, marginTop: 5 }}>median of {reply.timedCount}</div>
+            )}
+          </div>
+        )}
+      </div>
+    </Section>
   )
 }
 
