@@ -1419,10 +1419,19 @@ export async function platformTextLimits(): Promise<Record<string, number>> {
  * call is the one that spends. There is no rehearsal.
  */
 
-/** The most a single boost may ever be, whatever the caller asks for. */
-export const MAX_BOOST_USD = 50
-/** And the longest it may run, so a cheap boost cannot be stretched indefinitely. */
-export const MAX_BOOST_DAYS = 14
+/**
+ * The most a single boost may ever be, whatever the caller asks for.
+ *
+ * A GUARDRAIL, NOT A PLATFORM LIMIT. Meta's own minimum is $1/day and it has no
+ * maximum worth mentioning. This number exists so that a bug, a fat finger or a
+ * hostile request body cannot empty an ad account, and it is deliberately a
+ * number an owner would notice losing rather than one they would not.
+ */
+export const MAX_BOOST_USD = 500
+/** And the longest it may run. A month is a campaign; longer is a subscription. */
+export const MAX_BOOST_DAYS = 30
+/** Meta's own floor, below which it will not deliver. */
+export const MIN_DAILY_USD = 1
 
 export interface AdAccount {
   id: string
@@ -1480,6 +1489,63 @@ export async function connectAds(
 
 export interface BoostResult { id: string | null; status: string }
 
+/** Somewhere an ad can be aimed. */
+export interface GeoOption { key: string; name: string; type: string; region?: string; country?: string }
+
+/**
+ * Places matching a search, as the ad platform knows them.
+ *
+ * A city has to be resolved to the PLATFORM'S own id before it can be targeted;
+ * "Seattle" is not a targeting value, `key` is. This is what makes "how do I
+ * know it goes to the right area" answerable with something other than a shrug.
+ */
+export async function searchGeo(clientId: string, accountId: string, q: string): Promise<GeoOption[]> {
+  if (!q.trim()) return []
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  try {
+    const res = await zer(`/ads/targeting/search?accountId=${encodeURIComponent(accountId)}&dimension=geo&q=${encodeURIComponent(q.trim())}&limit=12`)
+    return unwrapList(res, 'results', 'data', 'items', 'options').map((x) => ({
+      key: str(x.key) || str(x.id),
+      name: str(x.name) || str(x.label),
+      type: str(x.type) || str(x.geoType) || 'city',
+      region: str(x.region) || str(x.regionName) || undefined,
+      country: str(x.country) || str(x.countryCode) || undefined,
+    })).filter((x) => x.key && x.name)
+  } catch { return [] }
+}
+
+export interface Reach { available: boolean; lower: number | null; upper: number | null; daily: number | null }
+
+/**
+ * How many people this could reach, BEFORE anything is bought.
+ *
+ * Meta answers this from its own delivery_estimate. Google and TikTok do not
+ * have a pre-flight reach API at all and report available:false, which is why
+ * this returns a shape that can say "we do not know" rather than a zero that
+ * looks like an answer.
+ */
+export async function reachEstimate(
+  clientId: string,
+  args: { accountId: string; adAccountId: string; spec: Record<string, unknown> },
+): Promise<Reach> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return { available: false, lower: null, upper: null, daily: null }
+  try {
+    const res = await zer('/ads/targeting/reach-estimate', {
+      method: 'POST',
+      body: JSON.stringify({ accountId: args.accountId, adAccountId: args.adAccountId, spec: args.spec, optimizationGoal: 'REACH' }),
+    })
+    const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+    return {
+      available: d.available === true,
+      lower: typeof d.lower === 'number' ? d.lower : null,
+      upper: typeof d.upper === 'number' ? d.upper : null,
+      daily: typeof d.daily === 'number' ? d.daily : null,
+    }
+  } catch { return { available: false, lower: null, upper: null, daily: null } }
+}
+
 /**
  * Put money behind a post that already exists.
  *
@@ -1497,6 +1563,10 @@ export async function boostPost(clientId: string, args: {
   amount: number
   days: number
   name: string
+  /** WHO SEES IT. Not optional in practice: a restaurant ad with no geo is
+   *  shown to a whole country, which is money spent on people who will never
+   *  walk in. The route refuses to send without one. */
+  targeting?: Record<string, unknown>
   /** where a tap on the ad goes; omitted means the post itself */
   linkUrl?: string
   callToAction?: string
@@ -1542,6 +1612,7 @@ export async function boostPost(clientId: string, args: {
       /* LIFETIME, never daily. This is the safety rail, not a preference. */
       budget: { amount, type: 'lifetime' },
       schedule: { startDate: start.toISOString(), endDate: end.toISOString() },
+      ...(args.targeting && Object.keys(args.targeting).length ? { targeting: args.targeting } : {}),
       ...(args.linkUrl ? { linkUrl: args.linkUrl } : {}),
       ...(args.callToAction ? { callToAction: args.callToAction } : {}),
     }),

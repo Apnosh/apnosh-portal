@@ -25,9 +25,39 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  listAdAccounts, connectAds, boostPost, listAds, stopAd,
-  listPostTargets, MAX_BOOST_USD, MAX_BOOST_DAYS,
+  listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate,
+  listPostTargets, MAX_BOOST_USD, MAX_BOOST_DAYS, MIN_DAILY_USD,
 } from '@/lib/channels/adapters/zernio'
+
+/**
+ * WHO SEES IT, built from what the owner picked.
+ *
+ * A radius around a place, an age range, and nothing else. Interests and
+ * behaviours are where ad accounts go to die: a restaurant owner picking
+ * "foodies" narrows their audience to people Meta has labelled, not to people
+ * who will walk in, and the result is a higher price for a smaller room.
+ * Distance from the door is the targeting that matters for a restaurant.
+ */
+function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string }): Record<string, unknown> {
+  const spec: Record<string, unknown> = {}
+  const radius = Math.max(1, Math.min(50, Number(t.radiusMiles) || 10))
+  if (t.geoKey && (t.geoType === 'city' || !t.geoType)) {
+    spec.cities = [{ key: t.geoKey, radius, distanceUnit: 'mile' }]
+  } else if (t.geoKey && t.geoType === 'region') {
+    spec.regions = [{ key: t.geoKey }]
+  } else if (t.geoKey && t.geoType === 'zip') {
+    spec.zips = [{ key: t.geoKey }]
+  } else if (t.geoKey && t.geoType === 'metro') {
+    spec.metros = [{ key: t.geoKey }]
+  } else {
+    spec.countries = [t.country || 'US']
+  }
+  const lo = Math.max(18, Math.min(65, Number(t.ageMin) || 18))
+  const hi = Math.max(lo, Math.min(65, Number(t.ageMax) || 65))
+  spec.ageMin = lo
+  spec.ageMax = hi
+  return spec
+}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -44,6 +74,16 @@ export async function GET(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized) {
     return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
+  }
+
+  /* ?places=seattle — resolve a typed place to the platform's own id, which is
+     the only thing targeting accepts. Read-only and cheap. */
+  const places = req.nextUrl.searchParams.get('places')
+  if (places !== null) {
+    const targets = await listPostTargets(clientId)
+    const meta = targets.find((t) => t.platform === 'facebook') ?? targets.find((t) => t.platform === 'instagram')
+    if (!meta) return NextResponse.json({ places: [] })
+    return NextResponse.json({ places: await searchGeo(clientId, meta.accountId, places) })
   }
 
   try {
@@ -119,7 +159,7 @@ export async function GET(req: NextRequest) {
       payer,
       metaAccountId: meta.accountId,
       accounts, ads, candidates,
-      limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS },
+      limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS, minDaily: MIN_DAILY_USD },
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load ads' }, { status: 502 })
@@ -131,6 +171,7 @@ export async function POST(req: NextRequest) {
     clientId?: string; action?: string
     adAccountIds?: string[]; returnTo?: string
     platformPostId?: string; adAccountId?: string; amount?: number; days?: number; name?: string
+    targeting?: { geoKey?: string; geoType?: string; geoName?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string }
     adId?: string
   }
   const clientId = body.clientId
@@ -169,6 +210,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, ...r })
     }
 
+    /* ── HOW MANY PEOPLE, BEFORE ANY MONEY ─────────────────────────────
+       Meta answers this from its own delivery_estimate. Read-only: no ad, no
+       campaign, no spend. */
+    if (body.action === 'estimate') {
+      const { data: connRow } = await createAdminClient().from('channel_connections')
+        .select('metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
+      const payer = (connRow?.metadata as Record<string, unknown> | null)?.ad_account_id
+      if (typeof payer !== 'string') return NextResponse.json({ available: false })
+      const r = await reachEstimate(clientId, {
+        accountId: meta.accountId, adAccountId: payer, spec: buildSpec(body.targeting ?? {}),
+      })
+      return NextResponse.json(r)
+    }
+
     if (body.action === 'stop') {
       if (!body.adId) return NextResponse.json({ error: 'adId required' }, { status: 400 })
       /* Verified against this client's own list first, so an id from elsewhere
@@ -186,6 +241,12 @@ export async function POST(req: NextRequest) {
       const days = Number(body.days)
       if (!Number.isFinite(amount) || amount < 1 || amount > MAX_BOOST_USD) {
         return NextResponse.json({ error: `A boost has to be between $1 and $${MAX_BOOST_USD}` }, { status: 400 })
+      }
+      /* Meta will accept a budget it cannot actually deliver on. Below a dollar
+         a day it simply does not show the ad, which looks like the money
+         vanished. */
+      if (amount / days < MIN_DAILY_USD) {
+        return NextResponse.json({ error: `That works out under $${MIN_DAILY_USD} a day, which is too thin to deliver. Spend more or run it for fewer days.` }, { status: 400 })
       }
       if (!Number.isFinite(days) || days < 1 || days > MAX_BOOST_DAYS) {
         return NextResponse.json({ error: `A boost runs between 1 and ${MAX_BOOST_DAYS} days` }, { status: 400 })
@@ -218,11 +279,21 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'That ad account is no longer reachable' }, { status: 400 })
       }
 
+      /* A BOOST WITHOUT A PLACE IS MONEY BURNED. The first version sent no
+         targeting at all, which leaves the platform to decide, and for a
+         single-location restaurant that is people who will never walk in.
+         Refused rather than defaulted, because a silent default here is the
+         expensive kind. */
+      if (!body.targeting?.geoKey && !body.targeting?.country) {
+        return NextResponse.json({ error: 'Choose the area this should reach first' }, { status: 400 })
+      }
+
       const r = await boostPost(clientId, {
         platformPostId: body.platformPostId,
         accountId: meta.accountId,
         adAccountId: payer,
         amount, days,
+        targeting: buildSpec(body.targeting),
         name: (body.name || `Apnosh boost · ${new Date().toISOString().slice(0, 10)}`).slice(0, 120),
       })
 

@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, TrendingUp, Square } from 'lucide-react'
+import { Check, TrendingUp, Square, MapPin } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
@@ -33,16 +33,20 @@ const T = { note: 11.5, label: 12.5, control: 13.5, body: 14, big: 17, hero: 22 
 
 interface AdAccount { id: string; name: string; currency: string; selectable: boolean; status: string }
 interface RunningAd { id: string; name: string; status: string; spend: number; impressions: number; clicks: number }
+interface GeoOption { key: string; name: string; type: string; region?: string; country?: string }
+interface Reach { available: boolean; lower: number | null; upper: number | null; daily: number | null }
 interface Candidate {
   platformPostId: string; platform: string; caption: string
   image: string | null; permalink: string | null; postedAt: string
   interactions: number; reach: number; timesMedian: number | null
 }
 
-/* Three amounts, not a slider. A slider invites fiddling with a number nobody
-   has a basis for; three named choices are a decision somebody can make. */
-const AMOUNTS = [10, 20, 40]
-const DAYS = [3, 5, 7]
+/* A DAILY amount and a length, not a lump sum. "$20 over 5 days" hid the number
+   that decides whether an ad delivers at all, which is what it spends per day.
+   Four dollars a day reaches almost nobody, and the old screen never said so. */
+const DAILY = [5, 10, 20, 35]
+const LENGTHS = [3, 7, 14, 30]
+const RADII = [3, 5, 10, 25]
 
 function Head({ hue, children, note }: { hue: 'brand' | 'mint' | 'amber'; children: React.ReactNode; note?: React.ReactNode }) {
   return (
@@ -61,12 +65,23 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [accounts, setAccounts] = useState<AdAccount[]>([])
   const [ads, setAds] = useState<RunningAd[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
-  const [limits, setLimits] = useState({ maxUsd: 50, maxDays: 14 })
+  const [limits, setLimits] = useState({ maxUsd: 500, maxDays: 30, minDaily: 1 })
 
   const [pickedAccount, setPickedAccount] = useState<string | null>(null)
   const [picked, setPicked] = useState<Candidate | null>(null)
-  const [amount, setAmount] = useState(20)
-  const [days, setDays] = useState(5)
+  const [daily, setDaily] = useState(10)
+  const [days, setDays] = useState(7)
+  const [radius, setRadius] = useState(10)
+  /* Age is sent but not yet offered as a control. 18-65 is everyone Meta will
+     serve a restaurant ad to, so the default is the honest one, and a narrower
+     range is a decision nobody has asked for yet. */
+  const ageMin = 18
+  const ageMax = 65
+  const [placeQ, setPlaceQ] = useState('')
+  const [places, setPlaces] = useState<GeoOption[]>([])
+  const [place, setPlace] = useState<GeoOption | null>(null)
+  const [reach, setReach] = useState<Reach | null>(null)
+  const [reaching, setReaching] = useState(false)
   const [busy, setBusy] = useState(false)
   const [done, setDone] = useState<{ spent: number; days: number } | null>(null)
 
@@ -108,6 +123,35 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   }
 
   const totalRunning = useMemo(() => ads.filter((a) => a.status?.toUpperCase() === 'ACTIVE').length, [ads])
+  const total = daily * days
+
+  /* Look up a place as they type. Debounced, because this is a network call per
+     keystroke otherwise and the answer is not urgent. */
+  useEffect(() => {
+    if (!placeQ.trim() || placeQ.trim().length < 2) { setPlaces([]); return }
+    const id = setTimeout(() => {
+      void fetch(`/api/dashboard/ads?clientId=${clientId}&places=${encodeURIComponent(placeQ.trim())}`, { cache: 'no-store' })
+        .then((r) => r.json()).then((j) => setPlaces((j.places ?? []) as GeoOption[])).catch(() => setPlaces([]))
+    }, 320)
+    return () => clearTimeout(id)
+  }, [placeQ, clientId])
+
+  /* HOW MANY PEOPLE, before any money. Re-asked whenever the audience changes,
+     because an estimate that lags the controls is worse than none. */
+  useEffect(() => {
+    if (!picked || !place) { setReach(null); return }
+    let live = true
+    setReaching(true)
+    const id = setTimeout(() => {
+      void fetch('/api/dashboard/ads', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, action: 'estimate', targeting: { geoKey: place.key, geoType: place.type, radiusMiles: radius, ageMin, ageMax } }),
+      }).then((r) => r.json()).then((j) => { if (live) setReach(j as Reach) })
+        .catch(() => { if (live) setReach(null) })
+        .finally(() => { if (live) setReaching(false) })
+    }, 260)
+    return () => { live = false; clearTimeout(id) }
+  }, [clientId, picked, place, radius, ageMin, ageMax])
 
   /* ── Spent ──────────────────────────────────────────────────────────────── */
   if (done) {
@@ -280,12 +324,97 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
               </span>
             </div>
 
-            <Head hue="brand" note={`up to $${limits.maxUsd}`}>How much</Head>
+            {/* ── WHO SEES IT ────────────────────────────────────────────
+                The thing the first version left out entirely, and the most
+                expensive omission possible: with no area, the platform decides,
+                and for a single-location restaurant that is people who will
+                never walk in. */}
+            <Head hue="mint">Who sees it</Head>
+            {place ? (
+              <button type="button" onClick={() => { setPlace(null); setPlaceQ('') }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit',
+                  padding: '12px 14px', borderRadius: R.box, cursor: 'pointer', background: tint('mint', .07), border: `1px solid ${C.green}` }}>
+                <MapPin size={15} color={C.greenDk} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>
+                    Within {radius} miles of {place.name}
+                  </span>
+                  <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>
+                    {place.region ? `${place.region} · ` : ''}Tap to change
+                  </span>
+                </span>
+              </button>
+            ) : (
+              <>
+                <input className="cmp-in" value={placeQ} onChange={(e) => setPlaceQ(e.target.value)}
+                  placeholder="Your town or city"
+                  style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: R.box, padding: '11px 12px', fontSize: T.body, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
+                {places.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                    {places.slice(0, 6).map((g) => (
+                      <button key={g.key} type="button" onClick={() => { setPlace(g); setPlaces([]) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', font: 'inherit',
+                          padding: '10px 12px', borderRadius: R.cell, cursor: 'pointer', background: '#fff', border: `1px solid ${C.line}` }}>
+                        <MapPin size={13} color={C.mute} />
+                        <span style={{ fontSize: T.control, color: C.ink }}>{g.name}</span>
+                        {g.region && <span style={{ fontSize: T.note, color: C.mute }}>{g.region}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {place && (
+              <>
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  {RADII.map((r) => {
+                    const on = radius === r
+                    return (
+                      <button key={r} type="button" onClick={() => setRadius(r)}
+                        style={{ flex: 1, padding: '9px 0', borderRadius: R.cell, cursor: 'pointer', font: 'inherit', fontFamily: DISPLAY,
+                          fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink,
+                          background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
+                        {r} mi
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* HOW MANY PEOPLE, BEFORE ANY MONEY. Meta's own estimate. */}
+                <div style={{ marginTop: 10, padding: '13px 15px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}` }}>
+                  {reaching ? (
+                    <span style={{ fontSize: T.control, color: C.mute }}>Checking how many people…</span>
+                  ) : reach?.available && reach.lower && reach.upper ? (
+                    <>
+                      <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
+                        {reach.lower.toLocaleString()} to {reach.upper.toLocaleString()} people
+                      </span>
+                      <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
+                        are reachable there. Meta&apos;s own estimate of the room, not a promise about
+                        how many will see it.
+                      </span>
+                    </>
+                  ) : (
+                    <span style={{ fontSize: T.label, color: C.mute, lineHeight: 1.5 }}>
+                      Meta could not size that audience. It usually means the area is very small.
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* ── HOW MUCH, PER DAY ─────────────────────────────────────────
+                Daily rather than a lump sum, because the per-day number is what
+                decides whether an ad delivers at all. The old screen offered
+                "$20 over 5 days" and never mentioned that this is $4 a day,
+                which on Meta reaches almost nobody. */}
+            <Head hue="brand" note={`$${limits.minDaily} a day minimum`}>How much a day</Head>
             <div style={{ display: 'flex', gap: 8 }}>
-              {AMOUNTS.map((a) => {
-                const on = amount === a
+              {DAILY.map((a) => {
+                const on = daily === a
                 return (
-                  <button key={a} type="button" onClick={() => setAmount(a)}
+                  <button key={a} type="button" onClick={() => setDaily(a)}
                     style={{ flex: 1, padding: '13px 0', borderRadius: R.box, cursor: 'pointer', font: 'inherit', fontFamily: DISPLAY,
                       fontSize: T.big, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink,
                       background: on ? gradOf('brand') : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
@@ -295,43 +424,47 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
               })}
             </div>
 
-            <Head hue="amber">Over how long</Head>
+            <Head hue="amber">For how long</Head>
             <div style={{ display: 'flex', gap: 8 }}>
-              {DAYS.map((d) => {
+              {LENGTHS.map((d) => {
                 const on = days === d
                 return (
                   <button key={d} type="button" onClick={() => setDays(d)}
                     style={{ flex: 1, padding: '11px 0', borderRadius: R.box, cursor: 'pointer', font: 'inherit', fontFamily: DISPLAY,
                       fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink,
                       background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
-                    {d} days
+                    {d === 30 ? 'a month' : `${d} days`}
                   </button>
                 )
               })}
             </div>
 
-            {/* THE NUMBER, IN A SENTENCE, BEFORE THE PRESS. Not a field they
-                filled in and might misread: the total, the ceiling, and the fact
-                that it stops on its own. */}
+            {/* THE NUMBER, IN A SENTENCE, BEFORE THE PRESS. */}
             <div style={{ marginTop: 20, padding: '15px 16px', borderRadius: R.box, background: tint('brand', .06), border: `1px solid ${tint('brand', .3)}` }}>
-              <div style={{ fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
-                ${amount} total, over {days} days
+              <div style={{ fontFamily: DISPLAY, fontSize: T.hero, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>
+                ${total}
               </div>
               <div style={{ fontSize: T.label, color: C.mute, marginTop: 5, lineHeight: 1.5 }}>
-                That is the most it can spend. It stops on its own after {days} days, and you can
-                stop it sooner from this screen. Around ${(amount / days).toFixed(2)} a day.
+                ${daily} a day for {days} day{days === 1 ? '' : 's'}{place ? `, within ${radius} miles of ${place.name}` : ''}.
+                That is the most it can spend. It stops on its own, and you can stop it sooner here.
               </div>
+              {total > limits.maxUsd && (
+                <div style={{ fontSize: T.label, color: C.coral, marginTop: 8, fontWeight: 600 }}>
+                  Over the ${limits.maxUsd} cap. Shorten it or spend less a day.
+                </div>
+              )}
             </div>
 
             <MvpActions>
-              <MvpButton full busy={busy} label={`Spend $${amount}`}
+              <MvpButton full busy={busy} disabled={!place || total > limits.maxUsd} label={place ? `Spend $${total}` : 'Pick an area first'}
                 onClick={() => void (async () => {
                   const j = await act({
                     action: 'boost', platformPostId: picked.platformPostId,
                     adAccountId: pickedAccount,
-                    amount, days,
+                    amount: total, days,
+                    targeting: { geoKey: place?.key, geoType: place?.type, geoName: place?.name, radiusMiles: radius, ageMin, ageMax },
                   })
-                  if (j) setDone({ spent: amount, days })
+                  if (j) setDone({ spent: total, days })
                 })()} />
               <MvpButton full variant="quiet" label="Not now" onClick={() => setPicked(null)} />
             </MvpActions>
