@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Clock, Sparkles, Send } from 'lucide-react'
+import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2 } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpGroup, MvpSaveBar, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark } from './mvp-insights'
@@ -30,6 +30,12 @@ import { C, DISPLAY } from './tokens'
 
 interface Target { accountId: string; platform: string; name: string }
 interface Best { iso: string; label: string; posts: number }
+interface Media { url: string; preview: string; isVideo: boolean }
+
+/* Platforms that will not accept a post with no photo or video. This is their
+   rule, not ours, and it is the reason a text-only composer was not a smaller
+   version of this feature but a broken one. */
+const NEEDS_MEDIA = new Set(['instagram', 'tiktok', 'youtube'])
 
 export default function MvpComposer({ clientId }: { clientId: string }) {
   const router = useRouter()
@@ -43,6 +49,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [done, setDone] = useState<string[] | null>(null)
+  const [media, setMedia] = useState<Media | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
     const zone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles' } catch { return 'America/Los_Angeles' } })()
@@ -65,9 +73,38 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     setChosen((cur) => { const n = new Set(cur); n.has(id) ? n.delete(id) : n.add(id); return n })
   }, [])
 
+  /* Which of the chosen accounts will refuse this post as it stands. Named, not
+     counted: "Instagram needs a photo" is something an owner can act on, and a
+     disabled button with no reason is the thing everyone hates. */
+  const blocked = useMemo(() => {
+    if (media || !targets) return [] as string[]
+    return targets.filter((t) => chosen.has(t.accountId) && NEEDS_MEDIA.has(t.platform))
+      .map((t) => t.platform.charAt(0).toUpperCase() + t.platform.slice(1))
+  }, [media, targets, chosen])
+
   const canSend = useMemo(() =>
-    !busy && chosen.size > 0 && text.trim().length > 0 && (when !== 'pick' || !!pickAt),
-    [busy, chosen, text, when, pickAt])
+    !busy && !uploading && chosen.size > 0 && blocked.length === 0
+    && (text.trim().length > 0 || !!media) && (when !== 'pick' || !!pickAt),
+    [busy, uploading, chosen, blocked, text, media, when, pickAt])
+
+  async function pickFile(file: File) {
+    setErr(null); setUploading(true)
+    try {
+      const r = await fetch('/api/dashboard/social-publish/media', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, filename: file.name, contentType: file.type, size: file.size }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || 'Could not prepare the upload')
+      /* Straight from the browser to the signed URL. The file never touches our
+         server, so a large video does not have to survive a request there. */
+      const put = await fetch(j.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+      if (!put.ok) throw new Error('The upload did not finish. Try again.')
+      setMedia({ url: j.fileUrl, preview: URL.createObjectURL(file), isVideo: file.type.startsWith('video/') })
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not upload that file')
+    } finally { setUploading(false) }
+  }
 
   async function send() {
     if (!canSend) return
@@ -78,7 +115,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         : { kind: 'at', iso: new Date(pickAt).toISOString(), timezone: tz }
       const r = await fetch('/api/dashboard/social-publish', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, content: text.trim(), accountIds: [...chosen], when: w }),
+        body: JSON.stringify({ clientId, content: text.trim(), accountIds: [...chosen], mediaUrls: media ? [media.url] : [], when: w }),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not publish')
@@ -119,9 +156,33 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
 
   return (
     <MvpShell active="home" back="/dashboard" title="New post">
+      {/* mvp-spin lives inside another component's own style block, so it is
+          declared here rather than borrowed and silently not animating. */}
+      <style>{`@keyframes cmpspin{to{transform:rotate(360deg)}}.mvp-spin{animation:cmpspin .8s linear infinite}`}</style>
       <div style={{ padding: '10px 18px 132px' }}>
 
-        <MvpGroup title="What you want to say">
+        <MvpGroup title="Photo or video">
+          {media ? (
+            <div style={{ position: 'relative', borderRadius: 16, overflow: 'hidden', border: `1px solid ${C.line}`, background: '#000' }}>
+              {media.isVideo
+                ? <video src={media.preview} controls playsInline style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'contain' }} />
+                : <img src={media.preview} alt="" style={{ display: 'block', width: '100%', maxHeight: 320, objectFit: 'contain' }} />}
+              <button type="button" onClick={() => setMedia(null)} aria-label="Remove"
+                style={{ position: 'absolute', top: 9, right: 9, width: 30, height: 30, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,.55)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                <X size={15} />
+              </button>
+            </div>
+          ) : (
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, minHeight: 96, borderRadius: 16, border: `1px dashed ${C.line}`, background: '#fff', color: C.mute, fontSize: 14, cursor: uploading ? 'default' : 'pointer' }}>
+              {uploading ? <><Loader2 size={17} className="mvp-spin" /> Uploading…</> : <><ImagePlus size={18} /> Add a photo or video</>}
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" disabled={uploading}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickFile(f); e.target.value = '' }}
+                style={{ display: 'none' }} />
+            </label>
+          )}
+        </MvpGroup>
+
+        <MvpGroup title="Caption">
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -193,6 +254,9 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           )}
         </MvpGroup>
 
+        {blocked.length > 0 && (
+          <MvpMsg ok={false} text={`${blocked.join(' and ')} ${blocked.length === 1 ? 'needs' : 'need'} a photo or video. Add one, or switch ${blocked.length === 1 ? 'it' : 'them'} off above.`} />
+        )}
         {err && <MvpMsg ok={false} text={err} />}
       </div>
 
