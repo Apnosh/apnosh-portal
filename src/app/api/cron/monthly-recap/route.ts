@@ -28,6 +28,28 @@ const CRON_SECRET = process.env.CRON_SECRET
    notification names when it is read in the first days of the next one. */
 const IMPACT_LINK = '/dashboard/insights/impact'
 
+/** The one number worth leading with, or the old wording when there is none. */
+function recapHeadline(s: { monthLabel: string; metrics: Array<{ key: string; label: string; value: number; deltaPct: number | null }>; reviewsThisMonth: number; rating: number | null }): string {
+  const best = s.metrics
+    .filter((m) => m.value > 0 && m.deltaPct != null && Math.abs(m.deltaPct) >= 15)
+    .sort((a, b) => Math.abs(b.deltaPct ?? 0) - Math.abs(a.deltaPct ?? 0))[0]
+  if (best && best.deltaPct != null) {
+    const dir = best.deltaPct > 0 ? 'up' : 'down'
+    return `${best.label} ${dir} ${Math.abs(best.deltaPct)}% in ${s.monthLabel}`
+  }
+  if (s.reviewsThisMonth > 0) {
+    return `${s.reviewsThisMonth} new review${s.reviewsThisMonth === 1 ? '' : 's'} in ${s.monthLabel}${s.rating != null ? `, now at ${s.rating.toFixed(1)}` : ''}`
+  }
+  return `Your ${s.monthLabel} recap is ready`
+}
+
+/** Two more real numbers, never a description of where to find them. */
+function recapBody(s: { metrics: Array<{ label: string; value: number }> }): string {
+  const top = s.metrics.filter((m) => m.value > 0).slice(0, 3)
+  if (!top.length) return 'See what your Google presence drove this month.'
+  return top.map((m) => `${m.label}: ${m.value.toLocaleString()}`).join(' · ')
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url)
   const querySecret = url.searchParams.get('secret')
@@ -80,8 +102,14 @@ export async function GET(req: Request) {
           supabase: admin,
           userId,
           type: 'report_ready',
-          title: `Your ${summary.monthLabel} recap is ready`,
-          body: 'See what your Google presence drove this month: profile views, calls, directions, and new reviews.',
+          /* "Your recap is ready" announces that work exists somewhere else and
+             asks the owner to go and do it. It is a chore, and it gets swiped.
+             The numbers are already in hand here, so the notification carries the
+             finding and opening the page becomes optional rather than the price
+             of finding out. Falls back to the old wording only when there is no
+             single number worth leading with. */
+          title: recapHeadline(summary),
+          body: recapBody(summary),
           link: monthLink,
         })
       }
