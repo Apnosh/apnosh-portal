@@ -252,10 +252,14 @@ export async function diagnoseComments(clientId: string): Promise<Record<string,
          themselves. So follow the first id down and describe THAT shape too. */
       if (arr.length > 0) {
         const firstId = str(arr[0].id) || str(arr[0]._id)
+        /* The drill-down told us what it wanted, in its own words:
+           {"code":"missing_required_field","param":"accountId"}. The first level
+           carries that accountId on every row, so pass it back down. */
+        const acct = str(arr[0].accountId)
         if (firstId) {
-          for (const sub of [`${path}/${encodeURIComponent(firstId)}`, `${path}/${encodeURIComponent(firstId)}/comments`]) {
+          for (const sub of [`${path}/${encodeURIComponent(firstId)}`]) {
             try {
-              const r2 = await fetch(`${API}${sub}?limit=5`, { headers: { Authorization: `Bearer ${key}` } })
+              const r2 = await fetch(`${API}${sub}?limit=5&accountId=${encodeURIComponent(acct)}`, { headers: { Authorization: `Bearer ${key}` } })
               const t2 = await r2.text()
               let j2: Record<string, unknown> | null = null
               try { j2 = JSON.parse(t2) as Record<string, unknown> } catch { /* not json */ }
