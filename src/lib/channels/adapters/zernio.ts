@@ -151,7 +151,11 @@ export function aggregateZernioPosts(rows: ZernioPostRow[] | null | undefined): 
 async function zer(path: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
   const key = process.env.ZERNIO_API_KEY
   if (!key) throw new ChannelError('not_configured', 'ZERNIO_API_KEY is not set')
+  /* A vendor call with no deadline is a page that never loads. One slow response
+     used to hold the whole comments queue open, because that queue fans out over
+     several posts and every one of them waited on this. */
   const r = await fetch(`${API}${path}`, {
+    signal: AbortSignal.timeout(12000),
     ...init,
     headers: {
       Authorization: `Bearer ${key}`,
@@ -313,21 +317,28 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
   const live = posts
     .filter((p) => num(p.commentCount) > 0 && str(p.id) && str(p.accountId))
     .sort((a, b) => str(b.createdTime).localeCompare(str(a.createdTime)))
-    .slice(0, 12)
+    .slice(0, 8)
 
-  const out: SocialCommentRow[] = []
-  for (const post of live) {
+  /* IN PARALLEL, not one after another. This walks a post at a time and the first
+     version awaited each one inside the loop, so a client with a dozen commented
+     posts paid thirteen round trips end to end and the tab sat there. They do not
+     depend on each other, so they go together and the queue costs two round trips
+     instead of thirteen.
+
+     allSettled, not all: one post failing is not the queue failing, and losing
+     every comment because a single post errored would be the worse bug. */
+  const fetched = await Promise.allSettled(live.map(async (post) => {
     const postId = str(post.id)
     const sub = new URLSearchParams({ accountId: str(post.accountId), limit: '25' })
-    let rows: Record<string, unknown>[] = []
-    try {
-      const r = await zer(`/inbox/comments/${encodeURIComponent(postId)}?${sub.toString()}`)
-      rows = unwrapList(r, 'comments', 'data', 'items', 'results')
-    } catch {
-      /* One post failing is not the queue failing. Skip it and keep the rest --
-         losing every comment because one post errored would be the worse bug. */
-      continue
-    }
+    const r = await zer(`/inbox/comments/${encodeURIComponent(postId)}?${sub.toString()}`)
+    return { post, rows: unwrapList(r, 'comments', 'data', 'items', 'results') }
+  }))
+
+  const out: SocialCommentRow[] = []
+  for (const res of fetched) {
+    if (res.status !== 'fulfilled') continue
+    const { post, rows } = res.value
+    const postId = str(post.id)
     for (const c of rows) {
       const id = str(c.id) || str(c._id) || str(c.commentId)
       /* Field names read through several plausible spellings. The post level
@@ -361,8 +372,11 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
         url: str(c.url) || str(c.permalink) || null,
       })
     }
-    if (out.length >= limit) break
   }
+  /* Newest first across every post, then capped. The old code broke out of the
+     loop at the limit, which meant the cap was decided by whichever post happened
+     to be walked first rather than by what is most recent. */
+  out.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
   return out.slice(0, limit)
 }
 
