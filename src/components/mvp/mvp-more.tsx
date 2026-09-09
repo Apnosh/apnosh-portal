@@ -112,7 +112,12 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
   const q = query.trim().toLowerCase()
   // Search on both words: the row is drawn in the owner's language, and they type what they see.
   const shown = q ? rows.filter((r) => r.label.toLowerCase().includes(q) || T(r.label).toLowerCase().includes(q)) : rows
+  /* A row only renders if a group claims its label -- so a row added without a
+     group here is silently invisible, which is exactly what happened to the
+     composer the first time. Its own group, first, because it is the only thing
+     on this page you DO rather than set. */
   const groups: { title: string; hue: HueKey; keys: string[] }[] = [
+    { title: 'Post', hue: 'brand', keys: ['Write a post'] },
     { title: 'You', hue: 'mint', keys: ['Your settings', 'Wins', 'People you have worked with'] },
     { title: 'Account', hue: 'nights', keys: ['Plan and billing', 'Connected accounts'] },
     { title: 'Help', hue: 'grey', keys: ['Get help', "What's new"] },
@@ -177,7 +182,12 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
                 <Mark hue={r.hue} size={36}><r.Icon size={18} /></Mark>
                 {/* t() answers an unknown key with its own English, so the rows nobody has
                     translated yet read exactly as they always have. */}
-                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{T(r.label)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 15, fontWeight: 500, color: C.ink, lineHeight: 1.25, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{T(r.label)}</span>
+                  {/* Only the rows that need explaining carry one, so the list does
+                      not become two lines of everything. */}
+                  {r.sub && <span style={{ display: 'block', fontSize: 12, color: C.mute, lineHeight: 1.3, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{T(r.sub)}</span>}
+                </span>
                 {r.pill && <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 99, padding: '3px 8px', flexShrink: 0, ...pillStyle(r.pill.tone) }}>{r.pill.text}</span>}
                 <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
               </Link>
