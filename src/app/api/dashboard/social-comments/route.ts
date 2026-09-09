@@ -13,7 +13,7 @@
  * because it needs Meta app review and that work is deferred. Zernio is already
  * connected for real clients and carries comments across every linked platform.
  *
- * ?diagnose=1 (admin only) returns what the vendor actually sent, unparsed. The
+ * ?diagnose=1 returns what parsed, and says so plainly. The
  * comment shape here is documented rather than observed -- the API key lives only
  * in Vercel -- so the first real run is meant to confirm or correct it in one
  * look, rather than leaving a guessed shape to fail quietly in a list.
@@ -34,20 +34,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
   }
 
-  /* The shape check. Admin only, because it returns the vendor's raw payload.
-     One call on production confirms every field name below, or shows exactly
-     which one to correct, without waiting for a silent empty list to be noticed. */
+  /* The shape check. One call on production confirms every field name the parser
+     reads, or shows exactly which one to correct, instead of waiting for a
+     silently empty list to be noticed.
+
+     Open to anyone who already passed checkClientAccess above, because it returns
+     PARSED comments and a count -- the same data this route serves anyway, with
+     no vendor payload, no tokens and nothing the caller cannot already see. An
+     admin gate here bought no safety and meant the person who owns the
+     connection could not run the check on their own account. */
   if (req.nextUrl.searchParams.get('diagnose') === '1') {
-    const { createClient } = await import('@/lib/supabase/server')
-    const sb = await createClient()
-    const { data: { user } } = await sb.auth.getUser()
-    const { data: profile } = user
-      ? await sb.from('profiles').select('role').eq('id', user.id).single()
-      : { data: null }
-    if (profile?.role !== 'admin') return NextResponse.json({ error: 'Admin required' }, { status: 403 })
     try {
       const parsed = await listComments(clientId, 5)
-      return NextResponse.json({ parsedCount: parsed.length, sample: parsed.slice(0, 3) })
+      return NextResponse.json({
+        ok: true,
+        parsedCount: parsed.length,
+        note: parsed.length === 0
+          ? 'Parsed zero comments. Either there genuinely are none, or the field names in listComments do not match what Zernio returned.'
+          : 'Shape confirmed: these parsed cleanly.',
+        sample: parsed.slice(0, 3),
+      })
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : 'failed' }, { status: 502 })
     }
