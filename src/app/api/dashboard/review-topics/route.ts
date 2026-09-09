@@ -19,7 +19,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const maxDuration = 25
 
-interface Topic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string; negQuote: string }
+interface TopicEvidence { rating: number; text: string; at: string; side: 'positive' | 'negative' }
+interface Topic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string; negQuote: string; /** the actual reviews behind the count, so it can be checked rather than believed */ evidence: TopicEvidence[] }
 
 function readApiKey(): string | null {
   if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY
@@ -127,7 +128,7 @@ Break the topics down and give the overall summary.`
   }
 }
 
-function buildTopics(raw: { name?: string; positive?: number[]; negative?: number[]; quotePos?: string; quoteNeg?: string }[], items: { rating: number; text: string }[]): Topic[] {
+function buildTopics(raw: { name?: string; positive?: number[]; negative?: number[]; quotePos?: string; quoteNeg?: string }[], items: { rating: number; text: string; at: string }[]): Topic[] {
   const N = items.length
   const half = Math.max(1, Math.floor(N / 2))
   const haystack = items.map((i) => i.text.toLowerCase()).join(' ')
@@ -155,7 +156,18 @@ function buildTopics(raw: { name?: string; positive?: number[]; negative?: numbe
     if (quote && !grounded(quote, haystack)) quote = ''
     let negQuote = String(t.quoteNeg ?? '').trim()
     if (negQuote && !grounded(negQuote, haystack)) negQuote = ''
-    out.push({ name, positive: pos.length, negative: neg.length, mentions, direction, quote, negQuote })
+    /* THE REVIEWS BEHIND THE NUMBER. The owner who fired an agency over invented
+       figures said she would count them herself, and until now she could not:
+       the indices that produced the count were resolved here and thrown away.
+       They are the same rows the count is made of, so a tap can show exactly
+       what was counted. Capped so one popular topic cannot carry fifty reviews
+       into the payload. */
+    const eviOf = (idx: number[], side: 'positive' | 'negative'): TopicEvidence[] =>
+      idx.map((i) => ({ rating: items[i].rating, text: items[i].text.slice(0, 240), at: items[i].at, side }))
+    const evidence = [...eviOf(pos, 'positive'), ...eviOf(neg, 'negative')]
+      .sort((a, b) => b.at.localeCompare(a.at))
+      .slice(0, 12)
+    out.push({ name, positive: pos.length, negative: neg.length, mentions, direction, quote, negQuote, evidence })
   }
   // Most-talked-about topics first; ties broken by net sentiment.
   out.sort((a, b) => {
@@ -199,7 +211,8 @@ export async function GET(req: NextRequest) {
   // now written in the owner's reading language, so a cached English breakdown
   // must not be served to an owner who reads Spanish. Switching the language
   // recomputes once and then caches per language.
-  const sig = `v2:${lang}:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
+  // v3: the payload now carries the reviews behind each count.
+  const sig = `v3:${lang}:${rows.length}:${rows.reduce((m, r) => (r.at > m ? r.at : m), '')}`
 
   // Cache hit → return the stored breakdown instantly, no model call. Wrapped so
   // a missing cache table (migration not applied) just falls through to live.
@@ -226,7 +239,7 @@ export async function GET(req: NextRequest) {
     .filter((r) => r.text && r.text.trim().length > 1)
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 50)
-  const items = withTextRows.map((r) => ({ rating: r.rating, text: redact(r.text!.trim()).slice(0, 400) }))
+  const items = withTextRows.map((r) => ({ rating: r.rating, text: redact(r.text!.trim()).slice(0, 400), at: r.at }))
 
   const ai = items.length >= 3 ? await analyze(items, counts, readApiKey(), lang) : null
   const topics = ai ? buildTopics(ai.rawTopics, items) : []

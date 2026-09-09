@@ -93,7 +93,8 @@ interface ReviewSummary {
 }
 // SLOW AI aspect analysis from /api/dashboard/review-topics — the per-topic
 // positive/negative breakdown + a plain summary. Loads a beat later.
-interface ReviewTopic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string; negQuote: string }
+interface TopicEvidence { rating: number; text: string; at: string; side: 'positive' | 'negative' }
+interface ReviewTopic { name: string; positive: number; negative: number; mentions: number; direction: 'up' | 'down' | 'flat'; quote: string; negQuote: string; evidence?: TopicEvidence[] }
 interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
@@ -2514,11 +2515,19 @@ function ReviewSentiment({ topics, loading }: { topics: ReviewTopicsData | null;
 
 // ── Topic breakdown: each topic's positive-vs-negative split + where it's headed ──
 function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
+  /* THE COUNT HAS TO BE CHECKABLE. The owner who fired an agency over invented
+     numbers said she would count these herself, and could not: the review indices
+     that produced each count were resolved on the server and thrown away. They
+     travel now, so tapping a topic shows exactly which reviews were counted and
+     which side each landed on. A number nobody can audit is what she left over. */
+  const [open, setOpen] = useState<number | null>(null)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {topics.map((t, i) => {
         const m = t.mentions || 1
         const gp = (t.positive / m) * 100
+        const evi = t.evidence ?? []
+        const isOpen = open === i
         return (
           <div key={i}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
@@ -2528,9 +2537,20 @@ function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
                   {t.direction === 'up' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}{t.direction === 'up' ? 'Improving' : 'Slipping'}
                 </span>
               )}
-              <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.mute, flexShrink: 0 }}>
-                <b style={{ color: C.greenDk, fontWeight: 600 }}>{t.positive}</b> liked{t.negative > 0 ? <> · <b style={{ color: C.coral, fontWeight: 600 }}>{t.negative}</b> not</> : ''}
-              </span>
+              {evi.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setOpen(isOpen ? null : i)}
+                  aria-expanded={isOpen}
+                  style={{ marginLeft: 'auto', flexShrink: 0, font: 'inherit', fontSize: 11.5, color: C.mute, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textDecoration: 'underline', textDecorationColor: C.line, textUnderlineOffset: 3 }}
+                >
+                  <b style={{ color: C.greenDk, fontWeight: 600 }}>{t.positive}</b> liked{t.negative > 0 ? <> · <b style={{ color: C.coral, fontWeight: 600 }}>{t.negative}</b> not</> : ''}
+                </button>
+              ) : (
+                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.mute, flexShrink: 0 }}>
+                  <b style={{ color: C.greenDk, fontWeight: 600 }}>{t.positive}</b> liked{t.negative > 0 ? <> · <b style={{ color: C.coral, fontWeight: 600 }}>{t.negative}</b> not</> : ''}
+                </span>
+              )}
             </div>
             <div style={{ display: 'flex', height: 9, borderRadius: 99, overflow: 'hidden', background: C.bg }}>
               {t.positive > 0 && <div style={{ width: `${gp}%`, background: C.green }} />}
@@ -2550,6 +2570,25 @@ function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
                     <span style={{ width: 6, height: 6, borderRadius: 99, background: C.coral, marginTop: 5, flexShrink: 0 }} />
                   </div>
                 )}
+              </div>
+            )}
+            {isOpen && evi.length > 0 && (
+              <div style={{ marginTop: 8, borderLeft: `2px solid ${C.line}`, paddingLeft: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 11, color: C.faint }}>
+                  {evi.length === t.mentions ? `The ${t.mentions} reviews counted here.` : `The ${evi.length} most recent of ${t.mentions} counted here.`}
+                </div>
+                {evi.map((e, k) => (
+                  <div key={k} style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 99, marginTop: 6, flexShrink: 0, background: e.side === 'positive' ? C.green : C.coral }} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 1 }}>
+                        <Stars n={e.rating} />
+                        {reviewDate(e.at) && <span style={{ fontSize: 10.5, color: C.faint }}>{reviewDate(e.at)}</span>}
+                      </span>
+                      <span style={{ display: 'block', fontSize: 12, color: C.mute, lineHeight: 1.45 }}>{e.text}</span>
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
           </div>
