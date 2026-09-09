@@ -61,6 +61,7 @@ const SHELL_CSS = `
 @media (prefers-reduced-motion:reduce){.mvp-frame-scroll>*,.mvp-pop,.mvp-tab-on{animation:none}.mvp-row:active{transform:none}}
 @media (hover:hover){.mvp-row:hover{background:#f7faf9}}
 .mvp-spin{animation:mvpspin .8s linear infinite}
+.mvp-btn:not(:disabled):active{transform:scale(.975)}
 @keyframes mvpspin{to{transform:rotate(360deg)}}
 .mvp-input{transition:border-color .12s ease}
 .mvp-input:focus{border-color:#4abd98}

@@ -24,7 +24,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import MvpShell from './mvp-shell'
-import { MvpGroup, MvpSaveBar, MvpEmpty, MvpMsg } from './mvp-detail'
+import { MvpGroup, MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
 import { C, DISPLAY } from './tokens'
 import { gradOf, tint, glow, alpha, hueOf, type HueKey } from './hues'
@@ -314,10 +314,11 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               : done.length ? done.join(', ') : 'Your accounts'}
             {handed ? '' : when === 'best' && pickedBest ? ` · ${pickedBest.label}` : when === 'pick' && pickedAt ? ` · ${pickedAt.toLocaleString([], { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric' })}` : ''}
           </div>
-          <button type="button" onClick={() => router.push(handed ? '/dashboard/messages' : when !== 'now' ? '/dashboard/scheduled' : '/dashboard/insights/posts')}
-            style={{ marginTop: 22, font: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '11px 22px', borderRadius: 99, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer' }}>
-            {handed ? 'See the message' : when !== 'now' ? 'See what is coming up' : 'See your posts'}
-          </button>
+          <div style={{ marginTop: 22 }}>
+            <MvpButton
+              onClick={() => router.push(handed ? '/dashboard/messages' : when !== 'now' ? '/dashboard/scheduled' : '/dashboard/insights/posts')}
+              label={handed ? 'See the message' : when !== 'now' ? 'See what is coming up' : 'See your posts'} />
+          </div>
         </div>
       </MvpShell>
     )
@@ -347,7 +348,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         .cmp-scroll::-webkit-scrollbar{display:none}
       `}</style>
 
-      <div style={{ padding: '6px 16px 150px' }}>
+      <div style={{ padding: '6px 16px 34px' }}>
 
         {/* ── THE PREVIEW ──────────────────────────────────────────────────
             A mirror, not the editing surface. The last version blurred the two:
@@ -589,7 +590,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               return (
                 <button key={t.accountId} type="button" onClick={() => toggle(t.accountId)} aria-pressed={on} className="cmp-x"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 8, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500,
-                    padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? C.ink : C.mute,
+                    fontFamily: DISPLAY, padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? C.ink : C.mute,
                     background: on ? alpha(c, 0.09) : '#fff',
                     border: `1px solid ${on ? c : C.line}`, boxShadow: on ? `0 3px 12px ${alpha(c, 0.22)}` : 'none' }}>
                   <span style={{ opacity: on ? 1 : .4, display: 'flex' }}><BrandOrMark provider={t.platform} size={16} /></span>
@@ -749,7 +750,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                   const isBest = bestHoursOnDay.has(h)
                   return (
                     <button key={h} type="button" disabled={past} onClick={() => setHour(h)} aria-pressed={on} className="cmp-x"
-                      style={{ padding: '9px 0', borderRadius: 12, cursor: past ? 'default' : 'pointer', font: 'inherit', fontSize: 13,
+                      style={{ padding: '9px 0', borderRadius: 12, cursor: past ? 'default' : 'pointer', font: 'inherit', fontFamily: DISPLAY, fontSize: 13,
                         fontWeight: on ? 700 : 500, border: `1px solid ${on ? 'transparent' : isBest ? C.green : C.line}`,
                         background: on ? C.ink : '#fff', color: past ? C.faint : on ? '#fff' : C.ink, opacity: past ? .45 : 1 }}>
                       {hourLabel(h)}{isBest && !on ? ' ★' : ''}
@@ -777,32 +778,28 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           </div>
         )}
         {err && <div style={{ marginTop: 12 }}><MvpMsg ok={false} text={err} /></div>}
+
+        {/* AT THE END OF THE PAGE, not floating over it. The sticky bar put a
+            second white plane above the bottom nav, so the screen finished with
+            two stacked strips of chrome and the thing being written was clipped
+            behind them. A composer is not a settings form: it is finished when
+            you reach the bottom. */}
+        <MvpActions
+          /* The decision, restated in words before they commit to it. A button
+             that says Post is not the same as being told what is about to happen. */
+          hint={chosen.size === 0 ? 'Pick where it goes.'
+            : `${when === 'now' ? 'Posting' : 'Scheduled'} to ${chosen.size} account${chosen.size === 1 ? '' : 's'}${when === 'best' && pickedBest ? `, ${pickedBest.label}` : ''}. Public, as your business.`}
+        >
+          <MvpButton full busy={busy} disabled={!canSend} onClick={() => void send(false)}
+            label={when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'} />
+          {/* THE WAY OUT, and deliberately quiet. This was a tab at the top of
+              the screen, which made a choice out of an escape hatch and made
+              every owner answer it before writing a word. */}
+          <MvpButton full variant="quiet" busy={handing} disabled={!canHand}
+            onClick={() => void send(true)} label="Send it to your team instead" />
+        </MvpActions>
       </div>
 
-      <MvpSaveBar
-        onClick={() => void send(false)}
-        disabled={!canSend}
-        saving={busy}
-        label={when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'}
-        /* The decision, restated in words before they commit to it. A button
-           that says Post is not the same as being told what is about to happen. */
-        hint={
-          chosen.size === 0 ? 'Pick where it goes.'
-            : `${when === 'now' ? 'Posting' : 'Scheduled'} to ${chosen.size} account${chosen.size === 1 ? '' : 's'}${when === 'best' && pickedBest ? `, ${pickedBest.label}` : ''}. Public, as your business.`
-        }
-        /* THE WAY OUT, and deliberately quiet. This was a tab at the top of the
-           screen -- "I will post it" against "Apnosh does it" -- which made a
-           choice out of something that is really an escape hatch, and made every
-           owner answer it before writing a word. It belongs here, small, at the
-           moment they might actually want it: they have written the thing and
-           would rather someone else finished it. */
-        secondary={{
-          label: 'Send it to your team instead',
-          onClick: () => void send(true),
-          disabled: !canHand,
-          busy: handing,
-        }}
-      />
     </MvpShell>
   )
 }

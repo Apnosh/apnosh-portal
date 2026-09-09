@@ -18,7 +18,7 @@ import React from 'react'
 import Link from 'next/link'
 import TopRow from './top-row'
 import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react'
-import { gradOf, type HueKey } from './hues'
+import { gradOf, tint, type HueKey } from './hues'
 import { Mark } from './mark'
 
 /* The palette, the display face and the amber trio all live in tokens.ts now, and are re-exported
@@ -83,26 +83,80 @@ export function MvpRow({ icon, label, sub, href, onClick, right, danger, externa
 
 // Sticky bottom save bar — pins above the bottom nav inside the shell's scroll
 // frame. `hint` shows a small line above the button (e.g. "Saved", or a nudge).
-export function MvpSaveBar({ onClick, label = 'Save', disabled, saving, hint, secondary }: {
-  onClick: () => void; label?: string; disabled?: boolean; saving?: boolean; hint?: string
-  /** A quieter way out, under the button: text, not a second button competing
-   *  with the first. */
-  secondary?: { label: string; onClick: () => void; disabled?: boolean; busy?: boolean }
+/**
+ * THE BUTTON, as the design system defines it and not as each screen remembers it.
+ *
+ * design-system.html says it in one line: "Cal Sans for anything that NAMES a
+ * thing: titles, card names, buttons, big numbers." Every button in the portal
+ * had been written with `fontFamily: 'inherit'`, which is Inter, so the one face
+ * that carries the brand was absent from the one element an owner actually
+ * presses. portal.html's own `.btn` is the reference for the rest: a mint
+ * gradient, a pill, and the gradient's own colour glowing under it -- not a flat
+ * fill with a 14px radius.
+ *
+ *   primary  the thing this screen is for
+ *   ghost    a real alternative, equal weight, quieter surface
+ *   quiet    a way out, text only, no box competing with the primary
+ */
+export function MvpButton({ label, onClick, variant = 'primary', disabled, busy, full, icon, hue = 'mint' }: {
+  label: string; onClick: () => void
+  variant?: 'primary' | 'ghost' | 'quiet'
+  disabled?: boolean; busy?: boolean; full?: boolean; icon?: React.ReactNode; hue?: HueKey
 }) {
-  const off = disabled || saving
-  const sOff = secondary?.disabled || secondary?.busy || saving
+  const off = disabled || busy
+  const H = variant === 'quiet' ? 40 : 50
+  const base: React.CSSProperties = {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    width: full ? '100%' : undefined, height: H, padding: variant === 'quiet' ? '0 10px' : '0 22px',
+    borderRadius: H / 2, border: 'none', cursor: off ? 'default' : 'pointer',
+    fontFamily: DISPLAY, fontSize: variant === 'quiet' ? 13.5 : 16, fontWeight: 600,
+    letterSpacing: '-.005em', transition: 'transform .12s ease, box-shadow .12s ease',
+  }
+  const skin: React.CSSProperties =
+    variant === 'primary'
+      ? off
+        ? { background: C.skel, color: C.faint, boxShadow: 'none' }
+        : { background: gradOf(hue), color: '#fff', boxShadow: `0 6px 16px ${tint(hue, 0.4, 1)}` }
+      : variant === 'ghost'
+        ? { background: off ? C.skel : '#fff', color: off ? C.faint : C.ink, boxShadow: 'none', border: `1px solid ${C.line}` }
+        : { background: 'none', color: off ? C.faint : C.greenDk, boxShadow: 'none' }
+  return (
+    <button type="button" onClick={onClick} disabled={off} className="mvp-btn" style={{ ...base, ...skin }}>
+      {busy && <Loader2 size={variant === 'quiet' ? 14 : 18} className="mvp-spin" />}{icon}{label}
+    </button>
+  )
+}
+
+/**
+ * The same buttons, at the end of the page rather than stuck to the glass.
+ *
+ * A sticky bar is right when a long form can be saved at any point. It is wrong
+ * here: it floated a second white plane over the bottom nav, so a screen with
+ * two rows of chrome under it read as three, and it clipped the last thing the
+ * owner was working on. This just ends the page.
+ */
+export function MvpActions({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div style={{ marginTop: 30, paddingTop: 20, borderTop: `1px solid ${C.line}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {hint && <div style={{ fontSize: 12.5, color: C.mute, textAlign: 'center', lineHeight: 1.45 }}>{hint}</div>}
+      {children}
+    </div>
+  )
+}
+
+/**
+ * The sticky save bar, for the six settings editors that want one: a long form
+ * you can save from any point in it.
+ *
+ * It draws MvpButton so a Save reads as the same object as every other button.
+ */
+export function MvpSaveBar({ onClick, label = 'Save', disabled, saving, hint }: {
+  onClick: () => void; label?: string; disabled?: boolean; saving?: boolean; hint?: string
+}) {
   return (
     <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `0.5px solid ${C.line}`, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))' }}>
       {hint && <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginBottom: 8 }}>{hint}</div>}
-      <button type="button" onClick={onClick} disabled={off} style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', background: off ? '#bfe7da' : C.green, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit', cursor: off ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-        {saving && <Loader2 size={18} className="mvp-spin" />}{label}
-      </button>
-      {secondary && (
-        <button type="button" onClick={secondary.onClick} disabled={sOff} style={{ width: '100%', marginTop: 9, padding: '4px 0', background: 'none', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-          color: sOff ? C.faint : C.greenDk, cursor: sOff ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
-          {secondary.busy && <Loader2 size={14} className="mvp-spin" />}{secondary.label}
-        </button>
-      )}
+      <MvpButton full label={label} onClick={onClick} disabled={disabled} busy={saving} />
     </div>
   )
 }
