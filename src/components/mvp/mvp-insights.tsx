@@ -549,7 +549,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
     if (k && k !== focus.stageKey) pick(k)
   }
 
-  if (tab === 'trends') return <TrendsTab detail={detail} campaigns={campaigns} byKey={byKey} initial={focus.stageKey} clientId={clientId} />
+  if (tab === 'trends') return <TrendsTab detail={detail} campaigns={campaigns} byKey={byKey} initial={focus.stageKey} clientId={clientId} reviews={data.reviews} />
   return (
     <div style={{ padding: '0 0 8px' }}>
       {/* the hero sits on the page like everything else (owner 2026-09-04: no card behind the graph) */}
@@ -1321,7 +1321,7 @@ function smoothDays(range: string, spanDays: number): number {
 }
 const avgLabel = (n: number) => (n <= 1 ? 'Each day' : `${n}-day average`)
 const TREND_RANGES: [ChartRange, string][] = [['7d', '7d'], ['30d', '30d'], ['90d', '90d'], ['1y', '1y'], ['custom', 'Custom']]
-function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: InsightsDetail | null; campaigns: Record<string, StageCampaign[]> | null; byKey: Map<string, MetricView>; initial: string; clientId?: string }) {
+function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }: { detail: InsightsDetail | null; campaigns: Record<string, StageCampaign[]> | null; byKey: Map<string, MetricView>; initial: string; clientId?: string; /** dated reviews, drawn on the same timeline as the metric */ reviews?: InsightsReview[] }) {
   const [range, setRange] = useState<ChartRange>('30d')
   const [cStart, setCStart] = useState(() => { const t = new Date(); return localYmdOf(new Date(t.getFullYear(), t.getMonth(), t.getDate() - 13)) })
   const [cEnd, setCEnd] = useState(() => localYmd())
@@ -1370,7 +1370,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId }: { detail: In
       </div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && !cur.locked
-          ? <CampaignTrend mv={cur.mv} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare series={(cur.mv.daily ?? []).filter((d) => d && d.date).map((d) => ({ date: d.date, value: d.value ?? 0 }))} noun={cur.mv.unit ?? ''} />} />
+          ? <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare series={(cur.mv.daily ?? []).filter((d) => d && d.date).map((d) => ({ date: d.date, value: d.value ?? 0 }))} noun={cur.mv.unit ?? ''} />} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
         {cur.mv && !cur.locked && <RhythmCard mv={cur.mv} />}
         {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
@@ -1447,7 +1447,7 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
   return { mean: n > 0 ? sum / n : 0, n }
 }
 
-function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, litPin, footer, customStart, customEnd, smooth = 7 }: { mv?: MetricView; list: StageCampaign[] | null; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; /** the rolling window in days (1 = each day) */ smooth?: number; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
+function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Trend', onPins, litPin, footer, customStart, customEnd, smooth = 7 }: { mv?: MetricView; list: StageCampaign[] | null; /** dated reviews, drawn under the same axis */ reviews?: InsightsReview[]; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; /** the rolling window in days (1 = each day) */ smooth?: number; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
   const A = useAccent()
   const range: TrendRange = TREND_OF_RANGE[chartRange] ?? 'month'
   const [pick, setPick] = useState<number | null>(null) // the day under the finger
@@ -1540,6 +1540,17 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
     if (g) { g.items.push(c); g.ms = Math.min(g.ms, ms) }
     else byDay.set(key, { ms, items: [c] })
   }
+  /* REVIEWS ON THE SAME AXIS.
+     Both are dated and neither has ever been drawn against the other, so nothing
+     in the product could say "the week you got three one-star reviews, calls
+     fell". A tick per review under the plot, coloured by rating, placed by the
+     same xAt the line uses so the two genuinely line up. Only inside the drawn
+     window; a review outside it is not evidence about these days. */
+  const reviewTicks = (reviews ?? [])
+    .map((r) => ({ ms: trendDayMs(String(r.postedAt).slice(0, 10)), rating: Number(r.rating ?? 0) }))
+    .filter((r) => r.ms >= startMs && r.ms <= endMs && r.rating > 0)
+    .map((r) => ({ x: clampX(xAt(r.ms)), bad: r.rating <= 2, mid: r.rating === 3 }))
+
   const marks = [...byDay.values()].sort((a, b) => a.ms - b.ms).map((g, i) => {
     const before = trendMeanIn(dayMs, g.ms - HALF, g.ms)
     const after = trendMeanIn(dayMs, g.ms, g.ms + HALF)
@@ -1594,6 +1605,20 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
             <span style={{ fontSize: 12.5, color: C.faint }}>end of this range vs its start</span>
           </>
         )}
+        {/* A mark nobody can read is decoration. Say what the ticks are, only
+            when there are some, and only mention bad ones when there are. */}
+        {reviewTicks.length > 0 && (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: C.faint }}>
+            <span aria-hidden style={{ width: 2, height: 11, borderRadius: 2, background: C.faint }} />
+            {reviewTicks.length} review{reviewTicks.length === 1 ? '' : 's'} below the line
+            {reviewTicks.some((t) => t.bad) && (
+              <>
+                <span aria-hidden style={{ width: 2, height: 11, borderRadius: 2, background: C.coral, marginLeft: 3 }} />
+                <span style={{ color: C.coral }}>{reviewTicks.filter((t) => t.bad).length} poor</span>
+              </>
+            )}
+          </span>
+        )}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', touchAction: 'pan-y' }} role="img" aria-label="Stage trend: every day, the 7-day average, the prior period, and campaign go-live markers"
         onPointerDown={(e) => { const r = e.currentTarget.getBoundingClientRect(); const x = ((e.clientX - r.left) / r.width) * W; setPick(Math.max(0, Math.min(n - 1, Math.round((x - padL) / slot - 0.5)))) }}
@@ -1617,6 +1642,19 @@ function CampaignTrend({ mv, list, chartRange = '30d', title = 'Trend', onPins, 
         {/* the trend: a 7-day rolling average */}
         <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={A.main} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
+        {/* Reviews, on the same axis and just under the plot: one tick each,
+            red for one and two stars, amber for three, grey above. Below the
+            line so they never compete with it, and never on top of the
+            campaign pins. */}
+        {reviewTicks.map((t, i) => (
+          <line
+            key={`rv${i}`}
+            x1={t.x} y1={yBot + 2} x2={t.x} y2={yBot + 7}
+            stroke={t.bad ? C.coral : t.mid ? C.amber : C.faint}
+            strokeWidth={t.bad ? 2 : 1.4}
+            strokeLinecap="round"
+          />
+        ))}
         {/* the latest average, at the line's end */}
         <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r={3.5} fill={A.main} stroke="#fff" strokeWidth={1.5} />
         {clusters.map((c) => {
