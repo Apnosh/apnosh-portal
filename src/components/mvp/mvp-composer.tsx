@@ -39,6 +39,11 @@ interface Media { url: string; preview: string; isVideo: boolean }
    rule, not ours, and it is the reason a text-only composer was not a smaller
    version of this feature but a broken one. */
 const NEEDS_MEDIA = new Set(['instagram', 'tiktok', 'youtube'])
+/* And the one that will not accept a PHOTO. YouTube's whole schema has no photo
+   option: a title, a visibility, a category and a video. It was sitting switched
+   on by default next to a photo, drawing a YouTube preview of it and heading for
+   a rejection at publish time. */
+const NEEDS_VIDEO = new Set(['youtube'])
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 /* Waking hours only. Nobody schedules a restaurant post for 4am, and offering it
@@ -244,9 +249,16 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
      counted: "Instagram needs a photo" is something an owner can act on, and a
      disabled button with no reason is the thing everyone hates. */
   const blocked = useMemo(() => {
-    if (media || !targets) return [] as string[]
-    return targets.filter((t) => chosen.has(t.accountId) && NEEDS_MEDIA.has(t.platform))
-      .map((t) => t.platform.charAt(0).toUpperCase() + t.platform.slice(1))
+    if (!targets) return [] as string[]
+    if (media) return []
+    return targets.filter((t) => chosen.has(t.accountId) && NEEDS_MEDIA.has(t.platform)).map((t) => platformName(t.platform))
+  }, [media, targets, chosen])
+
+  /* Chosen, but this is not the kind of media it takes. Separate from `blocked`
+     because the fix is different: one wants a file, this one wants a video. */
+  const wrongKind = useMemo(() => {
+    if (!targets || !media || media.isVideo) return [] as string[]
+    return targets.filter((t) => chosen.has(t.accountId) && NEEDS_VIDEO.has(t.platform)).map((t) => platformName(t.platform))
   }, [media, targets, chosen])
   /* One entry per PLATFORM in play, not per account: two Instagram accounts get
      one caption between them, because the difference that matters is Instagram
@@ -365,7 +377,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     /* A platform that needs a photo is a real stop, but only at the moment they
        actually try. Told up front it is a scolding for something they may be
        about to do anyway, on a screen they have only just opened. */
-    if (!handoff && blocked.length > 0) { setTried(true); return }
+    if (!handoff && (blocked.length > 0 || wrongKind.length > 0)) { setTried(true); return }
     setTried(false)
     if (handoff) setHanding(true); else setBusy(true)
     setErr(null)
@@ -862,6 +874,11 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         {tried && blocked.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <MvpMsg ok={false} text={`${blocked.join(' and ')} ${blocked.length === 1 ? 'needs' : 'need'} a photo or video. Add one, or switch ${blocked.length === 1 ? 'it' : 'them'} off above.`} />
+          </div>
+        )}
+        {tried && wrongKind.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <MvpMsg ok={false} text={`${wrongKind.join(' and ')} only takes video, not photos. Switch ${wrongKind.length === 1 ? 'it' : 'them'} off, or use a video instead.`} />
           </div>
         )}
         {err && <div style={{ marginTop: 10 }}><MvpMsg ok={false} text={err} /></div>}

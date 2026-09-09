@@ -54,9 +54,10 @@ function Media({ post, platform, dark }: { post: PreviewPost; platform: string; 
   const ratio = RATIO[platform]
   const common: React.CSSProperties = ratio
     ? { display: 'block', width: '100%', aspectRatio: String(ratio), objectFit: 'cover', background: dark ? '#000' : '#0d0d0d' }
-    /* No forced ratio: the photo keeps its own shape, tall ones letterboxed the
-       way the feed itself letterboxes them rather than cropped. */
-    : { display: 'block', width: '100%', height: 'auto', maxHeight: 340, objectFit: 'contain', background: '#0d0d0d' }
+    /* No forced ratio: the photo keeps its own shape. The ground is the card's
+       own white, not black -- a landscape photo sitting in black bars looked
+       like something had gone wrong with it, when nothing had. */
+    : { display: 'block', width: '100%', height: 'auto', maxHeight: 340, objectFit: 'contain', background: '#fff' }
   if (!post.media) {
     return (
       <div style={{ ...common, ...(ratio ? {} : { height: 130 }), display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: dark ? '#16161a' : PLACEHOLDER, color: dark ? '#7b7b85' : C.faint, fontSize: 12.5 }}>
