@@ -251,11 +251,16 @@ export async function diagnoseComments(clientId: string): Promise<Record<string,
          (accountUsername, commentCount, permalink, picture), not the comments
          themselves. So follow the first id down and describe THAT shape too. */
       if (arr.length > 0) {
-        const firstId = str(arr[0].id) || str(arr[0]._id)
+        /* Pick a post that HAS comments. The first row happened to have none, and
+           an empty array from a post with nothing on it proves nothing. */
+        const withComments = arr.find((x) => num(x.commentCount) > 0) ?? arr[0]
+        out.postsWithComments = arr.filter((x) => num(x.commentCount) > 0).length
+        out.commentCounts = arr.map((x) => num(x.commentCount))
+        const firstId = str(withComments.id) || str(withComments._id)
         /* The drill-down told us what it wanted, in its own words:
            {"code":"missing_required_field","param":"accountId"}. The first level
            carries that accountId on every row, so pass it back down. */
-        const acct = str(arr[0].accountId)
+        const acct = str(withComments.accountId)
         if (firstId) {
           for (const sub of [`${path}/${encodeURIComponent(firstId)}`]) {
             try {
@@ -287,25 +292,64 @@ export async function diagnoseComments(clientId: string): Promise<Record<string,
 export async function listComments(clientId: string, limit = 50): Promise<SocialCommentRow[]> {
   const profileId = await profileIdFor(clientId)
   if (!profileId) return []
-  const q = new URLSearchParams({ profileId, limit: String(Math.min(100, Math.max(1, limit))) })
+
+  /* TWO STEPS, and the first one is not what the name suggests. Confirmed against
+     the live API: GET /inbox/comments returns the client's own POSTS that have
+     comments on them -- id, accountId, platform, content (the caption),
+     commentCount, permalink -- not the comments. The comments live one level
+     down, and that sub-resource requires the accountId the first level carries.
+     The first parser read the wrong level and quietly returned nothing. */
+  const q = new URLSearchParams({ profileId, limit: '50' })
   const res = await zer(`/inbox/comments?${q.toString()}`)
-  const rows = unwrapList(res, 'comments', 'items', 'results')
-  return rows.map((c) => {
-    const id = str(c._id) || str(c.id) || str(c.commentId)
-    const author = c.author && typeof c.author === 'object' ? (c.author as Record<string, unknown>) : {}
-    return {
-      id,
-      platform: (str(c.platform) || 'instagram').toLowerCase(),
-      postId: str(c.postId) || str(c.post_id) || null,
-      authorName: str(c.authorName) || str(c.author_name) || str(author.name) || str(author.username) || 'Someone',
-      text: str(c.text) || str(c.message) || str(c.comment),
-      createdAt: str(c.createdAt) || str(c.created_at) || str(c.timestamp) || null,
-      /* Only true when the vendor says so. An unknown status is NOT "answered":
-         showing a comment as handled when it is not is the one error this queue
-         cannot make. */
-      replied: str(c.status).toLowerCase() === 'replied' || c.replied === true,
+  const posts = unwrapList(res, 'data', 'comments', 'items', 'results')
+
+  /* Only posts that actually have comments, newest first, and bounded: this is a
+     fan-out of one request per post and an owner queue does not need every post
+     they have ever made. */
+  const live = posts
+    .filter((p) => num(p.commentCount) > 0 && str(p.id) && str(p.accountId))
+    .sort((a, b) => str(b.createdTime).localeCompare(str(a.createdTime)))
+    .slice(0, 12)
+
+  const out: SocialCommentRow[] = []
+  for (const post of live) {
+    const postId = str(post.id)
+    const sub = new URLSearchParams({ accountId: str(post.accountId), limit: '25' })
+    let rows: Record<string, unknown>[] = []
+    try {
+      const r = await zer(`/inbox/comments/${encodeURIComponent(postId)}?${sub.toString()}`)
+      rows = unwrapList(r, 'comments', 'data', 'items', 'results')
+    } catch {
+      /* One post failing is not the queue failing. Skip it and keep the rest --
+         losing every comment because one post errored would be the worse bug. */
+      continue
     }
-  }).filter((c) => c.id && c.text)
+    for (const c of rows) {
+      const id = str(c.id) || str(c._id) || str(c.commentId)
+      /* Field names read through several plausible spellings. The post level
+         proved the docs and the API disagree (content, not text; createdTime,
+         not createdAt), so the comment level is read the same defensive way. */
+      const text = str(c.content) || str(c.text) || str(c.message) || str(c.comment)
+      if (!id || !text) continue
+      const author = c.author && typeof c.author === 'object' ? (c.author as Record<string, unknown>) : {}
+      out.push({
+        id,
+        platform: (str(post.platform) || str(c.platform) || 'instagram').toLowerCase(),
+        postId,
+        authorName:
+          str(c.username) || str(c.from) || str(c.authorName) || str(c.author_name) ||
+          str(author.username) || str(author.name) || 'Someone',
+        text,
+        createdAt: str(c.createdTime) || str(c.createdAt) || str(c.created_at) || str(c.timestamp) || null,
+        /* Only true when the vendor says so. An unknown status is NOT "answered":
+           showing a comment as handled when it is not is the one error this queue
+           cannot make. */
+        replied: str(c.status).toLowerCase() === 'replied' || c.replied === true || num(c.replyCount) > 0,
+      })
+    }
+    if (out.length >= limit) break
+  }
+  return out.slice(0, limit)
 }
 
 /** Post a reply to one comment, on whatever platform it came from. */
