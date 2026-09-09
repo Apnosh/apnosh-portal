@@ -2438,10 +2438,50 @@ function ReviewHero({ avgRating, summary }: { avgRating: number | null; summary:
         <span style={{ fontFamily: DISPLAY, fontSize: 46, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em' }}>{shownAvg != null ? shownAvg.toFixed(1) : '—'}</span>
         <span style={{ marginBottom: 8 }}><Stars n={shownAvg ?? 0} /></span>
       </div>
+      <RecentVsLifetime summary={summary} shownAvg={shownAvg} />
       {stars && sampleTotal > 0 ? (
         <div style={{ marginTop: 18 }}><StarBars stars={stars} /></div>
       ) : (
         <div style={{ marginTop: 16, fontSize: 12.5, color: C.faint }}>Loading your star breakdown&hellip;</div>
+      )}
+    </div>
+  )
+}
+
+/* ── Lately, against all time ────────────────────────────────────────────────
+ * The single most useful line for anyone repairing a bad score, and the reason
+ * they give up before it works. A business sitting at 2.9 with a couple of
+ * hundred reviews behind it barely moves that average with a month of fives --
+ * the arithmetic buries the recovery -- so the owner watches a number that will
+ * not budge and concludes nothing is working. Their last dozen reviews say
+ * otherwise, and we already hold both figures: Google's own lifetime rating and
+ * the individual recent ones.
+ *
+ * Shown only when it actually says something: enough recent reviews to mean
+ * anything, and a gap wide enough not to be rounding. */
+function RecentVsLifetime({ summary, shownAvg }: { summary: ReviewSummary | null; shownAvg: number | null }) {
+  const recent = summary?.recent ?? []
+  if (recent.length < 5 || shownAvg == null) return null
+  const avg = recent.reduce((t, r) => t + r.rating, 0) / recent.length
+  const lately = Math.round(avg * 10) / 10
+  const gap = Math.round((lately - shownAvg) * 10) / 10
+  if (Math.abs(gap) < 0.3) return null
+  const better = gap > 0
+  const col = better ? C.greenDk : C.coral
+  const behind = summary?.placeRatingCount ?? null
+  return (
+    <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45 }}>
+        Your last {recent.length} reviews average{' '}
+        <b style={{ fontWeight: 700, color: col }}>{lately.toFixed(1)}</b>
+        <span style={{ color: C.mute }}> against {shownAvg.toFixed(1)} all time.</span>
+      </div>
+      {better && (
+        <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
+          {behind && behind > 40
+            ? `The headline moves slowly with ${behind.toLocaleString()} reviews behind it. Lately is the one that is changing.`
+            : 'The headline carries every review you have ever had. Lately is the one that is changing.'}
+        </div>
       )}
     </div>
   )
