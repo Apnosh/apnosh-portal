@@ -74,6 +74,11 @@ export async function POST(req: NextRequest) {
     when?: { kind?: string; iso?: string; timezone?: string }
     /** true = do not publish; hand it to Apnosh as a draft to write and send */
     handoff?: boolean
+    firstComment?: string
+    collaborators?: string[]
+    tagged?: string[]
+    tagLocation?: boolean
+    tiktokDraft?: boolean
   }
   const { clientId, content, mediaUrls, when } = body
   const accountIds: string[] = Array.isArray(body.accountIds) ? body.accountIds : []
@@ -134,11 +139,26 @@ export async function POST(req: NextRequest) {
       ? { kind: 'at' as const, iso: when.iso, timezone: when.timezone || 'America/Los_Angeles' }
       : { kind: 'now' as const }
 
+    /* Usernames arrive from a text field, so they are cleaned here rather than
+       trusted: a leading @, stray spaces, and anything that is not a handle. */
+    const handles = (xs?: string[]) => (Array.isArray(xs) ? xs : [])
+      .map((x) => String(x).trim().replace(/^@+/, ''))
+      .filter((x) => /^[A-Za-z0-9._]{1,30}$/.test(x))
+
+    /* The location is never a free-typed id. It is the page the client's OWN
+       connected Facebook account carries, or it is not sent. */
+    const ownPage = targets.find((t) => t.pageId)?.pageId ?? null
+
     const r = await createPost(clientId, {
       content: content ?? '',
       targets: targets.map((t) => ({ accountId: t.accountId, platform: t.platform })),
       mediaUrls: Array.isArray(mediaUrls) ? mediaUrls.filter((u) => typeof u === 'string' && u.startsWith('https://')) : [],
       when: w,
+      firstComment: typeof body.firstComment === 'string' ? body.firstComment.slice(0, 2200) : undefined,
+      collaborators: handles(body.collaborators).slice(0, 3),
+      tagged: handles(body.tagged).slice(0, 20),
+      locationId: body.tagLocation ? ownPage : null,
+      tiktokDraft: body.tiktokDraft === true,
     })
     return NextResponse.json({ ok: true, id: r.id, posted: targets.map((t) => t.platform) })
   } catch (e) {

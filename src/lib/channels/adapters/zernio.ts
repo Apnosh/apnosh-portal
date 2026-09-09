@@ -263,7 +263,12 @@ async function profileIdFor(clientId: string): Promise<string | null> {
  * crash, and the diagnostic route reports what actually came back so the FIRST
  * real run confirms or corrects this in one look.
  */
-export interface PostTarget { accountId: string; platform: string; name: string }
+export interface PostTarget {
+  accountId: string; platform: string; name: string
+  /** a Facebook Page id with location data, when this account carries one; the
+   *  only thing Instagram accepts as a location and the only one obtainable */
+  pageId: string | null
+}
 export interface BestSlot { dayOfWeek: number; hourUtc: number; posts: number }
 
 /**
@@ -282,6 +287,16 @@ export async function listPostTargets(clientId: string): Promise<PostTarget[]> {
       accountId: str(a._id) || str(a.id),
       platform: (str(a.platform) || '').toLowerCase(),
       name: str(a.username) || str(a.name) || str(a.displayName) || str(a.platform),
+      /* Instagram's locationId is a FACEBOOK PAGE ID with location data, digits
+         only, and Zernio has no place search. So a general location picker is not
+         buildable. What IS buildable is the case that covers almost everyone:
+         tagging their own restaurant, using the page id their own Facebook
+         connection already carries. Empty when we cannot find one, and then the
+         option is simply not offered rather than offered broken. */
+      pageId: (() => {
+        const raw = str(a.pageId) || str(a.page_id) || str(a.platformAccountId) || str(a.externalId)
+        return /^\d{6,}$/.test(raw) ? raw : null
+      })(),
     }))
     .filter((a) => a.accountId && a.platform)
 }
@@ -337,6 +352,17 @@ export async function createPost(clientId: string, args: {
   targets: Array<{ accountId: string; platform: string }>
   mediaUrls?: string[]
   when: { kind: 'now' } | { kind: 'at'; iso: string; timezone: string }
+  /** goes underneath as the first comment; where hashtags belong */
+  firstComment?: string
+  /** Instagram usernames, up to 3, invited to co-own the post */
+  collaborators?: string[]
+  /** Instagram usernames tagged in the picture */
+  tagged?: string[]
+  /** a Facebook Page id with location data */
+  locationId?: string | null
+  /** TikTok: land in the Creator Inbox instead of publishing, so the owner can
+   *  add a trending sound in the app and post it themselves */
+  tiktokDraft?: boolean
 }): Promise<{ id: string | null }> {
   const content = args.content.trim()
   if (!content && !(args.mediaUrls ?? []).length) {
@@ -350,9 +376,29 @@ export async function createPost(clientId: string, args: {
   const seed = `${content}:${args.targets.map((t) => t.accountId).sort().join(',')}:${args.when.kind === 'at' ? args.when.iso : 'now'}`
   for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) | 0 }
 
+  /* Per-platform data, and only where the platform accepts it. Instagram takes
+     the tags, the collaborators and the location; TikTok takes the draft flag;
+     Facebook takes its own first comment. Sending a field to a platform that
+     does not know it is how a whole post gets rejected for one wrong key. */
+  const igExtras: Record<string, unknown> = {}
+  if (args.firstComment?.trim()) igExtras.firstComment = args.firstComment.trim()
+  if (args.collaborators?.length) igExtras.collaborators = args.collaborators.slice(0, 3)
+  if (args.locationId) igExtras.locationId = args.locationId
+  if (args.tagged?.length) {
+    /* Photos REQUIRE coordinates and Reels ignore them, so a centre point is sent
+       for both: it is correct for a photo and harmless for a video. */
+    igExtras.userTags = args.tagged.slice(0, 20).map((username) => ({ username, x: 0.5, y: 0.5 }))
+  }
+
   const body: Record<string, unknown> = {
     content,
-    platforms: args.targets.map((t) => ({ platform: t.platform, accountId: t.accountId })),
+    platforms: args.targets.map((t) => {
+      const per: Record<string, unknown> = {}
+      if (t.platform === 'instagram' && Object.keys(igExtras).length) per.platformSpecificData = igExtras
+      if (t.platform === 'facebook' && args.firstComment?.trim()) per.platformSpecificData = { firstComment: args.firstComment.trim() }
+      if (t.platform === 'tiktok' && args.tiktokDraft) per.platformSpecificData = { draft: true }
+      return { platform: t.platform, accountId: t.accountId, ...per }
+    }),
     ...(args.mediaUrls?.length ? { mediaItems: args.mediaUrls.map((url) => ({ url })) } : {}),
     ...(args.when.kind === 'now'
       ? { publishNow: true }

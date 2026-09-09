@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2 } from 'lucide-react'
+import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, Image as ImageIcon } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpGroup, MvpSaveBar, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark } from './mvp-insights'
@@ -30,7 +30,7 @@ import { C, DISPLAY } from './tokens'
 import { gradOf, tint, glow } from './hues'
 import { CARD_SHADOW } from './kit'
 
-interface Target { accountId: string; platform: string; name: string }
+interface Target { accountId: string; platform: string; name: string; pageId?: string | null }
 interface Best { iso: string; label: string; posts: number }
 interface Media { url: string; preview: string; isVideo: boolean }
 
@@ -38,6 +38,18 @@ interface Media { url: string; preview: string; isVideo: boolean }
    rule, not ours, and it is the reason a text-only composer was not a smaller
    version of this feature but a broken one. */
 const NEEDS_MEDIA = new Set(['instagram', 'tiktok', 'youtube'])
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+/* Waking hours only. Nobody schedules a restaurant post for 4am, and offering it
+   is 24 buttons where 14 would do. */
+const HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`
+const addChip = (on: boolean): React.CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13,
+  fontWeight: on ? 600 : 500, padding: '8px 13px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
+  color: on ? C.greenDk : C.mute, background: on ? C.greenSoft : '#fff',
+  border: `1px solid ${on ? C.green : C.line}`,
+})
 
 export default function MvpComposer({ clientId }: { clientId: string }) {
   const router = useRouter()
@@ -47,7 +59,6 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [text, setText] = useState('')
   const [when, setWhen] = useState<'now' | 'best' | 'pick'>('now')
-  const [pickAt, setPickAt] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [done, setDone] = useState<string[] | null>(null)
@@ -60,6 +71,20 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
      required (staff will shoot or source it) and the accounts become a
      preference rather than an address. */
   const [mode, setMode] = useState<'self' | 'apnosh'>('self')
+  /* The extras. Each one is hidden until asked for: a composer that shows every
+     option at once is a cockpit, and four owners asked for their content handled
+     rather than to be handed more controls. */
+  const [open, setOpen] = useState<Set<'tag' | 'collab' | 'first'>>(new Set())
+  const [tagged, setTagged] = useState('')
+  const [collabs, setCollabs] = useState('')
+  const [firstComment, setFirstComment] = useState('')
+  const [tagLocation, setTagLocation] = useState(false)
+  const [tiktokDraft, setTiktokDraft] = useState(false)
+  /* Scheduling as two taps instead of a keyboard: a day, then a time. */
+  /* If the last slot of the day has already passed, today is not offerable, so
+     open on tomorrow rather than on a grid where every button is dead. */
+  const [day, setDay] = useState(() => (new Date().getHours() >= HOURS[HOURS.length - 1] ? 1 : 0))
+  const [hour, setHour] = useState<number | null>(null)
 
   useEffect(() => {
     const zone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles' } catch { return 'America/Los_Angeles' } })()
@@ -95,8 +120,36 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     if (busy || uploading) return false
     if (mode === 'apnosh') return text.trim().length > 0
     return chosen.size > 0 && blocked.length === 0
-      && (text.trim().length > 0 || !!media) && (when !== 'pick' || !!pickAt)
-  }, [busy, uploading, mode, chosen, blocked, text, media, when, pickAt])
+      && (text.trim().length > 0 || !!media) && (when !== 'pick' || hour != null)
+  }, [busy, uploading, mode, chosen, blocked, text, media, when, hour])
+
+  /* The client's own Facebook page, which is the only thing Instagram accepts as
+     a location and the only one obtainable without a place search. When they have
+     none, the option is simply not offered. */
+  const ownPageName = (targets ?? []).find((t) => t.pageId)?.name ?? null
+  const taggedList = tagged.split(/[\s,]+/).map((x) => x.replace(/^@+/, '')).filter(Boolean)
+  /* Where the recommended slot falls, so the time grid can mark it. */
+  const bestAt = best ? new Date(best.iso) : null
+  const bestHour = bestAt ? bestAt.getHours() : null
+  const bestDayOffset = bestAt
+    ? Math.round((new Date(bestAt).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000)
+    : null
+
+  const whenWords = mode === 'apnosh' ? 'A draft for your team'
+    : when === 'now' ? 'Going out now'
+    : when === 'best' && best ? best.label
+    : hour != null ? `${day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : DAY_NAMES[(new Date().getDay() + day) % 7]} at ${hourLabel(hour)}`
+    : 'Pick a day and a time'
+
+  /* The chosen day and hour as an instant. Built from the owner's own clock, so
+     "Thursday at 6" is six where they are. */
+  const pickedAt = useMemo(() => {
+    if (hour == null) return null
+    const d = new Date()
+    d.setDate(d.getDate() + day)
+    d.setHours(hour, 0, 0, 0)
+    return d
+  }, [day, hour])
 
   async function pickFile(file: File) {
     setErr(null); setUploading(true)
@@ -123,10 +176,17 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     try {
       const w = when === 'now' ? { kind: 'now' }
         : when === 'best' && best ? { kind: 'at', iso: best.iso, timezone: tz }
-        : { kind: 'at', iso: new Date(pickAt).toISOString(), timezone: tz }
+        : { kind: 'at', iso: (pickedAt ?? new Date()).toISOString(), timezone: tz }
       const r = await fetch('/api/dashboard/social-publish', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, content: text.trim(), accountIds: [...chosen], mediaUrls: media ? [media.url] : [], when: w, handoff: mode === 'apnosh' }),
+        body: JSON.stringify({
+          clientId, content: text.trim(), accountIds: [...chosen],
+          mediaUrls: media ? [media.url] : [], when: w, handoff: mode === 'apnosh',
+          firstComment: firstComment.trim() || undefined,
+          collaborators: collabs.split(/[\s,]+/).filter(Boolean),
+          tagged: tagged.split(/[\s,]+/).filter(Boolean),
+          tagLocation, tiktokDraft,
+        }),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not publish')
@@ -151,7 +211,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             {mode === 'apnosh'
               ? 'Your team will write it up and send it back for your OK before anything goes out.'
               : done.length ? done.join(', ') : 'Your accounts'}
-            {mode === 'apnosh' ? '' : when === 'best' && best ? ` · ${best.label}` : when === 'pick' && pickAt ? ` · ${new Date(pickAt).toLocaleString()}` : ''}
+            {mode === 'apnosh' ? '' : when === 'best' && best ? ` · ${best.label}` : when === 'pick' && pickedAt ? ` · ${pickedAt.toLocaleString([], { weekday: 'long', hour: 'numeric' })}` : ''}
           </div>
           <button type="button" onClick={() => router.push(mode === 'apnosh' || when !== 'now' ? '/dashboard/scheduled' : '/dashboard/insights/posts')}
             style={{ marginTop: 22, font: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '11px 22px', borderRadius: 99, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer' }}>
@@ -172,18 +232,18 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
       <style>{`
         @keyframes cmpspin{to{transform:rotate(360deg)}}
         .mvp-spin{animation:cmpspin .8s linear infinite}
-        .cmp-cap{width:100%;border:none;outline:none;resize:none;background:transparent;font-family:inherit}
-        .cmp-cap::placeholder{color:${C.faint}}
-        .cmp-drop{transition:background .18s ease, border-color .18s ease}
-        .cmp-chip{transition:background .16s ease, border-color .16s ease, color .16s ease, transform .12s ease}
-        .cmp-chip:active{transform:scale(.97)}
+        .cmp-in{width:100%;border:1px solid ${C.line};border-radius:13px;padding:11px 12px;font-size:15px;font-family:inherit;color:${C.ink};background:#fff;outline:none;box-sizing:border-box}
+        .cmp-in:focus{border-color:${C.green}}
+        .cmp-in::placeholder{color:${C.faint}}
+        .cmp-x{transition:transform .12s ease}
+        .cmp-x:active{transform:scale(.96)}
+        .cmp-scroll{overflow-x:auto;scrollbar-width:none}
+        .cmp-scroll::-webkit-scrollbar{display:none}
       `}</style>
 
-      <div style={{ padding: '6px 16px 140px' }}>
+      <div style={{ padding: '6px 16px 150px' }}>
 
-        {/* Hands-on or hands-off, before anything else, because it changes what
-            the rest of the screen is asking for. */}
-        <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 99, background: '#f0f1f0', marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 99, background: '#f0f1f0', marginBottom: 16 }}>
           {([['self', 'I will post it'], ['apnosh', 'Apnosh does it']] as [typeof mode, string][]).map(([k, label]) => {
             const on = mode === k
             return (
@@ -195,96 +255,144 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             )
           })}
         </div>
-        {mode === 'apnosh' && (
-          <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: '0 2px 14px' }}>
-            Tell us the idea. Your team writes it, makes the picture if it needs one, and sends it back for your OK before anything goes out. Managed posting is charged on your plan.
-          </div>
-        )}
 
-        {/* ── THE POST ITSELF ──────────────────────────────────────────────
-            Not a form with a preview beside it: the thing on screen IS the post.
-            The owner is looking at what they are making, which is the difference
-            between filling in fields and writing something. */}
-        <div style={{ background: '#fff', borderRadius: 22, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
-
-          {/* who it goes out as */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 15px 11px' }}>
-            <span style={{ width: 34, height: 34, borderRadius: '50%', background: gradOf('mint'), boxShadow: glow('mint', .3), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <span style={{ fontFamily: DISPLAY, fontSize: 14, fontWeight: 700, color: '#fff' }}>
-                {(targets?.[0]?.name ?? 'A').trim().charAt(0).toUpperCase()}
-              </span>
+        {/* ── THE PREVIEW ──────────────────────────────────────────────────
+            A mirror, not the editing surface. The last version blurred the two:
+            it looked like a post but had a cursor and a placeholder in it, so it
+            was neither a clear form nor an honest picture of the result. This
+            only ever shows what the post will be. */}
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '0 2px 8px' }}>Preview</div>
+        <div style={{ background: '#fff', borderRadius: 20, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
+            <span style={{ width: 32, height: 32, borderRadius: '50%', background: gradOf('mint'), boxShadow: glow('mint', .28), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 700, color: '#fff' }}>{(targets?.[0]?.name ?? 'A').trim().charAt(0).toUpperCase()}</span>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
+              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
                 {targets === null ? 'Loading…' : chosen.size === 0 ? 'Nowhere yet'
-                  : chosen.size === 1 ? (targets.find((t) => chosen.has(t.accountId))?.name ?? 'One account')
-                  : `${chosen.size} accounts`}
+                  : chosen.size === 1 ? (targets.find((t) => chosen.has(t.accountId))?.name ?? 'One account') : `${chosen.size} accounts`}
               </span>
-              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 1 }}>
-                {when === 'now' ? 'Posting now' : when === 'best' && best ? best.label : pickAt ? new Date(pickAt).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : 'Scheduled'}
-              </span>
+              {tagLocation && ownPageName && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11.5, color: C.greenDk, marginTop: 1 }}>
+                  <MapPin size={11} />{ownPageName}
+                </span>
+              )}
             </span>
-            {/* the marks of everywhere it lands, on the post itself */}
-            <span style={{ display: 'flex', alignItems: 'center', gap: -4, flexShrink: 0 }}>
+            <span style={{ display: 'flex', alignItems: 'center' }}>
               {(targets ?? []).filter((t) => chosen.has(t.accountId)).slice(0, 5).map((t, i) => (
-                <span key={t.accountId} style={{ marginLeft: i ? -6 : 0, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BrandOrMark provider={t.platform} size={14} />
+                <span key={t.accountId} style={{ marginLeft: i ? -6 : 0, width: 22, height: 22, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <BrandOrMark provider={t.platform} size={13} />
                 </span>
               ))}
             </span>
           </div>
 
-          {/* the picture */}
           {media ? (
-            <div style={{ position: 'relative', background: '#0d0d0f' }}>
-              {media.isVideo
-                ? <video src={media.preview} controls playsInline style={{ display: 'block', width: '100%', maxHeight: 400, objectFit: 'contain' }} />
-                : <img src={media.preview} alt="" style={{ display: 'block', width: '100%', maxHeight: 400, objectFit: 'contain' }} />}
-              <button type="button" onClick={() => setMedia(null)} aria-label="Remove photo"
-                style={{ position: 'absolute', top: 10, right: 10, width: 32, height: 32, borderRadius: 99, border: 'none', background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                <X size={16} />
-              </button>
-            </div>
+            media.isVideo
+              ? <video src={media.preview} muted playsInline style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', background: '#000' }} />
+              : <img src={media.preview} alt="" style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', background: '#000' }} />
           ) : (
-            <label className="cmp-drop" style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 9,
-              minHeight: 178, cursor: uploading ? 'default' : 'pointer',
-              background: `linear-gradient(160deg, ${tint('mint', .10)}, ${tint('brand', .10)})`,
-              borderTop: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}`,
-            }}>
-              <span style={{ width: 46, height: 46, borderRadius: '50%', background: uploading ? 'transparent' : gradOf('mint'), boxShadow: uploading ? 'none' : glow('mint', .32), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
-                {uploading ? <Loader2 size={22} className="mvp-spin" color={C.greenDk} /> : <ImagePlus size={21} />}
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>
-                {uploading ? 'Uploading…' : mode === 'apnosh' ? 'Add a photo, or leave it to us' : 'Add a photo or video'}
-              </span>
-              {!uploading && <span style={{ fontSize: 11.5, color: C.mute }}>{mode === 'apnosh' ? 'Optional' : 'Instagram and TikTok need one'}</span>}
-              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" disabled={uploading}
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickFile(f); e.target.value = '' }}
-                style={{ display: 'none' }} />
-            </label>
+            <div style={{ minHeight: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13,
+              background: `linear-gradient(160deg, ${tint('mint', .08)}, ${tint('brand', .08)})`, borderTop: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}` }}>
+              <ImageIcon size={16} /> No photo yet
+            </div>
           )}
 
-          {/* the words, written straight onto the post */}
-          <div style={{ padding: '13px 15px 15px' }}>
-            <textarea
-              className="cmp-cap"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={media ? 3 : 5}
-              maxLength={2200}
-              placeholder={mode === 'apnosh' ? 'What do you want this post to be about?' : 'Write it the way you would say it…'}
-              style={{ fontSize: 15.5, lineHeight: 1.55, color: C.ink, minHeight: 62 }}
-            />
-            {text.length > 1800 && (
-              <div style={{ fontSize: 11.5, color: text.length > 2100 ? C.coral : C.faint, textAlign: 'right' }}>
-                {2200 - text.length} left
+          <div style={{ padding: '11px 14px 13px' }}>
+            <div style={{ fontSize: 14, lineHeight: 1.5, color: text.trim() ? C.ink : C.faint, whiteSpace: 'pre-wrap', maxHeight: 92, overflow: 'hidden' }}>
+              {text.trim() || 'Your caption will show here.'}
+            </div>
+            {taggedList.length > 0 && (
+              <div style={{ fontSize: 12.5, color: C.greenDk, marginTop: 6 }}>with {taggedList.map((h) => '@' + h).join(' ')}</div>
+            )}
+            {firstComment.trim() && (
+              <div style={{ fontSize: 12.5, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
+                <b style={{ fontWeight: 600, color: C.ink }}>First comment</b> {firstComment.trim()}
               </div>
             )}
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 9 }}>{whenWords}</div>
           </div>
         </div>
 
-        {/* ── WHERE ───────────────────────────────────────────────────────── */}
+        {/* ── CAPTION ──────────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '24px 2px 7px' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Caption</span>
+          {chosen.size > 1 && <span style={{ fontSize: 11.5, color: C.faint }}>Used on all {chosen.size}</span>}
+        </div>
+        <textarea
+          className="cmp-in"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={5}
+          maxLength={2200}
+          placeholder={mode === 'apnosh' ? 'What do you want this post to be about?' : 'Write it the way you would say it…'}
+          style={{ lineHeight: 1.55, resize: 'vertical' }}
+        />
+        {text.length > 1800 && (
+          <div style={{ fontSize: 11.5, color: text.length > 2100 ? C.coral : C.faint, marginTop: 5, textAlign: 'right' }}>{2200 - text.length} left</div>
+        )}
+
+        {/* ── PHOTO ────────────────────────────────────────────────────────── */}
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 8px' }}>Photo or video</div>
+        {media ? (
+          <button type="button" onClick={() => setMedia(null)} className="cmp-x"
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: 11, borderRadius: 14, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
+            <span style={{ width: 42, height: 42, borderRadius: 10, background: `center/cover url(${media.preview})`, flexShrink: 0 }} />
+            <span style={{ flex: 1, fontSize: 13.5, color: C.ink }}>{media.isVideo ? 'Video attached' : 'Photo attached'}</span>
+            <X size={16} color={C.mute} />
+          </button>
+        ) : (
+          <label className="cmp-x" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: 11, borderRadius: 14, border: `1px dashed ${C.line}`, background: '#fff', cursor: uploading ? 'default' : 'pointer' }}>
+            <span style={{ width: 42, height: 42, borderRadius: 10, flexShrink: 0, background: uploading ? C.bg : gradOf('mint'), boxShadow: uploading ? 'none' : glow('mint', .26), display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+              {uploading ? <Loader2 size={18} className="mvp-spin" color={C.greenDk} /> : <ImagePlus size={18} />}
+            </span>
+            <span style={{ flex: 1 }}>
+              <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{uploading ? 'Uploading…' : 'Add a photo or video'}</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 1 }}>{mode === 'apnosh' ? 'Optional, we can make one' : 'Instagram and TikTok need one'}</span>
+            </span>
+            <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" disabled={uploading}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickFile(f); e.target.value = '' }} style={{ display: 'none' }} />
+          </label>
+        )}
+
+        {/* ── ADD TO THIS POST ─────────────────────────────────────────────
+            Revealed, not displayed. Every option visible at once is a cockpit,
+            and the owners who asked for this wanted less to think about. */}
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 8px' }}>Add to this post</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {ownPageName && (
+            <button type="button" onClick={() => setTagLocation((v) => !v)} aria-pressed={tagLocation} className="cmp-x"
+              style={addChip(tagLocation)}><MapPin size={14} />{ownPageName}</button>
+          )}
+          {([['tag', 'Tag people', <AtSign key="a" size={14} />], ['collab', 'Collaborator', <Users key="u" size={14} />], ['first', 'First comment', <MessageSquare key="m" size={14} />]] as [ 'tag'|'collab'|'first', string, React.ReactNode][]).map(([k, label, icon]) => {
+            const on = open.has(k)
+            return (
+              <button key={k} type="button" className="cmp-x"
+                onClick={() => setOpen((cur) => { const n = new Set(cur); n.has(k) ? n.delete(k) : n.add(k); return n })}
+                aria-pressed={on} style={addChip(on)}>{icon}{label}</button>
+            )
+          })}
+        </div>
+        {open.has('tag') && (
+          <div style={{ marginTop: 9 }}>
+            <input className="cmp-in" value={tagged} onChange={(e) => setTagged(e.target.value)} placeholder="@handles, separated by spaces" />
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5 }}>Tags the people in the picture. Instagram only.</div>
+          </div>
+        )}
+        {open.has('collab') && (
+          <div style={{ marginTop: 9 }}>
+            <input className="cmp-in" value={collabs} onChange={(e) => setCollabs(e.target.value)} placeholder="@handle" />
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5 }}>Up to three. It appears on their feed too, once they accept.</div>
+          </div>
+        )}
+        {open.has('first') && (
+          <div style={{ marginTop: 9 }}>
+            <textarea className="cmp-in" rows={2} value={firstComment} onChange={(e) => setFirstComment(e.target.value)} placeholder="#hashtags go here" style={{ resize: 'vertical' }} />
+            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5 }}>Posted underneath, so hashtags stay out of the caption.</div>
+          </div>
+        )}
+
+        {/* ── WHERE ────────────────────────────────────────────────────────── */}
         <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>{mode === 'apnosh' ? 'Where you would like it' : 'Where it goes'}</div>
         {targets === null ? (
           <div style={{ fontSize: 13.5, color: C.faint, padding: '2px' }}>Loading your accounts…</div>
@@ -295,14 +403,10 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             {targets.map((t) => {
               const on = chosen.has(t.accountId)
               return (
-                <button key={t.accountId} type="button" onClick={() => toggle(t.accountId)} aria-pressed={on} className="cmp-chip"
-                  style={{
-                    display: 'inline-flex', alignItems: 'center', gap: 8, font: 'inherit', fontSize: 13.5,
-                    fontWeight: on ? 600 : 500, padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
-                    color: on ? C.ink : C.mute, background: on ? '#fff' : '#fff',
-                    border: `1px solid ${on ? C.green : C.line}`,
-                    boxShadow: on ? `0 2px 10px ${tint('mint', .22, 1)}` : 'none',
-                  }}>
+                <button key={t.accountId} type="button" onClick={() => toggle(t.accountId)} aria-pressed={on} className="cmp-x"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 8, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500,
+                    padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? C.ink : C.mute, background: '#fff',
+                    border: `1px solid ${on ? C.green : C.line}`, boxShadow: on ? `0 2px 10px ${tint('mint', .22, 1)}` : 'none' }}>
                   <span style={{ opacity: on ? 1 : .45, display: 'flex' }}><BrandOrMark provider={t.platform} size={16} /></span>
                   {t.name}
                 </button>
@@ -310,29 +414,31 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             })}
           </div>
         )}
+        {chosen.size > 0 && [...chosen].some((id) => targets?.find((t) => t.accountId === id)?.platform === 'tiktok') && mode === 'self' && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 11, cursor: 'pointer' }}>
+            <input type="checkbox" checked={tiktokDraft} onChange={(e) => setTiktokDraft(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: C.greenDk }} />
+            <span style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
+              <b style={{ color: C.ink, fontWeight: 600 }}>Send TikTok to drafts instead.</b> It waits in your TikTok app so you can add a trending sound before posting, which the app will not let us do for you.
+            </span>
+          </label>
+        )}
 
-        {/* ── WHEN ────────────────────────────────────────────────────────── */}
+        {/* ── WHEN ─────────────────────────────────────────────────────────── */}
         <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>{mode === 'apnosh' ? 'When you would like it out' : 'When'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {([
-            ['now', 'Now', <Send key="s" size={14} />],
+            ['now', mode === 'apnosh' ? 'As soon as you can' : 'Now', <Send key="s" size={14} />],
             ...(best ? [['best', best.label, <Sparkles key="b" size={14} />] as [string, string, React.ReactNode]] : []),
-            ['pick', 'Pick a time', <Clock key="c" size={14} />],
+            ['pick', 'Choose', <Clock key="c" size={14} />],
           ] as [string, string, React.ReactNode][]).map(([k, label, icon]) => {
             const on = when === k
-            /* The best time is the recommendation, so it wears the brand gradient
-               when chosen. The other two are plain choices and stay plain. */
             const smart = k === 'best'
             return (
-              <button key={k} type="button" onClick={() => setWhen(k as 'now' | 'best' | 'pick')} aria-pressed={on} className="cmp-chip"
-                style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13.5,
-                  fontWeight: on ? 600 : 500, padding: '9px 15px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
-                  color: on ? '#fff' : C.mute,
-                  background: on ? (smart ? gradOf('brand') : C.ink) : '#fff',
-                  border: `1px solid ${on ? 'transparent' : C.line}`,
-                  boxShadow: on && smart ? glow('brand', .3) : 'none',
-                }}>
+              <button key={k} type="button" onClick={() => setWhen(k as 'now' | 'best' | 'pick')} aria-pressed={on} className="cmp-x"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500,
+                  padding: '9px 15px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? '#fff' : C.mute,
+                  background: on ? (smart ? gradOf('brand') : C.ink) : '#fff', border: `1px solid ${on ? 'transparent' : C.line}`,
+                  boxShadow: on && smart ? glow('brand', .3) : 'none' }}>
                 {icon}{label}
               </button>
             )
@@ -344,9 +450,49 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           </div>
         )}
         {when === 'pick' && (
-          <input type="datetime-local" value={pickAt} onChange={(e) => setPickAt(e.target.value)}
-            min={new Date(Date.now() + 5 * 60000).toISOString().slice(0, 16)}
-            style={{ marginTop: 10, border: `1px solid ${C.line}`, borderRadius: 12, padding: '10px 12px', fontSize: 14.5, fontFamily: 'inherit', color: C.ink, background: '#fff' }} />
+          /* A day, then a time. The old control was a datetime-local: an OS
+             keyboard on a phone, for a decision that is really "which evening". */
+          <div style={{ marginTop: 12 }}>
+            <div className="cmp-scroll" style={{ display: 'flex', gap: 7, paddingBottom: 4 }}>
+              {Array.from({ length: 7 }, (_, i) => i).map((i) => {
+                const d = new Date(); d.setDate(d.getDate() + i)
+                const on = day === i
+                const spent = i === 0 && new Date().getHours() >= HOURS[HOURS.length - 1]
+                return (
+                  <button key={i} type="button" disabled={spent} aria-pressed={on} className="cmp-x"
+                    onClick={() => {
+                      setDay(i)
+                      /* An hour picked on a later day can be in the past on this one. */
+                      if (i === 0 && hour != null && hour <= new Date().getHours()) setHour(null)
+                    }}
+                    style={{ flexShrink: 0, width: 58, padding: '9px 0', borderRadius: 14, cursor: spent ? 'default' : 'pointer', font: 'inherit',
+                      border: `1px solid ${on ? 'transparent' : C.line}`, background: on ? C.ink : '#fff', color: on ? '#fff' : C.mute,
+                      textAlign: 'center', opacity: spent ? .4 : 1 }}>
+                    <span style={{ display: 'block', fontSize: 11, fontWeight: 500, opacity: .8 }}>{i === 0 ? 'Today' : i === 1 ? 'Tmrw' : DAY_NAMES[d.getDay()].slice(0, 3)}</span>
+                    <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, marginTop: 1 }}>{d.getDate()}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7, marginTop: 10 }}>
+              {HOURS.map((h) => {
+                const on = hour === h
+                const past = day === 0 && h <= new Date().getHours()
+                const isBest = bestHour != null && h === bestHour && day === bestDayOffset
+                return (
+                  <button key={h} type="button" disabled={past} onClick={() => setHour(h)} aria-pressed={on} className="cmp-x"
+                    style={{ padding: '9px 0', borderRadius: 12, cursor: past ? 'default' : 'pointer', font: 'inherit', fontSize: 13,
+                      fontWeight: on ? 700 : 500, border: `1px solid ${on ? 'transparent' : isBest ? C.green : C.line}`,
+                      background: on ? C.ink : '#fff', color: past ? C.faint : on ? '#fff' : C.ink, opacity: past ? .45 : 1 }}>
+                    {hourLabel(h)}{isBest && !on ? ' ★' : ''}
+                  </button>
+                )
+              })}
+            </div>
+            {bestHour != null && (
+              <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8 }}>★ is when your posts have done best.</div>
+            )}
+          </div>
         )}
 
         {blocked.length > 0 && (
