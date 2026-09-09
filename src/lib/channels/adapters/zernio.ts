@@ -264,6 +264,43 @@ async function profileIdFor(clientId: string): Promise<string | null> {
  * real run confirms or corrects this in one look.
  */
 /**
+ * Describe ANY read endpoint before a parser is written against it.
+ *
+ * Two rounds on the comments API taught this: the published shapes were wrong
+ * four ways on the read and three on the write, and every one was invisible
+ * until a real response was in hand. So new endpoints get described first and
+ * parsed second. Key NAMES only, never values, so this can never carry a
+ * customer's message out through a diagnostic.
+ */
+export async function describeEndpoint(clientId: string, path: string): Promise<Record<string, unknown>> {
+  const key = process.env.ZERNIO_API_KEY
+  if (!key) return { error: 'ZERNIO_API_KEY is not set' }
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return { error: 'This client has no active zernio connection' }
+  /* Read-only by construction: this only ever issues a GET. Discovering a write
+     endpoint by trying it would post something in public. */
+  const sep = path.includes('?') ? '&' : '?'
+  const url = `${API}${path}${sep}profileId=${encodeURIComponent(profileId)}&limit=5`
+  try {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(12000) })
+    const text = await r.text()
+    let json: Record<string, unknown> | null = null
+    try { json = JSON.parse(text) as Record<string, unknown> } catch { /* not json */ }
+    const arr = json ? unwrapList(json, 'data', 'conversations', 'messages', 'items', 'results') : []
+    return {
+      path,
+      status: r.status,
+      topLevelKeys: json ? Object.keys(json).slice(0, 12) : null,
+      arrayFound: arr.length,
+      firstItemKeys: arr[0] ? Object.keys(arr[0]).slice(0, 30) : null,
+      bodyStart: arr.length === 0 ? text.slice(0, 400) : undefined,
+    }
+  } catch (e) {
+    return { path, error: e instanceof Error ? e.message : 'fetch failed' }
+  }
+}
+
+/**
  * What the vendor ACTUALLY sent, described rather than guessed at.
  *
  * listComments returning zero is ambiguous: either there are no comments, or the

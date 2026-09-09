@@ -21,7 +21,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { listComments, replyToComment, diagnoseComments } from '@/lib/channels/adapters/zernio'
+import { listComments, replyToComment, diagnoseComments, describeEndpoint } from '@/lib/channels/adapters/zernio'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,6 +46,13 @@ export async function GET(req: NextRequest) {
   /* ?diagnose=raw describes the vendor's own response: status, top-level keys,
      which key held the array, and the first element's KEY NAMES. Names only, so
      it can correct the parser without dumping customers' comment text. */
+  /* ?describe=<path> reports the structure of any Zernio READ endpoint, so a
+     parser is never written from documentation again. GET only by construction. */
+  const describe = req.nextUrl.searchParams.get('describe')
+  if (describe && describe.startsWith('/')) {
+    return NextResponse.json(await describeEndpoint(clientId, describe))
+  }
+
   if (req.nextUrl.searchParams.get('diagnose') === 'raw') {
     return NextResponse.json(await diagnoseComments(clientId))
   }
