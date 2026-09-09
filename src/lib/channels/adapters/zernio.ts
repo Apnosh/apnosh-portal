@@ -263,6 +263,101 @@ async function profileIdFor(clientId: string): Promise<string | null> {
  * crash, and the diagnostic route reports what actually came back so the FIRST
  * real run confirms or corrects this in one look.
  */
+export interface SocialConversation {
+  id: string
+  accountId: string
+  platform: string
+  who: string
+  lastMessage: string
+  updatedAt: string | null
+  unread: number
+  url: string | null
+}
+
+export interface SocialMessage {
+  id: string
+  message: string
+  senderName: string | null
+  /** 'in' = from the customer, 'out' = from the business */
+  direction: 'in' | 'out'
+  createdAt: string | null
+  deleted: boolean
+}
+
+/**
+ * DIRECT MESSAGES, from the vendor already connected.
+ *
+ * Written against Zernio's OpenAPI specification rather than its prose docs, and
+ * that distinction is the whole story of this integration: the prose was wrong
+ * four ways on the comments read and three on the write, while the spec at
+ * zernio.com/openapi.json states every path, parameter and field exactly. Found
+ * only because a 404 body helpfully named it.
+ *
+ * Several owners said their customers reach them this way rather than through
+ * reviews, and one has no website at all, so her Instagram inbox IS her shop.
+ */
+export async function listConversations(clientId: string, limit = 30): Promise<SocialConversation[]> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return []
+  const q = new URLSearchParams({ profileId, limit: String(Math.min(100, Math.max(1, limit))), sortOrder: 'desc' })
+  const res = await zer(`/inbox/conversations?${q.toString()}`)
+  return unwrapList(res, 'data', 'conversations', 'items')
+    .map((c) => ({
+      id: str(c.id),
+      accountId: str(c.accountId),
+      platform: (str(c.platform) || 'instagram').toLowerCase(),
+      who: str(c.participantName) || str(c.participantUsername) || 'Someone',
+      lastMessage: str(c.lastMessage),
+      updatedAt: str(c.updatedTime) || null,
+      unread: num(c.unreadCount),
+      url: str(c.url) || null,
+    }))
+    .filter((c) => c.id && c.accountId)
+}
+
+/** One thread, oldest first, the way a conversation reads. */
+export async function listMessages(clientId: string, conversationId: string, accountId: string, limit = 40): Promise<SocialMessage[]> {
+  if (!conversationId || !accountId) return []
+  /* accountId is a REQUIRED QUERY parameter, not a body field and not optional --
+     the API says so in as many words when it is missing. */
+  const q = new URLSearchParams({ accountId, limit: String(Math.min(100, Math.max(1, limit))), sortOrder: 'asc' })
+  const res = await zer(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages?${q.toString()}`)
+  return unwrapList(res, 'messages', 'data', 'items')
+    .map((m) => ({
+      id: str(m.id),
+      message: str(m.message),
+      senderName: str(m.senderName) || null,
+      /* The spec calls this `direction`. Anything that is not explicitly outbound
+         is treated as the customer's, because showing the business's own words as
+         a customer's is the worse way to be wrong. */
+      direction: (str(m.direction).toLowerCase().startsWith('out') ? 'out' : 'in') as 'in' | 'out',
+      createdAt: str(m.createdAt) || null,
+      deleted: m.isDeleted === true,
+    }))
+    .filter((m) => m.id && (m.message || m.deleted))
+}
+
+/**
+ * Send one message into a conversation. Private, but still in the business's
+ * name, so it carries the same idempotency guard the public replies do: a double
+ * tap or a retry must not send the customer the same thing twice.
+ */
+export async function sendMessage(clientId: string, conversationId: string, accountId: string, text: string): Promise<void> {
+  const message = text.trim()
+  if (!message) throw new ChannelError('upstream', 'A message cannot be empty')
+  if (!conversationId || !accountId) throw new ChannelError('upstream', 'This conversation is missing its account')
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
+  let h = 0
+  const seed = `${conversationId}:${message}`
+  for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) | 0 }
+  await zer(`/inbox/conversations/${encodeURIComponent(conversationId)}/messages`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': `apnosh-dm-${conversationId}-${(h >>> 0).toString(36)}` },
+    body: JSON.stringify({ accountId, message }),
+  })
+}
+
 /**
  * Describe ANY read endpoint before a parser is written against it.
  *
@@ -293,6 +388,11 @@ export async function describeEndpoint(clientId: string, path: string): Promise<
       topLevelKeys: json ? Object.keys(json).slice(0, 12) : null,
       arrayFound: arr.length,
       firstItemKeys: arr[0] ? Object.keys(arr[0]).slice(0, 30) : null,
+      /* The first row's id and accountId, so a nested resource can be described
+         in the same pass. Identifiers, not content: the comments API needed both
+         to reach its second level and would otherwise cost another round trip. */
+      firstId: arr[0] ? (str(arr[0].id) || str(arr[0]._id) || null) : null,
+      firstAccountId: arr[0] ? (str(arr[0].accountId) || null) : null,
       bodyStart: arr.length === 0 ? text.slice(0, 400) : undefined,
     }
   } catch (e) {
