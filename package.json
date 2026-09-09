@@ -33,7 +33,8 @@
     "sim:referral": "tsx --tsconfig scripts/sim/tsconfig.json scripts/sim/referral.ts",
     "smoke:plan": "tsx scripts/smoke-render-slow-nights.tsx",
     "zernio:diff": "tsx scripts/zernio-schema-diff.ts",
-    "smoke:zernio-webhook": "tsx scripts/smoke-zernio-webhook.ts"
+    "smoke:zernio-webhook": "tsx scripts/smoke-zernio-webhook.ts",
+    "smoke:post-rules": "tsx scripts/smoke-post-rules.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",

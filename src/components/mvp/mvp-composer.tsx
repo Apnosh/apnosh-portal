@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpGroup, MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
@@ -30,20 +30,44 @@ import PostPreview from './mvp-post-preview'
 import { C, DISPLAY } from './tokens'
 import { gradOf, tint, glow, alpha, hueOf, type HueKey } from './hues'
 import { CARD_SHADOW } from './kit'
+import { RULES, blockersFor, willBecome, APP_LINK, type Platform, type MediaFacts } from '@/lib/channels/post-rules'
 
 interface Target { accountId: string; platform: string; name: string; pageId?: string | null }
 interface Best { iso: string; label: string; posts: number }
-interface Media { url: string; preview: string; isVideo: boolean }
+interface Media { url: string; preview: string; isVideo: boolean; facts: MediaFacts }
 
-/* Platforms that will not accept a post with no photo or video. This is their
-   rule, not ours, and it is the reason a text-only composer was not a smaller
-   version of this feature but a broken one. */
-const NEEDS_MEDIA = new Set(['instagram', 'tiktok', 'youtube'])
-/* And the one that will not accept a PHOTO. YouTube's whole schema has no photo
-   option: a title, a visibility, a category and a video. It was sitting switched
-   on by default next to a photo, drawing a YouTube preview of it and heading for
-   a rejection at publish time. */
-const NEEDS_VIDEO = new Set(['youtube'])
+/**
+ * MEASURE THE FILE, do not assume it.
+ *
+ * Every rule about whether a platform will take a post is about the file: how
+ * long the video is, what shape it is. The browser already knows both the moment
+ * it can render it, so this reads them off rather than sending the post and
+ * finding out from a failure webhook an hour later.
+ *
+ * Never rejects. A browser that will not decode the file returns zeros, and
+ * zeros mean "unknown", which the rules treat as "do not block". A false stop is
+ * worse than a real failure, because a real failure now reaches us as
+ * post.failed and a false stop just looks broken.
+ */
+function measure(file: File, url: string): Promise<MediaFacts> {
+  const base: MediaFacts = { isVideo: file.type.startsWith('video/'), width: 0, height: 0, duration: 0, size: file.size }
+  return new Promise((resolve) => {
+    const done = (extra: Partial<MediaFacts>) => resolve({ ...base, ...extra })
+    const bail = setTimeout(() => done({}), 4000)
+    if (base.isVideo) {
+      const v = document.createElement('video')
+      v.preload = 'metadata'
+      v.onloadedmetadata = () => { clearTimeout(bail); done({ width: v.videoWidth, height: v.videoHeight, duration: Number.isFinite(v.duration) ? v.duration : 0 }) }
+      v.onerror = () => { clearTimeout(bail); done({}) }
+      v.src = url
+    } else {
+      const i = new Image()
+      i.onload = () => { clearTimeout(bail); done({ width: i.naturalWidth, height: i.naturalHeight }) }
+      i.onerror = () => { clearTimeout(bail); done({}) }
+      i.src = url
+    }
+  })
+}
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 /* Waking hours only. Nobody schedules a restaurant post for 4am, and offering it
@@ -248,18 +272,6 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   /* Which of the chosen accounts will refuse this post as it stands. Named, not
      counted: "Instagram needs a photo" is something an owner can act on, and a
      disabled button with no reason is the thing everyone hates. */
-  const blocked = useMemo(() => {
-    if (!targets) return [] as string[]
-    if (media) return []
-    return targets.filter((t) => chosen.has(t.accountId) && NEEDS_MEDIA.has(t.platform)).map((t) => platformName(t.platform))
-  }, [media, targets, chosen])
-
-  /* Chosen, but this is not the kind of media it takes. Separate from `blocked`
-     because the fix is different: one wants a file, this one wants a video. */
-  const wrongKind = useMemo(() => {
-    if (!targets || !media || media.isVideo) return [] as string[]
-    return targets.filter((t) => chosen.has(t.accountId) && NEEDS_VIDEO.has(t.platform)).map((t) => platformName(t.platform))
-  }, [media, targets, chosen])
   /* One entry per PLATFORM in play, not per account: two Instagram accounts get
      one caption between them, because the difference that matters is Instagram
      against LinkedIn, not one handle against another. */
@@ -268,6 +280,15 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     for (const t of targets ?? []) if (chosen.has(t.accountId) && !seen.includes(t.platform)) seen.push(t.platform)
     return seen
   }, [targets, chosen])
+
+  /* Every reason a chosen platform will refuse this, from one rules file quoted
+     out of the vendor's schema rather than from two hand-written Sets that had
+     drifted apart. OWNER DECISION: we follow Zernio's numbers, and anything that
+     does not fit we hand back rather than guess at. */
+  const blockers = useMemo(
+    () => (targets ? blockersFor(platformsInPlay as Platform[], media?.facts ?? null) : []),
+    [targets, platformsInPlay, media],
+  )
   /* The tightest limit among the platforms still on the shared caption. Naming
      the platform matters more than the number: "1,900 over for X" tells the owner
      which one to give its own. */
@@ -294,8 +315,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   const canSend = useMemo(() => {
     if (busy || uploading || handing) return false
     if (tooLong) return false
-    /* `blocked` is deliberately NOT here. A missing photo is told about when they
-       try to post, not held over them while they write -- see `tried`. */
+    /* `blockers` is deliberately NOT here. A platform that will not take this is
+       told about when they try to post, not held over them while they write. */
     return chosen.size > 0 && (text.trim().length > 0 || !!media) && (when !== 'pick' || hour != null)
   }, [busy, uploading, handing, chosen, text, media, when, hour, tooLong])
 
@@ -360,7 +381,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
          server, so a large video does not have to survive a request there. */
       const put = await fetch(j.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
       if (!put.ok) throw new Error('The upload did not finish. Try again.')
-      setMedia({ url: j.fileUrl, preview: URL.createObjectURL(file), isVideo: file.type.startsWith('video/') })
+      const preview = URL.createObjectURL(file)
+      setMedia({ url: j.fileUrl, preview, isVideo: file.type.startsWith('video/'), facts: await measure(file, preview) })
       setTried(false)
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not upload that file')
@@ -377,7 +399,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     /* A platform that needs a photo is a real stop, but only at the moment they
        actually try. Told up front it is a scolding for something they may be
        about to do anyway, on a screen they have only just opened. */
-    if (!handoff && (blocked.length > 0 || wrongKind.length > 0)) { setTried(true); return }
+    if (!handoff && blockers.length > 0) { setTried(true); return }
     setTried(false)
     if (handoff) setHanding(true); else setBusy(true)
     setErr(null)
@@ -672,6 +694,24 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
 
         {/* ── WHERE ────────────────────────────────────────────────────────── */}
         <Head hue="event" note={chosen.size ? `${chosen.size} on` : null}>Where it goes</Head>
+        {/* WHAT IT WILL BECOME, said before they send rather than after.
+            Nobody picks a Reel or a Short: the vendor decides from the file. So
+            the honest thing is to show the prediction, not offer a menu that
+            does not exist. Only once a file is attached, because until then
+            there is nothing to predict. */}
+        {media && platformsInPlay.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, margin: '0 2px 10px', fontSize: T.note, color: C.mute, lineHeight: 1.5 }}>
+            {platformsInPlay.map((pl, i) => {
+              const becomes = willBecome(pl as Platform, media.facts)
+              if (!becomes) return null
+              return (
+                <span key={pl}>
+                  {i > 0 ? ', ' : ''}{platformName(pl)} <span style={{ color: C.ink, fontWeight: 500 }}>{becomes}</span>
+                </span>
+              )
+            })}
+          </div>
+        )}
         {targets === null ? (
           <div style={{ fontSize: T.control, color: C.mute, padding: '2px' }}>Loading your accounts…</div>
         ) : targets.length === 0 ? (
@@ -871,14 +911,34 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             <MvpMsg ok={false} text={`That caption is ${tooLong.over.toLocaleString()} characters too long for ${platformName(tooLong.platform)}, which stops at ${tooLong.limit.toLocaleString()}. Shorten it, or give ${platformName(tooLong.platform)} its own.`} />
           </div>
         )}
-        {tried && blocked.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <MvpMsg ok={false} text={`${blocked.join(' and ')} ${blocked.length === 1 ? 'needs' : 'need'} a photo or video. Add one, or switch ${blocked.length === 1 ? 'it' : 'them'} off above.`} />
-          </div>
-        )}
-        {tried && wrongKind.length > 0 && (
-          <div style={{ marginTop: 16 }}>
-            <MvpMsg ok={false} text={`${wrongKind.join(' and ')} only takes video, not photos. Switch ${wrongKind.length === 1 ? 'it' : 'them'} off, or use a video instead.`} />
+        {/* ── WHAT WE CANNOT DO, SAID PLAINLY ──────────────────────────────
+            Owner decision: rather than try to reshape a file to fit, we say what
+            will not work and hand it back. Each one names the platform, the
+            reason, and -- where posting it by hand would actually succeed -- a
+            way into the app. */}
+        {tried && blockers.length > 0 && (
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {blockers.map((b) => {
+              const c = brandTone(b.platform)?.solid ?? C.coral
+              return (
+                <div key={b.platform} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 14px', borderRadius: R.box, background: C.coralSoft, border: `1px solid ${C.coral}33` }}>
+                  <span style={{ marginTop: 1, flexShrink: 0 }}><BrandOrMark provider={b.platform} size={16} /></span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: T.control, color: C.ink, lineHeight: 1.45 }}>{b.reason}</span>
+                    <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 4 }}>
+                      Switch {RULES[b.platform]?.name ?? 'it'} off to send the rest.
+                      {b.appLaneHelps ? ' Or post this one yourself in the app.' : ''}
+                    </span>
+                    {b.appLaneHelps && (
+                      <a href={APP_LINK[b.platform]} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, color: c, textDecoration: 'none' }}>
+                        Open {RULES[b.platform]?.name} <ExternalLink size={12} />
+                      </a>
+                    )}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
         {err && <div style={{ marginTop: 10 }}><MvpMsg ok={false} text={err} /></div>}
