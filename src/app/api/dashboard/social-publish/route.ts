@@ -99,6 +99,71 @@ export async function GET(req: NextRequest) {
   }
 }
 
+/**
+ * The post, written out as something a person can read, on the owner's existing
+ * thread with their team.
+ *
+ * Never throws: the draft row is the part that must not be lost, and a thread
+ * that could not be found is a worse message, not a failed handoff. The caller
+ * is told whether it landed so it can say so honestly.
+ */
+async function sendAsMessage(
+  admin: ReturnType<typeof createAdminClient>,
+  a: {
+    clientId: string; userId: string | null; caption: string
+    perPlatform: Record<string, unknown>; platforms: string[]; hasMedia: boolean
+    when: string | null; firstComment: string; tagged: string[]; collaborators: string[]; tagLocation: boolean
+  },
+): Promise<boolean> {
+  try {
+    const { data: biz } = await admin.from('businesses').select('id').eq('client_id', a.clientId).maybeSingle()
+    if (!biz?.id) return false
+
+    const nice = (p: string) => (p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : p === 'youtube' ? 'YouTube' : p.charAt(0).toUpperCase() + p.slice(1))
+    const lines: string[] = ['I would like this posted.', '']
+    lines.push(a.caption ? `Caption\n${a.caption}` : 'No caption yet, please write one.')
+    for (const [pl, v] of Object.entries(a.perPlatform)) {
+      const own = typeof v === 'string' ? v.trim() : ''
+      if (own && own !== a.caption) lines.push('', `On ${nice(pl)} instead\n${own}`)
+    }
+    lines.push('')
+    lines.push(a.platforms.length ? `Where: ${a.platforms.map(nice).join(', ')}` : 'Where: your call')
+    lines.push(a.hasMedia ? 'Photo or video: attached to the draft' : 'Photo or video: none yet')
+    lines.push(`When: ${a.when ? new Date(a.when).toLocaleString('en-US', { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric' }) : 'whenever works'}`)
+    if (a.firstComment) lines.push(`First comment: ${a.firstComment}`)
+    if (a.tagged.length) lines.push(`Tag: ${a.tagged.map((x) => '@' + x.replace(/^@+/, '')).join(' ')}`)
+    if (a.collaborators.length) lines.push(`Collaborators: ${a.collaborators.map((x) => '@' + x.replace(/^@+/, '')).join(' ')}`)
+    if (a.tagLocation) lines.push('Tag our location on it.')
+
+    /* Reuse the open thread rather than starting one per post: an owner who sends
+       four posts this week wants one conversation, not four. */
+    const { data: open } = await admin.from('message_threads')
+      .select('id').eq('business_id', biz.id).order('last_message_at', { ascending: false }).limit(1).maybeSingle()
+    let threadId = open?.id as string | undefined
+    if (!threadId) {
+      const { data: made } = await admin.from('message_threads')
+        .insert({ business_id: biz.id, subject: 'Posts', last_message_at: new Date().toISOString() })
+        .select('id').single()
+      threadId = made?.id as string | undefined
+    }
+    if (!threadId) return false
+
+    const { data: profile } = a.userId
+      ? await admin.from('profiles').select('full_name').eq('id', a.userId).maybeSingle()
+      : { data: null }
+    const { error } = await admin.from('messages').insert({
+      business_id: biz.id, thread_id: threadId, sender_id: a.userId,
+      sender_name: (profile?.full_name as string) ?? 'Owner', sender_role: 'client',
+      content: lines.join('\n'), attachments: [],
+    })
+    if (error) return false
+    await admin.from('message_threads').update({ last_message_at: new Date().toISOString() }).eq('id', threadId)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     clientId?: string; content?: string; accountIds?: string[]; mediaUrls?: string[]
@@ -140,19 +205,37 @@ export async function POST(req: NextRequest) {
       const admin = createAdminClient()
       const targets = await listPostTargets(clientId)
       const picked = targets.filter((t) => accountIds.includes(t.accountId))
+      const media = Array.isArray(mediaUrls) ? mediaUrls.filter((u) => typeof u === 'string' && u.startsWith('https://')) : []
+      const perPlatform = (body.perPlatform && typeof body.perPlatform === 'object' ? body.perPlatform : {}) as Record<string, unknown>
       const { error } = await admin.from('content_drafts').insert({
         client_id: clientId,
         status: 'draft',
         idea: (content ?? '').trim().slice(0, 300) || 'A post the owner asked us to write',
         caption: (content ?? '').trim() || null,
         target_platforms: picked.map((t) => t.platform),
-        media_urls: Array.isArray(mediaUrls) ? mediaUrls.filter((u) => typeof u === 'string' && u.startsWith('https://')) : [],
+        media_urls: media,
         target_publish_date: when?.kind === 'at' && when.iso ? when.iso.slice(0, 10) : null,
         proposed_by: access.userId ?? null,
         proposed_via: 'owner_composer',
       })
       if (error) throw new Error(error.message)
-      return NextResponse.json({ ok: true, handed: true, posted: picked.map((t) => t.platform) })
+
+      /* AND AS A MESSAGE, because a row in a queue is not a conversation. The
+         owner asked for this to reach a person who can look at it and either say
+         something back or just do it, which is what the thread is for. The draft
+         row is still what makes it WORK rather than just chat. */
+      const messaged = await sendAsMessage(admin, {
+        clientId, userId: access.userId ?? null,
+        caption: (content ?? '').trim(),
+        perPlatform, platforms: picked.map((t) => t.platform),
+        hasMedia: media.length > 0,
+        when: when?.kind === 'at' && when.iso ? when.iso : null,
+        firstComment: typeof body.firstComment === 'string' ? body.firstComment.trim() : '',
+        tagged: Array.isArray(body.tagged) ? body.tagged.map(String) : [],
+        collaborators: Array.isArray(body.collaborators) ? body.collaborators.map(String) : [],
+        tagLocation: body.tagLocation === true,
+      })
+      return NextResponse.json({ ok: true, handed: true, messaged, posted: picked.map((t) => t.platform) })
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not send it over' }, { status: 502 })
     }

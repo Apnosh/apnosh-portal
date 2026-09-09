@@ -25,9 +25,9 @@ import { useRouter } from 'next/navigation'
 import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpGroup, MvpSaveBar, MvpEmpty, MvpMsg } from './mvp-detail'
-import { BrandOrMark } from './mvp-insights'
+import { BrandOrMark, brandTone } from './mvp-insights'
 import { C, DISPLAY } from './tokens'
-import { gradOf, tint, glow } from './hues'
+import { gradOf, tint, glow, alpha, hueOf, type HueKey } from './hues'
 import { CARD_SHADOW } from './kit'
 
 interface Target { accountId: string; platform: string; name: string; pageId?: string | null }
@@ -49,14 +49,32 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
    time, so no platform's own scheduling window applies; this is a horizon that
    keeps the calendar finite, not a platform rule. */
 const DAYS_AHEAD = 90
+/* A short bar, not a tile and not a dot. Icon tiles beside section names were
+   called tacky on Insights and they were; a dot, tried first, just read as a
+   speck of dirt at 5px. The bar echoes the rail across the top of the preview
+   card, so the page has one coloured device rather than two. */
+function Head({ hue, children, note }: { hue: HueKey; children: React.ReactNode; note?: React.ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '26px 2px 9px' }}>
+      <span style={{ width: 3, height: 13, borderRadius: 99, background: gradOf(hue, 180), flexShrink: 0 }} />
+      <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>{children}</span>
+      {note != null && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: C.mute }}>{note}</span>}
+    </div>
+  )
+}
+
 const platformName = (p: string) => (p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : p === 'youtube' ? 'YouTube' : p.charAt(0).toUpperCase() + p.slice(1))
 const midnight = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
-const addChip = (on: boolean): React.CSSProperties => ({
+/* One colour per thing, which is the kit's own law and was being ignored here:
+   four different additions all lit up the same mint, so the row read as one
+   switch with four positions rather than four separate things. */
+const addChip = (on: boolean, hue: HueKey = 'mint'): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13,
   fontWeight: on ? 600 : 500, padding: '8px 13px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
-  color: on ? C.greenDk : C.mute, background: on ? C.greenSoft : '#fff',
-  border: `1px solid ${on ? C.green : C.line}`,
+  color: on ? hueOf(hue)[1] : C.mute, background: on ? tint(hue, 0.1) : '#fff',
+  border: `1px solid ${on ? hueOf(hue)[0] : C.line}`,
+  boxShadow: on ? `0 3px 12px ${tint(hue, 0.2, 1)}` : 'none',
 })
 
 export default function MvpComposer({ clientId }: { clientId: string }) {
@@ -79,7 +97,10 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
      screen asks for: a handoff is a BRIEF, not a post, so media stops being
      required (staff will shoot or source it) and the accounts become a
      preference rather than an address. */
-  const [mode, setMode] = useState<'self' | 'apnosh'>('self')
+  /* Set when the post went to the team instead of out, so the finished screen
+     can say which of the two happened. */
+  const [handed, setHanded] = useState<{ messaged: boolean } | null>(null)
+  const [handing, setHanding] = useState(false)
   /* The extras. Each one is hidden until asked for: a composer that shows every
      option at once is a cockpit, and four owners asked for their content handled
      rather than to be handed more controls. */
@@ -138,10 +159,10 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
      counted: "Instagram needs a photo" is something an owner can act on, and a
      disabled button with no reason is the thing everyone hates. */
   const blocked = useMemo(() => {
-    if (mode === 'apnosh' || media || !targets) return [] as string[]
+    if (media || !targets) return [] as string[]
     return targets.filter((t) => chosen.has(t.accountId) && NEEDS_MEDIA.has(t.platform))
       .map((t) => t.platform.charAt(0).toUpperCase() + t.platform.slice(1))
-  }, [mode, media, targets, chosen])
+  }, [media, targets, chosen])
   /* One entry per PLATFORM in play, not per account: two Instagram accounts get
      one caption between them, because the difference that matters is Instagram
      against LinkedIn, not one handle against another. */
@@ -163,7 +184,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   /* Any platform whose caption -- shared or its own -- is past what it accepts.
      Named, so the fix is obvious. */
   const tooLong = useMemo(() => {
-    if (mode === 'apnosh' || !targets) return null as null | { platform: string; over: number; limit: number }
+    if (!targets) return null as null | { platform: string; over: number; limit: number }
     for (const pl of platformsInPlay) {
       const n = limits[pl]
       if (!n) continue
@@ -171,15 +192,14 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
       if (body.length > n) return { platform: pl, over: body.length - n, limit: n }
     }
     return null
-  }, [mode, targets, platformsInPlay, limits, perPlatform, text])
+  }, [targets, platformsInPlay, limits, perPlatform, text])
 
   const canSend = useMemo(() => {
-    if (busy || uploading) return false
-    if (mode === 'apnosh') return text.trim().length > 0
+    if (busy || uploading || handing) return false
     if (tooLong) return false
     return chosen.size > 0 && blocked.length === 0
       && (text.trim().length > 0 || !!media) && (when !== 'pick' || hour != null)
-  }, [busy, uploading, mode, chosen, blocked, text, media, when, hour, tooLong])
+  }, [busy, uploading, handing, chosen, blocked, text, media, when, hour, tooLong])
 
   /* The client's own Facebook page, which is the only thing Instagram accepts as
      a location and the only one obtainable without a place search. When they have
@@ -205,8 +225,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     : dayAt.getTime() - today.getTime() === 86400000 ? 'Tomorrow'
     : `${DAY_NAMES[dayAt.getDay()]} the ${dayAt.getDate()}`
 
-  const whenWords = mode === 'apnosh' ? 'A draft for your team'
-    : when === 'now' ? 'Going out now'
+  const whenWords = when === 'now' ? 'Going out now'
     : when === 'best' && pickedBest ? pickedBest.label
     : hour != null ? `${dayWords} at ${hourLabel(hour)}`
     : 'Pick a day and a time'
@@ -239,9 +258,15 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     } finally { setUploading(false) }
   }
 
-  async function send() {
-    if (!canSend) return
-    setBusy(true); setErr(null)
+  /* Sending it OUT and sending it TO SOMEONE are the same payload with one flag
+     between them, so they are one function. What differs is what has to be true
+     first: publishing needs an account and a photo where the platform demands
+     one; handing it over needs neither, because the person receiving it can
+     shoot the photo and pick the account. */
+  async function send(handoff = false) {
+    if (handoff ? !canHand : !canSend) return
+    if (handoff) setHanding(true); else setBusy(true)
+    setErr(null)
     try {
       const w = when === 'now' ? { kind: 'now' }
         : when === 'best' && pickedBest ? { kind: 'at', iso: pickedBest.iso, timezone: tz }
@@ -250,7 +275,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           clientId, content: text.trim(), accountIds: [...chosen],
-          mediaUrls: media ? [media.url] : [], when: w, handoff: mode === 'apnosh',
+          mediaUrls: media ? [media.url] : [], when: w, handoff,
           firstComment: firstComment.trim() || undefined,
           collaborators: collabs.split(/[\s,]+/).filter(Boolean),
           tagged: tagged.split(/[\s,]+/).filter(Boolean),
@@ -258,12 +283,19 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         }),
       })
       const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error || 'Could not publish')
+      if (!r.ok) throw new Error(j.error || (handoff ? 'Could not send it over' : 'Could not publish'))
+      if (handoff) setHanded({ messaged: j.messaged === true })
       setDone((j.posted ?? []) as string[])
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not publish')
-    } finally { setBusy(false) }
+      setErr(e instanceof Error ? e.message : handoff ? 'Could not send it over' : 'Could not publish')
+    } finally { setBusy(false); setHanding(false) }
   }
+
+  /* Enough to be worth a person's time: something written, or a photo. Not
+     gated on accounts, a photo, or a length limit -- every one of those is
+     something the team can sort out, and refusing to pass on a half-formed idea
+     is refusing the whole point of the button. */
+  const canHand = !busy && !handing && !uploading && (text.trim().length > 0 || !!media)
 
   /* ── Sent ──────────────────────────────────────────────────────────────── */
   if (done) {
@@ -274,27 +306,32 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             <Check size={28} color={C.greenDk} />
           </div>
           <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', marginBottom: 7 }}>
-            {mode === 'apnosh' ? 'We have got it' : when === 'now' ? 'It is live' : 'It is scheduled'}
+            {handed ? 'Sent to your team' : when === 'now' ? 'It is live' : 'It is scheduled'}
           </div>
           <div style={{ fontSize: 14, color: C.mute, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
-            {mode === 'apnosh'
-              ? 'Your team will write it up and send it back for your OK before anything goes out.'
+            {handed
+              ? `${handed.messaged ? 'It is in your messages and in their queue. ' : 'It is in their queue. '}Nothing goes out until you have said yes.`
               : done.length ? done.join(', ') : 'Your accounts'}
-            {mode === 'apnosh' ? '' : when === 'best' && pickedBest ? ` · ${pickedBest.label}` : when === 'pick' && pickedAt ? ` · ${pickedAt.toLocaleString([], { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric' })}` : ''}
+            {handed ? '' : when === 'best' && pickedBest ? ` · ${pickedBest.label}` : when === 'pick' && pickedAt ? ` · ${pickedAt.toLocaleString([], { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric' })}` : ''}
           </div>
-          <button type="button" onClick={() => router.push(mode === 'apnosh' || when !== 'now' ? '/dashboard/scheduled' : '/dashboard/insights/posts')}
+          <button type="button" onClick={() => router.push(handed ? '/dashboard/messages' : when !== 'now' ? '/dashboard/scheduled' : '/dashboard/insights/posts')}
             style={{ marginTop: 22, font: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '11px 22px', borderRadius: 99, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer' }}>
-            {mode === 'apnosh' || when !== 'now' ? 'See what is coming up' : 'See your posts'}
+            {handed ? 'See the message' : when !== 'now' ? 'See what is coming up' : 'See your posts'}
           </button>
         </div>
       </MvpShell>
     )
   }
 
-  const chipBase: React.CSSProperties = {
-    display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13.5,
-    padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
-  }
+  /* The networks this post is actually going to, in the order they appear, as a
+     rail and as the glow under the card. One stop is a solid bar rather than a
+     gradient to nowhere. */
+  const railTones = (openCaption ? [openCaption] : platformsInPlay).map((pl) => brandTone(pl)?.solid).filter(Boolean) as string[]
+  const previewRail = railTones.length === 0 ? C.line
+    : railTones.length === 1 ? (brandTone(openCaption ?? platformsInPlay[0])?.grad ?? railTones[0])
+    : `linear-gradient(90deg, ${railTones.map((c, i) => `${c} ${Math.round((i / railTones.length) * 100)}%, ${c} ${Math.round(((i + 1) / railTones.length) * 100)}%`).join(', ')})`
+  const previewGlow = railTones.length ? alpha(railTones[0], 0.2) : null
+  const previewAvatar = railTones.length === 1 ? (brandTone(openCaption ?? platformsInPlay[0])?.grad ?? gradOf('mint')) : gradOf('mint')
 
   return (
     <MvpShell active="home" back="/dashboard" title="New post">
@@ -312,28 +349,25 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
 
       <div style={{ padding: '6px 16px 150px' }}>
 
-        <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 99, background: '#f0f1f0', marginBottom: 16 }}>
-          {([['self', 'I will post it'], ['apnosh', 'Apnosh does it']] as [typeof mode, string][]).map(([k, label]) => {
-            const on = mode === k
-            return (
-              <button key={k} type="button" onClick={() => setMode(k)} aria-pressed={on}
-                style={{ flex: 1, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500, padding: '9px 0', borderRadius: 99, border: 'none', cursor: 'pointer',
-                  color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 3px rgba(0,0,0,.10)' : 'none' }}>
-                {label}
-              </button>
-            )
-          })}
-        </div>
-
         {/* ── THE PREVIEW ──────────────────────────────────────────────────
             A mirror, not the editing surface. The last version blurred the two:
             it looked like a post but had a cursor and a placeholder in it, so it
             was neither a clear form nor an honest picture of the result. This
             only ever shows what the post will be. */}
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '0 2px 8px' }}>Preview</div>
-        <div style={{ background: '#fff', borderRadius: 20, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 2px 9px' }}>
+          <span style={{ width: 3, height: 13, borderRadius: 99, background: previewRail, flexShrink: 0 }} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Preview</span>
+        </div>
+        <div style={{ background: '#fff', borderRadius: 20, overflow: 'hidden',
+          /* The card is lit from underneath by the networks it is going to, so
+             the whole screen changes colour as they toggle accounts on and off.
+             Falls back to the card shadow when it is going nowhere yet. */
+          boxShadow: previewGlow ? `${CARD_SHADOW}, 0 10px 30px ${previewGlow}` : CARD_SHADOW }}>
+          {/* A rail of exactly the networks it is going to, in their order and
+              their own colours: where this post lands, before a word is read. */}
+          <div style={{ height: 4, background: previewRail }} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
-            <span style={{ width: 32, height: 32, borderRadius: '50%', background: gradOf('mint'), boxShadow: glow('mint', .28), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ width: 32, height: 32, borderRadius: '50%', background: previewAvatar, boxShadow: `0 6px 14px ${previewGlow ?? tint('mint', .28, 1)}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 700, color: '#fff' }}>{(targets?.[0]?.name ?? 'A').trim().charAt(0).toUpperCase()}</span>
             </span>
             <span style={{ flex: 1, minWidth: 0 }}>
@@ -380,12 +414,12 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                 <b style={{ fontWeight: 600, color: C.ink }}>First comment</b> {firstComment.trim()}
               </div>
             )}
-            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 9 }}>{whenWords}</div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 9 }}>{whenWords}</div>
           </div>
         </div>
 
         {/* ── PHOTO ────────────────────────────────────────────────────────── */}
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '24px 2px 8px' }}>Photo or video</div>
+        <Head hue="announce">Photo or video</Head>
         {media ? (
           <button type="button" onClick={() => setMedia(null)} className="cmp-x"
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: 11, borderRadius: 14, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
@@ -400,7 +434,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             </span>
             <span style={{ flex: 1 }}>
               <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink }}>{uploading ? 'Uploading…' : 'Add a photo or video'}</span>
-              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 1 }}>{mode === 'apnosh' ? 'Optional, we can make one' : 'Instagram and TikTok need one'}</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 1 }}>Instagram and TikTok need one</span>
             </span>
             <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" disabled={uploading}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickFile(f); e.target.value = '' }} style={{ display: 'none' }} />
@@ -408,20 +442,17 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         )}
 
         {/* ── CAPTION ──────────────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '24px 2px 7px' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Caption</span>
-          {sharedOn.length > 1 && <span style={{ fontSize: 11.5, color: C.faint }}>Used on {sharedOn.map(platformName).join(', ')}</span>}
-        </div>
+        <Head hue="brand" note={sharedOn.length > 1 ? `Used on ${sharedOn.map(platformName).join(', ')}` : null}>Caption</Head>
         <textarea
           className="cmp-in"
           value={text}
           onChange={(e) => setText(e.target.value)}
           rows={5}
-          placeholder={mode === 'apnosh' ? 'What do you want this post to be about?' : 'Write it the way you would say it…'}
+          placeholder="Write it the way you would say it…"
           style={{ lineHeight: 1.55, resize: 'vertical' }}
         />
         {sharedLimit && text.length > sharedLimit.n * 0.8 && (
-          <div style={{ fontSize: 11.5, marginTop: 5, textAlign: 'right', color: text.length > sharedLimit.n ? C.coral : C.faint }}>
+          <div style={{ fontSize: 11.5, marginTop: 5, textAlign: 'right', color: text.length > sharedLimit.n ? C.coral : C.mute }}>
             {text.length > sharedLimit.n
               ? `${(text.length - sharedLimit.n).toLocaleString()} over what ${platformName(sharedLimit.pl)} takes`
               : `${(sharedLimit.n - text.length).toLocaleString()} left on ${platformName(sharedLimit.pl)}`}
@@ -433,22 +464,27 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             then the tags; TikTok is shorter than both. One caption everywhere is
             the right default and the wrong ceiling, so each platform can be given
             its own without leaving the screen. */}
-        {mode === 'self' && platformsInPlay.length > 1 && (
+        {platformsInPlay.length > 1 && (
           <>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 11 }}>
               {platformsInPlay.map((pl) => {
                 const own = !!perPlatform[pl]?.trim()
-                const open = openCaption === pl
+                const isOpen = openCaption === pl
+                const lit = own || isOpen
+                const c = brandTone(pl)?.solid ?? C.green
                 return (
-                  <button key={pl} type="button" className="cmp-x" aria-pressed={open}
+                  <button key={pl} type="button" className="cmp-x" aria-pressed={isOpen}
                     onClick={() => {
-                      setOpenCaption(open ? null : pl)
+                      setOpenCaption(isOpen ? null : pl)
                       /* Opening one starts it from the shared caption: the owner is
                          tailoring what they wrote, not starting over. */
-                      if (!open && perPlatform[pl] === undefined) setPerPlatform((c) => ({ ...c, [pl]: text }))
+                      if (!isOpen && perPlatform[pl] === undefined) setPerPlatform((cur) => ({ ...cur, [pl]: text }))
                     }}
-                    style={{ ...addChip(own), fontSize: 12.5, padding: '7px 12px' }}>
-                    <BrandOrMark provider={pl} size={13} />
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 12.5,
+                      fontWeight: lit ? 600 : 500, padding: '7px 12px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
+                      color: lit ? C.ink : C.mute, background: lit ? alpha(c, 0.09) : '#fff',
+                      border: `1px solid ${lit ? c : C.line}` }}>
+                    <span style={{ opacity: lit ? 1 : .45, display: 'flex' }}><BrandOrMark provider={pl} size={13} /></span>
                     {own ? `${platformName(pl)} has its own` : `Different for ${platformName(pl)}`}
                   </button>
                 )
@@ -458,13 +494,19 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               const pl = openCaption
               const val = perPlatform[pl] ?? ''
               const lim = limits[pl] ?? 0
+              const tone = brandTone(pl)
+              const c = tone?.solid ?? C.green
               return (
-                <div style={{ marginTop: 10, padding: 11, borderRadius: 14, background: tint('brand', .05), border: `1px solid ${C.line}` }}>
+                <div style={{ marginTop: 10, borderRadius: 15, background: alpha(c, 0.05), border: `1px solid ${alpha(c, 0.35)}`, overflow: 'hidden' }}>
+                  <div style={{ height: 3, background: tone?.grad ?? gradOf('mint') }} />
+                  <div style={{ padding: 11 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 7 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: C.ink }}>On {platformName(pl)}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: C.ink }}>
+                      <BrandOrMark provider={pl} size={13} />On {platformName(pl)}
+                    </span>
                     <button type="button" className="cmp-x"
                       onClick={() => { setPerPlatform((c) => { const n = { ...c }; delete n[pl]; return n }); setOpenCaption(null) }}
-                      style={{ font: 'inherit', fontSize: 11.5, color: C.greenDk, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      style={{ font: 'inherit', fontSize: 11.5, fontWeight: 600, color: c, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                       Use the same one
                     </button>
                   </div>
@@ -473,10 +515,11 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                     placeholder={`How it should read on ${platformName(pl)}…`}
                     style={{ lineHeight: 1.55, resize: 'vertical' }} />
                   {lim > 0 && val.length > lim * 0.8 && (
-                    <div style={{ fontSize: 11.5, marginTop: 5, textAlign: 'right', color: val.length > lim ? C.coral : C.faint }}>
+                    <div style={{ fontSize: 11.5, marginTop: 5, textAlign: 'right', color: val.length > lim ? C.coral : C.mute }}>
                       {val.length > lim ? `${(val.length - lim).toLocaleString()} over` : `${(lim - val.length).toLocaleString()} left`}
                     </div>
                   )}
+                  </div>
                 </div>
               )
             })()}
@@ -487,63 +530,76 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         {/* ── ADD TO THIS POST ─────────────────────────────────────────────
             Revealed, not displayed. Every option visible at once is a cockpit,
             and the owners who asked for this wanted less to think about. */}
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 8px' }}>Add to this post</div>
+        <Head hue="newfaces">Add to this post</Head>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {ownPageName && (
             <button type="button" onClick={() => setTagLocation((v) => !v)} aria-pressed={tagLocation} className="cmp-x"
-              style={addChip(tagLocation)}><MapPin size={14} />{ownPageName}</button>
+              style={addChip(tagLocation, 'mint')}><MapPin size={14} />{ownPageName}</button>
           )}
-          {([['tag', 'Tag people', <AtSign key="a" size={14} />], ['collab', 'Collaborator', <Users key="u" size={14} />], ['first', 'First comment', <MessageSquare key="m" size={14} />]] as [ 'tag'|'collab'|'first', string, React.ReactNode][]).map(([k, label, icon]) => {
+          {([
+            ['tag', 'Tag people', <AtSign key="a" size={14} />, 'newfaces'],
+            ['collab', 'Collaborator', <Users key="u" size={14} />, 'reviews'],
+            ['first', 'First comment', <MessageSquare key="m" size={14} />, 'nights'],
+          ] as ['tag' | 'collab' | 'first', string, React.ReactNode, HueKey][]).map(([k, label, icon, hue]) => {
             const on = open.has(k)
             return (
               <button key={k} type="button" className="cmp-x"
                 onClick={() => setOpen((cur) => { const n = new Set(cur); n.has(k) ? n.delete(k) : n.add(k); return n })}
-                aria-pressed={on} style={addChip(on)}>{icon}{label}</button>
+                aria-pressed={on} style={addChip(on, hue)}>{icon}{label}</button>
             )
           })}
         </div>
         {open.has('tag') && (
           <div style={{ marginTop: 9 }}>
             <input className="cmp-in" value={tagged} onChange={(e) => setTagged(e.target.value)} placeholder="@handles, separated by spaces" />
-            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5 }}>Tags the people in the picture. Instagram only.</div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 5 }}>Tags the people in the picture. Instagram only.</div>
           </div>
         )}
         {open.has('collab') && (
           <div style={{ marginTop: 9 }}>
             <input className="cmp-in" value={collabs} onChange={(e) => setCollabs(e.target.value)} placeholder="@handle" />
-            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5 }}>Up to three. It appears on their feed too, once they accept.</div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 5 }}>Up to three. It appears on their feed too, once they accept.</div>
           </div>
         )}
         {open.has('first') && (
           <div style={{ marginTop: 9 }}>
             <textarea className="cmp-in" rows={2} value={firstComment} onChange={(e) => setFirstComment(e.target.value)} placeholder="#hashtags go here" style={{ resize: 'vertical' }} />
-            <div style={{ fontSize: 11.5, color: C.faint, marginTop: 5 }}>Posted underneath, so hashtags stay out of the caption.</div>
+            <div style={{ fontSize: 11.5, color: C.mute, marginTop: 5 }}>Posted underneath, so hashtags stay out of the caption.</div>
           </div>
         )}
 
         {/* ── WHERE ────────────────────────────────────────────────────────── */}
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>{mode === 'apnosh' ? 'Where you would like it' : 'Where it goes'}</div>
+        <Head hue="event" note={chosen.size ? `${chosen.size} on` : null}>Where it goes</Head>
         {targets === null ? (
-          <div style={{ fontSize: 13.5, color: C.faint, padding: '2px' }}>Loading your accounts…</div>
+          <div style={{ fontSize: 13.5, color: C.mute, padding: '2px' }}>Loading your accounts…</div>
         ) : targets.length === 0 ? (
           <MvpEmpty text="No accounts are connected yet, so there is nowhere to post. Connect one under More, then come back." />
         ) : (
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {/* EACH ONE IN ITS OWN NETWORK'S COLOUR. The app has always known
+                what colour Instagram is -- it is in the 22px brand tile on every
+                row -- but every chip on this screen was the same mint, so five
+                accounts read as one undifferentiated block. The colour is not
+                decoration here: it is the fastest way to see where this post is
+                actually going. */}
             {targets.map((t) => {
               const on = chosen.has(t.accountId)
+              const tone = brandTone(t.platform)
+              const c = tone?.solid ?? C.green
               return (
                 <button key={t.accountId} type="button" onClick={() => toggle(t.accountId)} aria-pressed={on} className="cmp-x"
                   style={{ display: 'inline-flex', alignItems: 'center', gap: 8, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500,
-                    padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? C.ink : C.mute, background: '#fff',
-                    border: `1px solid ${on ? C.green : C.line}`, boxShadow: on ? `0 2px 10px ${tint('mint', .22, 1)}` : 'none' }}>
-                  <span style={{ opacity: on ? 1 : .45, display: 'flex' }}><BrandOrMark provider={t.platform} size={16} /></span>
+                    padding: '9px 14px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? C.ink : C.mute,
+                    background: on ? alpha(c, 0.09) : '#fff',
+                    border: `1px solid ${on ? c : C.line}`, boxShadow: on ? `0 3px 12px ${alpha(c, 0.22)}` : 'none' }}>
+                  <span style={{ opacity: on ? 1 : .4, display: 'flex' }}><BrandOrMark provider={t.platform} size={16} /></span>
                   {t.name}
                 </button>
               )
             })}
           </div>
         )}
-        {chosen.size > 0 && [...chosen].some((id) => targets?.find((t) => t.accountId === id)?.platform === 'tiktok') && mode === 'self' && (
+        {chosen.size > 0 && [...chosen].some((id) => targets?.find((t) => t.accountId === id)?.platform === 'tiktok') && (
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 11, cursor: 'pointer' }}>
             <input type="checkbox" checked={tiktokDraft} onChange={(e) => setTiktokDraft(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: C.greenDk }} />
             <span style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45 }}>
@@ -553,7 +609,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         )}
 
         {/* ── WHEN ─────────────────────────────────────────────────────────── */}
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>{mode === 'apnosh' ? 'When you would like it out' : 'When'}</div>
+        <Head hue="regulars" note={whenWords}>When</Head>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {(() => {
             const chipStyle = (on: boolean, smart: boolean): React.CSSProperties => ({
@@ -565,7 +621,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             return (
               <>
                 <button type="button" onClick={() => setWhen('now')} aria-pressed={when === 'now'} className="cmp-x" style={chipStyle(when === 'now', false)}>
-                  <Send size={14} />{mode === 'apnosh' ? 'As soon as you can' : 'Now'}
+                  <Send size={14} />Now
                 </button>
                 {/* ONE chip, and the slots underneath it. Three recommendations
                     on this row put five chips over two ragged lines and made the
@@ -724,18 +780,28 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
       </div>
 
       <MvpSaveBar
-        onClick={() => void send()}
+        onClick={() => void send(false)}
         disabled={!canSend}
         saving={busy}
-        label={mode === 'apnosh' ? 'Send it to Apnosh'
-          : when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'}
+        label={when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'}
         /* The decision, restated in words before they commit to it. A button
            that says Post is not the same as being told what is about to happen. */
         hint={
-          mode === 'apnosh' ? 'Nothing goes out until you have seen it.'
-            : chosen.size === 0 ? 'Pick where it goes.'
+          chosen.size === 0 ? 'Pick where it goes.'
             : `${when === 'now' ? 'Posting' : 'Scheduled'} to ${chosen.size} account${chosen.size === 1 ? '' : 's'}${when === 'best' && pickedBest ? `, ${pickedBest.label}` : ''}. Public, as your business.`
         }
+        /* THE WAY OUT, and deliberately quiet. This was a tab at the top of the
+           screen -- "I will post it" against "Apnosh does it" -- which made a
+           choice out of something that is really an escape hatch, and made every
+           owner answer it before writing a word. It belongs here, small, at the
+           moment they might actually want it: they have written the thing and
+           would rather someone else finished it. */
+        secondary={{
+          label: 'Send it to your team instead',
+          onClick: () => void send(true),
+          disabled: !canHand,
+          busy: handing,
+        }}
       />
     </MvpShell>
   )

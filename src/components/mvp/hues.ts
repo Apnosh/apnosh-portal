@@ -28,8 +28,11 @@ export const HUES: Record<HueKey, [string, string]> = {
 
 export const hueOf = (k?: HueKey | null): [string, string] => HUES[k ?? 'mint'] ?? HUES.mint
 export const gradOf = (k?: HueKey | null, angle = 135) => { const [a, b] = hueOf(k); return `linear-gradient(${angle}deg, ${a}, ${b})` }
+/** hex + alpha. Split out because network colours (Instagram's pink, LinkedIn's
+ *  blue) are not HueKeys but need the same soft fills. */
+export const alpha = (hex: string, a: number) => hex + Math.round(a * 255).toString(16).padStart(2, '0')
 /** hex + alpha, for tints and shadows: tint('mint', .16) */
-export const tint = (k: HueKey | null | undefined, alpha: number, stop: 0 | 1 = 0) => hueOf(k)[stop] + Math.round(alpha * 255).toString(16).padStart(2, '0')
+export const tint = (k: HueKey | null | undefined, a: number, stop: 0 | 1 = 0) => alpha(hueOf(k)[stop], a)
 /** the lifted-tile shadow under a gradient glyph */
 export const glow = (k?: HueKey | null, alpha = 0.35) => `0 6px 14px ${tint(k, alpha, 1)}`
 

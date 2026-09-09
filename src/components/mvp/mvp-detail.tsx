@@ -83,14 +83,26 @@ export function MvpRow({ icon, label, sub, href, onClick, right, danger, externa
 
 // Sticky bottom save bar — pins above the bottom nav inside the shell's scroll
 // frame. `hint` shows a small line above the button (e.g. "Saved", or a nudge).
-export function MvpSaveBar({ onClick, label = 'Save', disabled, saving, hint }: { onClick: () => void; label?: string; disabled?: boolean; saving?: boolean; hint?: string }) {
+export function MvpSaveBar({ onClick, label = 'Save', disabled, saving, hint, secondary }: {
+  onClick: () => void; label?: string; disabled?: boolean; saving?: boolean; hint?: string
+  /** A quieter way out, under the button: text, not a second button competing
+   *  with the first. */
+  secondary?: { label: string; onClick: () => void; disabled?: boolean; busy?: boolean }
+}) {
   const off = disabled || saving
+  const sOff = secondary?.disabled || secondary?.busy || saving
   return (
     <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: `0.5px solid ${C.line}`, padding: '10px 14px calc(12px + env(safe-area-inset-bottom))' }}>
       {hint && <div style={{ fontSize: 12, color: C.mute, textAlign: 'center', marginBottom: 8 }}>{hint}</div>}
       <button type="button" onClick={onClick} disabled={off} style={{ width: '100%', height: 48, borderRadius: 14, border: 'none', background: off ? '#bfe7da' : C.green, color: '#fff', fontSize: 16, fontWeight: 700, fontFamily: 'inherit', cursor: off ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         {saving && <Loader2 size={18} className="mvp-spin" />}{label}
       </button>
+      {secondary && (
+        <button type="button" onClick={secondary.onClick} disabled={sOff} style={{ width: '100%', marginTop: 9, padding: '4px 0', background: 'none', border: 'none', fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
+          color: sOff ? C.faint : C.greenDk, cursor: sOff ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          {secondary.busy && <Loader2 size={14} className="mvp-spin" />}{secondary.label}
+        </button>
+      )}
     </div>
   )
 }

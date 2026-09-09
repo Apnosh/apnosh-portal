@@ -898,6 +898,21 @@ const PROVIDER_MARK: Record<string, { bg: string; fg?: string; text?: string; ic
   social: { bg: '#e1306c', icon: 'share' },
   ads: { bg: '#3d8ed8', icon: 'mega' },
 }
+/* Instagram's mark is a gradient, and a border or a soft fill needs one colour.
+   The rest are already single colours. */
+const BRAND_SOLID: Record<string, string> = { instagram: '#e1306c' }
+/**
+ * A network's own colour, for chips and rails that should READ as that network
+ * rather than as generic mint. Same source as the little brand tiles, so the
+ * screen and the tile can never disagree about what colour Instagram is.
+ */
+export function brandTone(provider: string): { solid: string; grad: string } | null {
+  const m = PROVIDER_MARK[provider]
+  if (!m) return null
+  const solid = BRAND_SOLID[provider] ?? (m.bg.startsWith('linear-gradient') ? C.mute : m.bg)
+  return { solid, grad: m.bg }
+}
+
 export function ProviderMark({ provider, size = 28 }: { provider: string; size?: number }) {
   const m = PROVIDER_MARK[provider] ?? { bg: C.bg, fg: C.mute, icon: 'globe' as const }
   const ic = Math.round(size * 0.5)
