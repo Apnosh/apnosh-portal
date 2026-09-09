@@ -86,10 +86,13 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const body = (await req.json().catch(() => ({}))) as { clientId?: string; commentId?: string; text?: string }
-  const { clientId, commentId, text } = body
-  if (!clientId || !commentId || !text?.trim()) {
-    return NextResponse.json({ error: 'clientId, commentId and text required' }, { status: 400 })
+  const body = (await req.json().catch(() => ({}))) as { clientId?: string; commentId?: string; postId?: string; accountId?: string; text?: string }
+  const { clientId, commentId, postId, accountId, text } = body
+  /* The reply is addressed to the POST, with the comment named inside it -- the
+     vendor's actual contract, which a 405 taught us. So the caller has to send
+     both, and the list hands both back on every row. */
+  if (!clientId || !commentId || !postId || !accountId || !text?.trim()) {
+    return NextResponse.json({ error: 'clientId, commentId, postId, accountId and text required' }, { status: 400 })
   }
   const access = await checkClientAccess(clientId)
   if (!access.authorized) {
@@ -101,7 +104,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'That reply is too long' }, { status: 400 })
   }
   try {
-    await replyToComment(clientId, commentId, text.trim())
+    await replyToComment(clientId, { postId, accountId, commentId, text: text.trim() })
     return NextResponse.json({ ok: true })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not post the reply' }, { status: 502 })

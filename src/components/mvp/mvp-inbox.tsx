@@ -106,7 +106,7 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
   )
 }
 
-interface CommentRow { id: string; platform: string; postId: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean; canReply?: boolean; url?: string | null }
+interface CommentRow { id: string; platform: string; postId: string | null; accountId?: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean; canReply?: boolean; url?: string | null }
 
 /**
  * COMMENTS ON THEIR POSTS, with the reply in the same place.
@@ -141,22 +141,24 @@ function CommentsPane({ clientId }: { clientId: string }) {
 
   useEffect(() => { void load() }, [load])
 
-  async function send(id: string) {
+  async function send(c: CommentRow) {
     const text = draft.trim()
     if (!text || sending) return
     setSending(true)
     try {
+      /* The reply goes to the POST with the comment named inside it, so both ids
+         travel. A row missing either cannot be answered and says so instead. */
       const r = await fetch('/api/dashboard/social-comments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, commentId: id, text }),
+        body: JSON.stringify({ clientId, commentId: c.id, postId: c.postId, accountId: c.accountId, text }),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not post the reply')
       /* Mark it answered here rather than refetching: the vendor may not show the
          reply for a moment, and a row springing back to unanswered reads as a
          failed send. */
-      setRows((cur) => (cur ?? []).map((c) => (c.id === id ? { ...c, replied: true } : c)))
+      setRows((cur) => (cur ?? []).map((x) => (x.id === c.id ? { ...x, replied: true } : x)))
       setOpenId(null); setDraft('')
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not post the reply')
@@ -195,7 +197,7 @@ function CommentsPane({ clientId }: { clientId: string }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
                 {c.replied
                   ? <span style={{ fontSize: 11.5, fontWeight: 700, color: C.greenDk }}>Answered</span>
-                  : c.canReply === false
+                  : c.canReply === false || !c.postId || !c.accountId
                     ? <span style={{ fontSize: 11.5, color: C.faint }}>Cannot be answered here</span>
                     : (
                     <button
@@ -220,7 +222,7 @@ function CommentsPane({ clientId }: { clientId: string }) {
                     <button
                       type="button"
                       disabled={!draft.trim() || sending}
-                      onClick={() => void send(c.id)}
+                      onClick={() => void send(c)}
                       style={{ font: 'inherit', fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 99, border: 'none', cursor: draft.trim() && !sending ? 'pointer' : 'default', background: draft.trim() && !sending ? C.ink : C.line, color: draft.trim() && !sending ? '#fff' : C.faint }}
                     >{sending ? 'Posting…' : 'Post reply'}</button>
                     <span style={{ fontSize: 11.5, color: C.faint }}>Posts publicly as your business.</span>

@@ -1,4 +1,46 @@
 /**
+ * Post a reply to one comment, publicly, in the business's name.
+ *
+ * THE PATH IS THE POST, NOT THE COMMENT. The first version posted to
+ * /inbox/comments/{commentId}/reply with {text} and got a flat 405: that route
+ * does not exist. The real one is POST /v1/inbox/comments/{postId}, the reply
+ * text is `message` not `text`, `accountId` is REQUIRED, and `commentId` is what
+ * makes it a reply to a particular comment rather than a new top-level one.
+ * Three mistakes in one call, all of them from trusting a documented shape.
+ *
+ * IDEMPOTENT ON PURPOSE. This posts in public under someone's business name, so
+ * a double tap, a retry or a flaky connection must not produce two replies. The
+ * key is derived from the comment and the exact text, so the same reply replays
+ * the original response instead of posting again, while a genuinely different
+ * reply to the same comment still goes through.
+ */
+export async function replyToComment(
+  clientId: string,
+  args: { postId: string; accountId: string; commentId: string; text: string },
+): Promise<void> {
+  const message = args.text.trim()
+  if (!message) throw new ChannelError('upstream', 'A reply cannot be empty')
+  if (!args.postId || !args.accountId) {
+    throw new ChannelError('upstream', 'This comment is missing the post or account it belongs to')
+  }
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
+
+  /* A stable fingerprint of exactly this reply. Not random: the whole point is
+     that the same send twice is recognised as the same send. */
+  let h = 0
+  const seed = `${args.commentId}:${message}`
+  for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) | 0 }
+  const idem = `apnosh-${args.commentId}-${(h >>> 0).toString(36)}`
+
+  await zer(`/inbox/comments/${encodeURIComponent(args.postId)}`, {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idem },
+    body: JSON.stringify({ accountId: args.accountId, commentId: args.commentId, message }),
+  })
+}
+
+/**
  * ZERNIO ADAPTER — the bake-off challenger to Ayrshare (owner call 2026-08-10).
  *
  * Same law as every adapter: screens read canonical tables, never the vendor; swapping
@@ -179,6 +221,8 @@ export interface SocialCommentRow {
   id: string
   platform: string
   postId: string | null
+  /** the connected account the post belongs to; the reply endpoint requires it */
+  accountId: string | null
   authorName: string
   text: string
   createdAt: string | null
@@ -356,6 +400,7 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
         id,
         platform: (str(post.platform) || str(c.platform) || 'instagram').toLowerCase(),
         postId,
+        accountId: str(post.accountId) || null,
         authorName:
           str(c.from) || str(c.username) || str(c.authorName) || str(c.author_name) ||
           str(who.username) || str(who.name) || str(who.displayName) || 'Someone',
@@ -378,18 +423,6 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
      to be walked first rather than by what is most recent. */
   out.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')))
   return out.slice(0, limit)
-}
-
-/** Post a reply to one comment, on whatever platform it came from. */
-export async function replyToComment(clientId: string, commentId: string, text: string): Promise<void> {
-  const body = text.trim()
-  if (!body) throw new ChannelError('upstream', 'A reply cannot be empty')
-  const profileId = await profileIdFor(clientId)
-  if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
-  await zer(`/inbox/comments/${encodeURIComponent(commentId)}/reply`, {
-    method: 'POST',
-    body: JSON.stringify({ text: body, profileId }),
-  })
 }
 
 async function ensureProfile(clientId: string, userId?: string): Promise<string> {
