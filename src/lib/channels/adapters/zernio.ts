@@ -247,7 +247,32 @@ export async function diagnoseComments(clientId: string): Promise<Record<string,
            the whole answer ("no such route", "profileId required"). */
         bodyStart: arr.length === 0 ? text.slice(0, 400) : undefined,
       }
-      if (arr.length > 0) break
+      /* The first level turned out to be the POSTS that have comments
+         (accountUsername, commentCount, permalink, picture), not the comments
+         themselves. So follow the first id down and describe THAT shape too. */
+      if (arr.length > 0) {
+        const firstId = str(arr[0].id) || str(arr[0]._id)
+        if (firstId) {
+          for (const sub of [`${path}/${encodeURIComponent(firstId)}`, `${path}/${encodeURIComponent(firstId)}/comments`]) {
+            try {
+              const r2 = await fetch(`${API}${sub}?limit=5`, { headers: { Authorization: `Bearer ${key}` } })
+              const t2 = await r2.text()
+              let j2: Record<string, unknown> | null = null
+              try { j2 = JSON.parse(t2) as Record<string, unknown> } catch { /* not json */ }
+              const a2 = j2 ? unwrapList(j2, 'comments', 'items', 'results', 'data') : []
+              out[sub] = {
+                status: r2.status,
+                topLevelKeys: j2 ? Object.keys(j2).slice(0, 12) : null,
+                arrayFound: a2.length,
+                firstItemKeys: a2[0] ? Object.keys(a2[0]).slice(0, 25) : null,
+                bodyStart: a2.length === 0 ? t2.slice(0, 300) : undefined,
+              }
+              if (a2.length > 0) break
+            } catch { /* try the next */ }
+          }
+        }
+        break
+      }
     } catch (e) {
       out[path] = { error: e instanceof Error ? e.message : 'fetch failed' }
     }
