@@ -72,6 +72,37 @@ function Head({ hue, children, note }: { hue: HueKey; children: React.ReactNode;
   )
 }
 
+/**
+ * WHAT WE ALREADY KNEW, LAST TIME.
+ *
+ * Which accounts a restaurant has connected, and when its posts do best, change
+ * about never -- but they were fetched from the vendor on every open, so the
+ * screen spent a second with no accounts, no preview and no chips before it
+ * became itself. Nothing about that second was informative; it was just the
+ * network being visible.
+ *
+ * So the last answer is kept and painted immediately, and the real one is
+ * fetched behind it and swapped in when it differs. Connect an account and it
+ * appears on the next open without anyone waiting for it.
+ *
+ * Bumping VERSION invalidates every stored copy, which is what to do when the
+ * shape here changes rather than trying to migrate it.
+ */
+const CACHE_VERSION = 1
+const cacheKey = (clientId: string) => `apnosh.composer.v${CACHE_VERSION}.${clientId}`
+interface Cached { targets: Target[]; bests: Best[]; limits: Record<string, number> }
+function readCache(clientId: string): Cached | null {
+  try {
+    const raw = window.localStorage.getItem(cacheKey(clientId))
+    if (!raw) return null
+    const c = JSON.parse(raw) as Cached
+    return Array.isArray(c?.targets) ? c : null
+  } catch { return null }
+}
+function writeCache(clientId: string, c: Cached) {
+  try { window.localStorage.setItem(cacheKey(clientId), JSON.stringify(c)) } catch { /* private mode, a full disk */ }
+}
+
 const platformName = (p: string) => (p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : p === 'youtube' ? 'YouTube' : p.charAt(0).toUpperCase() + p.slice(1))
 const midnight = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
@@ -105,11 +136,14 @@ const brandChip = (on: boolean, solid: string): React.CSSProperties => ({
 
 export default function MvpComposer({ clientId }: { clientId: string }) {
   const router = useRouter()
-  const [targets, setTargets] = useState<Target[] | null>(null)
-  const [bests, setBests] = useState<Best[]>([])
+  /* Read once, synchronously, before the first paint: an effect would be one
+     frame too late and the empty state would still flash. */
+  const [seed] = useState<Cached | null>(() => (typeof window === 'undefined' ? null : readCache(clientId)))
+  const [targets, setTargets] = useState<Target[] | null>(seed?.targets ?? null)
+  const [bests, setBests] = useState<Best[]>(seed?.bests ?? [])
   const [bestIdx, setBestIdx] = useState(0)
   const [tz, setTz] = useState('America/Los_Angeles')
-  const [chosen, setChosen] = useState<Set<string>>(new Set())
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set((seed?.targets ?? []).map((t) => t.accountId)))
   const [text, setText] = useState('')
   const [when, setWhen] = useState<'now' | 'best' | 'pick'>('now')
   const [busy, setBusy] = useState(false)
@@ -145,7 +179,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   const [previewPick, setPreviewPick] = useState<string | null>(null)
   /* What each platform will actually accept, from the vendor rather than from
      memory: Instagram stops at 2,200, LinkedIn at 3,000, X at 280. */
-  const [limits, setLimits] = useState<Record<string, number>>({})
+  const [limits, setLimits] = useState<Record<string, number>>(seed?.limits ?? {})
   /* Scheduling as two taps instead of a keyboard: a day, then a time. */
   /* A real date, not an offset from today: an owner booking a holiday post in
      six weeks should not have to count days. If the last slot of today has
@@ -172,14 +206,34 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
       .then((j) => {
         if (!live) return
         const t = (j.targets ?? []) as Target[]
+        const b = (j.bests ?? (j.best ? [j.best] : [])) as Best[]
+        const l = (j.limits ?? {}) as Record<string, number>
         setTargets(t)
-        setChosen(new Set(t.map((x) => x.accountId)))
-        setBests((j.bests ?? (j.best ? [j.best] : [])) as Best[])
-        setLimits((j.limits ?? {}) as Record<string, number>)
+        setBests(b)
+        setLimits(l)
+        /* RECONCILE, DO NOT RESET. This can land while the owner is already
+           choosing, so their toggles are kept: accounts that no longer exist
+           drop out, genuinely new ones arrive on by default, and everything
+           they touched stays as they left it. */
+        setChosen((cur) => {
+          const live_ = new Set(t.map((x) => x.accountId))
+          const known = new Set((seed?.targets ?? []).map((x) => x.accountId))
+          const next = new Set([...cur].filter((id) => live_.has(id)))
+          for (const x of t) if (!known.has(x.accountId)) next.add(x.accountId)
+          return next
+        })
+        writeCache(clientId, { targets: t, bests: b, limits: l })
       })
-      .catch((e) => { if (live) { setErr(e instanceof Error ? e.message : 'Could not load your accounts'); setTargets([]) } })
+      .catch((e) => {
+        if (!live) return
+        /* A stale answer beats no answer: if we have last time's accounts on
+           screen, a failed refresh is not something to interrupt them with. */
+        if (seed) return
+        setErr(e instanceof Error ? e.message : 'Could not load your accounts')
+        setTargets([])
+      })
     return () => { live = false }
-  }, [clientId])
+  }, [clientId, seed])
 
   const toggle = useCallback((id: string) => {
     setChosen((cur) => { const n = new Set(cur); n.has(id) ? n.delete(id) : n.add(id); return n })
@@ -384,7 +438,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   const previewAvatar = railTones.length === 1 ? (brandTone(railOf[0])?.grad ?? gradOf('mint')) : gradOf('mint')
 
   return (
-    <MvpShell active="home" back="/dashboard" title="New post">
+    <MvpShell active="home" back="/dashboard" title="New post" focus>
       <style>{`
         @keyframes cmpspin{to{transform:rotate(360deg)}}
         .mvp-spin{animation:cmpspin .8s linear infinite}
@@ -397,7 +451,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         .cmp-scroll::-webkit-scrollbar{display:none}
       `}</style>
 
-      <div style={{ padding: '6px 16px 34px' }}>
+      <div style={{ padding: '6px 16px 0' }}>
 
         {/* ── THE PREVIEW ──────────────────────────────────────────────────
             A mirror, not the editing surface. The last version blurred the two:
@@ -820,7 +874,9 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         {/* No sentence above the button restating what the button says. The
             preview is directly above it, the button names the accounts, and the
             "When" heading carries the time: a third telling was clutter. */}
-        <MvpActions>
+        {/* Sticky, because with the nav gone this bar IS the bottom of the
+            screen and a long post should not need scrolling back to send. */}
+        <MvpActions sticky>
           <MvpButton full busy={busy} disabled={!canSend} onClick={() => void send(false)}
             label={when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'} />
           {/* THE WAY OUT, and deliberately quiet. This was a tab at the top of

@@ -1341,7 +1341,15 @@ export const zernioAdapter: ChannelAdapter = {
  * limits; the composer then counts as the owner types instead of asking the
  * vendor on every keystroke.
  */
+let limitsCache: { at: number; value: Record<string, number> } | null = null
+const LIMITS_TTL = 6 * 60 * 60 * 1000
+
 export async function platformTextLimits(): Promise<Record<string, number>> {
+  /* Held for six hours in the running process. These are the platforms' own
+     rules, not this client's data: asking the vendor for them on every composer
+     open and again on every publish was a round trip for a table that changes
+     when a platform changes, which is roughly never. */
+  if (limitsCache && Date.now() - limitsCache.at < LIMITS_TTL) return limitsCache.value
   try {
     const res = await zer('/tools/validate/post-length', { method: 'POST', body: JSON.stringify({ text: '.' }) })
     const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
@@ -1351,8 +1359,10 @@ export async function platformTextLimits(): Promise<Record<string, number>> {
       const limit = num((v as Record<string, unknown>)?.limit)
       if (limit > 0) out[k] = limit
     }
+    if (Object.keys(out).length) limitsCache = { at: Date.now(), value: out }
     return out
   } catch {
-    return {}
+    /* A failed refresh should not throw away numbers we already have. */
+    return limitsCache?.value ?? {}
   }
 }

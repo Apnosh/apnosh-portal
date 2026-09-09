@@ -37,6 +37,12 @@ const SHELL_CSS = `
 .mvp-frame-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;padding-bottom:${TAIL_TALL}}
 .mvp-frame-scroll.mvp-under-top{padding-top:58px}
 .mvp-frame-scroll.mvp-short-tail{padding-bottom:${TAIL}}
+/* A SCREEN YOU ARE WORKING IN, not browsing from. No bottom nav, because its own
+   action bar takes that place and two bars stacked is the thing that made the
+   composer feel like three rows of chrome. No tail at all: the page's own sticky
+   bar sits on the true bottom and carries the safe area itself, and adding it
+   here too would inset a phone's chin twice. */
+.mvp-frame-scroll.mvp-focus-tail{padding-bottom:0}
 /* ONE SCREEN, HELD STILL. Home is a fixed view: the funnel sizes itself to what is left after
    the rows under it, so there is nothing to scroll to. overscroll-behavior stops the rubber-band
    that made a page with no scroll still slide under a finger. Overflow stays auto on purpose —
@@ -128,9 +134,12 @@ function useSeenLog(clientId: string | undefined) {
   }, [clientId, pathname])
 }
 
-export default function MvpShell({ active, unread, header, children, wide, noHeader, fit, middle, title, back, right }: { /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; /** replaces the bell (a page's own action) */ right?: React.ReactNode; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean; /** a screen that fits on one screen and must not slide under a drag (Home) */ fit?: boolean }) {
+export default function MvpShell({ active, unread, header, children, wide, noHeader, fit, middle, title, back, right, focus }: { /** a screen with one job: hides the bottom nav and pins the header, so the page's own action bar owns the bottom */ focus?: boolean; /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; /** replaces the bell (a page's own action) */ right?: React.ReactNode; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean; /** a screen that fits on one screen and must not slide under a drag (Home) */ fit?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const tucked = useHideOnScroll(() => scrollRef.current)
+  /* The header tucks away as you scroll on browsing screens, which is right
+     there and wrong in a composer: the back arrow is the way out of a half
+     written post and it must not go looking for you. */
+  const tucked = useHideOnScroll(() => scrollRef.current) && !focus
   const { client } = useClient()
   useSeenLog(client?.id)
   return (
@@ -139,8 +148,8 @@ export default function MvpShell({ active, unread, header, children, wide, noHea
       <div className={`${wide ? 'mvp-frame mvp-frame-wide' : 'mvp-frame'}${tucked ? ' mvp-scrolling' : ''}`}>
         {/* the standard app bar floats over the scroll (glass); a page's own header stays in flow */}
         {noHeader ? null : header ? header : <div className="mvp-frame-top"><TopRow middle={middle} title={title} count={unread} back={back} right={right} /></div>}
-        <div ref={scrollRef} className={`${noHeader ? 'mvp-frame-scroll mvp-short-tail' : header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}${fit ? ' mvp-fit' : ''}`}>{children}</div>
-        <BottomNav active={active} />
+        <div ref={scrollRef} className={`${noHeader ? 'mvp-frame-scroll mvp-short-tail' : header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}${fit ? ' mvp-fit' : ''}${focus ? ' mvp-focus-tail' : ''}`}>{children}</div>
+        {!focus && <BottomNav active={active} />}
       </div>
     </div>
   )

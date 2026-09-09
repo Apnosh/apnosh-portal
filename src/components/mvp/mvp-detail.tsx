@@ -140,9 +140,26 @@ export function MvpButton({ label, onClick, variant = 'primary', disabled, busy,
  * page those two should read as continuous. Space separates them; a border
  * divides them. Space is what was wanted.
  */
-export function MvpActions({ children, hint }: { children: React.ReactNode; hint?: string }) {
+export function MvpActions({ children, hint, sticky, ground = '#fff' }: {
+  children: React.ReactNode; hint?: string
+  /** stays at the bottom of the screen; for a focus screen where it replaces the nav */
+  sticky?: boolean
+  /** the page colour it has to sit on, so the fade above it is invisible */
+  ground?: string
+}) {
   return (
-    <div style={{ marginTop: 34, display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div style={{
+      marginTop: 34, display: 'flex', flexDirection: 'column', gap: 10,
+      ...(sticky ? {
+        position: 'sticky', bottom: 0, zIndex: 4,
+        /* Content dissolves upward into the page rather than stopping at a rule.
+           A hairline here divided the last thing they touched from the button
+           that acts on it. */
+        background: `linear-gradient(to bottom, transparent 0, ${ground} 26px)`,
+        padding: `26px 0 calc(10px + env(safe-area-inset-bottom))`,
+        marginBottom: 0,
+      } : {}),
+    }}>
       {hint && <div style={{ fontSize: 12.5, color: C.mute, textAlign: 'center', lineHeight: 1.45 }}>{hint}</div>}
       {children}
     </div>
