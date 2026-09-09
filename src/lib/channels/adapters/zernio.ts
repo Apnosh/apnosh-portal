@@ -211,6 +211,50 @@ async function profileIdFor(clientId: string): Promise<string | null> {
  * crash, and the diagnostic route reports what actually came back so the FIRST
  * real run confirms or corrects this in one look.
  */
+/**
+ * What the vendor ACTUALLY sent, described rather than guessed at.
+ *
+ * listComments returning zero is ambiguous: either there are no comments, or the
+ * field names it reads do not match this vendor's. Nothing in a parsed result can
+ * tell those apart, so this reports the response's own structure -- the HTTP
+ * status, the top-level keys, which key held the array, and the KEY NAMES on the
+ * first element. Names only: enough to correct the parser, without dumping
+ * customers' comment text through a diagnostic.
+ */
+export async function diagnoseComments(clientId: string): Promise<Record<string, unknown>> {
+  const key = process.env.ZERNIO_API_KEY
+  if (!key) return { error: 'ZERNIO_API_KEY is not set' }
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return { error: 'This client has no active zernio connection' }
+
+  const out: Record<string, unknown> = { profileId }
+  /* Try the documented path first, then the plausible neighbours. A 404 here is
+     the most useful single fact: it means the path is wrong, not the parser. */
+  for (const path of ['/inbox/comments', '/comments', '/inbox/comment']) {
+    const url = `${API}${path}?profileId=${encodeURIComponent(profileId)}&limit=5`
+    try {
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${key}` } })
+      const text = await r.text()
+      let json: Record<string, unknown> | null = null
+      try { json = JSON.parse(text) as Record<string, unknown> } catch { /* not json */ }
+      const arr = json ? unwrapList(json, 'comments', 'items', 'results', 'data') : []
+      out[path] = {
+        status: r.status,
+        topLevelKeys: json ? Object.keys(json).slice(0, 12) : null,
+        arrayFound: arr.length,
+        firstItemKeys: arr[0] ? Object.keys(arr[0]).slice(0, 25) : null,
+        /* Only when nothing parsed, and truncated: the error message is usually
+           the whole answer ("no such route", "profileId required"). */
+        bodyStart: arr.length === 0 ? text.slice(0, 400) : undefined,
+      }
+      if (arr.length > 0) break
+    } catch (e) {
+      out[path] = { error: e instanceof Error ? e.message : 'fetch failed' }
+    }
+  }
+  return out
+}
+
 export async function listComments(clientId: string, limit = 50): Promise<SocialCommentRow[]> {
   const profileId = await profileIdFor(clientId)
   if (!profileId) return []

@@ -21,7 +21,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { listComments, replyToComment } from '@/lib/channels/adapters/zernio'
+import { listComments, replyToComment, diagnoseComments } from '@/lib/channels/adapters/zernio'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -43,6 +43,13 @@ export async function GET(req: NextRequest) {
      no vendor payload, no tokens and nothing the caller cannot already see. An
      admin gate here bought no safety and meant the person who owns the
      connection could not run the check on their own account. */
+  /* ?diagnose=raw describes the vendor's own response: status, top-level keys,
+     which key held the array, and the first element's KEY NAMES. Names only, so
+     it can correct the parser without dumping customers' comment text. */
+  if (req.nextUrl.searchParams.get('diagnose') === 'raw') {
+    return NextResponse.json(await diagnoseComments(clientId))
+  }
+
   if (req.nextUrl.searchParams.get('diagnose') === '1') {
     try {
       const parsed = await listComments(clientId, 5)
