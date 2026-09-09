@@ -95,13 +95,35 @@ export async function loadClientConnections(clientId: string): Promise<Connectio
  *  the client's owner-set analytics config so config-gated GA4 event sources
  *  resolve CONNECTED only when their exact value is present. */
 export async function resolveSourceStatuses(clientId: string): Promise<ResolvedSourceMap> {
-  const [connections, cfg] = await Promise.all([
+  const [connections, cfg, posSystem] = await Promise.all([
     loadClientConnections(clientId),
     loadClientAnalyticsConfig(clientId),
+    loadPosSystem(clientId),
   ])
   const config: ResolverClientConfig = {
     ga4_menu_path: cfg.menuPath,
     ga4_order_domain: cfg.orderDomain,
+    pos_system: posSystem,
   }
   return resolveSourceStatusesFrom(connections, config)
+}
+
+/** The register this client rings sales on, as told to us at onboarding.
+ *  Null when never asked, which keeps today's behaviour (offer Connect). */
+async function loadPosSystem(clientId: string): Promise<string | null> {
+  try {
+    const admin = createAdminClient()
+    const { data, error } = await admin
+      .from('businesses')
+      .select('pos_system')
+      .eq('client_id', clientId)
+      .not('pos_system', 'is', null)
+      .limit(1)
+      .maybeSingle()
+    if (error || !data) return null
+    const v = (data as { pos_system: string | null }).pos_system
+    return typeof v === 'string' && v.trim() ? v.trim() : null
+  } catch {
+    return null
+  }
 }

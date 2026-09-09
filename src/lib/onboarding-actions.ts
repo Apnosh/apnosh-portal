@@ -256,9 +256,28 @@ export async function completeOnboardingCRM(
     if (cuisine.trim()) bizPatch.category = cuisine.trim()
     const cap = budgetCapForChip(data.marketing_budget as string)
     if (cap != null) bizPatch.monthly_budget = cap
+
     if (Object.keys(bizPatch).length) {
       const { error: bizErr } = await supabase.from('businesses').update(bizPatch).eq('id', businessId)
       if (bizErr) console.error('[completeOnboardingCRM] businesses brand/budget write failed:', bizErr.message)
+    }
+    /* Which register they ring sales on. Decides whether the Orders stage offers a
+       Connect action or says plainly that we cannot read this one yet, and it is
+       the demand number behind the Toast decision. Validated against the same list
+       the form draws, so a hand-crafted post cannot write junk.
+
+       Written SEPARATELY on purpose: migration 263 adds the column, and until it
+       has run on an environment, folding this into the patch above would fail the
+       whole update and silently lose the brand voice and the budget with it. */
+    const { POS_VALUE_OF } = await import('@/app/(auth)/onboarding/full/data')
+    const raw = typeof data.pos_system === 'string' ? data.pos_system.trim() : ''
+    /* The form stores the LABEL the owner tapped; the column stores the value.
+       One map, imported from the same module the form draws, so the two lists
+       cannot drift apart. An unrecognised label writes nothing. */
+    const pos = POS_VALUE_OF[raw] ?? ''
+    if (pos) {
+      const { error: posErr } = await supabase.from('businesses').update({ pos_system: pos }).eq('id', businessId)
+      if (posErr) console.error('[completeOnboardingCRM] pos_system write failed (migration 263 run?):', posErr.message)
     }
   } catch (e) {
     console.error('[completeOnboardingCRM] brand/budget wiring threw:', e)

@@ -1133,7 +1133,14 @@ export type ResolvedSourceMap = Record<string, ResolvedSource>
 export interface ResolverClientConfig {
   ga4_menu_path?: string | null
   ga4_order_domain?: string | null
+  /** The register this business rings sales on (businesses.pos_system). Decides
+   *  whether the Orders stage offers Connect or says the register is unreadable. */
+  pos_system?: string | null
 }
+
+/** Registers we have a working adapter for. Anything else cannot be connected,
+ *  however many times an owner taps Connect. */
+export const READABLE_POS_SYSTEMS = ['square', 'clover'] as const
 
 /** A trimmed channel_connections row, keyed by channel, that the resolver reads. */
 export interface ConnectionSnapshot {
@@ -1187,6 +1194,27 @@ function resolveOne(
 
   const channels = PROVIDER_CHANNELS[source.provider]
   if (!channels || channels.length === 0) return comingSoon()
+
+  /* A register we cannot read is not a Connect button. Owner testing found people
+     tapping Connect for systems that will never appear; one of them counted the
+     times it asked. If the business told us at onboarding which register it runs
+     and it is not one we have an adapter for, say so instead of offering an
+     action that cannot succeed. Silence (null) still offers Connect -- we have
+     not asked them yet, so we cannot claim to know. */
+  if (source.provider === 'pos') {
+    const pos = config.pos_system
+    if (pos && !(READABLE_POS_SYSTEMS as readonly string[]).includes(pos)) {
+      return {
+        status: 'COMING_SOON',
+        hasData: false,
+        lastUpdated: null,
+        errorReason: null,
+        hint: pos === 'none'
+          ? 'You told us there is no register to read.'
+          : 'We cannot read this register yet.',
+      }
+    }
+  }
 
   // First present connection among the provider's channels.
   let conn: ConnectionSnapshot | undefined

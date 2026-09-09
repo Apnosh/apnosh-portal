@@ -85,6 +85,33 @@ export const RESERVATIONS = [
   'In-house only', 'No reservations',
 ] as const
 
+/* What the business rings sales up on — single select.
+   Toast also appears in DELIVERY below, and correctly: Toast Takeout is a real
+   delivery option. But it was ONLY there, so a full-service restaurant running
+   Toast as its register had no way to tell us, and full service is the primary
+   target. The value decides whether the Orders stage offers a Connect action or
+   says plainly that this register is not readable yet, and it is the demand
+   number behind the Toast partnership decision. */
+export const POS_LABELS = [
+  'Square', 'Clover', 'Toast', 'Lightspeed', 'Aloha', 'Micros / Oracle',
+  'Something else', 'Cash, or no register',
+] as const
+
+/** Label the owner taps -> the value stored on businesses.pos_system. */
+export const POS_VALUE_OF: Record<string, string> = {
+  'Square': 'square',
+  'Clover': 'clover',
+  'Toast': 'toast',
+  'Lightspeed': 'lightspeed',
+  'Aloha': 'aloha',
+  'Micros / Oracle': 'micros',
+  'Something else': 'other',
+  'Cash, or no register': 'none',
+}
+
+/** The registers we have a working adapter for today. */
+export const READABLE_POS = ['square', 'clover'] as const
+
 // Delivery platforms — multi-select (food only)
 export const DELIVERY = [
   'DoorDash', 'Uber Eats', 'Grubhub', 'Toast', 'Our own', 'No delivery',
@@ -447,6 +474,8 @@ export interface OnboardingData {
   dietary_options: string[]
   reservations_platform: string
   delivery_platforms: string[]
+  /** Label from POS_LABELS; mapped to a value on save. */
+  pos_system: string
   menu_items: MenuDraftItem[]
   specials: SpecialDraft[]
   locations: LocationDraft[]
@@ -512,6 +541,7 @@ export const INITIAL_DATA: OnboardingData = {
   dietary_options: [],
   reservations_platform: '',
   delivery_platforms: [],
+  pos_system: '',
   menu_items: [],
   specials: [],
   locations: [],
