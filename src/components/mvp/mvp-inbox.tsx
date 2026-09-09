@@ -36,7 +36,7 @@ interface InboxData { items: Item[]; wins: Win[]; counts: { needsYou: number; to
 const FILTERS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' }, { key: 'needsyou', label: 'Needs you' },
   { key: 'reviews', label: 'Reviews' }, { key: 'comments', label: 'Comments' },
-  { key: 'activity', label: 'Activity' },
+  { key: 'messages', label: 'Messages' }, { key: 'activity', label: 'Activity' },
 ]
 const COUNTED = new Set(['needsyou', 'reviews', 'activity'])
 // Which item chips each filter shows. "Needs you" folds in the old Fix-its
@@ -97,8 +97,8 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
 
       {/* Comments come from the social vendor rather than the inbox feed, so this
           filter swaps the list for its own pane instead of filtering Items. */}
-      {filter === 'comments'
-        ? <CommentsPane clientId={clientId} />
+      {filter === 'comments' ? <CommentsPane clientId={clientId} />
+        : filter === 'messages' ? <MessagesPane clientId={clientId} />
         : <ListView filter={filter} items={items} wins={data.wins} q={q} onDismiss={onDismiss} />}
 
       <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .26s ease both}.mvp-swipe-x{scrollbar-width:none}.mvp-swipe-x::-webkit-scrollbar{display:none}`}</style>
@@ -119,6 +119,131 @@ interface CommentRow { id: string; platform: string; postId: string | null; acco
  * An error says so out loud: an empty list would read as "nobody commented",
  * which is a different and much worse claim than "we could not load them".
  */
+interface Convo { id: string; accountId: string; platform: string; who: string; lastMessage: string; updatedAt: string | null; unread: number; url?: string | null }
+interface Msg { id: string; message: string; senderName: string | null; direction: 'in' | 'out'; createdAt: string | null; deleted: boolean }
+
+/**
+ * DIRECT MESSAGES.
+ * Several owners said their customers reach them here rather than through
+ * reviews, and one has no website at all, so her Instagram inbox is her shop.
+ *
+ * Two views in one pane: the threads, then one thread. Unread first, because an
+ * inbox is a queue and somebody waiting outranks somebody already answered.
+ */
+function MessagesPane({ clientId }: { clientId: string }) {
+  const [convos, setConvos] = useState<Convo[] | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [open, setOpen] = useState<Convo | null>(null)
+  const [msgs, setMsgs] = useState<Msg[] | null>(null)
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    setErr(null)
+    fetch(`/api/dashboard/social-messages?clientId=${clientId}`, { cache: 'no-store' })
+      .then((r) => r.json().then((j) => { if (!r.ok) throw new Error(j.error || 'Could not load messages'); return j }))
+      .then((j) => { if (live) setConvos((j.conversations ?? []) as Convo[]) })
+      .catch((e) => { if (live) { setErr(e instanceof Error ? e.message : 'Could not load messages'); setConvos([]) } })
+    return () => { live = false }
+  }, [clientId])
+
+  const openThread = useCallback(async (c: Convo) => {
+    setOpen(c); setMsgs(null); setDraft(''); setErr(null)
+    try {
+      const r = await fetch(`/api/dashboard/social-messages?clientId=${clientId}&conversationId=${encodeURIComponent(c.id)}&accountId=${encodeURIComponent(c.accountId)}`, { cache: 'no-store' })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error || 'Could not load this thread')
+      setMsgs((j.messages ?? []) as Msg[])
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not load this thread'); setMsgs([])
+    }
+  }, [clientId])
+
+  async function send() {
+    const text = draft.trim()
+    if (!text || !open || sending) return
+    setSending(true)
+    try {
+      const r = await fetch('/api/dashboard/social-messages', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, conversationId: open.id, accountId: open.accountId, text }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(j.error || 'Could not send')
+      /* Shown immediately rather than refetched. The platform can take a moment
+         to echo it back, and a message that vanishes reads as a failed send. */
+      setMsgs((cur) => [...(cur ?? []), { id: `local-${Date.now()}`, message: text, senderName: null, direction: 'out', createdAt: new Date().toISOString(), deleted: false }])
+      setDraft('')
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not send')
+    } finally { setSending(false) }
+  }
+
+  if (open) {
+    return (
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 14px', borderBottom: `1px solid ${C.line}` }}>
+          <button type="button" onClick={() => { setOpen(null); setMsgs(null); setErr(null) }} style={{ font: 'inherit', fontSize: 13, color: C.greenDk, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>Back</button>
+          <BrandOrMark provider={open.platform} size={17} />
+          <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{open.who}</span>
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {msgs === null ? <div style={{ fontSize: 13, color: C.faint }}>Loading…</div>
+            : msgs.length === 0 ? <div style={{ fontSize: 13, color: C.faint }}>Nothing in this thread yet.</div>
+            : msgs.map((m) => (
+              <div key={m.id} style={{ alignSelf: m.direction === 'out' ? 'flex-end' : 'flex-start', maxWidth: '82%' }}>
+                <div style={{ fontSize: 13.5, lineHeight: 1.45, padding: '8px 11px', borderRadius: 14, background: m.direction === 'out' ? C.greenSoft : '#fff', border: `0.5px solid ${C.line}`, color: m.deleted ? C.faint : C.ink, fontStyle: m.deleted ? 'italic' : 'normal', wordBreak: 'break-word' }}>
+                  {m.deleted ? 'This message was deleted' : m.message}
+                </div>
+              </div>
+            ))}
+        </div>
+        <div style={{ borderTop: `1px solid ${C.line}`, padding: '10px 14px' }}>
+          {err && <div style={{ fontSize: 12, color: C.coral, marginBottom: 6 }}>{err}</div>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} maxLength={1500} placeholder="Write a reply…"
+              style={{ flex: 1, border: `1px solid ${C.line}`, borderRadius: 12, padding: 9, fontSize: 13.5, fontFamily: 'inherit', color: C.ink, resize: 'none' }} />
+            <button type="button" disabled={!draft.trim() || sending} onClick={() => void send()}
+              style={{ font: 'inherit', fontSize: 13, fontWeight: 600, padding: '9px 15px', borderRadius: 99, border: 'none', cursor: draft.trim() && !sending ? 'pointer' : 'default', background: draft.trim() && !sending ? C.ink : C.line, color: draft.trim() && !sending ? '#fff' : C.faint }}>
+              {sending ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+          <div style={{ fontSize: 11, color: C.faint, marginTop: 5 }}>Sent privately, as your business.</div>
+        </div>
+      </div>
+    )
+  }
+
+  if (convos === null) return <Centered>Loading messages…</Centered>
+  if (err && convos.length === 0) {
+    return (
+      <div style={{ padding: '24px 20px', textAlign: 'center', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}>
+        <div style={{ fontWeight: 600, color: C.ink, marginBottom: 4 }}>Messages did not load</div>{err}
+      </div>
+    )
+  }
+  if (convos.length === 0) return <InboxEmpty icon={Check} title="No messages yet" sub="When someone messages you on a connected account, the conversation lands here." />
+
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      {convos.map((c) => (
+        <button key={c.id} type="button" onClick={() => void openThread(c)} className="mvp-row"
+          style={{ width: '100%', display: 'flex', gap: 11, alignItems: 'flex-start', padding: '12px 14px', background: c.unread > 0 ? C.greenSoft : 'transparent', border: 'none', borderBottom: `1px solid ${C.line}`, textAlign: 'left', font: 'inherit', cursor: 'pointer' }}>
+          <span style={{ width: 36, height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><BrandOrMark provider={c.platform} size={22} /></span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.who}</span>
+              {c.unread > 0 && <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: '#fff', background: C.greenDk, borderRadius: 99, padding: '1px 7px' }}>{c.unread}</span>}
+            </span>
+            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, ...clampStyle(1) }}>{c.lastMessage || 'No messages yet'}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function CommentsPane({ clientId }: { clientId: string }) {
   const [rows, setRows] = useState<CommentRow[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
