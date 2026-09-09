@@ -58,6 +58,21 @@ export async function GET(req: NextRequest) {
       listAds(clientId, meta.accountId).catch(() => []),
     ])
 
+    /* WHICH ACCOUNT PAYS IS A CHOICE, NOT A DEFAULT.
+       The first version treated "we can see ad accounts" as "connected", which
+       skipped the picker entirely. Reading Apnosh's own connection back, the
+       Facebook login can see THREE ad accounts, one of them personal and in
+       someone's own name. Defaulting to whichever we happened to see first, on
+       the one screen that spends money, is exactly the wrong instinct. So the
+       choice is stored, and until it is there is nothing to boost with. */
+    const adminRead = createAdminClient()
+    const { data: conn } = await adminRead.from('channel_connections')
+      .select('metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
+    const chosenAdAccount = (conn?.metadata as Record<string, unknown> | null)?.ad_account_id
+    const payer = typeof chosenAdAccount === 'string' && accounts.some((a) => a.id === chosenAdAccount)
+      ? chosenAdAccount
+      : null
+
     /* THE CANDIDATES ARE THE WHOLE PITCH. Ranked against this client's OWN
        median, not an industry number, because "four times your usual" is a
        claim we can actually stand behind and "above average engagement" is not.
@@ -98,7 +113,10 @@ export async function GET(req: NextRequest) {
       .slice(0, 12)
 
     return NextResponse.json({
-      connected: accounts.length > 0,
+      /* Connected means "an ad account has been chosen to pay", not "an ad
+         account is visible". */
+      connected: payer !== null,
+      payer,
       metaAccountId: meta.accountId,
       accounts, ads, candidates,
       limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS },
@@ -133,7 +151,21 @@ export async function POST(req: NextRequest) {
          another business is more than they meant to hand over. */
       const ids = (body.adAccountIds ?? []).map(String).filter((x) => /^[A-Za-z0-9_]{3,64}$/.test(x))
       if (!ids.length) return NextResponse.json({ error: 'Pick which ad account to use' }, { status: 400 })
+      /* Reachable is not the same as chosen, and only one of them is a
+         decision. Verify it is really theirs, then remember it. */
+      const reachable = await listAdAccounts(clientId, meta.accountId)
+      if (!reachable.some((a) => a.id === ids[0])) {
+        return NextResponse.json({ error: 'That ad account is not on this connection' }, { status: 400 })
+      }
       const r = await connectAds(clientId, meta.platform, { accountId: meta.accountId, adAccountIds: ids, returnTo: body.returnTo })
+      const adminW = createAdminClient()
+      const { data: row } = await adminW.from('channel_connections')
+        .select('id, metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
+      if (row?.id) {
+        await adminW.from('channel_connections')
+          .update({ metadata: { ...(row.metadata as Record<string, unknown> ?? {}), ad_account_id: ids[0], ad_account_chosen_at: new Date().toISOString() } })
+          .eq('id', row.id)
+      }
       return NextResponse.json({ ok: true, ...r })
     }
 
@@ -169,16 +201,27 @@ export async function POST(req: NextRequest) {
         .eq('client_id', clientId).eq('external_id', body.platformPostId).maybeSingle()
       if (!owned) return NextResponse.json({ error: 'That post is not one of yours' }, { status: 404 })
 
-      /* And the ad account has to be one this connection can actually reach. */
+      /* AND IT PAYS FROM THE ACCOUNT THEY CHOSE, not one the browser names.
+         The request body is what an attacker controls, and "which account pays"
+         is the field where that matters most. */
+      const { data: connRow } = await admin.from('channel_connections')
+        .select('metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
+      const payer = (connRow?.metadata as Record<string, unknown> | null)?.ad_account_id
+      if (typeof payer !== 'string' || !payer) {
+        return NextResponse.json({ error: 'Choose which ad account pays before boosting' }, { status: 400 })
+      }
+      if (body.adAccountId !== payer) {
+        return NextResponse.json({ error: 'That is not the ad account set up to pay' }, { status: 400 })
+      }
       const accounts = await listAdAccounts(clientId, meta.accountId)
-      if (!accounts.some((a) => a.id === body.adAccountId)) {
-        return NextResponse.json({ error: 'That ad account is not connected' }, { status: 400 })
+      if (!accounts.some((a) => a.id === payer)) {
+        return NextResponse.json({ error: 'That ad account is no longer reachable' }, { status: 400 })
       }
 
       const r = await boostPost(clientId, {
         platformPostId: body.platformPostId,
         accountId: meta.accountId,
-        adAccountId: body.adAccountId,
+        adAccountId: payer,
         amount, days,
         name: (body.name || `Apnosh boost · ${new Date().toISOString().slice(0, 10)}`).slice(0, 120),
       })

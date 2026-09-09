@@ -80,8 +80,10 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         setAds((j.ads ?? []) as RunningAd[])
         setCandidates((j.candidates ?? []) as Candidate[])
         if (j.limits) setLimits(j.limits)
-        const usable = ((j.accounts ?? []) as AdAccount[]).filter((a) => a.selectable)
-        if (usable.length === 1) setPickedAccount(usable[0].id)
+        /* The stored choice, or nothing. Not "the only one we can see": the
+           point of the picker is that seeing three ad accounts and paying from
+           one of them are different facts. */
+        setPickedAccount(typeof j.payer === 'string' ? j.payer : null)
       })
       .catch((e) => setErr(e instanceof Error ? e.message : 'Could not load'))
       .finally(() => setLoading(false))
@@ -326,7 +328,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 onClick={() => void (async () => {
                   const j = await act({
                     action: 'boost', platformPostId: picked.platformPostId,
-                    adAccountId: pickedAccount ?? accounts.find((a) => a.selectable)?.id,
+                    adAccountId: pickedAccount,
                     amount, days,
                   })
                   if (j) setDone({ spent: amount, days })
