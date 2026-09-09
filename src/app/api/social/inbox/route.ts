@@ -9,7 +9,12 @@ import {
 } from '@/lib/social-inbox'
 
 /**
- * POST /api/social/inbox
+ * POST /api/social/inbox — NOT WIRED. Returns nothing for every client.
+ *
+ * Every action here reads a token from `platform_connections`, which has zero
+ * rows in production. See the header of src/lib/social-inbox.ts: direct Meta is
+ * deferred until the Meta app work, and the live social vendor is Zernio. If you
+ * are here looking for comments, Zernio has a comments API and that is the path.
  *
  * Unified social inbox API. Handles all comment/DM/post operations.
  *

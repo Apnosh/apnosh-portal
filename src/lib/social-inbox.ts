@@ -1,8 +1,31 @@
 /**
- * Social Inbox API helpers.
+ * Social Inbox API helpers — DIRECT META. NOT WIRED. DO NOT BUILD ON THIS.
+ * ========================================================================
+ * Read/reply to comments, read/reply to DMs, manage posts across Instagram and
+ * Facebook, by talking to Meta's Graph API directly.
  *
- * Read/reply to comments, read/reply to DMs, manage posts
- * across Instagram and Facebook.
+ * STATUS 2026-09-09: complete, correct, and connected to nothing. It reads
+ * tokens from `platform_connections`, which has ZERO rows in production and
+ * always has. The OAuth routes that would fill it (/api/auth/instagram-direct,
+ * /api/auth/instagram-agency) exist and work, but no owner-facing screen links
+ * to them, so nobody has ever connected this way.
+ *
+ * That is deliberate, not an oversight. Direct Meta means Meta app review, and
+ * the owner's call is to leave that until much later. The live social vendor is
+ * ZERNIO (channel_connections, channel='zernio'), and everything an owner sees
+ * comes from the canonical tables that vendor fills.
+ *
+ * WHY THE WARNING IS AT THE TOP. This file reads as a working feature and is
+ * one search away from anyone looking for "reply to a comment". It nearly got a
+ * comments tab built on top of it, which would have shipped an empty screen to
+ * every client.
+ *
+ * IF YOU WANT COMMENTS: Zernio has them. Its API reference lists a Comments
+ * resource under Inbox -- 13 endpoints, "unified inbox API for managing comments
+ * on posts across all connected accounts", with GET /v1/inbox/comments and
+ * POST /v1/inbox/comments/{id}/reply. That is the path, because it needs no Meta
+ * app and it uses a connection two clients already have. Add it to
+ * src/lib/channels/adapters/zernio.ts, not here.
  */
 
 const IG_API = 'https://graph.instagram.com/v21.0'
