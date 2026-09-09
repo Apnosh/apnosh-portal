@@ -22,10 +22,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, ChevronLeft, ChevronRight } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpGroup, MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
+import PostPreview from './mvp-post-preview'
 import { C, DISPLAY } from './tokens'
 import { gradOf, tint, glow, alpha, hueOf, type HueKey } from './hues'
 import { CARD_SHADOW } from './kit'
@@ -70,13 +71,6 @@ function Head({ hue, children, note }: { hue: HueKey; children: React.ReactNode;
     </div>
   )
 }
-
-/* Roughly where each feed stops showing a caption and puts a "more" behind the
-   rest. Approximate on purpose and shown as a line in the preview rather than a
-   number in a sentence: the exact count moves whenever a platform reflows its
-   feed, and the useful thing is not the number, it is seeing which half of what
-   you wrote a scrolling customer will actually read. */
-const FOLD: Record<string, number> = { instagram: 125, tiktok: 100, linkedin: 140, facebook: 250, youtube: 157 }
 
 const platformName = (p: string) => (p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : p === 'youtube' ? 'YouTube' : p.charAt(0).toUpperCase() + p.slice(1))
 const midnight = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
@@ -258,7 +252,6 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   })()
   const shownText = previewOf ? (perPlatform[previewOf] ?? text) : text
   const shownAccount = previewOf ? (targets ?? []).find((t) => chosen.has(t.accountId) && t.platform === previewOf) : null
-  const fold = previewOf ? FOLD[previewOf] ?? 0 : 0
 
   const pickedBest = bests[bestIdx] ?? null
   /* Where the recommended slots fall, so the calendar and the time grid can mark
@@ -440,74 +433,28 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         </div>
         <div style={{ background: '#fff', borderRadius: R.card, overflow: 'hidden',
           /* The card is lit from underneath by the networks it is going to, so
-             the whole screen changes colour as they toggle accounts on and off.
-             Falls back to the card shadow when it is going nowhere yet. */
+             the whole screen changes colour as they toggle accounts on and off. */
           boxShadow: previewGlow ? `${CARD_SHADOW}, 0 10px 30px ${previewGlow}` : CARD_SHADOW }}>
           {/* A rail of exactly the networks it is going to, in their order and
               their own colours: where this post lands, before a word is read. */}
           <div style={{ height: 4, background: previewRail }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px 10px' }}>
-            <span style={{ width: 32, height: 32, borderRadius: '50%', background: previewAvatar, boxShadow: `0 6px 14px ${previewGlow ?? tint('mint', .28, 1)}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span style={{ fontFamily: DISPLAY, fontSize: T.control, fontWeight: 700, color: '#fff' }}>{(targets?.[0]?.name ?? 'A').trim().charAt(0).toUpperCase()}</span>
-            </span>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: T.control, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
-                {targets === null ? 'Loading…' : chosen.size === 0 ? 'Nowhere yet'
-                  : shownAccount ? shownAccount.name
-                  : previewOf ? platformName(previewOf)
-                  : chosen.size === 1 ? (targets.find((t) => chosen.has(t.accountId))?.name ?? 'One account') : `${chosen.size} accounts`}
+          <PostPreview
+            platform={previewOf}
+            post={{
+              name: shownAccount?.name ?? (chosen.size === 1 ? (targets ?? []).find((t) => chosen.has(t.accountId))?.name ?? 'Your business' : targets?.[0]?.name ?? 'Your business'),
+              caption: shownText,
+              media,
+              tagged: taggedList,
+              firstComment,
+              location: tagLocation ? ownPageName : null,
+              whenWords,
+            }}
+            marks={(targets ?? []).filter((t) => chosen.has(t.accountId)).slice(0, 5).map((t, i) => (
+              <span key={t.accountId} style={{ marginLeft: i ? -6 : 0, width: 22, height: 22, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <BrandOrMark provider={t.platform} size={13} />
               </span>
-              {tagLocation && ownPageName && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: T.note, color: C.greenDk, marginTop: 1 }}>
-                  <MapPin size={11} />{ownPageName}
-                </span>
-              )}
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center' }}>
-              {(targets ?? []).filter((t) => chosen.has(t.accountId) && (!previewOf || t.platform === previewOf)).slice(0, 5).map((t, i) => (
-                <span key={t.accountId} style={{ marginLeft: i ? -6 : 0, width: 22, height: 22, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <BrandOrMark provider={t.platform} size={13} />
-                </span>
-              ))}
-            </span>
-          </div>
-
-          {media ? (
-            media.isVideo
-              ? <video src={media.preview} muted playsInline style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', background: '#000' }} />
-              : <img src={media.preview} alt="" style={{ display: 'block', width: '100%', maxHeight: 300, objectFit: 'cover', background: '#000' }} />
-          ) : (
-            <div style={{ minHeight: 96, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: T.control,
-              background: `linear-gradient(160deg, ${tint('mint', .08)}, ${tint('brand', .08)})`, borderTop: `1px solid ${C.line}`, borderBottom: `1px solid ${C.line}` }}>
-              <ImageIcon size={16} /> No photo yet
-            </div>
-          )}
-
-          <div style={{ padding: '12px 14px 14px' }}>
-            <div style={{ fontSize: T.body, lineHeight: 1.5, color: shownText.trim() ? C.ink : C.faint, whiteSpace: 'pre-wrap' }}>
-              {shownText.trim().slice(0, fold || undefined) || 'Your caption will show here.'}
-              {/* Everything past the fold, greyed, with the "more" the feed will
-                  actually show. Not hidden: they should be able to see what they
-                  wrote AND see that a scrolling customer will not. */}
-              {fold > 0 && shownText.trim().length > fold && (
-                <>
-                  <span style={{ color: C.faint, fontWeight: 600 }}> … more</span>
-                  <span style={{ display: 'block', marginTop: 6, paddingTop: 6, borderTop: `1px dashed ${C.line}`, color: C.faint, fontSize: T.label, lineHeight: 1.45 }}>
-                    {shownText.trim().slice(fold)}
-                  </span>
-                </>
-              )}
-            </div>
-            {taggedList.length > 0 && (
-              <div style={{ fontSize: T.label, color: C.greenDk, marginTop: 6 }}>with {taggedList.map((h) => '@' + h).join(' ')}</div>
-            )}
-            {firstComment.trim() && (
-              <div style={{ fontSize: T.label, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
-                <b style={{ fontWeight: 600, color: C.ink }}>First comment</b> {firstComment.trim()}
-              </div>
-            )}
-            <div style={{ fontSize: T.note, color: C.mute, marginTop: 8 }}>{whenWords}</div>
-          </div>
+            ))}
+          />
         </div>
 
         {/* ── PHOTO ────────────────────────────────────────────────────────── */}
