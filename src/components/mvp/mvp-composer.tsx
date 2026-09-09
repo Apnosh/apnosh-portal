@@ -53,6 +53,13 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   const [done, setDone] = useState<string[] | null>(null)
   const [media, setMedia] = useState<Media | null>(null)
   const [uploading, setUploading] = useState(false)
+  /* THE SERVICE MODEL, made a control. The owner can do this themselves or pay to
+     have it done, and the same post moves between them, so this is the first
+     decision on the screen rather than a link at the bottom. It changes what the
+     screen asks for: a handoff is a BRIEF, not a post, so media stops being
+     required (staff will shoot or source it) and the accounts become a
+     preference rather than an address. */
+  const [mode, setMode] = useState<'self' | 'apnosh'>('self')
 
   useEffect(() => {
     const zone = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles' } catch { return 'America/Los_Angeles' } })()
@@ -79,15 +86,17 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
      counted: "Instagram needs a photo" is something an owner can act on, and a
      disabled button with no reason is the thing everyone hates. */
   const blocked = useMemo(() => {
-    if (media || !targets) return [] as string[]
+    if (mode === 'apnosh' || media || !targets) return [] as string[]
     return targets.filter((t) => chosen.has(t.accountId) && NEEDS_MEDIA.has(t.platform))
       .map((t) => t.platform.charAt(0).toUpperCase() + t.platform.slice(1))
-  }, [media, targets, chosen])
+  }, [mode, media, targets, chosen])
 
-  const canSend = useMemo(() =>
-    !busy && !uploading && chosen.size > 0 && blocked.length === 0
-    && (text.trim().length > 0 || !!media) && (when !== 'pick' || !!pickAt),
-    [busy, uploading, chosen, blocked, text, media, when, pickAt])
+  const canSend = useMemo(() => {
+    if (busy || uploading) return false
+    if (mode === 'apnosh') return text.trim().length > 0
+    return chosen.size > 0 && blocked.length === 0
+      && (text.trim().length > 0 || !!media) && (when !== 'pick' || !!pickAt)
+  }, [busy, uploading, mode, chosen, blocked, text, media, when, pickAt])
 
   async function pickFile(file: File) {
     setErr(null); setUploading(true)
@@ -117,7 +126,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         : { kind: 'at', iso: new Date(pickAt).toISOString(), timezone: tz }
       const r = await fetch('/api/dashboard/social-publish', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, content: text.trim(), accountIds: [...chosen], mediaUrls: media ? [media.url] : [], when: w }),
+        body: JSON.stringify({ clientId, content: text.trim(), accountIds: [...chosen], mediaUrls: media ? [media.url] : [], when: w, handoff: mode === 'apnosh' }),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not publish')
@@ -136,11 +145,13 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             <Check size={28} color={C.greenDk} />
           </div>
           <div style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.01em', marginBottom: 7 }}>
-            {when === 'now' ? 'It is live' : 'It is scheduled'}
+            {mode === 'apnosh' ? 'We have got it' : when === 'now' ? 'It is live' : 'It is scheduled'}
           </div>
           <div style={{ fontSize: 14, color: C.mute, lineHeight: 1.5, maxWidth: 300, margin: '0 auto' }}>
-            {done.length ? done.join(', ') : 'Your accounts'}
-            {when === 'best' && best ? ` · ${best.label}` : when === 'pick' && pickAt ? ` · ${new Date(pickAt).toLocaleString()}` : ''}
+            {mode === 'apnosh'
+              ? 'Your team will write it up and send it back for your OK before anything goes out.'
+              : done.length ? done.join(', ') : 'Your accounts'}
+            {mode === 'apnosh' ? '' : when === 'best' && best ? ` · ${best.label}` : when === 'pick' && pickAt ? ` · ${new Date(pickAt).toLocaleString()}` : ''}
           </div>
           <button type="button" onClick={() => router.push('/dashboard/insights/posts')}
             style={{ marginTop: 22, font: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '11px 22px', borderRadius: 99, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer' }}>
@@ -169,6 +180,26 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
       `}</style>
 
       <div style={{ padding: '6px 16px 140px' }}>
+
+        {/* Hands-on or hands-off, before anything else, because it changes what
+            the rest of the screen is asking for. */}
+        <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 99, background: '#f0f1f0', marginBottom: 14 }}>
+          {([['self', 'I will post it'], ['apnosh', 'Apnosh does it']] as [typeof mode, string][]).map(([k, label]) => {
+            const on = mode === k
+            return (
+              <button key={k} type="button" onClick={() => setMode(k)} aria-pressed={on}
+                style={{ flex: 1, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500, padding: '9px 0', borderRadius: 99, border: 'none', cursor: 'pointer',
+                  color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 1px 3px rgba(0,0,0,.10)' : 'none' }}>
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        {mode === 'apnosh' && (
+          <div style={{ fontSize: 13, color: C.mute, lineHeight: 1.5, margin: '0 2px 14px' }}>
+            Tell us the idea. Your team writes it, makes the picture if it needs one, and sends it back for your OK before anything goes out. Managed posting is charged on your plan.
+          </div>
+        )}
 
         {/* ── THE POST ITSELF ──────────────────────────────────────────────
             Not a form with a preview beside it: the thing on screen IS the post.
@@ -225,9 +256,9 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
                 {uploading ? <Loader2 size={22} className="mvp-spin" color={C.greenDk} /> : <ImagePlus size={21} />}
               </span>
               <span style={{ fontSize: 14, fontWeight: 600, color: C.ink }}>
-                {uploading ? 'Uploading…' : 'Add a photo or video'}
+                {uploading ? 'Uploading…' : mode === 'apnosh' ? 'Add a photo, or leave it to us' : 'Add a photo or video'}
               </span>
-              {!uploading && <span style={{ fontSize: 11.5, color: C.mute }}>Instagram and TikTok need one</span>}
+              {!uploading && <span style={{ fontSize: 11.5, color: C.mute }}>{mode === 'apnosh' ? 'Optional' : 'Instagram and TikTok need one'}</span>}
               <input type="file" accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/quicktime" disabled={uploading}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickFile(f); e.target.value = '' }}
                 style={{ display: 'none' }} />
@@ -242,7 +273,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               onChange={(e) => setText(e.target.value)}
               rows={media ? 3 : 5}
               maxLength={2200}
-              placeholder="Write it the way you would say it…"
+              placeholder={mode === 'apnosh' ? 'What do you want this post to be about?' : 'Write it the way you would say it…'}
               style={{ fontSize: 15.5, lineHeight: 1.55, color: C.ink, minHeight: 62 }}
             />
             {text.length > 1800 && (
@@ -254,7 +285,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         </div>
 
         {/* ── WHERE ───────────────────────────────────────────────────────── */}
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>Where it goes</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>{mode === 'apnosh' ? 'Where you would like it' : 'Where it goes'}</div>
         {targets === null ? (
           <div style={{ fontSize: 13.5, color: C.faint, padding: '2px' }}>Loading your accounts…</div>
         ) : targets.length === 0 ? (
@@ -281,7 +312,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         )}
 
         {/* ── WHEN ────────────────────────────────────────────────────────── */}
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>When</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>{mode === 'apnosh' ? 'When you would like it out' : 'When'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {([
             ['now', 'Now', <Send key="s" size={14} />],
@@ -330,11 +361,13 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         onClick={() => void send()}
         disabled={!canSend}
         saving={busy}
-        label={when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'}
+        label={mode === 'apnosh' ? 'Send it to Apnosh'
+          : when === 'now' ? `Post to ${chosen.size || 'no'} account${chosen.size === 1 ? '' : 's'}` : 'Schedule it'}
         /* The decision, restated in words before they commit to it. A button
            that says Post is not the same as being told what is about to happen. */
         hint={
-          chosen.size === 0 ? 'Pick where it goes.'
+          mode === 'apnosh' ? 'Nothing goes out until you have seen it.'
+            : chosen.size === 0 ? 'Pick where it goes.'
             : `${when === 'now' ? 'Posting' : 'Scheduled'} to ${chosen.size} account${chosen.size === 1 ? '' : 's'}${when === 'best' && best ? `, ${best.label}` : ''}. Public, as your business.`
         }
       />

@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { listPostTargets, bestSlots, createPost } from '@/lib/channels/adapters/zernio'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -71,9 +72,14 @@ export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as {
     clientId?: string; content?: string; accountIds?: string[]; mediaUrls?: string[]
     when?: { kind?: string; iso?: string; timezone?: string }
+    /** true = do not publish; hand it to Apnosh as a draft to write and send */
+    handoff?: boolean
   }
-  const { clientId, content, accountIds, mediaUrls, when } = body
-  if (!clientId || !Array.isArray(accountIds) || accountIds.length === 0) {
+  const { clientId, content, mediaUrls, when } = body
+  const accountIds: string[] = Array.isArray(body.accountIds) ? body.accountIds : []
+  /* A handoff needs no accounts chosen: the owner is describing what they want,
+     not addressing it. Publishing still does. */
+  if (!clientId || (!body.handoff && accountIds.length === 0)) {
     return NextResponse.json({ error: 'clientId and at least one account required' }, { status: 400 })
   }
   const access = await checkClientAccess(clientId)
@@ -82,6 +88,39 @@ export async function POST(req: NextRequest) {
   }
   if ((content ?? '').trim().length > 2200) {
     return NextResponse.json({ error: 'That caption is too long for at least one of these platforms' }, { status: 400 })
+  }
+
+  /* ── HAND IT TO APNOSH ──────────────────────────────────────────────────
+     The owner can do this themselves or pay to have it done, and the SAME post
+     has to be able to move between them. That machinery already exists:
+     content_drafts carries proposed_by, approved_by, a caption, target platforms,
+     media and a target date, and the staff drafts queue reads status idea, draft
+     and revising. The composer was publishing straight past all of it.
+
+     A handoff is a BRIEF, not a post, so the rules relax: no media required
+     because staff will shoot or source it, and platforms are a preference rather
+     than a requirement. What the owner is sending is an intention. */
+  if (body.handoff === true) {
+    try {
+      const admin = createAdminClient()
+      const targets = await listPostTargets(clientId)
+      const picked = targets.filter((t) => accountIds.includes(t.accountId))
+      const { error } = await admin.from('content_drafts').insert({
+        client_id: clientId,
+        status: 'draft',
+        idea: (content ?? '').trim().slice(0, 300) || 'A post the owner asked us to write',
+        caption: (content ?? '').trim() || null,
+        target_platforms: picked.map((t) => t.platform),
+        media_urls: Array.isArray(mediaUrls) ? mediaUrls.filter((u) => typeof u === 'string' && u.startsWith('https://')) : [],
+        target_publish_date: when?.kind === 'at' && when.iso ? when.iso.slice(0, 10) : null,
+        proposed_by: access.userId ?? null,
+        proposed_via: 'owner_composer',
+      })
+      if (error) throw new Error(error.message)
+      return NextResponse.json({ ok: true, handed: true, posted: picked.map((t) => t.platform) })
+    } catch (e) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not send it over' }, { status: 502 })
+    }
   }
 
   try {
