@@ -29,6 +29,12 @@ export default function AllPostsPage() {
   const router = useRouter()
   const { client, loading: clientLoading } = useClient()
   const [posts, setPosts] = useState<InsightsPost[] | null>(null)
+  /* Two owners asked for this by name in both rounds of testing. Views are NOT
+     comparable across platforms -- a TikTok number dwarfs an Instagram one for
+     the same content -- so "best received" ranks by the share of viewers who
+     reacted, which is. The labels say which is which rather than leaving the
+     owner to work out that a sort by views is a sort by platform. */
+  const [sort, setSort] = useState<'newest' | 'views' | 'engagement'>('newest')
   const [total, setTotal] = useState(0)
   const [hasMore, setHasMore] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -37,13 +43,13 @@ export default function AllPostsPage() {
 
   const fetchPage = useCallback(async (offset: number): Promise<InsightsPost[]> => {
     if (!client?.id) return []
-    const r = await fetch(`/api/dashboard/social-posts?clientId=${client.id}&offset=${offset}&limit=${PAGE}`, { cache: 'no-store' })
+    const r = await fetch(`/api/dashboard/social-posts?clientId=${client.id}&offset=${offset}&limit=${PAGE}&sort=${sort}`, { cache: 'no-store' })
     if (!r.ok) throw new Error('Could not load posts')
     const j = await r.json()
     setTotal(j.total ?? 0)
     setHasMore(!!j.hasMore)
     return (j.posts ?? []) as InsightsPost[]
-  }, [client?.id])
+  }, [client?.id, sort])
 
   useEffect(() => {
     if (!client?.id) return
@@ -53,7 +59,7 @@ export default function AllPostsPage() {
       .then((p) => { if (live) setPosts(p) })
       .catch((e) => { if (live) setError(e instanceof Error ? e.message : 'Could not load posts') })
     return () => { live = false }
-  }, [client?.id, fetchPage])
+  }, [client?.id, sort, fetchPage])
 
   const loadMore = async () => {
     if (busy || !posts) return
@@ -111,6 +117,27 @@ export default function AllPostsPage() {
           {posts && posts.length > 0 && (
             <>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                  {([['newest', 'Newest'], ['views', 'Most views'], ['engagement', 'Best received']] as const).map(([k, label]) => (
+                    <button
+                      key={k}
+                      type="button"
+                      onClick={() => { if (k !== sort) { setSort(k); setPosts(null) } }}
+                      style={{
+                        font: 'inherit', fontSize: 12.5, fontWeight: sort === k ? 600 : 500,
+                        padding: '6px 12px', borderRadius: 99, cursor: 'pointer',
+                        color: sort === k ? '#fff' : '#6e6e73',
+                        background: sort === k ? '#1d1d1f' : '#fff',
+                        border: `0.5px solid ${sort === k ? '#1d1d1f' : '#e6e6ea'}`,
+                      }}
+                    >{label}</button>
+                  ))}
+                </div>
+                {sort === 'engagement' && (
+                  <div style={{ fontSize: 12, color: '#6e6e73', marginBottom: 10, lineHeight: 1.45 }}>
+                    The share of people who saw it and then liked or saved it. Views are not comparable between platforms; this is.
+                  </div>
+                )}
                 {/* One piece of content posted to several platforms on the same day
                     collapses into a single comparison card. Everything else is an
                     ordinary row, in the same date order as before. */}
