@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
-import { listPostTargets, bestSlots, createPost } from '@/lib/channels/adapters/zernio'
+import { listPostTargets, bestSlots, createPost, platformTextLimits } from '@/lib/channels/adapters/zernio'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
@@ -26,6 +26,8 @@ export const dynamic = 'force-dynamic'
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 /** A slot built on fewer than this many posts is not a pattern. */
 const MIN_POSTS_FOR_A_RECOMMENDATION = 3
+/** How many recommended slots to offer at once. */
+const MOST_RECOMMENDATIONS = 3
 
 /** The next time it will be `dayOfWeek` at `hourUtc`, as an instant. */
 function nextOccurrence(dayOfWeek: number, hourUtc: number): Date {
@@ -49,20 +51,27 @@ export async function GET(req: NextRequest) {
   const tz = req.nextUrl.searchParams.get('tz') || 'America/Los_Angeles'
 
   try {
-    const [targets, slots] = await Promise.all([listPostTargets(clientId), bestSlots(clientId)])
-    const good = slots.filter((s) => s.posts >= MIN_POSTS_FOR_A_RECOMMENDATION)[0] ?? null
-    let best: { iso: string; label: string; posts: number } | null = null
-    if (good) {
-      const at = nextOccurrence(good.dayOfWeek, good.hourUtc)
+    const [targets, slots, limits] = await Promise.all([listPostTargets(clientId), bestSlots(clientId), platformTextLimits()])
+    /* Strongest first, and more than one: an owner offered a single "best time"
+       has to take it or leave it, and the second-best hour is usually nearly as
+       good and lands on a day that suits them better. Three is where the chips
+       stop being a choice and start being a list. */
+    const good = slots
+      .filter((s) => s.posts >= MIN_POSTS_FOR_A_RECOMMENDATION)
+      .sort((a, b) => b.posts - a.posts)
+      .slice(0, MOST_RECOMMENDATIONS)
+    const bests = good.map((g) => {
+      const at = nextOccurrence(g.dayOfWeek, g.hourUtc)
       let label = ''
       try {
         label = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long', hour: 'numeric' }).format(at)
       } catch {
-        label = `${DAYS[good.dayOfWeek]} at ${good.hourUtc}:00 UTC`
+        label = `${DAYS[g.dayOfWeek]} at ${g.hourUtc}:00 UTC`
       }
-      best = { iso: at.toISOString(), label, posts: good.posts }
-    }
-    return NextResponse.json({ targets, best, timezone: tz }, { headers: { 'Cache-Control': 'no-store' } })
+      return { iso: at.toISOString(), label, posts: g.posts }
+    })
+    /* `best` stays for anything still reading the old shape. */
+    return NextResponse.json({ targets, bests, best: bests[0] ?? null, limits, timezone: tz }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Could not load your accounts' }, { status: 502 })
   }
@@ -79,6 +88,8 @@ export async function POST(req: NextRequest) {
     tagged?: string[]
     tagLocation?: boolean
     tiktokDraft?: boolean
+    /** platform -> its own caption, for the platforms that need a different one */
+    perPlatform?: Record<string, string>
   }
   const { clientId, content, mediaUrls, when } = body
   const accountIds: string[] = Array.isArray(body.accountIds) ? body.accountIds : []
@@ -90,9 +101,6 @@ export async function POST(req: NextRequest) {
   const access = await checkClientAccess(clientId)
   if (!access.authorized) {
     return NextResponse.json({ error: access.reason ?? 'forbidden' }, { status: access.reason === 'unauthenticated' ? 401 : 403 })
-  }
-  if ((content ?? '').trim().length > 2200) {
-    return NextResponse.json({ error: 'That caption is too long for at least one of these platforms' }, { status: 400 })
   }
 
   /* ── HAND IT TO APNOSH ──────────────────────────────────────────────────
@@ -135,6 +143,29 @@ export async function POST(req: NextRequest) {
     const targets = (await listPostTargets(clientId)).filter((t) => accountIds.includes(t.accountId))
     if (!targets.length) return NextResponse.json({ error: 'Those accounts are not connected' }, { status: 400 })
 
+    /* Each platform's own caption, keyed by a platform actually being posted to.
+       A browser cannot introduce a platform this way, only override one already
+       chosen. */
+    const perPlatform: Record<string, string> = {}
+    const sent = (body.perPlatform && typeof body.perPlatform === 'object' ? body.perPlatform : {}) as Record<string, unknown>
+    for (const t of targets) {
+      const own = typeof sent[t.platform] === 'string' ? (sent[t.platform] as string).trim() : ''
+      if (own) perPlatform[t.platform] = own
+    }
+
+    /* Too long is the vendor's number, not ours, and it is per platform: the old
+       flat 2,200 was Instagram's limit applied to LinkedIn's 3,000 and X's 280
+       alike, refusing posts LinkedIn would have taken and passing ones X would
+       have cut. */
+    const limits = await platformTextLimits()
+    const over = targets
+      .map((t) => ({ platform: t.platform, text: perPlatform[t.platform] ?? (content ?? '').trim(), limit: limits[t.platform] }))
+      .find((x) => x.limit && x.text.length > x.limit)
+    if (over) {
+      const name = over.platform.charAt(0).toUpperCase() + over.platform.slice(1)
+      return NextResponse.json({ error: `That caption is ${over.text.length - over.limit!} characters too long for ${name}, which stops at ${over.limit!.toLocaleString()}.` }, { status: 400 })
+    }
+
     const w = when?.kind === 'at' && when.iso
       ? { kind: 'at' as const, iso: when.iso, timezone: when.timezone || 'America/Los_Angeles' }
       : { kind: 'now' as const }
@@ -159,6 +190,7 @@ export async function POST(req: NextRequest) {
       tagged: handles(body.tagged).slice(0, 20),
       locationId: body.tagLocation ? ownPage : null,
       tiktokDraft: body.tiktokDraft === true,
+      perPlatform,
     })
     return NextResponse.json({ ok: true, id: r.id, posted: targets.map((t) => t.platform) })
   } catch (e) {

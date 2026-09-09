@@ -22,7 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, Image as ImageIcon } from 'lucide-react'
+import { Check, Clock, Sparkles, Send, ImagePlus, X, Loader2, MapPin, AtSign, Users, MessageSquare, Image as ImageIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpGroup, MvpSaveBar, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark } from './mvp-insights'
@@ -44,6 +44,14 @@ const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Frid
    is 24 buttons where 14 would do. */
 const HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 const hourLabel = (h: number) => `${h % 12 === 0 ? 12 : h % 12}${h < 12 ? 'am' : 'pm'}`
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+/* How far ahead a post may be parked. The vendor holds it and sends it at the
+   time, so no platform's own scheduling window applies; this is a horizon that
+   keeps the calendar finite, not a platform rule. */
+const DAYS_AHEAD = 90
+const platformName = (p: string) => (p === 'tiktok' ? 'TikTok' : p === 'linkedin' ? 'LinkedIn' : p === 'youtube' ? 'YouTube' : p.charAt(0).toUpperCase() + p.slice(1))
+const midnight = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 const addChip = (on: boolean): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13,
   fontWeight: on ? 600 : 500, padding: '8px 13px', borderRadius: 99, cursor: 'pointer', lineHeight: 1,
@@ -54,7 +62,8 @@ const addChip = (on: boolean): React.CSSProperties => ({
 export default function MvpComposer({ clientId }: { clientId: string }) {
   const router = useRouter()
   const [targets, setTargets] = useState<Target[] | null>(null)
-  const [best, setBest] = useState<Best | null>(null)
+  const [bests, setBests] = useState<Best[]>([])
+  const [bestIdx, setBestIdx] = useState(0)
   const [tz, setTz] = useState('America/Los_Angeles')
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [text, setText] = useState('')
@@ -80,10 +89,27 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
   const [firstComment, setFirstComment] = useState('')
   const [tagLocation, setTagLocation] = useState(false)
   const [tiktokDraft, setTiktokDraft] = useState(false)
+  /* platform -> its own caption. Absent means "use the one above". */
+  const [perPlatform, setPerPlatform] = useState<Record<string, string>>({})
+  const [openCaption, setOpenCaption] = useState<string | null>(null)
+  /* What each platform will actually accept, from the vendor rather than from
+     memory: Instagram stops at 2,200, LinkedIn at 3,000, X at 280. */
+  const [limits, setLimits] = useState<Record<string, number>>({})
   /* Scheduling as two taps instead of a keyboard: a day, then a time. */
-  /* If the last slot of the day has already passed, today is not offerable, so
-     open on tomorrow rather than on a grid where every button is dead. */
-  const [day, setDay] = useState(() => (new Date().getHours() >= HOURS[HOURS.length - 1] ? 1 : 0))
+  /* A real date, not an offset from today: an owner booking a holiday post in
+     six weeks should not have to count days. If the last slot of today has
+     already passed, open on tomorrow rather than on a grid of dead buttons. */
+  const [dayAt, setDayAt] = useState<Date>(() => {
+    const d = midnight(new Date())
+    if (new Date().getHours() >= HOURS[HOURS.length - 1]) d.setDate(d.getDate() + 1)
+    return d
+  })
+  const [monthAt, setMonthAt] = useState<Date>(() => {
+    const d = midnight(new Date())
+    if (new Date().getHours() >= HOURS[HOURS.length - 1]) d.setDate(d.getDate() + 1)
+    d.setDate(1)
+    return d
+  })
   const [hour, setHour] = useState<number | null>(null)
 
   useEffect(() => {
@@ -97,7 +123,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         const t = (j.targets ?? []) as Target[]
         setTargets(t)
         setChosen(new Set(t.map((x) => x.accountId)))
-        setBest(j.best ?? null)
+        setBests((j.bests ?? (j.best ? [j.best] : [])) as Best[])
+        setLimits((j.limits ?? {}) as Record<string, number>)
       })
       .catch((e) => { if (live) { setErr(e instanceof Error ? e.message : 'Could not load your accounts'); setTargets([]) } })
     return () => { live = false }
@@ -115,41 +142,83 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     return targets.filter((t) => chosen.has(t.accountId) && NEEDS_MEDIA.has(t.platform))
       .map((t) => t.platform.charAt(0).toUpperCase() + t.platform.slice(1))
   }, [mode, media, targets, chosen])
+  /* One entry per PLATFORM in play, not per account: two Instagram accounts get
+     one caption between them, because the difference that matters is Instagram
+     against LinkedIn, not one handle against another. */
+  const platformsInPlay = useMemo(() => {
+    const seen: string[] = []
+    for (const t of targets ?? []) if (chosen.has(t.accountId) && !seen.includes(t.platform)) seen.push(t.platform)
+    return seen
+  }, [targets, chosen])
+  /* The tightest limit among the platforms still on the shared caption. Naming
+     the platform matters more than the number: "1,900 over for X" tells the owner
+     which one to give its own. */
+  const sharedOn = useMemo(() => platformsInPlay.filter((pl) => !perPlatform[pl]?.trim()), [platformsInPlay, perPlatform])
+  const sharedLimit = useMemo(() => {
+    const on = sharedOn.map((pl) => ({ pl, n: limits[pl] })).filter((x) => x.n > 0)
+    return on.length ? on.reduce((a, b) => (b.n < a.n ? b : a)) : null
+  }, [sharedOn, limits])
+
+
+  /* Any platform whose caption -- shared or its own -- is past what it accepts.
+     Named, so the fix is obvious. */
+  const tooLong = useMemo(() => {
+    if (mode === 'apnosh' || !targets) return null as null | { platform: string; over: number; limit: number }
+    for (const pl of platformsInPlay) {
+      const n = limits[pl]
+      if (!n) continue
+      const body = (perPlatform[pl] ?? text).trim()
+      if (body.length > n) return { platform: pl, over: body.length - n, limit: n }
+    }
+    return null
+  }, [mode, targets, platformsInPlay, limits, perPlatform, text])
 
   const canSend = useMemo(() => {
     if (busy || uploading) return false
     if (mode === 'apnosh') return text.trim().length > 0
+    if (tooLong) return false
     return chosen.size > 0 && blocked.length === 0
       && (text.trim().length > 0 || !!media) && (when !== 'pick' || hour != null)
-  }, [busy, uploading, mode, chosen, blocked, text, media, when, hour])
+  }, [busy, uploading, mode, chosen, blocked, text, media, when, hour, tooLong])
 
   /* The client's own Facebook page, which is the only thing Instagram accepts as
      a location and the only one obtainable without a place search. When they have
      none, the option is simply not offered. */
   const ownPageName = (targets ?? []).find((t) => t.pageId)?.name ?? null
   const taggedList = tagged.split(/[\s,]+/).map((x) => x.replace(/^@+/, '')).filter(Boolean)
-  /* Where the recommended slot falls, so the time grid can mark it. */
-  const bestAt = best ? new Date(best.iso) : null
-  const bestHour = bestAt ? bestAt.getHours() : null
-  const bestDayOffset = bestAt
-    ? Math.round((new Date(bestAt).setHours(0, 0, 0, 0) - new Date().setHours(0, 0, 0, 0)) / 86400000)
-    : null
+  /* The preview mirrors whichever caption is in front of the owner: opening the
+     LinkedIn box and still seeing the Instagram caption below it is the exact
+     confusion a preview exists to remove. */
+  const shownText = openCaption ? (perPlatform[openCaption] ?? text) : text
+
+  const pickedBest = bests[bestIdx] ?? null
+  /* Where the recommended slots fall, so the calendar and the time grid can mark
+     them: a dot on the day, a star on the hour. */
+  const bestDates = useMemo(() => bests.map((b) => new Date(b.iso)), [bests])
+  const bestHoursOnDay = useMemo(
+    () => new Set(bestDates.filter((d) => sameDay(d, dayAt)).map((d) => d.getHours())),
+    [bestDates, dayAt],
+  )
+
+  const today = midnight(new Date())
+  const dayWords = sameDay(dayAt, today) ? 'Today'
+    : dayAt.getTime() - today.getTime() === 86400000 ? 'Tomorrow'
+    : `${DAY_NAMES[dayAt.getDay()]} the ${dayAt.getDate()}`
 
   const whenWords = mode === 'apnosh' ? 'A draft for your team'
     : when === 'now' ? 'Going out now'
-    : when === 'best' && best ? best.label
-    : hour != null ? `${day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : DAY_NAMES[(new Date().getDay() + day) % 7]} at ${hourLabel(hour)}`
+    : when === 'best' && pickedBest ? pickedBest.label
+    : hour != null ? `${dayWords} at ${hourLabel(hour)}`
     : 'Pick a day and a time'
 
   /* The chosen day and hour as an instant. Built from the owner's own clock, so
      "Thursday at 6" is six where they are. */
   const pickedAt = useMemo(() => {
     if (hour == null) return null
-    const d = new Date()
-    d.setDate(d.getDate() + day)
+    const d = new Date(dayAt)
     d.setHours(hour, 0, 0, 0)
     return d
-  }, [day, hour])
+  }, [dayAt, hour])
 
   async function pickFile(file: File) {
     setErr(null); setUploading(true)
@@ -175,7 +244,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
     setBusy(true); setErr(null)
     try {
       const w = when === 'now' ? { kind: 'now' }
-        : when === 'best' && best ? { kind: 'at', iso: best.iso, timezone: tz }
+        : when === 'best' && pickedBest ? { kind: 'at', iso: pickedBest.iso, timezone: tz }
         : { kind: 'at', iso: (pickedAt ?? new Date()).toISOString(), timezone: tz }
       const r = await fetch('/api/dashboard/social-publish', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -185,7 +254,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           firstComment: firstComment.trim() || undefined,
           collaborators: collabs.split(/[\s,]+/).filter(Boolean),
           tagged: tagged.split(/[\s,]+/).filter(Boolean),
-          tagLocation, tiktokDraft,
+          tagLocation, tiktokDraft, perPlatform,
         }),
       })
       const j = await r.json().catch(() => ({}))
@@ -211,7 +280,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             {mode === 'apnosh'
               ? 'Your team will write it up and send it back for your OK before anything goes out.'
               : done.length ? done.join(', ') : 'Your accounts'}
-            {mode === 'apnosh' ? '' : when === 'best' && best ? ` · ${best.label}` : when === 'pick' && pickedAt ? ` · ${pickedAt.toLocaleString([], { weekday: 'long', hour: 'numeric' })}` : ''}
+            {mode === 'apnosh' ? '' : when === 'best' && pickedBest ? ` · ${pickedBest.label}` : when === 'pick' && pickedAt ? ` · ${pickedAt.toLocaleString([], { weekday: 'long', month: 'short', day: 'numeric', hour: 'numeric' })}` : ''}
           </div>
           <button type="button" onClick={() => router.push(mode === 'apnosh' || when !== 'now' ? '/dashboard/scheduled' : '/dashboard/insights/posts')}
             style={{ marginTop: 22, font: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '11px 22px', borderRadius: 99, border: 'none', background: C.ink, color: '#fff', cursor: 'pointer' }}>
@@ -270,6 +339,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
                 {targets === null ? 'Loading…' : chosen.size === 0 ? 'Nowhere yet'
+                  : openCaption ? `On ${platformName(openCaption)}`
                   : chosen.size === 1 ? (targets.find((t) => chosen.has(t.accountId))?.name ?? 'One account') : `${chosen.size} accounts`}
               </span>
               {tagLocation && ownPageName && (
@@ -279,7 +349,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               )}
             </span>
             <span style={{ display: 'flex', alignItems: 'center' }}>
-              {(targets ?? []).filter((t) => chosen.has(t.accountId)).slice(0, 5).map((t, i) => (
+              {(targets ?? []).filter((t) => chosen.has(t.accountId) && (!openCaption || t.platform === openCaption)).slice(0, 5).map((t, i) => (
                 <span key={t.accountId} style={{ marginLeft: i ? -6 : 0, width: 22, height: 22, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <BrandOrMark provider={t.platform} size={13} />
                 </span>
@@ -299,8 +369,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           )}
 
           <div style={{ padding: '11px 14px 13px' }}>
-            <div style={{ fontSize: 14, lineHeight: 1.5, color: text.trim() ? C.ink : C.faint, whiteSpace: 'pre-wrap', maxHeight: 92, overflow: 'hidden' }}>
-              {text.trim() || 'Your caption will show here.'}
+            <div style={{ fontSize: 14, lineHeight: 1.5, color: shownText.trim() ? C.ink : C.faint, whiteSpace: 'pre-wrap', maxHeight: 92, overflow: 'hidden' }}>
+              {shownText.trim() || 'Your caption will show here.'}
             </div>
             {taggedList.length > 0 && (
               <div style={{ fontSize: 12.5, color: C.greenDk, marginTop: 6 }}>with {taggedList.map((h) => '@' + h).join(' ')}</div>
@@ -314,26 +384,8 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           </div>
         </div>
 
-        {/* ── CAPTION ──────────────────────────────────────────────────────── */}
-        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '24px 2px 7px' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Caption</span>
-          {chosen.size > 1 && <span style={{ fontSize: 11.5, color: C.faint }}>Used on all {chosen.size}</span>}
-        </div>
-        <textarea
-          className="cmp-in"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={5}
-          maxLength={2200}
-          placeholder={mode === 'apnosh' ? 'What do you want this post to be about?' : 'Write it the way you would say it…'}
-          style={{ lineHeight: 1.55, resize: 'vertical' }}
-        />
-        {text.length > 1800 && (
-          <div style={{ fontSize: 11.5, color: text.length > 2100 ? C.coral : C.faint, marginTop: 5, textAlign: 'right' }}>{2200 - text.length} left</div>
-        )}
-
         {/* ── PHOTO ────────────────────────────────────────────────────────── */}
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 8px' }}>Photo or video</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '24px 2px 8px' }}>Photo or video</div>
         {media ? (
           <button type="button" onClick={() => setMedia(null)} className="cmp-x"
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: 11, borderRadius: 14, border: `1px solid ${C.line}`, background: '#fff', cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
@@ -354,6 +406,83 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickFile(f); e.target.value = '' }} style={{ display: 'none' }} />
           </label>
         )}
+
+        {/* ── CAPTION ──────────────────────────────────────────────────────── */}
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '24px 2px 7px' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: C.mute }}>Caption</span>
+          {sharedOn.length > 1 && <span style={{ fontSize: 11.5, color: C.faint }}>Used on {sharedOn.map(platformName).join(', ')}</span>}
+        </div>
+        <textarea
+          className="cmp-in"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={5}
+          placeholder={mode === 'apnosh' ? 'What do you want this post to be about?' : 'Write it the way you would say it…'}
+          style={{ lineHeight: 1.55, resize: 'vertical' }}
+        />
+        {sharedLimit && text.length > sharedLimit.n * 0.8 && (
+          <div style={{ fontSize: 11.5, marginTop: 5, textAlign: 'right', color: text.length > sharedLimit.n ? C.coral : C.faint }}>
+            {text.length > sharedLimit.n
+              ? `${(text.length - sharedLimit.n).toLocaleString()} over what ${platformName(sharedLimit.pl)} takes`
+              : `${(sharedLimit.n - text.length).toLocaleString()} left on ${platformName(sharedLimit.pl)}`}
+          </div>
+        )}
+
+        {/* ── A DIFFERENT CAPTION WHERE IT READS DIFFERENTLY ────────────────
+            LinkedIn is paragraphs and no hashtag wall; Instagram is one line and
+            then the tags; TikTok is shorter than both. One caption everywhere is
+            the right default and the wrong ceiling, so each platform can be given
+            its own without leaving the screen. */}
+        {mode === 'self' && platformsInPlay.length > 1 && (
+          <>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 11 }}>
+              {platformsInPlay.map((pl) => {
+                const own = !!perPlatform[pl]?.trim()
+                const open = openCaption === pl
+                return (
+                  <button key={pl} type="button" className="cmp-x" aria-pressed={open}
+                    onClick={() => {
+                      setOpenCaption(open ? null : pl)
+                      /* Opening one starts it from the shared caption: the owner is
+                         tailoring what they wrote, not starting over. */
+                      if (!open && perPlatform[pl] === undefined) setPerPlatform((c) => ({ ...c, [pl]: text }))
+                    }}
+                    style={{ ...addChip(own), fontSize: 12.5, padding: '7px 12px' }}>
+                    <BrandOrMark provider={pl} size={13} />
+                    {own ? `${platformName(pl)} has its own` : `Different for ${platformName(pl)}`}
+                  </button>
+                )
+              })}
+            </div>
+            {openCaption && (() => {
+              const pl = openCaption
+              const val = perPlatform[pl] ?? ''
+              const lim = limits[pl] ?? 0
+              return (
+                <div style={{ marginTop: 10, padding: 11, borderRadius: 14, background: tint('brand', .05), border: `1px solid ${C.line}` }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 7 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: C.ink }}>On {platformName(pl)}</span>
+                    <button type="button" className="cmp-x"
+                      onClick={() => { setPerPlatform((c) => { const n = { ...c }; delete n[pl]; return n }); setOpenCaption(null) }}
+                      style={{ font: 'inherit', fontSize: 11.5, color: C.greenDk, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                      Use the same one
+                    </button>
+                  </div>
+                  <textarea className="cmp-in" rows={5} value={val}
+                    onChange={(e) => setPerPlatform((c) => ({ ...c, [pl]: e.target.value }))}
+                    placeholder={`How it should read on ${platformName(pl)}…`}
+                    style={{ lineHeight: 1.55, resize: 'vertical' }} />
+                  {lim > 0 && val.length > lim * 0.8 && (
+                    <div style={{ fontSize: 11.5, marginTop: 5, textAlign: 'right', color: val.length > lim ? C.coral : C.faint }}>
+                      {val.length > lim ? `${(val.length - lim).toLocaleString()} over` : `${(lim - val.length).toLocaleString()} left`}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+          </>
+        )}
+
 
         {/* ── ADD TO THIS POST ─────────────────────────────────────────────
             Revealed, not displayed. Every option visible at once is a cockpit,
@@ -426,75 +555,166 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         {/* ── WHEN ─────────────────────────────────────────────────────────── */}
         <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '22px 2px 9px' }}>{mode === 'apnosh' ? 'When you would like it out' : 'When'}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-          {([
-            ['now', mode === 'apnosh' ? 'As soon as you can' : 'Now', <Send key="s" size={14} />],
-            ...(best ? [['best', best.label, <Sparkles key="b" size={14} />] as [string, string, React.ReactNode]] : []),
-            ['pick', 'Choose', <Clock key="c" size={14} />],
-          ] as [string, string, React.ReactNode][]).map(([k, label, icon]) => {
-            const on = when === k
-            const smart = k === 'best'
+          {(() => {
+            const chipStyle = (on: boolean, smart: boolean): React.CSSProperties => ({
+              display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500,
+              padding: '9px 15px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? '#fff' : C.mute,
+              background: on ? (smart ? gradOf('brand') : C.ink) : '#fff', border: `1px solid ${on ? 'transparent' : C.line}`,
+              boxShadow: on && smart ? glow('brand', .3) : 'none',
+            })
             return (
-              <button key={k} type="button" onClick={() => setWhen(k as 'now' | 'best' | 'pick')} aria-pressed={on} className="cmp-x"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, font: 'inherit', fontSize: 13.5, fontWeight: on ? 600 : 500,
-                  padding: '9px 15px', borderRadius: 99, cursor: 'pointer', lineHeight: 1, color: on ? '#fff' : C.mute,
-                  background: on ? (smart ? gradOf('brand') : C.ink) : '#fff', border: `1px solid ${on ? 'transparent' : C.line}`,
-                  boxShadow: on && smart ? glow('brand', .3) : 'none' }}>
-                {icon}{label}
-              </button>
+              <>
+                <button type="button" onClick={() => setWhen('now')} aria-pressed={when === 'now'} className="cmp-x" style={chipStyle(when === 'now', false)}>
+                  <Send size={14} />{mode === 'apnosh' ? 'As soon as you can' : 'Now'}
+                </button>
+                {/* ONE chip, and the slots underneath it. Three recommendations
+                    on this row put five chips over two ragged lines and made the
+                    strongest one no easier to see than the weakest. */}
+                {bests.length > 0 && (
+                  <button type="button" className="cmp-x" aria-pressed={when === 'best'} style={chipStyle(when === 'best', true)}
+                    onClick={() => setWhen('best')}>
+                    <Sparkles size={14} />{bests.length === 1 ? bests[0].label : 'Best time'}
+                  </button>
+                )}
+                <button type="button" onClick={() => setWhen('pick')} aria-pressed={when === 'pick'} className="cmp-x" style={chipStyle(when === 'pick', false)}>
+                  <Clock size={14} />Choose
+                </button>
+              </>
             )
-          })}
+          })()}
         </div>
-        {when === 'best' && best && (
+        {when === 'best' && bests.length === 1 && (
           <div style={{ fontSize: 12.5, color: C.mute, marginTop: 10, lineHeight: 1.45, padding: '0 2px' }}>
-            Your posts have done best then, across {best.posts} of them.
+            Your posts have done best then, across {bests[0].posts} of them.
           </div>
         )}
-        {when === 'pick' && (
+        {/* More than one, because a single "best time" is take it or leave it and
+            the runner-up is usually nearly as strong on a day that suits them
+            better. Each says what it rests on: a slot built on four posts and one
+            built on forty are not the same recommendation. */}
+        {when === 'best' && bests.length > 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
+            {bests.map((b, i) => {
+              const on = bestIdx === i
+              return (
+                <button key={b.iso} type="button" className="cmp-x" aria-pressed={on} onClick={() => setBestIdx(i)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit',
+                    padding: '10px 12px', borderRadius: 13, cursor: 'pointer',
+                    background: on ? tint('brand', .07) : '#fff', border: `1px solid ${on ? C.green : C.line}` }}>
+                  <span style={{ width: 16, height: 16, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: `1px solid ${on ? 'transparent' : C.line}`, background: on ? gradOf('brand') : '#fff' }}>
+                    {on && <Check size={10} color="#fff" strokeWidth={3} />}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 13.5, fontWeight: on ? 600 : 500, color: C.ink }}>{b.label}</span>
+                    <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 1 }}>
+                      {i === 0 ? 'Your strongest, ' : ''}across {b.posts} post{b.posts === 1 ? '' : 's'}
+                    </span>
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        )}
+        {when === 'pick' && (() => {
           /* A day, then a time. The old control was a datetime-local: an OS
-             keyboard on a phone, for a decision that is really "which evening". */
-          <div style={{ marginTop: 12 }}>
-            <div className="cmp-scroll" style={{ display: 'flex', gap: 7, paddingBottom: 4 }}>
-              {Array.from({ length: 7 }, (_, i) => i).map((i) => {
-                const d = new Date(); d.setDate(d.getDate() + i)
-                const on = day === i
-                const spent = i === 0 && new Date().getHours() >= HOURS[HOURS.length - 1]
-                return (
-                  <button key={i} type="button" disabled={spent} aria-pressed={on} className="cmp-x"
-                    onClick={() => {
-                      setDay(i)
-                      /* An hour picked on a later day can be in the past on this one. */
-                      if (i === 0 && hour != null && hour <= new Date().getHours()) setHour(null)
-                    }}
-                    style={{ flexShrink: 0, width: 58, padding: '9px 0', borderRadius: 14, cursor: spent ? 'default' : 'pointer', font: 'inherit',
-                      border: `1px solid ${on ? 'transparent' : C.line}`, background: on ? C.ink : '#fff', color: on ? '#fff' : C.mute,
-                      textAlign: 'center', opacity: spent ? .4 : 1 }}>
-                    <span style={{ display: 'block', fontSize: 11, fontWeight: 500, opacity: .8 }}>{i === 0 ? 'Today' : i === 1 ? 'Tmrw' : DAY_NAMES[d.getDay()].slice(0, 3)}</span>
-                    <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, marginTop: 1 }}>{d.getDate()}</span>
-                  </button>
-                )
-              })}
+             keyboard on a phone, for a decision that is really "which evening".
+             A month rather than a week, because holidays, closures and menu
+             changes are booked further out than seven days. */
+          const first = new Date(monthAt)
+          const lead = first.getDay()
+          const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate()
+          const horizon = midnight(new Date()); horizon.setDate(horizon.getDate() + DAYS_AHEAD)
+          const prevMonth = new Date(first.getFullYear(), first.getMonth() - 1, 1)
+          const nextMonth = new Date(first.getFullYear(), first.getMonth() + 1, 1)
+          const canPrev = nextMonth.getTime() > today.getTime()
+          const canNext = nextMonth.getTime() <= horizon.getTime()
+          const spentToday = new Date().getHours() >= HOURS[HOURS.length - 1]
+          const arrow: React.CSSProperties = {
+            width: 30, height: 30, borderRadius: 9, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            background: '#fff', border: `1px solid ${C.line}`, cursor: 'pointer', font: 'inherit', color: C.mute,
+          }
+          return (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 9 }}>
+                <button type="button" className="cmp-x" disabled={!canPrev} aria-label="Previous month"
+                  onClick={() => setMonthAt(prevMonth)} style={{ ...arrow, opacity: canPrev ? 1 : .35 }}>
+                  <ChevronLeft size={16} />
+                </button>
+                <span style={{ fontFamily: DISPLAY, fontSize: 15, fontWeight: 600 }}>
+                  {MONTHS[first.getMonth()]} {first.getFullYear()}
+                </span>
+                <button type="button" className="cmp-x" disabled={!canNext} aria-label="Next month"
+                  onClick={() => setMonthAt(nextMonth)} style={{ ...arrow, opacity: canNext ? 1 : .35 }}>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 5 }}>
+                {DAY_NAMES.map((d) => (
+                  <span key={d} style={{ textAlign: 'center', fontSize: 10.5, fontWeight: 600, color: C.faint, letterSpacing: '.03em' }}>
+                    {d.slice(0, 1)}
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+                {Array.from({ length: lead }, (_, i) => <span key={`x${i}`} />)}
+                {Array.from({ length: daysInMonth }, (_, i) => {
+                  const d = new Date(first.getFullYear(), first.getMonth(), i + 1)
+                  const on = sameDay(d, dayAt)
+                  /* Gone, past the horizon, or today with no waking hour left. */
+                  const shut = d.getTime() < today.getTime() || d.getTime() > horizon.getTime()
+                    || (sameDay(d, today) && spentToday)
+                  const starred = bestDates.some((b) => sameDay(b, d))
+                  return (
+                    <button key={i} type="button" className="cmp-x" disabled={shut} aria-pressed={on}
+                      onClick={() => {
+                        setDayAt(d)
+                        /* An hour picked on a later day can be in the past on this one. */
+                        if (sameDay(d, today) && hour != null && hour <= new Date().getHours()) setHour(null)
+                      }}
+                      style={{ position: 'relative', aspectRatio: '1', borderRadius: 11, cursor: shut ? 'default' : 'pointer',
+                        font: 'inherit', fontFamily: DISPLAY, fontSize: 14, fontWeight: on ? 700 : 500,
+                        border: `1px solid ${on ? 'transparent' : C.line}`, background: on ? C.ink : '#fff',
+                        color: shut ? C.faint : on ? '#fff' : C.ink, opacity: shut ? .35 : 1 }}>
+                      {i + 1}
+                      {starred && !shut && (
+                        <span style={{ position: 'absolute', left: '50%', bottom: 5, transform: 'translateX(-50%)',
+                          width: 4, height: 4, borderRadius: '50%', background: on ? '#fff' : C.green }} />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '18px 2px 8px' }}>{dayWords}</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7 }}>
+                {HOURS.map((h) => {
+                  const on = hour === h
+                  const past = sameDay(dayAt, today) && h <= new Date().getHours()
+                  const isBest = bestHoursOnDay.has(h)
+                  return (
+                    <button key={h} type="button" disabled={past} onClick={() => setHour(h)} aria-pressed={on} className="cmp-x"
+                      style={{ padding: '9px 0', borderRadius: 12, cursor: past ? 'default' : 'pointer', font: 'inherit', fontSize: 13,
+                        fontWeight: on ? 700 : 500, border: `1px solid ${on ? 'transparent' : isBest ? C.green : C.line}`,
+                        background: on ? C.ink : '#fff', color: past ? C.faint : on ? '#fff' : C.ink, opacity: past ? .45 : 1 }}>
+                      {hourLabel(h)}{isBest && !on ? ' ★' : ''}
+                    </button>
+                  )
+                })}
+              </div>
+              {bests.length > 0 && (
+                <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8 }}>
+                  A dot, and a ★, mark when your posts have done best.
+                </div>
+              )}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 7, marginTop: 10 }}>
-              {HOURS.map((h) => {
-                const on = hour === h
-                const past = day === 0 && h <= new Date().getHours()
-                const isBest = bestHour != null && h === bestHour && day === bestDayOffset
-                return (
-                  <button key={h} type="button" disabled={past} onClick={() => setHour(h)} aria-pressed={on} className="cmp-x"
-                    style={{ padding: '9px 0', borderRadius: 12, cursor: past ? 'default' : 'pointer', font: 'inherit', fontSize: 13,
-                      fontWeight: on ? 700 : 500, border: `1px solid ${on ? 'transparent' : isBest ? C.green : C.line}`,
-                      background: on ? C.ink : '#fff', color: past ? C.faint : on ? '#fff' : C.ink, opacity: past ? .45 : 1 }}>
-                    {hourLabel(h)}{isBest && !on ? ' ★' : ''}
-                  </button>
-                )
-              })}
-            </div>
-            {bestHour != null && (
-              <div style={{ fontSize: 11.5, color: C.mute, marginTop: 8 }}>★ is when your posts have done best.</div>
-            )}
+          )
+        })()}
+
+        {tooLong && (
+          <div style={{ marginTop: 16 }}>
+            <MvpMsg ok={false} text={`That caption is ${tooLong.over.toLocaleString()} characters too long for ${platformName(tooLong.platform)}, which stops at ${tooLong.limit.toLocaleString()}. Shorten it, or give ${platformName(tooLong.platform)} its own.`} />
           </div>
         )}
-
         {blocked.length > 0 && (
           <div style={{ marginTop: 16 }}>
             <MvpMsg ok={false} text={`${blocked.join(' and ')} ${blocked.length === 1 ? 'needs' : 'need'} a photo or video. Add one, or switch ${blocked.length === 1 ? 'it' : 'them'} off above.`} />
@@ -514,7 +734,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
         hint={
           mode === 'apnosh' ? 'Nothing goes out until you have seen it.'
             : chosen.size === 0 ? 'Pick where it goes.'
-            : `${when === 'now' ? 'Posting' : 'Scheduled'} to ${chosen.size} account${chosen.size === 1 ? '' : 's'}${when === 'best' && best ? `, ${best.label}` : ''}. Public, as your business.`
+            : `${when === 'now' ? 'Posting' : 'Scheduled'} to ${chosen.size} account${chosen.size === 1 ? '' : 's'}${when === 'best' && pickedBest ? `, ${pickedBest.label}` : ''}. Public, as your business.`
         }
       />
     </MvpShell>

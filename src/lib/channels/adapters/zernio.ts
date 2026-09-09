@@ -363,9 +363,15 @@ export async function createPost(clientId: string, args: {
   /** TikTok: land in the Creator Inbox instead of publishing, so the owner can
    *  add a trending sound in the app and post it themselves */
   tiktokDraft?: boolean
+  /** platform -> its own caption, replacing `content` on that platform only.
+   *  LinkedIn reads as a paragraph and Instagram as a line and a wall of tags,
+   *  and one caption cannot be both. */
+  perPlatform?: Record<string, string>
 }): Promise<{ id: string | null }> {
   const content = args.content.trim()
-  if (!content && !(args.mediaUrls ?? []).length) {
+  const everyTargetHasItsOwn = args.targets.length > 0
+    && args.targets.every((t) => !!args.perPlatform?.[t.platform]?.trim())
+  if (!content && !(args.mediaUrls ?? []).length && !everyTargetHasItsOwn) {
     throw new ChannelError('upstream', 'A post needs something in it')
   }
   if (!args.targets.length) throw new ChannelError('upstream', 'Pick at least one account to post to')
@@ -373,7 +379,8 @@ export async function createPost(clientId: string, args: {
   if (!profileId) throw new ChannelError('not_connected', 'This client has no connected social account')
 
   let h = 0
-  const seed = `${content}:${args.targets.map((t) => t.accountId).sort().join(',')}:${args.when.kind === 'at' ? args.when.iso : 'now'}`
+  const own = Object.entries(args.perPlatform ?? {}).filter(([, v]) => v?.trim()).sort().map(([k, v]) => `${k}=${v.trim()}`).join('|')
+  const seed = `${content}:${own}:${args.targets.map((t) => t.accountId).sort().join(',')}:${args.when.kind === 'at' ? args.when.iso : 'now'}`
   for (let i = 0; i < seed.length; i++) { h = (h * 31 + seed.charCodeAt(i)) | 0 }
 
   /* Per-platform data, and only where the platform accepts it. Instagram takes
@@ -397,6 +404,8 @@ export async function createPost(clientId: string, args: {
       if (t.platform === 'instagram' && Object.keys(igExtras).length) per.platformSpecificData = igExtras
       if (t.platform === 'facebook' && args.firstComment?.trim()) per.platformSpecificData = { firstComment: args.firstComment.trim() }
       if (t.platform === 'tiktok' && args.tiktokDraft) per.platformSpecificData = { draft: true }
+      const own = args.perPlatform?.[t.platform]?.trim()
+      if (own && own !== content) per.customContent = own
       return { platform: t.platform, accountId: t.accountId, ...per }
     }),
     ...(args.mediaUrls?.length ? { mediaItems: args.mediaUrls.map((url) => ({ url })) } : {}),
@@ -1306,4 +1315,31 @@ export const zernioAdapter: ChannelAdapter = {
     const note = followerNote ? `${base}. Followers: ${followerNote}` : base
     return { itemsWritten: written, note }
   },
+}
+
+/**
+ * WHAT EACH PLATFORM WILL ACCEPT, in characters, from the vendor rather than
+ * from memory. LinkedIn, Instagram, X and Threads all cut off at wildly
+ * different lengths, and a caption written once for all of them is silently
+ * truncated on whichever is strictest.
+ *
+ * POST /v1/tools/validate/post-length takes {text} and answers per platform with
+ * {count, limit, valid}. Called once with a one-character probe, it is a table of
+ * limits; the composer then counts as the owner types instead of asking the
+ * vendor on every keystroke.
+ */
+export async function platformTextLimits(): Promise<Record<string, number>> {
+  try {
+    const res = await zer('/tools/validate/post-length', { method: 'POST', body: JSON.stringify({ text: '.' }) })
+    const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+    const platforms = (d.platforms && typeof d.platforms === 'object' ? d.platforms : {}) as Record<string, unknown>
+    const out: Record<string, number> = {}
+    for (const [k, v] of Object.entries(platforms)) {
+      const limit = num((v as Record<string, unknown>)?.limit)
+      if (limit > 0) out[k] = limit
+    }
+    return out
+  } catch {
+    return {}
+  }
 }
