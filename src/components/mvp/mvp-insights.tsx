@@ -2502,8 +2502,17 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
   const more = typeof total === 'number' && total > posts.length
   return (
     <Section title="Recent posts">
+      {/* The same grouping the full list uses. Without it the two screens disagree
+          about what a post IS: one piece of content on three platforms reads as
+          three unrelated rows here and one comparison card there, and this file
+          already holds the line that the summary and the full list must never
+          drift about what a post reached. */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {posts.map((p, i) => <PostRow key={p.id} p={p} first={i === 0} />)}
+        {groupCrossPosts(posts).map((item, i) =>
+          Array.isArray(item)
+            ? <CrossPostCard key={item[0].crossKey ?? item[0].id} posts={item} />
+            : <PostRow key={item.id} p={item} first={i === 0} />,
+        )}
       </div>
       {more && (
         /* the way through to every post reads as one more row of the list (owner 2026-09-04:
