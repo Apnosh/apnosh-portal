@@ -81,7 +81,14 @@ interface Candidate {
 
 /* A DAILY amount and a length, not a lump sum. "$20 over 5 days" hid the number
    that decides whether an ad delivers at all, which is what it spends per day.
-   Four dollars a day reaches almost nobody, and the old screen never said so. */
+   Four dollars a day reaches almost nobody, and the old screen never said so.
+
+   THE PRESETS ARE NOW SHORTCUTS, NOT THE WHOLE CHOICE. They were the whole
+   choice on the grounds that "a slider invites fiddling with a number nobody
+   has a basis for". That reasoning has expired: the screen now shows what the
+   money buys, so moving the number moves an answer. Fiddling with a slider that
+   reports 6,000 people at $10 and 12,000 at $20 is not fiddling, it is the
+   decision being made. */
 const DAILY = [5, 10, 20, 35]
 const LENGTHS = [3, 7, 14, 30]
 const RADII = [3, 5, 10, 25]
@@ -302,6 +309,13 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   /* A TikTok post picked after a Meta one must not inherit a $10 a day that
      TikTok will simply refuse. */
   useEffect(() => { setDaily((d) => (d < minDaily ? dailyChoices[0] : d)) }, [minDaily, dailyChoices])
+
+  /* THE SLIDER CANNOT REACH AN INVALID NUMBER. The total is capped, so the most
+     anyone may spend per day depends on how many days they picked: $500 over a
+     month is about $16 a day. A slider that runs past what the screen will
+     accept is a control that lies about its own range. */
+  const maxDaily = Math.max(minDaily, Math.min(120, Math.floor(limits.maxUsd / Math.max(1, days))))
+  useEffect(() => { setDaily((d) => Math.min(Math.max(d, minDaily), maxDaily)) }, [maxDaily, minDaily])
   /* A number measured for one town says nothing about the next one. */
   useEffect(() => { setCounts({}) }, [place])
 
@@ -369,6 +383,17 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
 
   return (
     <MvpShell active="home" back="/dashboard" title={picked ? 'Boost this post' : 'Boost a post'} focus>
+      <style>{`
+        /* A range input has no cross-browser default worth keeping, so the whole
+           control is drawn here rather than half-styled. */
+        .bst-range{-webkit-appearance:none;appearance:none;width:100%;height:28px;background:transparent;cursor:pointer;display:block}
+        .bst-range::-webkit-slider-runnable-track{height:6px;border-radius:99px;background:var(--bst-track)}
+        .bst-range::-moz-range-track{height:6px;border-radius:99px;background:var(--bst-track)}
+        .bst-range::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:26px;height:26px;margin-top:-10px;border-radius:50%;background:#fff;border:2px solid ${hueOf('brand')[1]};box-shadow:0 2px 8px rgba(0,0,0,.18)}
+        .bst-range::-moz-range-thumb{width:26px;height:26px;border-radius:50%;background:#fff;border:2px solid ${hueOf('brand')[1]};box-shadow:0 2px 8px rgba(0,0,0,.18)}
+        .bst-range:focus{outline:none}
+        .bst-range:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 4px ${tint('brand', .3)}}
+      `}</style>
       <div style={{ padding: '6px 16px 0' }}>
 
         {loading && <div style={{ fontSize: T.control, color: C.mute, padding: '20px 2px' }}>Loading…</div>}
@@ -875,7 +900,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 which on Meta reaches almost nobody. */}
             <Head hue="brand" note={`$${minDaily} a day minimum on ${rules?.name ?? 'this'}`}>How much a day</Head>
             <div style={{ display: 'flex', gap: 8 }}>
-              {dailyChoices.map((a) => {
+              {dailyChoices.filter((a) => a <= maxDaily).map((a) => {
                 const on = daily === a
                 return (
                   <button key={a} type="button" onClick={() => setDaily(a)}
@@ -886,6 +911,37 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                   </button>
                 )
               })}
+            </div>
+
+            {/* ANY AMOUNT, not four of them. Budgets differ and the presets were
+                a guess at four of the commonest; this is the same control with
+                every number in between. It reads a value rather than inviting a
+                fidget, because the reach figure below moves with it. */}
+            <div style={{ marginTop: 14, padding: '12px 14px 6px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}` }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontFamily: DISPLAY, fontSize: T.hero, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>
+                  ${daily}
+                </span>
+                <span style={{ fontSize: T.note, color: C.mute }}>a day</span>
+              </div>
+              <input
+                type="range" className="bst-range"
+                min={minDaily} max={maxDaily} step={1} value={daily}
+                aria-label="Dollars a day"
+                onChange={(e) => setDaily(Number(e.target.value))}
+                style={{
+                  /* The filled part of the track is the value, drawn as a
+                     gradient up to the thumb rather than a second element. */
+                  ['--bst-track' as string]: `linear-gradient(to right, ${hueOf('brand')[0]} 0%, ${hueOf('brand')[1]} ${((daily - minDaily) / Math.max(1, maxDaily - minDaily)) * 100}%, ${C.line} ${((daily - minDaily) / Math.max(1, maxDaily - minDaily)) * 100}%)`,
+                } as React.CSSProperties}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: T.note, color: C.mute, marginTop: -2 }}>
+                <span>${minDaily}</span>
+                <span>
+                  ${maxDaily}
+                  {maxDaily < 120 && ` · the most that fits $${limits.maxUsd} over ${days} days`}
+                </span>
+              </div>
             </div>
 
             <Head hue="amber">For how long</Head>
