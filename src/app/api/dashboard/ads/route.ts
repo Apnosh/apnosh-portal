@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { AD_RULES, adPlatformFor, CONNECT_SLUG, type AdPlatform } from '@/lib/channels/ad-rules'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { coordsForClient } from '@/lib/geo/geocode'
 import {
   listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate, adPreviews, TARGETABLE_GEO, forecastReach,
   listPostTargets, MAX_BOOST_USD, MAX_BOOST_DAYS, MIN_DAILY_USD,
@@ -39,9 +40,26 @@ import {
  * who will walk in, and the result is a higher price for a smaller room.
  * Distance from the door is the targeting that matters for a restaurant.
  */
-function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string }, ad: AdPlatform = 'meta'): Record<string, unknown> {
+function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string; lat?: number; lng?: number }, ad: AdPlatform = 'meta'): Record<string, unknown> {
   const spec: Record<string, unknown> = {}
   const radius = Math.max(1, Math.min(50, Number(t.radiusMiles) || 10))
+
+  /* ── THE DOOR, WHERE WE KNOW IT ─────────────────────────────────────────
+     A radius around a CITY is centred on its middle, which for a restaurant in
+     West Seattle is about five miles from the restaurant. Meta accepts a point:
+     customLocations is lat/lng plus a radius, and the schema says it is honoured
+     on Meta. So when the client has been geocoded, the ad is aimed at their
+     address and the map on the screen is a picture of the same circle rather
+     than an approximation of a different one. */
+  if (AD_RULES[ad].cityRadius && Number.isFinite(t.lat) && Number.isFinite(t.lng)) {
+    spec.customLocations = [{ latitude: t.lat, longitude: t.lng, radius, distanceUnit: 'mile' }]
+    const lo0 = Math.max(18, Math.min(65, Number(t.ageMin) || 18))
+    const hi0 = Math.max(lo0, Math.min(65, Number(t.ageMax) || 65))
+    spec.ageMin = lo0
+    spec.ageMax = hi0
+    return spec
+  }
+
   if (t.geoKey && (t.geoType === 'city' || !t.geoType)) {
     /* The radius is dropped where the platform ignores it, rather than sent and
        silently discarded. A field the vendor throws away is a field the screen
@@ -210,6 +228,9 @@ export async function GET(req: NextRequest) {
      * Deliberately a SUGGESTION and not a default. It is still one tap, and the
      * tap is what makes it theirs rather than ours.
      */
+    /* One lookup per client, ever: cached into client_locations after the first. */
+    const here = await coordsForClient(clientId).catch(() => null)
+
     let suggested: Awaited<ReturnType<typeof searchGeo>>[number] | null = null
     if (meta) {
       const { data: biz } = await adminRead0.from('businesses')
@@ -328,7 +349,7 @@ export async function GET(req: NextRequest) {
       platforms,
       payer,
       metaAccountId: meta?.accountId ?? null,
-      accounts, ads, candidates, history, peerRate, suggested,
+      accounts, ads, candidates, history, peerRate, suggested, here,
       limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS, minDaily: MIN_DAILY_USD },
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
@@ -341,7 +362,7 @@ export async function POST(req: NextRequest) {
     clientId?: string; action?: string
     adAccountIds?: string[]; returnTo?: string
     platformPostId?: string; adAccountId?: string; amount?: number; days?: number; name?: string
-    targeting?: { geoKey?: string; geoType?: string; geoName?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string }
+    targeting?: { geoKey?: string; geoType?: string; geoName?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string; lat?: number; lng?: number }
     adPlatform?: string
     adId?: string
   }
@@ -524,10 +545,11 @@ export async function POST(req: NextRequest) {
          single-location restaurant that is people who will never walk in.
          Refused rather than defaulted, because a silent default here is the
          expensive kind. */
-      if (!body.targeting?.geoKey) {
+      const aimedAtPoint = Number.isFinite(body.targeting?.lat) && Number.isFinite(body.targeting?.lng) && rules.cityRadius
+      if (!aimedAtPoint && !body.targeting?.geoKey) {
         return NextResponse.json({ error: 'Choose the area this should reach first' }, { status: 400 })
       }
-      if (!TARGETABLE_GEO.has(String(body.targeting.geoType ?? '').toLowerCase())) {
+      if (!aimedAtPoint && !TARGETABLE_GEO.has(String(body.targeting?.geoType ?? '').toLowerCase())) {
         return NextResponse.json({ error: 'That kind of place cannot be targeted. Pick a city, a postcode or a state.' }, { status: 400 })
       }
 
@@ -536,7 +558,7 @@ export async function POST(req: NextRequest) {
         accountId: meta.accountId,
         adAccountId: payer,
         amount, days,
-        targeting: buildSpec(body.targeting, ad),
+        targeting: buildSpec(body.targeting ?? {}, ad),
         name: (body.name || `Apnosh boost · ${new Date().toISOString().slice(0, 10)}`).slice(0, 120),
       })
 

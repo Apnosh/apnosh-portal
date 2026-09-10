@@ -24,6 +24,7 @@ import { Check, TrendingUp, Square, MapPin, Eye, Play, Loader2, Image as ImageIc
 import MvpShell from './mvp-shell'
 import { MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
+import RadiusMap from './mvp-radius-map'
 import { C, DISPLAY } from './tokens'
 import { gradOf, tint, alpha, hueOf } from './hues'
 import { CARD_SHADOW } from './kit'
@@ -234,6 +235,9 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
      place changes, because a number for Seattle means nothing for Phoenix. */
   const [counts, setCounts] = useState<Record<number, number | null>>({})
   const [suggested, setSuggested] = useState<GeoOption | null>(null)
+  /* The restaurant's own coordinates. When we have them the ad is aimed at the
+     door rather than the city centre, and the map is a picture of that. */
+  const [here, setHere] = useState<{ lat: number; lng: number; label: string } | null>(null)
   /* Meta's own rendering of a running ad, fetched only when asked for. */
   const [previewOf, setPreviewOf] = useState<string | null>(null)
   const [previews, setPreviews] = useState<AdPreview[] | null>(null)
@@ -253,6 +257,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         setHistory((j.history ?? null) as History | null)
         setPeerRate((j.peerRate ?? null) as { perDollar: number; from: number } | null)
         setSuggested((j.suggested ?? null) as GeoOption | null)
+        setHere((j.here ?? null) as { lat: number; lng: number; label: string } | null)
         if (j.limits) setLimits(j.limits)
         /* The stored choice, or nothing. Not "the only one we can see": the
            point of the picker is that seeing three ad accounts and paying from
@@ -290,6 +295,9 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
       ? list
       : [...list].sort((a, b) => new Date(b.postedAt).getTime() - new Date(a.postedAt).getTime())
   }, [candidates, platforms, order])
+  /* "2516 Alki Avenue Southwest, Seattle, King County, Washington…" is not a map
+     label. The first line of the address is. */
+  const businessShort = useMemo(() => (here?.label ?? '').split(',')[0].trim() || place?.name || 'you', [here, place])
   const setupRules = useMemo(() => platforms.find((p) => p.platform === setupOf) ?? null, [platforms, setupOf])
   const setupAccounts = setupRules?.accounts ?? []
   const totalRunning = useMemo(() => ads.filter((a) => a.status?.toUpperCase() === 'ACTIVE').length, [ads])
@@ -353,7 +361,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     const ask = () => {
       void fetch('/api/dashboard/ads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, action: 'estimate', adPlatform: ad, targeting: { geoKey: place.key, geoType: place.type, radiusMiles: radius, ageMin, ageMax } }),
+        body: JSON.stringify({ clientId, action: 'estimate', adPlatform: ad, targeting: { geoKey: place.key, geoType: place.type, radiusMiles: radius, ageMin, ageMax, ...(here ? { lat: here.lat, lng: here.lng } : {}) } }),
       }).then((r) => r.json()).then((j) => {
         if (!live) return
         const got = j as Reach
@@ -366,7 +374,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     }
     const id = setTimeout(ask, 260)
     return () => { live = false; clearTimeout(id) }
-  }, [clientId, picked, place, radius, ageMin, ageMax, ad, rules])
+  }, [clientId, picked, place, radius, ageMin, ageMax, ad, rules, here])
 
   /* ── Spent ──────────────────────────────────────────────────────────────── */
   if (done) {
@@ -755,7 +763,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 <MapPin size={15} color={C.greenDk} />
                 <span style={{ flex: 1, minWidth: 0 }}>
                   <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>
-                    {rules?.cityRadius ? `Within ${radius} miles of ${place.name}` : place.name}
+                    {rules?.cityRadius ? `Within ${radius} miles of ${here ? businessShort : place.name}` : place.name}
                   </span>
                   <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>
                     {place.where ? `${place.where} · ` : ''}Tap to change
@@ -828,7 +836,34 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     city, which is exactly the kind of lie a screen should not
                     tell about somebody's money. */}
                 {rules?.cityRadius ? (
-                  <Rings options={RADII} value={radius} onPick={setRadius} counts={counts} city={place.name} />
+                  here ? (
+                    /* A MAP, because the rings could not answer the question
+                       somebody actually has: is my street in it, and which towns
+                       am I paying for. Only when we know where they are -- a
+                       circle drawn on a city centre would be a confident picture
+                       of the wrong place. */
+                    <div style={{ marginTop: 12 }}>
+                      <RadiusMap lat={here.lat} lng={here.lng} miles={radius} label={businessShort} />
+                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                        {RADII.map((r) => {
+                          const on = radius === r
+                          const n = counts[r]
+                          return (
+                            <button key={r} type="button" onClick={() => setRadius(r)}
+                              style={{ flex: 1, padding: '8px 0 9px', borderRadius: R.cell, cursor: 'pointer', font: 'inherit',
+                                background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
+                              <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink }}>{r} mi</span>
+                              <span style={{ display: 'block', fontSize: 10.5, marginTop: 2, color: on ? 'rgba(255,255,255,.75)' : C.mute }}>
+                                {n == null ? '—' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}m` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)}
+                              </span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <Rings options={RADII} value={radius} onPick={setRadius} counts={counts} city={place.name} />
+                  )
                 ) : (
                   <div style={{ marginTop: 10, fontSize: T.label, color: C.mute, lineHeight: 1.5, padding: '0 2px' }}>
                     {rules?.name} targets the whole city rather than a ring around you. There is no
@@ -1054,7 +1089,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
               </div>
               <div style={{ fontSize: T.label, color: C.mute, marginTop: 5, lineHeight: 1.5 }}>
                 ${daily} a day for {days} day{days === 1 ? '' : 's'}
-                {place ? (rules?.cityRadius ? `, within ${radius} miles of ${place.name}` : `, in ${place.name}`) : ''}.
+                {place ? (rules?.cityRadius ? `, within ${radius} miles of ${here ? businessShort : place.name}` : `, in ${place.name}`) : ''}.
                 That is the most it can spend on ads. It stops on its own, and you can stop it
                 sooner here.
               </div>
@@ -1083,7 +1118,12 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     adPlatform: ad,
                     adAccountId: rules?.payer ?? pickedAccount,
                     amount: total, days,
-                    targeting: { geoKey: place?.key, geoType: place?.type, geoName: place?.name, radiusMiles: radius, ageMin, ageMax },
+                    targeting: {
+                      geoKey: place?.key, geoType: place?.type, geoName: place?.name,
+                      radiusMiles: radius, ageMin, ageMax,
+                      /* Sent so the ad is aimed where the map says it is. */
+                      ...(here ? { lat: here.lat, lng: here.lng } : {}),
+                    },
                   })
                   if (j) setDone({ spent: total, days })
                 })()} />
