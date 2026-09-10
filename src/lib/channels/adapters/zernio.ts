@@ -1773,12 +1773,22 @@ export interface Forecast {
  * created". Nothing here reserves anything; reserving is a separate call we do
  * not make.
  *
- * ONE HONEST CAVEAT, which the UI has to carry. This is Meta's RESERVATION
- * model, and a boost buys on the AUCTION. The audience and the window are the
- * same, so the number is a real answer to "how big a dent does this budget
- * make", but it is not a promise about auction delivery. And R&F has its own
- * minimum spend: below it Meta answers with minBudget instead of a reach, which
- * is worth showing rather than swallowing.
+ * NOT WIRED TO THE SCREEN, and the measurements are why. Run against a real ad
+ * account on 2026-09-10, Seattle within 25 miles:
+ *
+ *     $140 over 7 days  ->  failed:6, minBudget 783.44
+ *     $70  over 7 days  ->  failed:6, minBudget 772.15
+ *     $20  over 3 days  ->  failed:6, minBudget 968.61
+ *
+ * Meta's Reach and Frequency buying carries a minimum around $780 to $970 for
+ * this audience and window. Our own cap is $500, so this can never answer for a
+ * restaurant boost and a screen that called it would show an error every time.
+ *
+ * Kept because it is correct, measured, and the answer to "why can we not show
+ * what the budget reaches" -- so nobody investigates this a second time. It
+ * becomes useful the day a client spends four figures, or if Zernio exposes
+ * Meta's AUCTION-side delivery estimate, which is the endpoint Ads Manager
+ * actually uses and which is absent from their schema entirely.
  */
 export async function forecastReach(clientId: string, args: {
   accountId: string

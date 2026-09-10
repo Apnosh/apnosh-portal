@@ -329,8 +329,10 @@ export async function POST(req: NextRequest) {
     }
 
     /* ── WHAT THIS BUDGET REACHES ──────────────────────────────────────
-       A quote from Meta, in its own words: nothing is bought and no ad
-       entities are created. Read-only in every way that matters. */
+       A quote from Meta: nothing is bought and no ad entities are created.
+       Reachable but not used by the screen -- Meta's R&F minimum measured at
+       $780 to $970 against a real account, well above our $500 cap. Left
+       callable so the finding stays testable rather than a claim in a comment. */
     if (body.action === 'forecast') {
       if (!rules.reachEstimate) return NextResponse.json({ ok: false, status: 'unsupported' })
       const { data: cRow } = await createAdminClient().from('channel_connections')
