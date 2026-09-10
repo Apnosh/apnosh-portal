@@ -434,6 +434,7 @@ export default function GbpFixer({ campaignId, mode = 'view' }: { campaignId?: s
             aiAdvice={aiAdvice}
             adviceLoading={adviceLoading}
             onSilentRefresh={recheck}
+            onOpenPost={() => setDoor('post')}
           />
         ) : effectiveMode === 'ai' ? (
           <AiReview
@@ -2689,7 +2690,7 @@ const GOOGLE_EDIT_GENERIC = 'https://business.google.com'
  * here on any tier; the builder with all of that runs only on the campaign
  * AI lane. Exported for the render smoke.
  */
-export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {}, adviceLoading = false, onSilentRefresh, initialEditKey }: {
+export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {}, adviceLoading = false, onSilentRefresh, onOpenPost, initialEditKey }: {
   diag: GbpDiagnosis
   clientId?: string
   /** Pro unlocks the inline editors on the save-rail sections. */
@@ -2701,6 +2702,10 @@ export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {
   adviceLoading?: boolean
   /** One silent diagnosis re-fetch after a save Google accepted. */
   onSilentRefresh?: () => void
+  /** Opens the Google post composer. The composer shipped reachable only from the
+   *  campaign AI lane's summary, so an owner arriving from More could read their
+   *  listing and had no way to post to it. */
+  onOpenPost?: () => void
   /** TEST SEAM (render smoke only): open this section's editor on first render. */
   initialEditKey?: string
 }) {
@@ -2750,6 +2755,42 @@ export function ProfileViewer({ diag, clientId = '', isPro = false, aiAdvice = {
           ))}
         </div>
       ))}
+      {/* Keep it strong: the two live Google rails, the same cards the campaign
+          summary carries. Questions and answers is deliberately NOT here --
+          Google answers that endpoint 501 UNIMPLEMENTED for us, so the card
+          would open a door onto nothing. */}
+      <div style={{ marginTop: 4, marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: C.mute, margin: '0 2px 8px' }}>
+          Keep it strong
+        </div>
+        <Link href={REVIEWS_HREF} className="mvp-row" style={hubCardStyle}>
+          <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Star size={19} color={C.greenDk} />
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Your reviews</span>
+            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+              Read new reviews and reply with AI help.
+            </span>
+          </span>
+          <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+        </Link>
+        {onOpenPost && (
+          <button type="button" onClick={onOpenPost} className="mvp-row" style={hubCardStyle}>
+            <span style={{ width: 40, height: 40, borderRadius: 12, background: C.greenSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <Megaphone size={19} color={C.greenDk} />
+            </span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: C.ink, lineHeight: 1.3 }}>Post an update</span>
+              <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4 }}>
+                Share news on your Google listing.
+              </span>
+            </span>
+            <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
+          </button>
+        )}
+      </div>
+
       <div style={{ textAlign: 'center', fontSize: 12, color: C.faint, padding: '4px 0 2px' }}>
         Read from your live Google listing.
       </div>

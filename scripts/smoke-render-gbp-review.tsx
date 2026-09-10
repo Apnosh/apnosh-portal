@@ -27,8 +27,9 @@
  *      sections on one page in chapter order under the 3 group headers,
  *      honest status chips, the rich On-Google-now content, a per-section
  *      Edit-on-Google link, ONE quiet Pro line — and NONE of the builder:
- *      no Fix it now, no Apnosh AI says, no Save to Google, no
- *      Keep-it-strong cards, no in-app Edit
+ *      no Fix it now, no Apnosh AI says, no Save to Google, no in-app Edit.
+ *      It DOES carry the two Keep-it-strong cards (reviews, post an update),
+ *      because it is the only door to the listing from More
  *   l2) the tier-aware viewer, Pro: the 6 save-rail sections get a small
  *      in-app Edit affordance that opens the SAME editors the builder uses
  *      (description textarea WITHOUT "Draft it for me", hours 7-day rows,
@@ -546,7 +547,17 @@ async function main() {
   ok(!viewer.includes('Apnosh AI says'), 'no Apnosh AI says advice in the viewer')
   ok(!viewer.includes(ADVICE.description) && !viewer.includes(ADVICE.hours), 'no advice text leaks into the viewer')
   ok(!viewer.includes('Save to Google'), 'no Save to Google in the viewer')
-  ok(!viewer.includes('Keep it strong'), 'no Keep-it-strong cards in the viewer')
+  /* The viewer DOES carry the two Keep-it-strong cards (2026-09-10). It used to
+     carry none, on the rule that nothing from the builder leaks in -- but the
+     viewer is now the only door to the Google listing from More, and the post
+     composer lived behind the campaign AI lane, so an owner could read their
+     listing and had no way to post to it. Reviews and Post an update are their
+     own rails, not builder blocks. Questions and answers stays out: Google
+     answers that endpoint 501 UNIMPLEMENTED for us. */
+  const withPost = renderViewer(FIXTURE, { isPro: false, onOpenPost: () => {} })
+  ok(withPost.includes('Keep it strong') && withPost.includes('Your reviews'), 'the viewer carries the Keep-it-strong cards')
+  ok(withPost.includes('Post an update'), 'the viewer opens the Google post composer')
+  ok(!withPost.includes('Questions and answers'), 'no Questions and answers card in the viewer')
   ok(!viewer.includes('Edit anyway'), 'no Edit-anyway editor door in the viewer')
   ok(!viewer.includes('<textarea'), 'no in-app editor fields in the viewer')
   ok(!viewer.includes('Why it matters'), 'no builder Why-it-matters block in the viewer')
