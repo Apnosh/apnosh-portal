@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, TrendingUp, Square, MapPin, Eye, Play, Image as ImageIcon } from 'lucide-react'
+import { Check, TrendingUp, Square, MapPin, Eye, Play, Loader2, Image as ImageIcon } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
@@ -34,7 +34,13 @@ const T = { note: 11.5, label: 12.5, control: 13.5, body: 14, big: 17, hero: 22 
 interface AdAccount { id: string; name: string; currency: string; selectable: boolean; status: string }
 interface RunningAd { id: string; name: string; status: string; spend: number; impressions: number; clicks: number }
 interface GeoOption { key: string; name: string; type: string; where: string; targetable: boolean }
-interface Reach { available: boolean; lower: number | null; upper: number | null; daily: number | null; untargetable?: boolean }
+interface Reach {
+  available: boolean; lower: number | null; upper: number | null; daily: number | null
+  /** Meta only. False while it is still computing an audience it has not seen. */
+  ready?: boolean | null
+  currency?: string | null
+  untargetable?: boolean
+}
 interface AdPreview { format: string; html: string | null }
 
 /**
@@ -210,15 +216,27 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   useEffect(() => {
     if (!picked || !place || !rules?.reachEstimate) { setReach(null); return }
     let live = true
+    let tries = 0
     setReaching(true)
-    const id = setTimeout(() => {
+
+    /* META TAKES A MOMENT ON AN AUDIENCE IT HAS NOT SEEN. It answers with zeros
+       and estimateReady:false while it works one out, which is exactly what a
+       fresh Seattle query does. Asking once and showing the zeros would read as
+       "nobody lives there", so this waits for it. Six tries over about half a
+       minute, then it says so rather than pretending. */
+    const ask = () => {
       void fetch('/api/dashboard/ads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ clientId, action: 'estimate', adPlatform: ad, targeting: { geoKey: place.key, geoType: place.type, radiusMiles: radius, ageMin, ageMax } }),
-      }).then((r) => r.json()).then((j) => { if (live) setReach(j as Reach) })
-        .catch(() => { if (live) setReach(null) })
-        .finally(() => { if (live) setReaching(false) })
-    }, 260)
+      }).then((r) => r.json()).then((j) => {
+        if (!live) return
+        const got = j as Reach
+        setReach(got)
+        if (got.ready === false && tries < 6) { tries++; setTimeout(ask, 5000); return }
+        setReaching(false)
+      }).catch(() => { if (live) { setReach(null); setReaching(false) } })
+    }
+    const id = setTimeout(ask, 260)
     return () => { live = false; clearTimeout(id) }
   }, [clientId, picked, place, radius, ageMin, ageMax, ad, rules])
 
@@ -649,8 +667,15 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     a plain "no" where the platform has no such API. */}
                 {rules?.reachEstimate ? (
                 <div style={{ marginTop: 10, padding: '14px 16px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}`, boxShadow: CARD_SHADOW }}>
-                  {reaching ? (
-                    <span style={{ fontSize: T.control, color: C.mute }}>Checking how many people…</span>
+                  {reach?.ready === false ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: T.control, color: C.mute }}>
+                      <Loader2 size={14} className="mvp-spin" />
+                      Meta has not sized this area before. Working it out…
+                    </span>
+                  ) : reaching ? (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: T.control, color: C.mute }}>
+                      <Loader2 size={14} className="mvp-spin" />Checking how many people…
+                    </span>
                   ) : reach?.untargetable ? (
                     <span style={{ fontSize: T.label, color: C.coral, lineHeight: 1.5 }}>
                       That kind of place cannot be targeted. Pick a city, a postcode or a state.
@@ -669,17 +694,43 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                           predicted click count on a $70 boost would be a number
                           we made up. What IS true is how the budget compares to
                           the room. */}
-                      {reach.upper > 0 && (
+                      {/* WHAT THE BUDGET REACHES, when Meta gives us a number.
+                          `daily` is its own estimate of daily reach, so it is
+                          reported as theirs and multiplied out over the run
+                          rather than dressed up as a promise. */}
+                      {reach.daily && reach.daily > 0 ? (
+                        <span style={{ display: 'block', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
+                          <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
+                            about {reach.daily.toLocaleString()} a day
+                          </span>
+                          <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 3, lineHeight: 1.5 }}>
+                            is what Meta expects this to reach, so roughly{' '}
+                            {(reach.daily * days).toLocaleString()} over {days} day{days === 1 ? '' : 's'}.
+                            Their estimate, not a guarantee.
+                          </span>
+                        </span>
+                      ) : (
+                        /* Zernio's reach call has no budget field, so Meta has
+                           nothing to price against and returns daily: 0 every
+                           time. Said plainly rather than left as a silent gap
+                           where a number should be. */
                         <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}`, lineHeight: 1.5 }}>
-                          At ${daily} a day, expect to reach a small share of them. Meta sells this at
-                          auction, so nobody can promise a number before it runs, and anyone who does
-                          is guessing.
+                          How many of them ${daily} a day actually reaches is not something Meta will
+                          say in advance. It sells delivery at auction and prices it as it runs.
                         </span>
                       )}
                     </>
                   ) : (
+                    /* MEASURED, NOT GUESSED AT: on this account a 25-mile
+                       radius answers instantly and 5 and 1 mile come back
+                       uncomputed. Meta works out tight audiences lazily and an
+                       account with no ad history waits longest. The important
+                       part is that this does NOT block the boost, so the copy
+                       says so instead of leaving somebody staring at it. */
                     <span style={{ fontSize: T.label, color: C.mute, lineHeight: 1.5 }}>
-                      Meta could not size that audience. It usually means the area is very small.
+                      Meta has not sized this radius yet. It works tighter areas out lazily, and
+                      fastest once an account has run something. <b style={{ color: C.ink, fontWeight: 600 }}>The boost will
+                      still run.</b> A wider radius usually answers straight away if you want a number first.
                     </span>
                   )}
                 </div>
