@@ -192,6 +192,30 @@ export async function GET(req: NextRequest) {
      * Only from ads that actually delivered. A boost that spent 40 cents before
      * anyone saw it would produce a wild rate and a confident wrong projection.
      */
+    /**
+     * WHERE THEIR RESTAURANT IS, so nobody has to type it.
+     *
+     * The city is on `businesses`, though not always in the city column: one of
+     * these two clients has "Seattle" sitting in `address` with city blank. So
+     * both are tried, and the answer is resolved through the ad platform's own
+     * geo search because a string is not a targeting value -- only its id is.
+     *
+     * Deliberately a SUGGESTION and not a default. It is still one tap, and the
+     * tap is what makes it theirs rather than ours.
+     */
+    let suggested: Awaited<ReturnType<typeof searchGeo>>[number] | null = null
+    if (meta) {
+      const { data: biz } = await adminRead0.from('businesses')
+        .select('city, state, address').eq('client_id', clientId).maybeSingle()
+      const guess = String(biz?.city ?? '').trim() || String(biz?.address ?? '').trim()
+      /* A street address will not match a city search, so only a bare-ish token
+         is worth asking about. */
+      if (guess && guess.length < 40 && !/\d/.test(guess)) {
+        const hits = await searchGeo(clientId, meta.accountId, guess).catch(() => [])
+        suggested = hits.find((h) => h.targetable && h.type === 'city') ?? null
+      }
+    }
+
     const delivered = ads.filter((a) => a.spend > 1 && a.reach > 0)
     const spentAll = delivered.reduce((n, a) => n + a.spend, 0)
     const reachedAll = delivered.reduce((n, a) => n + a.reach, 0)
@@ -259,7 +283,7 @@ export async function GET(req: NextRequest) {
       platforms,
       payer,
       metaAccountId: meta?.accountId ?? null,
-      accounts, ads, candidates, history,
+      accounts, ads, candidates, history, suggested,
       limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS, minDaily: MIN_DAILY_USD },
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {

@@ -25,7 +25,7 @@ import MvpShell from './mvp-shell'
 import { MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
 import { C, DISPLAY } from './tokens'
-import { gradOf, tint, alpha } from './hues'
+import { gradOf, tint, alpha, hueOf } from './hues'
 import { CARD_SHADOW } from './kit'
 
 const R = { cell: 12, box: 14, card: 20, pill: 99 } as const
@@ -86,6 +86,95 @@ const DAILY = [5, 10, 20, 35]
 const LENGTHS = [3, 7, 14, 30]
 const RADII = [3, 5, 10, 25]
 
+/**
+ * HOW WIDE TO CAST IT, drawn rather than listed.
+ *
+ * NOT A MAP, on purpose. We hold no coordinates for any client -- the radius is
+ * around the CITY, not their front door -- so dropping a pin would claim a
+ * precision that does not exist. And a map is the wrong tool anyway: it shows a
+ * circle, when the decision is "how many more people do I get for going wider".
+ * These rings show both, and the number is the part a map cannot draw.
+ *
+ * AREA-PROPORTIONAL, not radius-proportional. Audience grows with the area of
+ * the circle, so the rings are scaled by the square root: 25 miles looks about
+ * three times 3 miles rather than eight times, which is much closer to how the
+ * reach numbers actually behave. Drawn true-to-radius, the 3-mile ring would be
+ * a dot nobody could tap.
+ */
+function Rings({ options, value, onPick, counts, city }: {
+  options: readonly number[]
+  value: number
+  onPick: (n: number) => void
+  counts: Record<number, number | null>
+  city: string
+}) {
+  const BOX = 230, CX = BOX / 2, CY = BOX / 2, MAXR = 96
+  const widest = Math.max(...options)
+  const px = (mi: number) => Math.sqrt(mi / widest) * MAXR
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 12 }}>
+      <svg viewBox={`0 0 ${BOX} ${BOX}`} width="100%" style={{ maxWidth: 300, display: 'block', overflow: 'visible' }} role="group" aria-label="How far the ad reaches">
+        <defs>
+          <radialGradient id="bstCore" cx="50%" cy="50%">
+            <stop offset="0%" stopColor={tint('mint', .5)} />
+            <stop offset="100%" stopColor={tint('mint', 0)} />
+          </radialGradient>
+        </defs>
+        {/* Widest first so the smallest sits on top and stays tappable. */}
+        {[...options].sort((a, b) => b - a).map((mi) => {
+          const on = value === mi
+          const r = px(mi)
+          return (
+            <g key={mi} onClick={() => onPick(mi)} style={{ cursor: 'pointer' }} role="button" aria-label={`${mi} miles`} aria-pressed={on}>
+              <circle cx={CX} cy={CY} r={r}
+                fill={on ? tint('brand', .1) : 'transparent'}
+                stroke={on ? hueOf('brand')[1] : C.line}
+                strokeWidth={on ? 2 : 1}
+                strokeDasharray={on ? undefined : '3 4'} />
+              {/* ON THE DIAGONAL, not the top. Stacked vertically the 3 and 5
+                  mile labels landed ten pixels apart and read as one smudge,
+                  because those radii are close together by design. Placed at
+                  45 degrees they separate in both axes at once. The white halo
+                  keeps them legible where a label crosses a ring. */}
+              <text x={CX + r * 0.707} y={CY - r * 0.707 + 4} textAnchor="middle"
+                stroke="#fff" strokeWidth={3} paintOrder="stroke"
+                style={{ fontFamily: DISPLAY, fontSize: 11, fontWeight: on ? 700 : 500, fill: on ? hueOf('brand')[1] : C.faint }}>
+                {mi} mi
+              </text>
+            </g>
+          )
+        })}
+        <circle cx={CX} cy={CY} r={30} fill="url(#bstCore)" />
+        <circle cx={CX} cy={CY} r={5} fill={hueOf('mint')[1]} />
+        <text x={CX} y={CY + 22} textAnchor="middle"
+          style={{ fontFamily: DISPLAY, fontSize: 12, fontWeight: 600, fill: C.ink }}>
+          {city}
+        </text>
+      </svg>
+      {/* The numbers under the picture, because the picture cannot hold them
+          without becoming a chart nobody can read on a phone. */}
+      <div style={{ display: 'flex', gap: 6, marginTop: 10, width: '100%' }}>
+        {options.map((mi) => {
+          const on = value === mi
+          const n = counts[mi]
+          return (
+            <button key={mi} type="button" onClick={() => onPick(mi)}
+              style={{ flex: 1, padding: '8px 0 9px', borderRadius: R.cell, cursor: 'pointer', font: 'inherit',
+                background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
+              <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink }}>
+                {mi} mi
+              </span>
+              <span style={{ display: 'block', fontSize: 10.5, marginTop: 2, color: on ? 'rgba(255,255,255,.75)' : C.mute }}>
+                {n == null ? '—' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}m` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function Head({ hue, children, note }: { hue: 'brand' | 'mint' | 'amber'; children: React.ReactNode; note?: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '26px 2px 9px' }}>
@@ -130,6 +219,11 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [place, setPlace] = useState<GeoOption | null>(null)
   const [reach, setReach] = useState<Reach | null>(null)
   const [reaching, setReaching] = useState(false)
+  /* One number per radius, kept as they arrive, so the rings fill in as the
+     owner explores instead of forgetting everything on each tap. Reset when the
+     place changes, because a number for Seattle means nothing for Phoenix. */
+  const [counts, setCounts] = useState<Record<number, number | null>>({})
+  const [suggested, setSuggested] = useState<GeoOption | null>(null)
   /* Meta's own rendering of a running ad, fetched only when asked for. */
   const [previewOf, setPreviewOf] = useState<string | null>(null)
   const [previews, setPreviews] = useState<AdPreview[] | null>(null)
@@ -147,6 +241,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         setCandidates((j.candidates ?? []) as Candidate[])
         setPlatforms((j.platforms ?? []) as PlatformState[])
         setHistory((j.history ?? null) as History | null)
+        setSuggested((j.suggested ?? null) as GeoOption | null)
         if (j.limits) setLimits(j.limits)
         /* The stored choice, or nothing. Not "the only one we can see": the
            point of the picker is that seeing three ad accounts and paying from
@@ -203,6 +298,8 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   /* A TikTok post picked after a Meta one must not inherit a $10 a day that
      TikTok will simply refuse. */
   useEffect(() => { setDaily((d) => (d < minDaily ? dailyChoices[0] : d)) }, [minDaily, dailyChoices])
+  /* A number measured for one town says nothing about the next one. */
+  useEffect(() => { setCounts({}) }, [place])
 
   /* Look up a place as they type. Debounced, because this is a network call per
      keystroke otherwise and the answer is not urgent. */
@@ -237,6 +334,8 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         const got = j as Reach
         setReach(got)
         if (got.ready === false && tries < 6) { tries++; setTimeout(ask, 5000); return }
+        /* Remember it against this radius so the rings keep their labels. */
+        setCounts((c) => ({ ...c, [radius]: got.upper && got.upper > 0 ? got.upper : null }))
         setReaching(false)
       }).catch(() => { if (live) { setReach(null); setReaching(false) } })
     }
@@ -611,8 +710,28 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
               </button>
             ) : (
               <>
+                {/* THEIR OWN CITY, one tap, before anybody types anything. We
+                    know where the restaurant is; asking them to tell us again is
+                    a form for a fact we already hold. Still a tap and not a
+                    default, because on the screen that spends money the choice
+                    should be visibly theirs. */}
+                {suggested && !placeQ && (
+                  <button type="button" onClick={() => setPlace(suggested)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', font: 'inherit', marginBottom: 10,
+                      padding: '13px 15px', borderRadius: R.box, cursor: 'pointer',
+                      background: tint('mint', .07), border: `1px solid ${C.green}` }}>
+                    <span style={{ width: 30, height: 30, borderRadius: '50%', background: gradOf('mint'), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <MapPin size={15} color="#fff" />
+                    </span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>{suggested.name}</span>
+                      <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>Where your restaurant is</span>
+                    </span>
+                    <span style={{ fontSize: T.note, fontFamily: DISPLAY, fontWeight: 600, color: C.greenDk }}>Use this</span>
+                  </button>
+                )}
                 <input className="cmp-in" value={placeQ} onChange={(e) => setPlaceQ(e.target.value)}
-                  placeholder="Your town or city"
+                  placeholder={suggested ? 'Or somewhere else' : 'Your town or city'}
                   style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: R.box, padding: '11px 12px', fontSize: T.body, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
                 {places.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
@@ -655,19 +774,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     city, which is exactly the kind of lie a screen should not
                     tell about somebody's money. */}
                 {rules?.cityRadius ? (
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  {RADII.map((r) => {
-                    const on = radius === r
-                    return (
-                      <button key={r} type="button" onClick={() => setRadius(r)}
-                        style={{ flex: 1, padding: '9px 0', borderRadius: R.cell, cursor: 'pointer', font: 'inherit', fontFamily: DISPLAY,
-                          fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink,
-                          background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
-                        {r} mi
-                      </button>
-                    )
-                  })}
-                </div>
+                  <Rings options={RADII} value={radius} onPick={setRadius} counts={counts} city={place.name} />
                 ) : (
                   <div style={{ marginTop: 10, fontSize: T.label, color: C.mute, lineHeight: 1.5, padding: '0 2px' }}>
                     {rules?.name} targets the whole city rather than a ring around you. There is no
