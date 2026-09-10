@@ -26,7 +26,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { AD_RULES, adPlatformFor, CONNECT_SLUG, type AdPlatform } from '@/lib/channels/ad-rules'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate, adPreviews, TARGETABLE_GEO,
+  listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate, adPreviews, TARGETABLE_GEO, forecastReach,
   listPostTargets, MAX_BOOST_USD, MAX_BOOST_DAYS, MIN_DAILY_USD,
 } from '@/lib/channels/adapters/zernio'
 
@@ -326,6 +326,27 @@ export async function POST(req: NextRequest) {
       catch { return NextResponse.json({ available: false, untargetable: true }) }
       const r = await reachEstimate(clientId, { accountId: meta.accountId, adAccountId: payer, spec })
       return NextResponse.json(r)
+    }
+
+    /* ── WHAT THIS BUDGET REACHES ──────────────────────────────────────
+       A quote from Meta, in its own words: nothing is bought and no ad
+       entities are created. Read-only in every way that matters. */
+    if (body.action === 'forecast') {
+      if (!rules.reachEstimate) return NextResponse.json({ ok: false, status: 'unsupported' })
+      const { data: cRow } = await createAdminClient().from('channel_connections')
+        .select('metadata').eq('client_id', clientId).eq('channel', 'zernio').maybeSingle()
+      const payer = payerOf(cRow?.metadata, ad)
+      if (!payer) return NextResponse.json({ ok: false, status: 'no_payer' })
+      const amount = Number(body.amount), dys = Number(body.days)
+      if (!Number.isFinite(amount) || amount < 1 || !Number.isFinite(dys) || dys < 1) {
+        return NextResponse.json({ ok: false, status: 'bad_input' })
+      }
+      let spec: Record<string, unknown>
+      try { spec = buildSpec(body.targeting ?? {}, ad) }
+      catch { return NextResponse.json({ ok: false, status: 'untargetable' }) }
+      return NextResponse.json(await forecastReach(clientId, {
+        accountId: meta.accountId, adAccountId: payer, budget: amount, days: dys, targeting: spec,
+      }))
     }
 
     if (body.action === 'stop') {

@@ -1746,3 +1746,79 @@ export async function adPreviews(clientId: string, adId: string, formats?: strin
       .filter((x) => x.format)
   } catch { return [] }
 }
+
+export interface Forecast {
+  ok: boolean
+  status: string
+  /** people reached for the budget asked about */
+  reach: number | null
+  impressions: number | null
+  /** Meta's own floor for this audience and window; the reason a small boost
+   *  may get no answer at all. */
+  minBudget: number | null
+  maxBudget: number | null
+  currency: string | null
+  error: string | null
+}
+
+/**
+ * WHAT THIS BUDGET REACHES, from Meta rather than from us.
+ *
+ * The owner's question was the right one: Ads Manager shows an estimated reach
+ * for a budget, so why don't we. The answer is that reach-estimate has no budget
+ * field -- but THIS endpoint does. Give it budgetAmount and Meta predicts the
+ * reach; give it a reach and Meta predicts the budget.
+ *
+ * A QUOTE, in the vendor's own words: "nothing is bought and no ad entities are
+ * created". Nothing here reserves anything; reserving is a separate call we do
+ * not make.
+ *
+ * ONE HONEST CAVEAT, which the UI has to carry. This is Meta's RESERVATION
+ * model, and a boost buys on the AUCTION. The audience and the window are the
+ * same, so the number is a real answer to "how big a dent does this budget
+ * make", but it is not a promise about auction delivery. And R&F has its own
+ * minimum spend: below it Meta answers with minBudget instead of a reach, which
+ * is worth showing rather than swallowing.
+ */
+export async function forecastReach(clientId: string, args: {
+  accountId: string
+  adAccountId: string
+  budget: number
+  days: number
+  targeting: Record<string, unknown>
+}): Promise<Forecast> {
+  const profileId = await profileIdFor(clientId)
+  const none: Forecast = { ok: false, status: 'unavailable', reach: null, impressions: null, minBudget: null, maxBudget: null, currency: null, error: null }
+  if (!profileId) return none
+  const start = new Date(Date.now() + 60 * 60 * 1000)
+  const end = new Date(start.getTime() + Math.max(1, args.days) * 86400000)
+  try {
+    const res = await zer('/ads/rf-predictions', {
+      method: 'POST',
+      timeoutMs: 25_000,
+      body: JSON.stringify({
+        accountId: args.accountId,
+        adAccountId: args.adAccountId,
+        budgetAmount: Math.round(args.budget * 100) / 100,
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        targeting: args.targeting,
+      }),
+    })
+    const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+    const p = (d.prediction && typeof d.prediction === 'object' ? d.prediction : {}) as Record<string, unknown>
+    const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
+    return {
+      ok: str(p.status) === 'ready',
+      status: str(p.status) || 'unknown',
+      reach: n(p.reach),
+      impressions: n(p.impressions),
+      minBudget: n(p.minBudget),
+      maxBudget: n(p.maxBudget),
+      currency: str(d.currency) || null,
+      error: null,
+    }
+  } catch (e) {
+    return { ...none, error: e instanceof Error ? e.message : 'forecast failed' }
+  }
+}
