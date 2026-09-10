@@ -4,14 +4,19 @@
  * /dashboard/more — the owner's More tab (owner 2026-09-05: "make it simple").
  *
  * The profile owns the business facts: logo, name, what and where, open now, their goals,
- * and five quick buttons (Info, Hours, Menu, Photos, Brand). Under it, six rows and Sign out —
- * seven once there is a win to look at, because the deck only carries one for 14 days.
+ * and five quick buttons (Info, Hours, Menu, Photos, Brand). Under it, the rows and Sign out —
+ * one more once there is a win to look at, because the deck only carries one for 14 days.
  * Every row says what is inside it or what it is set to. Words stay at a fifth-grade level.
+ *
+ * This is also the ONLY door to the seven setup walkthroughs (Google profile, review replies,
+ * order buttons, other listings, social profiles, get measurable, land in the inbox). They each
+ * drew a back arrow reading "More" from the day they shipped and nothing here linked to them,
+ * so for months the only way in was a live campaign task.
  */
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, Trophy, LogOut, PenLine, CalendarClock , TrendingUp } from 'lucide-react'
+import { ChevronRight, Store, Clock, UtensilsCrossed, Image as ImageIcon, Palette, SlidersHorizontal, Heart, CreditCard, Plug, LifeBuoy, Sparkles, Trophy, LogOut, PenLine, CalendarClock, TrendingUp, MapPin, MessageSquare, ShoppingBag, MapPinned, AtSign, BarChart3, Mail } from 'lucide-react'
 import { signOut } from '@/lib/supabase/hooks'
 import { useLang } from './mvp-language'
 import { gradOf, hueOf, type HueKey } from './hues'
@@ -101,6 +106,18 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
     { label: 'Write a post', sub: 'Send it now or at your best time', href: '/dashboard/post', Icon: PenLine, hue: 'brand' },
     { label: 'Boost a post', sub: 'Put money behind one that already worked', href: '/dashboard/boost', Icon: TrendingUp, hue: 'event' },
     { label: 'Coming up', sub: 'What is still to go out', href: '/dashboard/scheduled', Icon: CalendarClock, hue: 'nights' },
+    /* THE SEVEN WALKTHROUGHS THAT HAD NO DOOR. Every one of these screens already
+       drew a back arrow reading "More" and nothing on More linked to it, so the
+       only way in was a campaign task -- an owner with no live campaign could not
+       reach their own Google listing. Each opens standalone (no campaignId) in
+       its read-and-fix mode. */
+    { label: 'Your Google profile', sub: 'What Google shows customers today', href: '/dashboard/google-profile', Icon: MapPin, hue: 'newfaces' },
+    { label: 'Reply to your reviews', sub: 'The ones still waiting, worst first', href: '/dashboard/review-replies', Icon: MessageSquare, hue: 'reviews' },
+    { label: 'Your order buttons', sub: 'Where Order and Reserve send people', href: '/dashboard/order-buttons', Icon: ShoppingBag, hue: 'online' },
+    { label: 'Your other listings', sub: 'Yelp, Apple Maps and the rest', href: '/dashboard/listings', Icon: MapPinned, hue: 'catering' },
+    { label: 'Your social profiles', sub: 'Complete and matching, on all five', href: '/dashboard/social-profiles', Icon: AtSign, hue: 'brand' },
+    { label: 'Get measurable', sub: 'The two tools that show if it works', href: '/dashboard/measure', Icon: BarChart3, hue: 'nights' },
+    { label: 'Land in the inbox', sub: 'Who is allowed to send email as you', href: '/dashboard/email', Icon: Mail, hue: 'mint' },
     { label: 'Your settings', href: '/dashboard/preferences', Icon: SlidersHorizontal, hue: 'mint' },
     // The wins shelf. Only once there IS one: the deck drops a counted promise after 14 days and
     // there is no other way back to it, but a row that opens an empty page is worse than no row.
@@ -122,6 +139,8 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
     /* A row whose label is in no group here is SILENTLY DROPPED. That is how
        "Write a post" was invisible for a day. Adding a row means adding its key. */
     { title: 'Post', hue: 'brand', keys: ['Write a post', 'Coming up', 'Boost a post'] },
+    { title: 'Your Google listing', hue: 'newfaces', keys: ['Your Google profile', 'Reply to your reviews', 'Your order buttons'] },
+    { title: 'Get found', hue: 'catering', keys: ['Your other listings', 'Your social profiles', 'Get measurable', 'Land in the inbox'] },
     { title: 'You', hue: 'mint', keys: ['Your settings', 'Wins', 'People you have worked with'] },
     { title: 'Account', hue: 'nights', keys: ['Plan and billing', 'Connected accounts'] },
     { title: 'Help', hue: 'grey', keys: ['Get help', "What's new"] },

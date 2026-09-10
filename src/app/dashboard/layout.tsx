@@ -109,6 +109,8 @@ const MVP_EXACT = new Set([
   '/dashboard/more', '/dashboard/billing', '/dashboard/bookings',
   '/dashboard/assets', '/dashboard/goals', '/dashboard/help', '/dashboard/google-profile',
   '/dashboard/order-buttons', '/dashboard/review-replies', '/dashboard/listings', '/dashboard/measure',
+  '/dashboard/social-profiles', // draws its own MvpShell like its five siblings; was missing here, so it
+                                // wore the legacy back-header on top of its own (found when More linked it)
   '/dashboard/team', // the team page moved onto the mobile kit (portal redesign 2026-09-04)
   '/dashboard/preferences', '/dashboard/people', '/dashboard/get-help', '/dashboard/whats-new', // the More tab's pages (owner 2026-09-05)
   '/dashboard/post', // the composer: one job, its own back arrow, no nav underneath
