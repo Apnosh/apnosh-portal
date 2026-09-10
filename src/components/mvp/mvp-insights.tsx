@@ -32,7 +32,7 @@ import {
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
   Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight, FileText,
-  ChevronDown, PenLine, MessageSquare, MapPin,
+  ChevronDown, PenLine, MessageSquare, MapPin, Layers,
 } from 'lucide-react'
 import { HUES, STAGE_HUES, gradOf, tint, type HueKey } from './hues'
 import { Mark } from './mark'
@@ -2546,7 +2546,28 @@ export const POSTS_FOOTNOTE = 'Your latest posts across every connected account,
  * The count on the end card is the REAL total we hold, so it never promises a
  * fuller list than exists.
  */
-const TILE_W = 152
+/* THE TILE IS THE SHAPE OF THE POST. Every tile was a square, so a TikTok -- shot
+   vertical, which is most of what a restaurant posts -- arrived as a crop with the
+   top and bottom of the frame gone, and a YouTube video got the same square. The
+   rail keeps ONE height and takes its width from what the post actually is, so a
+   reel is tall and narrow and a YouTube video is wide, and the bottoms still line
+   up. Landscape is capped short of a true 16:9: at this height that is 348px, one
+   tile filling a phone, and a rail you cannot see past is not a rail. */
+const TILE_H = 196
+const SHAPE_W: Record<'tall' | 'square' | 'wide', number> = {
+  tall: Math.round(TILE_H * 9 / 16),   // 110 — reels, stories, TikTok
+  square: TILE_H,                      // feed photos and carousels
+  wide: Math.round(TILE_H * 1.2),      // capped; see above
+}
+
+function shapeOf(p: InsightsPost): 'tall' | 'square' | 'wide' {
+  const t = (p.type ?? '').toLowerCase()
+  if (t === 'reel' || t === 'story') return 'tall'
+  const pl = (p.platform ?? '').toLowerCase()
+  if (pl.startsWith('tiktok')) return 'tall'
+  if (pl.startsWith('youtube')) return 'wide'
+  return 'square'
+}
 
 function tileNumber(p: InsightsPost): { big: string; small: string } {
   if (p.unreported) return { big: DASH, small: 'not reported' }
@@ -2554,65 +2575,72 @@ function tileNumber(p: InsightsPost): { big: string; small: string } {
   return { big: p.reach.toLocaleString(), small: p.likes > 0 ? `${p.likes.toLocaleString()} likes` : 'views' }
 }
 
-/** One post as a tile: its own picture, its number over it, its network in the corner. */
-function PostTile({ p, badge, caption }: { p: InsightsPost; badge?: string; caption?: string }) {
+/** One post as a tile: its own picture, in its own shape, its number over it. */
+function PostTile({ p, badge, caption }: { p: InsightsPost; badge?: number; caption?: string }) {
   const has = !!p.thumbnailUrl
   const n = tileNumber(p)
+  const w = SHAPE_W[shapeOf(p)]
   const date = p.postedAt ? reviewDate(p.postedAt) : ''
+  const narrow = w < 140
   const inner = (
     <>
       <div style={{
-        position: 'relative', width: TILE_W, height: TILE_W, borderRadius: 16, overflow: 'hidden',
+        position: 'relative', width: w, height: TILE_H, borderRadius: 16, overflow: 'hidden',
         background: has ? '#000' : '#f1f1f4',
         backgroundImage: has ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center',
         boxShadow: '0 1px 3px rgba(0,0,0,.06)',
       }}>
         {!has && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ImageIcon size={22} color={C.faint} /></span>}
         {/* the scrim only exists to keep white numerals readable on a bright photo */}
-        <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '58%', background: has ? 'linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.66))' : 'none' }} />
+        <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '56%', background: has ? 'linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.68))' : 'none' }} />
         <span style={{ position: 'absolute', left: 8, top: 8, width: 24, height: 24, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <BrandOrMark provider={p.platform} size={14} />
         </span>
-        {badge && (
-          <span style={{ position: 'absolute', right: 8, top: 8, padding: '3px 8px', borderRadius: 99, background: 'rgba(255,255,255,.94)', fontSize: 10.5, fontWeight: 700, color: C.ink, letterSpacing: '.01em' }}>{badge}</span>
+        {/* a count, not a sentence: this pill has to sit on a 110px tile too */}
+        {badge != null && (
+          <span style={{ position: 'absolute', right: 8, top: 8, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 7px', borderRadius: 99, background: 'rgba(255,255,255,.94)', fontSize: 10.5, fontWeight: 700, color: C.ink }}>
+            <Layers size={10} /> {badge}
+          </span>
         )}
         <span style={{ position: 'absolute', left: 10, right: 10, bottom: 9 }}>
-          <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1, color: has ? '#fff' : C.ink }}>{n.big}</span>
-          <span style={{ display: 'block', fontSize: 11, marginTop: 3, color: has ? 'rgba(255,255,255,.86)' : C.mute }}>{n.small}</span>
+          <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: narrow ? 18 : 21, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1, color: has ? '#fff' : C.ink }}>{n.big}</span>
+          <span style={{ display: 'block', fontSize: 11, marginTop: 3, color: has ? 'rgba(255,255,255,.86)' : C.mute, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{n.small}</span>
         </span>
       </div>
-      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {/* two lines, fixed, so the bottoms of the tiles line up whatever the words */}
+      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 7, lineHeight: 1.3, height: 30, overflow: 'hidden' }}>
         {caption ?? `${p.type ? p.type.charAt(0).toUpperCase() + p.type.slice(1).toLowerCase() : 'Post'}${date ? ` · ${date}` : ''}`}
       </div>
     </>
   )
-  const box: React.CSSProperties = { flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', display: 'block' }
+  const box: React.CSSProperties = { flex: `0 0 ${w}px`, width: w, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', display: 'block' }
   return p.permalink
     ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
     : <div style={box}>{inner}</div>
 }
 
-/** The same content on several platforms: one tile, badged, showing the one that
- *  carried it. The full comparison card lives on the post list. */
+/** The same content on several platforms: one tile, in the shape of the one that
+ *  carried it, counted. The full comparison card lives on the post list. */
 function CrossTile({ posts }: { posts: InsightsPost[] }) {
   const ranked = posts.slice().sort((a, b) => b.reach - a.reach)
   const best = ranked[0]
   const places = new Set(ranked.map((x) => x.platform)).size
   const name = best.platform ? best.platform.charAt(0).toUpperCase() + best.platform.slice(1) : 'One'
-  return <PostTile p={best} badge={`${places} places`} caption={`${name} carried it`} />
+  return <PostTile p={best} badge={places} caption={`${name} carried it`} />
 }
 
 /** The end of the rail: everything else, one tap away. */
 function AllPostsTile({ total }: { total?: number }) {
+  const w = SHAPE_W.square
   return (
-    <Link href="/dashboard/insights/posts" style={{ flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', display: 'block' }}>
-      <div style={{ width: TILE_W, height: TILE_W, borderRadius: 16, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+    <Link href="/dashboard/insights/posts" style={{ flex: `0 0 ${w}px`, width: w, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', display: 'block' }}>
+      <div style={{ width: w, height: TILE_H, borderRadius: 16, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
         <span style={{ width: 38, height: 38, borderRadius: 12, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ArrowRight size={17} color={C.greenDk} />
         </span>
         <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>See all{typeof total === 'number' ? ` ${total}` : ''}</span>
       </div>
-      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 7 }}>Every post, sorted</div>
+      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 7, lineHeight: 1.3, height: 30, overflow: 'hidden' }}>Every post, sorted</div>
     </Link>
   )
 }
@@ -2625,7 +2653,7 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
       {/* Bleeding past the page's own 18px gutter, so the last tile is visibly cut
           off at the edge -- that half-tile is the only thing that tells a thumb
           there is more to the right. */}
-      <div className="mvp-swipe" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x proximity', padding: '2px 18px 2px 2px', margin: '0 -18px 0 -2px' }}>
+      <div className="mvp-swipe" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', overflowX: 'auto', scrollSnapType: 'x proximity', padding: '2px 18px 2px 2px', margin: '0 -18px 0 -2px' }}>
         {items.map((item) =>
           Array.isArray(item)
             ? <CrossTile key={item[0].crossKey ?? item[0].id} posts={item} />
