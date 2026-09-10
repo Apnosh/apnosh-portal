@@ -37,6 +37,13 @@ interface Post { id: string; content: string; status: string; scheduledFor: stri
 interface Draft { id: string; idea: string; status: string; platforms: string[]; wantedFor: string | null }
 interface Data { waiting: Post[]; failed: Post[]; sent: Post[]; withTeam: Draft[]; error: string | null }
 
+/* An owner never reads a machine's words. The scheduled endpoint passes the
+   vendor's own error through, and on a box with no key that is the literal string
+   "ZERNIO_API_KEY is not set" -- true, and no help to a restaurant. Anything
+   shaped like an internal name becomes the plain line. */
+const OWNER_SAFE = 'We could not check what is coming up just now.'
+const ownerWords = (m: string): string => (/[A-Z]{3,}[_ ][A-Z]/.test(m) || /\bAPI\b|\bkey\b|\btoken\b|\b\d{3}\b/i.test(m) ? OWNER_SAFE : m)
+
 /* One answer per client, shared by every mount for a minute.
    Insights renders this under the stage the owner is looking at, so swiping from
    one stage to the next unmounts and remounts it -- without this, that is a fresh
@@ -92,9 +99,9 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
       if (!r.ok) throw new Error(j.error || 'Could not load what is coming up')
       CACHE.set(clientId, { at: Date.now(), data: j as Data })
       setData(j as Data)
-      if (j.error) setErr(j.error)
+      if (j.error) setErr(ownerWords(String(j.error)))
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not load what is coming up')
+      setErr(ownerWords(e instanceof Error ? e.message : OWNER_SAFE))
       setData({ waiting: [], failed: [], sent: [], withTeam: [], error: null })
     }
   }, [clientId])
@@ -118,7 +125,7 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
         return next
       })
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not cancel it')
+      setErr(ownerWords(e instanceof Error ? e.message : 'Could not cancel it'))
     } finally { setCancelling(null) }
   }
 
@@ -163,41 +170,60 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
   }
 
   if (compact) {
-    /* One list, in the order that matters: what went wrong, what is next, what
-       the team is holding. Three at most -- this sits above the post list on a
-       page the owner opened to read numbers, not to run the calendar. */
-    const rows: Array<{ id: string; when: string; text: string; platforms: string[]; media: string | null; bad?: boolean }> = [
+    /* SIDEWAYS, ten at most (owner 2026-09-10). Stacked, a busy week of scheduled
+       posts pushed the post rail and everything under it off the screen; on a rail
+       ten of them cost one card's height. Order still matters: what went wrong,
+       then what is next, then what the team is holding. */
+    const rows: Array<{ id: string; when: string; text: string; platforms: string[]; media: string | null; bad?: boolean; team?: boolean }> = [
       ...data.failed.map((p) => ({ id: p.id, when: p.failure ?? 'It did not publish', text: p.content || 'A post', platforms: p.platforms, media: p.mediaUrl, bad: true })),
       ...data.waiting.map((p) => ({ id: p.id, when: whenWords(p.scheduledFor), text: p.content || 'A post', platforms: p.platforms, media: p.mediaUrl })),
-      ...data.withTeam.map((d) => ({ id: d.id, when: d.status === 'approved' ? 'Written, waiting to go out' : 'Your team is writing it', text: d.idea, platforms: d.platforms, media: null })),
+      ...data.withTeam.map((d) => ({ id: d.id, when: d.status === 'approved' ? 'Written, ready to go' : 'Your team is writing it', text: d.idea, platforms: d.platforms, media: null, team: true })),
     ]
-    const shown = rows.slice(0, 3)
+    const shown = rows.slice(0, 10)
     return (
       <div style={{ marginTop: 16, padding: '0 2px' }}>
-        {/* the header carries the way through, like every other section on this
-            page, so the block is a heading and its cards and nothing else */}
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, padding: '0 2px' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8, padding: '0 2px' }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }}>Coming up</span>
           <span style={{ fontSize: 12, color: C.faint }}>{rows.length === 1 ? '1 thing' : `${rows.length} things`}</span>
           <Link href="/dashboard/insights/posts" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-            {rows.length > 3 ? 'See all' : 'Open'} <ChevronRight size={13} />
+            Open <ChevronRight size={13} />
           </Link>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {/* bleeds past the page gutter so a cut-off card shows there is more */}
+        <div className="mvp-swipe" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x proximity', padding: '2px 18px 2px 2px', margin: '0 -18px 0 -2px' }}>
           {shown.map((r) => (
-            <div key={r.id} style={{ ...card, padding: 11, borderColor: r.bad ? tint('red', .45, 1) : C.line, background: r.bad ? '#fffafa' : '#fff', alignItems: 'center' }}>
+            <div key={r.id} style={{
+              flex: '0 0 238px', width: 238, scrollSnapAlign: 'start', boxSizing: 'border-box',
+              borderRadius: 16, padding: 12, display: 'flex', gap: 10, alignItems: 'flex-start',
+              border: `0.5px solid ${r.bad ? tint('red', .45, 1) : C.line}`,
+              background: r.bad ? '#fffafa' : r.team ? `linear-gradient(150deg, ${tint('mint', .12)}, ${tint('brand', .1)})` : '#fff',
+              boxShadow: '0 1px 3px rgba(0,0,0,.05)',
+            }}>
               {r.media
-                ? thumb(r.media)
-                : <span style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, background: tint('mint', .16), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={16} color={C.greenDk} /></span>}
+                ? <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, background: `center/cover url(${r.media})` }} />
+                : (
+                  <span style={{ width: 42, height: 42, borderRadius: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', background: r.team ? gradOf('mint') : r.bad ? gradOf('red') : gradOf('nights'), boxShadow: r.team ? glow('mint', .26) : 'none' }}>
+                    {r.team ? <Users size={18} /> : <Calendar size={18} />}
+                  </span>
+                )}
+              {/* THE WHEN GETS THE WHOLE LINE. With the network marks beside it,
+                  "Written, ready to go" truncated to "Written, re…" in a 238px
+                  card -- the marks are a detail and the words are the point. */}
               <span style={{ flex: 1, minWidth: 0 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <span style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: r.bad ? C.coral : C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.when}</span>
-                  {marks(r.platforms)}
-                </span>
-                <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
+                <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: r.bad ? C.coral : C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.when}</span>
+                <span style={{ display: 'block', fontSize: 12, color: C.mute, marginTop: 3, lineHeight: 1.35, maxHeight: 32, overflow: 'hidden' }}>{r.text}</span>
+                {r.platforms.length > 0 && <span style={{ display: 'block', marginTop: 7 }}>{marks(r.platforms)}</span>}
               </span>
             </div>
           ))}
+          {rows.length > shown.length && (
+            <Link href="/dashboard/insights/posts" style={{ flex: '0 0 132px', width: 132, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', borderRadius: 16, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              <span style={{ width: 34, height: 34, borderRadius: 11, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ChevronRight size={16} color={C.greenDk} />
+              </span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink }}>{rows.length - shown.length} more</span>
+            </Link>
+          )}
         </div>
       </div>
     )

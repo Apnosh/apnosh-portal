@@ -183,10 +183,12 @@ export async function GET(req: NextRequest) {
     socialConnected = posts.value.length > 0
     postCount = posts.value.length
     socialReach = posts.value.reduce((s, p) => s + (p.reach ?? 0), 0)
-    /* The five newest. A fresh post with zero reach still shows (owner call: even a 0 must be
+    /* The ten newest. A fresh post with zero reach still shows (owner call: even a 0 must be
      * visible and accurate). The full list at /dashboard/insights/posts sorts and maps through
-     * the SAME helpers, so its first five are literally these five. */
-    topPosts = newestFirst(posts.value).slice(0, 5).map(toPostView)
+     * the SAME helpers, so its first ten are literally these ten.
+     * Ten, not five, since Insights draws them as a sideways rail (owner 2026-09-10) -- a rail
+     * that runs out after five scrolls is a rail that did not need to be one. */
+    topPosts = newestFirst(posts.value).slice(0, 10).map(toPostView)
   }
 
   // Fold social REACH into the funnel's TOP stage only — Awareness = "people who saw you"

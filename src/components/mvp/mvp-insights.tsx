@@ -32,8 +32,9 @@ import {
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
   Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight, FileText,
+  ChevronDown, PenLine, MessageSquare, MapPin,
 } from 'lucide-react'
-import { HUES, STAGE_HUES, type HueKey } from './hues'
+import { HUES, STAGE_HUES, gradOf, tint, type HueKey } from './hues'
 import { Mark } from './mark'
 import type { StageCampaign } from '@/lib/dashboard/get-stage-campaigns'
 import { useClient } from '@/lib/client-context'
@@ -604,6 +605,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
       <div style={{ padding: '0 18px' }}>
         <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
         {/* the trend chart and the campaigns live on the Trends tab now (owner 2026-09-04) */}
+        <QuickActions />
       </div>
       </AccentCtx.Provider>
     </div>
@@ -732,8 +734,15 @@ function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: C
 // reads as the drill-down of the 4 cards above (Google -> Maps + Search; Calls
 // -> Google + website) instead of a flat repeat of them. Groups with no source
 // are skipped.
+const SOURCES_AT_REST = 5
+
 function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
   const A = useAccent()
+  /* Five, then the rest on a tap (owner 2026-09-10). A restaurant with everything
+     connected has nine sources here, and the tail of them is a wall of small
+     numbers between the graph and the posts -- the part of the page people
+     actually came for. The big ones are the answer; the rest is the audit. */
+  const [allSources, setAllSources] = useState(false)
   const rows = (stage.groups ?? [])
     .map((g) => ({ g, srcs: g.sourceIds.map((id) => stage.sources.find((x) => x.id === id)).filter((v): v is StageSourceView => !!v) }))
     .filter((x) => x.srcs.length > 0)
@@ -751,7 +760,17 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
   return (
     <Section title="Breakdown by source" sub={sub}>
       <div>
-        {items.map((it, k) => <SourceItemRow key={it.x.id} s={it.x} groupLabel={it.g.label} first={k === 0} top={top} accent={A} />)}
+        {(allSources ? items : items.slice(0, SOURCES_AT_REST)).map((it, k) => <SourceItemRow key={it.x.id} s={it.x} groupLabel={it.g.label} first={k === 0} top={top} accent={A} />)}
+        {items.length > SOURCES_AT_REST && (
+          <button
+            type="button"
+            onClick={() => setAllSources((v) => !v)}
+            style={{ font: 'inherit', display: 'flex', alignItems: 'center', gap: 4, width: '100%', justifyContent: 'center', padding: '10px 0 4px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: C.greenDk }}
+          >
+            {allSources ? 'Show less' : `Show ${items.length - SOURCES_AT_REST} more`}
+            <ChevronDown size={14} style={{ transform: allSources ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }} />
+          </button>
+        )}
         {off.length > 0 && <ConnectRow label={offLabel} sources={off.flatMap(({ srcs }) => srcs)} first={items.length === 0} />}
       </div>
     </Section>
@@ -2514,35 +2533,156 @@ export function PostRow({ p, first = true }: { p: InsightsPost; first?: boolean 
 }
 export const POSTS_FOOTNOTE = 'Your latest posts across every connected account, with how many views each one has so far. A post added very recently can take a day for its numbers to arrive.'
 
-/** The five newest, with a way through to everything. The count is the REAL total we hold,
- *  so the link never promises a fuller list than exists. */
+/**
+ * THE POSTS, SIDEWAYS.
+ * ====================
+ * Ten tiles on a rail instead of five rows down the page (owner 2026-09-10).
+ * A stacked list of posts pushed everything under it off the screen, and the one
+ * thing a photo of food is good at -- being looked at -- was a 60px square beside
+ * two lines of text. On a rail the picture IS the row: the number sits on the
+ * image, the platform is a mark in the corner, and ten of them cost the height of
+ * one.
+ *
+ * The count on the end card is the REAL total we hold, so it never promises a
+ * fuller list than exists.
+ */
+const TILE_W = 152
+
+function tileNumber(p: InsightsPost): { big: string; small: string } {
+  if (p.unreported) return { big: DASH, small: 'not reported' }
+  if (p.pending) return { big: DASH, small: 'still counting' }
+  return { big: p.reach.toLocaleString(), small: p.likes > 0 ? `${p.likes.toLocaleString()} likes` : 'views' }
+}
+
+/** One post as a tile: its own picture, its number over it, its network in the corner. */
+function PostTile({ p, badge, caption }: { p: InsightsPost; badge?: string; caption?: string }) {
+  const has = !!p.thumbnailUrl
+  const n = tileNumber(p)
+  const date = p.postedAt ? reviewDate(p.postedAt) : ''
+  const inner = (
+    <>
+      <div style={{
+        position: 'relative', width: TILE_W, height: TILE_W, borderRadius: 16, overflow: 'hidden',
+        background: has ? '#000' : '#f1f1f4',
+        backgroundImage: has ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center',
+        boxShadow: '0 1px 3px rgba(0,0,0,.06)',
+      }}>
+        {!has && <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ImageIcon size={22} color={C.faint} /></span>}
+        {/* the scrim only exists to keep white numerals readable on a bright photo */}
+        <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '58%', background: has ? 'linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.66))' : 'none' }} />
+        <span style={{ position: 'absolute', left: 8, top: 8, width: 24, height: 24, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <BrandOrMark provider={p.platform} size={14} />
+        </span>
+        {badge && (
+          <span style={{ position: 'absolute', right: 8, top: 8, padding: '3px 8px', borderRadius: 99, background: 'rgba(255,255,255,.94)', fontSize: 10.5, fontWeight: 700, color: C.ink, letterSpacing: '.01em' }}>{badge}</span>
+        )}
+        <span style={{ position: 'absolute', left: 10, right: 10, bottom: 9 }}>
+          <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 21, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1, color: has ? '#fff' : C.ink }}>{n.big}</span>
+          <span style={{ display: 'block', fontSize: 11, marginTop: 3, color: has ? 'rgba(255,255,255,.86)' : C.mute }}>{n.small}</span>
+        </span>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {caption ?? `${p.type ? p.type.charAt(0).toUpperCase() + p.type.slice(1).toLowerCase() : 'Post'}${date ? ` · ${date}` : ''}`}
+      </div>
+    </>
+  )
+  const box: React.CSSProperties = { flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', display: 'block' }
+  return p.permalink
+    ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
+    : <div style={box}>{inner}</div>
+}
+
+/** The same content on several platforms: one tile, badged, showing the one that
+ *  carried it. The full comparison card lives on the post list. */
+function CrossTile({ posts }: { posts: InsightsPost[] }) {
+  const ranked = posts.slice().sort((a, b) => b.reach - a.reach)
+  const best = ranked[0]
+  const places = new Set(ranked.map((x) => x.platform)).size
+  const name = best.platform ? best.platform.charAt(0).toUpperCase() + best.platform.slice(1) : 'One'
+  return <PostTile p={best} badge={`${places} places`} caption={`${name} carried it`} />
+}
+
+/** The end of the rail: everything else, one tap away. */
+function AllPostsTile({ total }: { total?: number }) {
+  return (
+    <Link href="/dashboard/insights/posts" style={{ flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', textDecoration: 'none', color: 'inherit', display: 'block' }}>
+      <div style={{ width: TILE_W, height: TILE_W, borderRadius: 16, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f4f7f6)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        <span style={{ width: 38, height: 38, borderRadius: 12, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ArrowRight size={17} color={C.greenDk} />
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>See all{typeof total === 'number' ? ` ${total}` : ''}</span>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.mute, marginTop: 7 }}>Every post, sorted</div>
+    </Link>
+  )
+}
+
 function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) {
+  const items = groupCrossPosts(posts)
   const more = typeof total === 'number' && total > posts.length
   return (
-    <Section title="Recent posts">
-      {/* The same grouping the full list uses. Without it the two screens disagree
-          about what a post IS: one piece of content on three platforms reads as
-          three unrelated rows here and one comparison card there, and this file
-          already holds the line that the summary and the full list must never
-          drift about what a post reached. */}
-      <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {groupCrossPosts(posts).map((item, i) =>
+    <Section title="Recent posts" sub={total ? `${total} in all` : undefined}>
+      {/* Bleeding past the page's own 18px gutter, so the last tile is visibly cut
+          off at the edge -- that half-tile is the only thing that tells a thumb
+          there is more to the right. */}
+      <div className="mvp-swipe" style={{ display: 'flex', gap: 10, overflowX: 'auto', scrollSnapType: 'x proximity', padding: '2px 18px 2px 2px', margin: '0 -18px 0 -2px' }}>
+        {items.map((item) =>
           Array.isArray(item)
-            ? <CrossPostCard key={item[0].crossKey ?? item[0].id} posts={item} />
-            : <PostRow key={item.id} p={item} first={i === 0} />,
+            ? <CrossTile key={item[0].crossKey ?? item[0].id} posts={item} />
+            : <PostTile key={item.id} p={item} />,
         )}
+        {more && <AllPostsTile total={total} />}
       </div>
-      {more && (
-        /* the way through to every post reads as one more row of the list (owner 2026-09-04:
-           the full-width glass slab looked ugly on the white card) */
-        <Link href="/dashboard/insights/posts" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 2, padding: '8px 0 4px', textDecoration: 'none', color: C.ink }}>
-          <Mark hue="mint" size={36} bare><ImageIcon size={17} /></Mark>
-          <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600 }}>View all</span>
-          <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
-        </Link>
-      )}
       <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>{POSTS_FOOTNOTE}</div>
     </Section>
+  )
+}
+
+/**
+ * THE FOOT OF THE PAGE: four things to DO with what you just read.
+ * ================================================================
+ * Insights ended in a footnote. An owner who has just seen that TikTok carried a
+ * post sixty times further than Facebook has, at that exact moment, a reason to
+ * write another one -- and the only way to act on it was the nav bar and a guess
+ * about which tab. Four doors, in the order a restaurant reaches for them.
+ *
+ * Not a floating button. The page is read to the end and then acted on; a thing
+ * hovering over the numbers the whole way down is in the way of the numbers.
+ */
+const QUICK: { label: string; sub: string; href: string; hue: HueKey; Icon: typeof PenLine }[] = [
+  { label: 'Write a post', sub: 'Now or at your best time', href: '/dashboard/post', hue: 'brand', Icon: PenLine },
+  { label: 'Boost a post', sub: 'Put money behind a winner', href: '/dashboard/boost', hue: 'event', Icon: Megaphone },
+  { label: 'Reply to reviews', sub: 'Worst first', href: '/dashboard/review-replies', hue: 'reviews', Icon: MessageSquare },
+  { label: 'Your Google listing', sub: 'What people see', href: '/dashboard/google-profile', hue: 'newfaces', Icon: MapPin },
+]
+
+function QuickActions() {
+  return (
+    <div style={{ marginTop: 22, padding: '0 2px 4px' }}>
+      <div style={{ ...H3, marginBottom: 8, padding: '0 2px' }}>Do something with this</div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {QUICK.map((q) => (
+          <Link
+            key={q.label}
+            href={q.href}
+            className="mvp-row"
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 9, padding: '13px 13px 14px', borderRadius: 16,
+              textDecoration: 'none', color: 'inherit', background: '#fff',
+              border: `0.5px solid ${C.line}`, boxShadow: '0 1px 3px rgba(0,0,0,.05)',
+            }}
+          >
+            <span style={{ width: 34, height: 34, borderRadius: 11, background: gradOf(q.hue), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 3px 10px ${tint(q.hue, .5)}` }}>
+              <q.Icon size={17} />
+            </span>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.label}</span>
+              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.sub}</span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
   )
 }
 
