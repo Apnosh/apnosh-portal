@@ -1545,7 +1545,18 @@ export async function searchGeo(clientId: string, accountId: string, q: string):
   } catch { return [] }
 }
 
-export interface Reach { available: boolean; lower: number | null; upper: number | null; daily: number | null }
+export interface Reach {
+  available: boolean
+  lower: number | null
+  upper: number | null
+  /** Estimated daily reach at the budget, when Meta returns it. */
+  daily: number | null
+  /** Meta only. False while Meta is still computing: an audience it has not
+   *  seen before comes back as zeros until it has. Dropping this field meant
+   *  "still working" was indistinguishable from "nobody lives there". */
+  ready: boolean | null
+  currency: string | null
+}
 
 /**
  * How many people this could reach, BEFORE anything is bought.
@@ -1560,7 +1571,7 @@ export async function reachEstimate(
   args: { accountId: string; adAccountId: string; spec: Record<string, unknown> },
 ): Promise<Reach> {
   const profileId = await profileIdFor(clientId)
-  if (!profileId) return { available: false, lower: null, upper: null, daily: null }
+  if (!profileId) return { available: false, lower: null, upper: null, daily: null, ready: null, currency: null }
   try {
     const res = await zer('/ads/targeting/reach-estimate', {
       method: 'POST',
@@ -1572,8 +1583,10 @@ export async function reachEstimate(
       lower: typeof d.lower === 'number' ? d.lower : null,
       upper: typeof d.upper === 'number' ? d.upper : null,
       daily: typeof d.daily === 'number' ? d.daily : null,
+      ready: typeof d.estimateReady === 'boolean' ? d.estimateReady : null,
+      currency: str(d.currency) || null,
     }
-  } catch { return { available: false, lower: null, upper: null, daily: null } }
+  } catch { return { available: false, lower: null, upper: null, daily: null, ready: null, currency: null } }
 }
 
 /**
