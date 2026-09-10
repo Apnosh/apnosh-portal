@@ -28,7 +28,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { coordsForClient } from '@/lib/geo/geocode'
 import {
   listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate, adPreviews, TARGETABLE_GEO, forecastReach,
-  listPostTargets, MAX_BOOST_USD, MAX_BOOST_DAYS, MIN_DAILY_USD,
+  listPostTargets, MAX_BOOST_USD, MAX_BOOST_DAYS, MIN_DAILY_USD, instagramDemographics,
 } from '@/lib/channels/adapters/zernio'
 
 /**
@@ -40,7 +40,7 @@ import {
  * who will walk in, and the result is a higher price for a smaller room.
  * Distance from the door is the targeting that matters for a restaurant.
  */
-function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string; lat?: number; lng?: number }, ad: AdPlatform = 'meta'): Record<string, unknown> {
+function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; gender?: string; country?: string; lat?: number; lng?: number }, ad: AdPlatform = 'meta'): Record<string, unknown> {
   const spec: Record<string, unknown> = {}
   const radius = Math.max(1, Math.min(50, Number(t.radiusMiles) || 10))
 
@@ -53,10 +53,7 @@ function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number;
      than an approximation of a different one. */
   if (AD_RULES[ad].cityRadius && Number.isFinite(t.lat) && Number.isFinite(t.lng)) {
     spec.customLocations = [{ latitude: t.lat, longitude: t.lng, radius, distanceUnit: 'mile' }]
-    const lo0 = Math.max(18, Math.min(65, Number(t.ageMin) || 18))
-    const hi0 = Math.max(lo0, Math.min(65, Number(t.ageMax) || 65))
-    spec.ageMin = lo0
-    spec.ageMax = hi0
+    applyWho(spec, t)
     return spec
   }
 
@@ -82,11 +79,24 @@ function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number;
        now a refusal, not a bigger audience. */
     throw new Error('That kind of place cannot be targeted')
   }
+  applyWho(spec, t)
+  return spec
+}
+
+/**
+ * Age and gender, clamped to what the platform will take.
+ *
+ * Meta serves ads from 18 to 65+, so 18/65 is not a default we picked, it is the
+ * whole range. Gender is 'all' unless somebody deliberately narrows it, because
+ * on a small budget narrowing raises the price for a smaller room -- which is
+ * exactly why this lives behind a disclosure rather than in the main flow.
+ */
+function applyWho(spec: Record<string, unknown>, t: { ageMin?: number; ageMax?: number; gender?: string }) {
   const lo = Math.max(18, Math.min(65, Number(t.ageMin) || 18))
   const hi = Math.max(lo, Math.min(65, Number(t.ageMax) || 65))
   spec.ageMin = lo
   spec.ageMax = hi
-  return spec
+  if (t.gender === 'male' || t.gender === 'female') spec.gender = t.gender
 }
 
 export const runtime = 'nodejs'
@@ -160,6 +170,17 @@ export async function GET(req: NextRequest) {
     const mine = await listAds(clientId, meta.accountId)
     if (!mine.some((a) => a.id === previewAd)) return NextResponse.json({ previews: [] })
     return NextResponse.json({ previews: await adPreviews(clientId, previewAd) })
+  }
+
+  /* ?audience=1 — who their followers actually ARE, so the advanced controls
+     are a suggestion rather than a guess. Lazy: it is one more vendor call and
+     almost nobody opens that panel, so it is not on the critical path. */
+  if (req.nextUrl.searchParams.get('audience')) {
+    const targets = await listPostTargets(clientId)
+    const ig = targets.find((t) => t.platform === 'instagram')
+    if (!ig) return NextResponse.json({ audience: null })
+    const d = await instagramDemographics(clientId, ig.accountId).catch(() => null)
+    return NextResponse.json({ audience: d })
   }
 
   /* ?places=seattle — resolve a typed place to the platform's own id, which is
@@ -353,7 +374,7 @@ export async function POST(req: NextRequest) {
     clientId?: string; action?: string
     adAccountIds?: string[]; returnTo?: string
     platformPostId?: string; adAccountId?: string; amount?: number; days?: number; name?: string
-    targeting?: { geoKey?: string; geoType?: string; geoName?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; country?: string; lat?: number; lng?: number }
+    targeting?: { geoKey?: string; geoType?: string; geoName?: string; radiusMiles?: number; ageMin?: number; ageMax?: number; gender?: string; country?: string; lat?: number; lng?: number }
     adPlatform?: string
     adId?: string
   }

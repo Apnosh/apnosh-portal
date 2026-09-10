@@ -20,7 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Check, TrendingUp, Square, MapPin, Eye, Play, Loader2, Image as ImageIcon } from 'lucide-react'
+import { Check, TrendingUp, Square, MapPin, Eye, Play, Loader2, ChevronDown, Image as ImageIcon } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
 import { BrandOrMark, brandTone } from './mvp-insights'
@@ -217,8 +217,11 @@ function readCache(id: string): Record<string, unknown> | null {
  * refreshed behind so it stays honest without ever being the reason to wait.
  */
 const REACH_KEY = 'apnosh.boost.reach.v1'
-const reachId = (lat: number | undefined, lng: number | undefined, key: string | undefined, miles: number, ad: string) =>
-  `${ad}:${key ?? `${lat?.toFixed(3)},${lng?.toFixed(3)}`}:${miles}`
+/* The WHO is part of the key. Narrowing to 21-34 women is a different audience
+   from everyone in the same circle, and a cache that ignored it would answer the
+   new question with the old number. */
+const reachId = (lat: number | undefined, lng: number | undefined, key: string | undefined, miles: number, ad: string, who = 'all') =>
+  `${ad}:${key ?? `${lat?.toFixed(3)},${lng?.toFixed(3)}`}:${miles}:${who}`
 function readReach(id: string): Reach | null {
   try {
     const all = JSON.parse(window.localStorage.getItem(REACH_KEY) || '{}') as Record<string, Reach>
@@ -268,11 +271,17 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
      Seattle. Five is the honest default for somewhere people eat, and it makes
      the first number one an owner recognises rather than one they distrust. */
   const [radius, setRadius] = useState(5)
-  /* Age is sent but not yet offered as a control. 18-65 is everyone Meta will
-     serve a restaurant ad to, so the default is the honest one, and a narrower
-     range is a decision nobody has asked for yet. */
-  const ageMin = 18
-  const ageMax = 65
+  /* 18 to 65 is everyone Meta will serve, so the default is the whole room.
+     Narrowing lives behind a disclosure because on a small budget it raises the
+     price for a smaller audience, and most owners should not touch it. */
+  const [ageMin, setAgeMin] = useState(18)
+  const [ageMax, setAgeMax] = useState(65)
+  const [gender, setGender] = useState<'all' | 'female' | 'male'>('all')
+  const [advanced, setAdvanced] = useState(false)
+  /* One string for the whole narrowing, so caches and effects have one thing to
+     watch instead of three. */
+  const who = `${ageMin}-${ageMax}-${gender}`
+  const [audience, setAudience] = useState<{ topAge: string | null; women: number | null; men: number | null } | null>(null)
   const [placeQ, setPlaceQ] = useState('')
   const [places, setPlaces] = useState<GeoOption[]>([])
   const [place, setPlace] = useState<GeoOption | null>(null)
@@ -322,6 +331,13 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   }, [clientId, seed])
 
   useEffect(() => { void load() }, [load])
+
+  /* Only when they open it. Almost nobody will, and it is a vendor call. */
+  useEffect(() => {
+    if (!advanced || audience) return
+    void fetch(`/api/dashboard/ads?clientId=${clientId}&audience=1`, { cache: 'no-store' })
+      .then((r) => r.json()).then((j) => setAudience(j.audience ?? null)).catch(() => {})
+  }, [advanced, audience, clientId])
 
   async function act(payload: Record<string, unknown>) {
     setBusy(true); setErr(null)
@@ -390,11 +406,11 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   useEffect(() => {
     const next: Record<number, number | null> = {}
     for (const r of RADII) {
-      const k = readReach(reachId(here?.lat, here?.lng, place?.key, r, ad))
+      const k = readReach(reachId(here?.lat, here?.lng, place?.key, r, ad, who))
       if (k?.upper) next[r] = k.upper
     }
     setCounts(next)
-  }, [place, here, ad])
+  }, [place, here, ad, who])
 
   /* Look up a place as they type. Debounced, because this is a network call per
      keystroke otherwise and the answer is not urgent. */
@@ -413,7 +429,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     if (!picked || (!place && !here) || !rules?.reachEstimate) { setReach(null); return }
     let live = true
     let tries = 0
-    const id = reachId(here?.lat, here?.lng, place?.key, radius, ad)
+    const id = reachId(here?.lat, here?.lng, place?.key, radius, ad, who)
 
     /* Answer first, ask second. */
     const known = readReach(id)
@@ -428,7 +444,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     const ask = () => {
       void fetch('/api/dashboard/ads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, action: 'estimate', adPlatform: ad, targeting: { geoKey: place?.key, geoType: place?.type, radiusMiles: radius, ageMin, ageMax, ...(here && !place ? { lat: here.lat, lng: here.lng } : {}) } }),
+        body: JSON.stringify({ clientId, action: 'estimate', adPlatform: ad, targeting: { geoKey: place?.key, geoType: place?.type, radiusMiles: radius, ageMin, ageMax, gender, ...(here && !place ? { lat: here.lat, lng: here.lng } : {}) } }),
       }).then((r) => r.json()).then((j) => {
         if (!live) return
         const got = j as Reach
@@ -442,7 +458,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     }
     const t = setTimeout(ask, known ? 1200 : 260)
     return () => { live = false; clearTimeout(t) }
-  }, [clientId, picked, place, radius, ageMin, ageMax, ad, rules, here])
+  }, [clientId, picked, place, radius, ageMin, ageMax, gender, ad, rules, here])
 
   /* ── Spent ──────────────────────────────────────────────────────────────── */
   if (done) {
@@ -963,6 +979,75 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
               </div>
             )}
 
+            {/* ── WHO, IF THEY CARE ─────────────────────────────────────────
+                Folded away on purpose. Distance from the door does the work for
+                a restaurant, and narrowing by age on a small budget buys a
+                smaller room at a higher price. But a late-night place has no
+                business paying to reach 60-year-olds, so the door is here. */}
+            <button type="button" onClick={() => setAdvanced((v) => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 16, padding: 0, background: 'none', border: 'none',
+                font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, color: C.greenDk, cursor: 'pointer' }}>
+              {advanced ? 'Hide' : 'Choose who sees it'}
+              <ChevronDown size={13} style={{ transform: advanced ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} />
+            </button>
+
+            {advanced && (
+              <div style={{ marginTop: 10, padding: '14px 16px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}` }}>
+                {/* THE THING NO AD PLATFORM CAN TELL THEM. Meta knows what its
+                    own ads did; it does not know who already follows this
+                    restaurant. */}
+                {audience?.topAge && (
+                  <div style={{ fontSize: T.label, color: C.mute, marginBottom: 12, lineHeight: 1.45 }}>
+                    Your followers are mostly <b style={{ color: C.ink, fontWeight: 600 }}>{audience.topAge}</b>
+                    {audience.women != null && audience.women >= 55 ? ` and ${audience.women}% women` : ''}
+                    {audience.men != null && audience.men >= 55 ? ` and ${audience.men}% men` : ''}.
+                  </div>
+                )}
+
+                <div style={{ fontSize: T.note, fontWeight: 600, color: C.mute, marginBottom: 7 }}>Age</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {([[18, 65, 'Everyone'], [21, 34, '21–34'], [25, 44, '25–44'], [35, 65, '35+']] as Array<[number, number, string]>).map(([lo, hi, label]) => {
+                    const on = ageMin === lo && ageMax === hi
+                    return (
+                      <button key={label} type="button" onClick={() => { setAgeMin(lo); setAgeMax(hi) }}
+                        style={{ padding: '8px 13px', borderRadius: R.pill, cursor: 'pointer', font: 'inherit', fontFamily: DISPLAY,
+                          fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink,
+                          background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div style={{ fontSize: T.note, fontWeight: 600, color: C.mute, margin: '14px 0 7px' }}>Gender</div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {([['all', 'Everyone'], ['female', 'Women'], ['male', 'Men']] as Array<['all' | 'female' | 'male', string]>).map(([k, label]) => {
+                    const on = gender === k
+                    return (
+                      <button key={k} type="button" onClick={() => setGender(k)}
+                        style={{ flex: 1, padding: '9px 0', borderRadius: R.cell, cursor: 'pointer', font: 'inherit', fontFamily: DISPLAY,
+                          fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink,
+                          background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {(ageMin !== 18 || ageMax !== 65 || gender !== 'all') && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.line}` }}>
+                    <span style={{ flex: 1, fontSize: T.note, color: C.mute, lineHeight: 1.45 }}>
+                      A narrower audience costs more per person.
+                    </span>
+                    <button type="button" onClick={() => { setAgeMin(18); setAgeMax(65); setGender('all') }}
+                      style={{ padding: 0, background: 'none', border: 'none', font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, color: C.greenDk, cursor: 'pointer' }}>
+                      Reset
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ── HOW MUCH, PER DAY ─────────────────────────────────────────
                 Daily rather than a lump sum, because the per-day number is what
                 decides whether an ad delivers at all. The old screen offered
@@ -1109,14 +1194,13 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     amount: total, days,
                     targeting: {
                       geoKey: place?.key, geoType: place?.type, geoName: place?.name,
-                      radiusMiles: radius, ageMin, ageMax,
+                      radiusMiles: radius, ageMin, ageMax, gender,
                       /* Sent so the ad is aimed where the map says it is. */
                       ...(here && !place ? { lat: here.lat, lng: here.lng } : {}),
                     },
                   })
                   if (j) setDone({ spent: total, days })
                 })()} />
-              <MvpButton full variant="quiet" label="Not now" onClick={() => setPicked(null)} />
             </MvpActions>
           </>
         )}

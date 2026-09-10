@@ -7,6 +7,7 @@
  * columns either side, so the middle really is the middle. Floats over the scroll as glass.
  */
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useInboxCounts } from './use-inbox-unread'
 import Link from 'next/link'
 import { Bell, Check, ChevronLeft, Search, X } from 'lucide-react'
@@ -17,6 +18,7 @@ const DISPLAY = "'Cal Sans','Inter',sans-serif"
 export const GLASS: React.CSSProperties = { background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
 
 export default function TopRow({ middle, title, count, back, right }: { middle?: React.ReactNode; title?: string; count?: number; /** a screen you clicked INTO (Insights, a campaign, an order): the left slot is a back chevron to this href instead of the avatar (owner 2026-09-04) */ back?: string; /** replaces the bell (a detail page's own action) */ right?: React.ReactNode }) {
+  const router = useRouter()
   const { client, availableClients, switchClient } = useClient()
   const name = client?.name?.trim() || 'Your restaurant'
   const initial = (name[0] ?? '·').toUpperCase()
@@ -37,7 +39,23 @@ export default function TopRow({ middle, title, count, back, right }: { middle?:
   return (
     <div style={{ position: 'relative', display: 'grid', gridTemplateColumns: '40px minmax(0, 1fr) 40px', alignItems: 'center', gap: 10, padding: '10px 12px 8px' }}>{/* floats over the page like Home's row: no band, no hairline (owner 2026-09-04) */}
       {back
-        ? <Link href={back} aria-label="Back" style={{ ...GLASS, width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', boxSizing: 'border-box' }}><ChevronLeft size={21} /></Link>
+        ? (
+          /* ACTUALLY BACK. This was a Link to a fixed href, so a chevron that
+             looks like every back button anywhere took you to the dashboard
+             instead of where you came from -- open the composer from Insights
+             and "back" landed you somewhere you had not been. It goes back when
+             there is somewhere to go back to, and falls to the href on a fresh
+             tab or a shared link, where history has nothing in it. */
+          <button
+            type="button" aria-label="Back"
+            onClick={() => {
+              if (typeof window !== 'undefined' && window.history.length > 1) router.back()
+              else router.push(back)
+            }}
+            style={{ ...GLASS, width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, cursor: 'pointer', padding: 0, boxSizing: 'border-box' }}>
+            <ChevronLeft size={21} />
+          </button>
+        )
         : multi
         ? <button type="button" onClick={() => setOpen((o) => !o)} aria-label={`Switch location (now ${name})`} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>{avatar}</button>
         : <Link href="/dashboard/more" aria-label={name}>{avatar}</Link>}

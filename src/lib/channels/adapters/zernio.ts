@@ -1872,3 +1872,37 @@ export async function forecastReach(clientId: string, args: {
     return { ...none, error: e instanceof Error ? e.message : 'forecast failed' }
   }
 }
+
+export interface Demographics { topAge: string | null; women: number | null; men: number | null }
+
+/**
+ * WHO THEIR FOLLOWERS ACTUALLY ARE.
+ *
+ * The one thing we can say that an ad platform cannot: Meta knows what its own
+ * ads did, not who already follows this restaurant. It turns "pick an age range"
+ * from a guess into "your followers are mostly 35 to 44, want to aim there?"
+ *
+ * Needs 100+ followers and lags up to 48 hours, per the vendor. Null rather than
+ * zeros when it cannot say, so the panel can stay quiet instead of asserting.
+ */
+export async function instagramDemographics(clientId: string, accountId: string): Promise<Demographics | null> {
+  const profileId = await profileIdFor(clientId)
+  if (!profileId) return null
+  try {
+    const res = await zer(`/analytics/instagram/demographics?accountId=${encodeURIComponent(accountId)}&breakdown=age,gender`)
+    const d = (res.data && typeof res.data === 'object' ? res.data : res) as Record<string, unknown>
+    const demo = (d.demographics && typeof d.demographics === 'object' ? d.demographics : {}) as Record<string, unknown>
+    const rows = (k: string) => unwrapList({ data: demo[k] }, 'data')
+      .map((x) => ({ dim: str(x.dimension), n: num(x.value) }))
+      .filter((x) => x.dim && x.n > 0)
+
+    const ages = rows('age').sort((a, b) => b.n - a.n)
+    const genders = rows('gender')
+    const total = genders.reduce((n, g) => n + g.n, 0)
+    const pct = (code: string) => {
+      const hit = genders.find((g) => g.dim.toUpperCase().startsWith(code))
+      return total > 0 && hit ? Math.round((hit.n / total) * 100) : null
+    }
+    return { topAge: ages[0]?.dim ?? null, women: pct('F'), men: pct('M') }
+  } catch { return null }
+}
