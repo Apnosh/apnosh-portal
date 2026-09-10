@@ -200,6 +200,9 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [platforms, setPlatforms] = useState<PlatformState[]>([])
   const [history, setHistory] = useState<History | null>(null)
+  /* What a dollar has bought for OTHER Apnosh restaurants, used only until this
+     one has a rate of its own. */
+  const [peerRate, setPeerRate] = useState<{ perDollar: number; from: number } | null>(null)
   /* Which platform the connect step is setting up. */
   const [setupOf, setSetupOf] = useState<'meta' | 'tiktok'>('meta')
   const [limits, setLimits] = useState({ maxUsd: 500, maxDays: 30, minDaily: 1 })
@@ -241,6 +244,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         setCandidates((j.candidates ?? []) as Candidate[])
         setPlatforms((j.platforms ?? []) as PlatformState[])
         setHistory((j.history ?? null) as History | null)
+        setPeerRate((j.peerRate ?? null) as { perDollar: number; from: number } | null)
         setSuggested((j.suggested ?? null) as GeoOption | null)
         if (j.limits) setLimits(j.limits)
         /* The stored choice, or nothing. Not "the only one we can see": the
@@ -920,6 +924,23 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                   Doubling to ${total * 2} would reach roughly{' '}
                   {Math.round(history.perDollar * total * 2).toLocaleString()}. It is not perfectly
                   linear, but it is close enough to decide with.
+                </span>
+              </div>
+            ) : peerRate ? (
+              /* SOMEBODY ELSE ALREADY PAID FOR THIS NUMBER. A rate is people per
+                 dollar and nothing else -- no post, no audience, no business in
+                 it -- so it can be shared where the spend behind it could not.
+                 Labelled as borrowed, and replaced by their own the moment they
+                 have one. */
+              <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}`, boxShadow: CARD_SHADOW }}>
+                <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
+                  maybe {Math.round(peerRate.perDollar * total).toLocaleString()} people
+                </span>
+                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
+                  going on what ${'​'}1 has bought for {peerRate.from === 1 ? 'another Apnosh restaurant' : `${peerRate.from} other Apnosh restaurants`},
+                  about {peerRate.perDollar} people per dollar. A borrowed number until you have your
+                  own, and yours will differ: a different town and a different post buy different
+                  amounts.
                 </span>
               </div>
             ) : (

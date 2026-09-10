@@ -223,6 +223,40 @@ export async function GET(req: NextRequest) {
       ? { boosts: delivered.length, spend: Math.round(spentAll * 100) / 100, reach: reachedAll, perDollar: Math.round((reachedAll / spentAll) * 10) / 10 }
       : null
 
+    /**
+     * SO ONLY THE FIRST BOOST ANYWHERE IS BLIND, not the first for every client.
+     *
+     * Their own rate is better, and it replaces this the moment they have one.
+     * But a restaurant that has never boosted should not have to buy the number
+     * from scratch when another Apnosh restaurant already paid for it. A rate is
+     * people per dollar: an aggregate with no post, no audience and no business
+     * in it, which is why it can be shared when the underlying spend cannot.
+     *
+     * Each client's own rate is written back to their connection as it is
+     * computed, so the pool fills itself without a job to run.
+     */
+    if (history) {
+      const m = (conn0?.metadata as Record<string, unknown>) ?? {}
+      if (m.boost_rate !== history.perDollar) {
+        await adminRead0.from('channel_connections')
+          .update({ metadata: { ...m, boost_rate: history.perDollar, boost_rate_at: new Date().toISOString() } })
+          .eq('client_id', clientId).eq('channel', 'zernio')
+      }
+    }
+
+    let peerRate: { perDollar: number; from: number } | null = null
+    if (!history) {
+      const { data: peers } = await adminRead0.from('channel_connections')
+        .select('client_id, metadata').eq('channel', 'zernio').neq('client_id', clientId)
+      const rates = (peers ?? [])
+        .map((r) => Number((r.metadata as Record<string, unknown> | null)?.boost_rate))
+        .filter((n) => Number.isFinite(n) && n > 0)
+      if (rates.length) {
+        const median = rates.sort((a, b) => a - b)[Math.floor(rates.length / 2)]
+        peerRate = { perDollar: Math.round(median * 10) / 10, from: rates.length }
+      }
+    }
+
     /* WHICH ACCOUNT PAYS IS A CHOICE, NOT A DEFAULT.
        The first version treated "we can see ad accounts" as "connected", which
        skipped the picker entirely. Reading Apnosh's own connection back, the
@@ -283,7 +317,7 @@ export async function GET(req: NextRequest) {
       platforms,
       payer,
       metaAccountId: meta?.accountId ?? null,
-      accounts, ads, candidates, history, suggested,
+      accounts, ads, candidates, history, peerRate, suggested,
       limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS, minDaily: MIN_DAILY_USD },
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {
