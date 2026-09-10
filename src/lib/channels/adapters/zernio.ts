@@ -1786,6 +1786,8 @@ export async function forecastReach(clientId: string, args: {
   budget: number
   days: number
   targeting: Record<string, unknown>
+  /** how many times one person may see it over the window; 2 by default */
+  frequencyCap?: number
 }): Promise<Forecast> {
   const profileId = await profileIdFor(clientId)
   const none: Forecast = { ok: false, status: 'unavailable', reach: null, impressions: null, minBudget: null, maxBudget: null, currency: null, error: null }
@@ -1802,6 +1804,14 @@ export async function forecastReach(clientId: string, args: {
         budgetAmount: Math.round(args.budget * 100) / 100,
         startDate: start.toISOString(),
         endDate: end.toISOString(),
+        /* REQUIRED, and only discovered by calling it: Meta rejects the whole
+           prediction with "you must provide a value for the frequency cap
+           parameter" unless is_balanced_frequency is set. Two over the window is
+           the right number for a restaurant -- enough to be remembered, few
+           enough that the same person is not followed around for a week. It also
+           makes the reach figure conservative, which is the safe direction for a
+           number somebody is about to spend against. */
+        frequencyCap: Math.max(1, Math.min(90, args.frequencyCap ?? 2)),
         targeting: args.targeting,
       }),
     })
