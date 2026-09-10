@@ -1,7 +1,12 @@
 'use client'
 
 /**
- * /dashboard/insights/posts — every post, newest first.
+ * /dashboard/insights/posts — what is about to go out, then every post that has.
+ *
+ * COMING UP LIVES HERE NOW (owner 2026-09-10: "the flow should be coming up ->
+ * recent posts"). It used to be its own screen at /dashboard/scheduled, reached
+ * only from More, holding half of one story while this screen held the other
+ * half. /dashboard/scheduled now redirects here.
  *
  * Insights shows the five newest with a "View all" through to here. Rows render via the SAME
  * exported PostRow the summary uses, and the data comes through the same server-side mapper,
@@ -17,9 +22,10 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, Clock } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { PostRow, CrossPostCard, groupCrossPosts, POSTS_FOOTNOTE, type InsightsPost } from '@/components/mvp/mvp-insights'
+import ComingUp, { NothingYet } from '@/components/mvp/coming-up'
 import { usePullToRefresh, PullIndicator } from '@/components/mvp/pull-to-refresh'
 
 const C = { ink: '#16181d', mute: '#6b7280', faint: '#9aa1ab', line: '#e8e9ec', bg: '#f7f7f9', greenDk: '#2f8f70' }
@@ -39,6 +45,10 @@ export default function AllPostsPage() {
   const [hasMore, setHasMore] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /* How many things are waiting to go out, reported up by the Coming up section.
+     -1 means it has not answered yet, which is NOT the same as zero: the whole
+     screen's empty state must not flash while that request is still in the air. */
+  const [waiting, setWaiting] = useState(-1)
   const scroller = useRef<HTMLDivElement | null>(null)
 
   const fetchPage = useCallback(async (offset: number): Promise<InsightsPost[]> => {
@@ -98,7 +108,7 @@ export default function AllPostsPage() {
         <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 12px 6px', borderBottom: `1px solid ${C.line}`, background: '#fff' }}>
           <button onClick={back} aria-label="Back" style={{ width: 38, height: 38, borderRadius: 99, border: 'none', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.ink }}><ChevronLeft size={24} /></button>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>All posts</div>
+            <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.2 }}>Your posts</div>
             {total > 0 && <div style={{ fontSize: 11.5, color: C.faint }}>{total} across your connected accounts</div>}
           </div>
           {/* The one place an owner is already looking at their posts is the one
@@ -114,15 +124,28 @@ export default function AllPostsPage() {
 
           {loading && <div style={{ padding: '40px 0', textAlign: 'center', color: C.faint, fontSize: 13 }}>Loading your posts…</div>}
           {error && !loading && <div style={{ padding: '30px 4px', color: C.mute, fontSize: 13 }}>{error}</div>}
-          {!loading && !error && posts && posts.length === 0 && (
-            <div style={{ padding: '40px 6px', textAlign: 'center', color: C.faint, fontSize: 13, lineHeight: 1.5 }}>
-              No posts yet. Once you post on a connected account, it shows up here.
+
+          {/* FIRST, what has not happened yet. Then what has. That order is the
+              only reason both halves are on one screen.
+              The nudge to write one is suppressed when the screen is otherwise
+              empty, so an owner with nothing at all is told that once. */}
+          {!loading && !error && client?.id && (
+            <ComingUp clientId={client.id} onCount={setWaiting} nudge={!posts || posts.length > 0} />
+          )}
+
+          {!loading && !error && posts && posts.length === 0 && waiting === 0 && <NothingYet />}
+          {!loading && !error && posts && posts.length === 0 && waiting > 0 && (
+            <div style={{ padding: '18px 6px 6px', textAlign: 'center', color: C.faint, fontSize: 12.5, lineHeight: 1.5 }}>
+              Nothing has gone out yet. Once one of these posts publishes, it shows up here with its numbers.
             </div>
           )}
 
           {posts && posts.length > 0 && (
             <>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5, fontWeight: 600, color: C.mute, margin: '16px 2px 9px' }}>
+                  <Clock size={14} color={C.greenDk} /> Recent posts
+                </div>
                 <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
                   {([['newest', 'Newest'], ['views', 'Most views'], ['engagement', 'Best received']] as const).map(([k, label]) => (
                     <button

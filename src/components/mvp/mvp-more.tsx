@@ -105,7 +105,7 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
        action; this is one tap from the nav bar and the first thing on the page. */
     { label: 'Write a post', sub: 'Send it now or at your best time', href: '/dashboard/post', Icon: PenLine, hue: 'brand' },
     { label: 'Boost a post', sub: 'Put money behind one that already worked', href: '/dashboard/boost', Icon: TrendingUp, hue: 'event' },
-    { label: 'Coming up', sub: 'What is still to go out', href: '/dashboard/scheduled', Icon: CalendarClock, hue: 'nights' },
+    { label: 'Your posts', sub: 'What is coming up, then how the last ones did', href: '/dashboard/insights/posts', Icon: CalendarClock, hue: 'nights' },
     /* THE SEVEN WALKTHROUGHS THAT HAD NO DOOR. Every one of these screens already
        drew a back arrow reading "More" and nothing on More linked to it, so the
        only way in was a campaign task -- an owner with no live campaign could not
@@ -138,7 +138,7 @@ export default function MvpMore({ name, tier, query = '', clientId }: { name: st
   const groups: { title: string; hue: HueKey; keys: string[] }[] = [
     /* A row whose label is in no group here is SILENTLY DROPPED. That is how
        "Write a post" was invisible for a day. Adding a row means adding its key. */
-    { title: 'Post', hue: 'brand', keys: ['Write a post', 'Coming up', 'Boost a post'] },
+    { title: 'Post', hue: 'brand', keys: ['Write a post', 'Your posts', 'Boost a post'] },
     { title: 'Your Google listing', hue: 'newfaces', keys: ['Your Google profile', 'Reply to your reviews', 'Your order buttons'] },
     { title: 'Get found', hue: 'catering', keys: ['Your other listings', 'Your social profiles', 'Get measurable', 'Land in the inbox'] },
     { title: 'You', hue: 'mint', keys: ['Your settings', 'Wins', 'People you have worked with'] },

@@ -452,7 +452,7 @@ export default function MvpComposer({ clientId }: { clientId: string }) {
           </div>
           <div style={{ marginTop: 22 }}>
             <MvpButton
-              onClick={() => router.push(handed ? '/dashboard/messages' : when !== 'now' ? '/dashboard/scheduled' : '/dashboard/insights/posts')}
+              onClick={() => router.push(handed ? '/dashboard/messages' : '/dashboard/insights/posts')}
               label={handed ? 'See the message' : when !== 'now' ? 'See what is coming up' : 'See your posts'} />
           </div>
         </div>
