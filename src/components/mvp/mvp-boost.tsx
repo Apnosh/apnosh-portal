@@ -33,8 +33,8 @@ const T = { note: 11.5, label: 12.5, control: 13.5, body: 14, big: 17, hero: 22 
 
 interface AdAccount { id: string; name: string; currency: string; selectable: boolean; status: string }
 interface RunningAd { id: string; name: string; status: string; spend: number; impressions: number; clicks: number }
-interface GeoOption { key: string; name: string; type: string; region?: string; country?: string }
-interface Reach { available: boolean; lower: number | null; upper: number | null; daily: number | null }
+interface GeoOption { key: string; name: string; type: string; where: string; targetable: boolean }
+interface Reach { available: boolean; lower: number | null; upper: number | null; daily: number | null; untargetable?: boolean }
 interface AdPreview { format: string; html: string | null }
 
 /**
@@ -516,11 +516,14 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         {/* ── SPEND ─────────────────────────────────────────────────────────── */}
         {!loading && connected && picked && (
           <>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'center', background: '#fff', borderRadius: R.box, border: `1px solid ${C.line}`, overflow: 'hidden', marginTop: 8 }}>
+            {/* THE POST IS THE SUBJECT OF THIS SCREEN, so it gets the card and
+                the shadow rather than a thin strip. Everything under it is a
+                decision about this picture. */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'stretch', background: '#fff', borderRadius: R.card, border: `1px solid ${C.line}`, boxShadow: CARD_SHADOW, overflow: 'hidden', marginTop: 8 }}>
               {/* Same 4:5 as the grid, so the thing they tapped still looks like
                   the thing they tapped. */}
               {picked.image && (
-                <span style={{ position: 'relative', width: 64, flexShrink: 0, aspectRatio: '4 / 5', display: 'block' }}>
+                <span style={{ position: 'relative', width: 84, flexShrink: 0, aspectRatio: '4 / 5', display: 'block' }}>
                   <img src={picked.image} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                   {picked.isVideo && (
                     <span style={{ position: 'absolute', left: 5, top: 5, width: 18, height: 18, borderRadius: '50%',
@@ -530,7 +533,15 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                   )}
                 </span>
               )}
-              <span style={{ flex: 1, minWidth: 0, padding: '10px 12px 10px 0' }}>
+              <span style={{ flex: 1, minWidth: 0, padding: '12px 14px 12px 0', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                  <BrandOrMark provider={picked.platform} size={13} />
+                  {picked.timesMedian != null && picked.timesMedian >= 1.5 && (
+                    <span style={{ fontFamily: DISPLAY, fontSize: T.note, fontWeight: 700, color: '#fff', background: gradOf('brand'), padding: '2px 8px', borderRadius: R.pill }}>
+                      {picked.timesMedian}× your usual
+                    </span>
+                  )}
+                </span>
                 <span style={{ fontSize: T.label, color: C.ink, lineHeight: 1.4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as React.CSSProperties}>
                   {picked.caption || 'No caption'}
                 </span>
@@ -564,7 +575,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     {rules?.cityRadius ? `Within ${radius} miles of ${place.name}` : place.name}
                   </span>
                   <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>
-                    {place.region ? `${place.region} · ` : ''}Tap to change
+                    {place.where ? `${place.where} · ` : ''}Tap to change
                   </span>
                 </span>
               </button>
@@ -575,15 +586,31 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                   style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: R.box, padding: '11px 12px', fontSize: T.body, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
                 {places.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                    {places.slice(0, 6).map((g) => (
+                    {/* WHICH Wallingford. Searching that word returns four of
+                        them, two in England, and the list used to show the name
+                        alone. Meta's own breadcrumb is the only way to tell. */}
+                    {places.filter((g) => g.targetable).slice(0, 6).map((g) => (
                       <button key={g.key} type="button" onClick={() => { setPlace(g); setPlaces([]) }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', font: 'inherit',
-                          padding: '10px 12px', borderRadius: R.cell, cursor: 'pointer', background: '#fff', border: `1px solid ${C.line}` }}>
-                        <MapPin size={13} color={C.mute} />
-                        <span style={{ fontSize: T.control, color: C.ink }}>{g.name}</span>
-                        {g.region && <span style={{ fontSize: T.note, color: C.mute }}>{g.region}</span>}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit',
+                          padding: '11px 13px', borderRadius: R.cell, cursor: 'pointer', background: '#fff', border: `1px solid ${C.line}` }}>
+                        <MapPin size={14} color={C.greenDk} />
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>{g.name}</span>
+                          {g.where && <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>{g.where}</span>}
+                        </span>
+                        <span style={{ fontSize: T.note, color: C.faint }}>{g.type}</span>
                       </button>
                     ))}
+                    {/* A NEIGHBOURHOOD CANNOT BE TARGETED, and saying nothing
+                        about it is how somebody ends up thinking we ignored what
+                        they typed. Meta's search offers them; its targeting has
+                        no field for them. */}
+                    {places.some((g) => !g.targetable) && places.filter((g) => g.targetable).length === 0 && (
+                      <div style={{ fontSize: T.label, color: C.mute, lineHeight: 1.5, padding: '10px 2px' }}>
+                        {places[0].name} is a neighbourhood, and ads cannot be aimed at one.
+                        Search for the city instead and set a radius.
+                      </div>
+                    )}
                   </div>
                 )}
               </>
@@ -621,18 +648,34 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 {/* HOW MANY PEOPLE, BEFORE ANY MONEY. Meta's own estimate, and
                     a plain "no" where the platform has no such API. */}
                 {rules?.reachEstimate ? (
-                <div style={{ marginTop: 10, padding: '13px 15px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}` }}>
+                <div style={{ marginTop: 10, padding: '14px 16px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}`, boxShadow: CARD_SHADOW }}>
                   {reaching ? (
                     <span style={{ fontSize: T.control, color: C.mute }}>Checking how many people…</span>
+                  ) : reach?.untargetable ? (
+                    <span style={{ fontSize: T.label, color: C.coral, lineHeight: 1.5 }}>
+                      That kind of place cannot be targeted. Pick a city, a postcode or a state.
+                    </span>
                   ) : reach?.available && reach.lower && reach.upper ? (
                     <>
                       <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
                         {reach.lower.toLocaleString()} to {reach.upper.toLocaleString()} people
                       </span>
                       <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
-                        are reachable there. Meta&apos;s own estimate of the room, not a promise about
-                        how many will see it.
+                        live there and use Facebook or Instagram. This is the size of the room, not
+                        how many will see the post.
                       </span>
+                      {/* WHAT THE MONEY BUYS, said plainly and only where it can
+                          be stood behind. Meta prices delivery at auction, so a
+                          predicted click count on a $70 boost would be a number
+                          we made up. What IS true is how the budget compares to
+                          the room. */}
+                      {reach.upper > 0 && (
+                        <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}`, lineHeight: 1.5 }}>
+                          At ${daily} a day, expect to reach a small share of them. Meta sells this at
+                          auction, so nobody can promise a number before it runs, and anyone who does
+                          is guessing.
+                        </span>
+                      )}
                     </>
                   ) : (
                     <span style={{ fontSize: T.label, color: C.mute, lineHeight: 1.5 }}>
@@ -687,19 +730,36 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
             </div>
 
             {/* THE NUMBER, IN A SENTENCE, BEFORE THE PRESS. */}
-            <div style={{ marginTop: 20, padding: '15px 16px', borderRadius: R.box, background: tint('brand', .06), border: `1px solid ${tint('brand', .3)}` }}>
-              <div style={{ fontFamily: DISPLAY, fontSize: T.hero, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>
-                ${total}
+            <div style={{ marginTop: 20, borderRadius: R.card, background: '#fff', border: `1px solid ${tint('brand', .35)}`, boxShadow: `0 6px 20px ${tint('brand', .13, 1)}`, overflow: 'hidden' }}>
+              <div style={{ height: 3, background: gradOf('brand') }} />
+              <div style={{ padding: '16px 17px 15px' }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ fontFamily: DISPLAY, fontSize: 34, fontWeight: 600, color: C.ink, letterSpacing: '-.02em', lineHeight: 1 }}>
+                  ${total}
+                </span>
+                <span style={{ fontSize: T.label, color: C.mute }}>in total</span>
               </div>
               <div style={{ fontSize: T.label, color: C.mute, marginTop: 5, lineHeight: 1.5 }}>
-                ${daily} a day for {days} day{days === 1 ? '' : 's'}{place ? `, within ${radius} miles of ${place.name}` : ''}.
-                That is the most it can spend. It stops on its own, and you can stop it sooner here.
+                ${daily} a day for {days} day{days === 1 ? '' : 's'}
+                {place ? (rules?.cityRadius ? `, within ${radius} miles of ${place.name}` : `, in ${place.name}`) : ''}.
+                That is the most it can spend on ads. It stops on its own, and you can stop it
+                sooner here.
+              </div>
+              {/* TAX IS NOT OURS TO CALCULATE AND NOT OURS TO HIDE. Meta bills
+                  the ad account directly and adds sales tax or VAT on top
+                  depending on the billing address. Neither we nor Zernio see
+                  that number, so the honest thing is to say the total is the ad
+                  spend and the card will be charged a little more. */}
+              <div style={{ fontSize: T.note, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tint('brand', .25)}`, lineHeight: 1.5 }}>
+                {rules?.name} bills this to your own ad account and may add sales tax on top, so the
+                card is charged a little more than ${total}.
               </div>
               {total > limits.maxUsd && (
                 <div style={{ fontSize: T.label, color: C.coral, marginTop: 8, fontWeight: 600 }}>
                   Over the ${limits.maxUsd} cap. Shorten it or spend less a day.
                 </div>
               )}
+              </div>
             </div>
 
             <MvpActions>

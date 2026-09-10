@@ -1495,7 +1495,25 @@ export async function connectAds(
 export interface BoostResult { id: string | null; status: string }
 
 /** Somewhere an ad can be aimed. */
-export interface GeoOption { key: string; name: string; type: string; region?: string; country?: string }
+export interface GeoOption {
+  key: string; name: string; type: string
+  /** "United States, Washington, Seattle" — the only way to tell Wallingford,
+   *  Washington from Wallingford, Oxfordshire, both of which this search
+   *  returns for the same word. */
+  where: string
+  /** Whether our targeting spec can actually express this kind of place. */
+  targetable: boolean
+}
+
+/**
+ * The place types Zernio's TargetingSpec can express.
+ *
+ * Its geo SEARCH returns more than its geo TARGETING accepts: type
+ * "neighborhood" and "subcity" come back for a query like "wallingford", and
+ * there is no neighbourhoods field on the spec at all. Offering one is offering
+ * a place that cannot be aimed at.
+ */
+export const TARGETABLE_GEO = new Set(['city', 'region', 'zip', 'postal', 'metro', 'dma', 'country'])
 
 /**
  * Places matching a search, as the ad platform knows them.
@@ -1510,13 +1528,20 @@ export async function searchGeo(clientId: string, accountId: string, q: string):
   if (!profileId) return []
   try {
     const res = await zer(`/ads/targeting/search?accountId=${encodeURIComponent(accountId)}&dimension=geo&q=${encodeURIComponent(q.trim())}&limit=12`)
-    return unwrapList(res, 'results', 'data', 'items', 'options').map((x) => ({
-      key: str(x.key) || str(x.id),
-      name: str(x.name) || str(x.label),
-      type: str(x.type) || str(x.geoType) || 'city',
-      region: str(x.region) || str(x.regionName) || undefined,
-      country: str(x.country) || str(x.countryCode) || undefined,
-    })).filter((x) => x.key && x.name)
+    return unwrapList(res, 'results', 'data', 'items', 'options').map((x) => {
+      const type = (str(x.type) || str(x.geoType) || 'city').toLowerCase()
+      /* `path` is Meta's own breadcrumb for the place. Without it the list shows
+         four things called Wallingford and no way to tell them apart. */
+      const path = Array.isArray(x.path) ? x.path.map((p) => String(p)) : []
+      const where = path.length ? path.slice(0, -1).reverse().join(', ') : (str(x.region) || str(x.country))
+      return {
+        key: str(x.key) || str(x.id),
+        name: str(x.name) || str(x.label),
+        type,
+        where,
+        targetable: TARGETABLE_GEO.has(type),
+      }
+    }).filter((x) => x.key && x.name)
   } catch { return [] }
 }
 

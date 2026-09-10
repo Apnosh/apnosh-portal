@@ -26,7 +26,7 @@ import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { AD_RULES, adPlatformFor, CONNECT_SLUG, type AdPlatform } from '@/lib/channels/ad-rules'
 import { createAdminClient } from '@/lib/supabase/admin'
 import {
-  listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate, adPreviews,
+  listAdAccounts, connectAds, boostPost, listAds, stopAd, searchGeo, reachEstimate, adPreviews, TARGETABLE_GEO,
   listPostTargets, MAX_BOOST_USD, MAX_BOOST_DAYS, MIN_DAILY_USD,
 } from '@/lib/channels/adapters/zernio'
 
@@ -56,7 +56,13 @@ function buildSpec(t: { geoKey?: string; geoType?: string; radiusMiles?: number;
   } else if (t.geoKey && t.geoType === 'metro') {
     spec.metros = [{ key: t.geoKey }]
   } else {
-    spec.countries = [t.country || 'US']
+    /* NO SILENT WIDENING. The first version fell through to the whole country
+       here, so picking "Wallingford" -- which Meta returns as type
+       "neighborhood", a type the targeting spec cannot express -- quietly
+       targeted the entire United States. The reach estimate said 300 million
+       and that number is the only reason anybody noticed. An unknown place is
+       now a refusal, not a bigger audience. */
+    throw new Error('That kind of place cannot be targeted')
   }
   const lo = Math.max(18, Math.min(65, Number(t.ageMin) || 18))
   const hi = Math.max(lo, Math.min(65, Number(t.ageMax) || 65))
@@ -315,9 +321,10 @@ export async function POST(req: NextRequest) {
       /* TikTok has no pre-flight reach API at all, so this says so rather than
          asking and reporting an empty answer as if it were a small audience. */
       if (!rules.reachEstimate) return NextResponse.json({ available: false })
-      const r = await reachEstimate(clientId, {
-        accountId: meta.accountId, adAccountId: payer, spec: buildSpec(body.targeting ?? {}, ad),
-      })
+      let spec: Record<string, unknown>
+      try { spec = buildSpec(body.targeting ?? {}, ad) }
+      catch { return NextResponse.json({ available: false, untargetable: true }) }
+      const r = await reachEstimate(clientId, { accountId: meta.accountId, adAccountId: payer, spec })
       return NextResponse.json(r)
     }
 
@@ -387,8 +394,11 @@ export async function POST(req: NextRequest) {
          single-location restaurant that is people who will never walk in.
          Refused rather than defaulted, because a silent default here is the
          expensive kind. */
-      if (!body.targeting?.geoKey && !body.targeting?.country) {
+      if (!body.targeting?.geoKey) {
         return NextResponse.json({ error: 'Choose the area this should reach first' }, { status: 400 })
+      }
+      if (!TARGETABLE_GEO.has(String(body.targeting.geoType ?? '').toLowerCase())) {
+        return NextResponse.json({ error: 'That kind of place cannot be targeted. Pick a city, a postcode or a state.' }, { status: 400 })
       }
 
       const r = await boostPost(clientId, {
