@@ -1442,9 +1442,22 @@ export interface AdAccount {
   id: string
   name: string
   currency: string
+  /** Zernio's own judgement that this account can be used. The authority. */
   selectable: boolean
   status: string
+  /** Why the platform says it cannot be used, in the platform's words. Present
+   *  when a card has bounced, a bill is unsettled, or the account is in review. */
+  reason: string | null
   minimumDailyBudget: number
+}
+
+/* Meta's account_status is a number. OURS, not the vendor's: a label for a code,
+   used only to say something readable next to Zernio's `selectable`, which is
+   what actually decides whether we let anyone spend. If this map is wrong the
+   worst case is a vaguer sentence, never a wrong permission. */
+const META_ACCOUNT_STATUS: Record<string, string> = {
+  '1': 'active', '2': 'disabled', '3': 'unsettled', '7': 'in review',
+  '8': 'awaiting payment', '9': 'in grace period', '100': 'closing', '101': 'closed',
 }
 
 /** The ad accounts a connected posting account can reach. Read-only. */
@@ -1457,7 +1470,16 @@ export async function listAdAccounts(clientId: string, accountId: string): Promi
     name: str(a.name) || str(a.businessName) || 'Ad account',
     currency: str(a.currency) || 'USD',
     selectable: a.selectable !== false,
-    status: str(a.accountStatus) || 'unknown',
+    /* accountStatus arrives as a NUMBER on Meta, and str() returns '' for a
+       number -- so this read 'unknown' on every account since it was written,
+       and nothing checked it anyway. */
+    status: (() => {
+      const raw = a.accountStatus
+      if (typeof raw === 'number') return META_ACCOUNT_STATUS[String(raw)] ?? `status ${raw}`
+      const t = str(raw)
+      return t ? (META_ACCOUNT_STATUS[t] ?? t.toLowerCase()) : 'unknown'
+    })(),
+    reason: str(a.unusableReason) || str(a.disableReason) || null,
     minimumDailyBudget: num(a.minimumDailyBudget),
   })).filter((a) => a.id)
 }

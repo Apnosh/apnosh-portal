@@ -253,8 +253,12 @@ export async function GET(req: NextRequest) {
 
     let peerRate: { perDollar: number; from: number } | null = null
     if (!history) {
+      /* ONLY LIVE CONNECTIONS CONTRIBUTE. A client who disconnected, or whose
+         token died, should stop informing anybody else's screen -- their rate is
+         from a world that may no longer exist. `status` is set to 'error' by the
+         disconnection webhook, so this excludes them automatically. */
       const { data: peers } = await adminRead0.from('channel_connections')
-        .select('client_id, metadata').eq('channel', 'zernio').neq('client_id', clientId)
+        .select('client_id, metadata').eq('channel', 'zernio').eq('status', 'active').neq('client_id', clientId)
       const rates = (peers ?? [])
         .map((r) => Number((r.metadata as Record<string, unknown> | null)?.boost_rate))
         .filter((n) => Number.isFinite(n) && n > 0)
@@ -492,9 +496,27 @@ export async function POST(req: NextRequest) {
       if (body.adAccountId !== payer) {
         return NextResponse.json({ error: 'That is not the ad account set up to pay' }, { status: 400 })
       }
+      /* ── THE ACCOUNT HAS TO BE ALIVE, NOT JUST CHOSEN ────────────────
+         An ad account whose card has bounced is still listed, still stored as
+         the payer, and will still fail -- after the owner has pressed a button
+         that says Spend. Meta reports it as unusable and we now read that: the
+         earlier code kept `accountStatus` but parsed it with a string helper
+         that returns '' for a number, so every account read as "unknown" and
+         nothing ever checked it.
+
+         `selectable` is Zernio's own judgement and is the authority here; the
+         status label is only for saying WHY. */
       const accounts = await listAdAccounts(clientId, meta.accountId)
-      if (!accounts.some((a) => a.id === payer)) {
+      const payerAccount = accounts.find((a) => a.id === payer)
+      if (!payerAccount) {
         return NextResponse.json({ error: 'That ad account is no longer reachable' }, { status: 400 })
+      }
+      if (!payerAccount.selectable) {
+        return NextResponse.json({
+          error: payerAccount.reason
+            ? `${rules.name} will not run ads from that account: ${payerAccount.reason}`
+            : `That ad account is ${payerAccount.status} and cannot run ads. Sort the billing out with ${rules.name}, then come back.`,
+        }, { status: 400 })
       }
 
       /* A BOOST WITHOUT A PLACE IS MONEY BURNED. The first version sent no

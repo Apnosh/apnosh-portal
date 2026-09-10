@@ -31,7 +31,7 @@ import { CARD_SHADOW } from './kit'
 const R = { cell: 12, box: 14, card: 20, pill: 99 } as const
 const T = { note: 11.5, label: 12.5, control: 13.5, body: 14, big: 17, hero: 22 } as const
 
-interface AdAccount { id: string; name: string; currency: string; selectable: boolean; status: string }
+interface AdAccount { id: string; name: string; currency: string; selectable: boolean; status: string; reason: string | null }
 interface RunningAd { id: string; name: string; status: string; spend: number; impressions: number; clicks: number; reach: number; cpm: number }
 /** What a dollar has actually bought on this account, from boosts that ran. */
 interface History { boosts: number; spend: number; reach: number; perDollar: number }
@@ -302,6 +302,13 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const rules = useMemo(() => platforms.find((p) => p.platform === ad) ?? null, [platforms, ad])
   const minDaily = rules?.minDaily ?? 1
   /* TikTok's floor is $20, so its cheapest choices are not $5 and $10. */
+  /* The chosen payer, gone bad since it was chosen. */
+  const payerDead = useMemo(() => {
+    const r = platforms.find((p) => p.platform === ad)
+    const acct = r?.accounts.find((a) => a.id === r?.payer)
+    return !!acct && !acct.selectable
+  }, [platforms, ad])
+
   const dailyChoices = useMemo(() => DAILY.filter((d) => d >= minDaily).slice(0, 4).length >= 3
     ? DAILY.filter((d) => d >= minDaily).slice(0, 4)
     : [minDaily, minDaily * 2, minDaily * 3, minDaily * 5], [minDaily])
@@ -472,8 +479,11 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                         </span>
                         <span style={{ flex: 1, minWidth: 0 }}>
                           <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>{a.name}</span>
-                          <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>
-                            {a.currency}{a.selectable ? '' : ' · not usable'}
+                          {/* WHY it cannot be used, not just that it cannot.
+                              A bounced card shows up here as Meta's own words
+                              instead of a greyed row with no explanation. */}
+                          <span style={{ display: 'block', fontSize: T.note, color: a.selectable ? C.mute : C.coral, marginTop: 1 }}>
+                            {a.selectable ? a.currency : (a.reason || `${a.currency} · ${a.status}, cannot run ads`)}
                           </span>
                         </span>
                       </button>
@@ -715,6 +725,21 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 expensive omission possible: with no area, the platform decides,
                 and for a single-location restaurant that is people who will
                 never walk in. */}
+            {/* THE PAYER CAN GO BAD AFTER IT WAS CHOSEN. A card bounces weeks
+                later and nothing on this screen would have said so until the
+                press failed. */}
+            {(() => {
+              const acct = rules?.accounts.find((a) => a.id === rules?.payer)
+              if (!acct || acct.selectable) return null
+              return (
+                <div style={{ marginTop: 12 }}>
+                  <MvpMsg ok={false} text={acct.reason
+                    ? `${rules?.name} will not run ads from ${acct.name} right now: ${acct.reason}`
+                    : `${acct.name} is ${acct.status} and cannot run ads. Sort the billing out with ${rules?.name} first.`} />
+                </div>
+              )
+            })()}
+
             {rules?.note && (
               <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', marginTop: 12, padding: '11px 13px', borderRadius: R.box, background: tint('mint', .06), border: `1px solid ${tint('mint', .3)}` }}>
                 <span style={{ marginTop: 1, flexShrink: 0 }}><BrandOrMark provider={picked.platform} size={14} /></span>
@@ -1051,7 +1076,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
             </div>
 
             <MvpActions>
-              <MvpButton full busy={busy} disabled={!place || total > limits.maxUsd} label={place ? `Spend $${total}` : 'Pick an area first'}
+              <MvpButton full busy={busy} disabled={!place || total > limits.maxUsd || payerDead} label={payerDead ? 'That ad account cannot run ads' : place ? `Spend $${total}` : 'Pick an area first'}
                 onClick={() => void (async () => {
                   const j = await act({
                     action: 'boost', platformPostId: picked.zernioPostId,
