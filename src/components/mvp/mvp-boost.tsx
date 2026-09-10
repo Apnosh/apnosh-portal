@@ -208,6 +208,34 @@ function readCache(id: string): Record<string, unknown> | null {
   try { const raw = window.localStorage.getItem(cacheKey(id)); return raw ? JSON.parse(raw) : null } catch { return null }
 }
 
+/**
+ * AN AUDIENCE SIZE DOES NOT CHANGE WHILE SOMEBODY DECIDES.
+ *
+ * Five miles round the same point is the same number this minute as it was
+ * yesterday, but every visit and every tap between radii re-asked Meta and put
+ * a spinner up meanwhile. Kept per place-and-radius, shown instantly, and
+ * refreshed behind so it stays honest without ever being the reason to wait.
+ */
+const REACH_KEY = 'apnosh.boost.reach.v1'
+const reachId = (lat: number | undefined, lng: number | undefined, key: string | undefined, miles: number, ad: string) =>
+  `${ad}:${key ?? `${lat?.toFixed(3)},${lng?.toFixed(3)}`}:${miles}`
+function readReach(id: string): Reach | null {
+  try {
+    const all = JSON.parse(window.localStorage.getItem(REACH_KEY) || '{}') as Record<string, Reach>
+    return all[id] ?? null
+  } catch { return null }
+}
+function writeReach(id: string, r: Reach) {
+  try {
+    const all = JSON.parse(window.localStorage.getItem(REACH_KEY) || '{}') as Record<string, Reach>
+    /* Only a real answer is worth keeping. A "still computing" reply cached
+       would show a spinner forever. */
+    if (!r.available || !r.upper) return
+    all[id] = r
+    window.localStorage.setItem(REACH_KEY, JSON.stringify(all))
+  } catch { /* private mode */ }
+}
+
 export default function MvpBoost({ clientId }: { clientId: string }) {
   const [seed] = useState<Record<string, unknown> | null>(() => (typeof window === 'undefined' ? null : readCache(clientId)))
   const [loading, setLoading] = useState(!seed)
@@ -235,7 +263,11 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [picked, setPicked] = useState<Candidate | null>(null)
   const [daily, setDaily] = useState(10)
   const [days, setDays] = useState(7)
-  const [radius, setRadius] = useState(10)
+  /* FIVE, NOT TEN. Ten miles from downtown Seattle is a million and a half
+     people and most of them are never walking into a restaurant in West
+     Seattle. Five is the honest default for somewhere people eat, and it makes
+     the first number one an owner recognises rather than one they distrust. */
+  const [radius, setRadius] = useState(5)
   /* Age is sent but not yet offered as a control. 18-65 is everyone Meta will
      serve a restaurant ad to, so the default is the honest one, and a narrower
      range is a decision nobody has asked for yet. */
@@ -353,7 +385,16 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const maxDaily = Math.max(minDaily, Math.min(120, Math.floor(limits.maxUsd / Math.max(1, days))))
   useEffect(() => { setDaily((d) => Math.min(Math.max(d, minDaily), maxDaily)) }, [maxDaily, minDaily])
   /* A number measured for one town says nothing about the next one. */
-  useEffect(() => { setCounts({}) }, [place, here])
+  /* Every radius we have ever measured for this place, so the pills arrive
+     filled in rather than as four dashes. */
+  useEffect(() => {
+    const next: Record<number, number | null> = {}
+    for (const r of RADII) {
+      const k = readReach(reachId(here?.lat, here?.lng, place?.key, r, ad))
+      if (k?.upper) next[r] = k.upper
+    }
+    setCounts(next)
+  }, [place, here, ad])
 
   /* Look up a place as they type. Debounced, because this is a network call per
      keystroke otherwise and the answer is not urgent. */
@@ -372,7 +413,12 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     if (!picked || (!place && !here) || !rules?.reachEstimate) { setReach(null); return }
     let live = true
     let tries = 0
-    setReaching(true)
+    const id = reachId(here?.lat, here?.lng, place?.key, radius, ad)
+
+    /* Answer first, ask second. */
+    const known = readReach(id)
+    if (known) { setReach(known); setCounts((c) => ({ ...c, [radius]: known.upper ?? null })) }
+    setReaching(!known)
 
     /* META TAKES A MOMENT ON AN AUDIENCE IT HAS NOT SEEN. It answers with zeros
        and estimateReady:false while it works one out, which is exactly what a
@@ -390,11 +436,12 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         if (got.ready === false && tries < 6) { tries++; setTimeout(ask, 5000); return }
         /* Remember it against this radius so the rings keep their labels. */
         setCounts((c) => ({ ...c, [radius]: got.upper && got.upper > 0 ? got.upper : null }))
+        writeReach(id, got)
         setReaching(false)
       }).catch(() => { if (live) { setReach(null); setReaching(false) } })
     }
-    const id = setTimeout(ask, 260)
-    return () => { live = false; clearTimeout(id) }
+    const t = setTimeout(ask, known ? 1200 : 260)
+    return () => { live = false; clearTimeout(t) }
   }, [clientId, picked, place, radius, ageMin, ageMax, ad, rules, here])
 
   /* ── Spent ──────────────────────────────────────────────────────────────── */
@@ -888,10 +935,23 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                     <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
                       {reach.lower.toLocaleString()}–{reach.upper.toLocaleString()} people
                     </span>
-                    <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 3 }}>live in that circle</span>
-                    {reach.daily && reach.daily > 0 && (
+                    {/* NOT "live there". Meta's delivery estimate counts
+                        ACCOUNTS it could deliver to in that area -- residents,
+                        yes, but also people who work there or pass through, and
+                        an account is not a person. Saying "live" turned a
+                        reach estimate into a census claim, and 1.5 million
+                        residents within ten miles of downtown Seattle is why it
+                        read as wrong. */}
+                    <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 3 }}>
+                      Meta can reach them there
+                    </span>
+                    {/* Boolean, not the number. `{0 && …}` evaluates to 0 and
+                        React renders it, so a bare "0" was printing under the
+                        audience on every single estimate -- Meta always returns
+                        daily: 0 because the reach call has no budget field. */}
+                    {Boolean(reach.daily && reach.daily > 0) && (
                       <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
-                        Meta expects about {reach.daily.toLocaleString()} a day
+                        Meta expects about {(reach.daily ?? 0).toLocaleString()} a day
                       </span>
                     )}
                   </>
