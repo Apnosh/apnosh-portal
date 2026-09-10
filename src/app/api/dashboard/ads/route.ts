@@ -78,6 +78,13 @@ export const dynamic = 'force-dynamic'
    mid-flight and report a failure for an ad that was still being created. */
 export const maxDuration = 120
 
+/**
+ * How many other clients must have boosted before their median is shown to
+ * somebody who has not. Below this the "median" is one identifiable business's
+ * own rate wearing an anonymous label.
+ */
+const MIN_PEERS_FOR_A_RATE = 5
+
 /** Every posting platform we can put money behind. */
 const BOOSTABLE = new Set(Object.values(AD_RULES).flatMap((r) => r.posts))
 
