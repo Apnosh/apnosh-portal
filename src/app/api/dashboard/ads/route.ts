@@ -231,18 +231,9 @@ export async function GET(req: NextRequest) {
     /* One lookup per client, ever: cached into client_locations after the first. */
     const here = await coordsForClient(clientId).catch(() => null)
 
-    let suggested: Awaited<ReturnType<typeof searchGeo>>[number] | null = null
-    if (meta) {
-      const { data: biz } = await adminRead0.from('businesses')
-        .select('city, state, address').eq('client_id', clientId).maybeSingle()
-      const guess = String(biz?.city ?? '').trim() || String(biz?.address ?? '').trim()
-      /* A street address will not match a city search, so only a bare-ish token
-         is worth asking about. */
-      if (guess && guess.length < 40 && !/\d/.test(guess)) {
-        const hits = await searchGeo(clientId, meta.accountId, guess).catch(() => [])
-        suggested = hits.find((h) => h.targetable && h.type === 'city') ?? null
-      }
-    }
+    /* The city suggestion that used to live here is gone. It was a vendor round
+       trip to propose a city when we now have the address itself, and the screen
+       opens on their own coordinates. One less call on the slowest screen. */
 
     const delivered = ads.filter((a) => a.spend > 1 && a.reach > 0)
     const spentAll = delivered.reduce((n, a) => n + a.spend, 0)
@@ -349,7 +340,7 @@ export async function GET(req: NextRequest) {
       platforms,
       payer,
       metaAccountId: meta?.accountId ?? null,
-      accounts, ads, candidates, history, peerRate, suggested, here,
+      accounts, ads, candidates, history, peerRate, here,
       limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS, minDaily: MIN_DAILY_USD },
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {

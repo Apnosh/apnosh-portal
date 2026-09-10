@@ -193,21 +193,37 @@ function Head({ hue, children, note }: { hue: 'brand' | 'mint' | 'amber'; childr
   )
 }
 
+/**
+ * WHAT WE KNEW LAST TIME.
+ *
+ * This screen asks the vendor for accounts, running ads, ad accounts on two
+ * platforms and the client's coordinates before it can draw anything, and none
+ * of it changes between one visit and the next. Kept and painted immediately,
+ * refreshed behind. Same treatment the composer got, for the same reason: the
+ * second of blank screen was never telling anybody anything.
+ */
+const CACHE_V = 1
+const cacheKey = (id: string) => `apnosh.boost.v${CACHE_V}.${id}`
+function readCache(id: string): Record<string, unknown> | null {
+  try { const raw = window.localStorage.getItem(cacheKey(id)); return raw ? JSON.parse(raw) : null } catch { return null }
+}
+
 export default function MvpBoost({ clientId }: { clientId: string }) {
-  const [loading, setLoading] = useState(true)
+  const [seed] = useState<Record<string, unknown> | null>(() => (typeof window === 'undefined' ? null : readCache(clientId)))
+  const [loading, setLoading] = useState(!seed)
   const [err, setErr] = useState<string | null>(null)
-  const [connected, setConnected] = useState(false)
+  const [connected, setConnected] = useState(seed?.connected === true)
   /* Set up one platform and the setup screen goes away, which would leave no
      way to add the second. This forces it back. */
   const [addingPlatform, setAddingPlatform] = useState(false)
   /* Best first is the pitch; newest first is how somebody looks for the post
      they are actually thinking of. */
   const [order, setOrder] = useState<'best' | 'new'>('best')
-  const [accounts, setAccounts] = useState<AdAccount[]>([])
-  const [ads, setAds] = useState<RunningAd[]>([])
-  const [candidates, setCandidates] = useState<Candidate[]>([])
-  const [platforms, setPlatforms] = useState<PlatformState[]>([])
-  const [history, setHistory] = useState<History | null>(null)
+  const [accounts, setAccounts] = useState<AdAccount[]>((seed?.accounts ?? []) as AdAccount[])
+  const [ads, setAds] = useState<RunningAd[]>((seed?.ads ?? []) as RunningAd[])
+  const [candidates, setCandidates] = useState<Candidate[]>((seed?.candidates ?? []) as Candidate[])
+  const [platforms, setPlatforms] = useState<PlatformState[]>((seed?.platforms ?? []) as PlatformState[])
+  const [history, setHistory] = useState<History | null>((seed?.history ?? null) as History | null)
   /* What a dollar has bought for OTHER Apnosh restaurants, used only until this
      one has a rate of its own. */
   const [peerRate, setPeerRate] = useState<{ perDollar: number; from: number } | null>(null)
@@ -215,7 +231,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [setupOf, setSetupOf] = useState<'meta' | 'tiktok'>('meta')
   const [limits, setLimits] = useState({ maxUsd: 500, maxDays: 30, minDaily: 1 })
 
-  const [pickedAccount, setPickedAccount] = useState<string | null>(null)
+  const [pickedAccount, setPickedAccount] = useState<string | null>((seed?.payer ?? null) as string | null)
   const [picked, setPicked] = useState<Candidate | null>(null)
   const [daily, setDaily] = useState(10)
   const [days, setDays] = useState(7)
@@ -228,16 +244,19 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [placeQ, setPlaceQ] = useState('')
   const [places, setPlaces] = useState<GeoOption[]>([])
   const [place, setPlace] = useState<GeoOption | null>(null)
+  /* Their own address is the answer for almost everybody, so the map opens on it
+     and "somewhere else" is a link rather than a step. Only shown when they
+     actively want to move it. */
+  const [changingPlace, setChangingPlace] = useState(false)
   const [reach, setReach] = useState<Reach | null>(null)
   const [reaching, setReaching] = useState(false)
   /* One number per radius, kept as they arrive, so the rings fill in as the
      owner explores instead of forgetting everything on each tap. Reset when the
      place changes, because a number for Seattle means nothing for Phoenix. */
   const [counts, setCounts] = useState<Record<number, number | null>>({})
-  const [suggested, setSuggested] = useState<GeoOption | null>(null)
   /* The restaurant's own coordinates. When we have them the ad is aimed at the
      door rather than the city centre, and the map is a picture of that. */
-  const [here, setHere] = useState<{ lat: number; lng: number; label: string } | null>(null)
+  const [here, setHere] = useState<{ lat: number; lng: number; label: string } | null>((seed?.here ?? null) as { lat: number; lng: number; label: string } | null)
   /* Meta's own rendering of a running ad, fetched only when asked for. */
   const [previewOf, setPreviewOf] = useState<string | null>(null)
   const [previews, setPreviews] = useState<AdPreview[] | null>(null)
@@ -256,17 +275,19 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         setPlatforms((j.platforms ?? []) as PlatformState[])
         setHistory((j.history ?? null) as History | null)
         setPeerRate((j.peerRate ?? null) as { perDollar: number; from: number } | null)
-        setSuggested((j.suggested ?? null) as GeoOption | null)
         setHere((j.here ?? null) as { lat: number; lng: number; label: string } | null)
+        try { window.localStorage.setItem(cacheKey(clientId), JSON.stringify(j)) } catch { /* private mode */ }
         if (j.limits) setLimits(j.limits)
         /* The stored choice, or nothing. Not "the only one we can see": the
            point of the picker is that seeing three ad accounts and paying from
            one of them are different facts. */
         setPickedAccount(typeof j.payer === 'string' ? j.payer : null)
       })
-      .catch((e) => setErr(e instanceof Error ? e.message : 'Could not load'))
+      /* A stale screen beats an error banner over a screen that is already
+         correct. Only speak up when there is nothing to show. */
+      .catch((e) => { if (!seed) setErr(e instanceof Error ? e.message : 'Could not load') })
       .finally(() => setLoading(false))
-  }, [clientId])
+  }, [clientId, seed])
 
   useEffect(() => { void load() }, [load])
 
@@ -332,7 +353,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const maxDaily = Math.max(minDaily, Math.min(120, Math.floor(limits.maxUsd / Math.max(1, days))))
   useEffect(() => { setDaily((d) => Math.min(Math.max(d, minDaily), maxDaily)) }, [maxDaily, minDaily])
   /* A number measured for one town says nothing about the next one. */
-  useEffect(() => { setCounts({}) }, [place])
+  useEffect(() => { setCounts({}) }, [place, here])
 
   /* Look up a place as they type. Debounced, because this is a network call per
      keystroke otherwise and the answer is not urgent. */
@@ -348,7 +369,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   /* HOW MANY PEOPLE, before any money. Re-asked whenever the audience changes,
      because an estimate that lags the controls is worse than none. */
   useEffect(() => {
-    if (!picked || !place || !rules?.reachEstimate) { setReach(null); return }
+    if (!picked || (!place && !here) || !rules?.reachEstimate) { setReach(null); return }
     let live = true
     let tries = 0
     setReaching(true)
@@ -361,7 +382,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
     const ask = () => {
       void fetch('/api/dashboard/ads', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, action: 'estimate', adPlatform: ad, targeting: { geoKey: place.key, geoType: place.type, radiusMiles: radius, ageMin, ageMax, ...(here ? { lat: here.lat, lng: here.lng } : {}) } }),
+        body: JSON.stringify({ clientId, action: 'estimate', adPlatform: ad, targeting: { geoKey: place?.key, geoType: place?.type, radiusMiles: radius, ageMin, ageMax, ...(here && !place ? { lat: here.lat, lng: here.lng } : {}) } }),
       }).then((r) => r.json()).then((j) => {
         if (!live) return
         const got = j as Reach
@@ -756,50 +777,70 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
             )}
 
             <Head hue="mint">Who sees it</Head>
-            {place ? (
-              <button type="button" onClick={() => { setPlace(null); setPlaceQ('') }}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit',
-                  padding: '12px 14px', borderRadius: R.box, cursor: 'pointer', background: tint('mint', .07), border: `1px solid ${C.green}` }}>
-                <MapPin size={15} color={C.greenDk} />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>
-                    {rules?.cityRadius ? `Within ${radius} miles of ${here ? businessShort : place.name}` : place.name}
-                  </span>
-                  <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>
-                    {place.where ? `${place.where} · ` : ''}Tap to change
-                  </span>
-                </span>
-              </button>
-            ) : (
+
+            {/* OPENS ON THEIR OWN ADDRESS. It is the answer for almost everyone,
+                so it is the starting state rather than the result of a search,
+                and moving it is a link instead of a step. */}
+            {here && !changingPlace ? (
               <>
-                {/* THEIR OWN CITY, one tap, before anybody types anything. We
-                    know where the restaurant is; asking them to tell us again is
-                    a form for a fact we already hold. Still a tap and not a
-                    default, because on the screen that spends money the choice
-                    should be visibly theirs. */}
-                {suggested && !placeQ && (
-                  <button type="button" onClick={() => setPlace(suggested)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', textAlign: 'left', font: 'inherit', marginBottom: 10,
-                      padding: '13px 15px', borderRadius: R.box, cursor: 'pointer',
-                      background: tint('mint', .07), border: `1px solid ${C.green}` }}>
-                    <span style={{ width: 30, height: 30, borderRadius: '50%', background: gradOf('mint'), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <MapPin size={15} color="#fff" />
+                <RadiusMap lat={here.lat} lng={here.lng} miles={radius} label={businessShort} />
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  {RADII.map((r) => {
+                    const on = radius === r
+                    const n = counts[r]
+                    return (
+                      <button key={r} type="button" onClick={() => setRadius(r)}
+                        style={{ flex: 1, padding: '8px 0 9px', borderRadius: R.cell, cursor: 'pointer', font: 'inherit',
+                          background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
+                        <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink }}>{r} mi</span>
+                        <span style={{ display: 'block', fontSize: 10.5, marginTop: 2, color: on ? 'rgba(255,255,255,.75)' : C.mute }}>
+                          {n == null ? '—' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}m` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <button type="button" onClick={() => { setChangingPlace(true); setPlace(null) }}
+                  style={{ marginTop: 8, padding: 0, background: 'none', border: 'none', font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, color: C.greenDk, cursor: 'pointer' }}>
+                  Somewhere else
+                </button>
+              </>
+            ) : place ? (
+              <>
+                <button type="button" onClick={() => { setPlace(null); setPlaceQ('') }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit',
+                    padding: '12px 14px', borderRadius: R.box, cursor: 'pointer', background: tint('mint', .07), border: `1px solid ${C.green}` }}>
+                  <MapPin size={15} color={C.greenDk} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>
+                      {rules?.cityRadius ? `${radius} miles round ${place.name}` : place.name}
                     </span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>{suggested.name}</span>
-                      <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>Where your restaurant is</span>
-                    </span>
-                    <span style={{ fontSize: T.note, fontFamily: DISPLAY, fontWeight: 600, color: C.greenDk }}>Use this</span>
+                    <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>{place.where || 'Tap to change'}</span>
+                  </span>
+                </button>
+                {rules?.cityRadius ? (
+                  <Rings options={RADII} value={radius} onPick={setRadius} counts={counts} city={place.name} />
+                ) : (
+                  <div style={{ marginTop: 10, fontSize: T.label, color: C.mute, lineHeight: 1.45, padding: '0 2px' }}>
+                    {rules?.name} targets the whole city, with no radius.
+                  </div>
+                )}
+                {here && (
+                  <button type="button" onClick={() => { setChangingPlace(false); setPlace(null); setPlaceQ('') }}
+                    style={{ marginTop: 8, padding: 0, background: 'none', border: 'none', font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, color: C.greenDk, cursor: 'pointer' }}>
+                    Back to {businessShort}
                   </button>
                 )}
+              </>
+            ) : (
+              <>
                 <input className="cmp-in" value={placeQ} onChange={(e) => setPlaceQ(e.target.value)}
-                  placeholder={suggested ? 'Or somewhere else' : 'Your town or city'}
+                  placeholder="Town or city"
                   style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: R.box, padding: '11px 12px', fontSize: T.body, fontFamily: 'inherit', boxSizing: 'border-box', outline: 'none' }} />
                 {places.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                    {/* WHICH Wallingford. Searching that word returns four of
-                        them, two in England, and the list used to show the name
-                        alone. Meta's own breadcrumb is the only way to tell. */}
+                    {/* Which one: this word returns four Wallingfords, two of
+                        them in England. */}
                     {places.filter((g) => g.targetable).slice(0, 6).map((g) => (
                       <button key={g.key} type="button" onClick={() => { setPlace(g); setPlaces([]) }}
                         style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', font: 'inherit',
@@ -809,148 +850,57 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                           <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>{g.name}</span>
                           {g.where && <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 1 }}>{g.where}</span>}
                         </span>
-                        <span style={{ fontSize: T.note, color: C.faint }}>{g.type}</span>
                       </button>
                     ))}
-                    {/* A NEIGHBOURHOOD CANNOT BE TARGETED, and saying nothing
-                        about it is how somebody ends up thinking we ignored what
-                        they typed. Meta's search offers them; its targeting has
-                        no field for them. */}
                     {places.some((g) => !g.targetable) && places.filter((g) => g.targetable).length === 0 && (
-                      <div style={{ fontSize: T.label, color: C.mute, lineHeight: 1.5, padding: '10px 2px' }}>
-                        {places[0].name} is a neighbourhood, and ads cannot be aimed at one.
-                        Search for the city instead and set a radius.
+                      <div style={{ fontSize: T.label, color: C.mute, lineHeight: 1.45, padding: '10px 2px' }}>
+                        {places[0].name} is a neighbourhood. Search for the city instead.
                       </div>
                     )}
                   </div>
                 )}
+                {here && (
+                  <button type="button" onClick={() => { setChangingPlace(false); setPlaceQ('') }}
+                    style={{ marginTop: 10, padding: 0, background: 'none', border: 'none', font: 'inherit', fontFamily: DISPLAY, fontSize: T.note, fontWeight: 600, color: C.greenDk, cursor: 'pointer' }}>
+                    Back to {businessShort}
+                  </button>
+                )}
               </>
             )}
 
-            {place && (
-              <>
-                {/* THE RADIUS IS META ONLY, and the vendor says so: "radius is
-                    only honoured on platforms whose capability map allows city
-                    radius (Meta)". Showing this slider on TikTok would promise a
-                    ring around the restaurant and quietly deliver the whole
-                    city, which is exactly the kind of lie a screen should not
-                    tell about somebody's money. */}
-                {rules?.cityRadius ? (
-                  here ? (
-                    /* A MAP, because the rings could not answer the question
-                       somebody actually has: is my street in it, and which towns
-                       am I paying for. Only when we know where they are -- a
-                       circle drawn on a city centre would be a confident picture
-                       of the wrong place. */
-                    <div style={{ marginTop: 12 }}>
-                      <RadiusMap lat={here.lat} lng={here.lng} miles={radius} label={businessShort} />
-                      <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                        {RADII.map((r) => {
-                          const on = radius === r
-                          const n = counts[r]
-                          return (
-                            <button key={r} type="button" onClick={() => setRadius(r)}
-                              style={{ flex: 1, padding: '8px 0 9px', borderRadius: R.cell, cursor: 'pointer', font: 'inherit',
-                                background: on ? C.ink : '#fff', border: `1px solid ${on ? 'transparent' : C.line}` }}>
-                              <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: on ? 700 : 500, color: on ? '#fff' : C.ink }}>{r} mi</span>
-                              <span style={{ display: 'block', fontSize: 10.5, marginTop: 2, color: on ? 'rgba(255,255,255,.75)' : C.mute }}>
-                                {n == null ? '—' : n >= 1000000 ? `${(n / 1000000).toFixed(1)}m` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n)}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <Rings options={RADII} value={radius} onPick={setRadius} counts={counts} city={place.name} />
-                  )
-                ) : (
-                  <div style={{ marginTop: 10, fontSize: T.label, color: C.mute, lineHeight: 1.5, padding: '0 2px' }}>
-                    {rules?.name} targets the whole city rather than a ring around you. There is no
-                    radius to set.
-                  </div>
-                )}
-
-                {/* HOW MANY PEOPLE, BEFORE ANY MONEY. Meta's own estimate, and
-                    a plain "no" where the platform has no such API. */}
-                {rules?.reachEstimate ? (
-                <div style={{ marginTop: 10, padding: '14px 16px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}`, boxShadow: CARD_SHADOW }}>
-                  {reach?.ready === false ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: T.control, color: C.mute }}>
-                      <Loader2 size={14} className="mvp-spin" />
-                      Meta has not sized this area before. Working it out…
+            {/* The audience size, whichever way the place was chosen. */}
+            {(here || place) && rules?.reachEstimate && (
+              <div style={{ marginTop: 10, padding: '14px 16px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}`, boxShadow: CARD_SHADOW }}>
+                {reach?.ready === false ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: T.control, color: C.mute }}>
+                    <Loader2 size={14} className="mvp-spin" />Sizing it…
+                  </span>
+                ) : reaching ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: T.control, color: C.mute }}>
+                    <Loader2 size={14} className="mvp-spin" />Sizing it…
+                  </span>
+                ) : reach?.untargetable ? (
+                  <span style={{ fontSize: T.label, color: C.coral, lineHeight: 1.45 }}>
+                    That kind of place cannot be targeted. Pick a city.
+                  </span>
+                ) : reach?.available && reach.lower && reach.upper ? (
+                  <>
+                    <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
+                      {reach.lower.toLocaleString()}–{reach.upper.toLocaleString()} people
                     </span>
-                  ) : reaching ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: T.control, color: C.mute }}>
-                      <Loader2 size={14} className="mvp-spin" />Checking how many people…
-                    </span>
-                  ) : reach?.untargetable ? (
-                    <span style={{ fontSize: T.label, color: C.coral, lineHeight: 1.5 }}>
-                      That kind of place cannot be targeted. Pick a city, a postcode or a state.
-                    </span>
-                  ) : reach?.available && reach.lower && reach.upper ? (
-                    <>
-                      <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
-                        {reach.lower.toLocaleString()} to {reach.upper.toLocaleString()} people
+                    <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 3 }}>live in that circle</span>
+                    {reach.daily && reach.daily > 0 && (
+                      <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}` }}>
+                        Meta expects about {reach.daily.toLocaleString()} a day
                       </span>
-                      <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
-                        live there and use Facebook or Instagram. This is the size of the room, not
-                        how many will see the post.
-                      </span>
-                      {/* WHAT THE MONEY BUYS, said plainly and only where it can
-                          be stood behind. Meta prices delivery at auction, so a
-                          predicted click count on a $70 boost would be a number
-                          we made up. What IS true is how the budget compares to
-                          the room. */}
-                      {/* WHAT THE BUDGET REACHES, when Meta gives us a number.
-                          `daily` is its own estimate of daily reach, so it is
-                          reported as theirs and multiplied out over the run
-                          rather than dressed up as a promise. */}
-                      {reach.daily && reach.daily > 0 ? (
-                        <span style={{ display: 'block', marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
-                          <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
-                            about {reach.daily.toLocaleString()} a day
-                          </span>
-                          <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 3, lineHeight: 1.5 }}>
-                            is what Meta expects this to reach, so roughly{' '}
-                            {(reach.daily * days).toLocaleString()} over {days} day{days === 1 ? '' : 's'}.
-                            Their estimate, not a guarantee.
-                          </span>
-                        </span>
-                      ) : (
-                        /* Zernio's reach call has no budget field, so Meta has
-                           nothing to price against and returns daily: 0 every
-                           time. Said plainly rather than left as a silent gap
-                           where a number should be. */
-                        <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}`, lineHeight: 1.5 }}>
-                          How many of them ${daily} a day actually reaches is not something Meta will
-                          say in advance. It sells delivery at auction and prices it as it runs.
-                        </span>
-                      )}
-                    </>
-                  ) : (
-                    /* MEASURED, NOT GUESSED AT: on this account a 25-mile
-                       radius answers instantly and 5 and 1 mile come back
-                       uncomputed. Meta works out tight audiences lazily and an
-                       account with no ad history waits longest. The important
-                       part is that this does NOT block the boost, so the copy
-                       says so instead of leaving somebody staring at it. */
-                    <span style={{ fontSize: T.label, color: C.mute, lineHeight: 1.5 }}>
-                      Meta has not sized this radius yet. It works tighter areas out lazily, and
-                      fastest once an account has run something. <b style={{ color: C.ink, fontWeight: 600 }}>The boost will
-                      still run.</b> A wider radius usually answers straight away if you want a number first.
-                    </span>
-                  )}
-                </div>
+                    )}
+                  </>
                 ) : (
-                  <div style={{ marginTop: 10, padding: '13px 15px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}` }}>
-                    <span style={{ fontSize: T.label, color: C.mute, lineHeight: 1.5 }}>
-                      {rules?.name} cannot say how many people that reaches before you pay. Meta can;
-                      TikTok has no such tool, and a made-up number would be worse than none.
-                    </span>
-                  </div>
+                  <span style={{ fontSize: T.label, color: C.mute, lineHeight: 1.45 }}>
+                    Meta has not sized this circle yet. <b style={{ color: C.ink, fontWeight: 600 }}>The boost still runs.</b>
+                  </span>
                 )}
-              </>
+              </div>
             )}
 
             {/* ── HOW MUCH, PER DAY ─────────────────────────────────────────
@@ -1031,15 +981,8 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
                   roughly {Math.round(history.perDollar * total).toLocaleString()} people
                 </span>
-                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
-                  is what ${total} bought last time, going on your own {history.boosts === 1 ? 'boost' : `${history.boosts} boosts`}:
-                  ${history.spend.toLocaleString()} reached {history.reach.toLocaleString()} people, about{' '}
-                  {history.perDollar} per dollar. Your rate, not an industry average.
-                </span>
-                <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}`, lineHeight: 1.5 }}>
-                  Doubling to ${total * 2} would reach roughly{' '}
-                  {Math.round(history.perDollar * total * 2).toLocaleString()}. It is not perfectly
-                  linear, but it is close enough to decide with.
+                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 3 }}>
+                  at your rate of {history.perDollar} per dollar
                 </span>
               </div>
             ) : peerRate ? (
@@ -1052,27 +995,17 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
                   maybe {Math.round(peerRate.perDollar * total).toLocaleString()} people
                 </span>
-                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
-                  going on what ${'​'}1 has bought for {peerRate.from === 1 ? 'another Apnosh restaurant' : `${peerRate.from} other Apnosh restaurants`},
-                  about {peerRate.perDollar} people per dollar. A borrowed number until you have your
-                  own, and yours will differ: a different town and a different post buy different
-                  amounts.
+                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 3 }}>
+                  going on other Apnosh restaurants, until you have your own
                 </span>
               </div>
             ) : (
               <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: R.box, background: tint('amber', .07), border: `1px solid ${tint('amber', .3)}` }}>
                 <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>
-                  Nobody can tell you what this reaches yet
+                  First one, so there is no number yet
                 </span>
-                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
-                  Not us and not Meta: it only forecasts campaigns over about $780, and it prices
-                  everything smaller at auction as it runs. What settles it is one boost. After this
-                  one we will know what a dollar buys on your account, and every amount here will
-                  come with a real number.
-                </span>
-                <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tint('amber', .3)}`, lineHeight: 1.5 }}>
-                  So make the first one small. ${dailyChoices[0]} a day for {LENGTHS[0]} days is
-                  ${dailyChoices[0] * LENGTHS[0]}, and it buys you the number.
+                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 3, lineHeight: 1.45 }}>
+                  Start small and this screen will know your rate next time.
                 </span>
               </div>
             )}
@@ -1087,20 +1020,16 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 </span>
                 <span style={{ fontSize: T.label, color: C.mute }}>in total</span>
               </div>
-              <div style={{ fontSize: T.label, color: C.mute, marginTop: 5, lineHeight: 1.5 }}>
-                ${daily} a day for {days} day{days === 1 ? '' : 's'}
-                {place ? (rules?.cityRadius ? `, within ${radius} miles of ${here ? businessShort : place.name}` : `, in ${place.name}`) : ''}.
-                That is the most it can spend on ads. It stops on its own, and you can stop it
-                sooner here.
+              <div style={{ fontSize: T.label, color: C.mute, marginTop: 5, lineHeight: 1.45 }}>
+                ${daily} a day for {days} day{days === 1 ? '' : 's'}. Stops on its own.
               </div>
               {/* TAX IS NOT OURS TO CALCULATE AND NOT OURS TO HIDE. Meta bills
                   the ad account directly and adds sales tax or VAT on top
                   depending on the billing address. Neither we nor Zernio see
                   that number, so the honest thing is to say the total is the ad
                   spend and the card will be charged a little more. */}
-              <div style={{ fontSize: T.note, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tint('brand', .25)}`, lineHeight: 1.5 }}>
-                {rules?.name} bills this to your own ad account and may add sales tax on top, so the
-                card is charged a little more than ${total}.
+              <div style={{ fontSize: T.note, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tint('brand', .25)}` }}>
+                Billed to your own ad account, plus tax.
               </div>
               {total > limits.maxUsd && (
                 <div style={{ fontSize: T.label, color: C.coral, marginTop: 8, fontWeight: 600 }}>
@@ -1111,7 +1040,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
             </div>
 
             <MvpActions>
-              <MvpButton full busy={busy} disabled={!place || total > limits.maxUsd || payerDead} label={payerDead ? 'That ad account cannot run ads' : place ? `Spend $${total}` : 'Pick an area first'}
+              <MvpButton full busy={busy} disabled={(!place && !here) || total > limits.maxUsd || payerDead} label={payerDead ? 'That ad account cannot run ads' : (place || here) ? `Spend $${total}` : 'Pick an area first'}
                 onClick={() => void (async () => {
                   const j = await act({
                     action: 'boost', platformPostId: picked.zernioPostId,
@@ -1122,7 +1051,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                       geoKey: place?.key, geoType: place?.type, geoName: place?.name,
                       radiusMiles: radius, ageMin, ageMax,
                       /* Sent so the ad is aimed where the map says it is. */
-                      ...(here ? { lat: here.lat, lng: here.lng } : {}),
+                      ...(here && !place ? { lat: here.lat, lng: here.lng } : {}),
                     },
                   })
                   if (j) setDone({ spent: total, days })
