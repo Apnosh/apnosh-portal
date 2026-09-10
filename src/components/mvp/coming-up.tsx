@@ -24,7 +24,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import { Calendar, Users, Image as ImageIcon, PenLine } from 'lucide-react'
+import { Calendar, Users, Image as ImageIcon, PenLine, ChevronRight } from 'lucide-react'
+/* mvp-insights imports THIS file for its own compact block, so the two are a
+   cycle. It is safe because both bindings are function declarations used at
+   render time, never read while either module is still evaluating -- but do not
+   turn either of them into a const arrow without checking the other side. */
 import { BrandOrMark } from './mvp-insights'
 import { C, DISPLAY } from './tokens'
 import { gradOf, glow, tint } from './hues'
@@ -32,6 +36,14 @@ import { gradOf, glow, tint } from './hues'
 interface Post { id: string; content: string; status: string; scheduledFor: string | null; platforms: string[]; mediaUrl: string | null; failure: string | null }
 interface Draft { id: string; idea: string; status: string; platforms: string[]; wantedFor: string | null }
 interface Data { waiting: Post[]; failed: Post[]; sent: Post[]; withTeam: Draft[]; error: string | null }
+
+/* One answer per client, shared by every mount for a minute.
+   Insights renders this under the stage the owner is looking at, so swiping from
+   one stage to the next unmounts and remounts it -- without this, that is a fresh
+   call to the vendor every swipe, and the block flashes empty each time. Stale
+   data is shown while the refetch runs rather than a blank. */
+const CACHE = new Map<string, { at: number; data: Data }>()
+const FRESH_MS = 60_000
 
 /** "Tomorrow 9 AM", not a timestamp. */
 function whenWords(iso: string | null): string {
@@ -54,12 +66,16 @@ function whenWords(iso: string | null): string {
  *                 and offers a post. False on a screen that is drawing its own
  *                 empty state, so an empty screen never says "nothing" twice.
  */
-export default function ComingUp({ clientId, onCount, nudge = true }: {
+export default function ComingUp({ clientId, onCount, nudge = true, compact = false }: {
   clientId: string
   onCount?: (n: number) => void
   nudge?: boolean
+  /** The Insights version: three lines and a way through, no cancel buttons.
+   *  Cancelling a post is a decision, and a decision belongs on the screen the
+   *  owner went to on purpose, not under a graph they were reading. */
+  compact?: boolean
 }) {
-  const [data, setData] = useState<Data | null>(null)
+  const [data, setData] = useState<Data | null>(() => CACHE.get(clientId)?.data ?? null)
   const [err, setErr] = useState<string | null>(null)
   const [cancelling, setCancelling] = useState<string | null>(null)
   /* The callback in a ref: a parent that passes an inline arrow would otherwise
@@ -68,10 +84,13 @@ export default function ComingUp({ clientId, onCount, nudge = true }: {
   countRef.current = onCount
 
   const load = useCallback(async () => {
+    const hit = CACHE.get(clientId)
+    if (hit && Date.now() - hit.at < FRESH_MS) { setData(hit.data); return }
     try {
       const r = await fetch(`/api/dashboard/social-scheduled?clientId=${clientId}`, { cache: 'no-store' })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error || 'Could not load what is coming up')
+      CACHE.set(clientId, { at: Date.now(), data: j as Data })
       setData(j as Data)
       if (j.error) setErr(j.error)
     } catch (e) {
@@ -92,7 +111,12 @@ export default function ComingUp({ clientId, onCount, nudge = true }: {
       const r = await fetch(`/api/dashboard/social-scheduled?clientId=${clientId}&postId=${encodeURIComponent(id)}`, { method: 'DELETE' })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || 'Could not cancel it')
-      setData((cur) => cur ? { ...cur, waiting: cur.waiting.filter((p) => p.id !== id) } : cur)
+      setData((cur) => {
+        if (!cur) return cur
+        const next = { ...cur, waiting: cur.waiting.filter((p) => p.id !== id) }
+        CACHE.set(clientId, { at: Date.now(), data: next })
+        return next
+      })
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not cancel it')
     } finally { setCancelling(null) }
@@ -128,12 +152,53 @@ export default function ComingUp({ clientId, onCount, nudge = true }: {
     /* The quiet version. Nothing is wrong when nothing is scheduled, so this is a
        line and a link, not a card with a drawing in it. */
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', marginBottom: 12, background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 13px', ...(compact ? { marginTop: 16 } : { marginBottom: 12 }), background: '#fff', border: `0.5px solid ${C.line}`, borderRadius: 14 }}>
         <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, background: tint('mint', .16), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Calendar size={15} color={C.greenDk} />
         </span>
         <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.mute, lineHeight: 1.4 }}>Nothing is scheduled.</span>
         <Link href="/dashboard/post" style={{ flexShrink: 0, textDecoration: 'none', font: 'inherit', fontSize: 13, fontWeight: 600, color: C.greenDk }}>Write one</Link>
+      </div>
+    )
+  }
+
+  if (compact) {
+    /* One list, in the order that matters: what went wrong, what is next, what
+       the team is holding. Three at most -- this sits above the post list on a
+       page the owner opened to read numbers, not to run the calendar. */
+    const rows: Array<{ id: string; when: string; text: string; platforms: string[]; media: string | null; bad?: boolean }> = [
+      ...data.failed.map((p) => ({ id: p.id, when: p.failure ?? 'It did not publish', text: p.content || 'A post', platforms: p.platforms, media: p.mediaUrl, bad: true })),
+      ...data.waiting.map((p) => ({ id: p.id, when: whenWords(p.scheduledFor), text: p.content || 'A post', platforms: p.platforms, media: p.mediaUrl })),
+      ...data.withTeam.map((d) => ({ id: d.id, when: d.status === 'approved' ? 'Written, waiting to go out' : 'Your team is writing it', text: d.idea, platforms: d.platforms, media: null })),
+    ]
+    const shown = rows.slice(0, 3)
+    return (
+      <div style={{ marginTop: 16, padding: '0 2px' }}>
+        {/* the header carries the way through, like every other section on this
+            page, so the block is a heading and its cards and nothing else */}
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6, padding: '0 2px' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600, letterSpacing: '.01em', color: C.mute }}>Coming up</span>
+          <span style={{ fontSize: 12, color: C.faint }}>{rows.length === 1 ? '1 thing' : `${rows.length} things`}</span>
+          <Link href="/dashboard/insights/posts" style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: C.greenDk, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+            {rows.length > 3 ? 'See all' : 'Open'} <ChevronRight size={13} />
+          </Link>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {shown.map((r) => (
+            <div key={r.id} style={{ ...card, padding: 11, borderColor: r.bad ? tint('red', .45, 1) : C.line, background: r.bad ? '#fffafa' : '#fff', alignItems: 'center' }}>
+              {r.media
+                ? thumb(r.media)
+                : <span style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, background: tint('mint', .16), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={16} color={C.greenDk} /></span>}
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 13, fontWeight: 600, color: r.bad ? C.coral : C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.when}</span>
+                  {marks(r.platforms)}
+                </span>
+                <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2, lineHeight: 1.4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.text}</span>
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     )
   }

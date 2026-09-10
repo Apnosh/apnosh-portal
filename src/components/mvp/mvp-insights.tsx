@@ -48,6 +48,7 @@ import { deriveStandouts, deriveRhythm } from '@/lib/insights/analyst-derive'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
+import ComingUp from './coming-up'
 
 /* the browser's local calendar date — the server must never guess the client's timezone */
 function localYmdOf(d: Date): string {
@@ -667,6 +668,7 @@ function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; 
           {cs
             ? <RangeSources cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" title="Views by source" range={range} />
             : <WhatFeedsThis feed={buildAwarenessFeed(toFeedInput(detail))} unit="Times you showed up" />}
+          {clientId && <ComingUp clientId={clientId} compact />}
           {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} total={detail?.postCount} />}
           {detail.topQueries.length > 0 && <TopSearches queries={detail.topQueries} />}
         </>
@@ -679,6 +681,7 @@ function StageBottom({ stageKey, detail, clientId, range }: { stageKey: string; 
           {cs
             ? <RangeSources cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" title="Interest by source" range={range} />
             : <WhatFeedsThis feed={buildInterestFeed(toFeedInput(detail))} unit="Looked closer" />}
+          {clientId && <ComingUp clientId={clientId} compact />}
           {detail.topPosts.length > 0 && <BestPosts posts={detail.topPosts} />}
           {!cs && !detail.socialConnected && <ConnectSocial connected={false} />}
         </>
