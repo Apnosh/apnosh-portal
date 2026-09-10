@@ -179,6 +179,26 @@ export async function GET(req: NextRequest) {
     const accounts = platforms.find((p) => p.platform === 'meta')?.accounts ?? []
     const ads = platforms.flatMap((p) => p.ads)
 
+    /**
+     * THEIR OWN RATE, which is the only honest basis for "should I spend more".
+     *
+     * Meta will not forecast a boost this small -- measured, its Reach and
+     * Frequency minimum is around $780 -- and its auction-side estimate is not
+     * in this vendor's API at all. But once ONE boost has run we no longer need
+     * a forecast: we know what a dollar bought on this account, on this
+     * audience, with this kind of post. That is better than any estimate,
+     * because it is not an estimate.
+     *
+     * Only from ads that actually delivered. A boost that spent 40 cents before
+     * anyone saw it would produce a wild rate and a confident wrong projection.
+     */
+    const delivered = ads.filter((a) => a.spend > 1 && a.reach > 0)
+    const spentAll = delivered.reduce((n, a) => n + a.spend, 0)
+    const reachedAll = delivered.reduce((n, a) => n + a.reach, 0)
+    const history = delivered.length && spentAll > 0
+      ? { boosts: delivered.length, spend: Math.round(spentAll * 100) / 100, reach: reachedAll, perDollar: Math.round((reachedAll / spentAll) * 10) / 10 }
+      : null
+
     /* WHICH ACCOUNT PAYS IS A CHOICE, NOT A DEFAULT.
        The first version treated "we can see ad accounts" as "connected", which
        skipped the picker entirely. Reading Apnosh's own connection back, the
@@ -239,7 +259,7 @@ export async function GET(req: NextRequest) {
       platforms,
       payer,
       metaAccountId: meta?.accountId ?? null,
-      accounts, ads, candidates,
+      accounts, ads, candidates, history,
       limits: { maxUsd: MAX_BOOST_USD, maxDays: MAX_BOOST_DAYS, minDaily: MIN_DAILY_USD },
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (e) {

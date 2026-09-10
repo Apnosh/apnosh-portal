@@ -32,7 +32,9 @@ const R = { cell: 12, box: 14, card: 20, pill: 99 } as const
 const T = { note: 11.5, label: 12.5, control: 13.5, body: 14, big: 17, hero: 22 } as const
 
 interface AdAccount { id: string; name: string; currency: string; selectable: boolean; status: string }
-interface RunningAd { id: string; name: string; status: string; spend: number; impressions: number; clicks: number }
+interface RunningAd { id: string; name: string; status: string; spend: number; impressions: number; clicks: number; reach: number; cpm: number }
+/** What a dollar has actually bought on this account, from boosts that ran. */
+interface History { boosts: number; spend: number; reach: number; perDollar: number }
 interface GeoOption { key: string; name: string; type: string; where: string; targetable: boolean }
 interface Reach {
   available: boolean; lower: number | null; upper: number | null; daily: number | null
@@ -108,6 +110,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [ads, setAds] = useState<RunningAd[]>([])
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [platforms, setPlatforms] = useState<PlatformState[]>([])
+  const [history, setHistory] = useState<History | null>(null)
   /* Which platform the connect step is setting up. */
   const [setupOf, setSetupOf] = useState<'meta' | 'tiktok'>('meta')
   const [limits, setLimits] = useState({ maxUsd: 500, maxDays: 30, minDaily: 1 })
@@ -143,6 +146,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         setAds((j.ads ?? []) as RunningAd[])
         setCandidates((j.candidates ?? []) as Candidate[])
         setPlatforms((j.platforms ?? []) as PlatformState[])
+        setHistory((j.history ?? null) as History | null)
         if (j.limits) setLimits(j.limits)
         /* The stored choice, or nothing. Not "the only one we can see": the
            point of the picker is that seeing three ad accounts and paying from
@@ -392,8 +396,16 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                       <span style={{ flex: 1, minWidth: 0 }}>
                         <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
                         <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 2 }}>
-                          ${a.spend.toFixed(2)} spent · {a.impressions.toLocaleString()} seen · {a.status.toLowerCase()}
+                          {/* Reach, not impressions. Impressions counts the same
+                              person twice and flatters the number; unique people
+                              is what an owner means by "how many saw it". */}
+                          ${a.spend.toFixed(2)} spent · {a.reach > 0 ? `${a.reach.toLocaleString()} people` : `${a.impressions.toLocaleString()} views`} · {a.status.toLowerCase()}
                         </span>
+                        {a.spend > 1 && a.reach > 0 && (
+                          <span style={{ display: 'block', fontSize: T.note, color: C.greenDk, marginTop: 2, fontWeight: 600 }}>
+                            {Math.round(a.reach / a.spend)} people per dollar
+                          </span>
+                        )}
                       </span>
                       <button type="button"
                         onClick={() => void (async () => {
@@ -779,6 +791,47 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
                 )
               })}
             </div>
+
+            {/* SHOULD I SPEND MORE? The question the amounts above cannot
+                answer on their own. Meta will not forecast a boost this size --
+                its Reach and Frequency minimum measured at about $780 -- and its
+                auction-side estimate is not in this vendor's API. So the first
+                boost is the one nobody can predict, and every boost after it is
+                answered by the account's own rate. That is better than a
+                forecast, because it is not one. */}
+            {history ? (
+              <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: R.box, background: '#fff', border: `1px solid ${C.line}`, boxShadow: CARD_SHADOW }}>
+                <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.big, fontWeight: 600, color: C.ink }}>
+                  roughly {Math.round(history.perDollar * total).toLocaleString()} people
+                </span>
+                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
+                  is what ${total} bought last time, going on your own {history.boosts === 1 ? 'boost' : `${history.boosts} boosts`}:
+                  ${history.spend.toLocaleString()} reached {history.reach.toLocaleString()} people, about{' '}
+                  {history.perDollar} per dollar. Your rate, not an industry average.
+                </span>
+                <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${C.line}`, lineHeight: 1.5 }}>
+                  Doubling to ${total * 2} would reach roughly{' '}
+                  {Math.round(history.perDollar * total * 2).toLocaleString()}. It is not perfectly
+                  linear, but it is close enough to decide with.
+                </span>
+              </div>
+            ) : (
+              <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: R.box, background: tint('amber', .07), border: `1px solid ${tint('amber', .3)}` }}>
+                <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: T.control, fontWeight: 600, color: C.ink }}>
+                  Nobody can tell you what this reaches yet
+                </span>
+                <span style={{ display: 'block', fontSize: T.label, color: C.mute, marginTop: 4, lineHeight: 1.5 }}>
+                  Not us and not Meta: it only forecasts campaigns over about $780, and it prices
+                  everything smaller at auction as it runs. What settles it is one boost. After this
+                  one we will know what a dollar buys on your account, and every amount here will
+                  come with a real number.
+                </span>
+                <span style={{ display: 'block', fontSize: T.note, color: C.mute, marginTop: 8, paddingTop: 8, borderTop: `1px solid ${tint('amber', .3)}`, lineHeight: 1.5 }}>
+                  So make the first one small. ${dailyChoices[0]} a day for {LENGTHS[0]} days is
+                  ${dailyChoices[0] * LENGTHS[0]}, and it buys you the number.
+                </span>
+              </div>
+            )}
 
             {/* THE NUMBER, IN A SENTENCE, BEFORE THE PRESS. */}
             <div style={{ marginTop: 20, borderRadius: R.card, background: '#fff', border: `1px solid ${tint('brand', .35)}`, boxShadow: `0 6px 20px ${tint('brand', .13, 1)}`, overflow: 'hidden' }}>

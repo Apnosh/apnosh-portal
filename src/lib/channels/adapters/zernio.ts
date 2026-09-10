@@ -1684,6 +1684,12 @@ export interface RunningAd {
   spend: number
   impressions: number
   clicks: number
+  /** UNIQUE PEOPLE, which is the number an owner actually cares about and the
+   *  one this was dropping. Impressions counts the same person twice; reach does
+   *  not, and it is what makes "$70 reached 6,200 people" sayable. */
+  reach: number
+  /** Meta's own cost per 1,000 impressions for this ad. */
+  cpm: number
 }
 
 /** What is running and what it has cost. Read-only. */
@@ -1698,9 +1704,11 @@ export async function listAds(clientId: string, accountId: string): Promise<Runn
         id: str(a.id) || str(a._id),
         name: str(a.name) || 'Boost',
         status: str(a.status) || 'unknown',
-        spend: num(m.spend),
+        spend: typeof m.spend === 'number' ? m.spend : 0,
         impressions: num(m.impressions),
         clicks: num(m.clicks),
+        reach: num(m.reach),
+        cpm: typeof m.cpm === 'number' ? m.cpm : 0,
       }
     }).filter((a) => a.id)
   } catch { return [] }
