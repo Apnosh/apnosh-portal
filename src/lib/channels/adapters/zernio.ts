@@ -258,6 +258,12 @@ export interface SocialCommentRow {
   canReply: boolean
   /** link to the comment on the platform */
   url: string | null
+  /** the post it sits under, as the vendor names it: its link and caption. The post sheet
+   *  matches comments to a post by this link (2026-09-11). */
+  postPermalink: string | null
+  postCaption: string | null
+  /** likes on the comment itself, when the vendor reports them */
+  likes: number
 }
 
 /** The client's Zernio profile id, or null when they have no live connection. */
@@ -823,6 +829,9 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
            keep. Absent means yes, since older responses did not carry it. */
         canReply: c.canReply !== false,
         url: str(c.url) || str(c.permalink) || null,
+        postPermalink: str(post.permalink) || null,
+        postCaption: str(post.content) || null,
+        likes: num(c.likeCount),
       })
     }
   }

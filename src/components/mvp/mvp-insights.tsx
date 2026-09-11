@@ -51,6 +51,8 @@ import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom,
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
 import ComingUp from './coming-up'
+import PostSheet from './post-sheet'
+import type { PostStats } from '@/lib/insights/post-view'
 
 /* the browser's local calendar date — the server must never guess the client's timezone */
 function localYmdOf(d: Date): string {
@@ -102,7 +104,7 @@ interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
 // Lazy-fetched from /api/dashboard/insights-detail.
-export interface InsightsPost { /** one piece of content posted to several platforms the same day; null when it stands alone */ crossKey?: string | null; id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; /** this post kind never reports reach (e.g. a Story) — an absence, not a zero */ unreported?: boolean; likes: number; saves: number; comments?: number; shares?: number; postedAt: string | null }
+export interface InsightsPost { /** one piece of content posted to several platforms the same day; null when it stands alone */ crossKey?: string | null; id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; /** this post kind never reports reach (e.g. a Story) — an absence, not a zero */ unreported?: boolean; likes: number; saves: number; comments?: number; shares?: number; postedAt: string | null; caption?: string | null; externalId?: string | null; stats?: PostStats }
 interface InsightsDetail {
   findYou: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } | null
   topQueries: { query: string; impressions: number }[]
@@ -2501,7 +2503,7 @@ export function groupCrossPosts(posts: InsightsPost[]): Array<InsightsPost | Ins
   return out
 }
 
-export function PostRow({ p, first = true }: { p: InsightsPost; first?: boolean }) {
+export function PostRow({ p, first = true, onOpen }: { p: InsightsPost; first?: boolean; /** the posts page opens the sheet; without it the row links out as before */ onOpen?: (p: InsightsPost) => void }) {
   const date = p.postedAt ? reviewDate(p.postedAt) : ''
   const platform = p.platform ? p.platform.charAt(0).toUpperCase() + p.platform.slice(1) : ''
   const inner = (
@@ -2528,6 +2530,7 @@ export function PostRow({ p, first = true }: { p: InsightsPost; first?: boolean 
     </>
   )
   const box: React.CSSProperties = { textDecoration: 'none', color: 'inherit', display: 'flex', gap: 13, alignItems: 'center', padding: '8px 0' }
+  if (onOpen) return <button type="button" onClick={() => onOpen(p)} style={{ ...box, width: '100%', font: 'inherit', textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer' }}>{inner}</button>
   return p.permalink
     ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
     : <div style={box}>{inner}</div>
@@ -2712,10 +2715,12 @@ function PostTile({ t, onOpen }: { t: TileData; onOpen?: (t: TileData) => void }
     <div style={{ fontSize: 12, color: C.mute, marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.foot}</div>
   )
   const box: React.CSSProperties = { flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', display: 'block', textDecoration: 'none', color: 'inherit' }
-  /* ONE POST GOES STRAIGHT OUT to the platform. Several is a different question --
-     which of them is this number? -- so the tile opens the split instead, and the
-     way out to each platform is a row in there. */
-  if (t.parts.length > 1 && onOpen) {
+  /* EVERY tile opens the sheet (owner 2026-09-11). It used to go straight out to
+     the platform, which threw away the one thing this product knows and the
+     platform's own page does not: how this post did against the owner's usual, and
+     what people said under it. The way out to the post is the first thing on the
+     sheet. */
+  if (onOpen) {
     return (
       <button type="button" onClick={() => onOpen(t)} style={{ ...box, font: 'inherit', textAlign: 'left', border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
         {media}{foot}
@@ -2725,107 +2730,6 @@ function PostTile({ t, onOpen }: { t: TileData; onOpen?: (t: TileData) => void }
   return t.permalink
     ? <a href={t.permalink} target="_blank" rel="noreferrer noopener" style={box}>{media}{foot}</a>
     : <div style={box}>{media}{foot}</div>
-}
-
-/**
- * THE SPLIT, WHEN ONE PIECE OF CONTENT WENT TO SEVERAL PLACES.
- * ============================================================
- * The tile adds the platforms up, which is the honest headline and hides the
- * single most useful thing this product knows: the same video did 11,156 on
- * TikTok and 176 on Instagram, and no platform's own dashboard can tell an owner
- * that. So the tile opens this: every network it went to, its real numbers, and
- * a way through to the post itself on each one.
- *
- * A sheet rather than a page. It is a detail about a thing on screen, and sending
- * someone to another screen to read four numbers loses their place in the rail.
- */
-function CrossSheet({ t, onClose }: { t: TileData; onClose: () => void }) {
-  /* THROUGH A PORTAL, onto the body. The app shell is a fixed, z-indexed frame
-     and the nav bar is a child of it, so a sheet rendered where it is used sits
-     INSIDE that stacking context and the nav pill draws on top of it however
-     high its own z-index goes. */
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  const rows = t.parts.slice().sort((a, b) => b.reach - a.reach)
-  const top = Math.max(1, ...rows.map((r) => r.reach))
-  const name = (pl: string) => (pl ? pl.charAt(0).toUpperCase() + pl.slice(1) : 'Somewhere')
-
-  if (!mounted) return null
-
-  return createPortal(
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Where this post went"
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(20,22,26,.38)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 480, maxHeight: '82dvh', overflowY: 'auto', background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(22px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.18)' }}
-      >
-        <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 14px' }} />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
-          <span style={{ width: 46, height: 46, borderRadius: 13, flexShrink: 0, background: t.thumb ? `center/cover url(${t.thumb})` : '#f1f1f4' }} />
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
-              One post, {rows.length} places
-            </span>
-            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{t.foot} · {t.views.toLocaleString()} views in all</span>
-          </span>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ width: 32, height: 32, borderRadius: 99, border: 'none', background: '#f2f2f5', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-            <X size={16} />
-          </button>
-        </div>
-
-        <div style={{ marginTop: 14 }}>
-          {rows.map((r) => {
-            const body = (
-              <>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <BrandOrMark provider={r.platform} size={20} />
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: C.ink }}>{name(r.platform)}</span>
-                  <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }}>
-                    {r.unreported || r.pending ? DASH : r.reach.toLocaleString()}
-                  </span>
-                  <span style={{ fontSize: 11.5, color: C.mute }}>views</span>
-                  {r.permalink && <ArrowUpRight size={15} color={C.faint} style={{ flexShrink: 0 }} />}
-                </div>
-                {/* the bar is the comparison: the point of this sheet is which one
-                    carried it, and a row of figures does not say that at a glance */}
-                <div style={{ height: 5, borderRadius: 99, background: '#f0f0f3', margin: '9px 0 0 30px', overflow: 'hidden' }}>
-                  <div style={{ width: `${Math.max(1.5, (r.reach / top) * 100)}%`, height: '100%', borderRadius: 99, background: brandTone(r.platform)?.solid ?? C.green }} />
-                </div>
-                <div style={{ display: 'flex', gap: 14, marginTop: 8, marginLeft: 30, fontSize: 12, color: C.mute, fontVariantNumeric: 'tabular-nums' }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Heart size={12} /> {compactNum(r.likes)}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><MessageCircle size={12} /> {compactNum(r.comments ?? 0)}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Share2 size={12} /> {compactNum(r.shares ?? 0)}</span>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bookmark size={12} /> {compactNum(r.saves)}</span>
-                  {!r.permalink && <span style={{ marginLeft: 'auto', color: C.faint }}>link unavailable</span>}
-                </div>
-              </>
-            )
-            const shell: React.CSSProperties = { display: 'block', padding: '13px 12px', borderRadius: 15, border: `0.5px solid ${C.line}`, marginBottom: 9, textDecoration: 'none', color: 'inherit', background: '#fff' }
-            return r.permalink
-              ? <a key={r.id} className="mvp-row" href={r.permalink} target="_blank" rel="noreferrer noopener" style={shell}>{body}</a>
-              : <div key={r.id} style={shell}>{body}</div>
-          })}
-        </div>
-
-        <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.45, marginTop: 4 }}>
-          Views are not comparable between platforms. A TikTok view and an Instagram view are counted differently, so read this as where it travelled, not as a score.
-        </div>
-      </div>
-    </div>,
-    document.body,
-  )
 }
 
 /** The end of the rail: everything else, one tap away. Same frame as the rest,
@@ -2861,7 +2765,7 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
         {more && <AllPostsTile total={total} />}
       </div>
       <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>{POSTS_FOOTNOTE}</div>
-      {split && <CrossSheet t={split} onClose={() => setSplit(null)} />}
+      {split && <PostSheet parts={split.parts} peers={posts} onClose={() => setSplit(null)} />}
     </Section>
   )
 }

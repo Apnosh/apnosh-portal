@@ -526,21 +526,21 @@ export default function CreatePage() {
      so nothing here opens onto "that one is not on the shelf". */
   type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { href: string } | { card: string }; hue?: HueKey }
   const QUICK_ALL: Quick[] = [
-    { hue: 'announce', t: T('Announce something'), I: Megaphone, to: { ask: true } },
-    { hue: 'newfaces', t: T('Update hours'), I: Clock, to: { href: '/dashboard/business-info/hours' } },
-    { hue: 'brand', t: T('Write a post'), I: PenLine, to: { href: '/dashboard/post' } },
-    { hue: 'event', t: T('Boost a post'), I: TrendingUp, to: { href: '/dashboard/boost' } },
-    { hue: 'reviews', t: T('Reply to reviews'), I: Star, to: { href: '/dashboard/review-replies' } },
-    { t: T('A graphic'), I: ImageIcon, to: { card: 'creative-graphic' } },
-    { t: T('A video'), I: Video, to: { card: 'creative-video' } },
+    { hue: 'announce', t: T('Announce'), I: Megaphone, to: { ask: true } },
+    { hue: 'newfaces', t: T('Hours'), I: Clock, to: { href: '/dashboard/business-info/hours' } },
+    { hue: 'brand', t: T('Post'), I: PenLine, to: { href: '/dashboard/post' } },
+    { hue: 'event', t: T('Boost'), I: TrendingUp, to: { href: '/dashboard/boost' } },
+    { hue: 'reviews', t: T('Reviews'), I: Star, to: { href: '/dashboard/review-replies' } },
+    { t: T('Graphic'), I: ImageIcon, to: { card: 'creative-graphic' } },
+    { t: T('Video'), I: Video, to: { card: 'creative-video' } },
     { t: T('Photos'), I: Camera, to: { card: 'creative-photos' } },
     { t: T('Menu'), I: Tag, to: { card: 'creative-menu' } },
     { t: T('Website'), I: Store, to: { card: 'creative-website' } },
     { t: T('Influencers'), I: Users, to: { card: 'creator' } },
-    { t: T('Run ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' } },
-    { t: T('An event'), I: Ticket, to: { card: 'promoevent' } },
-    { t: T('A deal or offer'), I: Tag, to: { card: 'slowoffer' } },
-    { t: T('Email & texts'), I: Mail, to: { card: 'creative-email' } },
+    { t: T('Ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' } },
+    { t: T('Event'), I: Ticket, to: { card: 'promoevent' } },
+    { t: T('Deal'), I: Tag, to: { card: 'slowoffer' } },
+    { t: T('Email'), I: Mail, to: { card: 'creative-email' } },
   ]
   const QUICK = QUICK_ALL.filter((x) => !('card' in x.to) || !!cards[x.to.card])
   function quickGo(x: Quick) {
@@ -614,7 +614,6 @@ export default function CreatePage() {
     const setups = of((c) => c.kind === 'setup')
     const monthly = of((c) => c.kind === 'program')
     const people = of((c) => c.id === 'creator')
-    const setupDone = setups.filter((c) => done.has(c.id)).length
     const empty = [rec, creatives, campaigns, setups, monthly, people].every((l) => l.length === 0)
     return (
       <>
@@ -623,12 +622,12 @@ export default function CreatePage() {
         <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
         {browseBlock}
         {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Raise the budget or pick another stage.')}</div>}
-        {rail({ t: T('Recommended for you'), s: T(ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet'), list: rec, hue: stage ? STAGE_HUE[stage] : 'mint' })}
-        {rail({ t: T('Creatives'), s: T('One piece, made for you'), list: creatives, hue: 'brand', kind: 'quick' })}
-        {rail({ t: T('Campaigns'), s: T('A few pieces, against a date'), list: campaigns, hue: 'event', kind: 'campaign' })}
-        {rail({ t: T('Setup'), s: T('{n} of {total} done', { n: setupDone, total: setups.length }), list: setups, hue: 'newfaces', kind: 'setup' })}
-        {rail({ t: T('Every month'), s: T('Run for you, cancel any time'), list: monthly, hue: 'nights', kind: 'program' })}
-        {rail({ t: T('People'), s: T('Someone comes in and posts'), list: people, hue: 'catering' })}
+        {rail({ t: T('Recommended for you'), list: rec, hue: stage ? STAGE_HUE[stage] : 'mint' })}
+        {rail({ t: T('Creatives'), list: creatives, hue: 'brand', kind: 'quick' })}
+        {rail({ t: T('Campaigns'), list: campaigns, hue: 'event', kind: 'campaign' })}
+        {rail({ t: T('Setup'), list: setups, hue: 'newfaces', kind: 'setup' })}
+        {rail({ t: T('Every month'), list: monthly, hue: 'nights', kind: 'program' })}
+        {rail({ t: T('People'), list: people, hue: 'catering' })}
 
         {helpDoor}
         <div style={{ height: 24 }} />

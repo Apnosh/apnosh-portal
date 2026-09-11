@@ -26,6 +26,7 @@ import { ChevronLeft, Clock } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { PostRow, CrossPostCard, groupCrossPosts, POSTS_FOOTNOTE, type InsightsPost } from '@/components/mvp/mvp-insights'
 import ComingUp, { NothingYet } from '@/components/mvp/coming-up'
+import PostSheet from '@/components/mvp/post-sheet'
 import { usePullToRefresh, PullIndicator } from '@/components/mvp/pull-to-refresh'
 
 const C = { ink: '#16181d', mute: '#6b7280', faint: '#9aa1ab', line: '#e8e9ec', bg: '#f7f7f9', greenDk: '#2f8f70' }
@@ -35,6 +36,8 @@ export default function AllPostsPage() {
   const router = useRouter()
   const { client, loading: clientLoading } = useClient()
   const [posts, setPosts] = useState<InsightsPost[] | null>(null)
+  /** the post whose sheet is open (owner 2026-09-11: a row opens the breakdown, not the platform) */
+  const [open, setOpen] = useState<InsightsPost | null>(null)
   /* Two owners asked for this by name in both rounds of testing. Views are NOT
      comparable across platforms -- a TikTok number dwarfs an Instagram one for
      the same content -- so "best received" ranks by the share of viewers who
@@ -173,7 +176,7 @@ export default function AllPostsPage() {
                 {groupCrossPosts(posts).map((item, i) =>
                   Array.isArray(item)
                     ? <CrossPostCard key={item[0].crossKey ?? item[0].id} posts={item} />
-                    : <PostRow key={item.id} p={item} first={i === 0} />,
+                    : <PostRow key={item.id} p={item} first={i === 0} onOpen={setOpen} />,
                 )}
               </div>
               {hasMore && (
@@ -190,6 +193,7 @@ export default function AllPostsPage() {
           )}
         </div>
       </div>
+      {open && posts && <PostSheet parts={[open]} peers={posts} onClose={() => setOpen(null)} />}
     </div>
   )
 }

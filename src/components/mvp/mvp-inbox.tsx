@@ -132,14 +132,14 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
    comments endpoint answers "ZERNIO_API_KEY is not set", which is true and no
    help to a restaurant; anything shaped like an internal name becomes this. */
 const COMMENTS_PLAIN = 'We could not reach your accounts just now. Try again in a minute.'
-const ownerSafe = (m: string): string =>
+export const ownerSafe = (m: string): string =>
   (!m || /[A-Z]{3,}[_ ][A-Z]/.test(m) || /\bAPI\b|\bkey\b|\btoken\b/i.test(m) ? COMMENTS_PLAIN : m)
 
 const COMMENT_KEY = (clientId: string) => `apnosh.comments.${clientId}`
 const commentMem = new Map<string, CommentRow[]>()
 const commentFlight = new Map<string, Promise<CommentRow[]>>()
 
-function cachedComments(clientId: string): CommentRow[] | null {
+export function cachedComments(clientId: string): CommentRow[] | null {
   const mem = commentMem.get(clientId)
   if (mem) return mem
   try {
@@ -153,7 +153,7 @@ function cachedComments(clientId: string): CommentRow[] | null {
 }
 
 /** Always a real fetch; the caches above are for what to SHOW while it runs. */
-function loadComments(clientId: string): Promise<CommentRow[]> {
+export function loadComments(clientId: string): Promise<CommentRow[]> {
   const running = commentFlight.get(clientId)
   if (running) return running
   const p = (async () => {
@@ -169,7 +169,7 @@ function loadComments(clientId: string): Promise<CommentRow[]> {
   return p
 }
 
-interface CommentRow { id: string; platform: string; postId: string | null; accountId?: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean; canReply?: boolean; url?: string | null }
+export interface CommentRow { id: string; platform: string; postId: string | null; accountId?: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean; canReply?: boolean; url?: string | null; postPermalink?: string | null; postCaption?: string | null; likes?: number }
 
 /**
  * COMMENTS ON THEIR POSTS, with the reply in the same place.

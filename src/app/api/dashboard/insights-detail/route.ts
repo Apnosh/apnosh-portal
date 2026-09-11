@@ -12,7 +12,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { postType, toPostView, newestFirst } from '@/lib/insights/post-view'
+import { toPostView, newestFirst, type PostView } from '@/lib/insights/post-view'
 import { checkClientAccess } from '@/lib/dashboard/check-client-access'
 import { getGbpAnalytics, type AnalyticsRange } from '@/lib/dashboard/get-gbp-analytics'
 import { getSocialPosts } from '@/lib/dashboard/get-social-posts'
@@ -22,10 +22,7 @@ import { computeStages, type ComputedStage } from '@/lib/insights/compute-stages
 export const maxDuration = 15
 
 type FindYou = { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number }
-type TopPost = {
-  id: string; platform: string; permalink: string | null; thumbnailUrl: string | null
-  type: string; reach: number; likes: number; saves: number; comments: number; shares: number; postedAt: string | null
-}
+type TopPost = PostView
 
 
 export async function GET(req: NextRequest) {

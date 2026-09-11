@@ -36,6 +36,31 @@ export interface PostView {
   /** Identifies ONE piece of content posted to several platforms on the same
    *  day. Null when the row has no caption to match on. See crossPostKey. */
   crossKey: string | null
+  /** the caption, for the post sheet and for reading its comments in context */
+  caption: string | null
+  /** the platform's own id for the post; comments name their post by it */
+  externalId: string | null
+  /** the deeper per-post numbers the vendor reports (null = not reported) */
+  stats: PostStats
+}
+
+/**
+ * What the sync already carries for every post and nothing showed (owner 2026-09-11): how a
+ * reel was watched, and what the post led to. Null means the platform did not report it,
+ * which is the case for every photo and for most of TikTok, and prints as nothing.
+ */
+export interface PostStats {
+  impressions: number | null
+  clicks: number | null
+  profileViews: number | null
+  follows: number | null
+  engagementRate: number | null
+  /** reels: share of viewers who skipped past (0..1 or 0..100 as the vendor sends it) */
+  skipRate: number | null
+  completionRate: number | null
+  /** reels: average watch time as the vendor sends it (Meta reports milliseconds) */
+  avgWatchSec: number | null
+  durationSec: number | null
 }
 
 /**
@@ -88,6 +113,7 @@ type Row = {
   shares?: number | null
   posted_at?: string | null
   caption?: string | null
+  external_id?: string | null
   raw_data?: unknown
 }
 
@@ -116,7 +142,21 @@ export function toPostView(p: Row): PostView {
     shares: p.shares ?? 0,
     postedAt: p.posted_at ?? null,
     crossKey: crossPostKey(p.caption ?? null, p.posted_at ?? null),
+    caption: p.caption ?? null,
+    externalId: p.external_id ?? null,
+    stats: {
+      impressions: numOrNull(a.impressions), clicks: numOrNull(a.clicks), profileViews: numOrNull(a.profileViews), follows: numOrNull(a.follows),
+      engagementRate: numOrNull(a.engagementRate), skipRate: numOrNull(a.reelsSkipRate), completionRate: numOrNull(a.completionRate),
+      avgWatchSec: numOrNull(a.igReelsAvgWatchTime), durationSec: numOrNull(a.videoDurationSeconds),
+    },
   }
+}
+
+/** a reported number, or null. A vendor zero on a rate is a real zero; a missing key is not. */
+function numOrNull(v: unknown): number | null {
+  if (v == null || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? n : null
 }
 
 /**
