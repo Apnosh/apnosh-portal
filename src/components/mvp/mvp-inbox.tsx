@@ -34,12 +34,13 @@ interface Win { id: string; source?: string; icon: string; title: string; body: 
 interface InboxData { items: Item[]; wins: Win[]; counts: { needsYou: number; today: number } }
 
 // Single LinkedIn-style pill row (active = filled).
+/* Four, not six (owner 2026-09-11): Comments and Activity are gone from here. Comments live on
+   each post's own sheet; the activity rows still show under All. */
 const FILTERS: { key: string; label: string }[] = [
   { key: 'all', label: 'All' }, { key: 'needsyou', label: 'Needs you' },
-  { key: 'reviews', label: 'Reviews' }, { key: 'comments', label: 'Comments' },
-  { key: 'messages', label: 'Messages' }, { key: 'activity', label: 'Activity' },
+  { key: 'reviews', label: 'Reviews' }, { key: 'messages', label: 'Messages' },
 ]
-const COUNTED = new Set(['needsyou', 'reviews', 'activity'])
+const COUNTED = new Set(['needsyou', 'reviews'])
 // Which item chips each filter shows. "Needs you" folds in the old Fix-its
 // (broken connections); "Activity" is the tasks/updates + wins stream.
 const CHIPS: Record<string, Chip[]> = {
@@ -48,7 +49,7 @@ const CHIPS: Record<string, Chip[]> = {
   activity: ['todos'],
 }
 // Old ?tab= deep-link values still resolve (home + suggestion cards use them).
-const TAB_ALIAS: Record<string, string> = { approvals: 'needsyou', fix: 'needsyou', reviews: 'reviews', todos: 'activity', all: 'all' }
+const TAB_ALIAS: Record<string, string> = { approvals: 'needsyou', fix: 'needsyou', reviews: 'reviews', todos: 'all', activity: 'all', comments: 'all', all: 'all' }
 
 export default function MvpInbox({ clientId }: { clientId: string }) {
   const [data, setData] = useState<InboxData | null>(null)
@@ -59,7 +60,6 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
   /* Warm the comments queue the moment the inbox opens. It is two round trips to
      the vendor and nobody is waiting on it yet, so it costs nothing here and
      saves the whole wait when the tab is tapped. */
-  useEffect(() => { loadComments(clientId).catch(() => {}) }, [clientId])
   /* Opening this screen is what clears the bell's mint number (owner 2026-09-11), whether or not
      the owner scrolls to the last row. The red number is untouched: it clears only as each
      needs-you item is resolved. */
@@ -102,8 +102,7 @@ export default function MvpInbox({ clientId }: { clientId: string }) {
 
       {/* Comments come from the social vendor rather than the inbox feed, so this
           filter swaps the list for its own pane instead of filtering Items. */}
-      {filter === 'comments' ? <CommentsPane clientId={clientId} />
-        : filter === 'messages' ? <MessagesPane clientId={clientId} />
+      {filter === 'messages' ? <MessagesPane clientId={clientId} />
         : <ListView filter={filter} items={items} wins={data.wins} q={q} onDismiss={onDismiss} />}
 
       <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .26s ease both}.mvp-swipe-x{scrollbar-width:none}.mvp-swipe-x::-webkit-scrollbar{display:none}`}</style>
@@ -307,164 +306,12 @@ function MessagesPane({ clientId }: { clientId: string }) {
   )
 }
 
-function CommentsPane({ clientId }: { clientId: string }) {
-  /* Starts null and is filled from the cache in the effect below, NOT in this
-     initializer: reading localStorage during render makes the first client pass
-     disagree with the server's HTML, which is a hydration error. The cached rows
-     still land in the first committed frame, so it is instant either way. */
-  const [rows, setRows] = useState<CommentRow[] | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [openId, setOpenId] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
-  const [sending, setSending] = useState(false)
-  /* True only while a fetch is running WITH something already on screen -- the
-     quiet line at the top, never the full-screen spinner. */
-  const [checking, setChecking] = useState(false)
-
-  useEffect(() => {
-    let live = true
-    const had = cachedComments(clientId)
-    if (had) { setRows(had); setChecking(true) }
-    setErr(null)
-    loadComments(clientId)
-      .then((fresh) => { if (live) setRows(fresh) })
-      .catch((e) => {
-        if (!live) return
-        /* A failed refresh must not wipe rows that are already readable. */
-        setErr(ownerSafe(e instanceof Error ? e.message : ''))
-        setRows((cur) => cur ?? [])
-      })
-      .finally(() => { if (live) setChecking(false) })
-    return () => { live = false }
-  }, [clientId])
-
-  async function send(c: CommentRow) {
-    const text = draft.trim()
-    if (!text || sending) return
-    setSending(true)
-    try {
-      /* The reply goes to the POST with the comment named inside it, so both ids
-         travel. A row missing either cannot be answered and says so instead. */
-      const r = await fetch('/api/dashboard/social-comments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ clientId, commentId: c.id, postId: c.postId, accountId: c.accountId, text }),
-      })
-      const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(ownerSafe(String(j.error ?? '')))
-      /* Mark it answered here rather than refetching: the vendor may not show the
-         reply for a moment, and a row springing back to unanswered reads as a
-         failed send. */
-      setRows((cur) => {
-        const next = (cur ?? []).map((x) => (x.id === c.id ? { ...x, replied: true } : x))
-        /* into the cache as well, or the next visit draws it unanswered again
-           from a copy written before the reply */
-        commentMem.set(clientId, next)
-        try { window.localStorage.setItem(COMMENT_KEY(clientId), JSON.stringify(next)) } catch { /* private mode */ }
-        return next
-      })
-      setOpenId(null); setDraft('')
-    } catch (e) {
-      setErr(ownerSafe(e instanceof Error ? e.message : ''))
-    } finally {
-      setSending(false)
-    }
-  }
-
-  if (rows === null) return <CommentsGhost />
-  if (err && rows.length === 0) {
-    return (
-      <div style={{ padding: '24px 20px', textAlign: 'center', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}>
-        <div style={{ fontWeight: 600, color: C.ink, marginBottom: 4 }}>Comments did not load</div>
-        {err}
-      </div>
-    )
-  }
-  if (rows.length === 0) {
-    return <InboxEmpty icon={Check} title="No comments yet" sub="When someone comments on your posts, it lands here and you can answer without leaving." />
-  }
-
-  return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-      {checking && <div style={{ padding: '6px 16px 0', fontSize: 11.5, color: C.faint }}>Checking for new ones…</div>}
-      {err && <div style={{ padding: '10px 14px', fontSize: 12.5, color: C.coral }}>{err}</div>}
-      {rows.map((c) => (
-        <div key={c.id} style={{ borderBottom: `1px solid ${C.line}`, padding: '12px 14px', background: c.replied ? 'transparent' : C.greenSoft }}>
-          <div style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
-            <div style={{ width: 36, height: 36, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <BrandOrMark provider={c.platform} size={22} />
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13.5, lineHeight: 1.4, color: C.ink }}>
-                <b style={{ fontWeight: 700 }}>{c.authorName}</b>{' '}
-                <span style={{ color: C.mute }}>{c.text}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-                {c.replied
-                  ? <span style={{ fontSize: 11.5, fontWeight: 700, color: C.greenDk }}>Answered</span>
-                  : c.canReply === false || !c.postId || !c.accountId
-                    ? <span style={{ fontSize: 11.5, color: C.faint }}>Cannot be answered here</span>
-                    : (
-                    <button
-                      type="button"
-                      onClick={() => { setOpenId(openId === c.id ? null : c.id); setDraft('') }}
-                      style={{ font: 'inherit', fontSize: 12.5, fontWeight: 600, color: C.greenDk, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                      >{openId === c.id ? 'Cancel' : 'Reply'}</button>
-                    )}
-                {c.url && <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, color: C.mute, textDecoration: 'none' }}>See it</a>}
-              </div>
-              {openId === c.id && (
-                <div style={{ marginTop: 8 }}>
-                  <textarea
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    rows={3}
-                    maxLength={1000}
-                    placeholder="Write a reply…"
-                    style={{ width: '100%', border: `1px solid ${C.line}`, borderRadius: 10, padding: 9, fontSize: 13.5, fontFamily: 'inherit', color: C.ink, resize: 'vertical' }}
-                  />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 6 }}>
-                    <button
-                      type="button"
-                      disabled={!draft.trim() || sending}
-                      onClick={() => void send(c)}
-                      style={{ font: 'inherit', fontSize: 13, fontWeight: 600, padding: '7px 14px', borderRadius: 99, border: 'none', cursor: draft.trim() && !sending ? 'pointer' : 'default', background: draft.trim() && !sending ? C.ink : C.line, color: draft.trim() && !sending ? '#fff' : C.faint }}
-                    >{sending ? 'Posting…' : 'Post reply'}</button>
-                    <span style={{ fontSize: 11.5, color: C.faint }}>Posts publicly as your business.</span>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function Shell({ children }: { children: React.ReactNode }) {
   return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>{children}</div>
 }
 /** The cold start, in the shape of what is coming: four comment rows, greyed.
  *  A centred spinner on an empty screen makes a two-second wait feel like a
  *  broken tab; blocks in the right places make it feel like a list arriving. */
-function CommentsGhost() {
-  return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'hidden', padding: '4px 16px' }}>
-      {[0, 1, 2, 3].map((i) => (
-        <div key={i} style={{ display: 'flex', gap: 11, padding: '13px 0', opacity: 1 - i * 0.18 }}>
-          <span style={{ width: 34, height: 34, borderRadius: 99, background: '#eeeef1', flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: 0 }}>
-            <span style={{ display: 'block', width: '38%', height: 11, borderRadius: 6, background: '#eeeef1' }} />
-            <span style={{ display: 'block', width: '86%', height: 10, borderRadius: 6, background: '#f3f3f5', marginTop: 8 }} />
-            <span style={{ display: 'block', width: '64%', height: 10, borderRadius: 6, background: '#f3f3f5', marginTop: 6 }} />
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 function Centered({ children }: { children: React.ReactNode }) {
   return <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13.5, padding: 24, textAlign: 'center' }}>{children}</div>
 }
