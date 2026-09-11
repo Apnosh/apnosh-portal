@@ -434,9 +434,9 @@ const STAGE_EXPLAIN: Record<string, string> = {
 /* the graph's bars take the NUMBER's colour (owner 2026-09-04): green when the period is up on
    the one before, red when down, amber when even. The stage hue stays on the dots + sections. */
 /* BRIGHT, on purpose (owner 2026-09-11: "stand out more"): the graph, its range and its pill all
-   wear these, a clear green up and a red-orange down, not the quieter kit greens and corals. */
-const TREND_GREEN = '#1fc47a', TREND_RED = '#ff4d2e', TREND_AMBER = '#f0a12b'
-const TREND_GREEN_SOFT = '#e4f8ee', TREND_RED_SOFT = '#ffe9e4'
+   wear these, a clear green up and a bright red down (owner: red, not orange), not the quieter kit greens and corals. */
+const TREND_GREEN = '#1fc47a', TREND_RED = '#ff2d3a', TREND_AMBER = '#f0a12b'
+const TREND_GREEN_SOFT = '#e4f8ee', TREND_RED_SOFT = '#ffe6e8'
 const AccentCtx = createContext<Accent>(STAGE_ACCENT.shown)
 const useAccent = () => useContext(AccentCtx)
 /* The conversion from the stage before, as a chip beside the stage name (owner 2026-09-04:
