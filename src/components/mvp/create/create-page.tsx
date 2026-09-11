@@ -245,14 +245,14 @@ const CREATE_CSS = `
 .cr .qt .ic svg{width:23px;height:23px;stroke-width:2}
 .cr .qt span:last-child{font-size:10.5px;font-weight:600;text-align:center;line-height:1.2;color:#1d1d1f}
 .cr .browse{margin:22px 16px 0}
-.cr .stages{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
+.cr .stages{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:10px}
 /* stage tabs: a coloured OUTLINE, not a tinted fill, so they read as a different kind of thing
    from the quick-request tiles above them (owner 2026-09-11). Picked = the outline filled in. */
 .cr .stg{--c1:#4abd98;--c2:#2e9a78;--sh:#2e9a7866;flex:none;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:99px;border:1.5px solid var(--c2);color:var(--c2);white-space:nowrap;background:#fff;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:inherit;transition:transform .15s,background .15s}
 .cr .stg i{width:7px;height:7px;border-radius:99px;background:var(--c2);display:inline-block}
-.cr .stg.on{background:var(--c2);color:#fff;box-shadow:0 6px 14px var(--sh)}
+.cr .stg.on{background:var(--c2);color:#fff}
 .cr .stg.on i{background:rgba(255,255,255,.9)}
-.cr .srch{margin-top:10px;width:100%;display:flex;align-items:center;gap:8px;height:42px;padding:0 14px;border-radius:999px;background:#f5f5f7;border:0;color:#6e6e73;font-size:14.5px;cursor:text;font-family:inherit;text-align:left}
+.cr .srch{width:100%;display:flex;align-items:center;gap:8px;height:42px;padding:0 14px;border-radius:999px;background:#f5f5f7;border:0;color:#6e6e73;font-size:14.5px;cursor:text;font-family:inherit;text-align:left}
 .cr .srch svg{color:#2e9a78;flex:none}
 /* the one door at the bottom */
 .cr .door{margin:22px 16px 0;padding:16px;border-radius:20px;background:linear-gradient(135deg,#eaf7f3,#f2f9f6 60%,#f5f5f7)}
@@ -534,11 +534,11 @@ export default function CreatePage() {
   const fits = (c: ShelfCard) => stage == null || c.stage === stage
   const browseBlock = (
     <div className="browse">
+      <button type="button" className="srch" onClick={() => go({ name: 'search' })}><Search size={16} /> {T('Search campaigns and services')}</button>
       <div className="stages cc-scroll">
         <button type="button" className={`stg${stage == null ? ' on' : ''}`} onClick={() => setStage(null)}>{T('For you')}</button>
         {STAGES.map((s) => <button key={s} type="button" className={`stg${stage === s ? ' on' : ''}`} onClick={() => setStage(s)} style={hv(STAGE_HUE[s])}><i />{T(s)}</button>)}
       </div>
-      <button type="button" className="srch" onClick={() => go({ name: 'search' })}><Search size={16} /> {T('Search campaigns and services')}</button>
     </div>
   )
 
