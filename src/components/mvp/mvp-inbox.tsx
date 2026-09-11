@@ -57,6 +57,11 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
   const [searchOpen, setSearchOpen] = useState(false)
   const [items, setItems] = useState<Item[]>([])
 
+  /* Warm the comments queue the moment the inbox opens. It is two round trips to
+     the vendor and nobody is waiting on it yet, so it costs nothing here and
+     saves the whole wait when the tab is tapped. */
+  useEffect(() => { loadComments(clientId).catch(() => {}) }, [clientId])
+
   useEffect(() => {
     let live = true
     fetch(`/api/dashboard/inbox?clientId=${clientId}`)
@@ -104,6 +109,64 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
       <style>{`@keyframes inrise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.inrise{animation:inrise .26s ease both}.mvp-swipe-x{scrollbar-width:none}.mvp-swipe-x::-webkit-scrollbar{display:none}`}</style>
     </Shell>
   )
+}
+
+/**
+ * COMMENTS ARRIVE INSTANTLY THE SECOND TIME, AND THE TAB IS WARM THE FIRST.
+ * =========================================================================
+ * Loading the queue is one vendor call for the posts that HAVE comments, then one
+ * more per post -- eight in parallel. That is two round trips to a third party
+ * before a single row can be drawn, and it was paid again on every single visit
+ * to the tab, with "Loading comments…" in the middle of the screen each time.
+ *
+ * Three things fix it, none of which make the vendor faster:
+ *   · the last answer is kept, in memory and in localStorage, and drawn at once
+ *   · a fresh one is fetched behind it every time, so what you read is never old
+ *     for longer than it takes to arrive
+ *   · the request STARTS when the inbox opens, not when the tab is tapped, so by
+ *     the time anyone reaches Comments it is usually already in hand
+ *
+ * One request per client at a time: tapping between tabs used to stack them up.
+ */
+/* The vendor's own words never reach an owner. With no key configured the
+   comments endpoint answers "ZERNIO_API_KEY is not set", which is true and no
+   help to a restaurant; anything shaped like an internal name becomes this. */
+const COMMENTS_PLAIN = 'We could not reach your accounts just now. Try again in a minute.'
+const ownerSafe = (m: string): string =>
+  (!m || /[A-Z]{3,}[_ ][A-Z]/.test(m) || /\bAPI\b|\bkey\b|\btoken\b/i.test(m) ? COMMENTS_PLAIN : m)
+
+const COMMENT_KEY = (clientId: string) => `apnosh.comments.${clientId}`
+const commentMem = new Map<string, CommentRow[]>()
+const commentFlight = new Map<string, Promise<CommentRow[]>>()
+
+function cachedComments(clientId: string): CommentRow[] | null {
+  const mem = commentMem.get(clientId)
+  if (mem) return mem
+  try {
+    const raw = window.localStorage.getItem(COMMENT_KEY(clientId))
+    if (!raw) return null
+    const rows = JSON.parse(raw) as CommentRow[]
+    if (!Array.isArray(rows)) return null
+    commentMem.set(clientId, rows)
+    return rows
+  } catch { return null }
+}
+
+/** Always a real fetch; the caches above are for what to SHOW while it runs. */
+function loadComments(clientId: string): Promise<CommentRow[]> {
+  const running = commentFlight.get(clientId)
+  if (running) return running
+  const p = (async () => {
+    const r = await fetch(`/api/dashboard/social-comments?clientId=${clientId}`, { cache: 'no-store' })
+    const j = await r.json()
+    if (!r.ok) throw new Error(j.error || 'Could not load comments')
+    const rows = (j.comments ?? []) as CommentRow[]
+    commentMem.set(clientId, rows)
+    try { window.localStorage.setItem(COMMENT_KEY(clientId), JSON.stringify(rows)) } catch { /* private mode */ }
+    return rows
+  })().finally(() => { commentFlight.delete(clientId) })
+  commentFlight.set(clientId, p)
+  return p
 }
 
 interface CommentRow { id: string; platform: string; postId: string | null; accountId?: string | null; authorName: string; text: string; createdAt: string | null; replied: boolean; canReply?: boolean; url?: string | null }
@@ -245,26 +308,35 @@ function MessagesPane({ clientId }: { clientId: string }) {
 }
 
 function CommentsPane({ clientId }: { clientId: string }) {
+  /* Starts null and is filled from the cache in the effect below, NOT in this
+     initializer: reading localStorage during render makes the first client pass
+     disagree with the server's HTML, which is a hydration error. The cached rows
+     still land in the first committed frame, so it is instant either way. */
   const [rows, setRows] = useState<CommentRow[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  /* True only while a fetch is running WITH something already on screen -- the
+     quiet line at the top, never the full-screen spinner. */
+  const [checking, setChecking] = useState(false)
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    let live = true
+    const had = cachedComments(clientId)
+    if (had) { setRows(had); setChecking(true) }
     setErr(null)
-    try {
-      const r = await fetch(`/api/dashboard/social-comments?clientId=${clientId}`, { cache: 'no-store' })
-      const j = await r.json()
-      if (!r.ok) throw new Error(j.error || 'Could not load comments')
-      setRows((j.comments ?? []) as CommentRow[])
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not load comments')
-      setRows([])
-    }
+    loadComments(clientId)
+      .then((fresh) => { if (live) setRows(fresh) })
+      .catch((e) => {
+        if (!live) return
+        /* A failed refresh must not wipe rows that are already readable. */
+        setErr(ownerSafe(e instanceof Error ? e.message : ''))
+        setRows((cur) => cur ?? [])
+      })
+      .finally(() => { if (live) setChecking(false) })
+    return () => { live = false }
   }, [clientId])
-
-  useEffect(() => { void load() }, [load])
 
   async function send(c: CommentRow) {
     const text = draft.trim()
@@ -279,20 +351,27 @@ function CommentsPane({ clientId }: { clientId: string }) {
         body: JSON.stringify({ clientId, commentId: c.id, postId: c.postId, accountId: c.accountId, text }),
       })
       const j = await r.json().catch(() => ({}))
-      if (!r.ok) throw new Error(j.error || 'Could not post the reply')
+      if (!r.ok) throw new Error(ownerSafe(String(j.error ?? '')))
       /* Mark it answered here rather than refetching: the vendor may not show the
          reply for a moment, and a row springing back to unanswered reads as a
          failed send. */
-      setRows((cur) => (cur ?? []).map((x) => (x.id === c.id ? { ...x, replied: true } : x)))
+      setRows((cur) => {
+        const next = (cur ?? []).map((x) => (x.id === c.id ? { ...x, replied: true } : x))
+        /* into the cache as well, or the next visit draws it unanswered again
+           from a copy written before the reply */
+        commentMem.set(clientId, next)
+        try { window.localStorage.setItem(COMMENT_KEY(clientId), JSON.stringify(next)) } catch { /* private mode */ }
+        return next
+      })
       setOpenId(null); setDraft('')
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Could not post the reply')
+      setErr(ownerSafe(e instanceof Error ? e.message : ''))
     } finally {
       setSending(false)
     }
   }
 
-  if (rows === null) return <Centered>Loading comments…</Centered>
+  if (rows === null) return <CommentsGhost />
   if (err && rows.length === 0) {
     return (
       <div style={{ padding: '24px 20px', textAlign: 'center', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}>
@@ -307,6 +386,7 @@ function CommentsPane({ clientId }: { clientId: string }) {
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      {checking && <div style={{ padding: '6px 16px 0', fontSize: 11.5, color: C.faint }}>Checking for new ones…</div>}
       {err && <div style={{ padding: '10px 14px', fontSize: 12.5, color: C.coral }}>{err}</div>}
       {rows.map((c) => (
         <div key={c.id} style={{ borderBottom: `1px solid ${C.line}`, padding: '12px 14px', background: c.replied ? 'transparent' : C.greenSoft }}>
@@ -365,6 +445,26 @@ function CommentsPane({ clientId }: { clientId: string }) {
 function Shell({ children }: { children: React.ReactNode }) {
   return <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', position: 'relative' }}>{children}</div>
 }
+/** The cold start, in the shape of what is coming: four comment rows, greyed.
+ *  A centred spinner on an empty screen makes a two-second wait feel like a
+ *  broken tab; blocks in the right places make it feel like a list arriving. */
+function CommentsGhost() {
+  return (
+    <div style={{ flex: 1, minHeight: 0, overflowY: 'hidden', padding: '4px 16px' }}>
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} style={{ display: 'flex', gap: 11, padding: '13px 0', opacity: 1 - i * 0.18 }}>
+          <span style={{ width: 34, height: 34, borderRadius: 99, background: '#eeeef1', flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', width: '38%', height: 11, borderRadius: 6, background: '#eeeef1' }} />
+            <span style={{ display: 'block', width: '86%', height: 10, borderRadius: 6, background: '#f3f3f5', marginTop: 8 }} />
+            <span style={{ display: 'block', width: '64%', height: 10, borderRadius: 6, background: '#f3f3f5', marginTop: 6 }} />
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function Centered({ children }: { children: React.ReactNode }) {
   return <div style={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, color: C.faint, fontSize: 13.5, padding: 24, textAlign: 'center' }}>{children}</div>
 }

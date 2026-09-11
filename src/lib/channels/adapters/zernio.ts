@@ -755,7 +755,7 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
      down, and that sub-resource requires the accountId the first level carries.
      The first parser read the wrong level and quietly returned nothing. */
   const q = new URLSearchParams({ profileId, limit: '50' })
-  const res = await zer(`/inbox/comments?${q.toString()}`)
+  const res = await zer(`/inbox/comments?${q.toString()}`, { timeoutMs: 9000 })
   const posts = unwrapList(res, 'data', 'comments', 'items', 'results')
 
   /* Only posts that actually have comments, newest first, and bounded: this is a
@@ -777,7 +777,12 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
   const fetched = await Promise.allSettled(live.map(async (post) => {
     const postId = str(post.id)
     const sub = new URLSearchParams({ accountId: str(post.accountId), limit: '25' })
-    const r = await zer(`/inbox/comments/${encodeURIComponent(postId)}?${sub.toString()}`)
+    /* Seven seconds, not the usual twelve. These are eight parallel calls whose
+       results are merged, and allSettled waits for the slowest -- so one laggard
+       decided how long the whole tab took. Dropping one post's comments is a gap
+       in a queue; making an owner wait twelve seconds for the other seven is the
+       tab feeling broken. */
+    const r = await zer(`/inbox/comments/${encodeURIComponent(postId)}?${sub.toString()}`, { timeoutMs: 7000 })
     return { post, rows: unwrapList(r, 'comments', 'data', 'items', 'results') }
   }))
 

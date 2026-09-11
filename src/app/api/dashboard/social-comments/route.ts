@@ -25,6 +25,10 @@ import { listComments, replyToComment, diagnoseComments, describeEndpoint } from
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+/* The queue is one vendor call plus a bounded fan-out, each with its own
+   deadline; this is the outer bound so a stall returns an error the pane can
+   show rather than a platform timeout page. */
+export const maxDuration = 20
 
 export async function GET(req: NextRequest) {
   const clientId = req.nextUrl.searchParams.get('clientId')
