@@ -1351,10 +1351,10 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
     return { st, mv, sm, launches, locked, cs, n: STAGE_ORDER.findIndex((x) => x.key === st.key) + 1 }
   })
   const cur = rows.find((r) => r.st.key === sel) ?? rows[0]
-  return (
-    <div style={{ padding: '12px 18px 8px' }}>
-      {/* the same range row the Insights graph wears (owner 2026-09-11): plain words, no glass
-          capsule, the one in force filled with the picked stage's colour */}
+  const rangeRow = (
+    <>
+        {/* the range row sits UNDER the graph, as it does on Insights (owner 2026-09-11): plain
+            words, no capsule, the one in force filled with the picked stage's verdict colour */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {TREND_RANGES.map(([k, l]) => {
           const on = range === k
@@ -1369,6 +1369,10 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
           <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>To<input type="date" value={cEnd} min={cStart} onChange={(e) => setCEnd(e.target.value)} style={{ border: 'none', borderRadius: 8, padding: '6px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.bg }} /></label>
         </div>
       )}
+    </>
+  )
+  return (
+    <div style={{ padding: '12px 18px 8px' }}>
       {/* every stage on one screen: its 7-day average as a sparkline, its total, its change, its launches */}
       <div style={{ ...LIST, padding: '0 8px' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -1385,7 +1389,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
       </div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && !cur.locked
-          ? <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare series={(cur.mv.daily ?? []).filter((d) => d && d.date).map((d) => ({ date: d.date, value: d.value ?? 0 }))} noun={cur.mv.unit ?? ''} />} />
+          ? <CampaignTrend mv={cur.mv} underGraph={rangeRow} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare series={(cur.mv.daily ?? []).filter((d) => d && d.date).map((d) => ({ date: d.date, value: d.value ?? 0 }))} noun={cur.mv.unit ?? ''} />} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
         {cur.mv && !cur.locked && <RhythmCard mv={cur.mv} />}
         {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
@@ -1465,7 +1469,7 @@ function trendMeanIn(dayMs: { t: number; v: number }[], a: number, b: number): {
   return { mean: n > 0 ? sum / n : 0, n }
 }
 
-function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Trend', onPins, litPin, footer, customStart, customEnd, smooth = 7 }: { mv?: MetricView; list: StageCampaign[] | null; /** dated reviews, drawn under the same axis */ reviews?: InsightsReview[]; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; /** the rolling window in days (1 = each day) */ smooth?: number; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
+function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Trend', onPins, litPin, footer, underGraph, customStart, customEnd, smooth = 7 }: { mv?: MetricView; /** drawn right under the legend, before the campaigns (the Trends range row) */ underGraph?: React.ReactNode; list: StageCampaign[] | null; /** dated reviews, drawn under the same axis */ reviews?: InsightsReview[]; /** the stage chart's picked range — the trend follows it */ chartRange?: string; /** the custom window's edges (YYYY-MM-DD) when chartRange is 'custom' */ customStart?: string; customEnd?: string; /** the rolling window in days (1 = each day) */ smooth?: number; title?: string; /** which campaign got which pin number, for the list under the chart */ onPins?: (m: Record<string, number>) => void; /** the pin a tapped campaign row belongs to */ litPin?: number | null; /** the campaigns legend, rendered inside this card so it lines up with the pins */ footer?: React.ReactNode }) {
   const A = useAccent()
   const range: TrendRange = TREND_OF_RANGE[chartRange] ?? 'month'
   const [pick, setPick] = useState<number | null>(null) // the day under the finger
@@ -1719,6 +1723,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           </div>
         )}
       </div>
+      {underGraph}
 
       {marks.length === 0 && !footer && <div style={{ marginTop: 12, fontSize: 12.5, color: C.faint, lineHeight: 1.45 }}>Nothing launched in this window. When something goes live, its day pins here.</div>}
       {footer}
