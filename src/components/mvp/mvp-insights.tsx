@@ -23,6 +23,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import MvpShell from './mvp-shell'
 import { useRouter } from 'next/navigation'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { usePullToRefresh, PullIndicator } from './pull-to-refresh'
 import {
@@ -32,7 +33,7 @@ import {
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
   Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight, FileText,
-  ChevronDown, PenLine, MessageSquare, MapPin, MessageCircle, Bookmark,
+  ChevronDown, PenLine, MessageSquare, MapPin, MessageCircle, Bookmark, X,
 } from 'lucide-react'
 import { HUES, STAGE_HUES, gradOf, tint, type HueKey } from './hues'
 import { Mark } from './mark'
@@ -2596,6 +2597,9 @@ interface TileData {
   saves: number
   shares: number
   foot: string
+  /** every row behind this tile: one post, or the same content on several
+   *  platforms. More than one and the tile opens the breakdown instead of a link. */
+  parts: InsightsPost[]
 }
 
 function footOf(p: InsightsPost): string {
@@ -2609,7 +2613,7 @@ function tileOf(p: InsightsPost): TileData {
     key: p.id, thumb: p.thumbnailUrl, platforms: [p.platform], permalink: p.permalink,
     views: p.reach, pending: !!p.pending, unreported: !!p.unreported,
     likes: p.likes, comments: p.comments ?? 0, saves: p.saves, shares: p.shares ?? 0,
-    foot: footOf(p),
+    foot: footOf(p), parts: [p],
   }
 }
 
@@ -2638,11 +2642,11 @@ function crossTileOf(posts: InsightsPost[]): TileData {
     pending: ranked.every((x) => x.pending), unreported: ranked.every((x) => x.unreported),
     likes: sum((x) => x.likes), comments: sum((x) => x.comments ?? 0),
     saves: sum((x) => x.saves), shares: sum((x) => x.shares ?? 0),
-    foot: footOf(best),
+    foot: footOf(best), parts: ranked,
   }
 }
 
-function PostTile({ t }: { t: TileData }) {
+function PostTile({ t, onOpen }: { t: TileData; onOpen?: (t: TileData) => void }) {
   const has = !!t.thumb
   const big = t.unreported || t.pending ? DASH : t.views.toLocaleString()
   const unit = t.unreported ? 'not reported' : t.pending ? 'still counting' : 'views'
@@ -2708,9 +2712,120 @@ function PostTile({ t }: { t: TileData }) {
     <div style={{ fontSize: 12, color: C.mute, marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.foot}</div>
   )
   const box: React.CSSProperties = { flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', display: 'block', textDecoration: 'none', color: 'inherit' }
+  /* ONE POST GOES STRAIGHT OUT to the platform. Several is a different question --
+     which of them is this number? -- so the tile opens the split instead, and the
+     way out to each platform is a row in there. */
+  if (t.parts.length > 1 && onOpen) {
+    return (
+      <button type="button" onClick={() => onOpen(t)} style={{ ...box, font: 'inherit', textAlign: 'left', border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
+        {media}{foot}
+      </button>
+    )
+  }
   return t.permalink
     ? <a href={t.permalink} target="_blank" rel="noreferrer noopener" style={box}>{media}{foot}</a>
     : <div style={box}>{media}{foot}</div>
+}
+
+/**
+ * THE SPLIT, WHEN ONE PIECE OF CONTENT WENT TO SEVERAL PLACES.
+ * ============================================================
+ * The tile adds the platforms up, which is the honest headline and hides the
+ * single most useful thing this product knows: the same video did 11,156 on
+ * TikTok and 176 on Instagram, and no platform's own dashboard can tell an owner
+ * that. So the tile opens this: every network it went to, its real numbers, and
+ * a way through to the post itself on each one.
+ *
+ * A sheet rather than a page. It is a detail about a thing on screen, and sending
+ * someone to another screen to read four numbers loses their place in the rail.
+ */
+function CrossSheet({ t, onClose }: { t: TileData; onClose: () => void }) {
+  /* THROUGH A PORTAL, onto the body. The app shell is a fixed, z-indexed frame
+     and the nav bar is a child of it, so a sheet rendered where it is used sits
+     INSIDE that stacking context and the nav pill draws on top of it however
+     high its own z-index goes. */
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const rows = t.parts.slice().sort((a, b) => b.reach - a.reach)
+  const top = Math.max(1, ...rows.map((r) => r.reach))
+  const name = (pl: string) => (pl ? pl.charAt(0).toUpperCase() + pl.slice(1) : 'Somewhere')
+
+  if (!mounted) return null
+
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Where this post went"
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, zIndex: 80, background: 'rgba(20,22,26,.38)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ width: '100%', maxWidth: 480, maxHeight: '82dvh', overflowY: 'auto', background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(22px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.18)' }}
+      >
+        <div style={{ width: 38, height: 4, borderRadius: 99, background: '#e2e2e7', margin: '0 auto 14px' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
+          <span style={{ width: 46, height: 46, borderRadius: 13, flexShrink: 0, background: t.thumb ? `center/cover url(${t.thumb})` : '#f1f1f4' }} />
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 17, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>
+              One post, {rows.length} places
+            </span>
+            <span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 2 }}>{t.foot} · {t.views.toLocaleString()} views in all</span>
+          </span>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ width: 32, height: 32, borderRadius: 99, border: 'none', background: '#f2f2f5', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          {rows.map((r) => {
+            const body = (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <BrandOrMark provider={r.platform} size={20} />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: C.ink }}>{name(r.platform)}</span>
+                  <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, letterSpacing: '-.01em', color: C.ink }}>
+                    {r.unreported || r.pending ? DASH : r.reach.toLocaleString()}
+                  </span>
+                  <span style={{ fontSize: 11.5, color: C.mute }}>views</span>
+                  {r.permalink && <ArrowUpRight size={15} color={C.faint} style={{ flexShrink: 0 }} />}
+                </div>
+                {/* the bar is the comparison: the point of this sheet is which one
+                    carried it, and a row of figures does not say that at a glance */}
+                <div style={{ height: 5, borderRadius: 99, background: '#f0f0f3', margin: '9px 0 0 30px', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.max(1.5, (r.reach / top) * 100)}%`, height: '100%', borderRadius: 99, background: brandTone(r.platform)?.solid ?? C.green }} />
+                </div>
+                <div style={{ display: 'flex', gap: 14, marginTop: 8, marginLeft: 30, fontSize: 12, color: C.mute, fontVariantNumeric: 'tabular-nums' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Heart size={12} /> {compactNum(r.likes)}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><MessageCircle size={12} /> {compactNum(r.comments ?? 0)}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Share2 size={12} /> {compactNum(r.shares ?? 0)}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Bookmark size={12} /> {compactNum(r.saves)}</span>
+                  {!r.permalink && <span style={{ marginLeft: 'auto', color: C.faint }}>link unavailable</span>}
+                </div>
+              </>
+            )
+            const shell: React.CSSProperties = { display: 'block', padding: '13px 12px', borderRadius: 15, border: `0.5px solid ${C.line}`, marginBottom: 9, textDecoration: 'none', color: 'inherit', background: '#fff' }
+            return r.permalink
+              ? <a key={r.id} className="mvp-row" href={r.permalink} target="_blank" rel="noreferrer noopener" style={shell}>{body}</a>
+              : <div key={r.id} style={shell}>{body}</div>
+          })}
+        </div>
+
+        <div style={{ fontSize: 11.5, color: C.faint, lineHeight: 1.45, marginTop: 4 }}>
+          Views are not comparable between platforms. A TikTok view and an Instagram view are counted differently, so read this as where it travelled, not as a score.
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
 }
 
 /** The end of the rail: everything else, one tap away. Same frame as the rest,
@@ -2732,6 +2847,7 @@ function AllPostsTile({ total }: { total?: number }) {
 function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) {
   const items = groupCrossPosts(posts)
   const more = typeof total === 'number' && total > posts.length
+  const [split, setSplit] = useState<TileData | null>(null)
   return (
     <Section title="Recent posts" sub={total ? `${total} in all` : undefined}>
       {/* Bleeding past the page's own 18px gutter, so the last tile is visibly cut
@@ -2740,11 +2856,12 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
       <div className="mvp-swipe" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', overflowX: 'auto', scrollSnapType: 'x proximity', padding: '2px 18px 2px 2px', margin: '0 -18px 0 -2px' }}>
         {items.map((item) => {
           const t = Array.isArray(item) ? crossTileOf(item) : tileOf(item)
-          return <PostTile key={t.key} t={t} />
+          return <PostTile key={t.key} t={t} onOpen={setSplit} />
         })}
         {more && <AllPostsTile total={total} />}
       </div>
       <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>{POSTS_FOOTNOTE}</div>
+      {split && <CrossSheet t={split} onClose={() => setSplit(null)} />}
     </Section>
   )
 }
