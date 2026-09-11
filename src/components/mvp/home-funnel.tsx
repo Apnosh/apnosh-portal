@@ -907,9 +907,6 @@ export default function HomeFunnel({
     setLS('0px')
     ctx.textAlign = 'center'
     for (let i = 0; i < n - 1; i++) {
-      /* No chip on the first leg (owner 2026-09-11): the Awareness-to-Interest rate is a different
-         kind of number (views into looks) and its "2% · very low" read as an alarm on every account. */
-      if (i === 0) continue
       const a = stages[i].count, b = stages[i + 1].count
       if (a == null || b == null || a <= 0 || b <= 0) continue // a 0 at the destination is no-data (grey), not a rated leg
       const pillIn = easeOutCubic(clamp01((entrance - (i * 0.09 + 0.45)) / 0.4))
