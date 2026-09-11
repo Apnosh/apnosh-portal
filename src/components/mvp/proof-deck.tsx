@@ -8,8 +8,6 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import Link from 'next/link'
-import { ChevronRight } from 'lucide-react'
 import ProofCard, { type ProofCardData } from './proof-card'
 import { useLang } from './mvp-language'
 import { isWin, metricKeyOf } from '@/lib/love/win'
@@ -35,7 +33,7 @@ const SAMPLE_CARDS: ProofCardData[] = [
   { id: 'example-start', label: 'Example · grow', big: 'Start your first campaign', context: 'A plan built from your numbers, ready in a few minutes.', tone: 'heads_up', cta: { label: 'Start a campaign', href: '/campaigns/new' } },
 ]
 
-export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: string; mute?: string }) {
+export default function ProofDeck({ clientId }: { clientId?: string }) {
   const { T } = useLang()
   const [cards, setCards] = useState<ProofCardData[]>([])
   const [examples, setExamples] = useState(false)
@@ -160,14 +158,8 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
   if (!loaded || !front) return null
   return (
     <div style={{ padding: '0 18px', marginBottom: 18, isolation: 'isolate' }}>{/* the stacked cards' z-indexes stay inside this box, under the floating top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: '#1d1d1f' }}>
-          {examples ? 'Examples' : 'Results'}{examples && <span style={{ fontSize: 12.5, fontWeight: 400, color: mute }}> · your results land here</span>}
-        </span>
-        <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <Link href="/dashboard/results" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 28, padding: '0 10px 0 12px', borderRadius: 99, background: '#f0f0f2', color: '#1d1d1f', fontSize: 12.5, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>See all <ChevronRight size={14} color="#6e6e73" /></Link>
-        </span>
-      </div>
+      {/* No heading, no pager, no See all (owner 2026-09-11): the stack is the thing. The example
+          deck still says so on the card itself, since a sample must never read as a result. */}
       <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} style={{ position: 'relative', paddingBottom: deck.length > 1 ? PEEK * 2 : 0, touchAction: 'pan-y' }}>
         {deck.map((c, pos) => (
           <div key={c.id} ref={pos === 0 ? frontRef : undefined} style={{ ...deckDepth(pos), ...(pos > 0 && frontH ? { height: frontH } : {}), transformOrigin: 'top center', transition: drag.current && pos === 0 ? 'none' : 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s',

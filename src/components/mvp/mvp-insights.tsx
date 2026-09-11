@@ -584,7 +584,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
       </div>
       {/* RESULTS — the stackable deck of fired proof cards, right between the
           histogram's dots and the by-source tiles (owner placement). */}
-      <div style={{ paddingTop: 10 }}><ProofDeck clientId={clientId} mute={C.mute} /></div>
+      <div style={{ paddingTop: 10 }}><ProofDeck clientId={clientId} /></div>
 
       {/* everything below the dots follows the ACTIVE stage: its by-source
           cards (scoped to the chart's picked range), extras, and campaigns */}
