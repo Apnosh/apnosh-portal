@@ -26,7 +26,7 @@ const CRON_SECRET = process.env.CRON_SECRET
 /* the report itself, not the Insights tab: the notification says the recap is ready, so it has
    to open the recap. The month rides along in ?m= so the link still opens the month the
    notification names when it is read in the first days of the next one. */
-const IMPACT_LINK = '/dashboard/insights/impact'
+const IMPACT_LINK = '/dashboard/insights/analyst'
 
 /** The one number worth leading with, or the old wording when there is none. */
 function recapHeadline(s: { monthLabel: string; metrics: Array<{ key: string; label: string; value: number; deltaPct: number | null }>; reviewsThisMonth: number; rating: number | null }): string {

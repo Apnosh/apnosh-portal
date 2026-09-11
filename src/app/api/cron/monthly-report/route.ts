@@ -95,7 +95,7 @@ export async function GET(req: Request) {
   const key = monthKey(year, month)
   // src=email is what the page stamps the open on. Only this link carries it: the Home banner and
   // the owner paging back through old months are not "they opened what we sent".
-  const link = `/dashboard/insights/impact?m=${key}&src=email`
+  const link = `/dashboard/insights/analyst?m=${key}&src=email`
 
   const admin = createAdminClient()
   let q = admin.from('clients').select('id, name').neq('status', 'churned')

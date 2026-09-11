@@ -32,7 +32,7 @@ import {
   Search, ExternalLink, Image as ImageIcon, Check,
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
-  Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight, FileText,
+  Route, Heart, Megaphone, Info, Globe, Store, ArrowUpRight, FileText,
   ChevronDown, PenLine, MessageSquare, MapPin, MessageCircle, Bookmark, X,
 } from 'lucide-react'
 import { HUES, STAGE_HUES, gradOf, tint, type HueKey } from './hues'
@@ -336,10 +336,9 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 }
 
 const ANALYST_HREF = '/dashboard/insights/analyst'
-const REPORT_HREF = '/dashboard/insights/impact'
 
 /**
- * A 36px glass circle that NAVIGATES, used by the two tools on the stage row.
+ * A 36px glass circle that NAVIGATES, used by the tools on the stage row.
  *
  * It must always do something. It was a bare <Link>, and a tap could land on a screen that
  * never appeared, with no feedback at all. A control that sometimes does nothing is the worst
@@ -348,7 +347,7 @@ const REPORT_HREF = '/dashboard/insights/impact'
  * load if the client-side navigation has not moved us anywhere after a beat. A slow navigation
  * beats a silent one.
  */
-function PushCircle({ href, label, lit, children }: { href: string; label: string; /** the green "this is yours" state */ lit: boolean; children: React.ReactNode }) {
+function PushCircle({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
   const router = useRouter()
   const [pressed, setPressed] = useState(false)
 
@@ -366,43 +365,29 @@ function PushCircle({ href, label, lit, children }: { href: string; label: strin
   }
 
   return (
-    <button
-      type="button"
-      onClick={go}
-      aria-label={label}
-      title={label}
-      style={{ ...GLASS_CIRCLE, background: lit ? C.greenSoft : GLASS_CIRCLE.background, color: lit ? C.greenDk : C.mute, border: `1px solid ${lit ? C.greenLine : 'rgba(255,255,255,0.75)'}`, opacity: pressed ? 0.55 : 1, transition: 'opacity .12s ease' }}
-    >
+    <button type="button" onClick={go} aria-label={label} title={label} style={{ ...GLASS_CIRCLE, color: C.ink, cursor: 'pointer', opacity: pressed ? 0.55 : 1, transition: 'opacity .15s' }}>
       {children}
     </button>
   )
 }
 
 /**
- * "Your report" — the monthly report built from the account's own numbers
- * (/dashboard/insights/impact). It was pointed at the AI analyst, which is Pro only, so the
- * one control called "your report" opened a lock for most owners while the real report,
- * already built, was reachable from nothing at all. Every client gets this one.
- */
-function ReportButton() {
-  return <PushCircle href={REPORT_HREF} label="Your monthly report" lit><FileText size={16} /></PushCircle>
-}
-
-/**
- * The AI analyst, its own entry beside the report.
+ * "Your report": the analyst's read of the last 30 days, the one report this page has (owner
+ * 2026-09-11: the separate "This month, so far" page is gone; this is the report). It wears the
+ * document glyph in the same glass circle as the metrics control, no green fill, so the row's
+ * three tools read as one set.
  *
  * IT MUST BE HONEST ABOUT THE PRO GATE. The server only ever generates a read for Pro (and
- * paying) clients; everyone else was invited to tap a full-price-looking button and only then
- * told they could not use it. The lock shows on the button itself, so the gate is visible
- * before the tap, and the page explains it. The tap still goes through: a client who pays but
- * whose tier was never switched gets the read from the server anyway.
+ * paying) clients; the lock shows on the button itself, so the gate is visible before the tap,
+ * and the page explains it. The tap still goes through: a client who pays but whose tier was
+ * never switched gets the read from the server anyway.
  */
-function AnalystButton() {
+function ReportButton() {
   const { client } = useClient()
   const pro = isProTier(client?.tier)
   return (
-    <PushCircle href={ANALYST_HREF} label={pro ? 'Ask the analyst' : 'Ask the analyst, Pro plan only'} lit={pro}>
-      {pro ? <Sparkles size={16} /> : <Lock size={14} />}
+    <PushCircle href={ANALYST_HREF} label={pro ? 'Your report' : 'Your report, Pro plan only'}>
+      {pro ? <FileText size={16} /> : <Lock size={14} />}
     </PushCircle>
   )
 }
@@ -562,7 +547,6 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
       {/* the page's two tools ride the stage row, top right, over every slide */}
       <div style={{ position: 'absolute', top: 12, right: 14, display: 'flex', gap: 8, zIndex: 2 }}>
         <ReportButton />
-        <AnalystButton />
         <Link href="/dashboard/insights/metrics" aria-label="Choose your metrics" title="Choose your metrics" style={GLASS_CIRCLE}><SlidersHorizontal size={16} /></Link>
       </div>
       {/* SWIPEABLE GRAPHS — each slide is a stage's title + number + trend +
