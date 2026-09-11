@@ -13,7 +13,7 @@
  */
 
 import { useRef, useState } from 'react'
-import { X, ChevronRight, ChevronDown } from 'lucide-react'
+import { X, ChevronRight, ChevronDown, AlertTriangle, TrendingUp } from 'lucide-react'
 
 export interface ProofCardData {
   /** Stable id for dismissal, e.g. "gbp-2026-08-24". */
@@ -60,8 +60,14 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   const opened = useRef(false)
   const markOpen = () => { if (!opened.current) { opened.current = true; onOpen?.() } }
   const headsUp = card.tone === 'heads_up'
-  const dotColor = headsUp ? '#aeaeb2' : '#4abd98'
-  const labelColor = headsUp ? '#6e6e73' : '#2e9a78'
+  /* COLOUR ON THE EDGE, not the ground (owner 2026-09-11: "missing colours, don't just change
+     the background"). A win wears a mint outline and a rising arrow; a heads-up wears an amber
+     outline and a warning triangle, so the two kinds read apart from across the room while
+     the card itself stays white. */
+  const edge = headsUp ? '#e0a13a' : '#4abd98'
+  const dotColor = headsUp ? '#e0a13a' : '#4abd98'
+  const labelColor = headsUp ? '#9a6b17' : '#2e9a78'
+  const Glyph = headsUp ? AlertTriangle : TrendingUp
   const max = card.spark && card.spark.length ? Math.max(...card.spark, 1) : 1
   if (!open) {
     return (
@@ -70,11 +76,11 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
         className="mvp-rise"
         style={{
           display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-          background: '#fff', border: 'none', borderRadius: 14, padding: '9px 12px', marginBottom: 10,
+          background: '#fff', border: `1.5px solid ${edge}`, borderRadius: 14, padding: '9px 12px', marginBottom: 10,
           boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.06)', cursor: 'pointer',
         }}
       >
-        <span style={{ width: 6, height: 6, borderRadius: 99, background: dotColor, flexShrink: 0 }} />
+        <Glyph size={13} color={dotColor} strokeWidth={2.4} style={{ flexShrink: 0 }} />
         <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '.1em', textTransform: 'uppercase', color: labelColor, flexShrink: 0 }}>{card.label}</span>
         <span style={{ fontSize: 13, fontWeight: 700, color: '#1d1d1f', fontVariantNumeric: 'tabular-nums', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{card.big}</span>
         <ChevronDown size={14} color="#aeaeb2" style={{ flexShrink: 0 }} />
@@ -89,7 +95,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       onClick={markOpen}
       style={{
         position: 'relative', borderRadius: 18, padding: '16px 16px 15px', marginBottom: 12,
-        background: '#fff',
+        background: '#fff', border: `1.5px solid ${edge}`,
         boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06)',
       }}
     >
@@ -100,7 +106,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
         <X size={13} />
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase', color: labelColor, marginBottom: 8 }}>
-        <span style={{ width: 6, height: 6, borderRadius: 99, background: dotColor }} />
+        <Glyph size={13} color={dotColor} strokeWidth={2.4} />
         {card.label.replace(/^Example · /i, '')}
         {/^example/i.test(card.id) && (
           <span style={{ marginLeft: 4, fontSize: 9, letterSpacing: '.08em', border: '1px solid #d8d8dc', color: '#8e8e93', borderRadius: 5, padding: '1px 6px', fontWeight: 700 }}>Example</span>

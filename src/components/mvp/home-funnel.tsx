@@ -470,17 +470,23 @@ export default function HomeFunnel({
   }, [])
 
   const { lang, T } = useLang()
-  /* "the 30 days before" / "the year before" — from the real window when known, else the tab */
+  /* THE PERIOD BEFORE, BY ITS DATES (owner 2026-09-11: "the actual dates, just vs (date)"):
+     the same length as the real window, ending the day before it starts. "Jul 14 – Aug 12",
+     not "the 30 days before". Falls back to the words only when the window is not known yet. */
   const compareLabel = useMemo(() => {
-    if (curRange === '12m') return T('the year before')
-    let days: number | null = null
     if (windowStart && windowEnd) {
-      const d = Math.round((new Date(windowEnd + 'T00:00:00').getTime() - new Date(windowStart + 'T00:00:00').getTime()) / 86400000) + 1
-      if (d > 0) days = d
+      const start = new Date(windowStart + 'T00:00:00'), end = new Date(windowEnd + 'T00:00:00')
+      const d = Math.round((end.getTime() - start.getTime()) / 86400000) + 1
+      if (d > 0) {
+        const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1)
+        const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - (d - 1))
+        const f = (x: Date) => x.toLocaleDateString(lang === 'es' ? 'es' : 'en-US', { month: 'short', day: 'numeric' })
+        return `${f(prevStart)} – ${f(prevEnd)}`
+      }
     }
-    if (days == null) days = curRange === '7d' ? 7 : curRange === '90d' ? 90 : 30
-    return T('the {n} days before', { n: days })
-  }, [curRange, windowStart, windowEnd, T])
+    if (curRange === '12m') return T('the year before')
+    return T('the {n} days before', { n: curRange === '7d' ? 7 : curRange === '90d' ? 90 : 30 })
+  }, [curRange, windowStart, windowEnd, T, lang])
   /* The shape of the business, off the client this screen already resolved for the bell. It
    * only bends the stage WORDS (shape-words.ts); nothing about the layout or the numbers reads
    * it. A client with no shape yet is a storefront, which is the copy that was always here. */
@@ -1291,10 +1297,10 @@ export default function HomeFunnel({
            the line sits on its own plate from the tokens rather than on the sprites. The funnel
            itself is untouched: this is chrome above it. */
         <div style={{ display: 'flex', justifyContent: 'center', padding: '2px 16px 8px' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', background: C.card, border: `1px solid ${C.line}`, borderRadius: 999, padding: '3px 11px' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, maxWidth: '100%', whiteSpace: 'nowrap', overflow: 'hidden', padding: '3px 11px' }}>
             <span style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, flexShrink: 0 }}>{rangeLabel}</span>
             {/* the standing honesty line (owner ask, 2026-08-18): platforms report late by nature */}
-            <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· ${T('change vs {when}', { when: compareLabel })}` : `· ${T('platforms report a few days behind')}`}</span>
+            <span style={{ fontSize: 10.5, color: C.faint, overflow: 'hidden', textOverflow: 'ellipsis' }}>{yoy ? `· vs ${compareLabel}` : `· ${T('platforms report a few days behind')}`}</span>
           </span>
         </div>
       )}
