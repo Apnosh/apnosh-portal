@@ -15,7 +15,7 @@ import { revalidatePath } from 'next/cache'
 import { createClient as createServerClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { SUMMABLE, OPTIONAL } from '@/lib/insights/compute-stages'
-import { SOURCES, STAGE_NAMES, type FunnelStage } from '@/lib/insights/source-registry'
+import { SOURCES, STAGE_NAMES, shortLabelFor, type FunnelStage } from '@/lib/insights/source-registry'
 import { userMayConnectClient } from '@/lib/connect-access'
 
 const PROVIDER_LABEL: Record<string, string> = {
@@ -95,7 +95,9 @@ export async function listMetricToggles(selectedClientId?: string): Promise<Metr
         const list = byProvider.get(providerLabel) ?? []
         list.push({
           id,
-          label: def.displayName,
+          /* the same short name Insights prints ("TikTok views", "Instagram reach"), so the switch
+             and the row it controls read as one thing (owner 2026-09-11) */
+          label: shortLabelFor(id),
           stageLabel: STAGE_NAMES[stage],
           providerLabel,
           optional: kind === 'optional',

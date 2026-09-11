@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { SlidersHorizontal } from 'lucide-react'
+import { SlidersHorizontal, ChevronLeft } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
 import { listMetricToggles, setMetricToggle, type MetricToggleGroup } from '@/lib/metric-prefs-actions'
 import { C, DISPLAY } from '@/components/mvp/mvp-detail'
@@ -40,7 +40,6 @@ export function MetricSettingsPage() {
   const clientId = client?.id || undefined
   const [groups, setGroups] = useState<MetricToggleGroup[] | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [touched, setTouched] = useState(false)
 
   useEffect(() => {
     listMetricToggles(clientId).then(setGroups).catch(() => setGroups([]))
@@ -57,7 +56,6 @@ export function MetricSettingsPage() {
       }),
     })
     setGroups(next)
-    setTouched(true)
     const r = await setMetricToggle(item.id, !item.enabled, clientId)
     if (!r.success) {
       setErr(r.error)
@@ -70,18 +68,25 @@ export function MetricSettingsPage() {
     router.refresh()
   }
 
+  /* Done and Back are the same move: BACK, not forward (owner 2026-09-11: Done pushed Insights on
+     top of this page, so the next Back landed here again). Insights refetches on mount, and flip()
+     already dropped the router cache, so the changed switch shows on return. */
   const done = () => {
-    // a fresh Insights mount refetches, so a changed switch shows up on return
-    if (touched) window.location.assign('/dashboard/insights')
-    else router.push('/dashboard/insights')
+    if (typeof window !== 'undefined' && window.history.length > 1) router.back()
+    else router.replace('/dashboard/insights')
   }
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 40, background: '#fff', display: 'flex', flexDirection: 'column', fontFamily: "'Inter',system-ui,sans-serif", color: C.ink }}>
       <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '22px 18px calc(110px + env(safe-area-inset-bottom))' }}>
-        <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>Choose your metrics</div>
-        <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, margin: '8px 0 6px' }}>
-          What shows and counts on your dashboard. Everything keeps being tracked, so switching a metric back on brings its history with it.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button type="button" onClick={done} aria-label="Back" style={{ width: 40, height: 40, borderRadius: 999, border: '1px solid rgba(255,255,255,0.75)', background: 'rgba(240,241,240,0.72)', boxShadow: '0 1px 3px rgba(0,0,0,.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, cursor: 'pointer', padding: 0, flexShrink: 0 }}>
+            <ChevronLeft size={21} />
+          </button>
+          <div style={{ fontFamily: DISPLAY, fontSize: 24, fontWeight: 600, letterSpacing: '-.01em', lineHeight: 1.1 }}>Choose your metrics</div>
+        </div>
+        <div style={{ fontSize: 13.5, color: C.mute, lineHeight: 1.5, margin: '10px 0 6px' }}>
+          Switch a metric on to count it in its stage, off to leave it out.
         </div>
         {err && (
           <div style={{ background: C.coralSoft, borderRadius: 12, padding: '9px 12px', marginTop: 12, fontSize: 12.5, color: '#8a2f28' }}>{err}</div>
