@@ -24,7 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Clock } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
-import { PostTile, tileOf, crossTileOf, groupCrossPosts, POSTS_FOOTNOTE, type InsightsPost, type TileData } from '@/components/mvp/mvp-insights'
+import { PostTile, tileOf, crossTileOf, groupCrossPosts, type InsightsPost, type TileData } from '@/components/mvp/mvp-insights'
 import { NothingYet } from '@/components/mvp/coming-up'
 import PostSheet from '@/components/mvp/post-sheet'
 import { usePullToRefresh, PullIndicator } from '@/components/mvp/pull-to-refresh'
@@ -171,7 +171,6 @@ export default function AllPostsPage() {
                   {busy ? 'Loading…' : `Show ${Math.min(PAGE, total - posts.length)} more`}
                 </button>
               )}
-              <div style={{ fontSize: 11, color: C.faint, marginTop: 14, lineHeight: 1.45 }}>{POSTS_FOOTNOTE} Pull down to check for anything new.</div>
             </>
           )}
         </div>

@@ -2766,7 +2766,6 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
         })}
         {more && <AllPostsTile total={total} />}
       </div>
-      <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>{POSTS_FOOTNOTE}</div>
       {split && <PostSheet parts={split.parts} peers={posts} onClose={() => setSplit(null)} />}
     </Section>
   )
@@ -2783,11 +2782,11 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
  * Not a floating button. The page is read to the end and then acted on; a thing
  * hovering over the numbers the whole way down is in the way of the numbers.
  */
-const QUICK: { label: string; sub: string; href: string; hue: HueKey; Icon: typeof PenLine }[] = [
-  { label: 'Write a post', sub: 'Now or at your best time', href: '/dashboard/post', hue: 'brand', Icon: PenLine },
-  { label: 'Boost a post', sub: 'Put money behind a winner', href: '/dashboard/boost', hue: 'event', Icon: Megaphone },
-  { label: 'Reply to reviews', sub: 'Worst first', href: '/dashboard/review-replies', hue: 'reviews', Icon: MessageSquare },
-  { label: 'Your Google listing', sub: 'What people see', href: '/dashboard/google-profile', hue: 'newfaces', Icon: MapPin },
+const QUICK: { label: string; href: string; hue: HueKey; Icon: typeof PenLine }[] = [
+  { label: 'Write a post', href: '/dashboard/post', hue: 'brand', Icon: PenLine },
+  { label: 'Boost a post', href: '/dashboard/boost', hue: 'event', Icon: Megaphone },
+  { label: 'Reply to reviews', href: '/dashboard/review-replies', hue: 'reviews', Icon: MessageSquare },
+  { label: 'Your Google listing', href: '/dashboard/google-profile', hue: 'newfaces', Icon: MapPin },
 ]
 
 function QuickActions() {
@@ -2811,7 +2810,6 @@ function QuickActions() {
             </span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 14.5, fontWeight: 600, color: C.ink, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.label}</span>
-              <span style={{ display: 'block', fontSize: 11.5, color: C.mute, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{q.sub}</span>
             </span>
           </Link>
         ))}
