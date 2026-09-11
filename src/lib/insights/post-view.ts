@@ -27,6 +27,11 @@ export interface PostView {
   unreported: boolean
   likes: number
   saves: number
+  /* Comments and shares came late (2026-09-11): the columns were always there
+     and nothing read them, so a tile could say 3,829 views and 277 likes about a
+     post that was shared 98 times, which is the number that actually travelled. */
+  comments: number
+  shares: number
   postedAt: string | null
   /** Identifies ONE piece of content posted to several platforms on the same
    *  day. Null when the row has no caption to match on. See crossPostKey. */
@@ -79,6 +84,8 @@ type Row = {
   video_views?: number | null
   likes?: number | null
   saves?: number | null
+  comments?: number | null
+  shares?: number | null
   posted_at?: string | null
   caption?: string | null
   raw_data?: unknown
@@ -105,6 +112,8 @@ export function toPostView(p: Row): PostView {
     unreported: value === 0 && state === 'synced' && !measured,
     likes: p.likes ?? 0,
     saves: p.saves ?? 0,
+    comments: p.comments ?? 0,
+    shares: p.shares ?? 0,
     postedAt: p.posted_at ?? null,
     crossKey: crossPostKey(p.caption ?? null, p.posted_at ?? null),
   }

@@ -32,7 +32,7 @@ import {
   Share2, ArrowRight,
   Footprints, ShoppingBag, Repeat, Lock, SlidersHorizontal,
   Route, Heart, Megaphone, Sparkles, Info, Globe, Store, ArrowUpRight, FileText,
-  ChevronDown, PenLine, MessageSquare, MapPin, Layers,
+  ChevronDown, PenLine, MessageSquare, MapPin, MessageCircle, Bookmark,
 } from 'lucide-react'
 import { HUES, STAGE_HUES, gradOf, tint, type HueKey } from './hues'
 import { Mark } from './mark'
@@ -101,7 +101,7 @@ interface ReviewTopicsData { summary: string | null; topics: ReviewTopic[] }
 
 // The "further breakdown" data that /api/dashboard/load doesn't carry.
 // Lazy-fetched from /api/dashboard/insights-detail.
-export interface InsightsPost { /** one piece of content posted to several platforms the same day; null when it stands alone */ crossKey?: string | null; id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; /** this post kind never reports reach (e.g. a Story) — an absence, not a zero */ unreported?: boolean; likes: number; saves: number; postedAt: string | null }
+export interface InsightsPost { /** one piece of content posted to several platforms the same day; null when it stands alone */ crossKey?: string | null; id: string; platform: string; permalink: string | null; thumbnailUrl: string | null; type: string; reach: number; /** the vendor has not finished syncing this post's numbers — show that, never a false 0 */ pending?: boolean; /** this post kind never reports reach (e.g. a Story) — an absence, not a zero */ unreported?: boolean; likes: number; saves: number; comments?: number; shares?: number; postedAt: string | null }
 interface InsightsDetail {
   findYou: { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number } | null
   topQueries: { query: string; impressions: number }[]
@@ -2551,42 +2551,114 @@ export const POSTS_FOOTNOTE = 'Your latest posts across every connected account,
  * =================================
  * Two wrong answers came before this one. Squares first, which cropped the top
  * and bottom off every vertical video -- and almost everything a restaurant posts
- * is vertical. Then a tile shaped per post, which was honest and looked broken:
- * a 110px reel beside a 235px landscape beside a square, with captions of
- * different lengths under each, is a rail of mismatched offcuts.
+ * is vertical. Then a tile shaped per post, which was honest and looked broken: a
+ * 110px reel beside a 235px landscape beside a square is a rail of mismatched
+ * offcuts.
  *
- * So: every tile the same portrait frame, which is the shape the content is
- * actually shot in, and everything that belongs to a post lives INSIDE it. No
- * caption strip underneath, so nothing can make one tile taller than its
- * neighbour, and the rail reads as a shelf of pictures rather than a table with
- * pictures in it. A square photo or a landscape video is centre-cropped, which
- * is what every feed on earth does to them.
+ * So: every tile the same portrait frame, the shape the content is shot in. The
+ * numbers live ON the picture, and only what the post IS -- video, Sep 8 -- sits
+ * under it, one line, the same length every time, so no tile can end up taller
+ * than the one beside it.
+ *
+ * A square photo or a landscape video is centre-cropped, which is what every feed
+ * on earth does to them.
  */
-const TILE_W = 136
-const TILE_H = 240
+const TILE_W = 152
+const TILE_H = 250
 
-function tileNumber(p: InsightsPost): { big: string; small: string } {
-  if (p.unreported) return { big: DASH, small: 'not reported' }
-  if (p.pending) return { big: DASH, small: 'still counting' }
-  return { big: p.reach.toLocaleString(), small: 'views' }
+/** 98 · 1.4K · 12.6K · 1.2M — four stats have to fit across 152px. */
+function compactNum(n: number): string {
+  if (n < 1000) return String(n)
+  if (n < 10000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`
+  if (n < 1000000) return `${Math.round(n / 1000)}K`
+  return `${(n / 1000000).toFixed(1).replace(/\.0$/, '')}M`
 }
 
-/** One post as a tile: its picture, its network, its number, its day. */
-function PostTile({ p, badge, note }: { p: InsightsPost; badge?: number; note?: string }) {
-  const has = !!p.thumbnailUrl
-  const n = tileNumber(p)
-  const date = p.postedAt ? reviewDate(p.postedAt) : ''
+/** What one tile draws. A single post and a group of cross-posts both become one
+ *  of these, so the tile itself never has to know which it is. */
+interface TileData {
+  key: string
+  thumb: string | null
+  platforms: string[]
+  permalink: string | null
+  views: number
+  pending: boolean
+  unreported: boolean
+  likes: number
+  comments: number
+  saves: number
+  shares: number
+  foot: string
+}
+
+function footOf(p: InsightsPost): string {
   const kind = p.type ? p.type.charAt(0).toUpperCase() + p.type.slice(1).toLowerCase() : 'Post'
-  const foot = note ?? [kind, date].filter(Boolean).join(' · ')
-  const inner = (
-    <>
-      {/* NO PICTURE IS STILL A TILE. An empty grey rectangle in a shelf of
-          photographs reads as a thing that failed to load; a soft wash in the
-          network's own colour reads as a post that simply has no image. */}
-      {/* the network's own gradient, laid on as its own pane at low opacity --
-          a background shorthand here fights the photo's background-image and
-          loses silently */}
-      {!has && <span style={{ position: 'absolute', inset: 0, background: brandTone(p.platform)?.grad ?? gradOf('mint'), opacity: .17 }} />}
+  const date = p.postedAt ? reviewDate(p.postedAt) : ''
+  return [kind, date].filter(Boolean).join(' · ')
+}
+
+function tileOf(p: InsightsPost): TileData {
+  return {
+    key: p.id, thumb: p.thumbnailUrl, platforms: [p.platform], permalink: p.permalink,
+    views: p.reach, pending: !!p.pending, unreported: !!p.unreported,
+    likes: p.likes, comments: p.comments ?? 0, saves: p.saves, shares: p.shares ?? 0,
+    foot: footOf(p),
+  }
+}
+
+/**
+ * The same content on several platforms, added up.
+ *
+ * The tile used to name the winner ("Instagram carried it") and show only that
+ * one's numbers, which undercounts the post: one piece of content that did 4,710
+ * on Instagram and 299 on Facebook reached 5,009 people, and that is the number
+ * an owner is entitled to. Which platform carried it is still worth knowing and
+ * is still the whole point of the comparison card on the post list, where there
+ * is room to show it honestly. Here, every network it went to is a mark in the
+ * corner and the numbers are the totals.
+ */
+function crossTileOf(posts: InsightsPost[]): TileData {
+  const ranked = posts.slice().sort((a, b) => b.reach - a.reach)
+  const best = ranked[0]
+  const sum = (f: (x: InsightsPost) => number) => ranked.reduce((t, x) => t + (f(x) || 0), 0)
+  /* Distinct platforms, best first: the same content can appear twice on one
+     network as a feed post and a reel, and two identical marks read as a bug. */
+  const platforms: string[] = []
+  for (const x of ranked) if (!platforms.includes(x.platform)) platforms.push(x.platform)
+  return {
+    key: best.crossKey ?? best.id, thumb: best.thumbnailUrl, platforms, permalink: best.permalink,
+    views: sum((x) => x.reach),
+    pending: ranked.every((x) => x.pending), unreported: ranked.every((x) => x.unreported),
+    likes: sum((x) => x.likes), comments: sum((x) => x.comments ?? 0),
+    saves: sum((x) => x.saves), shares: sum((x) => x.shares ?? 0),
+    foot: footOf(best),
+  }
+}
+
+function PostTile({ t }: { t: TileData }) {
+  const has = !!t.thumb
+  const big = t.unreported || t.pending ? DASH : t.views.toLocaleString()
+  const unit = t.unreported ? 'not reported' : t.pending ? 'still counting' : 'views'
+  const ink = has ? '#fff' : C.ink
+  const soft = has ? 'rgba(255,255,255,.86)' : C.mute
+  /* Only what happened. A row of zeroes is not a report, it is decoration. */
+  const stats: Array<{ icon: typeof Heart; n: number }> = [
+    { icon: Heart, n: t.likes },
+    { icon: MessageCircle, n: t.comments },
+    { icon: Share2, n: t.shares },
+    { icon: Bookmark, n: t.saves },
+  ].filter((x) => x.n > 0)
+  const media = (
+    <div style={{
+      position: 'relative', width: TILE_W, height: TILE_H, borderRadius: 18, overflow: 'hidden',
+      background: has ? '#111' : '#f7f7f9',
+      backgroundImage: has ? `url(${t.thumb})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center',
+      border: has ? 'none' : `0.5px solid ${C.line}`, boxSizing: 'border-box',
+      boxShadow: '0 1px 3px rgba(0,0,0,.08), 0 8px 20px rgba(0,0,0,.05)',
+    }}>
+      {/* the network's own gradient, laid on as its own pane at low opacity — a
+          background shorthand here fights the photo's background-image and loses */}
+      {!has && <span style={{ position: 'absolute', inset: 0, background: brandTone(t.platforms[0] ?? '')?.grad ?? gradOf('mint'), opacity: .17 }} />}
       {!has && (
         <span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ width: 46, height: 46, borderRadius: 15, background: '#fff', boxShadow: '0 2px 8px rgba(0,0,0,.07)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2594,64 +2666,56 @@ function PostTile({ p, badge, note }: { p: InsightsPost; badge?: number; note?: 
           </span>
         </span>
       )}
-      {/* the scrim is the only reason white numerals hold on a bright photo; on a
-          tile with no picture there is nothing to darken, so it does not appear */}
-      <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '62%', background: has ? 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.30) 42%, rgba(0,0,0,.78) 100%)' : 'none' }} />
-      <span style={{ position: 'absolute', left: 8, top: 8, width: 25, height: 25, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.24)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <BrandOrMark provider={p.platform} size={14} />
+      {/* the scrim is the only reason white numerals hold on a bright photo */}
+      <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '66%', background: has ? 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.32) 40%, rgba(0,0,0,.80) 100%)' : 'none' }} />
+
+      {/* every network it went to, overlapped, newest-biggest first */}
+      <span style={{ position: 'absolute', left: 8, top: 8, display: 'inline-flex', alignItems: 'center' }}>
+        {t.platforms.slice(0, 4).map((pl, i) => (
+          <span key={pl + i} style={{ marginLeft: i ? -7 : 0, width: 25, height: 25, borderRadius: 99, background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.24)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <BrandOrMark provider={pl} size={14} />
+          </span>
+        ))}
       </span>
-      {badge != null && (
-        <span style={{ position: 'absolute', right: 8, top: 8, display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 7px', borderRadius: 99, background: 'rgba(255,255,255,.94)', fontSize: 10.5, fontWeight: 700, color: C.ink }}>
-          <Layers size={10} /> {badge}
-        </span>
-      )}
+
       <span style={{ position: 'absolute', left: 11, right: 11, bottom: 10 }}>
         <span style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-          <span style={{ fontFamily: DISPLAY, fontSize: 22, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1, color: has ? '#fff' : C.ink }}>{n.big}</span>
-          <span style={{ fontSize: 11, color: has ? 'rgba(255,255,255,.82)' : C.mute }}>{n.small}</span>
+          <span style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1, color: ink }}>{big}</span>
+          <span style={{ fontSize: 11.5, color: soft }}>{unit}</span>
         </span>
-        {p.likes > 0 && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, fontSize: 11, color: has ? 'rgba(255,255,255,.82)' : C.mute }}>
-            <Heart size={10} /> {p.likes.toLocaleString()}
+        {stats.length > 0 && (
+          <span style={{ display: 'flex', flexWrap: 'wrap', columnGap: 11, rowGap: 3, marginTop: 7 }}>
+            {stats.map((x, i) => (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3.5, fontSize: 12.5, fontWeight: 500, color: ink }}>
+                <x.icon size={13} strokeWidth={2} /> {compactNum(x.n)}
+              </span>
+            ))}
           </span>
         )}
-        <span style={{ display: 'block', marginTop: 5, fontSize: 10.5, letterSpacing: '.02em', color: has ? 'rgba(255,255,255,.72)' : C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{foot}</span>
       </span>
-    </>
+    </div>
   )
-  const box: React.CSSProperties = {
-    position: 'relative', flex: `0 0 ${TILE_W}px`, width: TILE_W, height: TILE_H, scrollSnapAlign: 'start',
-    borderRadius: 18, overflow: 'hidden', display: 'block', textDecoration: 'none', color: 'inherit',
-    background: has ? '#111' : '#f7f7f9',
-    backgroundImage: has ? `url(${p.thumbnailUrl})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center',
-    border: has ? 'none' : `0.5px solid ${C.line}`, boxSizing: 'border-box',
-    boxShadow: '0 1px 3px rgba(0,0,0,.08), 0 8px 20px rgba(0,0,0,.05)',
-  }
-  return p.permalink
-    ? <a href={p.permalink} target="_blank" rel="noreferrer noopener" style={box}>{inner}</a>
-    : <div style={box}>{inner}</div>
-}
-
-/** The same content on several platforms: one tile, the one that carried it,
- *  counted. The full comparison card lives on the post list. */
-function CrossTile({ posts }: { posts: InsightsPost[] }) {
-  const ranked = posts.slice().sort((a, b) => b.reach - a.reach)
-  const best = ranked[0]
-  const places = new Set(ranked.map((x) => x.platform)).size
-  const name = best.platform ? best.platform.charAt(0).toUpperCase() + best.platform.slice(1) : 'One'
-  return <PostTile p={best} badge={places} note={`${name} carried it`} />
+  const foot = (
+    <div style={{ fontSize: 12, color: C.mute, marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.foot}</div>
+  )
+  const box: React.CSSProperties = { flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', display: 'block', textDecoration: 'none', color: 'inherit' }
+  return t.permalink
+    ? <a href={t.permalink} target="_blank" rel="noreferrer noopener" style={box}>{media}{foot}</a>
+    : <div style={box}>{media}{foot}</div>
 }
 
 /** The end of the rail: everything else, one tap away. Same frame as the rest,
  *  so the shelf keeps its line. */
 function AllPostsTile({ total }: { total?: number }) {
   return (
-    <Link href="/dashboard/insights/posts" style={{ flex: `0 0 ${TILE_W}px`, width: TILE_W, height: TILE_H, scrollSnapAlign: 'start', borderRadius: 18, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f3f7f5)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 9, textDecoration: 'none', color: 'inherit', boxSizing: 'border-box' }}>
-      <span style={{ width: 40, height: 40, borderRadius: 13, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <ArrowRight size={18} color={C.greenDk} />
-      </span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>See all{typeof total === 'number' ? ` ${total}` : ''}</span>
-      <span style={{ fontSize: 11, color: C.mute }}>Every post, sorted</span>
+    <Link href="/dashboard/insights/posts" style={{ flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', display: 'block', textDecoration: 'none', color: 'inherit' }}>
+      <div style={{ width: TILE_W, height: TILE_H, borderRadius: 18, border: `1px dashed ${C.line}`, background: 'linear-gradient(180deg,#fbfdfc,#f3f7f5)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 9, boxSizing: 'border-box' }}>
+        <span style={{ width: 40, height: 40, borderRadius: 13, background: '#fff', boxShadow: '0 1px 4px rgba(0,0,0,.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ArrowRight size={18} color={C.greenDk} />
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>See all{typeof total === 'number' ? ` ${total}` : ''}</span>
+      </div>
+      <div style={{ fontSize: 12, color: C.mute, marginTop: 7, whiteSpace: 'nowrap' }}>Every post, sorted</div>
     </Link>
   )
 }
@@ -2665,11 +2729,10 @@ function BestPosts({ posts, total }: { posts: InsightsPost[]; total?: number }) 
           off at the edge -- that half-tile is the only thing that tells a thumb
           there is more to the right. */}
       <div className="mvp-swipe" style={{ display: 'flex', gap: 10, alignItems: 'flex-start', overflowX: 'auto', scrollSnapType: 'x proximity', padding: '2px 18px 2px 2px', margin: '0 -18px 0 -2px' }}>
-        {items.map((item) =>
-          Array.isArray(item)
-            ? <CrossTile key={item[0].crossKey ?? item[0].id} posts={item} />
-            : <PostTile key={item.id} p={item} />,
-        )}
+        {items.map((item) => {
+          const t = Array.isArray(item) ? crossTileOf(item) : tileOf(item)
+          return <PostTile key={t.key} t={t} />
+        })}
         {more && <AllPostsTile total={total} />}
       </div>
       <div style={{ fontSize: 11, color: C.faint, marginTop: 11, lineHeight: 1.45 }}>{POSTS_FOOTNOTE}</div>

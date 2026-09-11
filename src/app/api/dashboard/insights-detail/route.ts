@@ -24,7 +24,7 @@ export const maxDuration = 15
 type FindYou = { searchMobile: number; searchDesktop: number; mapsMobile: number; mapsDesktop: number }
 type TopPost = {
   id: string; platform: string; permalink: string | null; thumbnailUrl: string | null
-  type: string; reach: number; likes: number; saves: number; postedAt: string | null
+  type: string; reach: number; likes: number; saves: number; comments: number; shares: number; postedAt: string | null
 }
 
 
