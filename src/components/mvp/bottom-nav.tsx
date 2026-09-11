@@ -8,9 +8,11 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { Home as HomeIcon, CalendarDays, Plus, MessageCircle, Menu } from 'lucide-react'
+import { Home as HomeIcon, CalendarDays, PlusCircle, MessageCircle, Menu } from 'lucide-react'
 
-const C = { green: '#4abd98', greenDk: '#2e9a78', line: '#e6e6ea', navOff: '#6e6e73' } // mute, not faint: a 10.5px label at 2.2:1 was unreadable
+/* The nav's green is the Insights graph's bright green, not the kit's deep mint (owner 2026-09-11:
+   the mint "felt off" on the pale seat). The seat is a light wash of the same hue. */
+const C = { green: '#1fc47a', greenOn: '#17ad6b', seat: 'rgba(31,196,122,.15)', line: '#e6e6ea', navOff: '#6e6e73' }
 
 /**
  * THE NAV'S FOOTPRINT, WRITTEN ONCE.
@@ -46,12 +48,8 @@ export default function BottomNav({ active }: { active: NavKey }) {
     <nav className="mvp-nav" style={{ position: 'absolute', left: 12, right: 12, bottom: `max(${NAV_BOTTOM}px, env(safe-area-inset-bottom))`, zIndex: 5, overflow: 'visible', borderRadius: 999, background: 'rgba(255,255,255,0.88)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', border: `1px solid ${C.line}`, boxShadow: '0 1px 2px rgba(0,0,0,.06), 0 12px 34px rgba(0,0,0,.16)', height: NAV_HEIGHT, display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', padding: '0 6px' }}>
       <Item href="/dashboard" label="Home" on={active === 'home'}><HomeIcon /></Item>
       <Item href="/dashboard/campaigns" label="Campaigns" on={active === 'campaigns'}><CalendarDays /></Item>
-      <Link href="/dashboard/campaigns/new" aria-label="Create" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, textDecoration: 'none' }}>
-        {/* the + is always lit; on the Create screen it gains the halo the other tabs get */}
-        <span style={{ width: 40, height: 40, borderRadius: 99, background: `linear-gradient(135deg, ${C.green}, ${C.greenDk})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: active === 'create' ? '0 0 0 5px rgba(74,189,152,.22), 0 6px 16px rgba(46,154,120,.45)' : '0 4px 12px rgba(46,154,120,.30)', transition: 'box-shadow .18s' }}>
-          <Plus size={24} strokeWidth={2.6} />
-        </span>
-      </Link>
+      {/* Create is a tab like the others now (owner 2026-09-11), not a floating disc */}
+      <Item href="/dashboard/campaigns/new" label="Create" on={active === 'create'}><PlusCircle /></Item>
       <Item href="/dashboard/messages" label="Inbox" on={active === 'messages' || active === 'inbox'}><MessageCircle /></Item>
       <Item href="/dashboard/more" label="More" on={active === 'more'}><Menu /></Item>
     </nav>
@@ -65,7 +63,7 @@ function Item({ href, label, on, children }: { href: string; label: string; on?:
     <Link href={href} aria-label={label} title={label} aria-current={on ? 'page' : undefined}
       /* THE SEAT IS THE WHOLE SLOT (owner 2026-09-11: "cover a lot more"): each tab owns a fifth of
          the bar, top to bottom, and the lit one fills it in mint. No glow (owner, same day). */
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, alignSelf: 'stretch', margin: '5px 2px', borderRadius: 999, textDecoration: 'none', color: on ? C.greenDk : C.navOff, background: on ? 'rgba(74,189,152,.18)' : 'transparent', transition: 'color .18s, background .18s' }}>
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, alignSelf: 'stretch', margin: '5px 2px', borderRadius: 999, textDecoration: 'none', color: on ? C.greenOn : C.navOff, background: on ? C.seat : 'transparent', transition: 'color .18s, background .18s' }}>
       <span className={on ? 'mvp-tab-on' : undefined} style={{ display: 'flex' }}>{icon}</span>
     </Link>
   )
