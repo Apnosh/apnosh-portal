@@ -435,6 +435,14 @@ const STAGE_EXPLAIN: Record<string, string> = {
    wear these, a clear green up and a bright red down (owner: red, not orange), not the quieter kit greens and corals. */
 const TREND_GREEN = '#1fc47a', TREND_RED = '#ff2d3a', TREND_AMBER = '#f0a12b'
 const TREND_GREEN_SOFT = '#e4f8ee', TREND_RED_SOFT = '#ffe6e8'
+/* THE VERDICT COLOURS (owner 2026-09-11): each stage has its own bright colour for UP, and every
+   stage shares the bright red for DOWN. The graph's bars, its range button, the pill, the by-source
+   bars and the Trends line all wear the verdict, so one glance says which way the number went. */
+const STAGE_BRIGHT: Record<string, string> = { shown: '#1fc47a', engaged: '#2f7bff', moved: '#8a4bff', camein: '#ffb020', back: '#14c3c3' }
+const verdictColor = (stageKey: string, deltaPct: number): string => (deltaPct < 0 ? TREND_RED : deltaPct === 0 ? TREND_AMBER : (STAGE_BRIGHT[stageKey] ?? TREND_GREEN))
+const verdictAccent = (hex: string): Accent => ({ main: hex, soft: hex + '29', dark: hex })
+/** the stage key an accent belongs to (the Trends chart only holds the accent) */
+const stageKeyOfAccent = (a: Accent): string => Object.keys(STAGE_ACCENT).find((k) => STAGE_ACCENT[k].main === a.main) ?? 'shown'
 const AccentCtx = createContext<Accent>(STAGE_ACCENT.shown)
 const useAccent = () => useContext(AccentCtx)
 /* The conversion chip beside the stage name is gone from Insights (owner 2026-09-11); Home's
@@ -473,6 +481,9 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
   // the dots stay scoped to the SAME window the visible chart shows
   const [ranges, setRanges] = useState<Record<string, string>>({})
   const rangeFor = (k: string) => (r: string) => setRanges((prev) => (prev[k] === r ? prev : { ...prev, [k]: r }))
+  /* each stage's verdict colour, reported by its chart; the by-source bars follow it */
+  const [dirs, setDirs] = useState<Record<string, string>>({})
+  const dirFor = useCallback((k: string) => (hex: string) => setDirs((prev) => (prev[k] === hex ? prev : { ...prev, [k]: hex })), [])
 
   const swipeRef = useRef<HTMLDivElement>(null)
   const progRef = useRef(false) // true while WE scroll it (deep-link) — don't re-pick
@@ -541,7 +552,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
               </button>
               </div>
               {explain && <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, margin: '2px 0 4px' }}>{stageExplainFor(s.key as StageWordKey, shape, STAGE_EXPLAIN[s.key])}</div>}
-              <StageTop stageKey={s.key} detail={detail} mv={smv} clientId={clientId} onRange={rangeFor(s.key)} accent={STAGE_ACCENT[s.key].main} />
+              <StageTop stageKey={s.key} detail={detail} mv={smv} clientId={clientId} onRange={rangeFor(s.key)} onDir={dirFor(s.key)} accent={STAGE_ACCENT[s.key].main} />
             </div>
           )
         })}
@@ -561,7 +572,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
 
       {/* everything below the dots follows the ACTIVE stage: its by-source
           cards (scoped to the chart's picked range), extras, and campaigns */}
-      <AccentCtx.Provider value={STAGE_ACCENT[focus.stageKey] ?? STAGE_ACCENT.shown}>
+      <AccentCtx.Provider value={dirs[focus.stageKey] ? verdictAccent(dirs[focus.stageKey]) : (STAGE_ACCENT[focus.stageKey] ?? STAGE_ACCENT.shown)}>
       <div style={{ padding: '0 18px' }}>
         <StageBottom stageKey={focus.stageKey} detail={detail} clientId={clientId} range={ranges[focus.stageKey] ?? '30d'} />
         {/* the trend chart and the campaigns live on the Trends tab now (owner 2026-09-04) */}
@@ -573,14 +584,14 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
 }
 
 // ── The swipeable TOP of a stage: number + trend + histogram (no cards). ──
-function StageTop({ stageKey, detail, mv, clientId, onRange, accent }: { stageKey: string; detail: InsightsDetail | null; mv?: MetricView; clientId?: string; onRange?: (r: string) => void; accent?: string }) {
+function StageTop({ stageKey, detail, mv, clientId, onRange, onDir, accent }: { stageKey: string; detail: InsightsDetail | null; mv?: MetricView; clientId?: string; onRange?: (r: string) => void; onDir?: (hex: string) => void; accent?: string }) {
   if (!detail) return <FeedLoading />
   switch (stageKey) {
     case 'shown': {
       const cs = computedStage(detail, 1)
       const feed = cs ? stageFeedFrom(cs) : buildAwarenessFeed(toFeedInput(detail))
       return mv && cs
-        ? <StageWithChart mv={mv} label="Times you showed up" cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" showBreakdown={false} onRange={onRange} accent={accent} />
+        ? <StageWithChart mv={mv} label="Times you showed up" cs={cs} stageNumber={1} clientId={clientId} unit="Times you showed up" showBreakdown={false} onRange={onRange} onDir={onDir} accent={accent} />
         : <StageHero total={feed.headline} label="Times you showed up" caption={feed.caption} />
     }
     case 'engaged': {
@@ -588,14 +599,14 @@ function StageTop({ stageKey, detail, mv, clientId, onRange, accent }: { stageKe
       if (cs?.isEmpty) return <EmptyStageHero label="People who looked closer" note="Connect a social account (or add your menu link) to measure this." />
       const feed = cs ? stageFeedFrom(cs) : buildInterestFeed(toFeedInput(detail))
       return mv && cs
-        ? <StageWithChart mv={mv} label="People who looked closer" cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" showBreakdown={false} onRange={onRange} accent={accent} />
+        ? <StageWithChart mv={mv} label="People who looked closer" cs={cs} stageNumber={2} clientId={clientId} unit="Looked closer" showBreakdown={false} onRange={onRange} onDir={onDir} accent={accent} />
         : <StageHero total={feed.headline} label="People who looked closer" caption={feed.caption} />
     }
     case 'moved': {
       const cs = computedStage(detail, 3)
       const feed = cs ? stageFeedFrom(cs) : buildActionsFeed(toFeedInput(detail))
       return mv && cs
-        ? <StageWithChart mv={mv} label="Moves people made" cs={cs} stageNumber={3} clientId={clientId} unit="Moves people made" showBreakdown={false} onRange={onRange} accent={accent} />
+        ? <StageWithChart mv={mv} label="Moves people made" cs={cs} stageNumber={3} clientId={clientId} unit="Moves people made" showBreakdown={false} onRange={onRange} onDir={onDir} accent={accent} />
         : <StageHero total={feed.headline} label="Moves people made" caption={feed.caption} />
     }
     case 'camein': {
@@ -608,7 +619,7 @@ function StageTop({ stageKey, detail, mv, clientId, onRange, accent }: { stageKe
       const cs = computedStage(detail, 5)
       if (cs && !cs.isEmpty) {
         const registerLive = cs.sources.some((s) => s.id === 'pos_repeat_customers' && s.counted)
-        if (mv && !registerLive) return <StageWithChart mv={mv} label="New reviews" cs={cs} stageNumber={5} clientId={clientId} unit="Reviews" showBreakdown={false} onRange={onRange} accent={accent} />
+        if (mv && !registerLive) return <StageWithChart mv={mv} label="New reviews" cs={cs} stageNumber={5} clientId={clientId} unit="Reviews" showBreakdown={false} onRange={onRange} onDir={onDir} accent={accent} />
         const feed = stageFeedFrom(cs)
         return <StageHero total={feed.headline} label="Guests who came back" caption={feed.caption} />
       }
@@ -1243,14 +1254,16 @@ function useCountUp(target: number): number {
   return v
 }
 
-function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNumber, showBreakdown = true, onRange, accent }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; accent?: string; breakdownTitle?: string; clientId?: string; stageNumber?: number; showBreakdown?: boolean; onRange?: (r: string) => void }) {
+function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNumber, showBreakdown = true, onRange, onDir, accent }: { mv: MetricView; label: string; cs: ComputedStage | undefined; unit: string; accent?: string; /** reports the verdict colour up, so the by-source bars under the graph can match it */ onDir?: (hex: string) => void; breakdownTitle?: string; clientId?: string; stageNumber?: number; showBreakdown?: boolean; onRange?: (r: string) => void }) {
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
   const fresh = isFresh(mv.lastDataDate, summary.periodDays)
   const dn = summary.deltaPct < 0
-  const ac = dn ? TREND_RED : TREND_GREEN
-  const acbg = dn ? TREND_RED_SOFT : TREND_GREEN_SOFT
-  // report the picked range up (the external cards follow it)
+  const stageKey = STAGE_ORDER[Math.max(0, Math.min(4, (stageNumber ?? 1) - 1))]?.key ?? 'shown'
+  const ac = verdictColor(stageKey, summary.deltaPct)
+  const acbg = ac + '22'
+  // report the picked range up (the external cards follow it), and the verdict colour
   useEffect(() => { onRange?.(range) }, [range, onRange])
+  useEffect(() => { onDir?.(ac) }, [ac, onDir])
   // The big number IS the sum of the by-source breakdown (the computeStages
   // headline), scoped to the picked range — so the total ALWAYS equals the cards
   // below it and can never drift. The histogram shows the trend/shape from the
@@ -1291,7 +1304,7 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
       </div>
       {/* histogram — trend/shape only; the ONE number for this card is the
           by-source total above, so the chart's own sum caption stays off */}
-      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} accent={dn ? TREND_RED : summary.deltaPct === 0 ? TREND_AMBER : TREND_GREEN} />
+      <ActionsChart range={range} setRange={setRange} cStart={cStart} setCStart={setCStart} cEnd={cEnd} setCEnd={setCEnd} summary={summary} noun={mv.unit} showTotal={false} accent={ac} />
       {/* inline source cards (legacy single-column layout only — the swipeable
           layout renders them below the dots instead via RangeSources) */}
       {showBreakdown && (rangeStage ?? cs) ? <SourceBreakdown stage={(rangeStage ?? cs)!} unit={unit} title={breakdownTitle} sub={sub} showReconcile={false} showExtras={false} /> : null}
@@ -1346,7 +1359,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
         {TREND_RANGES.map(([k, l]) => {
           const on = range === k
           const cal = k === 'custom'
-          const col = (STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown).main
+          const col = cur.sm && cur.sm.compareTotal > 0 ? verdictColor(cur.st.key, cur.sm.deltaPct) : (STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown).main
           return <button key={k} type="button" aria-label={cal ? 'Custom dates' : l} onClick={() => setRange(k)} style={{ flex: cal ? '0 0 auto' : 1, minWidth: 0, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 99, padding: cal ? '0 12px' : 0, background: on ? col : 'transparent', color: on ? '#fff' : C.mute, fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s, color .15s' }}>{cal ? <CalendarDays size={15} /> : l}</button>
         })}
       </div>
@@ -1399,6 +1412,9 @@ function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaign
   const t0 = series.length ? trendDayMs(series[0].date) : 0, t1 = series.length ? trendDayMs(series[series.length - 1].date) : 1
   const pins = campaigns.map((c) => (c.shippedAt ? trendDayMs(c.shippedAt) : NaN)).filter((ms) => Number.isFinite(ms) && ms >= t0 && ms <= t1)
   const dn = (sm?.deltaPct ?? 0) < 0
+  /* the sparkline and the % wear this stage's verdict: its bright colour up, red down; the dot
+     keeps the stage's identity hue */
+  const rowCol = sm && sm.compareTotal > 0 ? (dn ? TREND_RED : (STAGE_BRIGHT[stageKeyOfAccent(accent)] ?? TREND_GREEN)) : accent.main
   return (
     <button type="button" onClick={onPick} aria-pressed={on} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '9px 8px', margin: '0 -8px', boxSizing: 'content-box', background: on ? accent.soft : 'none', borderRadius: on ? 12 : 0, border: 'none', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s' }}>
       <span style={{ width: 9, height: 9, borderRadius: 99, background: accent.main, flexShrink: 0 }} />
@@ -1409,14 +1425,14 @@ function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaign
       <span style={{ flex: 1, minWidth: 0, height: H }}>
         {roll.length > 1 && !locked && (
           <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="none" style={{ display: 'block' }} aria-hidden>
-            <polyline points={pts.join(' ')} fill="none" stroke={accent.main} strokeWidth={1.8} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
+            <polyline points={pts.join(' ')} fill="none" stroke={rowCol} strokeWidth={1.8} vectorEffect="non-scaling-stroke" strokeLinejoin="round" strokeLinecap="round" />
             {pins.map((ms, i) => { const x = ((ms - t0) / Math.max(1, t1 - t0)) * W; return <line key={i} x1={x} y1={2} x2={x} y2={H - 2} stroke={accent.main} strokeOpacity={0.45} strokeWidth={1} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" /> })}
           </svg>
         )}
       </span>
       <span style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
         <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: locked ? C.faint : C.ink, letterSpacing: '-.01em' }}>{!locked && total != null ? total.toLocaleString() : DASH}</span>
-        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? TREND_RED : TREND_GREEN }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
+        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: rowCol }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
       </span>
     </button>
   )
@@ -1490,6 +1506,9 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const stretch = Math.max(DAY_MS * 2, Math.min(7 * DAY_MS, spanMs / 3))
   const headA = trendMeanIn(dayMs, startMs, startMs + stretch), headB = trendMeanIn(dayMs, endMs - stretch, endMs + 1)
   const trendPct = headA.n >= 2 && headB.n >= 2 && headA.mean > 0 ? Math.round(((headB.mean - headA.mean) / headA.mean) * 100) : null
+  /* the line wears the verdict (owner 2026-09-11): the stage's bright colour up, bright red down,
+     the stage hue only while it is too early to call */
+  const trendCol = trendPct == null || Math.abs(trendPct) < 5 ? A.main : trendPct > 0 ? (STAGE_BRIGHT[stageKeyOfAccent(A)] ?? TREND_GREEN) : TREND_RED
   const roll = days.map((_, i) => { const sl = days.slice(Math.max(0, i - (smooth - 1)), i + 1); return sl.reduce((t, x) => t + x.v, 0) / sl.length })
   const byT = new Map(dayMs.map((x) => [x.t, x.v]))
   const priorOffset = Math.round(spanMs / DAY_MS + 1) * DAY_MS
@@ -1600,7 +1619,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           <span style={{ fontSize: 13.5, color: C.mute }}>Not enough days to call a direction yet.</span>
         ) : (
           <>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? TREND_GREEN : TREND_RED }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendCol }}>
               {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
               {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
             </span>
@@ -1628,8 +1647,8 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         onPointerLeave={() => setPick(null)}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={A.main} stopOpacity="0.22" />
-            <stop offset="100%" stopColor={A.main} stopOpacity="0.01" />
+            <stop offset="0%" stopColor={trendCol} stopOpacity="0.22" />
+            <stop offset="100%" stopColor={trendCol} stopOpacity="0.01" />
           </linearGradient>
         </defs>
         {/* axis: three numbers, hairlines */}
@@ -1643,7 +1662,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         {priorHas && <path d={priorLine} fill="none" stroke={C.mute} strokeOpacity={0.55} strokeWidth={1.3} strokeDasharray="3 3" strokeLinejoin="round" />}
         {/* the trend: a 7-day rolling average */}
         <path d={area} fill={`url(#${gid})`} />
-        <path d={line} fill="none" stroke={A.main} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
+        <path d={line} fill="none" stroke={trendCol} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
         {/* Reviews, on the same axis and just under the plot: one tick each,
             red for one and two stars, amber for three, grey above. Below the
             line so they never compete with it, and never on top of the
@@ -1658,7 +1677,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           />
         ))}
         {/* the latest average, at the line's end */}
-        <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r={3.5} fill={A.main} stroke="#fff" strokeWidth={1.5} />
+        <circle cx={pts[n - 1].x} cy={pts[n - 1].y} r={3.5} fill={trendCol} stroke="#fff" strokeWidth={1.5} />
         {clusters.map((c) => {
           const multi = c.last !== c.first
           const tag = multi ? `${c.first}–${c.last}` : String(c.first)
@@ -1666,8 +1685,8 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           const lit = litPin != null && litPin >= c.first && litPin <= c.last
           return (
             <g key={c.ms0}>
-              <line x1={c.cx} y1={yTop} x2={c.cx} y2={yBot} stroke={lit ? A.dark : A.main} strokeWidth={lit ? 1.6 : 1} strokeOpacity={lit ? 0.9 : 0.55} strokeDasharray="3 3" />
-              <circle cx={c.cx} cy={yBot} r={r} fill={lit ? A.dark : '#fff'} stroke={lit ? A.dark : A.main} strokeWidth={1.8} />
+              <line x1={c.cx} y1={yTop} x2={c.cx} y2={yBot} stroke={lit ? trendCol : trendCol} strokeWidth={lit ? 1.6 : 1} strokeOpacity={lit ? 0.9 : 0.55} strokeDasharray="3 3" />
+              <circle cx={c.cx} cy={yBot} r={r} fill={lit ? trendCol : '#fff'} stroke={lit ? trendCol : trendCol} strokeWidth={1.8} />
               <text x={c.cx} y={yBot} textAnchor="middle" dominantBaseline="central" fontSize={multi ? 8.5 : 10} fontWeight={700} fill={lit ? '#fff' : A.dark}>{tag}</text>
             </g>
           )
@@ -1676,7 +1695,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         {pick != null && (
           <g>
             <line x1={xOf(pick)} y1={yTop} x2={xOf(pick)} y2={yBot} stroke={C.ink} strokeOpacity={0.35} strokeWidth={1} />
-            <circle cx={xOf(pick)} cy={yAt(roll[pick])} r={4} fill="#fff" stroke={A.dark} strokeWidth={2} />
+            <circle cx={xOf(pick)} cy={yAt(roll[pick])} r={4} fill="#fff" stroke={trendCol} strokeWidth={2} />
           </g>
         )}
       </svg>
@@ -2832,7 +2851,7 @@ function TopicBreakdown({ topics }: { topics: ReviewTopic[] }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: C.ink, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.name}</span>
               {t.direction !== 'flat' && (
-                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: t.direction === 'up' ? C.greenDk : C.coral, background: t.direction === 'up' ? C.greenSoft : C.coralBg, borderRadius: 99, padding: '2px 7px' }}>
+                <span style={{ flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 700, color: t.direction === 'up' ? TREND_GREEN : TREND_RED, background: t.direction === 'up' ? C.greenSoft : C.coralBg, borderRadius: 99, padding: '2px 7px' }}>
                   {t.direction === 'up' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}{t.direction === 'up' ? 'Improving' : 'Slipping'}
                 </span>
               )}
@@ -2948,7 +2967,7 @@ function RecentVsLifetime({ summary, shownAvg }: { summary: ReviewSummary | null
   const gap = Math.round((lately - shownAvg) * 10) / 10
   if (Math.abs(gap) < 0.3) return null
   const better = gap > 0
-  const col = better ? C.greenDk : C.coral
+  const col = better ? TREND_GREEN : TREND_RED
   const behind = summary?.placeRatingCount ?? null
   return (
     <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -3151,7 +3170,7 @@ function MonthlyRating({ months }: { months: { ym: string; count: number; avg: n
           <span style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 500, color: C.ink }}>{last.toFixed(1)}&#9733;</span>
         </span>
         {Math.abs(move) >= 0.2 && (
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: move > 0 ? C.greenDk : C.coral }}>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: move > 0 ? TREND_GREEN : TREND_RED }}>
             {move > 0 ? '▲' : '▼'}{Math.abs(move).toFixed(1)} since {monLabel(withData[0].ym + '-01')}
           </span>
         )}
