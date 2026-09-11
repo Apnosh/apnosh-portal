@@ -693,6 +693,9 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
         {summary.total > 0 && (
           <div style={{ fontSize: 12, color: C.mute, marginTop: 5 }}>{deltaSub(summary)}{!fresh && mv.lastDataDate ? ` · last update ${relDate(mv.lastDataDate)}` : ''}</div>
         )}
+        {summary.total > 0 && spikeNote(summary, mv.unit) && (
+          <div style={{ fontSize: 12.5, color: C.ink, marginTop: 6, padding: '8px 11px', borderRadius: 12, background: C.greenSoft, lineHeight: 1.45 }}>{spikeNote(summary, mv.unit)}</div>
+        )}
         <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
         {fresh && summary.yoyPct != null && (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: summary.yoyPct > 0 ? C.green : summary.yoyPct < 0 ? C.coral : C.mute }}>
@@ -754,6 +757,11 @@ export interface RangeSummary {
   /* portfolio-style change (2026-09-04): the count that moved, and the two windows it compares,
      as dates — settled days only, so both sides hold the same number of days */
   deltaAbs: number; curDates: string; cmpDates: string
+  /** ONE BAR CARRIED IT (owner 2026-09-11: "how can the previous period have a lot more views,
+   *  but it says I'm up 118%?"). A total can be up while most days are down when one day was a
+   *  spike. When a single bar is 40% or more of the total, this names it and says what the
+   *  window did without it, so "up 118%" and "most days were lower" stop contradicting. */
+  spike: { side: 'cur' | 'cmp'; tip: string; value: number; share: number; restPct: number | null; restNew: boolean } | null
   avg: number; max: number; periodDays: number
   // Year-over-year for the SELECTED window (this period vs the same period last
   // year). null when the range can't support it (annual view — the pill already
@@ -861,12 +869,18 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   // period is shown but never tilts the up/down, and future days don't drag the
   // average. max spans all bars so the axis is stable.
   const elapsed = bars.filter((b) => b.elapsed)
-  const settled = bars.filter((b) => b.settled)
   const total = elapsed.reduce((s, b) => s + b.value, 0)
   const compareTotal = bars.reduce((s, b) => s + b.compare, 0)
-  const curTrend = settled.reduce((s, b) => s + b.value, 0)
-  const cmpTrend = settled.reduce((s, b) => s + b.compare, 0)
-  const deltaPct = settled.length === 0 ? 0 : (cmpTrend === 0 ? (curTrend > 0 ? 100 : 0) : Math.round(((curTrend - cmpTrend) / cmpTrend) * 100))
+  /* THE % IS THE WHOLE WINDOW AGAINST THE WHOLE WINDOW BEFORE (owner 2026-09-11: "how can the
+     previous period have a lot more views, but it says I'm up 118%?"). It used to count only
+     SETTLED days on both sides, and dropping the still-filling today also dropped today's
+     counterpart in the prior window, which was the biggest day that window had (249,526 on
+     Aug 12). The grey bar drew it; the % pretended it never happened. Now today-so-far counts
+     against its counterpart in full. Today under-counts by a few hours, which the "filling in"
+     bar already says; losing a whole day silently said something false. */
+  const curTrend = total
+  const cmpTrend = compareTotal
+  const deltaPct = elapsed.length === 0 ? 0 : (cmpTrend === 0 ? (curTrend > 0 ? 100 : 0) : Math.round(((curTrend - cmpTrend) / cmpTrend) * 100))
   const deltaAbs = curTrend - cmpTrend
   const fmtD = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   /* THE DATES NAME THE WHOLE WINDOW, not the settled part of it (owner 2026-09-11: "why does
@@ -884,6 +898,23 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     return x === y ? x : `${x} – ${y}`
   }
   const curDates = span('cur'), cmpDates = span('cmp')
+  /* One day carried a window, on either side. The paired day comes out of BOTH sides for the
+     "without it" figure, so the comparison stays day-for-day. */
+  let spike: RangeSummary['spike'] = null
+  if (elapsed.length >= 7) {
+    const topCur = elapsed.reduce((m, b) => (b.value > m.value ? b : m), elapsed[0])
+    const topCmp = bars.reduce((m, b) => (b.compare > m.compare ? b : m), bars[0])
+    const curShare = total > 0 ? topCur.value / total : 0
+    const cmpShare = compareTotal > 0 ? topCmp.compare / compareTotal : 0
+    const side: 'cur' | 'cmp' | null = curShare >= 0.4 && curShare >= cmpShare ? 'cur' : cmpShare >= 0.4 ? 'cmp' : null
+    if (side) {
+      const top = side === 'cur' ? topCur : topCmp
+      const restCur = total - top.value
+      const restCmp = compareTotal - top.compare
+      const strip = (x: string) => x.replace(/^[A-Z][a-z]{2}, /, '')
+      spike = { side, tip: strip(side === 'cur' ? top.tip : top.cmpDate), value: side === 'cur' ? top.value : top.compare, share: side === 'cur' ? curShare : cmpShare, restPct: restCmp > 0 ? Math.round(((restCur - restCmp) / restCmp) * 100) : null, restNew: restCmp === 0 && restCur > 0 }
+    }
+  }
   const avg = elapsed.length ? Math.round(total / elapsed.length) : 0
   const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
 
@@ -899,7 +930,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     yoyPct = Math.round(((total - agoTotal) / agoTotal) * 100)
     yoyLabel = 'vs last year'
   }
-  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, deltaAbs, curDates, cmpDates, avg, max, periodDays, yoyPct, yoyLabel }
+  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, deltaAbs, curDates, cmpDates, avg, max, periodDays, yoyPct, yoyLabel, spike }
 }
 
 /* ── ONE range for the whole session ──────────────────────────────────────────
@@ -1082,7 +1113,9 @@ export function ActionsChart({
               <b style={{ color: C.ink, fontWeight: 700 }}>{b.tip}</b>
               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}><b style={{ color: C.ink, fontWeight: 700 }}>{b.value.toLocaleString()}</b> {noun}</span>
               {dpct != null && <span style={{ fontWeight: 700, color: delta > 0 ? C.greenDk : delta < 0 ? '#c0564f' : C.mute, flexShrink: 0 }}>{delta > 0 ? '▲' : delta < 0 ? '▼' : ''}{Math.abs(dpct)}%</span>}
-              <span style={{ color: C.faint, flexShrink: 0 }}>vs {b.compare.toLocaleString()} {b.cmpLabel.replace('13 weeks earlier', 'earlier').replace('30 days earlier', 'earlier').replace('90 days earlier', 'earlier')}</span>
+              {/* THE DAY IT IS MEASURED AGAINST, by name (owner 2026-09-11). "vs 1,204 earlier"
+                  left the owner guessing which day; the bar has always known. */}
+              <span style={{ color: C.faint, flexShrink: 0 }}>vs {b.compare.toLocaleString()} {b.cmpDate.includes('–') ? '' : 'on '}{b.cmpDate.replace(/^[A-Z][a-z]{2}, /, '')}</span>
             </div>
           )
         })() : (
@@ -1113,6 +1146,19 @@ export function deltaLabel(summary: RangeSummary): string {
   const n = Math.abs(Math.round(deltaAbs)).toLocaleString()
   if (compareTotal === 0) return `${n} (new)`
   return `${n} (${Math.abs(deltaPct).toLocaleString()}%)`
+}
+/** The one-day-carried-it sentence, or null. Plain words: the day, its share, and what the
+ *  other days did against the period before. */
+export function spikeNote(summary: RangeSummary, noun: string): string | null {
+  const sp = summary.spike
+  if (!sp) return null
+  const head = sp.side === 'cur'
+    ? `${sp.tip} alone was ${sp.value.toLocaleString()} of these ${noun}.`
+    : `${sp.tip} alone was ${sp.value.toLocaleString()} of the period before.`
+  if (sp.restNew) return `${head} The other days are new; nothing to compare.`
+  if (sp.restPct == null) return head
+  const rest = sp.restPct > 0 ? `up ${sp.restPct}%` : sp.restPct < 0 ? `down ${Math.abs(sp.restPct)}%` : 'even'
+  return `${head} Without that day, you are ${rest}.`
 }
 /** The line under the number: the two windows being compared, by date. */
 export function deltaSub(summary: RangeSummary): string {

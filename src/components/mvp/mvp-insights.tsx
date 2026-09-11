@@ -42,7 +42,7 @@ import { useClient } from '@/lib/client-context'
 import { isShelfShape, type ShelfShape } from '@/lib/clients/shape'
 import { stageLabelFor, stageExplainFor } from '@/lib/clients/shape-words'
 import { isProTier } from '@/lib/entitlements'
-import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, deltaSub, bucketsFor, type MetricView, type ChartRange } from './mvp-home'
+import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, deltaSub, spikeNote, bucketsFor, type MetricView, type ChartRange } from './mvp-home'
 import { TopSegmented } from './top-row'
 import ProofDeck from './proof-deck'
 import { bandFor, BAND_WORD, BAND_INK, type HealthBand } from './home-funnel'
@@ -1322,6 +1322,9 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
           <div style={{ fontSize: 12, color: C.mute, marginTop: 5, lineHeight: 1.4 }}>
             {deltaSub(summary)}{!fresh && mv.lastDataDate ? ` · last update ${relDate(mv.lastDataDate)}` : ''}
           </div>
+        )}
+        {summary.total > 0 && spikeNote(summary, mv.unit) && (
+          <div style={{ fontSize: 12.5, color: C.ink, marginTop: 8, padding: '9px 12px', borderRadius: 12, background: C.greenSoft, lineHeight: 1.45 }}>{spikeNote(summary, mv.unit)}</div>
         )}
         {/* year-over-year: same window a year ago. Shows only when we can honestly
             make the claim (fresh data + a real prior-year number). */}

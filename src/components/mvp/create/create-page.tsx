@@ -28,8 +28,6 @@ import { CHIP_ORDER, liveForChip, shelfForChip } from '@/lib/campaigns/data/chip
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
 import { hrefFor, firstName, type OrderPerson } from '../people-row'
-import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
-import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
 import { DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
 import { useLang } from '../mvp-language'
 
@@ -246,16 +244,13 @@ const CREATE_CSS = `
 .cr .qt .ic svg{width:23px;height:23px;stroke-width:2}
 .cr .qt span:last-child{font-size:10.5px;font-weight:600;text-align:center;line-height:1.2;color:#1d1d1f}
 .cr .browse{margin:22px 16px 0}
-.cr .fchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
-.cr .fchips .fch{background:#f5f5f7;height:32px;padding:0 10px 0 12px;font-size:12.5px}
-.cr .fchips .fch.on{background:#1d1d1f;color:#fff}
-.cr .fchips .fch svg{width:12px;height:12px;color:#6e6e73}
-.cr .fchips .fch.on svg{color:rgba(255,255,255,.7)}
 .cr .stages{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
-.cr .stg{--c1:#4abd98;--c2:#2e9a78;--t1:#4abd9829;--sh:#2e9a7866;flex:none;font-size:12.5px;font-weight:700;padding:8px 12px;border-radius:99px;border:0;color:var(--c2);white-space:nowrap;background:var(--t1);display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:inherit;transition:transform .15s}
-.cr .stg i{width:8px;height:8px;border-radius:99px;background:var(--c2);display:inline-block}
-.cr .stg.on{background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;box-shadow:0 6px 14px var(--sh)}
-.cr .stg.on i{background:rgba(255,255,255,.85)}
+/* stage tabs: a coloured OUTLINE, not a tinted fill, so they read as a different kind of thing
+   from the quick-request tiles above them (owner 2026-09-11). Picked = the outline filled in. */
+.cr .stg{--c1:#4abd98;--c2:#2e9a78;--sh:#2e9a7866;flex:none;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:99px;border:1.5px solid var(--c2);color:var(--c2);white-space:nowrap;background:#fff;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:inherit;transition:transform .15s,background .15s}
+.cr .stg i{width:7px;height:7px;border-radius:99px;background:var(--c2);display:inline-block}
+.cr .stg.on{background:var(--c2);color:#fff;box-shadow:0 6px 14px var(--sh)}
+.cr .stg.on i{background:rgba(255,255,255,.9)}
 .cr .srch{margin-top:10px;width:100%;display:flex;align-items:center;gap:8px;height:42px;padding:0 14px;border-radius:999px;background:#f5f5f7;border:0;color:#6e6e73;font-size:14.5px;cursor:text;font-family:inherit;text-align:left}
 .cr .srch svg{color:#2e9a78;flex:none}
 /* the one door at the bottom */
@@ -282,7 +277,6 @@ interface Describe { ok: boolean; reason?: string; situation: string | null; sum
 /** The four facts about THIS client the shelf is drawn from (/api/campaigns/shelf-context). */
 interface ShelfCtx { goals: string[]; monthlyBudget: number | null; shape: ShelfShape; hasGoogle: boolean }
 
-const money = (n: number) => `$${n.toLocaleString()}`
 /* The describe box reads a situation and lands on a shelf goal; the shelf is keyed by the
  * owner's chip now, so this is the one bridge between the two vocabularies. */
 const CHIP_FOR_GOAL: Record<ShelfGoal, string> = {
@@ -302,7 +296,7 @@ const CHIP_FOR_GOAL: Record<ShelfGoal, string> = {
 export default function CreatePage() {
   const router = useRouter()
   const params = useSearchParams()
-  const { client, availableClients, switchClient } = useClient()
+  const { client } = useClient()
   const { T } = useLang()
   /* The price as the owner reads it. Every real price is a number and travels as it is; the ONE
      card price that is a WORD is 'Quote', and it was the last English left on a Spanish shelf. */
@@ -329,12 +323,10 @@ export default function CreatePage() {
   const [ctx, setCtx] = useState<ShelfCtx | null>(null)
   /** The chip whose shelf is showing. Null until the client's own goals arrive. */
   const [chip, setChip] = useState<string | null>(null)
-  const [budgetSheet, setBudgetSheet] = useState(false)
   /* the Canva-shaped browse (owner 2026-09-11): which stage the rails are filtered to (null =
-     For you, everything), how they sort, and the location sheet for owners with several */
+     For you, everything). The location, budget and sort chips were tried and cut the same day:
+     the stage is the one filter an owner reaches for. */
   const [stage, setStage] = useState<ShelfStage | null>(null)
-  const [sort, setSort] = useState<'rec' | 'cheap' | 'fast'>('rec')
-  const [locSheet, setLocSheet] = useState(false)
   /** The people who are on this client's live orders, for the bottom door. Empty is a fine
    *  answer: the door then says Get help, which is a real place, and never invents a name. */
   const [people, setPeople] = useState<OrderPerson[]>([])
@@ -363,25 +355,9 @@ export default function CreatePage() {
    * chip ("More foot traffic overall"), because it is the one whose shelf is true for anyone. */
   const shape: ShelfShape = ctx?.shape ?? DEFAULT_SHAPE
   const activeChip = chip ?? ctx?.goals[0] ?? CHIP_ORDER[1]
-  const cap = ctx?.monthlyBudget ?? null
   /** What this card asks for on the first payment (the one-time amount, or the first month). */
   const liveIds = useMemo(() => liveForChip(activeChip, shape), [activeChip, shape])
 
-  const setBudget = async (chipLabel: string | null) => {
-    const value = chipLabel ? budgetCapForChip(chipLabel) : null
-    const before = ctx?.monthlyBudget ?? null
-    setCtx((c) => (c ? { ...c, monthlyBudget: value } : c))
-    setBudgetSheet(false)
-    if (!clientId) return
-    try {
-      const r = await fetch(`/api/campaigns/shelf-context?clientId=${clientId}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ monthlyBudget: value }),
-      })
-      // The route now 404s when the update matched no row. Put the old number back rather than
-      // leaving a shelf drawn at a cap that was never saved and reverts on the next load.
-      if (!r.ok) setCtx((c) => (c ? { ...c, monthlyBudget: before } : c))
-    } catch { setCtx((c) => (c ? { ...c, monthlyBudget: before } : c)) }
-  }
 
   /* why-now lines from the account's own numbers */
   const whyNow = useCallback((c: ShelfCard): string | null => {
@@ -549,29 +525,14 @@ export default function CreatePage() {
     const c = cards[x.to.card]; if (c) open(c)
   }
 
-  /* ── the browse block: three filters, the five stages, then search ──
-     Location defaults to this store and only opens when the owner has more than one. Budget is
-     the same cap onboarding saved (the sheet below). Sort cycles. The stage is the filter every
-     rail reads, with the stage's own Insights colour as its dot. */
+  /* ── the browse block: the five stages, then search ──
+     The stage is the filter every rail reads, with the stage's own Insights colour as its dot.
+     Buyable cards first in every rail, then the coming-soon ones. */
   const STAGES: ShelfStage[] = ['Awareness', 'Interest', 'Actions', 'Orders', 'Retention']
-  const SORT_LABEL: Record<typeof sort, string> = { rec: T('Recommended'), cheap: T('Cheapest first'), fast: T('Fastest first') }
-  const daysOf = (r: string) => { const m = /(\d+)\s*(day|week)/i.exec(r); return m ? Number(m[1]) * (m[2].toLowerCase() === 'week' ? 7 : 1) : 99 }
-  /* Buyable first, then the coming-soon cards, each half in the chosen order. A card with no
-     number ('Quote') sorts last on price rather than first as a zero. */
-  const sorted = (list: ShelfCard[]) => {
-    const live = list.filter(isBuyable), soon = list.filter((c) => !isBuyable(c))
-    const by = sort === 'cheap' ? (a: ShelfCard, b: ShelfCard) => (a.priceN || 1e9) - (b.priceN || 1e9) : sort === 'fast' ? (a: ShelfCard, b: ShelfCard) => daysOf(a.ready) - daysOf(b.ready) : null
-    return by ? [...live.sort(by), ...soon.sort(by)] : [...live, ...soon]
-  }
-  const fits = (c: ShelfCard) => (stage == null || c.stage === stage) && (cap == null || c.priceN <= cap)
-  const multiLoc = availableClients.length > 1
+  const sorted = (list: ShelfCard[]) => [...list.filter(isBuyable), ...list.filter((c) => !isBuyable(c))]
+  const fits = (c: ShelfCard) => stage == null || c.stage === stage
   const browseBlock = (
     <div className="browse">
-      <div className="fchips cc-scroll">
-        <button type="button" className="fch" onClick={() => { if (multiLoc) setLocSheet(true) }} style={multiLoc ? undefined : { cursor: 'default' }}><MapPin /> {client?.name?.trim() || T('This location')}{multiLoc && <ChevronDown />}</button>
-        <button type="button" className={`fch${cap != null ? ' on' : ''}`} onClick={() => setBudgetSheet(true)}>{cap == null ? T('Any budget') : T('Up to {amount}', { amount: money(cap) })}<ChevronDown /></button>
-        <button type="button" className={`fch${sort !== 'rec' ? ' on' : ''}`} onClick={() => setSort((s) => (s === 'rec' ? 'cheap' : s === 'cheap' ? 'fast' : 'rec'))}>{SORT_LABEL[sort]}<ChevronDown /></button>
-      </div>
       <div className="stages cc-scroll">
         <button type="button" className={`stg${stage == null ? ' on' : ''}`} onClick={() => setStage(null)}>{T('For you')}</button>
         {STAGES.map((s) => <button key={s} type="button" className={`stg${stage === s ? ' on' : ''}`} onClick={() => setStage(s)} style={hv(STAGE_HUE[s])}><i />{T(s)}</button>)}
@@ -621,7 +582,7 @@ export default function CreatePage() {
         <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
         <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
         {browseBlock}
-        {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Raise the budget or pick another stage.')}</div>}
+        {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Pick another stage.')}</div>}
         {rail({ t: T('Recommended for you'), list: rec, hue: stage ? STAGE_HUE[stage] : 'mint' })}
         {rail({ t: T('Creatives'), list: creatives, hue: 'brand', kind: 'quick' })}
         {rail({ t: T('Campaigns'), list: campaigns, hue: 'event', kind: 'campaign' })}
@@ -766,51 +727,7 @@ export default function CreatePage() {
     )
   }
 
-  /* ── the budget sheet ──
-   * The same six answers onboarding asks, in the same words, so setting it here and setting it
-   * there are one thing. Saved straight to businesses.monthly_budget. */
-  const budgetSheetUI = budgetSheet ? (
-    <>
-      <div onClick={() => setBudgetSheet(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.28)', zIndex: 40 }} />
-      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
-        {/* Six answers plus their sub-lines run past the bottom of a short phone, so the sheet
-            caps at 80% of the window and scrolls inside itself, keeping the last chip reachable
-            above the home bar. */}
-        <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))', maxHeight: '80vh', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line, margin: '0 auto 12px' }} />
-          <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink }}>{T('What feels right to start?')}</div>
-          <div style={{ fontSize: 12.5, color: C.mute, margin: '2px 0 8px' }}>{T('You can change it any time. Nothing is charged now.')}</div>
-          {BUDGET_CHIPS.map((b) => { const on = cap != null && budgetCapForChip(b) === cap
-            const noCap = NO_CAP_BUDGET_CHIPS.includes(b)
-            return (
-              <button key={b} type="button" onClick={() => setBudget(noCap ? null : b)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}>
-                <span style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? C.mintDk : C.line}`, background: on ? C.mintDk : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{on && <Check size={12} strokeWidth={3} />}</span>
-                <span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{T(b)}
-                  {/* Both of these set no cap, so the row says what happens instead of leaving
-                      the owner to guess at a ceiling we would have invented. */}
-                  {noCap && <span style={{ display: 'block', fontSize: 12, fontWeight: 500, color: C.mute, marginTop: 1 }}>{T('No cap set. Everything shows.')}</span>}
-                </span>
-              </button>
-            ) })}
-        </div>
-      </div>
-    </>
-  ) : null
 
-  /* ── the location sheet: only reachable when the owner has more than one ── */
-  const locSheetUI = locSheet ? (
-    <>
-      <div onClick={() => setLocSheet(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.28)', zIndex: 40 }} />
-      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
-          <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line, margin: '0 auto 12px' }} />
-          <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 8 }}>{T('Which location?')}</div>
-          {availableClients.map((l) => { const on = l.id === clientId
-            return <button key={l.id} type="button" onClick={() => { setLocSheet(false); if (!on) switchClient(l.id) }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}><span style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? C.mintDk : C.line}`, background: on ? C.mintDk : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{on && <Check size={12} strokeWidth={3} />}</span><span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{l.name}</span></button> })}
-        </div>
-      </div>
-    </>
-  ) : null
 
   /* ── the filter sheet ── */
   const filterSheetUI = sheet ? (
@@ -843,8 +760,6 @@ export default function CreatePage() {
         {view.name === 'product' && product(view.id)}
       </div>
       {filterSheetUI}
-      {budgetSheetUI}
-      {locSheetUI}
       {view.name !== 'browse' && view.name !== 'product' && (
         <button type="button" onClick={back} aria-label={T('Back')} style={{ display: 'none' }}><ChevronLeft /></button>
       )}
