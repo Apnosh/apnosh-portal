@@ -9,14 +9,13 @@
  */
 
 import { useState, useEffect } from 'react'
-import { Segmented, CARD_SHADOW } from './kit'
+import { CARD_SHADOW } from './kit'
 import { outcomeLine, type CampaignOutcome } from '@/lib/campaigns/outcome-view'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import MvpCalendar from './mvp-calendar'
 import { useClient } from '@/lib/client-context'
-import {
-  ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Loader2, Minus, Plus, TrendingDown, TrendingUp, ShoppingBag } from 'lucide-react'
+import { ArrowRight, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, Loader2, Minus, Plus, TrendingDown, TrendingUp, LayoutList } from 'lucide-react'
 import { campaignCardVM, type CampCard, type SavedCampaign, type CampaignProgress } from '@/lib/campaigns/view'
 import { upcomingOccasions } from '@/lib/design/occasions'
 import { RATE_CARD } from '@/lib/design/rate-card'
@@ -91,7 +90,7 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
   const [outcomes, setOutcomes] = useState<Record<string, CampaignOutcome>>({})
   const [error, setError] = useState<string | null>(null)
   const [viewState, setView] = useState<'list' | 'calendar'>('list')
-  const view = viewProp ?? viewState // the top row owns List/Calendar now (2026-09-04); the inline control is the fallback
+  const view = viewProp ?? viewState // the calendar row on the page owns this now (2026-09-11)
   const [tab, setTab] = useState<Tab>('all')
   /* THE LEDGER (order_promises): the promise each order made on Create, carried onto its card;
      plus desk orders (photos, posts, video, print, a website), which have no campaign row and
@@ -189,26 +188,17 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
   return (
     <div style={{ fontFamily: "'Inter',system-ui,sans-serif", color: C.ink, background: '#fff', minHeight: '100%', overflowY: 'auto', paddingBottom: 28 }}>
       <style>{ANIM}</style>
-      <div style={{ background: '#fff', padding: '14px 18px 4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: 15, color: C.ink, fontWeight: 600 }}>Campaigns</div>
-      </div>
 
       <div style={{ padding: '16px 18px 0' }}>
-        {!empty && viewProp == null && (
-          <div style={{ display: 'inline-flex', borderRadius: 999, padding: 3, marginBottom: 18, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.08)' }}>
-            {([['list', 'List'], ['calendar', 'Calendar']] as const).map(([k, l]) => {
-              const on = view === k
-              return <button key={k} onClick={() => setView(k)} style={{ border: 'none', borderRadius: 999, padding: '7px 18px', fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.ink : C.mute, background: on ? '#fff' : 'transparent', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none', cursor: 'pointer', transition: 'all .15s' }}>{l}</button>
-            })}
-          </div>
+        {/* The calendar is a row (owner 2026-09-11), where Orders used to be: tap it for the month
+            view, tap again for the list. Orders keep their door on the More hub. */}
+        {!empty && (
+          <button type="button" onClick={() => setView(view === 'calendar' ? 'list' : 'calendar')} className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, marginBottom: 10, borderRadius: 12, width: '100%', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
+            <Mark hue="mint" size={36} bare>{view === 'calendar' ? <LayoutList size={18} /> : <CalendarDays size={18} />}</Mark>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink }}>{view === 'calendar' ? 'Campaigns' : 'Calendar'}</span>
+            <ChevronRight size={17} color={C.faint} />
+          </button>
         )}
-
-        {/* Orders moved in here from its own tab (owner 2026-09-04): one row through to receipts */}
-        <Link href="/dashboard/orders" className="mvp-row" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 2px', minHeight: 46, marginBottom: 10, borderRadius: 12, textDecoration: 'none', color: 'inherit' }}>
-          <Mark hue="mint" size={36} bare><ShoppingBag size={18} /></Mark>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: C.ink }}>Orders</span>
-          <ChevronRight size={17} color={C.faint} />
-        </Link>
 
         {/* the builder card and the occasion rail are gone (owner 2026-09-04): the + tab is the door in */}
         {/* GD-3: the occasion calendar brings graphic demand to the owner. The
@@ -227,8 +217,18 @@ export default function MvpCampaigns({ view: viewProp }: { view?: 'list' | 'cale
           <MvpCalendar clientId={client?.id} campaigns={saved ?? []} />
         ) : (
           <>
-            <div style={{ marginBottom: 16 }}>
-              <Segmented items={[['all', 'All'], ['live', 'Live'], ['production', 'In progress'], ['done', 'History']]} value={tab} onChange={setTab} counts={counts} />
+            {/* the same tabs Create's stages wear (owner 2026-09-11): a coloured outline each, the
+                picked one filled */}
+            <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none', marginBottom: 16, padding: '2px 0' }}>
+              {([['all', 'All', '#2e9a78'], ['live', 'Live', '#17ad6b'], ['production', 'In progress', '#3b6fd4'], ['done', 'History', '#6a39de']] as const).map(([k, l, col]) => {
+                const on = tab === k
+                const n = k === 'all' ? undefined : counts[k]
+                return (
+                  <button key={k} type="button" onClick={() => setTab(k)} style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 99, border: `1.5px solid ${col}`, background: on ? col : '#fff', color: on ? '#fff' : col, fontSize: 12.5, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'pointer', fontFamily: 'inherit', boxShadow: on ? `0 6px 14px ${col}55` : 'none', transition: 'background .15s, color .15s' }}>
+                    <span style={{ width: 7, height: 7, borderRadius: 99, background: on ? 'rgba(255,255,255,.9)' : col }} />{l}{n ? <span style={{ opacity: .85 }}>{n}</span> : null}
+                  </button>
+                )
+              })}
             </div>
             {shown.length === 0 ? (
               <div style={{ background: '#fff', border: `0.5px dashed ${C.line}`, borderRadius: 16, padding: '26px 16px', textAlign: 'center', color: C.faint, fontSize: 13.5 }}>Nothing in this filter.</div>

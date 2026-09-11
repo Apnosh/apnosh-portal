@@ -8,7 +8,7 @@
 
 import React from 'react'
 import Link from 'next/link'
-import { Home as HomeIcon, CalendarDays, PlusCircle, MessageCircle, Menu } from 'lucide-react'
+import { Home as HomeIcon, CalendarDays, Plus, MessageCircle, Menu } from 'lucide-react'
 
 /* The nav's green is the Insights graph's bright green, not the kit's deep mint (owner 2026-09-11:
    the mint "felt off" on the pale seat). The seat is a light wash of the same hue. */
@@ -49,16 +49,16 @@ export default function BottomNav({ active }: { active: NavKey }) {
       <Item href="/dashboard" label="Home" on={active === 'home'}><HomeIcon /></Item>
       <Item href="/dashboard/campaigns" label="Campaigns" on={active === 'campaigns'}><CalendarDays /></Item>
       {/* Create is a tab like the others now (owner 2026-09-11), not a floating disc */}
-      <Item href="/dashboard/campaigns/new" label="Create" on={active === 'create'}><PlusCircle /></Item>
+      <Item href="/dashboard/campaigns/new" label="Create" on={active === 'create'} big><Plus /></Item>
       <Item href="/dashboard/messages" label="Inbox" on={active === 'messages' || active === 'inbox'}><MessageCircle /></Item>
       <Item href="/dashboard/more" label="More" on={active === 'more'}><Menu /></Item>
     </nav>
   )
 }
 
-function Item({ href, label, on, children }: { href: string; label: string; on?: boolean; children: React.ReactElement<{ size?: number; strokeWidth?: number; fill?: string; fillOpacity?: number }> }) {
+function Item({ href, label, on, big, children }: { href: string; label: string; on?: boolean; /** the Create plus: a big bare plus, no circle (owner 2026-09-11) */ big?: boolean; children: React.ReactElement<{ size?: number; strokeWidth?: number; fill?: string; fillOpacity?: number }> }) {
   /* the glyph itself carries the state: thicker stroke and a tinted fill when on */
-  const icon = React.cloneElement(children, { size: 28, strokeWidth: on ? 2.4 : 2, fill: on ? 'currentColor' : 'none', fillOpacity: on ? 0.22 : 0 })
+  const icon = React.cloneElement(children, big ? { size: 34, strokeWidth: on ? 3 : 2.6 } : { size: 28, strokeWidth: on ? 2.4 : 2, fill: on ? 'currentColor' : 'none', fillOpacity: on ? 0.22 : 0 })
   return (
     <Link href={href} aria-label={label} title={label} aria-current={on ? 'page' : undefined}
       /* THE SEAT IS THE WHOLE SLOT (owner 2026-09-11: "cover a lot more"): each tab owns a fifth of

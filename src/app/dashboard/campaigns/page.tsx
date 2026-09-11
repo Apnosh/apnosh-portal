@@ -1,6 +1,4 @@
 'use client'
-import { useState } from 'react'
-import { TopSegmented } from '@/components/mvp/top-row'
 
 /**
  * /dashboard/campaigns — the Campaigns board, full-screen owner experience.
@@ -12,10 +10,10 @@ import MvpCampaigns from '@/components/mvp/mvp-campaigns'
 import MvpShell from '@/components/mvp/mvp-shell'
 
 export default function CampaignsPage() {
-  const [view, setView] = useState<'list' | 'calendar'>('list')
+  /* the top row says Campaigns (owner 2026-09-11); the calendar is a row on the page, not a tab up here */
   return (
-    <MvpShell active="campaigns" middle={<TopSegmented options={[['list', 'List'], ['calendar', 'Calendar']]} value={view} onChange={setView} />}>
-      <MvpCampaigns view={view} />
+    <MvpShell active="campaigns" title="Campaigns">
+      <MvpCampaigns />
     </MvpShell>
   )
 }
