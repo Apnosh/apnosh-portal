@@ -19,7 +19,7 @@
  *   and a way to stop it afterwards that is on the same screen, not in support.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, TrendingUp, Square, MapPin, Eye, Play, Loader2, ChevronDown, Image as ImageIcon } from 'lucide-react'
 import MvpShell from './mvp-shell'
 import { MvpButton, MvpActions, MvpEmpty, MvpMsg } from './mvp-detail'
@@ -263,7 +263,19 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
   const [limits, setLimits] = useState({ maxUsd: 500, maxDays: 30, minDaily: 1 })
 
   const [pickedAccount, setPickedAccount] = useState<string | null>((seed?.payer ?? null) as string | null)
-  const [picked, setPicked] = useState<Candidate | null>(null)
+  /* OPENED FROM A POST'S OWN SHEET (2026-09-11): ?post=<the vendor's post id> picks that post
+     the moment it is in the list, once. A post the ad platforms cannot boost is not in the list
+     and the screen behaves as if nobody asked. Consumed on first use so clearing the pick stays
+     cleared. */
+  const wantRef = useRef<string | null>(typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('post'))
+  const prepick = (list: Candidate[]): Candidate | null => {
+    const w = wantRef.current
+    if (!w) return null
+    const hit = list.find((c) => c.zernioPostId === w) ?? null
+    if (hit) wantRef.current = null
+    return hit
+  }
+  const [picked, setPicked] = useState<Candidate | null>(() => prepick((seed?.candidates ?? []) as Candidate[]))
   const [daily, setDaily] = useState(10)
   const [days, setDays] = useState(7)
   /* FIVE, NOT TEN. Ten miles from downtown Seattle is a million and a half
@@ -313,6 +325,7 @@ export default function MvpBoost({ clientId }: { clientId: string }) {
         setAccounts((j.accounts ?? []) as AdAccount[])
         setAds((j.ads ?? []) as RunningAd[])
         setCandidates((j.candidates ?? []) as Candidate[])
+        { const hit = prepick((j.candidates ?? []) as Candidate[]); if (hit) setPicked(hit) }
         setPlatforms((j.platforms ?? []) as PlatformState[])
         setHistory((j.history ?? null) as History | null)
         setPeerRate((j.peerRate ?? null) as { perDollar: number; from: number } | null)

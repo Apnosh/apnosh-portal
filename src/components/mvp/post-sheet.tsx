@@ -22,7 +22,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowUpRight, Bookmark, Check, Eye, Heart, Loader2, MessageCircle, MousePointerClick, Send, Share2, UserPlus, X, Image as ImageIcon } from 'lucide-react'
+import { ArrowUpRight, Bookmark, Check, Eye, Heart, Loader2, MessageCircle, MousePointerClick, Send, Share2, TrendingUp, UserPlus, X, Image as ImageIcon } from 'lucide-react'
+import Link from 'next/link'
 import { C, DISPLAY } from './tokens'
 import { BrandOrMark, brandTone, type InsightsPost } from './mvp-insights'
 import { cachedComments, loadComments, ownerSafe, type CommentRow } from './mvp-inbox'
@@ -216,7 +217,15 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
           <button type="button" onClick={onClose} aria-label="Close" style={{ width: 32, height: 32, borderRadius: 99, border: 'none', background: '#f2f2f5', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}><X size={16} /></button>
         </div>
         {best.caption && <div style={{ padding: '10px 16px 0', fontSize: 13, color: C.mute, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{best.caption}</div>}
-        {!multi && best.permalink && <div style={{ padding: '12px 16px 0' }}>{openPill(best.permalink, best.platform)}</div>}
+        {/* BOOST FIRST, then the way out (owner 2026-09-11). Boost opens the boost screen with
+            this post already picked, by the vendor's own post id; a post the ad platforms cannot
+            boost lands on the screen's normal list. */}
+        <div style={{ display: 'flex', gap: 8, padding: '12px 16px 0', flexWrap: 'wrap' }}>
+          <Link href={`/dashboard/boost${best.externalId ? `?post=${encodeURIComponent(best.externalId)}` : ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 34, padding: '0 14px 0 12px', borderRadius: 99, textDecoration: 'none', fontSize: 12.5, fontWeight: 700, color: '#fff', background: `linear-gradient(135deg, ${C.green}, ${C.greenDk})`, boxShadow: '0 6px 14px rgba(46,154,120,.35)', whiteSpace: 'nowrap' }}>
+            <TrendingUp size={14} /> Boost post
+          </Link>
+          {!multi && best.permalink && openPill(best.permalink, best.platform)}
+        </div>
 
         {/* ── the headline, against your usual ── */}
         <div style={{ margin: '16px 16px 0', borderRadius: 20, padding: '16px 16px 14px', color: '#fff', background: hero, position: 'relative', overflow: 'hidden' }}>
@@ -297,7 +306,11 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
           </div>
         )}
 
-        {/* ── what people said ── */}
+        {/* ── what people said ──
+            A TikTok-only post shows this only when comments actually came back (owner
+            2026-09-11): the vendor serves TikTok comments for some connections and not others,
+            and an empty section under every TikTok is a promise the sheet cannot keep. */}
+        {(!rows.every((x) => x.platform === 'tiktok') || (mine && mine.length > 0)) && (
         <div style={{ margin: '20px 16px 0' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
             <div style={{ fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: C.ink, letterSpacing: '-.01em' }}>What people said</div>
@@ -347,6 +360,7 @@ export default function PostSheet({ parts, peers, onClose }: Props) {
               ) })}
           </div>
         </div>
+        )}
       </div>
     </div>,
     document.body,
