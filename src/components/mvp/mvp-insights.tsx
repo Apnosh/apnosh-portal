@@ -2563,15 +2563,22 @@ export const POSTS_FOOTNOTE = 'Your latest posts across every connected account,
  * A square photo or a landscape video is centre-cropped, which is what every feed
  * on earth does to them.
  */
-const TILE_W = 152
-const TILE_H = 250
+const TILE_W = 164
+const TILE_H = 256
 
-/** 98 · 1.4K · 12.6K · 1.2M — four stats have to fit across 152px. */
+/**
+ * 98 · 1K · 13K · 1M. Three characters at most, because four of these sit on one
+ * line across a 164px tile and a line that wraps puts one tile out of step with
+ * the rest of the shelf.
+ *
+ * ROUNDED DOWN, never up. 1,999 reads as 1K. An owner screenshots these and
+ * sends them to people; a number this app printed must never be larger than the
+ * number the platform would.
+ */
 function compactNum(n: number): string {
   if (n < 1000) return String(n)
-  if (n < 10000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}K`
-  if (n < 1000000) return `${Math.round(n / 1000)}K`
-  return `${(n / 1000000).toFixed(1).replace(/\.0$/, '')}M`
+  if (n < 1000000) return `${Math.floor(n / 1000)}K`
+  return `${Math.floor(n / 1000000)}M`
 }
 
 /** What one tile draws. A single post and a group of cross-posts both become one
@@ -2641,13 +2648,15 @@ function PostTile({ t }: { t: TileData }) {
   const unit = t.unreported ? 'not reported' : t.pending ? 'still counting' : 'views'
   const ink = has ? '#fff' : C.ink
   const soft = has ? 'rgba(255,255,255,.86)' : C.mute
-  /* Only what happened. A row of zeroes is not a report, it is decoration. */
+  /* All four, always, zeroes included (owner 2026-09-11). Hiding the empty ones
+     made every tile a different shape and, worse, hid the thing worth knowing:
+     nobody shared it, nobody saved it. A zero here is a result. */
   const stats: Array<{ icon: typeof Heart; n: number }> = [
     { icon: Heart, n: t.likes },
     { icon: MessageCircle, n: t.comments },
     { icon: Share2, n: t.shares },
     { icon: Bookmark, n: t.saves },
-  ].filter((x) => x.n > 0)
+  ]
   const media = (
     <div style={{
       position: 'relative', width: TILE_W, height: TILE_H, borderRadius: 18, overflow: 'hidden',
@@ -2683,15 +2692,15 @@ function PostTile({ t }: { t: TileData }) {
           <span style={{ fontFamily: DISPLAY, fontSize: 23, fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1, color: ink }}>{big}</span>
           <span style={{ fontSize: 11.5, color: soft }}>{unit}</span>
         </span>
-        {stats.length > 0 && (
-          <span style={{ display: 'flex', flexWrap: 'wrap', columnGap: 11, rowGap: 3, marginTop: 7 }}>
-            {stats.map((x, i) => (
-              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3.5, fontSize: 12.5, fontWeight: 500, color: ink }}>
-                <x.icon size={13} strokeWidth={2} /> {compactNum(x.n)}
-              </span>
-            ))}
-          </span>
-        )}
+        {/* ONE LINE. space-between rather than a fixed gap, so four three-figure
+            counts and four single digits both sit right across the tile. */}
+        <span style={{ display: 'flex', flexWrap: 'nowrap', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginTop: 8 }}>
+          {stats.map((x, i) => (
+            <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 500, color: ink, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+              <x.icon size={12.5} strokeWidth={2} /> {compactNum(x.n)}
+            </span>
+          ))}
+        </span>
       </span>
     </div>
   )
