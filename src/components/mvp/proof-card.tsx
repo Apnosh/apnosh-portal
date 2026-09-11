@@ -94,7 +94,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
          own clicks); nothing about how the card looks changes */
       onClick={markOpen}
       style={{
-        position: 'relative', borderRadius: 18, padding: '16px 16px 15px', marginBottom: 12,
+        position: 'relative', borderRadius: 18, padding: '18px 18px 17px', marginBottom: 12, minHeight: 176, boxSizing: 'border-box',
         background: '#fff', border: `1.5px solid ${edge}`,
         boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06)',
       }}

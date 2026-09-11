@@ -14,15 +14,22 @@ import { isWin, metricKeyOf } from '@/lib/love/win'
 
 /* THE STACK, evenly stepped (owner 2026-09-11). Each card behind the front one sits exactly
    PEEK px lower and a little narrower, and is the SAME HEIGHT as the front card, so the visible
-   lip under the front is one even band per card. The back cards used to be the height of the
-   whole box (front card + bottom padding), so the first lip was three times the second. */
+   lip under the front is one even band per card.
+
+   THE STACK MOVES WITH THE THUMB. `p` is how far the front card has travelled toward leaving
+   (0 at rest, 1 gone): every card behind rises and widens by that much, so by the time the
+   front card is off the edge the next one is already in its place, and the promotion is a
+   glide rather than a jump. */
 const PEEK = 6
-function deckDepth(pos: number): React.CSSProperties {
+const FLY_MS = 280
+const EASE = 'cubic-bezier(.22,.61,.36,1)'
+function deckDepth(pos: number, p: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, opacity: 1 }
   const behind = { position: 'absolute' as const, left: 0, right: 0, top: 0, height: `calc(100% - ${PEEK * 2}px)` }
-  if (pos === 1) return { ...behind, zIndex: 20, transform: `translateY(${PEEK}px) scaleX(0.965)`, opacity: 1 }
-  if (pos === 2) return { ...behind, zIndex: 10, transform: `translateY(${PEEK * 2}px) scaleX(0.93)`, opacity: 1 }
-  return { ...behind, zIndex: 0, transform: `translateY(${PEEK * 3}px) scaleX(0.895)`, opacity: 0, pointerEvents: 'none' }
+  const at = (n: number) => `translateY(${PEEK * (n - p)}px) scaleX(${(1 - 0.035 * (n - p)).toFixed(4)})`
+  if (pos === 1) return { ...behind, zIndex: 20, transform: at(1), opacity: 1 }
+  if (pos === 2) return { ...behind, zIndex: 10, transform: at(2), opacity: 1 }
+  return { ...behind, zIndex: 0, transform: at(3), opacity: p, pointerEvents: 'none' }
 }
 
 const SAMPLE_CARDS: ProofCardData[] = [
@@ -60,7 +67,7 @@ export default function ProofDeck({ clientId }: { clientId?: string }) {
     if (n > 1 && Math.abs(dx) > 64) {
       const dir: -1 | 1 = dx < 0 ? -1 : 1
       setFlying(dir)
-      window.setTimeout(() => { setStep((p) => (dir < 0 ? (p + 1) % n : (p - 1 + n) % n)); setFlying(0); setDx(0) }, 220)
+      window.setTimeout(() => { setStep((p) => (dir < 0 ? (p + 1) % n : (p - 1 + n) % n)); setFlying(0); setDx(0) }, FLY_MS)
     } else setDx(0)
   }
 
@@ -144,7 +151,9 @@ export default function ProofDeck({ clientId }: { clientId?: string }) {
     return () => ro.disconnect()
   })
   const safeStep = Math.min(step, Math.max(0, cards.length - 1))
-  const deck = cards.slice(safeStep, safeStep + 3)
+  /* four, not three: the fourth is the one that fades in at the bottom while the front leaves */
+  const deck = cards.slice(safeStep, safeStep + 4)
+  const progress = flying !== 0 ? 1 : Math.min(1, Math.abs(dx) / 140)
   const front = deck[0]
 
   useEffect(() => {
@@ -162,8 +171,16 @@ export default function ProofDeck({ clientId }: { clientId?: string }) {
           deck still says so on the card itself, since a sample must never read as a result. */}
       <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} style={{ position: 'relative', paddingBottom: deck.length > 1 ? PEEK * 2 : 0, touchAction: 'pan-y' }}>
         {deck.map((c, pos) => (
-          <div key={c.id} ref={pos === 0 ? frontRef : undefined} style={{ ...deckDepth(pos), ...(pos > 0 && frontH ? { height: frontH } : {}), transformOrigin: 'top center', transition: drag.current && pos === 0 ? 'none' : 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s',
-            ...(pos === 0 && (dx !== 0 || flying !== 0) ? { transform: flying !== 0 ? `translateX(${flying * 120}%) rotate(${flying * 8}deg)` : `translateX(${dx}px) rotate(${dx / 22}deg)`, opacity: flying !== 0 ? 0 : 1, transition: flying !== 0 ? 'transform .22s ease-in, opacity .22s ease-in' : 'none' } : {}) }}>
+          <div key={c.id} ref={pos === 0 ? frontRef : undefined} style={{ ...deckDepth(pos, progress), ...(pos > 0 && frontH ? { height: frontH } : {}), transformOrigin: 'top center',
+            /* the front card: dragged (no transition), flying off in an arc, or springing home;
+               the cards behind glide on the same curve as the flight */
+            ...(pos === 0
+              ? flying !== 0
+                ? { transform: `translateX(${flying * 130}%) translateY(18px) rotate(${flying * 12}deg)`, opacity: 0, transition: `transform ${FLY_MS}ms ${EASE}, opacity ${FLY_MS}ms ease-in` }
+                : dx !== 0
+                  ? { transform: `translateX(${dx}px) translateY(${Math.abs(dx) / 14}px) rotate(${dx / 20}deg)`, transition: 'none' }
+                  : { transition: 'transform 320ms cubic-bezier(.34,1.56,.64,1)' }
+              : { transition: drag.current ? 'none' : `transform ${FLY_MS}ms ${EASE}, opacity ${FLY_MS}ms ${EASE}` }) }}>
             {pos === 0 ? (
               <ProofCard
                 /* a win gets its second door: the page where it becomes something to send
