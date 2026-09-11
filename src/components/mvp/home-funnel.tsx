@@ -90,18 +90,20 @@ export function bandFor(rate: number, key: string): HealthBand {
 // Funnel stage → the create page's matching shelf (its ROWS/lens ids). The store
 // speaks the funnel's words, so a weak leg taps straight into what fixes it.
 const STAGE_LENS: Record<string, string> = { shown: 'aware', engaged: 'interest', moved: 'actions', camein: 'orders', back: 'back' }
-const HEALTH_RED: [number, number, number] = [229, 72, 77]
+/* BRIGHT, the same red and green the Insights graph wears (owner 2026-09-11: match the two) */
+const HEALTH_RED: [number, number, number] = [255, 45, 58]
+const HEALTH_GREEN: [number, number, number] = [31, 196, 122]
 // the 5-band health ramp: very low → very high = red → orange-red → yellow → light green → green.
 const BAND_RGB: Record<HealthBand, [number, number, number]> = {
   veryLow: HEALTH_RED,      // red
   low: [232, 110, 58],      // orange-red
   average: [222, 176, 52],  // yellow
-  high: [116, 196, 122],    // light green
-  veryHigh: [46, 168, 124], // green
+  high: HEALTH_GREEN,       // green
+  veryHigh: HEALTH_GREEN,   // green
 }
 // darker variants for text/marks on the LIGHT ground (the bright ramp above is for dark, and for fills/rings/crowd on dark).
 export const BAND_INK: Record<HealthBand, [number, number, number]> = {
-  veryLow: [201, 45, 50], low: [186, 78, 28], average: [150, 112, 14], high: [46, 154, 120], veryHigh: [46, 154, 120],
+  veryLow: HEALTH_RED, low: [186, 78, 28], average: [150, 112, 14], high: HEALTH_GREEN, veryHigh: HEALTH_GREEN,
 }
 export const BAND_WORD: Record<HealthBand, string> = { veryLow: 'very low', low: 'low', average: 'average', high: 'high', veryHigh: 'very high' }
 const bandVigor = (b: HealthBand | null): number => (b === 'veryHigh' ? 1 : b === 'high' ? 0.66 : 0.38) // pulse liveliness by band
@@ -864,7 +866,7 @@ export default function HomeFunnel({
           const tx = fits ? (numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8) : anchorX
           const ty = fits ? oy + 5 : numBase + 17
           ctx.globalAlpha = tickIn
-          ctx.fillStyle = r0 > 0 ? C.greenDk : r0 < 0 ? C.coral : C.mute
+          ctx.fillStyle = r0 > 0 ? `rgb(${HEALTH_GREEN.join(',')})` : r0 < 0 ? `rgb(${HEALTH_RED.join(',')})` : C.mute
           ctx.fillText(tickStr, tx, ty)
           ctx.globalAlpha = 1
         }
@@ -905,6 +907,9 @@ export default function HomeFunnel({
     setLS('0px')
     ctx.textAlign = 'center'
     for (let i = 0; i < n - 1; i++) {
+      /* No chip on the first leg (owner 2026-09-11): the Awareness-to-Interest rate is a different
+         kind of number (views into looks) and its "2% · very low" read as an alarm on every account. */
+      if (i === 0) continue
       const a = stages[i].count, b = stages[i + 1].count
       if (a == null || b == null || a <= 0 || b <= 0) continue // a 0 at the destination is no-data (grey), not a rated leg
       const pillIn = easeOutCubic(clamp01((entrance - (i * 0.09 + 0.45)) / 0.4))
@@ -924,7 +929,7 @@ export default function HomeFunnel({
       ctx.globalAlpha = pillIn
       roundRectP(px - pw / 2, midY - ph / 2, pw, ph, ph / 2)
       const alarm = !dark && dband === 'veryLow' // the weak step is the one filled chip on the page (owner pick 2026-09-03)
-      ctx.fillStyle = alarm ? '#c92d32' : `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
+      ctx.fillStyle = alarm ? `rgb(${HEALTH_RED.join(',')})` : `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
       ctx.fill()
       ctx.fillStyle = alarm ? '#ffffff' : `rgb(${cr.join(',')})` // band-coloured text (bright on dark, dark ink on light)
       ctx.fillText(label, px, midY + 4)
