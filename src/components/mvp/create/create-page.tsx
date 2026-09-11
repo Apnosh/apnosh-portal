@@ -36,7 +36,6 @@ import { useLang } from '../mvp-language'
 const C = { ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', fill: '#f5f5f7', mint: '#4abd98', mintDk: '#2e9a78', mintSoft: '#eaf7f3', amberInk: '#8a5a0c', amberBg: '#fbf3e4' }
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 const GLASS: React.CSSProperties = { background: 'rgba(240,241,240,0.72)', border: '1px solid rgba(255,255,255,0.75)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)' }
-const CARD_SHADOW = '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)'
 
 const GOAL_ICON: Record<ShelfGoal, typeof Megaphone> = { foryou: Sparkles, announce: Megaphone, event: Ticket, deal: Tag, nights: Moon, newfaces: MapPin, regulars: Heart, reviews: Star, online: ShoppingCart, catering: Users, brand: Share2 }
 const STAGE_ICON: Record<ShelfStage, typeof Eye> = { Awareness: Eye, Interest: Lightbulb, Actions: MousePointerClick, Orders: DoorOpen, Retention: Repeat }
@@ -236,31 +235,36 @@ const CREATE_CSS = `
 .cr .sticky .p span{display:block;font-family:Inter,system-ui,sans-serif;font-size:11.5px;color:#6e6e73;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .sticky .btn{height:46px;padding:0 20px}
 /* the Canva-shaped Create (owner 2026-09-11): describe, quick request, then browse */
-.cr .say2{margin:6px 16px 0;padding:12px 14px;border-radius:18px;background:#fff;border:0.5px solid #e6e6ea;box-shadow:0 2px 8px rgba(0,0,0,.05)}
-.cr .say2 .k{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#2e9a78}
+.cr .say2{padding:12px 14px}
 .cr .say2 .ta{display:block;width:100%;min-height:58px;margin-top:6px;border:0;outline:0;resize:none;background:none;font-family:'Inter',system-ui,sans-serif;font-size:15px;line-height:1.45;color:#1d1d1f;padding:0;box-sizing:border-box}
 .cr .say2 .ta::placeholder{color:#aeaeb2}
 .cr .say2 .foot{display:flex;align-items:center;gap:8px;margin-top:6px}
 .cr .say2 .hint{flex:1;font-size:12px;color:#aeaeb2}
-.cr .say2 .go{width:34px;height:34px;border-radius:17px;border:0;background:#1d1d1f;color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
-.cr .say2 .go:disabled{background:#e3e6e5;cursor:default}
 .cr .qgrid{display:grid;grid-template-rows:repeat(2,auto);grid-auto-flow:column;grid-auto-columns:64px;gap:10px 8px;overflow-x:auto;padding:2px 16px 6px;scrollbar-width:none}
 .cr .qt{width:64px;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
-.cr .qt .ic{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;color:#1d1d1f;background:#f5f5f7}
-.cr .qt .ic svg{width:22px;height:22px;stroke-width:1.8}
+.cr .qt .ic{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;color:var(--c2);background:var(--t1)}
+.cr .qt .ic svg{width:23px;height:23px;stroke-width:2}
 .cr .qt span:last-child{font-size:10.5px;font-weight:600;text-align:center;line-height:1.2;color:#1d1d1f}
 .cr .browse{margin:22px 16px 0}
 .cr .fchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
-.cr .fchips .fch{background:#fff;border:0.5px solid #e6e6ea;height:32px;padding:0 10px 0 12px;font-size:12.5px}
-.cr .fchips .fch.on{background:#1d1d1f;color:#fff;border-color:transparent}
+.cr .fchips .fch{background:#f5f5f7;height:32px;padding:0 10px 0 12px;font-size:12.5px}
+.cr .fchips .fch.on{background:#1d1d1f;color:#fff}
 .cr .fchips .fch svg{width:12px;height:12px;color:#6e6e73}
 .cr .fchips .fch.on svg{color:rgba(255,255,255,.7)}
 .cr .stages{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
-.cr .stg{flex:none;font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:99px;border:0.5px solid #e6e6ea;color:#1d1d1f;white-space:nowrap;background:#fff;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:inherit}
+.cr .stg{--c1:#4abd98;--c2:#2e9a78;--t1:#4abd9829;--sh:#2e9a7866;flex:none;font-size:12.5px;font-weight:700;padding:8px 12px;border-radius:99px;border:0;color:var(--c2);white-space:nowrap;background:var(--t1);display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:inherit;transition:transform .15s}
 .cr .stg i{width:8px;height:8px;border-radius:99px;background:var(--c2);display:inline-block}
-.cr .stg.on{background:#1d1d1f;color:#fff;border-color:transparent}
-.cr .srch{margin-top:10px;width:100%;display:flex;align-items:center;gap:8px;height:42px;padding:0 14px;border-radius:999px;background:#fff;border:0.5px solid #e6e6ea;color:#aeaeb2;font-size:14.5px;cursor:text;font-family:inherit;text-align:left}
-.cr .srch svg{color:#1d1d1f;flex:none}
+.cr .stg.on{background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;box-shadow:0 6px 14px var(--sh)}
+.cr .stg.on i{background:rgba(255,255,255,.85)}
+.cr .srch{margin-top:10px;width:100%;display:flex;align-items:center;gap:8px;height:42px;padding:0 14px;border-radius:999px;background:#f5f5f7;border:0;color:#6e6e73;font-size:14.5px;cursor:text;font-family:inherit;text-align:left}
+.cr .srch svg{color:#2e9a78;flex:none}
+/* the one door at the bottom */
+.cr .door{margin:22px 16px 0;padding:16px;border-radius:20px;background:linear-gradient(135deg,#eaf7f3,#f2f9f6 60%,#f5f5f7)}
+.cr .door .dt{font-family:'Cal Sans','Inter',sans-serif;font-size:17px;font-weight:600;color:#1d1d1f;letter-spacing:-.01em}
+.cr .door .ds{font-size:12.5px;color:#6e6e73;margin-top:4px;line-height:1.45}
+.cr .door .da{display:flex;gap:8px;margin-top:12px}
+.cr .door .da .btn{flex:1;height:40px}
+.cr .door .da .btn.ghost{background:#fff}
 .cr .pc.wide{width:280px}
 .cr .pc .pl{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:4px;font-size:12.5px}
 .cr .pc .pl b{font-weight:700;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -445,12 +449,12 @@ export default function CreatePage() {
      inside the page is a new type on every keystroke, and React remounts it, which drops the
      caret out of the box mid-word. */
   const sayBox = (
-    <div className="say2">
-      <div className="k">{T('Describe it')}</div>
+    <div className="say"><div className="in say2">
+      <div className="eyebrow"><Sparkles /><span className="aur">{T('Describe it')}</span></div>
       <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={2} placeholder={T('What do you want to do? A video for the new dish, Labor Day hours, more people in on Tuesdays…')} />
       <div className="foot">
         <span className="hint">{T('We read it and suggest a plan. You can change anything.')}</span>
-        <button type="button" className="go" onClick={describe} disabled={!ask.trim() || reading} aria-label={T('Plan it')}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={16} />}</button>
+        <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? T('Reading') : T('Plan it')}</button>
       </div>
         {read && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
@@ -475,35 +479,30 @@ export default function CreatePage() {
             )}
           </div>
         )}
-    </div>
+    </div></div>
   )
   /* ── the door at the bottom ──
    * The rule from Move 6: name a person only when a real person is on this client's live work.
    * Then the door is that person's own thread. Otherwise it is Get help, with the one promise
    * the whole product makes. No stock face, no phone number we do not answer. */
-  const Fallback = () => {
+  /* ── the one door at the bottom (owner 2026-09-11: Guide me and Ask us were two cards saying
+     the same thing). One card, two ways out: three questions, or a person. The person is named
+     only when a real one is on this client's live work (Move 6); otherwise it is Get help. */
+  const helpDoor = (() => {
     const p = people[0]
     const who = p ? firstName(p.name) : null
-    /* The same rule the people strip uses (hrefFor): their thread when one exists, else the work
-       itself. This door sent everyone to Messages, so a person with no thread yet opened an empty
-       room instead of the order they are on. */
     const href = p ? hrefFor(p) : '/dashboard/get-help'
     return (
-      <div className="ask">
-        <div style={{ fontWeight: 600, color: C.ink, marginBottom: 2 }}>{who ? T('Nothing fit? Ask {name}.', { name: who }) : T('Nothing fit? Ask us.')}</div>
-        {/* The promise sentence is REPLY_PROMISE_SENTENCE itself, not a second sentence built out
-            of the same words: two spellings meant two Spanish translations of one promise, and
-            they did not match. The name, when there is one, is its own short sentence in front. */}
-        <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 8, lineHeight: 1.4 }}>
-          {who ? `${T('{name} is already on your work.', { name: who })} ` : ''}{T(REPLY_PROMISE_SENTENCE)}
+      <div className="door">
+        <div className="dt">{T('Not sure what to pick?')}</div>
+        <div className="ds">{who ? `${T('{name} is already on your work.', { name: who })} ` : ''}{T(REPLY_PROMISE_SENTENCE)}</div>
+        <div className="da">
+          <button type="button" className="btn" onClick={() => go({ name: 'guide' })}><Compass size={15} /> {T('Guide me')}</button>
+          <Link href={href} className="btn ghost" style={{ textDecoration: 'none' }}>{who ? T('Message {name}', { name: who }) : T('Ask a person')}</Link>
         </div>
-        <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: 10, height: 42, borderRadius: 21, background: C.fill, padding: '0 6px 0 14px', textDecoration: 'none', color: C.ink, fontSize: 14, fontWeight: 600 }}>
-          {who ? T('Message {name}', { name: who }) : T('Get help')}
-          <span style={{ marginLeft: 'auto', width: 32, height: 32, borderRadius: 16, background: gradOf('mint'), color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ArrowRight size={15} /></span>
-        </Link>
       </div>
     )
-  }
+  })()
   const AskBox = () => (
     <div className="ask">
       <div style={{ fontWeight: 600, color: C.ink, marginBottom: 6 }}>{T('Not seeing it? Ask for anything')}</div>
@@ -525,13 +524,13 @@ export default function CreatePage() {
      sideways. Every tile is a door to something real: a live screen, a card's own page, or the
      describe box with the first words typed. A tile whose card is not on the shelf is dropped,
      so nothing here opens onto "that one is not on the shelf". */
-  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { href: string } | { card: string } }
+  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { href: string } | { card: string }; hue?: HueKey }
   const QUICK_ALL: Quick[] = [
-    { t: T('Announce something'), I: Megaphone, to: { ask: true } },
-    { t: T('Update hours'), I: Clock, to: { href: '/dashboard/business-info/hours' } },
-    { t: T('Write a post'), I: PenLine, to: { href: '/dashboard/post' } },
-    { t: T('Boost a post'), I: TrendingUp, to: { href: '/dashboard/boost' } },
-    { t: T('Reply to reviews'), I: Star, to: { href: '/dashboard/review-replies' } },
+    { hue: 'announce', t: T('Announce something'), I: Megaphone, to: { ask: true } },
+    { hue: 'newfaces', t: T('Update hours'), I: Clock, to: { href: '/dashboard/business-info/hours' } },
+    { hue: 'brand', t: T('Write a post'), I: PenLine, to: { href: '/dashboard/post' } },
+    { hue: 'event', t: T('Boost a post'), I: TrendingUp, to: { href: '/dashboard/boost' } },
+    { hue: 'reviews', t: T('Reply to reviews'), I: Star, to: { href: '/dashboard/review-replies' } },
     { t: T('A graphic'), I: ImageIcon, to: { card: 'creative-graphic' } },
     { t: T('A video'), I: Video, to: { card: 'creative-video' } },
     { t: T('Photos'), I: Camera, to: { card: 'creative-photos' } },
@@ -621,7 +620,7 @@ export default function CreatePage() {
       <>
         {sayBox}
         <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
-        <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
+        <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
         {browseBlock}
         {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Raise the budget or pick another stage.')}</div>}
         {rail({ t: T('Recommended for you'), s: T(ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet'), list: rec, hue: stage ? STAGE_HUE[stage] : 'mint' })}
@@ -631,14 +630,7 @@ export default function CreatePage() {
         {rail({ t: T('Every month'), s: T('Run for you, cancel any time'), list: monthly, hue: 'nights', kind: 'program' })}
         {rail({ t: T('People'), s: T('Someone comes in and posts'), list: people, hue: 'catering' })}
 
-        <div style={{ margin: '18px 16px 0' }}>
-          <button type="button" onClick={() => go({ name: 'guide' })} className="press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 18, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
-            <Mark hue="mint" size={38}><Compass size={22} /></Mark>
-            <span style={{ flex: 1 }}><span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 15.5, fontWeight: 600, color: C.ink }}>{T('Not sure? Guide me')}</span><span style={{ display: 'block', fontSize: 12.5, color: C.mute, marginTop: 1 }}>{T('Three questions, then three picks')}</span></span>
-            <ChevronRight size={17} color={C.faint} />
-          </button>
-        </div>
-        <Fallback />
+        {helpDoor}
         <div style={{ height: 24 }} />
       </>
     )
