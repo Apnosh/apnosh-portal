@@ -347,7 +347,7 @@ const ANALYST_HREF = '/dashboard/insights/analyst'
  * load if the client-side navigation has not moved us anywhere after a beat. A slow navigation
  * beats a silent one.
  */
-function PushCircle({ href, label, children }: { href: string; label: string; children: React.ReactNode }) {
+function PushCircle({ href, label, children, style }: { href: string; label: string; children: React.ReactNode; /** overrides on the glass circle (the report door wears the describe-box gradient) */ style?: React.CSSProperties }) {
   const router = useRouter()
   const [pressed, setPressed] = useState(false)
 
@@ -365,7 +365,7 @@ function PushCircle({ href, label, children }: { href: string; label: string; ch
   }
 
   return (
-    <button type="button" onClick={go} aria-label={label} title={label} style={{ ...GLASS_CIRCLE, color: C.ink, cursor: 'pointer', opacity: pressed ? 0.55 : 1, transition: 'opacity .15s' }}>
+    <button type="button" onClick={go} aria-label={label} title={label} style={{ ...GLASS_CIRCLE, color: C.ink, cursor: 'pointer', opacity: pressed ? 0.55 : 1, transition: 'opacity .15s', ...style }}>
       {children}
     </button>
   )
@@ -386,8 +386,11 @@ function ReportButton() {
   const { client } = useClient()
   const pro = isProTier(client?.tier)
   return (
-    <PushCircle href={ANALYST_HREF} label={pro ? 'Your report' : 'Your report, Pro plan only'}>
-      {pro ? <FileText size={16} /> : <Lock size={14} />}
+    <PushCircle href={ANALYST_HREF} label={pro ? 'Your report' : 'Your report, Pro plan only'}
+      /* the same mint-to-violet the describe box wears on Create, so the report reads as the
+         page's one enticing door (owner 2026-09-11); the lock keeps the plain glass */
+      style={pro ? { background: 'linear-gradient(135deg,#4abd98,#5ba8e8 45%,#9a5bf0)', border: '1px solid rgba(255,255,255,.6)', color: '#fff', boxShadow: '0 6px 16px rgba(91,168,232,.35)' } : undefined}>
+      {pro ? <FileText size={16} strokeWidth={2.2} /> : <Lock size={14} />}
     </PushCircle>
   )
 }
