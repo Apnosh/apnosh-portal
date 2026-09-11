@@ -1340,11 +1340,14 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
   const cur = rows.find((r) => r.st.key === sel) ?? rows[0]
   return (
     <div style={{ padding: '12px 18px 8px' }}>
-      <div style={{ display: 'flex', gap: 2, borderRadius: 999, padding: 3, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
+      {/* the same range row the Insights graph wears (owner 2026-09-11): plain words, no glass
+          capsule, the one in force filled with the picked stage's colour */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {TREND_RANGES.map(([k, l]) => {
           const on = range === k
           const cal = k === 'custom'
-          return <button key={k} type="button" aria-label={cal ? 'Custom dates' : l} onClick={() => setRange(k)} style={{ flex: cal ? '0 0 44px' : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 13.5, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none' }}>{cal ? <CalendarDays size={15} /> : l}</button>
+          const col = (STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown).main
+          return <button key={k} type="button" aria-label={cal ? 'Custom dates' : l} onClick={() => setRange(k)} style={{ flex: cal ? '0 0 auto' : 1, minWidth: 0, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 99, padding: cal ? '0 12px' : 0, background: on ? col : 'transparent', color: on ? '#fff' : C.mute, fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s, color .15s' }}>{cal ? <CalendarDays size={15} /> : l}</button>
         })}
       </div>
       {range === 'custom' && (
@@ -1413,7 +1416,7 @@ function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaign
       </span>
       <span style={{ textAlign: 'right', flexShrink: 0, minWidth: 64 }}>
         <span style={{ display: 'block', fontFamily: DISPLAY, fontSize: 16, fontWeight: 600, color: locked ? C.faint : C.ink, letterSpacing: '-.01em' }}>{!locked && total != null ? total.toLocaleString() : DASH}</span>
-        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? C.coral : C.greenDk }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
+        {sm && sm.compareTotal > 0 && <span style={{ display: 'inline-block', marginTop: 2, fontSize: 11, fontWeight: 700, color: dn ? TREND_RED : TREND_GREEN }}>{dn ? '▼' : '▲'}{Math.abs(sm.deltaPct) > 999 ? 'sharply' : `${Math.abs(sm.deltaPct)}%`}</span>}
       </span>
     </button>
   )
@@ -1597,7 +1600,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           <span style={{ fontSize: 13.5, color: C.mute }}>Not enough days to call a direction yet.</span>
         ) : (
           <>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? C.greenDk : C.coral }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13.5, fontWeight: 600, color: Math.abs(trendPct) < 5 ? C.mute : trendPct > 0 ? TREND_GREEN : TREND_RED }}>
               {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
               {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
             </span>
@@ -1820,7 +1823,7 @@ function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false, se
                       const ba = beforeAfter(series, c.shippedAt ?? null)
                       if (!ba) return null
                       return (
-                        <span style={{ display: 'block', fontSize: 11.5, color: ba.pct > 0 ? C.greenDk : C.coral, marginTop: 3, fontWeight: 600 }}>
+                        <span style={{ display: 'block', fontSize: 11.5, color: ba.pct > 0 ? TREND_GREEN : TREND_RED, marginTop: 3, fontWeight: 600 }}>
                           {ba.before.toLocaleString()} → {ba.after.toLocaleString()} {noun ? noun.toLowerCase() + ' ' : ''}a day
                           <span style={{ color: C.mute, fontWeight: 500 }}> · {ba.days} days either side</span>
                         </span>
@@ -1925,7 +1928,7 @@ function HighlightsCard({ mv, days, label, smooth = 7 }: { mv: MetricView; days:
         <div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>No day stood out from its week for {label.toLowerCase()} in this window.</div>
       ) : hits.map((h) => {
         const up = h.vsWeekPct > 0
-        const col = up ? C.greenDk : C.coral
+        const col = up ? TREND_GREEN : TREND_RED
         const avg = Math.round(h.value / (1 + h.vsWeekPct / 100))
         const isOpen = open === h.date
         const max = Math.max(h.value, avg, 1)
