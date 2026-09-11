@@ -869,8 +869,13 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
   const deltaPct = settled.length === 0 ? 0 : (cmpTrend === 0 ? (curTrend > 0 ? 100 : 0) : Math.round(((curTrend - cmpTrend) / cmpTrend) * 100))
   const deltaAbs = curTrend - cmpTrend
   const fmtD = (ms: number) => new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  /* THE DATES NAME THE WHOLE WINDOW, not the settled part of it (owner 2026-09-11: "why does
+     30 days skip a day?"). The label read the settled bars, so with today still filling in it
+     said "Aug 13 – Sep 10" under a chart that plainly drew Aug 13 – Sep 11, and the owner went
+     looking for a missing Aug 12. The % still stands on settled days only; the words say what
+     the graph shows. */
   const span = (which: 'cur' | 'cmp'): string => {
-    const a = settled[0], b = settled[settled.length - 1]
+    const a = bars[0], b = bars[bars.length - 1]
     if (!a || !b) return ''
     const s0 = which === 'cur' ? a.sMs : a.cMs
     const e0 = which === 'cur' ? (b.eMs ?? b.sMs) : (b.ceMs ?? b.cMs)
