@@ -8,7 +8,13 @@ import { useEffect, useState } from 'react'
  * the tab for a minute; refreshed when the inbox fires apnosh:inbox-changed (a row opened
  * or dismissed) and when the tab comes back into focus. Returns null until it knows.
  */
-export interface InboxCounts { unread: number; needsYou: number }
+export interface InboxCounts { unread: number; needsYou: number; /** rows newer than the last time the inbox was opened: the bell's mint number (owner 2026-09-11) */ unseen: number }
+
+/** when this owner last opened the inbox, on this device; the mint number counts what arrived since */
+export const inboxSeenKey = (clientId: string) => `apnosh:inbox-seen:${clientId}`
+export function markInboxSeen(clientId: string) {
+  try { localStorage.setItem(inboxSeenKey(clientId), String(Date.now())) } catch { /* private mode */ }
+}
 
 /** The full pair (unread + needs-you) for callers that colour the bell by attention. */
 export function useInboxCounts(clientId: string | null | undefined, enabled = true): InboxCounts | null {
@@ -21,14 +27,19 @@ export function useInboxCounts(clientId: string | null | undefined, enabled = tr
       try {
         if (!force) {
           const raw = sessionStorage.getItem(key)
-          if (raw) { const c = JSON.parse(raw) as { n: number; needs?: number; at: number }; if (Date.now() - c.at < 60_000 && typeof c.needs === 'number') { if (alive) setN({ unread: c.n, needsYou: c.needs }); return } }
+          if (raw) { const c = JSON.parse(raw) as { n: number; needs?: number; unseen?: number; at: number }; if (Date.now() - c.at < 60_000 && typeof c.needs === 'number' && typeof c.unseen === 'number') { if (alive) setN({ unread: c.n, needsYou: c.needs, unseen: c.unseen }); return } }
         }
         const r = await fetch(`/api/dashboard/inbox?clientId=${encodeURIComponent(clientId)}`, { cache: 'no-store' })
         if (!r.ok) return
-        const j = await r.json() as { counts?: { unread?: number; needsYou?: number } }
+        const j = await r.json() as { counts?: { unread?: number; needsYou?: number }; items?: Array<{ whenIso?: string }> }
         const nn = Number(j.counts?.unread ?? 0), needs = Number(j.counts?.needsYou ?? 0)
-        sessionStorage.setItem(key, JSON.stringify({ n: nn, needs, at: Date.now() }))
-        if (alive) setN({ unread: nn, needsYou: needs })
+        /* Opening the inbox clears the mint number even if the owner never scrolled to the bottom;
+           it comes back only when something newer than that visit arrives. */
+        let seenAt = 0
+        try { seenAt = Number(localStorage.getItem(inboxSeenKey(clientId)) ?? 0) || 0 } catch { /* private mode */ }
+        const unseen = (j.items ?? []).filter((it) => it.whenIso && Date.parse(it.whenIso) > seenAt).length
+        sessionStorage.setItem(key, JSON.stringify({ n: nn, needs, unseen, at: Date.now() }))
+        if (alive) setN({ unread: nn, needsYou: needs, unseen })
       } catch { /* the bell just stays quiet */ }
     }
     void load()

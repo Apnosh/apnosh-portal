@@ -1,4 +1,5 @@
 'use client'
+import { markInboxSeen } from './use-inbox-unread'
 
 /**
  * Owner Notifications — LinkedIn-style notification feed. The page lives at
@@ -49,18 +50,20 @@ const CHIPS: Record<string, Chip[]> = {
 // Old ?tab= deep-link values still resolve (home + suggestion cards use them).
 const TAB_ALIAS: Record<string, string> = { approvals: 'needsyou', fix: 'needsyou', reviews: 'reviews', todos: 'activity', all: 'all' }
 
-export default function MvpInbox({ clientId, query: queryProp }: { clientId: string; /** the top row's search (2026-09-04) */ query?: string }) {
+export default function MvpInbox({ clientId }: { clientId: string }) {
   const [data, setData] = useState<InboxData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [filter, setFilter] = useState<string>('all')
-  const [query, setQuery] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
   const [items, setItems] = useState<Item[]>([])
 
   /* Warm the comments queue the moment the inbox opens. It is two round trips to
      the vendor and nobody is waiting on it yet, so it costs nothing here and
      saves the whole wait when the tab is tapped. */
   useEffect(() => { loadComments(clientId).catch(() => {}) }, [clientId])
+  /* Opening this screen is what clears the bell's mint number (owner 2026-09-11), whether or not
+     the owner scrolls to the last row. The red number is untouched: it clears only as each
+     needs-you item is resolved. */
+  useEffect(() => { markInboxSeen(clientId); inboxChanged() }, [clientId])
 
   useEffect(() => {
     let live = true
@@ -84,7 +87,7 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
   if (!data) return <Shell><Centered><Loader2 size={16} className="animate-spin" /> Loading your notifications…</Centered></Shell>
 
   const needsYou = items.length
-  const q = (queryProp ?? query).trim().toLowerCase()
+  const q = ''
   const countFor = (k: string) => k === 'all' ? items.length : items.filter((i) => CHIPS[k]?.includes(i.chip)).length
 
   // Dismiss an item via the "⋯" (mark read + drop from the feed).
@@ -94,9 +97,6 @@ export default function MvpInbox({ clientId, query: queryProp }: { clientId: str
     <Shell>
       {/* the top row is the header (owner 2026-09-04): no title, no count line — just the filter */}
       <div style={{ padding: '4px 16px 10px', flexShrink: 0 }}>
-        {queryProp == null && searchOpen && (
-          <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notifications…" style={{ width: '100%', marginBottom: 12, border: 'none', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.05)', borderRadius: 12, padding: '10px 12px', fontSize: 14, fontFamily: 'inherit' }} />
-        )}
         <Segmented items={FILTERS.map((f) => [f.key, f.label] as [typeof f.key, string])} value={filter} onChange={setFilter} counts={Object.fromEntries(FILTERS.filter((f) => COUNTED.has(f.key)).map((f) => [f.key, countFor(f.key)]))} hot={['needsyou']} />
       </div>
 
@@ -489,11 +489,14 @@ function InboxEmpty({ icon: Icon, title, sub }: { icon: typeof Check; title: str
  *  hairline like a real notifications feed. Renders as a Link when it has a
  *  destination; long bodies clamp to two lines with a trailing "…". */
 function NotifRow({ href, unread, time, onDismiss, onNav, avatar, children }: { href?: string; unread?: boolean; time?: string; onDismiss?: () => void; onNav?: () => void; avatar: React.ReactNode; children: React.ReactNode }) {
-  // Unread = a soft green wash across the whole row + a green dot/timestamp.
+  // Unread = a faint mint fill with a soft inner glow across the whole row, plus the dot and a
+  // green timestamp (owner 2026-09-11). Opened rows sit plain.
   const frame: React.CSSProperties = {
     display: 'flex', gap: 12, alignItems: 'flex-start',
-    padding: '10px 14px',
-    background: 'transparent',
+    padding: '12px 14px',
+    background: unread ? 'rgba(74,189,152,.08)' : 'transparent',
+    boxShadow: unread ? 'inset 0 0 0 1px rgba(74,189,152,.14), inset 0 0 28px rgba(74,189,152,.08)' : 'none',
+    borderRadius: 16, margin: '0 8px 4px',
   }
   const inner = (
     <>
@@ -557,8 +560,8 @@ function IconAvatar({ emoji, source, danger }: { emoji: string; source?: string;
 const inboxChanged = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('apnosh:inbox-changed')) }
 const clampStyle = (lines: number): React.CSSProperties => ({ display: '-webkit-box', WebkitLineClamp: lines, WebkitBoxOrient: 'vertical', overflow: 'hidden' })
 
-function Lead({ bold, rest, lines = 2 }: { bold: string; rest?: string; lines?: number }) {
-  // Body clamps to two lines; the trailing "…" signals there's more and the
+function Lead({ bold, rest, lines = 3 }: { bold: string; rest?: string; lines?: number }) {
+  // Body clamps to three lines (owner 2026-09-11); the trailing "…" signals there's more and the
   // whole row taps through to the full text.
   return (
     <div style={{ fontSize: 14, lineHeight: 1.4, color: C.ink, ...clampStyle(lines) }}>
@@ -656,7 +659,7 @@ function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) =>
         <b style={{ fontWeight: 700 }}>{r.author}</b>
         <Stars n={r.rating} />
       </div>
-      {r.text && <div style={{ marginTop: 4, fontSize: 13.5, color: C.mute, lineHeight: 1.45, ...clampStyle(2) }}>&ldquo;{r.text}&rdquo;</div>}
+      {r.text && <div style={{ marginTop: 4, fontSize: 13.5, color: C.mute, lineHeight: 1.45, ...clampStyle(3) }}>&ldquo;{r.text}&rdquo;</div>}
     </NotifRow>
   )
 }

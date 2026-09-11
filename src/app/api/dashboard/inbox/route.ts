@@ -190,6 +190,8 @@ export async function GET(req: NextRequest) {
   const unreadThread = thread.messages.some((m) => m.from === 'team') // simple: any team message → show chat dot
   return NextResponse.json({
     items, wins, history, thread,
-    counts: { needsYou: items.length, today: items.filter((i) => i.band === 'today').length, chatUnread: unreadThread && thread.messages.length > 0, unread: items.filter((i) => i.unread).length + wins.filter((w) => !w.read).length },
+    /* NEEDS YOU is the actionable set (approvals and broken connections), the same rows the
+       Needs-you filter shows, and it stays until each one is resolved (owner 2026-09-11). */
+    counts: { needsYou: items.filter((i) => i.chip === 'approvals' || i.chip === 'fix').length, today: items.filter((i) => i.band === 'today').length, chatUnread: unreadThread && thread.messages.length > 0, unread: items.filter((i) => i.unread).length + wins.filter((w) => !w.read).length },
   })
 }

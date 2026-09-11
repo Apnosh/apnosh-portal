@@ -28,9 +28,11 @@ export default function TopRow({ middle, title, count, back, backExact, right }:
   /* The bell counts for itself when the page did not hand it a number. */
   const autoCounts = useInboxCounts(client?.id, count === undefined)
   const auto = autoCounts ? autoCounts.unread : null
-  /* the badge turns amber while something needs the owner (owner 2026-09-04: "so they know needs you needs attention") */
-  const hot = (autoCounts?.needsYou ?? 0) > 0
-  const n = count ?? auto ?? 0
+  /* TWO NUMBERS (owner 2026-09-11): a RED one for what needs the owner, which stays until each
+     item is resolved, and a MINT one for what arrived since the inbox was last opened, which
+     opening the inbox clears. A page that hands in its own count keeps the single mint badge. */
+  const needs = count === undefined ? (autoCounts?.needsYou ?? 0) : 0
+  const n = count ?? (autoCounts ? autoCounts.unseen : 0)
   const avatar = (
     <span style={{ display: 'block', width: 40, height: 40, borderRadius: '50%', padding: 2, background: 'linear-gradient(135deg, #4abd98 0%, #8ee5c6 45%, #ffd58a 100%)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 6px 20px rgba(0,0,0,.08)', boxSizing: 'border-box' }}>
       <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', borderRadius: '50%', background: 'rgba(255,255,255,0.86)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', fontSize: 16, fontWeight: 800, letterSpacing: '-.02em', color: C.greenDk, fontFamily: DISPLAY }}>{initial}</span>
@@ -63,9 +65,10 @@ export default function TopRow({ middle, title, count, back, backExact, right }:
       <div style={{ minWidth: 0, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
         {middle ?? (title ? <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</span> : null)}
       </div>
-      {right !== undefined ? <div style={{ width: 40, display: 'flex', justifyContent: 'flex-end' }}>{right}</div> : <Link href="/dashboard/inbox" aria-label={n > 0 ? `Notifications (${n})` : 'Notifications'} style={{ ...GLASS, position: 'relative', width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', boxSizing: 'border-box' }}>
+      {right !== undefined ? <div style={{ width: 40, display: 'flex', justifyContent: 'flex-end' }}>{right}</div> : <Link href="/dashboard/inbox" aria-label={needs > 0 || n > 0 ? `Notifications${needs > 0 ? `, ${needs} need you` : ''}${n > 0 ? `, ${n} new` : ''}` : 'Notifications'} style={{ ...GLASS, position: 'relative', width: 40, height: 40, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', boxSizing: 'border-box' }}>
         <Bell size={19} />
-        {n > 0 && <span className="mvp-pop" style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: hot ? '#d99a1e' : C.green, color: '#fff', fontSize: 10.5, fontWeight: 800, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,.12)' }}>{n > 99 ? '99+' : n}</span>}
+        {needs > 0 && <span className="mvp-pop" style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: '#ff2d3a', color: '#fff', fontSize: 10.5, fontWeight: 800, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,.12)' }}>{needs > 99 ? '99+' : needs}</span>}
+        {n > 0 && <span className="mvp-pop" style={{ position: 'absolute', top: -5, ...(needs > 0 ? { left: -6 } : { right: -6 }), minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10.5, fontWeight: 800, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #fff', boxShadow: '0 1px 3px rgba(0,0,0,.12)' }}>{n > 99 ? '99+' : n}</span>}
       </Link>}
       {open && (
         <>

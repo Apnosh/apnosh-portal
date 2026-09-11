@@ -391,8 +391,10 @@ export default function HomeFunnel({
   const { client: bellClient } = useClient()
   const bellCounts = useInboxCounts(bellClient?.id)
   const bellAuto = bellCounts ? bellCounts.unread : null
-  const bellHot = (bellCounts?.needsYou ?? 0) > 0
-  const bellN = bellAuto ?? (bar?.unread ?? 0)
+  /* two numbers, the same rule as TopRow's bell (owner 2026-09-11): red = needs you, until
+     resolved; mint = new since the inbox was last opened */
+  const bellNeeds = bellCounts?.needsYou ?? 0
+  const bellN = bellCounts ? bellCounts.unseen : (bellAuto ?? (bar?.unread ?? 0))
 
   const { C, theme } = useMvpTheme() // the active skin (light / dark) — drives the whole hero
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -1260,7 +1262,8 @@ export default function HomeFunnel({
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Link href="/dashboard/inbox" aria-label={bellN ? T('Alerts ({n})', { n: bellN }) : T('Alerts')} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
               <Bell size={19} />
-              {(bellN) > 0 && <span style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: bellHot ? '#d99a1e' : C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center' }}>{bellN > 99 ? '99+' : bellN}</span>}
+              {bellNeeds > 0 && <span style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: '#ff2d3a', color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', border: '2px solid #fff' }}>{bellNeeds > 99 ? '99+' : bellNeeds}</span>}
+              {bellN > 0 && <span style={{ position: 'absolute', top: -5, ...(bellNeeds > 0 ? { left: -6 } : { right: -6 }), minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', border: '2px solid #fff' }}>{bellN > 99 ? '99+' : bellN}</span>}
             </Link>
           </div>
         )}
