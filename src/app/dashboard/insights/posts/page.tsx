@@ -24,8 +24,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronLeft, Clock } from 'lucide-react'
 import { useClient } from '@/lib/client-context'
-import { PostRow, CrossPostCard, groupCrossPosts, POSTS_FOOTNOTE, type InsightsPost } from '@/components/mvp/mvp-insights'
-import ComingUp, { NothingYet } from '@/components/mvp/coming-up'
+import { PostTile, tileOf, crossTileOf, groupCrossPosts, POSTS_FOOTNOTE, type InsightsPost, type TileData } from '@/components/mvp/mvp-insights'
+import { NothingYet } from '@/components/mvp/coming-up'
 import PostSheet from '@/components/mvp/post-sheet'
 import { usePullToRefresh, PullIndicator } from '@/components/mvp/pull-to-refresh'
 
@@ -37,7 +37,7 @@ export default function AllPostsPage() {
   const { client, loading: clientLoading } = useClient()
   const [posts, setPosts] = useState<InsightsPost[] | null>(null)
   /** the post whose sheet is open (owner 2026-09-11: a row opens the breakdown, not the platform) */
-  const [open, setOpen] = useState<InsightsPost | null>(null)
+  const [open, setOpen] = useState<TileData | null>(null)
   /* Two owners asked for this by name in both rounds of testing. Views are NOT
      comparable across platforms -- a TikTok number dwarfs an Instagram one for
      the same content -- so "best received" ranks by the share of viewers who
@@ -48,10 +48,6 @@ export default function AllPostsPage() {
   const [hasMore, setHasMore] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  /* How many things are waiting to go out, reported up by the Coming up section.
-     -1 means it has not answered yet, which is NOT the same as zero: the whole
-     screen's empty state must not flash while that request is still in the air. */
-  const [waiting, setWaiting] = useState(-1)
   const scroller = useRef<HTMLDivElement | null>(null)
 
   const fetchPage = useCallback(async (offset: number): Promise<InsightsPost[]> => {
@@ -128,20 +124,8 @@ export default function AllPostsPage() {
           {loading && <div style={{ padding: '40px 0', textAlign: 'center', color: C.faint, fontSize: 13 }}>Loading your posts…</div>}
           {error && !loading && <div style={{ padding: '30px 4px', color: C.mute, fontSize: 13 }}>{error}</div>}
 
-          {/* FIRST, what has not happened yet. Then what has. That order is the
-              only reason both halves are on one screen.
-              The nudge to write one is suppressed when the screen is otherwise
-              empty, so an owner with nothing at all is told that once. */}
-          {!loading && !error && client?.id && (
-            <ComingUp clientId={client.id} onCount={setWaiting} nudge={!posts || posts.length > 0} />
-          )}
 
-          {!loading && !error && posts && posts.length === 0 && waiting === 0 && <NothingYet />}
-          {!loading && !error && posts && posts.length === 0 && waiting > 0 && (
-            <div style={{ padding: '18px 6px 6px', textAlign: 'center', color: C.faint, fontSize: 12.5, lineHeight: 1.5 }}>
-              Nothing has gone out yet. Once one of these posts publishes, it shows up here with its numbers.
-            </div>
-          )}
+          {!loading && !error && posts && posts.length === 0 && <NothingYet />}
 
           {posts && posts.length > 0 && (
             <>
@@ -170,14 +154,13 @@ export default function AllPostsPage() {
                     The share of people who saw it and then liked or saved it. Views are not comparable between platforms; this is.
                   </div>
                 )}
-                {/* One piece of content posted to several platforms on the same day
-                    collapses into a single comparison card. Everything else is an
-                    ordinary row, in the same date order as before. */}
-                {groupCrossPosts(posts).map((item, i) =>
-                  Array.isArray(item)
-                    ? <CrossPostCard key={item[0].crossKey ?? item[0].id} posts={item} />
-                    : <PostRow key={item.id} p={item} first={i === 0} onOpen={setOpen} />,
-                )}
+                {/* THE SAME TILES AS THE RAIL, all of them, two across (owner 2026-09-11).
+                    One piece of content posted to several platforms the same day is one
+                    tile with every network's mark on it, and every tile opens the sheet. */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {groupCrossPosts(posts).map((item) => { const t = Array.isArray(item) ? crossTileOf(item) : tileOf(item)
+                    return <PostTile key={t.key} t={t} fluid onOpen={setOpen} /> })}
+                </div>
               </div>
               {hasMore && (
                 <button
@@ -193,7 +176,7 @@ export default function AllPostsPage() {
           )}
         </div>
       </div>
-      {open && posts && <PostSheet parts={[open]} peers={posts} onClose={() => setOpen(null)} />}
+      {open && posts && <PostSheet parts={open.parts} peers={posts} onClose={() => setOpen(null)} />}
     </div>
   )
 }

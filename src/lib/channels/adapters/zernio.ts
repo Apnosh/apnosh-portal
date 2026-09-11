@@ -750,6 +750,46 @@ export async function diagnoseComments(clientId: string): Promise<Record<string,
   return out
 }
 
+async function tiktokComments(clientId: string, profileId: string): Promise<SocialCommentRow[]> {
+  const admin = createAdminClient()
+  const { data } = await admin.from('social_posts').select('permalink, caption').eq('client_id', clientId).eq('platform', 'tiktok').gt('comments', 0).order('posted_at', { ascending: false }).limit(6)
+  const videos = ((data ?? []) as Array<{ permalink: string | null; caption: string | null }>)
+    .map((p) => ({ ...p, videoId: /\/video\/(\d+)/.exec(p.permalink ?? '')?.[1] ?? null }))
+    .filter((p): p is { permalink: string | null; caption: string | null; videoId: string } => !!p.videoId)
+  if (videos.length === 0) return []
+  const q = new URLSearchParams({ profileId, page: '1', limit: '25' })
+  const acc = unwrapList(await zer(`/accounts?${q.toString()}`, { timeoutMs: 7000 }), 'accounts', 'data', 'items').find((a) => (str(a.platform) || '').toLowerCase() === 'tiktok')
+  const accountId = acc ? (str(acc._id) || str(acc.id)) : ''
+  if (!accountId) return []
+  const fetched = await Promise.allSettled(videos.map(async (v) => {
+    const sub = new URLSearchParams({ accountId, limit: '25' })
+    const r = await zer(`/inbox/comments/${encodeURIComponent(v.videoId)}?${sub.toString()}`, { timeoutMs: 7000 })
+    return { v, rows: unwrapList(r, 'comments', 'data', 'items', 'results') }
+  }))
+  const out: SocialCommentRow[] = []
+  for (const res of fetched) {
+    if (res.status !== 'fulfilled') continue
+    const { v, rows } = res.value
+    for (const c of rows) {
+      const id = str(c.id) || str(c._id) || str(c.commentId)
+      const text = str(c.content) || str(c.text) || str(c.message) || str(c.comment)
+      if (!id || !text) continue
+      const fromObj = (x: unknown): Record<string, unknown> => (x && typeof x === 'object' ? (x as Record<string, unknown>) : {})
+      const who = { ...fromObj(c.author), ...fromObj(c.from) }
+      out.push({
+        id, platform: 'tiktok', postId: v.videoId, accountId,
+        authorName: str(c.from) || str(c.username) || str(c.authorName) || str(who.username) || str(who.name) || str(who.displayName) || 'Someone',
+        text, createdAt: str(c.createdTime) || str(c.createdAt) || str(c.created_at) || null,
+        replied: str(c.status).toLowerCase() === 'replied' || c.replied === true || num(c.replyCount) > 0,
+        canReply: c.canReply !== false,
+        url: str(c.url) || str(c.permalink) || null,
+        postPermalink: v.permalink, postCaption: v.caption, likes: num(c.likeCount),
+      })
+    }
+  }
+  return out
+}
+
 export async function listComments(clientId: string, limit = 50): Promise<SocialCommentRow[]> {
   const profileId = await profileIdFor(clientId)
   if (!profileId) return []
@@ -835,6 +875,13 @@ export async function listComments(clientId: string, limit = 50): Promise<Social
       })
     }
   }
+  /* TIKTOK, the other way round (2026-09-11). The first level lists no TikTok posts at all:
+     its platform filter does not even name TikTok. The second level DOES serve TikTok, when the
+     account was connected through the TikTok for Business app: the video id from the post's own
+     link, plus the TikTok account id. Developer-app connections answer 400 PLATFORM_LIMITATION,
+     which is a plain no, not a failure, so a miss here costs nothing. The videos come from our
+     own social_posts, the ones the sync says carry comments. */
+  out.push(...await tiktokComments(clientId, profileId).catch(() => [] as SocialCommentRow[]))
   /* Newest first across every post, then capped. The old code broke out of the
      loop at the limit, which meant the cap was decided by whichever post happened
      to be walked first rather than by what is most recent. */

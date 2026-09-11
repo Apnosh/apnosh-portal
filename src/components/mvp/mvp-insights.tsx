@@ -2587,7 +2587,7 @@ function compactNum(n: number): string {
 
 /** What one tile draws. A single post and a group of cross-posts both become one
  *  of these, so the tile itself never has to know which it is. */
-interface TileData {
+export interface TileData {
   key: string
   thumb: string | null
   platforms: string[]
@@ -2611,7 +2611,7 @@ function footOf(p: InsightsPost): string {
   return [kind, date].filter(Boolean).join(' · ')
 }
 
-function tileOf(p: InsightsPost): TileData {
+export function tileOf(p: InsightsPost): TileData {
   return {
     key: p.id, thumb: p.thumbnailUrl, platforms: [p.platform], permalink: p.permalink,
     views: p.reach, pending: !!p.pending, unreported: !!p.unreported,
@@ -2631,7 +2631,7 @@ function tileOf(p: InsightsPost): TileData {
  * is room to show it honestly. Here, every network it went to is a mark in the
  * corner and the numbers are the totals.
  */
-function crossTileOf(posts: InsightsPost[]): TileData {
+export function crossTileOf(posts: InsightsPost[]): TileData {
   const ranked = posts.slice().sort((a, b) => b.reach - a.reach)
   const best = ranked[0]
   const sum = (f: (x: InsightsPost) => number) => ranked.reduce((t, x) => t + (f(x) || 0), 0)
@@ -2649,7 +2649,7 @@ function crossTileOf(posts: InsightsPost[]): TileData {
   }
 }
 
-function PostTile({ t, onOpen }: { t: TileData; onOpen?: (t: TileData) => void }) {
+export function PostTile({ t, onOpen, fluid = false }: { t: TileData; onOpen?: (t: TileData) => void; /** fill a grid cell instead of the rail's fixed width; the shape stays 164:256 (the posts page, 2026-09-11) */ fluid?: boolean }) {
   const has = !!t.thumb
   const big = t.unreported || t.pending ? DASH : t.views.toLocaleString()
   const unit = t.unreported ? 'not reported' : t.pending ? 'still counting' : 'views'
@@ -2666,7 +2666,7 @@ function PostTile({ t, onOpen }: { t: TileData; onOpen?: (t: TileData) => void }
   ]
   const media = (
     <div style={{
-      position: 'relative', width: TILE_W, height: TILE_H, borderRadius: 18, overflow: 'hidden',
+      position: 'relative', width: fluid ? '100%' : TILE_W, height: fluid ? 'auto' : TILE_H, aspectRatio: fluid ? `${TILE_W} / ${TILE_H}` : undefined, borderRadius: 18, overflow: 'hidden',
       background: has ? '#111' : '#f7f7f9',
       backgroundImage: has ? `url(${t.thumb})` : undefined, backgroundSize: 'cover', backgroundPosition: 'center',
       border: has ? 'none' : `0.5px solid ${C.line}`, boxSizing: 'border-box',
@@ -2714,7 +2714,9 @@ function PostTile({ t, onOpen }: { t: TileData; onOpen?: (t: TileData) => void }
   const foot = (
     <div style={{ fontSize: 12, color: C.mute, marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.foot}</div>
   )
-  const box: React.CSSProperties = { flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', display: 'block', textDecoration: 'none', color: 'inherit' }
+  const box: React.CSSProperties = fluid
+    ? { width: '100%', minWidth: 0, display: 'block', textDecoration: 'none', color: 'inherit' }
+    : { flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', display: 'block', textDecoration: 'none', color: 'inherit' }
   /* EVERY tile opens the sheet (owner 2026-09-11). It used to go straight out to
      the platform, which threw away the one thing this product knows and the
      platform's own page does not: how this post did against the owner's usual, and

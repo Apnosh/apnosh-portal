@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     sortParam === 'views' || sortParam === 'engagement' ? sortParam : 'newest'
 
   const db = createAdminClient()
-  const COLS = 'id, platform, external_id, permalink, thumbnail_url, media_type, media_product_type, reach, video_views, likes, saves, posted_at, caption, raw_data'
+  const COLS = 'id, platform, external_id, permalink, thumbnail_url, media_type, media_product_type, reach, video_views, likes, comments, shares, saves, posted_at, caption, raw_data'
 
   let posts: ReturnType<typeof toPostView>[]
   let total: number
