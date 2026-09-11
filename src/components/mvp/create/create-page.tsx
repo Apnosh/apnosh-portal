@@ -17,21 +17,20 @@ import { PROMISE_BY_CARD, promiseSentence, renderPromiseSentence } from '@/lib/p
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Check, Search, Sparkles, X, Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Eye, Lightbulb, MousePointerClick, DoorOpen, Repeat, Loader2, Compass, Image as ImageIcon, Store, Camera, Video, Mail, PenLine, Gift, Clock, Wrench, BarChart3 } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Check, Search, Sparkles, X, Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Eye, Lightbulb, MousePointerClick, DoorOpen, Repeat, Loader2, Compass, Image as ImageIcon, Store, Camera, Video, Mail, PenLine, Gift, Clock, Wrench, BarChart3, TrendingUp, Target } from 'lucide-react'
 import MvpShell from '../mvp-shell'
 import TopRow from '../top-row'
 import { useClient } from '@/lib/client-context'
 import { gradOf, hueOf, tint, type HueKey } from '../hues'
 import { Mark } from '../mark'
-import { GOALS, FILTERS, GUIDE_QS, SETUP_IDS, SITUATION_GOAL, hasFreeLane, isBuyable, lanesFor, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
-import { CHIP_ORDER, liveForChip, laterForChip, shelfForChip, shelfTitle } from '@/lib/campaigns/data/chip-shelf'
+import { GOALS, FILTERS, GUIDE_QS, SITUATION_GOAL, isBuyable, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
+import { CHIP_ORDER, liveForChip, shelfForChip } from '@/lib/campaigns/data/chip-shelf'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
-import { curatedDetourFor } from '@/lib/campaigns/data/live-alternatives'
 import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
 import { hrefFor, firstName, type OrderPerson } from '../people-row'
 import { BUDGET_CHIPS } from '@/app/(auth)/onboarding/full/data'
 import { budgetCapForChip, NO_CAP_BUDGET_CHIPS } from '@/lib/goals/defaults'
-import { SHAPE_LABEL, DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
+import { DEFAULT_SHAPE, type ShelfShape } from '@/lib/clients/shape'
 import { useLang } from '../mvp-language'
 
 const C = { ink: '#1d1d1f', mute: '#6e6e73', faint: '#aeaeb2', line: '#e6e6ea', fill: '#f5f5f7', mint: '#4abd98', mintDk: '#2e9a78', mintSoft: '#eaf7f3', amberInk: '#8a5a0c', amberBg: '#fbf3e4' }
@@ -236,19 +235,39 @@ const CREATE_CSS = `
 .cr .sticky .p{font-family:'Cal Sans','Inter',sans-serif;font-size:20px;font-weight:600;flex:1;min-width:0;font-variant-numeric:normal}
 .cr .sticky .p span{display:block;font-family:Inter,system-ui,sans-serif;font-size:11.5px;color:#6e6e73;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .sticky .btn{height:46px;padding:0 20px}
+/* the Canva-shaped Create (owner 2026-09-11): describe, quick request, then browse */
+.cr .say2{margin:6px 16px 0;padding:12px 14px;border-radius:18px;background:#fff;border:0.5px solid #e6e6ea;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.cr .say2 .k{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#2e9a78}
+.cr .say2 .ta{display:block;width:100%;min-height:58px;margin-top:6px;border:0;outline:0;resize:none;background:none;font-family:'Inter',system-ui,sans-serif;font-size:15px;line-height:1.45;color:#1d1d1f;padding:0;box-sizing:border-box}
+.cr .say2 .ta::placeholder{color:#aeaeb2}
+.cr .say2 .foot{display:flex;align-items:center;gap:8px;margin-top:6px}
+.cr .say2 .hint{flex:1;font-size:12px;color:#aeaeb2}
+.cr .say2 .go{width:34px;height:34px;border-radius:17px;border:0;background:#1d1d1f;color:#fff;display:grid;place-items:center;cursor:pointer;flex:none}
+.cr .say2 .go:disabled{background:#e3e6e5;cursor:default}
+.cr .qgrid{display:grid;grid-template-rows:repeat(2,auto);grid-auto-flow:column;grid-auto-columns:64px;gap:10px 8px;overflow-x:auto;padding:2px 16px 6px;scrollbar-width:none}
+.cr .qt{width:64px;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
+.cr .qt .ic{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;color:#1d1d1f;background:#f5f5f7}
+.cr .qt .ic svg{width:22px;height:22px;stroke-width:1.8}
+.cr .qt span:last-child{font-size:10.5px;font-weight:600;text-align:center;line-height:1.2;color:#1d1d1f}
+.cr .browse{margin:22px 16px 0}
+.cr .fchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.cr .fchips .fch{background:#fff;border:0.5px solid #e6e6ea;height:32px;padding:0 10px 0 12px;font-size:12.5px}
+.cr .fchips .fch.on{background:#1d1d1f;color:#fff;border-color:transparent}
+.cr .fchips .fch svg{width:12px;height:12px;color:#6e6e73}
+.cr .fchips .fch.on svg{color:rgba(255,255,255,.7)}
+.cr .stages{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:8px}
+.cr .stg{flex:none;font-size:12.5px;font-weight:600;padding:8px 12px;border-radius:99px;border:0.5px solid #e6e6ea;color:#1d1d1f;white-space:nowrap;background:#fff;display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-family:inherit}
+.cr .stg i{width:8px;height:8px;border-radius:99px;background:var(--c2);display:inline-block}
+.cr .stg.on{background:#1d1d1f;color:#fff;border-color:transparent}
+.cr .srch{margin-top:10px;width:100%;display:flex;align-items:center;gap:8px;height:42px;padding:0 14px;border-radius:999px;background:#fff;border:0.5px solid #e6e6ea;color:#aeaeb2;font-size:14.5px;cursor:text;font-family:inherit;text-align:left}
+.cr .srch svg{color:#1d1d1f;flex:none}
+.cr .pc.wide{width:280px}
+.cr .pc .pl{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:4px;font-size:12.5px}
+.cr .pc .pl b{font-weight:700;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cr .pc .pl span{color:#aeaeb2;font-size:11.5px}
+.cr .pc .pl em{margin-left:auto;font-style:normal;font-weight:600;font-size:9.5px;padding:2px 7px;border-radius:99px;background:var(--t1);color:var(--c2);display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex:none}
+.cr .pc .pl em i{width:5px;height:5px;border-radius:99px;background:var(--c2)}
 `
-/**
- * THE ONE OPEN DECISION ON THIS PAGE, and it is the owner's.
- *
- * The shelf's Order pills and row glyphs wear the per-goal hue map (hues.ts, owner-approved
- * 2026-09-04: purple newfaces, blue reviews, teal event). The same file's first paragraph says
- * chrome stays mint, and the v8 mockup the twenty owners actually scored is mint and ink only.
- * Both readings are defensible and only the owner can settle it, so nothing is changed here:
- * false keeps the hues that are live today, true paints every row's glyph and button mint and
- * leaves the goal colour to the section dot. Flip this one line, look at both, then keep one.
- */
-const SHELF_CHROME_MINT = false
-
 /* a card's colour, as CSS variables the classes read */
 const hv = (k: HueKey): React.CSSProperties => ({ ['--c1' as string]: hueOf(k)[0], ['--c2' as string]: hueOf(k)[1], ['--t1' as string]: tint(k, 0.16), ['--sh' as string]: tint(k, 0.4, 1) } as React.CSSProperties)
 
@@ -259,33 +278,6 @@ interface Describe { ok: boolean; reason?: string; situation: string | null; sum
 /** The four facts about THIS client the shelf is drawn from (/api/campaigns/shelf-context). */
 interface ShelfCtx { goals: string[]; monthlyBudget: number | null; shape: ShelfShape; hasGoogle: boolean }
 
-/* One glyph and one colour per goal chip, the same pair the owner saw on the setup tiles and
- * the same hue family the cards wear. Keys are the exact GOAL_CHIPS strings (stored values). */
-const CHIP_HUE: Record<string, HueKey> = {
-  'More customers on slow days': 'nights',
-  'More foot traffic overall': 'newfaces',
-  'Build local awareness': 'brand',
-  'Promote a specific offering': 'announce',
-  'Grow social following': 'catering',
-  'Improve online reputation': 'reviews',
-  'Launch something new': 'announce',
-  'Stay top of mind': 'regulars',
-  'Compete with nearby businesses': 'newfaces',
-  'More bookings or orders': 'online',
-  'Turn first-timers into regulars': 'regulars',
-  'Grow catering orders': 'catering',
-  'Better photos of my food': 'event',
-  'Reach a younger crowd': 'brand',
-}
-/** What the "For you" shelf is called for this shape, in the owner's words (from the mockups). */
-const SHELF_TITLE_FOR_SHAPE: Record<ShelfShape, string> = {
-  storefront: 'For you',
-  truck: 'For a truck',
-  delivery_only: 'For delivery only',
-  two_locations: 'For this shop',
-  catering: 'For catering',
-  seasonal: 'For the season',
-}
 const money = (n: number) => `$${n.toLocaleString()}`
 /* The describe box reads a situation and lands on a shelf goal; the shelf is keyed by the
  * owner's chip now, so this is the one bridge between the two vocabularies. */
@@ -306,7 +298,7 @@ const CHIP_FOR_GOAL: Record<ShelfGoal, string> = {
 export default function CreatePage() {
   const router = useRouter()
   const params = useSearchParams()
-  const { client } = useClient()
+  const { client, availableClients, switchClient } = useClient()
   const { T } = useLang()
   /* The price as the owner reads it. Every real price is a number and travels as it is; the ONE
      card price that is a WORD is 'Quote', and it was the last English left on a Spanish shelf. */
@@ -333,11 +325,12 @@ export default function CreatePage() {
   const [ctx, setCtx] = useState<ShelfCtx | null>(null)
   /** The chip whose shelf is showing. Null until the client's own goals arrive. */
   const [chip, setChip] = useState<string | null>(null)
-  /* null = the owner has not touched it, so the section opens on its own when the list is short
-     (v8: a five-row roadmap is a roadmap; a fifteen-row one is a wall). Reset to null on every
-     chip change, because the next goal's list is a different length. */
-  const [showLater, setShowLater] = useState<boolean | null>(null)
   const [budgetSheet, setBudgetSheet] = useState(false)
+  /* the Canva-shaped browse (owner 2026-09-11): which stage the rails are filtered to (null =
+     For you, everything), how they sort, and the location sheet for owners with several */
+  const [stage, setStage] = useState<ShelfStage | null>(null)
+  const [sort, setSort] = useState<'rec' | 'cheap' | 'fast'>('rec')
+  const [locSheet, setLocSheet] = useState(false)
   /** The people who are on this client's live orders, for the bottom door. Empty is a fine
    *  answer: the door then says Get help, which is a real place, and never invents a name. */
   const [people, setPeople] = useState<OrderPerson[]>([])
@@ -368,11 +361,7 @@ export default function CreatePage() {
   const activeChip = chip ?? ctx?.goals[0] ?? CHIP_ORDER[1]
   const cap = ctx?.monthlyBudget ?? null
   /** What this card asks for on the first payment (the one-time amount, or the first month). */
-  const firstPayment = useCallback((id: string) => shelfCard(id)?.priceN ?? 0, [])
   const liveIds = useMemo(() => liveForChip(activeChip, shape), [activeChip, shape])
-  const underCap = useMemo(() => liveIds.filter((id) => cap == null || firstPayment(id) <= cap), [liveIds, cap, firstPayment])
-  const overCap = useMemo(() => liveIds.filter((id) => cap != null && firstPayment(id) > cap), [liveIds, cap, firstPayment])
-  const laterIds = useMemo(() => laterForChip(activeChip, shape), [activeChip, shape])
 
   const setBudget = async (chipLabel: string | null) => {
     const value = chipLabel ? budgetCapForChip(chipLabel) : null
@@ -423,17 +412,6 @@ export default function CreatePage() {
     )
   }
   /* row: a setup */
-  const SetupRow = ({ c }: { c: ShelfCard }) => { const Icon = iconFor(c); const isDone = done.has(c.id); const buy = isBuyable(c); const why = whyNow(c)
-    return (
-      <button type="button" onClick={() => open(c)} className={`row press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
-        <span className={`st${isDone ? ' done' : ''}`}>{isDone && <Check size={13} strokeWidth={3} />}</span>
-        <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
-        <span className="tx"><span className="t" style={{ display: 'block', textDecoration: isDone ? 'line-through' : 'none', opacity: isDone ? 0.6 : 1 }}>{c.title}</span>{(why || !buy) && <span className={`s${why && buy ? ' why' : ''}`} style={{ display: 'block' }}>{buy ? why : T('Coming soon')}</span>}</span>
-        <span className="r"><b>{isDone ? T('Done') : buy ? priceWord(c.price) : ''}</b></span>
-        <ChevronRight size={16} color={C.faint} style={{ flexShrink: 0 }} />
-      </button>
-    )
-  }
   const Sec = ({ t, s, hue, more }: { t: string; s?: string; hue: HueKey; more?: () => void }) => (
     <div className="sec" style={hv(hue)}>
       <div><h2><span className="dot" />{t}</h2>{s && <div className="sub">{s}</div>}</div>
@@ -457,22 +435,23 @@ export default function CreatePage() {
       setRead({ ok: r.ok && j?.ok !== false, reason: j?.reason, situation: res?.situation ?? null, summary: res?.summary ?? '', unsupported: Array.isArray(res?.unsupported) ? res.unsupported : [], when: res?.when ?? null })
       // Steer the chip rail, which is what draws the shelf now.
       const c = res?.situation ? CHIP_FOR_GOAL[SITUATION_GOAL[res.situation]] : null
-      if (c) { setChip(c); setShowLater(null) }
+      if (c) setChip(c)
     } catch { setRead({ ok: false, reason: 'no-answer', situation: null, summary: '', unsupported: [] }) }
     setReading(false)
   }
-  /* The four example sentences. They are TRANSLATED before they are shown and before they are
-     dropped in the box, because what an owner reads has to be what they would send. */
-  const EXAMPLES: [ShelfGoal, string][] = [['event', 'Halloween party Oct 31, want it packed'], ['announce', 'New fall menu lands Sep 18'], ['nights', 'Tuesdays are dead, fill them'], ['catering', 'Get office lunch orders']]
-  const SayBox = () => (
-    <div className="say">
-      <div className="in">
-        <div className="eyebrow"><Sparkles /><span className="aur">{T('Describe what you want to do')}</span></div>
-        <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={3} placeholder={T('Say it in a sentence. A date, a dish, a slow night…')} />
-        <div className="foot">
-          <span className="hint">{T('We read it and suggest a plan. You can change anything.')}</span>
-          <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? T('Reading') : T('Plan it')}</button>
-        </div>
+  /* ── the describe-it box (owner 2026-09-11, the Canva-shaped Create) ──
+     A hairline card in the kit: a kicker, the words, one ink arrow. The read-back underneath is
+     exactly what it was. Rendered as a VALUE, not an inner component: a component declared
+     inside the page is a new type on every keystroke, and React remounts it, which drops the
+     caret out of the box mid-word. */
+  const sayBox = (
+    <div className="say2">
+      <div className="k">{T('Describe it')}</div>
+      <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={2} placeholder={T('What do you want to do? A video for the new dish, Labor Day hours, more people in on Tuesdays…')} />
+      <div className="foot">
+        <span className="hint">{T('We read it and suggest a plan. You can change anything.')}</span>
+        <button type="button" className="go" onClick={describe} disabled={!ask.trim() || reading} aria-label={T('Plan it')}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={16} />}</button>
+      </div>
         {read && (
           <div style={{ marginTop: 12, borderTop: `1px solid ${C.line}`, paddingTop: 12 }}>
             {read.ok && read.situation ? (() => {
@@ -496,14 +475,6 @@ export default function CreatePage() {
             )}
           </div>
         )}
-      </div>
-    </div>
-  )
-
-  const Examples = () => (
-    <div className="ex cc-scroll" style={{ margin: '10px 16px 0' }}>
-      {EXAMPLES.map(([g, t]) => { const k: HueKey = g === 'foryou' ? 'mint' : g; const words = T(t)
-        return <button key={t} type="button" onClick={() => { setAsk(words); askRef.current?.focus() }} style={{ color: hueOf(k)[1], background: tint(k, 0.16) }}>{words}</button> })}
     </div>
   )
   /* ── the door at the bottom ──
@@ -540,180 +511,125 @@ export default function CreatePage() {
     </div>
   )
 
-  /* ── the goal rail ──
-   * The fourteen chips the owner was actually asked in setup, in their own words, with the
-   * ones they picked first. It used to be ten goals keyed in different words entirely, so
-   * nothing an owner said in setup could reach this page. Existing filter-chip styling; the
-   * budget chip is the same pill with a dashed edge when it has never been answered. */
-  const Rail = () => (
-    <div className="filters cc-scroll" style={{ paddingTop: 6, paddingBottom: 4 }}>
-      {/* No cap is no cap. The top chip ("Over $2,500/mo") and "Not sure yet" both leave
-          monthly_budget null, and this pill never prints a number the owner did not say. */}
-      <button type="button" onClick={() => setBudgetSheet(true)} className="fch" style={cap == null ? { border: '1.5px dashed #d9d9de', background: '#fff', color: C.mute } : undefined}>
-        {cap == null ? T('Set a budget') : T('Up to {amount} to start', { amount: money(cap) })}
-      </button>
-      {ctx && <span className="fch" style={{ background: '#fff', color: C.mute, cursor: 'default' }}>{T(SHAPE_LABEL[shape].title)}</span>}
-    </div>
-  )
-  const GoalRail = () => {
-    const mine = ctx?.goals ?? []
-    const ordered = [...mine, ...CHIP_ORDER.filter((c) => !mine.includes(c))]
-    return (
-      <div className="filters cc-scroll" style={{ paddingTop: 10 }}>
-        {ordered.map((c) => {
-          const on = c === activeChip
-          return <button key={c} type="button" onClick={() => { setChip(c); setShowLater(null) }} className={`fch${on ? ' on' : ''}`}>{T(c)}</button>
-        })}
-      </div>
-    )
-  }
-
   /* ── views ── */
   const cards = shelfCards()
-  const SearchBar = ({ live }: { live?: boolean }) => live ? (
+  const searchBar = (
     <div style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px 0 14px' }}>
       <Search size={16} color={C.faint} />
       <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={T('Search campaigns')} style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', fontSize: 14, color: C.ink, fontFamily: 'inherit', outline: 'none' }} />
       {q && <button type="button" onClick={() => setQ('')} aria-label={T('Clear')} style={{ width: 26, height: 26, borderRadius: 13, border: 'none', background: '#e3e6e5', color: C.mute, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}><X size={13} /></button>}
     </div>
-  ) : (
-    <button type="button" onClick={() => go({ name: 'search' })} style={{ ...GLASS, height: 40, borderRadius: 20, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', width: '100%', color: C.mute, fontSize: 14, cursor: 'text', fontFamily: 'inherit' }}><Search size={16} /> {T('Search campaigns')}</button>
   )
 
-  /* ONE SHELF CARD, the v8 shape the twenty owners read:
-       glyph · title · why (their own number, when one fired) · what the work is ·
-       the price with its time word · the button, then the lane ladder where a card has
-       three lanes, then the count line from the ledger registry.
-     Nothing here is invented: the why comes from their numbers, the what from the card's own
-     plain words, the ladder from the setup-card engine, the count from PROMISE_BY_CARD. A card
-     with no promise spec prints NO count line rather than a made-up one. */
-  const ShelfRow = ({ id, reason, softReason }: { id: string; reason?: string | null; /** the reason is the no-numbers-yet line, not a finding about them */ softReason?: boolean }) => {
-    const c = cards[id]
-    if (!c) return null
-    const Icon = iconFor(c)
-    const free = hasFreeLane(c.id)
-    const price = c.price === 'Quote' && free ? T('Free') : priceWord(c.price)
-    // The time word under the price. A monthly card says what monthly means; everything else
-    // says when it is ready. "Fee inside" is true: chargedPriceLabel folds the service fee in.
-    const monthly = c.price.includes('/mo') && !c.price.includes('+')
-    const priceSub = monthly ? T('monthly, cancel any time') : c.price === 'Quote' ? T(c.ready) : `${T(c.ready)} · ${T('fee inside')}`
-    const lanes = lanesFor(c.id, client?.tier === 'Pro')
-    const count = renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T)
-    // The glyph and the Order button take the card's goal colour, or mint, per the switch above.
-    const chrome: HueKey = SHELF_CHROME_MINT ? 'mint' : c.goal
-    return (
-      <div className="crow" style={hv(chrome)}>
-        <div className="top">
-          <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-            <Mark hue={chrome} size={38}><Icon size={19} /></Mark>
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <span className="t">{c.title}</span>
-              {/* Amber is a finding from their own numbers. The no-numbers-yet line is not one, so it
-                  wears the plain grey instead. */}
-              {reason && <span className={`why${softReason ? ' none' : ''}`}>{reason}</span>}
-              <span className="w">{c.plain || c.get[0]}</span>
-              {/* The ladder below already spells the free lane out, so the price line only says
-                  "or free, you do it" on a card that has no ladder to say it. */}
-              <span className="pl">{price}{price !== T('Free') && free && lanes.length === 0 ? T(', or free, you do it') : ''} <span>· {priceSub}</span></span>
-            </span>
-          </button>
-          {/* The button matches the price. A desk card with a real price is an order, not an ask:
-              only a card that genuinely has no price ('Quote') says Ask. */}
-          <button type="button" className="btn hue" style={{ height: 34, padding: '0 14px', flex: 'none', marginTop: 2 }} onClick={() => order(c)}>{free && c.price === 'Quote' ? T('Start') : c.handoff.kind === 'request' && c.price === 'Quote' ? T('Ask') : T('Order')}</button>
-        </div>
-        {lanes.length > 0 && (
-          <div className="lanes">
-            {lanes.map((l) => <div key={l.kind}><b>{T(l.price)}</b><span>{T(l.what)}</span></div>)}
-          </div>
-        )}
-        {count && <div className="count">{count}</div>}
-      </div>
-    )
+  /* ── quick request (owner 2026-09-11): the fifteen things owners do most, two rows that scroll
+     sideways. Every tile is a door to something real: a live screen, a card's own page, or the
+     describe box with the first words typed. A tile whose card is not on the shelf is dropped,
+     so nothing here opens onto "that one is not on the shelf". */
+  type Quick = { t: string; I: typeof PenLine; to: { ask: true } | { href: string } | { card: string } }
+  const QUICK_ALL: Quick[] = [
+    { t: T('Announce something'), I: Megaphone, to: { ask: true } },
+    { t: T('Update hours'), I: Clock, to: { href: '/dashboard/business-info/hours' } },
+    { t: T('Write a post'), I: PenLine, to: { href: '/dashboard/post' } },
+    { t: T('Boost a post'), I: TrendingUp, to: { href: '/dashboard/boost' } },
+    { t: T('Reply to reviews'), I: Star, to: { href: '/dashboard/review-replies' } },
+    { t: T('A graphic'), I: ImageIcon, to: { card: 'creative-graphic' } },
+    { t: T('A video'), I: Video, to: { card: 'creative-video' } },
+    { t: T('Photos'), I: Camera, to: { card: 'creative-photos' } },
+    { t: T('Menu'), I: Tag, to: { card: 'creative-menu' } },
+    { t: T('Website'), I: Store, to: { card: 'creative-website' } },
+    { t: T('Influencers'), I: Users, to: { card: 'creator' } },
+    { t: T('Run ads'), I: Target, to: { card: cards.reach ? 'reach' : 'creative-ads' } },
+    { t: T('An event'), I: Ticket, to: { card: 'promoevent' } },
+    { t: T('A deal or offer'), I: Tag, to: { card: 'slowoffer' } },
+    { t: T('Email & texts'), I: Mail, to: { card: 'creative-email' } },
+  ]
+  const QUICK = QUICK_ALL.filter((x) => !('card' in x.to) || !!cards[x.to.card])
+  function quickGo(x: Quick) {
+    if ('ask' in x.to) { setAsk(T('Announce something: ')); askRef.current?.focus(); return }
+    if ('href' in x.to) { router.push(x.to.href); return }
+    const c = cards[x.to.card]; if (c) open(c)
   }
 
+  /* ── the browse block: three filters, the five stages, then search ──
+     Location defaults to this store and only opens when the owner has more than one. Budget is
+     the same cap onboarding saved (the sheet below). Sort cycles. The stage is the filter every
+     rail reads, with the stage's own Insights colour as its dot. */
+  const STAGES: ShelfStage[] = ['Awareness', 'Interest', 'Actions', 'Orders', 'Retention']
+  const SORT_LABEL: Record<typeof sort, string> = { rec: T('Recommended'), cheap: T('Cheapest first'), fast: T('Fastest first') }
+  const daysOf = (r: string) => { const m = /(\d+)\s*(day|week)/i.exec(r); return m ? Number(m[1]) * (m[2].toLowerCase() === 'week' ? 7 : 1) : 99 }
+  /* Buyable first, then the coming-soon cards, each half in the chosen order. A card with no
+     number ('Quote') sorts last on price rather than first as a zero. */
+  const sorted = (list: ShelfCard[]) => {
+    const live = list.filter(isBuyable), soon = list.filter((c) => !isBuyable(c))
+    const by = sort === 'cheap' ? (a: ShelfCard, b: ShelfCard) => (a.priceN || 1e9) - (b.priceN || 1e9) : sort === 'fast' ? (a: ShelfCard, b: ShelfCard) => daysOf(a.ready) - daysOf(b.ready) : null
+    return by ? [...live.sort(by), ...soon.sort(by)] : [...live, ...soon]
+  }
+  const fits = (c: ShelfCard) => (stage == null || c.stage === stage) && (cap == null || c.priceN <= cap)
+  const multiLoc = availableClients.length > 1
+  const browseBlock = (
+    <div className="browse">
+      <div className="fchips cc-scroll">
+        <button type="button" className="fch" onClick={() => { if (multiLoc) setLocSheet(true) }} style={multiLoc ? undefined : { cursor: 'default' }}><MapPin /> {client?.name?.trim() || T('This location')}{multiLoc && <ChevronDown />}</button>
+        <button type="button" className={`fch${cap != null ? ' on' : ''}`} onClick={() => setBudgetSheet(true)}>{cap == null ? T('Any budget') : T('Up to {amount}', { amount: money(cap) })}<ChevronDown /></button>
+        <button type="button" className={`fch${sort !== 'rec' ? ' on' : ''}`} onClick={() => setSort((s) => (s === 'rec' ? 'cheap' : s === 'cheap' ? 'fast' : 'rec'))}>{SORT_LABEL[sort]}<ChevronDown /></button>
+      </div>
+      <div className="stages cc-scroll">
+        <button type="button" className={`stg${stage == null ? ' on' : ''}`} onClick={() => setStage(null)}>{T('For you')}</button>
+        {STAGES.map((s) => <button key={s} type="button" className={`stg${stage === s ? ' on' : ''}`} onClick={() => setStage(s)} style={hv(STAGE_HUE[s])}><i />{T(s)}</button>)}
+      </div>
+      <button type="button" className="srch" onClick={() => go({ name: 'search' })}><Search size={16} /> {T('Search campaigns and services')}</button>
+    </div>
+  )
+
+  /* ── a picture card (the standard `.pc` card, wearing the card's goal hue and a stage tag) ──
+     The tag is why the page exists: the owner reads which number this moves on every card, not
+     only behind a stage tab. A done setup wears Done; a held card wears Coming soon and no price. */
+  const pc = (c: ShelfCard, wide?: boolean) => { const Icon = iconFor(c); const buy = isBuyable(c); const isDone = done.has(c.id); const why = whyNow(c)
+    return (
+      <button key={c.id} type="button" onClick={() => open(c)} className={`card pc press${buy ? '' : ' dim'}${wide ? ' wide' : ''}`} style={hv(c.goal)}>
+        <div className="tile"><span className="glass"><Icon /></span>{(!buy || isDone) && <span className="badge">{isDone ? <span className="pill-w"><Check strokeWidth={3} /> {T('Done')}</span> : <Coming />}</span>}</div>
+        <div className="body">
+          <div className="t">{c.title}</div>
+          <div className="s">{why ?? c.plain}</div>
+          <div className="pl">{buy ? <b>{priceWord(c.price)}</b> : <span>{T('Not on sale yet')}</span>}<em style={hv(STAGE_HUE[c.stage])}><i />{T(c.stage)}</em></div>
+        </div>
+      </button>
+    )
+  }
+  const rail = ({ t, s, list, hue, kind }: { t: string; s?: string; list: ShelfCard[]; hue: HueKey; kind?: string }) => list.length === 0 ? null : (
+    <>
+      <Sec t={t} s={s} hue={hue} more={kind && list.length > 8 ? () => { setFilters((f) => ({ ...f, kind })); go({ name: 'search' }) } : undefined} />
+      <Shelf>{list.slice(0, 8).map((c) => pc(c, list.length === 1))}</Shelf>
+    </>
+  )
+
   const browse = () => {
-    /* The reason line is their own number where one exists. Where Google has never reported a
-       day there is no number to state, so the FIRST card says so plainly instead of a card
-       going out with a hollow zero on it. Said once, on the first row, not fourteen times. */
-    const nothingYet = ctx && !ctx.hasGoogle ? T('We do not have your Google numbers yet. This is the first step.') : null
-    const setupRows = SETUP_IDS.map((id) => cards[id]).filter((c): c is ShelfCard => !!c && isBuyable(c))
+    const all = Object.values(cards).filter(fits)
+    const rec = sorted(liveIds.map((id) => cards[id]).filter((c): c is ShelfCard => !!c && fits(c) && isBuyable(c)))
+    const of = (f: (c: ShelfCard) => boolean) => sorted(all.filter(f))
+    /* Five kinds of thing, not five stages: a creative is one piece made, a campaign is several
+       against a date, a setup is something you have fixed once, a program runs every month, and
+       people come in. They differ in what happens after the tap, which is what a category means. */
+    const creatives = of((c) => c.kind === 'quick')
+    const campaigns = of((c) => c.kind === 'campaign' && c.id !== 'creator')
+    const setups = of((c) => c.kind === 'setup')
+    const monthly = of((c) => c.kind === 'program')
+    const people = of((c) => c.id === 'creator')
+    const setupDone = setups.filter((c) => done.has(c.id)).length
+    const empty = [rec, creatives, campaigns, setups, monthly, people].every((l) => l.length === 0)
     return (
       <>
-        <SayBox />
-        <Examples />
-        {/* The goal rail sits UNDER the say box and the examples, the v8 order the twenty owners
-            read. It used to be pinned in the header above them, which pushed the first shelf row
-            off a 520px screen. The budget and shape chips stay in the header: they are facts about
-            this account that every price on the page is drawn at, not a choice you scroll to. */}
-        <GoalRail />
-
-        <Sec t={T(SHELF_TITLE_FOR_SHAPE[shape])} s={`${T(ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet')} · ${T('{n} you can order today', { n: underCap.length })}`} hue={CHIP_HUE[activeChip] ?? 'mint'} />
-        {underCap.length === 0 ? (
-          <div style={{ padding: '0 16px', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}>
-            <b style={{ color: C.ink }}>{T('Nothing here yet for this one.')}</b> {T('Everything we could do for it is below, with the reason it is not ready.')}
-          </div>
-        ) : (
-          <div style={{ padding: '0 12px' }}>{underCap.map((id, i) => { const own = cards[id] ? whyNow(cards[id]) : null
-              return <ShelfRow key={id} id={id} reason={own ?? (i === 0 ? nothingYet : null)} softReason={!own} /> })}</div>
-        )}
-
-        {overCap.length > 0 && cap != null && (
-          <>
-            <Sec t={T('Above {amount} to start', { amount: money(cap) })} s={T('{n} more, once you raise it', { n: overCap.length })} hue="amber" />
-            <div style={{ padding: '0 12px' }}>
-              {overCap.map((id) => { const c = cards[id]; if (!c) return null
-                return (
-                  <div key={id} className="row" style={hv('amber')}>
-                    <button type="button" onClick={() => open(c)} className="press" style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'none', border: 0, padding: 0, textAlign: 'left', font: 'inherit', color: C.ink, cursor: 'pointer' }}>
-                      <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{priceWord(c.price)} · {c.ready}</span></span>
-                    </button>
-                    <button type="button" className="btn ghost" style={{ height: 34, padding: '0 14px', flex: 'none' }} onClick={() => setBudgetSheet(true)}>{T('Raise budget')}</button>
-                  </div>
-                ) })}
-            </div>
-          </>
-        )}
-
-        {laterIds.length > 0 && (() => {
-          const openLater = showLater ?? laterIds.length <= 5
-          return (
-          <div style={{ margin: '18px 16px 0' }}>
-            <button type="button" onClick={() => setShowLater(!openLater)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderRadius: 16, border: 'none', background: C.fill, cursor: 'pointer', font: 'inherit', textAlign: 'left' }}>
-              <span style={{ flex: 1, fontWeight: 600, fontSize: 14, color: C.ink }}>{T('Coming later for this goal')} · {laterIds.length}</span>
-              <ChevronDown size={16} color={C.faint} style={{ transform: openLater ? 'rotate(180deg)' : undefined, transition: 'transform .15s' }} />
-            </button>
-            {openLater && (
-              <div style={{ padding: '6px 2px 0' }}>
-                {laterIds.map((id) => {
-                  const title = cards[id]?.title ?? shelfTitle(id)
-                  /* A detour only where a HAND-PICKED piece of this very card is on sale
-                     (curatedDetourFor reads UNBUNDLED_TODAY). The broad fallback used to answer
-                     here, and it never comes back empty, so all 65 rows offered an unrelated
-                     card: "Run local ads" under a photo shoot. Nothing curated, no swap. */
-                  const alt = cards[curatedDetourFor(id) ?? '']
-                  return (
-                  <div key={id} className="row" style={{ alignItems: 'flex-start' }}>
-                    <span className="tx">
-                      <span className="t" style={{ display: 'block', fontSize: 14 }}>{title}</span>
-                      <span className="s" style={{ display: 'block', whiteSpace: 'normal', lineHeight: 1.35, color: C.mute }}>
-                        {notSellableReason(id)}{alt ? ` ${T('{title} is {price} today.', { title: alt.title, price: priceWord(alt.price) })}` : ''}
-                      </span>
-                    </span>
-                    {alt
-                      ? <button type="button" className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', fontSize: 13 }} onClick={() => order(alt)}>{T('Order that instead')}</button>
-                      : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${title} when it is ready.`)}`} className="btn ghost" style={{ height: 32, padding: '0 12px', flex: 'none', textDecoration: 'none', fontSize: 13 }}>{T('Tell me when')}</Link>}
-                  </div>
-                ) })}
-              </div>
-            )}
-          </div>
-          )
-        })()}
-
-        {/* "2 of 5", from the same set the tick on each row reads: the setup cards this client has
-            actually ordered (a shipped campaign carrying that card's id). Never a guess. */}
-        <Sec t={T('Set up once')} s={T('{n} of {total} done', { n: setupRows.filter((c) => done.has(c.id)).length, total: setupRows.length })} hue="newfaces" more={() => { setFilters((f) => ({ ...f, kind: 'setup' })); go({ name: 'search' }) }} />
-        <div style={{ padding: '0 12px' }}>{setupRows.map((c) => <SetupRow key={c.id} c={c} />)}</div>
+        {sayBox}
+        <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
+        <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
+        {browseBlock}
+        {empty && <div style={{ padding: '18px 16px 0', color: C.mute, fontSize: 13.5, lineHeight: 1.5 }}><b style={{ color: C.ink }}>{T('Nothing fits those filters yet.')}</b> {T('Raise the budget or pick another stage.')}</div>}
+        {rail({ t: T('Recommended for you'), s: T(ctx?.hasGoogle ? 'From your own numbers' : 'No numbers yet'), list: rec, hue: stage ? STAGE_HUE[stage] : 'mint' })}
+        {rail({ t: T('Creatives'), s: T('One piece, made for you'), list: creatives, hue: 'brand', kind: 'quick' })}
+        {rail({ t: T('Campaigns'), s: T('A few pieces, against a date'), list: campaigns, hue: 'event', kind: 'campaign' })}
+        {rail({ t: T('Setup'), s: T('{n} of {total} done', { n: setupDone, total: setups.length }), list: setups, hue: 'newfaces', kind: 'setup' })}
+        {rail({ t: T('Every month'), s: T('Run for you, cancel any time'), list: monthly, hue: 'nights', kind: 'program' })}
+        {rail({ t: T('People'), s: T('Someone comes in and posts'), list: people, hue: 'catering' })}
 
         <div style={{ margin: '18px 16px 0' }}>
           <button type="button" onClick={() => go({ name: 'guide' })} className="press" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 18, border: 'none', background: '#fff', boxShadow: CARD_SHADOW, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
@@ -890,8 +806,23 @@ export default function CreatePage() {
     </>
   ) : null
 
+  /* ── the location sheet: only reachable when the owner has more than one ── */
+  const locSheetUI = locSheet ? (
+    <>
+      <div onClick={() => setLocSheet(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.28)', zIndex: 40 }} />
+      <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: '22px 22px 0 0', padding: '10px 16px calc(18px + env(safe-area-inset-bottom))' }}>
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: C.line, margin: '0 auto 12px' }} />
+          <div style={{ fontFamily: DISPLAY, fontSize: 19, fontWeight: 600, color: C.ink, marginBottom: 8 }}>{T('Which location?')}</div>
+          {availableClients.map((l) => { const on = l.id === clientId
+            return <button key={l.id} type="button" onClick={() => { setLocSheet(false); if (!on) switchClient(l.id) }} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 4px', border: 'none', background: 'none', textAlign: 'left', cursor: 'pointer', font: 'inherit' }}><span style={{ width: 20, height: 20, borderRadius: 10, border: `2px solid ${on ? C.mintDk : C.line}`, background: on ? C.mintDk : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', flexShrink: 0 }}>{on && <Check size={12} strokeWidth={3} />}</span><span style={{ flex: 1, fontSize: 15, fontWeight: on ? 700 : 500, color: C.ink }}>{l.name}</span></button> })}
+        </div>
+      </div>
+    </>
+  ) : null
+
   /* ── the filter sheet ── */
-  const FilterSheet = () => sheet ? (
+  const filterSheetUI = sheet ? (
     <>
       <div onClick={() => setSheet(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.28)', zIndex: 40 }} />
       <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 41, display: 'flex', justifyContent: 'center' }}>
@@ -905,13 +836,12 @@ export default function CreatePage() {
     </>
   ) : null
 
-  const title = view.name === 'guide' ? T('Guide me') : view.name === 'product' ? (cards[view.id]?.title ?? 'Create') : null
+  const title = view.name === 'guide' ? T('Guide me') : view.name === 'product' ? (cards[view.id]?.title ?? T('Create')) : T('Create')
   const backTo = view.name === 'browse' ? undefined : '/dashboard/campaigns/new'
   return (
     <MvpShell active="create" header={
       <div style={{ flexShrink: 0, background: '#fff' }}>
-        <div style={{ padding: '0 0 2px' }}><TopRow back={backTo} middle={view.name === 'search' ? <SearchBar live /> : view.name === 'browse' ? <SearchBar /> : <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', textAlign: 'center' }}>{title}</span>} /></div>
-        {view.name === 'browse' && <div className="cr"><style>{CREATE_CSS}</style><Rail /></div>}
+        <div style={{ padding: '0 0 2px' }}><TopRow back={backTo} middle={view.name === 'search' ? searchBar : <span style={{ fontFamily: DISPLAY, fontWeight: 600, fontSize: 17, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block', textAlign: 'center' }}>{title}</span>} /></div>
       </div>
     }>
       <div className="cr" style={{ background: '#fff', minHeight: '100%', fontFamily: "'Inter',system-ui,sans-serif" }}>
@@ -921,8 +851,9 @@ export default function CreatePage() {
         {view.name === 'guide' && guide()}
         {view.name === 'product' && product(view.id)}
       </div>
-      <FilterSheet />
+      {filterSheetUI}
       {budgetSheetUI}
+      {locSheetUI}
       {view.name !== 'browse' && view.name !== 'product' && (
         <button type="button" onClick={back} aria-label={T('Back')} style={{ display: 'none' }}><ChevronLeft /></button>
       )}
