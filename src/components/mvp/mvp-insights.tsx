@@ -1404,7 +1404,9 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
               range against the one before it, while the chart caption below compares
               the end of this range against its start. Both were unlabelled, so one
               screen could read "up 785%" here and "down 86%" there. */}
-          <span style={{ fontSize: 11.5, color: C.faint }}>change vs the period before</span>
+          {/* The actual dates of the period before, not the words (owner 2026-09-11). Every
+              stage's summary carries the same window, so the first one that has it speaks. */}
+          <span style={{ fontSize: 11.5, color: C.faint }}>{(() => { const d = rows.map((r) => r.sm?.cmpDates).find(Boolean); return d ? `vs ${d}` : 'change vs the period before' })()}</span>
         </div>
         {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
       </div>
