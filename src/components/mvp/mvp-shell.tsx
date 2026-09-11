@@ -134,7 +134,7 @@ function useSeenLog(clientId: string | undefined) {
   }, [clientId, pathname])
 }
 
-export default function MvpShell({ active, unread, header, children, wide, noHeader, fit, middle, title, back, right, focus }: { /** a screen with one job: hides the bottom nav and pins the header, so the page's own action bar owns the bottom */ focus?: boolean; /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; /** replaces the bell (a page's own action) */ right?: React.ReactNode; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean; /** a screen that fits on one screen and must not slide under a drag (Home) */ fit?: boolean }) {
+export default function MvpShell({ active, unread, header, children, wide, noHeader, fit, middle, title, back, backExact, right, focus }: { /** a screen with one job: hides the bottom nav and pins the header, so the page's own action bar owns the bottom */ focus?: boolean; /** a screen you clicked into: the row's left slot becomes a back chevron to this href */ back?: string; /** see TopRow: the chevron goes to `back` itself, never through history */ backExact?: boolean; /** replaces the bell (a page's own action) */ right?: React.ReactNode; active: NavKey; unread?: number; header?: React.ReactNode; children: React.ReactNode; wide?: boolean; /** the page's own control for the top row's centre (a search, a segmented) */ middle?: React.ReactNode; /** or just the page's name in the centre */ title?: string; /** the screen draws its own top row (Home's funnel bar) */ noHeader?: boolean; /** a screen that fits on one screen and must not slide under a drag (Home) */ fit?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   /* The header tucks away as you scroll on browsing screens, which is right
      there and wrong in a composer: the back arrow is the way out of a half
@@ -147,7 +147,7 @@ export default function MvpShell({ active, unread, header, children, wide, noHea
       <style>{SHELL_CSS}</style>
       <div className={`${wide ? 'mvp-frame mvp-frame-wide' : 'mvp-frame'}${tucked ? ' mvp-scrolling' : ''}`}>
         {/* the standard app bar floats over the scroll (glass); a page's own header stays in flow */}
-        {noHeader ? null : header ? header : <div className="mvp-frame-top"><TopRow middle={middle} title={title} count={unread} back={back} right={right} /></div>}
+        {noHeader ? null : header ? header : <div className="mvp-frame-top"><TopRow middle={middle} title={title} count={unread} back={back} backExact={backExact} right={right} /></div>}
         <div ref={scrollRef} className={`${noHeader ? 'mvp-frame-scroll mvp-short-tail' : header ? 'mvp-frame-scroll' : 'mvp-frame-scroll mvp-under-top'}${fit ? ' mvp-fit' : ''}${focus ? ' mvp-focus-tail' : ''}`}>{children}</div>
         {!focus && <BottomNav active={active} />}
       </div>

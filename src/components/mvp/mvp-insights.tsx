@@ -310,7 +310,7 @@ export default function MvpInsights({ data, loading, error, clientId, initialSta
 
 
   return (
-    <MvpShell active="home" back="/dashboard" middle={<TopSegmented options={[['insights', 'Insights'], ['trends', 'Trends']]} value={tab} onChange={setTab} />}>
+    <MvpShell active="home" back="/dashboard" backExact middle={<TopSegmented options={[['insights', 'Insights'], ['trends', 'Trends']]} value={tab} onChange={setTab} />}>
       <style>{`.mvp-swipe{scrollbar-width:none;-ms-overflow-style:none}
 .mvp-swipe::-webkit-scrollbar{display:none}
 .mvp-spin{animation:mvpspin .8s linear infinite}

@@ -17,7 +17,7 @@ const C = { green: '#4abd98', greenDk: '#2e9a78', ink: '#1d1d1f', mute: '#6e6e73
 const DISPLAY = "'Cal Sans','Inter',sans-serif"
 export const GLASS: React.CSSProperties = { background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
 
-export default function TopRow({ middle, title, count, back, right }: { middle?: React.ReactNode; title?: string; count?: number; /** a screen you clicked INTO (Insights, a campaign, an order): the left slot is a back chevron to this href instead of the avatar (owner 2026-09-04) */ back?: string; /** replaces the bell (a detail page's own action) */ right?: React.ReactNode }) {
+export default function TopRow({ middle, title, count, back, backExact, right }: { middle?: React.ReactNode; title?: string; count?: number; /** a screen you clicked INTO (Insights, a campaign, an order): the left slot is a back chevron to this href instead of the avatar (owner 2026-09-04) */ back?: string; /** always go to `back` itself, never through history: a hub screen (Insights) whose history may hold the settings screens it opened (owner 2026-09-11) */ backExact?: boolean; /** replaces the bell (a detail page's own action) */ right?: React.ReactNode }) {
   const router = useRouter()
   const { client, availableClients, switchClient } = useClient()
   const name = client?.name?.trim() || 'Your restaurant'
@@ -49,6 +49,7 @@ export default function TopRow({ middle, title, count, back, right }: { middle?:
           <button
             type="button" aria-label="Back"
             onClick={() => {
+              if (backExact) { router.push(back); return }
               if (typeof window !== 'undefined' && window.history.length > 1) router.back()
               else router.push(back)
             }}
