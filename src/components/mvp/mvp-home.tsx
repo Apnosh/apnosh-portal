@@ -1015,25 +1015,6 @@ export function ActionsChart({
   const pickedBar = picked != null ? bars[picked] : null
   return (
     <div style={{ margin: '10px 0 0' }}>
-      {/* the range capsule: short labels (the long ones overlapped on a phone) and a
-          calendar for a custom window */}
-      <div style={{ display: 'flex', gap: 2, marginBottom: 12, borderRadius: 999, padding: 3, background: 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 3px rgba(0,0,0,.05)' }}>
-        {CHART_RANGES.map(([k, l]) => {
-          const on = range === k
-          const cal = k === 'custom'
-          return (
-            <button key={k} aria-label={cal ? 'Custom dates' : l} title={cal ? 'Custom dates' : undefined} onClick={() => { setRange(k); setPicked(null) }} style={{ flex: cal ? '0 0 44px' : 1, minWidth: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', whiteSpace: 'nowrap', border: 'none', background: on ? '#fff' : 'transparent', color: on ? C.ink : C.mute, borderRadius: 999, padding: '8px 0', fontSize: 13.5, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: on ? '0 2px 6px rgba(0,0,0,.12)' : 'none', transition: 'background .15s' }}>
-              {cal ? <CalendarDays size={15} /> : l}
-            </button>
-          )
-        })}
-      </div>
-      {range === 'custom' && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-          <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>From<input type="date" value={cStart} max={cEnd} onChange={(e) => { setCStart(e.target.value); setPicked(null) }} style={dateInput} /></label>
-          <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>To<input type="date" value={cEnd} min={cStart} onChange={(e) => { setCEnd(e.target.value); setPicked(null) }} style={dateInput} /></label>
-        </div>
-      )}
       {showTotal && (
         <div style={{ fontSize: 11.5, color: C.faint, marginBottom: 8 }}>
           <b style={{ color: C.ink, fontWeight: 700 }}>{total.toLocaleString()}</b> {noun}
@@ -1101,6 +1082,27 @@ export function ActionsChart({
           </div>
         )}
       </div>
+      {/* THE RANGE, UNDER THE GRAPH, as plain words (owner 2026-09-11): no glass capsule, just
+          the four spans and a calendar. The one in force wears the graph's own colour, so the
+          bars, the pill and the range read as one thing. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 10 }}>
+        {CHART_RANGES.map(([k, l]) => {
+          const on = range === k
+          const cal = k === 'custom'
+          return (
+            <button key={k} aria-label={cal ? 'Custom dates' : l} title={cal ? 'Custom dates' : undefined} onClick={() => { setRange(k); setPicked(null) }}
+              style={{ flex: cal ? '0 0 auto' : 1, minWidth: 0, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', borderRadius: 99, padding: cal ? '0 12px' : 0, background: on ? col : 'transparent', color: on ? '#fff' : C.mute, fontSize: 13, fontWeight: on ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', transition: 'background .15s, color .15s' }}>
+              {cal ? <CalendarDays size={15} /> : l}
+            </button>
+          )
+        })}
+      </div>
+      {range === 'custom' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>From<input type="date" value={cStart} max={cEnd} onChange={(e) => { setCStart(e.target.value); setPicked(null) }} style={dateInput} /></label>
+          <label style={{ fontSize: 11.5, color: C.mute, display: 'flex', alignItems: 'center', gap: 6 }}>To<input type="date" value={cEnd} min={cStart} onChange={(e) => { setCEnd(e.target.value); setPicked(null) }} style={dateInput} /></label>
+        </div>
+      )}
     </div>
   )
 }

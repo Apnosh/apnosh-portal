@@ -429,7 +429,10 @@ const STAGE_EXPLAIN: Record<string, string> = {
 }
 /* the graph's bars take the NUMBER's colour (owner 2026-09-04): green when the period is up on
    the one before, red when down, amber when even. The stage hue stays on the dots + sections. */
-const TREND_GREEN = '#2e9a78', TREND_RED = '#c92d32', TREND_AMBER = '#d99a1e'
+/* BRIGHT, on purpose (owner 2026-09-11: "stand out more"): the graph, its range and its pill all
+   wear these, a clear green up and a red-orange down, not the quieter kit greens and corals. */
+const TREND_GREEN = '#1fc47a', TREND_RED = '#ff4d2e', TREND_AMBER = '#f0a12b'
+const TREND_GREEN_SOFT = '#e4f8ee', TREND_RED_SOFT = '#ffe9e4'
 const AccentCtx = createContext<Accent>(STAGE_ACCENT.shown)
 const useAccent = () => useContext(AccentCtx)
 /* The conversion from the stage before, as a chip beside the stage name (owner 2026-09-04:
@@ -1274,8 +1277,8 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
   const { range, setRange, cStart, setCStart, cEnd, setCEnd, summary } = useChartRange(mv)
   const fresh = isFresh(mv.lastDataDate, summary.periodDays)
   const dn = summary.deltaPct < 0
-  const ac = dn ? C.coral : C.green
-  const acbg = dn ? C.coralBg : C.greenSoft
+  const ac = dn ? TREND_RED : TREND_GREEN
+  const acbg = dn ? TREND_RED_SOFT : TREND_GREEN_SOFT
   // report the picked range up (the external cards follow it)
   useEffect(() => { onRange?.(range) }, [range, onRange])
   // The big number IS the sum of the by-source breakdown (the computeStages
