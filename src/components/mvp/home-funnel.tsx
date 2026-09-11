@@ -832,7 +832,9 @@ export default function HomeFunnel({
       }
       // the number wears its direction: red when down, green otherwise (owner 2026-09-04: "black should still be green").
       // red when down; otherwise plain ink — big green digits were hard to read (owner 2026-09-04)
-      ctx.fillStyle = s.count == null ? C.faint : band === 'veryLow' ? `rgb(${bandCol(band).join(',')})` : s.zone === 'estimate' ? C.amberDk : C.ink
+      /* the number stays INK whichever way it went (owner 2026-09-11); the ring, the crowd and the
+         tick beside it carry the red */
+      ctx.fillStyle = s.count == null ? C.faint : s.zone === 'estimate' ? C.amberDk : C.ink
       // as big as the room allows, from a bold 54px down to a floor of 24px; if a very long number
       // still won't fit at the floor (tiny embed × 8 digits), maxWidth compresses it to the room as a
       // last resort so it never spills into the orb or across the centre path.
