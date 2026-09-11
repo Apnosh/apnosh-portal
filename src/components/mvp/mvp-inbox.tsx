@@ -13,10 +13,10 @@ import { markInboxSeen } from './use-inbox-unread'
  * Under "All" the feed still leads with "Needs you" so urgent items surface
  * first. Wired to real data (/api/dashboard/inbox).
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState , useRef } from 'react'
 import { CARD_SHADOW, Segmented } from './kit'
 import Link from 'next/link'
-import { Bell, CalendarDays, Check, Clapperboard, CreditCard, FileText, Flag, Hourglass, Loader2, MoreHorizontal, Palette, PartyPopper, Plug, Rocket, Search, Star, ThumbsUp, TrendingUp } from 'lucide-react'
+import { Bell, CalendarDays, Check, Clapperboard, CreditCard, FileText, Flag, Hourglass, Loader2, MoreHorizontal, Palette, PartyPopper, Plug, Rocket, Search, Star, ThumbsUp, TrendingUp , BellOff } from 'lucide-react'
 import { markInboxRead, markWinRead } from '@/app/dashboard/inbox/actions'
 import { BrandOrMark } from './mvp-insights'
 
@@ -430,19 +430,19 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
   const pad: React.CSSProperties = { flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 0 28px' }
 
   if (filter === 'all') {
-    // One flat feed, urgent first — no section headers.
+    // One flat feed, urgent first — no section headers. NO dismiss here (owner 2026-09-11): All is
+    // the record, and a notification cannot be deleted from it. Twenty rows at a time; scrolling to
+    // the end loads the next twenty.
     const ordered = [...list].sort((a, b) => (a.band === 'today' ? 0 : 1) - (b.band === 'today' ? 0 : 1))
+    const feed: Array<{ key: string; node: React.ReactNode }> = [
+      ...ordered.map((i) => ({ key: i.id, node: <Row key={i.id} item={i} /> })),
+      ...winList.map((w) => ({ key: w.id, node: <WinLink key={w.id} w={w} /> })),
+    ]
     return (
       <div style={pad}>
-        {q && list.length === 0 && winList.length === 0 && <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />}
-        {!q && list.length === 0 && (
-          <div style={{ margin: '4px 14px 2px', background: C.greenSoft, borderRadius: 16, padding: '15px 16px', display: 'flex', alignItems: 'center', gap: 11 }}>
-            <span style={{ fontSize: 22 }}>🎉</span>
-            <div><div style={{ fontWeight: 700, fontSize: 14.5, color: C.greenDk }}>You&apos;re all caught up</div><div style={{ fontSize: 12, color: C.greenDk, opacity: 0.85 }}>Nothing is waiting on you right now.</div></div>
-          </div>
-        )}
-        {ordered.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}
-        {winList.map((w) => <WinLink key={w.id} w={w} />)}
+        {q && feed.length === 0 && <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />}
+        {!q && feed.length === 0 && <InboxEmpty icon={BellOff} title="No notifications yet" sub="When something happens, it lands here." />}
+        <PagedFeed items={feed} />
       </div>
     )
   }
@@ -454,8 +454,8 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
         {q
           ? <InboxEmpty icon={Search} title="No matches" sub="Nothing here matches that search." />
           : filter === 'needsyou'
-            ? <InboxEmpty icon={Check} title="You're all caught up" sub="Nothing is waiting on you right now." />
-            : <InboxEmpty icon={Check} title={`No ${label} right now`} sub={`When something shows up in ${label}, it lands here.`} />}
+            ? <InboxEmpty icon={Check} title="Nothing needs you" sub="When something does, it lands here." />
+            : <InboxEmpty icon={Check} title={`No ${label} yet`} sub={`When something shows up in ${label}, it lands here.`} />}
       </div>
     )
   }
@@ -464,6 +464,26 @@ function ListView({ filter, items, wins, q, onDismiss }: { filter: string; items
       {sorted.map((i) => <Row key={i.id} item={i} onDismiss={onDismiss} />)}
       {winList.map((w) => <WinLink key={w.id} w={w} />)}
     </div>
+  )
+}
+
+/** Twenty rows at a time; a sentinel at the end asks for twenty more when it scrolls into view. */
+const PAGE = 20
+function PagedFeed({ items }: { items: Array<{ key: string; node: React.ReactNode }> }) {
+  const [shown, setShown] = useState(PAGE)
+  const endRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = endRef.current
+    if (!el || shown >= items.length) return
+    const io = new IntersectionObserver((es) => { if (es.some((e) => e.isIntersecting)) setShown((n) => Math.min(items.length, n + PAGE)) }, { rootMargin: '200px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [shown, items.length])
+  return (
+    <>
+      {items.slice(0, shown).map((x) => x.node)}
+      {shown < items.length && <div ref={endRef} style={{ height: 1 }} />}
+    </>
   )
 }
 
@@ -477,17 +497,17 @@ function WinLink({ w }: { w: Win }) {
 
 /* generic row — every row deep-links to its own page (reviews → the review
    page with AI reply); nothing expands inline. */
-function Row({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void }) {
+function Row({ item, onDismiss }: { item: Item; onDismiss?: (id: string) => void }) {
   if (item.review) return <ReviewRow item={item} onDismiss={onDismiss} />
   const isFix = item.kind === 'connection'
   return (
-    <NotifRow href={item.href} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id); inboxChanged() }} avatar={<IconAvatar emoji={item.icon} source={item.source} danger={isFix} />}>
+    <NotifRow href={item.href} unread={item.unread} time={item.time} onDismiss={onDismiss ? () => onDismiss(item.id) : undefined} onNav={() => { void markInboxRead(item.id); inboxChanged() }} avatar={<IconAvatar emoji={item.icon} source={item.source} danger={isFix} />}>
       <Lead bold={item.title} rest={item.subtitle || undefined} />
     </NotifRow>
   )
 }
 
-function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) => void }) {
+function ReviewRow({ item, onDismiss }: { item: Item; onDismiss?: (id: string) => void }) {
   const r = item.review!
   // the platform is what the eye should land on (owner 2026-09-04: "Google shows the Google
   // symbol, TikTok TikTok") — its mark leads, the reviewer's real photo rides as the badge
@@ -501,7 +521,7 @@ function ReviewRow({ item, onDismiss }: { item: Item; onDismiss: (id: string) =>
     </div>
   )
   return (
-    <NotifRow href={`/dashboard/reviews/${r.reviewId}`} unread={item.unread} time={item.time} onDismiss={() => onDismiss(item.id)} onNav={() => { void markInboxRead(item.id); inboxChanged() }} avatar={avatar}>
+    <NotifRow href={`/dashboard/reviews/${r.reviewId}`} unread={item.unread} time={item.time} onDismiss={onDismiss ? () => onDismiss(item.id) : undefined} onNav={() => { void markInboxRead(item.id); inboxChanged() }} avatar={avatar}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', fontSize: 14, lineHeight: 1.3, color: C.ink }}>
         <b style={{ fontWeight: 700 }}>{r.author}</b>
         <Stars n={r.rating} />
