@@ -43,10 +43,10 @@ export type NavKey = 'home' | 'campaigns' | 'orders' | 'inbox' | 'more' | 'messa
    mint seat with the glyph filled in its colour and a faint glow, the way modern tab bars do. */
 export default function BottomNav({ active }: { active: NavKey }) {
   return (
-    <nav className="mvp-nav" style={{ position: 'absolute', left: 12, right: 12, bottom: `max(${NAV_BOTTOM}px, env(safe-area-inset-bottom))`, zIndex: 5, overflow: 'visible', borderRadius: 999, background: 'rgba(255,255,255,0.72)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', border: '1px solid rgba(255,255,255,0.75)', boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.10)', height: NAV_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'space-around', padding: '0 8px' }}>
+    <nav className="mvp-nav" style={{ position: 'absolute', left: 12, right: 12, bottom: `max(${NAV_BOTTOM}px, env(safe-area-inset-bottom))`, zIndex: 5, overflow: 'visible', borderRadius: 999, background: 'rgba(255,255,255,0.88)', backdropFilter: 'saturate(180%) blur(18px)', WebkitBackdropFilter: 'saturate(180%) blur(18px)', border: `1px solid ${C.line}`, boxShadow: '0 1px 2px rgba(0,0,0,.06), 0 12px 34px rgba(0,0,0,.16)', height: NAV_HEIGHT, display: 'flex', alignItems: 'stretch', justifyContent: 'space-between', padding: '0 6px' }}>
       <Item href="/dashboard" label="Home" on={active === 'home'}><HomeIcon /></Item>
       <Item href="/dashboard/campaigns" label="Campaigns" on={active === 'campaigns'}><CalendarDays /></Item>
-      <Link href="/dashboard/campaigns/new" aria-label="Create" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 46, height: 46, textDecoration: 'none' }}>
+      <Link href="/dashboard/campaigns/new" aria-label="Create" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, textDecoration: 'none' }}>
         {/* the + is always lit; on the Create screen it gains the halo the other tabs get */}
         <span style={{ width: 36, height: 36, borderRadius: 99, background: `linear-gradient(135deg, ${C.green}, ${C.greenDk})`, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: active === 'create' ? '0 0 0 5px rgba(74,189,152,.22), 0 6px 16px rgba(46,154,120,.45)' : '0 4px 12px rgba(46,154,120,.30)', transition: 'box-shadow .18s' }}>
           <Plus size={22} strokeWidth={2.6} />
@@ -60,10 +60,12 @@ export default function BottomNav({ active }: { active: NavKey }) {
 
 function Item({ href, label, on, children }: { href: string; label: string; on?: boolean; children: React.ReactElement<{ size?: number; strokeWidth?: number; fill?: string; fillOpacity?: number }> }) {
   /* the glyph itself carries the state: thicker stroke and a tinted fill when on */
-  const icon = React.cloneElement(children, { size: 25, strokeWidth: on ? 2.4 : 1.9, fill: on ? 'currentColor' : 'none', fillOpacity: on ? 0.2 : 0 })
+  const icon = React.cloneElement(children, { size: 26, strokeWidth: on ? 2.4 : 2, fill: on ? 'currentColor' : 'none', fillOpacity: on ? 0.22 : 0 })
   return (
     <Link href={href} aria-label={label} title={label} aria-current={on ? 'page' : undefined}
-      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 46, height: 46, borderRadius: 16, textDecoration: 'none', color: on ? C.greenDk : C.navOff, background: on ? 'rgba(74,189,152,.14)' : 'transparent', boxShadow: on ? '0 0 0 1px rgba(74,189,152,.10), 0 6px 16px rgba(46,154,120,.18)' : 'none', transition: 'color .18s, background .18s, box-shadow .18s' }}>
+      /* THE SEAT IS THE WHOLE SLOT (owner 2026-09-11: "cover a lot more"): each tab owns a fifth of
+         the bar, top to bottom, and the lit one fills it in mint with a glow that bleeds past it */
+      style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, alignSelf: 'stretch', margin: '4px 2px', borderRadius: 999, textDecoration: 'none', color: on ? C.greenDk : C.navOff, background: on ? 'rgba(74,189,152,.18)' : 'transparent', boxShadow: on ? '0 0 0 1px rgba(74,189,152,.16), 0 0 22px 6px rgba(74,189,152,.28)' : 'none', transition: 'color .18s, background .18s, box-shadow .18s' }}>
       <span className={on ? 'mvp-tab-on' : undefined} style={{ display: 'flex' }}>{icon}</span>
     </Link>
   )
