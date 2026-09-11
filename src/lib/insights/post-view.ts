@@ -37,10 +37,23 @@ export interface PostView {
  * The type chip. Reel ONLY when the platform's own reel-only metric is present (their spec:
  * "Instagram Reels only, 0 for non-Reels media"), never inferred from anything else. A row
  * with no usable type stays "Post" rather than being guessed into a category.
+ *
+ * THE PERMALINK IS ALSO EVIDENCE, and better evidence than the metric for three
+ * of the five networks. The vendor leaves media_product_type empty on every row
+ * we hold, and the reel-only watch-time metric exists on Instagram alone -- so a
+ * Facebook reel came through as a plain "Video" while its own URL said
+ * facebook.com/reel/. That is the platform's word for what the thing is, not a
+ * guess from a duration or an aspect ratio. YouTube Shorts are NOT inferred:
+ * their links arrive as ordinary /watch?v= URLs and nothing else in the payload
+ * separates one from a landscape upload, so they stay "Video" until something
+ * real says otherwise.
  */
-export function postType(mediaType: string | null, product: string | null, isReel = false): string {
+export function postType(mediaType: string | null, product: string | null, isReel = false, permalink?: string | null): string {
   const p = (product ?? '').toUpperCase()
   const m = (mediaType ?? '').toUpperCase()
+  const url = (permalink ?? '').toLowerCase()
+  if (/\/(reel|reels)\//.test(url)) return 'Reel'
+  if (/\/shorts\//.test(url)) return 'Short'
   if (p === 'REELS' || isReel) return 'Reel'
   if (p === 'STORY') return 'Story'
   if (m === 'VIDEO') return 'Video'
@@ -86,7 +99,7 @@ export function toPostView(p: Row): PostView {
     platform: p.platform,
     permalink: p.permalink || null,
     thumbnailUrl: p.thumbnail_url ?? null,
-    type: postType(p.media_type ?? null, p.media_product_type ?? null, isReel),
+    type: postType(p.media_type ?? null, p.media_product_type ?? null, isReel, p.permalink ?? null),
     reach: value,
     pending: value === 0 && state !== 'synced',
     unreported: value === 0 && state === 'synced' && !measured,
