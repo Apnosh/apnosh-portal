@@ -56,13 +56,12 @@ const CREATE_CSS = `
 .cr .orb.on{color:var(--c2)}
 .cr .orb.on i{transform:scale(1.1)}
 /* the describe box */
-/* OUR gradient, not Canva's (owner 2026-09-11: the mint-blue-violet read as theirs). Mint to warm gold,
-   the sweep the avatar ring has worn since the top row was built. */
-.cr .say{margin:8px 16px 0;padding:2px;border-radius:22px;background:linear-gradient(135deg,#4abd98 0%,#8ee5c6 45%,#ffd58a 100%);box-shadow:0 10px 30px rgba(74,189,152,.2)}
+/* the colourful ring (owner 2026-09-11, after a day on mint-to-gold: back to this one) */
+.cr .say{margin:8px 16px 0;padding:2px;border-radius:22px;background:linear-gradient(135deg,#4abd98,#5ba8e8 45%,#9a5bf0);box-shadow:0 10px 30px rgba(74,189,152,.18)}
 .cr .say .in{background:#fff;border-radius:20px;padding:14px 14px 12px}
 .cr .eyebrow{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:#6e6e73}
 .cr .eyebrow svg{width:13px;height:13px;color:#2e9a78}
-.cr .aur{background:linear-gradient(90deg,#2e9a78,#4abd98 55%,#d99a1e);-webkit-background-clip:text;background-clip:text;color:transparent}
+.cr .aur{background:linear-gradient(90deg,#2e9a78,#3b6fd4,#6a39de);-webkit-background-clip:text;background-clip:text;color:transparent}
 .cr .say .ta{display:block;width:100%;min-height:84px;margin-top:8px;border:0;outline:0;resize:none;background:none;font-family:'Cal Sans','Inter',sans-serif;font-size:19px;line-height:1.35;color:#1d1d1f;padding:0;box-sizing:border-box}
 .cr .say .ta::placeholder{color:#aeaeb2}
 .cr .ex{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}

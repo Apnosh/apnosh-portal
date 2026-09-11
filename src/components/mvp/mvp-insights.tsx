@@ -387,10 +387,9 @@ function ReportButton() {
   const pro = isProTier(client?.tier)
   return (
     <PushCircle href={ANALYST_HREF} label={pro ? 'Your report' : 'Your report, Pro plan only'}
-      /* the same mint-to-gold the describe box wears on Create (our sweep, the avatar ring's, not
-         Canva's teal-to-purple), so the report reads as the page's one enticing door (owner
-         2026-09-11); the lock keeps the plain glass */
-      style={pro ? { background: 'linear-gradient(135deg,#2e9a78 0%,#4abd98 55%,#ffd58a 100%)', border: '1px solid rgba(255,255,255,.6)', color: '#fff', boxShadow: '0 6px 16px rgba(74,189,152,.4)' } : undefined}>
+      /* the describe box's colourful ring, as an OUTLINE around a white circle, not a fill (owner
+         2026-09-11), so the report reads as the page's one enticing door; the lock keeps the glass */
+      style={pro ? { background: 'linear-gradient(#fff,#fff) padding-box, linear-gradient(135deg,#4abd98,#5ba8e8 45%,#9a5bf0) border-box', border: '2px solid transparent', color: C.greenDk, boxShadow: '0 6px 16px rgba(91,168,232,.28)' } : undefined}>
       {pro ? <FileText size={16} strokeWidth={2.2} /> : <Lock size={14} />}
     </PushCircle>
   )
