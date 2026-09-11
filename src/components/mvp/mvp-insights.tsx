@@ -1353,8 +1353,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
   const cur = rows.find((r) => r.st.key === sel) ?? rows[0]
   const rangeRow = (
     <>
-        {/* the range row sits UNDER the graph, as it does on Insights (owner 2026-09-11): plain
-            words, no capsule, the one in force filled with the picked stage's verdict colour */}
+        {/* plain words, no capsule, the one in force filled with the picked stage's verdict colour */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
         {TREND_RANGES.map(([k, l]) => {
           const on = range === k
@@ -1387,9 +1386,11 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
         </div>
         {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
       </div>
+      {/* the range row sits between the stage list and the picked stage's graph (owner 2026-09-11) */}
+      <div style={{ margin: '14px 0 6px' }}>{rangeRow}</div>
       <AccentCtx.Provider value={STAGE_ACCENT[cur.st.key] ?? STAGE_ACCENT.shown}>
         {cur.mv && !cur.locked
-          ? <CampaignTrend mv={cur.mv} underGraph={rangeRow} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare series={(cur.mv.daily ?? []).filter((d) => d && d.date).map((d) => ({ date: d.date, value: d.value ?? 0 }))} noun={cur.mv.unit ?? ''} />} />
+          ? <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare series={(cur.mv.daily ?? []).filter((d) => d && d.date).map((d) => ({ date: d.date, value: d.value ?? 0 }))} noun={cur.mv.unit ?? ''} />} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
         {cur.mv && !cur.locked && <RhythmCard mv={cur.mv} />}
         {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
