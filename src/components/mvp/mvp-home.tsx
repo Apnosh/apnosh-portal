@@ -693,9 +693,6 @@ export function MetricCard({ mv, stage }: { mv: MetricView; stage?: { href: stri
         {summary.total > 0 && (
           <div style={{ fontSize: 12, color: C.mute, marginTop: 5 }}>{deltaSub(summary)}{!fresh && mv.lastDataDate ? ` · last update ${relDate(mv.lastDataDate)}` : ''}</div>
         )}
-        {summary.total > 0 && spikeNote(summary, mv.unit) && (
-          <div style={{ fontSize: 12.5, color: C.ink, marginTop: 6, padding: '8px 11px', borderRadius: 12, background: C.greenSoft, lineHeight: 1.45 }}>{spikeNote(summary, mv.unit)}</div>
-        )}
         <div style={{ fontSize: 14, color: C.faint, marginTop: 5 }}>{mv.heroSub}</div>
         {fresh && summary.yoyPct != null && (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 6, fontSize: 12.5, fontWeight: 600, color: summary.yoyPct > 0 ? C.green : summary.yoyPct < 0 ? C.coral : C.mute }}>
@@ -757,11 +754,6 @@ export interface RangeSummary {
   /* portfolio-style change (2026-09-04): the count that moved, and the two windows it compares,
      as dates — settled days only, so both sides hold the same number of days */
   deltaAbs: number; curDates: string; cmpDates: string
-  /** ONE BAR CARRIED IT (owner 2026-09-11: "how can the previous period have a lot more views,
-   *  but it says I'm up 118%?"). A total can be up while most days are down when one day was a
-   *  spike. When a single bar is 40% or more of the total, this names it and says what the
-   *  window did without it, so "up 118%" and "most days were lower" stop contradicting. */
-  spike: { side: 'cur' | 'cmp'; tip: string; value: number; share: number; restPct: number | null; restNew: boolean } | null
   avg: number; max: number; periodDays: number
   // Year-over-year for the SELECTED window (this period vs the same period last
   // year). null when the range can't support it (annual view — the pill already
@@ -898,23 +890,6 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     return x === y ? x : `${x} – ${y}`
   }
   const curDates = span('cur'), cmpDates = span('cmp')
-  /* One day carried a window, on either side. The paired day comes out of BOTH sides for the
-     "without it" figure, so the comparison stays day-for-day. */
-  let spike: RangeSummary['spike'] = null
-  if (elapsed.length >= 7) {
-    const topCur = elapsed.reduce((m, b) => (b.value > m.value ? b : m), elapsed[0])
-    const topCmp = bars.reduce((m, b) => (b.compare > m.compare ? b : m), bars[0])
-    const curShare = total > 0 ? topCur.value / total : 0
-    const cmpShare = compareTotal > 0 ? topCmp.compare / compareTotal : 0
-    const side: 'cur' | 'cmp' | null = curShare >= 0.4 && curShare >= cmpShare ? 'cur' : cmpShare >= 0.4 ? 'cmp' : null
-    if (side) {
-      const top = side === 'cur' ? topCur : topCmp
-      const restCur = total - top.value
-      const restCmp = compareTotal - top.compare
-      const strip = (x: string) => x.replace(/^[A-Z][a-z]{2}, /, '')
-      spike = { side, tip: strip(side === 'cur' ? top.tip : top.cmpDate), value: side === 'cur' ? top.value : top.compare, share: side === 'cur' ? curShare : cmpShare, restPct: restCmp > 0 ? Math.round(((restCur - restCmp) / restCmp) * 100) : null, restNew: restCmp === 0 && restCur > 0 }
-    }
-  }
   const avg = elapsed.length ? Math.round(total / elapsed.length) : 0
   const max = Math.max(1, ...bars.map((b) => Math.max(b.value, b.compare)), avg)
 
@@ -930,7 +905,7 @@ export function bucketsFor(range: ChartRange, src: ChartSrc, cStart: string, cEn
     yoyPct = Math.round(((total - agoTotal) / agoTotal) * 100)
     yoyLabel = 'vs last year'
   }
-  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, deltaAbs, curDates, cmpDates, avg, max, periodDays, yoyPct, yoyLabel, spike }
+  return { bars, curLbl, cmpLbl, cmpFrame, total, compareTotal, deltaPct, deltaAbs, curDates, cmpDates, avg, max, periodDays, yoyPct, yoyLabel }
 }
 
 /* ── ONE range for the whole session ──────────────────────────────────────────
@@ -1146,19 +1121,6 @@ export function deltaLabel(summary: RangeSummary): string {
   const n = Math.abs(Math.round(deltaAbs)).toLocaleString()
   if (compareTotal === 0) return `${n} (new)`
   return `${n} (${Math.abs(deltaPct).toLocaleString()}%)`
-}
-/** The one-day-carried-it sentence, or null. Plain words: the day, its share, and what the
- *  other days did against the period before. */
-export function spikeNote(summary: RangeSummary, noun: string): string | null {
-  const sp = summary.spike
-  if (!sp) return null
-  const head = sp.side === 'cur'
-    ? `${sp.tip} alone was ${sp.value.toLocaleString()} of these ${noun}.`
-    : `${sp.tip} alone was ${sp.value.toLocaleString()} of the period before.`
-  if (sp.restNew) return `${head} The other days are new; nothing to compare.`
-  if (sp.restPct == null) return head
-  const rest = sp.restPct > 0 ? `up ${sp.restPct}%` : sp.restPct < 0 ? `down ${Math.abs(sp.restPct)}%` : 'even'
-  return `${head} Without that day, you are ${rest}.`
 }
 /** The line under the number: the two windows being compared, by date. */
 export function deltaSub(summary: RangeSummary): string {
