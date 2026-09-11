@@ -14,11 +14,17 @@ import ProofCard, { type ProofCardData } from './proof-card'
 import { useLang } from './mvp-language'
 import { isWin, metricKeyOf } from '@/lib/love/win'
 
+/* THE STACK, evenly stepped (owner 2026-09-11). Each card behind the front one sits exactly
+   PEEK px lower and a little narrower, and is the SAME HEIGHT as the front card, so the visible
+   lip under the front is one even band per card. The back cards used to be the height of the
+   whole box (front card + bottom padding), so the first lip was three times the second. */
+const PEEK = 6
 function deckDepth(pos: number): React.CSSProperties {
   if (pos === 0) return { position: 'relative', zIndex: 30, opacity: 1 }
-  if (pos === 1) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 20, transform: 'translateY(4px) scaleX(0.97)', opacity: 1 }
-  if (pos === 2) return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10, transform: 'translateY(8px) scaleX(0.94)', opacity: 1 }
-  return { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 0, transform: 'translateY(12px) scaleX(0.91)', opacity: 0, pointerEvents: 'none' }
+  const behind = { position: 'absolute' as const, left: 0, right: 0, top: 0, height: `calc(100% - ${PEEK * 2}px)` }
+  if (pos === 1) return { ...behind, zIndex: 20, transform: `translateY(${PEEK}px) scaleX(0.965)`, opacity: 1 }
+  if (pos === 2) return { ...behind, zIndex: 10, transform: `translateY(${PEEK * 2}px) scaleX(0.93)`, opacity: 1 }
+  return { ...behind, zIndex: 0, transform: `translateY(${PEEK * 3}px) scaleX(0.895)`, opacity: 0, pointerEvents: 'none' }
 }
 
 const SAMPLE_CARDS: ProofCardData[] = [
@@ -127,6 +133,18 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
     }).catch(() => { /* best effort */ })
   }
 
+  /* The back cards are sized to the FRONT CARD ITSELF, measured, not to the box around it: the
+     card carries its own bottom margin, and sizing the back cards to the box made the first lip
+     three times the second (owner 2026-09-11: "uniform spacing between the cards in the back"). */
+  const frontRef = useRef<HTMLDivElement | null>(null)
+  const [frontH, setFrontH] = useState<number | null>(null)
+  useEffect(() => {
+    const el = frontRef.current?.firstElementChild as HTMLElement | null
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setFrontH(el.getBoundingClientRect().height))
+    ro.observe(el)
+    return () => ro.disconnect()
+  })
   const safeStep = Math.min(step, Math.max(0, cards.length - 1))
   const deck = cards.slice(safeStep, safeStep + 3)
   const front = deck[0]
@@ -147,23 +165,12 @@ export default function ProofDeck({ clientId, mute = '#6e6e73' }: { clientId?: s
           {examples ? 'Examples' : 'Results'}{examples && <span style={{ fontSize: 12.5, fontWeight: 400, color: mute }}> · your results land here</span>}
         </span>
         <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {/* the pager: one dot per card, the front one long — tap to advance (owner 2026-09-04: the old "2 of 5 ›" text looked ugly) */}
-          {cards.length > 1 && (
-            <button
-              type="button"
-              aria-label={`Card ${safeStep + 1} of ${cards.length}. Next card`}
-              onClick={() => setStep((p) => (p + 1) % cards.length)}
-              style={{ display: 'inline-flex', gap: 4, alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px' }}
-            >
-              {cards.map((c, i) => <span key={c.id} style={{ width: i === safeStep ? 16 : 6, height: 6, borderRadius: 99, background: i === safeStep ? '#2e9a78' : '#d9d9de', transition: 'width .2s, background .2s' }} />)}
-            </button>
-          )}
           <Link href="/dashboard/results" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 28, padding: '0 10px 0 12px', borderRadius: 99, background: '#f0f0f2', color: '#1d1d1f', fontSize: 12.5, fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap' }}>See all <ChevronRight size={14} color="#6e6e73" /></Link>
         </span>
       </div>
-      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} style={{ position: 'relative', paddingBottom: deck.length > 1 ? 9 : 0, touchAction: 'pan-y' }}>
+      <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd} style={{ position: 'relative', paddingBottom: deck.length > 1 ? PEEK * 2 : 0, touchAction: 'pan-y' }}>
         {deck.map((c, pos) => (
-          <div key={c.id} style={{ ...deckDepth(pos), transformOrigin: 'top center', transition: drag.current && pos === 0 ? 'none' : 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s', height: pos === 0 ? undefined : '100%',
+          <div key={c.id} ref={pos === 0 ? frontRef : undefined} style={{ ...deckDepth(pos), ...(pos > 0 && frontH ? { height: frontH } : {}), transformOrigin: 'top center', transition: drag.current && pos === 0 ? 'none' : 'transform .32s cubic-bezier(.2,.7,.3,1), opacity .32s',
             ...(pos === 0 && (dx !== 0 || flying !== 0) ? { transform: flying !== 0 ? `translateX(${flying * 120}%) rotate(${flying * 8}deg)` : `translateX(${dx}px) rotate(${dx / 22}deg)`, opacity: flying !== 0 ? 0 : 1, transition: flying !== 0 ? 'transform .22s ease-in, opacity .22s ease-in' : 'none' } : {}) }}>
             {pos === 0 ? (
               <ProofCard
