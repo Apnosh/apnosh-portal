@@ -60,11 +60,9 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
   const opened = useRef(false)
   const markOpen = () => { if (!opened.current) { opened.current = true; onOpen?.() } }
   const headsUp = card.tone === 'heads_up'
-  /* COLOUR ON THE EDGE, not the ground (owner 2026-09-11: "missing colours, don't just change
-     the background"). A win wears a mint outline and a rising arrow; a heads-up wears an amber
-     outline and a warning triangle, so the two kinds read apart from across the room while
-     the card itself stays white. */
-  const edge = headsUp ? '#e0a13a' : '#4abd98'
+  /* THE COLOUR IS THE SYMBOL (owner 2026-09-12: keep the old card, add the marks). A win carries
+     a mint rising arrow, a heads-up an amber warning triangle, beside the label; the card itself
+     is the plain white card it always was, no outline. */
   const dotColor = headsUp ? '#e0a13a' : '#4abd98'
   const labelColor = headsUp ? '#9a6b17' : '#2e9a78'
   const Glyph = headsUp ? AlertTriangle : TrendingUp
@@ -76,7 +74,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
         className="mvp-rise"
         style={{
           display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
-          background: '#fff', border: `1.5px solid ${edge}`, borderRadius: 14, padding: '9px 12px', marginBottom: 10,
+          background: '#fff', border: 'none', borderRadius: 14, padding: '9px 12px', marginBottom: 10,
           boxShadow: '0 1px 2px rgba(0,0,0,0.04), 0 6px 18px rgba(0,0,0,0.06)', cursor: 'pointer',
         }}
       >
@@ -95,7 +93,7 @@ export default function ProofCard({ card, onDismiss, onSee, onOpen, defaultOpen 
       onClick={markOpen}
       style={{
         position: 'relative', borderRadius: 18, padding: '18px 18px 17px', marginBottom: 12, minHeight: 176, boxSizing: 'border-box',
-        background: '#fff', border: `1.5px solid ${edge}`,
+        background: '#fff',
         boxShadow: '0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06)',
       }}
     >
