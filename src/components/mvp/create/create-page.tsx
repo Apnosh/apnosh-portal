@@ -83,7 +83,7 @@ const CREATE_CSS = `
 .cr .sec h2 .dot{display:inline-block;width:8px;height:8px;border-radius:4px;background:linear-gradient(135deg,var(--c1),var(--c2));margin:0 8px 2px 0;vertical-align:middle}
 .cr .sec .sub{font-size:13px;color:#6e6e73;margin-top:2px}
 .cr .sec .more{color:#aeaeb2;display:flex;align-items:center;padding-bottom:4px;background:none;border:0;cursor:pointer}
-.cr .shelf{display:flex;gap:12px;overflow-x:auto;padding:2px 16px 8px;scrollbar-width:none}
+.cr .shelf{display:flex;gap:12px;overflow-x:auto;padding:2px 16px 8px;scrollbar-width:none;align-items:stretch}
 .cr .grp{font-size:13px;font-weight:600;color:#6e6e73;padding:10px 16px 8px}
 .cr .facts{display:flex;gap:0;margin-top:2px}
 .cr .facts div{flex:1;min-width:0}
@@ -271,8 +271,34 @@ const CREATE_CSS = `
 .cr .door .da .btn.ghost{background:#fff}
 .cr .pc.wide{width:280px}
 /* the one-glance card */
-.cr .pc2{flex:none;width:208px;border-radius:18px;background:#fff;border:0.5px solid #e6e6ea;box-shadow:0 1px 2px rgba(0,0,0,.03),0 6px 18px rgba(0,0,0,.05);padding:12px 12px 11px;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;display:flex;flex-direction:column;gap:7px;position:relative}
+.cr .pc2{flex:none;width:184px;border-radius:18px;background:#fff;border:0.5px solid #e6e6ea;box-shadow:0 1px 2px rgba(0,0,0,.03),0 6px 18px rgba(0,0,0,.05);padding:12px 12px 11px;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;display:flex;flex-direction:column;gap:7px;position:relative}
 .cr .pc2.wide{width:280px}
+.cr .pcb{flex:none;width:292px;border-radius:18px;background:#fff;border:0.5px solid #e6e6ea;box-shadow:0 1px 2px rgba(0,0,0,.03),0 6px 18px rgba(0,0,0,.05);padding:12px 12px 11px;margin-bottom:10px;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;display:flex;flex-direction:column;gap:8px;position:relative;isolation:isolate}
+.cr .pcb::before,.cr .pcb::after{content:'';position:absolute;left:8px;right:8px;bottom:-5px;height:14px;border-radius:0 0 16px 16px;background:#fff;border:0.5px solid #e6e6ea;border-top:0;z-index:-1}
+.cr .pcb::after{left:16px;right:16px;bottom:-10px;opacity:.7}
+.cr .pcb.dim{opacity:.62}
+.cr .pcb .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cr .pcb .kind{font-style:normal;font-weight:700;font-size:10px;letter-spacing:.02em;padding:4px 9px;border-radius:99px;background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.cr .pcb .kind i{width:5px;height:5px;border-radius:99px;background:rgba(255,255,255,.9)}
+.cr .pcb .stage{font-style:normal;font-weight:700;font-size:9.5px;padding:3px 8px;border-radius:99px;background:var(--t1);color:var(--c2);display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex:none}
+.cr .pcb .stage i{width:5px;height:5px;border-radius:99px;background:var(--c2)}
+.cr .pcb .inside{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:12px;background:var(--t1)}
+.cr .pcb .glyphs{display:inline-flex;align-items:center}
+.cr .pcb .gl{width:28px;height:28px;border-radius:9px;background:#fff;border:1.5px solid var(--t1);color:var(--c2);display:grid;place-items:center;margin-left:-6px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.cr .pcb .gl:first-child{margin-left:0}
+.cr .pcb .gl svg{width:14px;height:14px}
+.cr .pcb .gl.more{font-size:10.5px;font-weight:700;color:#6e6e73}
+.cr .pcb .chs{display:inline-flex;gap:4px;flex-wrap:wrap;min-width:0}
+.cr .pcb .chs span{font-size:10.5px;font-weight:600;padding:3px 7px;border-radius:99px;background:#fff;color:var(--c2);white-space:nowrap}
+.cr .pcb .n{font-size:11px;font-weight:700;color:var(--c2);white-space:nowrap;flex:none}
+.cr .pcb .t{font-family:'Cal Sans','Inter',sans-serif;font-size:16px;line-height:1.2;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.cr .pcb .g{font-size:12px;color:#6e6e73;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:32px}
+.cr .pcb .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:9px;border-top:0.5px solid #e6e6ea}
+.cr .pcb .pr{font-size:13px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cr .pcb .pr b{font-weight:700;color:#1d1d1f}
+.cr .pcb .pr span{color:#6e6e73;font-size:11.5px}
+.cr .pcb .you{flex:none;font-size:10px;font-weight:700;padding:3px 7px;border-radius:99px;background:var(--t1);color:var(--c2);white-space:nowrap;display:inline-flex;align-items:center;gap:3px}
+.cr .pcb .you.done{background:#eaf7f3;color:#2e9a78}
 .cr .pc2.dim{opacity:.62}
 .cr .pc2 .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .cr .pc2 .ic{width:38px;height:38px;border-radius:12px;background:var(--t1);color:var(--c2);display:grid;place-items:center;flex:none}
@@ -625,8 +651,14 @@ export default function CreatePage() {
      WHAT DOES IT COST AND WHEN (price and the ready time on one line), and WHAT DO I DO (nothing,
      approve, show up). The stage it moves rides top right. No gradient tile: the picture said
      nothing the name did not. */
-  const pc = (c: ShelfCard, wide?: boolean) => { const Icon = iconFor(c); const buy = isBuyable(c); const isDone = done.has(c.id); const why = whyNow(c)
-    const get = c.parts ? T('{n} parts. Tick what you need, pay for those.', { n: c.parts.length }) : c.get.find((g) => g && !/^A plan you approve/i.test(g)) ?? c.plain
+  /* TWO SHAPES OF CARD (owner 2026-09-13: "distinguish the campaigns/bundles with individual
+     services"). A SERVICE is one thing made or fixed: a narrow card, one glyph, the stage it
+     moves. A CAMPAIGN is several things against one outcome: a wider card that shows what is
+     inside it (the parts' glyphs, or the channels it goes out on), a Campaign / Every month
+     tag instead of a stage tag, and two sheets peeking out under it, because it is a stack. */
+  const isBundle = (c: ShelfCard) => !!c.parts || c.kind === 'campaign' || c.kind === 'program'
+  const pcService = (c: ShelfCard, wide?: boolean) => { const Icon = iconFor(c); const buy = isBuyable(c); const isDone = done.has(c.id); const why = whyNow(c)
+    const get = c.get.find((g) => g && !/^A plan you approve/i.test(g)) ?? c.plain
     return (
       <button key={c.id} type="button" onClick={() => open(c)} className={`pc2 press${buy ? '' : ' dim'}${wide ? ' wide' : ''}`} style={hv(c.goal)}>
         <div className="top">
@@ -646,6 +678,42 @@ export default function CreatePage() {
       </button>
     )
   }
+  const pcBundle = (c: ShelfCard) => { const buy = isBuyable(c); const isDone = done.has(c.id); const why = whyNow(c)
+    const parts = (c.parts ?? []).map((id) => cards[id]).filter((x): x is ShelfCard => !!x)
+    const pieces = c.parts ? parts.length : c.get.filter((g) => g && !/^A plan you approve|^Made by your Apnosh|^Results on your Home/i.test(g)).length
+    const word = c.kind === 'program' ? T('Every month') : T('Campaign')
+    const first = c.plain.split(/(?<=\.)\s/)[0]
+    return (
+      <button key={c.id} type="button" onClick={() => open(c)} className={`pcb press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
+        <div className="top">
+          <em className="kind"><i />{word}</em>
+          <em className="stage" style={hv(STAGE_HUE[c.stage])}><i />{T(c.stage)}</em>
+        </div>
+        <div className="inside">
+          {parts.length > 0
+            ? <>
+                <span className="glyphs">{parts.slice(0, 5).map((p) => { const I = iconFor(p); return <span key={p.id} className="gl" style={hv(p.goal)}><I /></span> })}{parts.length > 5 && <span className="gl more">+{parts.length - 5}</span>}</span>
+                <span className="n">{T('{n} parts', { n: parts.length })}</span>
+              </>
+            : <>
+                <span className="chs">{c.channels.slice(0, 4).map((ch) => <span key={ch}>{ch}</span>)}</span>
+                <span className="n">{pieces > 1 ? T('{n} pieces', { n: pieces }) : T('{n} weeks', { n: 2 })}</span>
+              </>}
+        </div>
+        <div className="t">{c.title}</div>
+        <div className="g">{why ?? first}</div>
+        <div className="foot">
+          {buy
+            ? <span className="pr"><b>{priceWord(c.price)}</b><span> · {c.parts ? T('whole thing') : T(c.ready)}</span></span>
+            : <span className="pr"><span>{T('Coming soon')}</span></span>}
+          {isDone
+            ? <span className="you done"><Check size={10} strokeWidth={3} /> {T('Done')}</span>
+            : buy && <span className="you">{c.parts ? T('Pick parts') : `${T('You')}: ${T(c.you).toLowerCase()}`}</span>}
+        </div>
+      </button>
+    )
+  }
+  const pc = (c: ShelfCard, wide?: boolean) => (isBundle(c) ? pcBundle(c) : pcService(c, wide))
   const rail = ({ t, s, list, hue, kind }: { t: string; s?: string; list: ShelfCard[]; hue: HueKey; kind?: string }) => list.length === 0 ? null : (
     <>
       <Sec t={t} s={s} hue={hue} more={kind && list.length > 8 ? () => { setFilters((f) => ({ ...f, kind })); go({ name: 'search' }) } : undefined} />
