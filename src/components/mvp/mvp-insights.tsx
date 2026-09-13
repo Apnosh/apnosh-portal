@@ -1391,9 +1391,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
               range against the one before it, while the chart caption below compares
               the end of this range against its start. Both were unlabelled, so one
               screen could read "up 785%" here and "down 86%" there. */}
-          {/* The actual dates of the period before, not the words (owner 2026-09-11). Every
-              stage's summary carries the same window, so the first one that has it speaks. */}
-          <span style={{ fontSize: 11.5, color: C.faint }}>{(() => { const d = rows.map((r) => r.sm?.cmpDates).find(Boolean); return d ? `vs ${d}` : 'change vs the period before' })()}</span>
+
         </div>
         {rows.map((r, i) => <StageTrendRow key={r.st.key} label={r.st.label} accent={STAGE_ACCENT[r.st.key]} mv={r.mv} sm={r.sm} launches={r.launches} locked={r.locked} days={days} campaigns={campaigns?.[r.st.key] ?? []} on={r.st.key === sel} first={i === 0} onPick={() => setSel(r.st.key)} cs={r.cs} stageNumber={r.n} clientId={clientId} range={range} smooth={smooth} />)}
       </div>
@@ -1410,7 +1408,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
   )
 }
 
-function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range, smooth = 7 }: { smooth?: number; label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
+function StageTrendRow({ label, accent, mv, sm, locked, days, campaigns, on, first, onPick, cs, stageNumber, clientId, range, smooth = 7 }: { smooth?: number; label: string; accent: Accent; mv?: MetricView; sm: ReturnType<typeof bucketsFor> | null; launches: number; locked: boolean; days: number; campaigns: StageCampaign[]; on: boolean; first: boolean; onPick: () => void; cs?: ComputedStage; stageNumber: number; clientId?: string; range: string }) {
   // the row's total is the SAME by-source headline the Insights tab shows for this window
   // (the series' own sum can differ by definition); the % stays the series' read
   const { stage: rs } = useRangeStage(cs, stageNumber, clientId, range)
@@ -1436,7 +1434,7 @@ function StageTrendRow({ label, accent, mv, sm, launches, locked, days, campaign
       <span style={{ width: 9, height: 9, borderRadius: 99, background: accent.main, flexShrink: 0 }} />
       <span style={{ width: 92, flexShrink: 0 }}>
         <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: C.ink, lineHeight: 1.2 }}>{label}</span>
-        <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 2, whiteSpace: 'nowrap' }}>{locked ? 'not measured' : launches === 0 ? 'no launches' : launches === 1 ? '1 launch' : `${launches} launches`}</span>
+        {locked && <span style={{ display: 'block', fontSize: 11.5, color: C.faint, marginTop: 2, whiteSpace: 'nowrap' }}>not measured</span>}
       </span>
       <span style={{ flex: 1, minWidth: 0, height: H }}>
         {roll.length > 1 && !locked && (
@@ -1649,13 +1647,12 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
               {Math.abs(trendPct) < 5 ? <Minus size={15} /> : trendPct > 0 ? <TrendingUp size={15} /> : <TrendingDown size={15} />}
               {Math.abs(trendPct) < 5 ? 'Holding steady' : Math.abs(trendPct) > 999 ? (trendPct > 0 ? 'Trending up sharply' : 'Trending down sharply') : `${trendPct > 0 ? 'Trending up' : 'Trending down'} ${Math.abs(trendPct)}%`}
             </span>
-            <span style={{ fontSize: 12.5, color: C.faint }}>end of this range vs its start</span>
           </>
         )}
         {/* the same window a year ago, tight under the trending line (owner 2026-09-12). Shows
             only when there is a real prior-year number to stand on. */}
         {yoy && (
-          <span style={{ flexBasis: '100%', display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: -4, fontSize: 12.5, fontWeight: 600, color: yoy.pct > 0 ? TREND_GREEN : yoy.pct < 0 ? TREND_RED : C.mute }}>
+          <span style={{ flexBasis: '100%', display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: -7, fontSize: 12.5, fontWeight: 600, color: yoy.pct > 0 ? TREND_GREEN : yoy.pct < 0 ? TREND_RED : C.mute }}>
             {yoy.pct > 0 ? <TrendingUp size={14} /> : yoy.pct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
             {yoy.pct > 999 ? `Far above ${yoy.label}` : yoy.pct > 0 ? `Up ${yoy.pct}% ${yoy.label}` : yoy.pct < 0 ? `Down ${Math.abs(yoy.pct)}% ${yoy.label}` : 'Even with last year'}
           </span>
