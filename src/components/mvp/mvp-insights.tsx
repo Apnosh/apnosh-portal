@@ -491,12 +491,17 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
      range row. The height now follows the active slide, measured, and eases between them. */
   const [slideH, setSlideH] = useState<number | null>(null)
   useEffect(() => {
+    if (tab === 'trends') return
     const el = swipeRef.current?.children[idx] as HTMLElement | undefined
     if (!el || typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver(() => setSlideH(Math.ceil(el.getBoundingClientRect().height)))
+    /* Never lock the carousel at zero: the slide can measure 0 for a frame while its data is
+       still arriving, and a zero height hid the whole graph after a trip to Trends and back
+       (owner 2026-09-12). Re-observe whenever the data or the tab changes, so the observer never
+       stays attached to a node that has since been replaced. */
+    const ro = new ResizeObserver(() => { const h = Math.ceil(el.getBoundingClientRect().height); if (h > 0) setSlideH(h) })
     ro.observe(el)
     return () => ro.disconnect()
-  }, [idx])
+  }, [idx, tab, detail])
   /* the WHOLE hero card swipes (owner 2026-09-04: "not very swipable"): a horizontal drag that
      starts on the name row, the number, the dots or the padding is forwarded to the carousel */
   const dragRef = useRef<{ x: number; y: number; left: number; horiz: boolean | null; dx: number; t0: number } | null>(null)
@@ -560,7 +565,7 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
       </div>
       {/* SWIPEABLE GRAPHS — each slide is a stage's title + number + trend +
           histogram; swipe the graph left/right to change stages */}
-      <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory', alignItems: 'flex-start', height: slideH ?? undefined, transition: 'height .25s cubic-bezier(.2,.7,.3,1)' }}>
+      <div ref={swipeRef} onScroll={onSwipe} className="mvp-swipe" style={{ display: 'flex', overflowX: 'auto', overflowY: 'hidden', scrollSnapType: 'x mandatory', alignItems: 'flex-start', height: slideH && slideH > 0 ? slideH : undefined, transition: 'height .25s cubic-bezier(.2,.7,.3,1)' }}>
         {STAGE_ORDER.map((s, si) => {
           const smv = byKey.get(resolveFocus(s.key).metric)
           return (
