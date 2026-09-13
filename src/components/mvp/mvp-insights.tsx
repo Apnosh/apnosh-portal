@@ -708,7 +708,7 @@ function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: C
   const s = stage ?? cs
   return (
     <>
-      <GroupedSources stage={s} sub={sub} />
+      <GroupedSources stage={s} />
     </>
   )
 }
@@ -719,7 +719,7 @@ function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: C
 // are skipped.
 const SOURCES_AT_REST = 5
 
-function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
+function GroupedSources({ stage }: { stage: ComputedStage }) {
   const A = useAccent()
   /* Five, then the rest on a tap (owner 2026-09-10). A restaurant with everything
      connected has nine sources here, and the tail of them is a wall of small
@@ -741,7 +741,7 @@ function GroupedSources({ stage, sub }: { stage: ComputedStage; sub: string }) {
   const top = Math.max(0, ...items.map((i) => i.v ?? 0))
   const offLabel = off.map(({ g }, k) => (k === 0 ? g.label : g.label.charAt(0).toLowerCase() + g.label.slice(1))).join(', ')
   return (
-    <Section title="Breakdown by source" sub={sub}>
+    <Section title="Breakdown by source">
       <div>
         {(allSources ? items : items.slice(0, SOURCES_AT_REST)).map((it, k) => <SourceItemRow key={it.x.id} s={it.x} groupLabel={it.g.label} first={k === 0} top={top} accent={A} />)}
         {items.length > SOURCES_AT_REST && (
@@ -769,10 +769,15 @@ function SourceItemRow({ s, groupLabel, first, top, accent }: { s: StageSourceVi
   const asOf = friendlyStamp(s.asOf)
   const provider = String(s.provider ?? '')
   const label = s.shortLabel || s.displayName
-  const subText = err ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : s.context || (asOf ? `as of ${asOf}` : (label.toLowerCase().includes(groupLabel.toLowerCase()) ? '' : groupLabel))
+  /* The "as of" line is folded away (owner 2026-09-12): tap the row and it opens underneath,
+     with the source's own context when it has one. A broken connection or a hand-entered number
+     still says so on the row itself, because those are things to act on. */
+  const [open, setOpen] = useState(false)
+  const subText = err ? 'Reconnect' : manual ? `entered by ${s.manualBy ?? 'hand'}` : ''
+  const detail = [s.context, asOf ? `as of ${asOf}` : '', label.toLowerCase().includes(groupLabel.toLowerCase()) ? '' : groupLabel].filter(Boolean).join(' · ')
   return (
     <div style={{ padding: '9px 0 10px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div role={detail ? 'button' : undefined} onClick={() => detail && setOpen((o) => !o)} style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: detail ? 'pointer' : 'default' }}>
         <span style={{ width: 36, height: 36, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <BrandOrMark provider={provider} size={22} />
         </span>
@@ -789,6 +794,7 @@ function SourceItemRow({ s, groupLabel, first, top, accent }: { s: StageSourceVi
           <div style={{ width: `${Math.max(1.5, (v / top) * 100)}%`, height: '100%', borderRadius: 99, background: accent.main }} />
         </div>
       )}
+      {open && detail && <div style={{ fontSize: 12, color: C.mute, marginTop: 7, marginLeft: 48, lineHeight: 1.4 }}>{detail}</div>}
     </div>
   )
 }
@@ -1215,13 +1221,11 @@ function prewarmStageWindows(clientId: string | undefined) {
 //    back to the 30-day `cs` while loading — never a blank). ──
 function useRangeStage(cs: ComputedStage | undefined, stageNumber: number | undefined, clientId: string | undefined, range: string): { stage: ComputedStage | undefined; sub: string } {
   const [rangeStage, setRangeStage] = useState<ComputedStage | undefined>(cs)
-  const [sub, setSub] = useState('last 30 days')
   useEffect(() => {
     const picked = RANGE_WINDOW[range] ?? null
     // 30 days, custom, or no way to fetch → the snapshot we already have
     if (!picked || picked.w === '30d' || !clientId || stageNumber == null) {
       setRangeStage(cs)
-      setSub(range === 'custom' ? 'recent' : 'last 30 days')
       return
     }
     setSub(picked.label)
