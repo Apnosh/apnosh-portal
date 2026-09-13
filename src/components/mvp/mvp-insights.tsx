@@ -704,7 +704,7 @@ function EmptyStageHero({ label, note }: { label: string; note: string }) {
 // The by-source cards, re-scoped to the chart's picked range (driven by the
 // range the visible slide reported up — never its own separate state).
 function RangeSources({ cs, stageNumber, clientId, unit, title, range }: { cs: ComputedStage; stageNumber: number; clientId?: string; unit: string; title: string; range: string }) {
-  const { stage, sub } = useRangeStage(cs, stageNumber, clientId, range)
+  const { stage } = useRangeStage(cs, stageNumber, clientId, range)
   const s = stage ?? cs
   return (
     <>
@@ -1221,11 +1221,13 @@ function prewarmStageWindows(clientId: string | undefined) {
 //    back to the 30-day `cs` while loading — never a blank). ──
 function useRangeStage(cs: ComputedStage | undefined, stageNumber: number | undefined, clientId: string | undefined, range: string): { stage: ComputedStage | undefined; sub: string } {
   const [rangeStage, setRangeStage] = useState<ComputedStage | undefined>(cs)
+  const [sub, setSub] = useState('last 30 days')
   useEffect(() => {
     const picked = RANGE_WINDOW[range] ?? null
     // 30 days, custom, or no way to fetch → the snapshot we already have
     if (!picked || picked.w === '30d' || !clientId || stageNumber == null) {
       setRangeStage(cs)
+      setSub(range === 'custom' ? 'recent' : 'last 30 days')
       return
     }
     setSub(picked.label)
