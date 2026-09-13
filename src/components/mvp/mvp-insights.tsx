@@ -441,8 +441,6 @@ const TREND_GREEN_SOFT = '#e4f8ee', TREND_RED_SOFT = '#ffe6e8'
 const STAGE_BRIGHT: Record<string, string> = { shown: '#1fc47a', engaged: '#2f7bff', moved: '#8a4bff', camein: '#ffb020', back: '#14c3c3' }
 const verdictColor = (stageKey: string, deltaPct: number): string => (deltaPct < 0 ? TREND_RED : deltaPct === 0 ? TREND_AMBER : (STAGE_BRIGHT[stageKey] ?? TREND_GREEN))
 const verdictAccent = (hex: string): Accent => ({ main: hex, soft: hex + '29', dark: hex })
-/** the stage key an accent belongs to (the Trends chart only holds the accent) */
-const stageKeyOfAccent = (a: Accent): string => Object.keys(STAGE_ACCENT).find((k) => STAGE_ACCENT[k].main === a.main) ?? 'shown'
 const AccentCtx = createContext<Accent>(STAGE_ACCENT.shown)
 const useAccent = () => useContext(AccentCtx)
 /* The conversion chip beside the stage name is gone from Insights (owner 2026-09-11); Home's
