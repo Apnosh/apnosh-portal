@@ -489,17 +489,29 @@ function Body({ data, focusKey, detail, campaigns, clientId, refreshing, tab = '
   const progRef = useRef(false) // true while WE scroll it (deep-link) — don't re-pick
   /* the WHOLE hero card swipes (owner 2026-09-04: "not very swipable"): a horizontal drag that
      starts on the name row, the number, the dots or the padding is forwarded to the carousel */
-  const dragRef = useRef<{ x: number; y: number; left: number; horiz: boolean | null } | null>(null)
-  const onCardTouchStart = (e: React.TouchEvent) => { const t = e.touches[0]; dragRef.current = { x: t.clientX, y: t.clientY, left: swipeRef.current?.scrollLeft ?? 0, horiz: null } }
+  const dragRef = useRef<{ x: number; y: number; left: number; horiz: boolean | null; dx: number; t0: number } | null>(null)
+  const onCardTouchStart = (e: React.TouchEvent) => { const t = e.touches[0]; dragRef.current = { x: t.clientX, y: t.clientY, left: swipeRef.current?.scrollLeft ?? 0, horiz: null, dx: 0, t0: Date.now() } }
   const onCardTouchMove = (e: React.TouchEvent) => {
     const d = dragRef.current, el = swipeRef.current; if (!d || !el) return
     const t = e.touches[0]; const dx = t.clientX - d.x, dy = t.clientY - d.y
+    d.dx = dx
     if (d.horiz === null && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) d.horiz = Math.abs(dx) > Math.abs(dy)
     if (d.horiz && !el.contains(e.target as Node)) el.scrollLeft = d.left - dx
   }
+  /* A FLICK IS ENOUGH (owner 2026-09-12: "I have to move too much"). The landing slide used to
+     be the nearest one to wherever the thumb let go, which meant dragging past half the screen.
+     Now 40px of travel in a direction, or a quick flick, moves one stage that way; less than
+     that springs back. Same rule whether the drag started on the graph or on the card around it. */
   const onCardTouchEnd = () => {
     const d = dragRef.current, el = swipeRef.current
-    if (d?.horiz && el) { const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' }) }
+    if (d?.horiz && el) {
+      const w = Math.max(1, el.clientWidth)
+      const from = Math.round(d.left / w)
+      const quick = Date.now() - d.t0 < 260 && Math.abs(d.dx) > 18
+      const step = Math.abs(d.dx) > 40 || quick ? (d.dx < 0 ? 1 : -1) : 0
+      const to = Math.max(0, Math.min(STAGE_ORDER.length - 1, from + step))
+      el.scrollTo({ left: to * w, behavior: 'smooth' })
+    }
     dragRef.current = null
   }
   const pick = (k: string) => {
