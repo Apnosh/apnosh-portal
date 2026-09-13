@@ -1531,13 +1531,11 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
      day in the up/down verdict colours); the trending words still say the direction */
   const trendCol = A.main
   const roll = days.map((_, i) => { const sl = days.slice(Math.max(0, i - (smooth - 1)), i + 1); return sl.reduce((t, x) => t + x.v, 0) / sl.length })
-  const byT = new Map(dayMs.map((x) => [x.t, x.v]))
-  const priorOffset = Math.round(spanMs / DAY_MS + 1) * DAY_MS
-  const prior = days.map((d) => byT.get(d.t - priorOffset) ?? null)
-  const priorHas = prior.filter((v) => v != null).length >= Math.ceil(n / 2)
   // scale to the LINE that is drawn (the 7-day average), not the raw daily peak — a sharp
   // rise should fill the chart, not sit in the bottom half (owner 2026-09-04)
-  const lineMax = Math.max(1, ...roll, ...(priorHas ? prior.filter((v): v is number => v != null) : [0]))
+  // The prior period is gone from this chart (owner 2026-09-12): its one giant day set the axis
+  // at 250k and pressed the trend flat. The scale is the drawn line alone.
+  const lineMax = Math.max(1, ...roll)
   const head = lineMax * 1.1
   // SVG geometry (uniform-scaled so pins stay round). y grows downward; a left gutter
   // holds the axis numbers.
@@ -1552,7 +1550,6 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const pts = days.map((_, i) => ({ x: xOf(i), y: yAt(roll[i]) }))
   const line = pts.map((pt, i) => `${i ? 'L' : 'M'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')
   const area = `${line} L${pts[n - 1].x.toFixed(1)},${yBot} L${pts[0].x.toFixed(1)},${yBot} Z`
-  const priorLine = prior.map((v, i) => (v == null ? '' : `${i > 0 && prior[i - 1] != null ? 'L' : 'M'}${xOf(i).toFixed(1)},${yAt(v).toFixed(1)}`)).filter(Boolean).join(' ')
   const noun = mv?.unit ?? ''
 
   const yOnLine = (x: number) => {
@@ -1679,7 +1676,6 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           </g>
         ))}
         {/* the same window one period earlier */}
-        {priorHas && <path d={priorLine} fill="none" stroke={C.mute} strokeOpacity={0.55} strokeWidth={1.3} strokeDasharray="3 3" strokeLinejoin="round" />}
         {/* the trend: a 7-day rolling average */}
         <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={trendCol} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
@@ -1730,12 +1726,10 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, color: C.mute, width: '100%', whiteSpace: 'nowrap', overflow: 'hidden' }}>
             <b style={{ color: C.ink }}>{fmtDay(days[pick].t)}</b>
             <span><b style={{ color: C.ink }}>{Math.round(roll[pick]).toLocaleString()}</b> {noun}{smooth > 1 ? ' a day, on average' : ''}</span>
-            {prior[pick] != null && <span style={{ color: C.faint }}>· prior period {prior[pick]!.toLocaleString()}</span>}
           </div>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11 }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 14, height: 0, borderTop: `2.2px solid ${A.main}` }} /> {avgLabel(smooth)}</span>
-            {priorHas && <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 14, borderTop: `1.3px dashed ${C.mute}`, display: 'inline-block' }} /> Prior period</span>}
           </div>
         )}
       </div>

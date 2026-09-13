@@ -1012,8 +1012,7 @@ export function ActionsChart({
   const { C } = useMvpTheme()
   const H = 124
   const [picked, setPicked] = useState<number | null>(null)
-  const { bars, curLbl, cmpLbl, total, avg, max } = summary
-  const avgY = (avg / max) * H
+  const { bars, total, max } = summary
   const dense = bars.length > 8
   const col = accent ?? C.green
   const dateInput: React.CSSProperties = { border: `1px solid ${C.line}`, borderRadius: 8, padding: '5px 8px', fontSize: 12.5, color: C.ink, fontFamily: 'inherit', background: C.card }
@@ -1033,7 +1032,6 @@ export function ActionsChart({
             <span style={{ flex: 1, borderTop: `1px solid ${C.ghost}`, opacity: f === 0 ? 1 : 0.7 }} />
           </div>
         ))}
-        <div style={{ position: 'absolute', left: 34, right: 0, bottom: avgY, borderTop: `1px dashed ${C.faint}`, opacity: 0.6 }} />
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: dense ? 3 : 10, height: '100%', position: 'relative' }}>
           {bars.map((b, i) => {
             const isPicked = picked === i
@@ -1041,13 +1039,8 @@ export function ActionsChart({
             const pending = b.elapsed === false
             return (
               <div key={i} onClick={() => setPicked(isPicked ? null : i)} style={{ flex: 1, height: '100%', position: 'relative', cursor: 'pointer' }}>
-                {/* THE PAIR SHARES ONE SLOT (owner 2026-09-12: the ranges "did not feel the same
-                    size"). Side by side, thirty pairs made hairline bars and seven made fat ones.
-                    The prior period now sits BEHIND its partner, wider and ghosted, and the current
-                    bar in front, so every range draws bars of a similar weight and the pair still
-                    reads as a pair: the ghost shows above when the prior was bigger, the current
-                    covers it when this period won. */}
-                <div style={{ position: 'absolute', left: '50%', bottom: 0, transform: 'translateX(-50%)', width: '86%', maxWidth: 30, height: `${Math.min(100, (b.compare / max) * 100)}%`, minHeight: isPicked && b.compare > 0 ? 2 : 0, background: isPicked ? '#b9b9c2' : C.ghost, opacity: dim ? 0.3 : 1, borderRadius: b.compare > max ? '0' : '5px 5px 0 0', borderTop: b.compare > max ? `2px dashed ${isPicked ? '#6e6e73' : '#c9c9cf'}` : 'none', boxSizing: 'border-box', transition: 'opacity .15s' }} />
+                {/* no prior-period ghost bar (owner 2026-09-12): the comparison lives in the
+                    readout when a bar is picked, not on the graph */}
                 {/* a day no source has reported yet: a faint dashed stub, not an
                     empty slot — the window is current, the numbers are en route */}
                 {pending ? (
@@ -1070,10 +1063,10 @@ export function ActionsChart({
           return <div key={i} style={{ flex: 1, textAlign: 'center', fontSize: dense ? 9 : 10.5, color: C.faint, whiteSpace: 'nowrap' }}>{show ? b.label : ''}</div>
         })}
       </div>
-      {/* ONE fixed-height line under the axis: the legend, or — while a bar is
-          picked — that bar's readout. It used to float above the bars, where it
-          covered the range tabs and the number (owner, 2026-09-04). */}
-      <div style={{ minHeight: 22, marginTop: 9, fontSize: 11.5, display: 'flex', alignItems: 'center' }}>
+      {/* ONE line under the axis, only while a bar is picked: that bar's readout against the same
+          day the period before. The legend (Last 30 days · Prior 30 days · Avg) is gone (owner
+          2026-09-12); the picked readout is the one place the comparison still lives. */}
+      <div style={{ minHeight: pickedBar ? 22 : 0, marginTop: pickedBar ? 9 : 0, fontSize: 11.5, display: 'flex', alignItems: 'center' }}>
         {pickedBar ? (() => {
           const b = pickedBar
           const delta = b.value - b.compare
@@ -1088,13 +1081,7 @@ export function ActionsChart({
               <span style={{ color: C.faint, flexShrink: 0 }}>vs {b.compare.toLocaleString()} {b.cmpDate.includes('–') ? '' : 'on '}{b.cmpDate.replace(/^[A-Z][a-z]{2}, /, '')}</span>
             </div>
           )
-        })() : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', fontSize: 11 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.mute }}><span style={{ width: 9, height: 9, borderRadius: 3, background: col }} /> {curLbl}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 9, height: 9, borderRadius: 3, background: C.ghost }} /> {cmpLbl}</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.faint }}><span style={{ width: 11, borderTop: `1px dashed ${C.faint}`, display: 'inline-block' }} /> Avg {avg.toLocaleString()}</span>
-          </div>
-        )}
+        })() : null}
       </div>
       {/* THE RANGE, UNDER THE GRAPH, as plain words (owner 2026-09-11): no glass capsule, just
           the four spans and a calendar. The one in force wears the graph's own colour, so the
