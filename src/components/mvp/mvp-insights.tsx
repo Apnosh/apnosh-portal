@@ -2621,10 +2621,10 @@ export interface TileData {
   parts: InsightsPost[]
 }
 
+/* the date alone (owner 2026-09-12): the kind (video, reel) came off, and the date rides the
+   tile's top-right corner instead of a line under it */
 function footOf(p: InsightsPost): string {
-  const kind = p.type ? p.type.charAt(0).toUpperCase() + p.type.slice(1).toLowerCase() : 'Post'
-  const date = p.postedAt ? reviewDate(p.postedAt) : ''
-  return [kind, date].filter(Boolean).join(' · ')
+  return p.postedAt ? reviewDate(p.postedAt) : ''
 }
 
 export function tileOf(p: InsightsPost): TileData {
@@ -2701,6 +2701,8 @@ export function PostTile({ t, onOpen, fluid = false }: { t: TileData; onOpen?: (
       {/* the scrim is the only reason white numerals hold on a bright photo */}
       <span style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '66%', background: has ? 'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.32) 40%, rgba(0,0,0,.80) 100%)' : 'none' }} />
 
+      {/* the date, top right, on a chip that holds on a photo or a plain pane */}
+      {t.foot && <span style={{ position: 'absolute', right: 8, top: 9, fontSize: 10.5, fontWeight: 700, padding: '3px 7px', borderRadius: 99, background: has ? 'rgba(0,0,0,.42)' : 'rgba(255,255,255,.92)', color: has ? '#fff' : C.ink, backdropFilter: has ? 'blur(6px)' : undefined, WebkitBackdropFilter: has ? 'blur(6px)' : undefined, whiteSpace: 'nowrap' }}>{t.foot}</span>}
       {/* every network it went to, overlapped, newest-biggest first */}
       <span style={{ position: 'absolute', left: 8, top: 8, display: 'inline-flex', alignItems: 'center' }}>
         {t.platforms.slice(0, 4).map((pl, i) => (
@@ -2727,9 +2729,6 @@ export function PostTile({ t, onOpen, fluid = false }: { t: TileData; onOpen?: (
       </span>
     </div>
   )
-  const foot = (
-    <div style={{ fontSize: 12, color: C.mute, marginTop: 7, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.foot}</div>
-  )
   const box: React.CSSProperties = fluid
     ? { width: '100%', minWidth: 0, display: 'block', textDecoration: 'none', color: 'inherit' }
     : { flex: `0 0 ${TILE_W}px`, width: TILE_W, scrollSnapAlign: 'start', display: 'block', textDecoration: 'none', color: 'inherit' }
@@ -2741,13 +2740,13 @@ export function PostTile({ t, onOpen, fluid = false }: { t: TileData; onOpen?: (
   if (onOpen) {
     return (
       <button type="button" onClick={() => onOpen(t)} style={{ ...box, font: 'inherit', textAlign: 'left', border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}>
-        {media}{foot}
+        {media}
       </button>
     )
   }
   return t.permalink
-    ? <a href={t.permalink} target="_blank" rel="noreferrer noopener" style={box}>{media}{foot}</a>
-    : <div style={box}>{media}{foot}</div>
+    ? <a href={t.permalink} target="_blank" rel="noreferrer noopener" style={box}>{media}</a>
+    : <div style={box}>{media}</div>
 }
 
 /** The end of the rail: everything else, one tap away. Same frame as the rest,
