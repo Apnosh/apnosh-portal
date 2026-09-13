@@ -594,7 +594,9 @@ export default function HomeFunnel({
     // the direction rule (red when down, ink otherwise).
     const hexRgb = (h: string): [number, number, number] => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]
     const stageRgb = (i: number): [number, number, number] => hexRgb(HUES[STAGE_HUES[Math.max(0, Math.min(4, i))]][dark ? 0 : 1])
-    const dirCol = (i: number, b: HealthBand): [number, number, number] => (b === 'veryLow' ? bandCol(b) : stageRgb(i))
+    /* No red anywhere on the funnel (owner 2026-09-13): a ring, its number's tick and the step chip
+       under it wear the STAGE's own colour whatever the period did. The band word still says it. */
+    const dirCol = (i: number, _b: HealthBand): [number, number, number] => stageRgb(i)
     // Ring, number and glow colour = DIRECTION vs the prior period (owner 2026-09-04): down → red,
     // otherwise green (a stage that used to read black now reads green). The conversion bands
     // (`health`) colour ONLY the step chips between stages, which is where the disconnect shows.
@@ -865,7 +867,7 @@ export default function HomeFunnel({
           const tx = fits ? (numLeft ? anchorX + drawnNumW + 8 : anchorX - drawnNumW - 8) : anchorX
           const ty = fits ? oy + 5 : numBase + 17
           ctx.globalAlpha = tickIn
-          ctx.fillStyle = r0 > 0 ? `rgb(${HEALTH_GREEN.join(',')})` : r0 < 0 ? `rgb(${HEALTH_RED.join(',')})` : C.mute
+          ctx.fillStyle = r0 === 0 ? C.mute : `rgb(${stageRgb(i).join(',')})`
           ctx.fillText(tickStr, tx, ty)
           ctx.globalAlpha = 1
         }
@@ -913,7 +915,6 @@ export default function HomeFunnel({
       const dband = health[i + 1] // the band of the stage this leg feeds → the pill's colour + word
       if (dband == null) continue
       const weak = dband === 'veryLow' || dband === 'low'
-      const cr = bandCol(dband) // theme-aware band colour for the text
       const pct = Math.round((b / a) * 100)
       // The band word is drawn INTO the canvas, so it never went through a React tree and stayed
       // English on a Spanish page. It is one t() call like every other word on this screen.
@@ -924,10 +925,11 @@ export default function HomeFunnel({
       const pw = ctx.measureText(label).width + 20, ph = 18
       ctx.globalAlpha = pillIn
       roundRectP(px - pw / 2, midY - ph / 2, pw, ph, ph / 2)
-      const alarm = !dark && dband === 'veryLow' // the weak step is the one filled chip on the page (owner pick 2026-09-03)
-      ctx.fillStyle = alarm ? `rgb(${HEALTH_RED.join(',')})` : `rgba(${BAND_RGB[dband].join(',')},${dark ? 0.22 : 0.15})` // a soft band-tinted background
+      // the chip wears the colour of the stage it feeds, never a health colour (owner 2026-09-13)
+      const sc = stageRgb(i + 1)
+      ctx.fillStyle = `rgba(${sc.join(',')},${dark ? 0.22 : 0.13})`
       ctx.fill()
-      ctx.fillStyle = alarm ? '#ffffff' : `rgb(${cr.join(',')})` // band-coloured text (bright on dark, dark ink on light)
+      ctx.fillStyle = `rgb(${sc.join(',')})`
       ctx.fillText(label, px, midY + 4)
       ctx.globalAlpha = 1
     }
