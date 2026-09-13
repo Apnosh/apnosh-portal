@@ -1753,89 +1753,7 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   )
 }
 
-/* A friendly network name from a source's provider id ("instagram" → "Instagram"). */
-const PROVIDER_NAMES: Record<string, string> = { instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', linkedin: 'LinkedIn', youtube: 'YouTube', google_business_profile: 'Google', google_analytics: 'Google Analytics', google_search_console: 'Search Console', yelp: 'Yelp', social: 'a social account', ads: 'an ads account', pos: 'your register', reservations: 'a reservations app', delivery: 'a delivery app', loyalty: 'a loyalty program', email: 'your email tool' }
-function providerName(id: string): string {
-  const p = String(SOURCE_BY_ID[id]?.provider ?? '')
-  return PROVIDER_NAMES[p] ?? (p ? p.charAt(0).toUpperCase() + p.slice(1) : '')
-}
-/** One quiet row for a group with nothing connected yet: names the networks that would
- *  fill it and opens the connect screen. Replaces a tile per network saying "Connect to see". */
-function ConnectRow({ label, sources, first = false }: { label: string; sources: StageSourceView[]; first?: boolean }) {
-  const provs = [...new Set(sources.filter((s) => s.status === 'AVAILABLE_NOT_CONNECTED').map((s) => String(SOURCE_BY_ID[s.id]?.provider ?? '')).filter(Boolean))]
-  const names = provs.map((p) => PROVIDER_NAMES[p] ?? p)
-  const list = names.length <= 2 ? names.join(' or ') : `${names.slice(0, 2).join(', ')} or ${names.length - 2} more`
-  return (
-    <Link href="/dashboard/connected-accounts" style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none', color: 'inherit', padding: '10px 0 4px' }}>
-      <span style={{ display: 'inline-flex', flexShrink: 0, width: 36, justifyContent: 'center' }}>
-        {(provs.length ? provs.slice(0, 3) : ['website']).map((p, i) => (
-          <span key={p} style={{ width: 28, height: 28, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginLeft: i ? -8 : 0, opacity: 0.55, filter: 'grayscale(.4)' }}>
-            <BrandOrMark provider={p} size={15} />
-          </span>
-        ))}
-      </span>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, fontWeight: 600, color: C.ink }}>{label}</div>
-        <div style={{ fontSize: 12, color: C.mute, marginTop: 1, lineHeight: 1.35 }}>{names.length ? `Connect ${list} to see it here.` : 'Coming soon.'}</div>
-      </div>
-      {names.length > 0 && <span style={{ fontSize: 12.5, fontWeight: 600, color: C.greenDk, flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 2 }}>Connect <ChevronRight size={14} /></span>}
-    </Link>
-  )
-}
-/** Several campaigns shipped the same day under the same title read as one row with a count. */
-function foldSameNames(items: StageCampaign[]): { c: StageCampaign; count: number }[] {
-  const out: { c: StageCampaign; count: number }[] = []
-  for (const c of items) {
-    const hit = out.find((o) => o.c.name === c.name)
-    if (hit) hit.count++; else out.push({ c, count: 1 })
-  }
-  return out
-}
-/**
- * BEFORE AND AFTER, around the day it went live.
- * ===============================================
- * Four owners share one question the product had no answer to: did the thing I
- * paid for do anything. The chart already drew a dashed line on the go-live day,
- * and a marker is not an answer. This states the daily average on each side of
- * that line.
- *
- * It states them and stops. No "this campaign drove X", because a restaurant's
- * numbers move for weather, a holiday, a competitor closing and the season, and
- * a causal claim from two averages would be exactly the invented arithmetic this
- * pass has spent its time deleting. The owner who audits everything asked to be
- * able to CHECK, not to be told.
- *
- * Silent unless it can be honest: real days on both sides, and a gap big enough
- * not to be noise.
- */
-function beforeAfter(series: Array<{ date: string; value: number }>, shippedAt: string | null, span = 14):
-  { before: number; after: number; pct: number; days: number } | null {
-  if (!shippedAt) return null
-  const t = trendDayMs(String(shippedAt).slice(0, 10))
-  if (!t) return null
-  const inWin = (from: number, to: number) => series.filter((d) => {
-    const ms = trendDayMs(d.date)
-    return ms > 0 && ms >= from && ms < to
-  })
-  const pre = inWin(t - span * DAY_MS, t)
-  const post = inWin(t, t + span * DAY_MS)
-  /* Both sides need most of their window. A campaign that shipped three days ago
-     has no "after" yet, and saying so is better than dividing by a stub. */
-  const need = Math.ceil(span * 0.6)
-  if (pre.length < need || post.length < need) return null
-  const mean = (a: typeof pre) => a.reduce((x, d) => x + d.value, 0) / a.length
-  const before = mean(pre), after = mean(post)
-  /* A percentage needs a level under it. One account averages two views a day,
-     where 2.4 falling to 2.0 is "down 16%" and means one person. Same lesson as
-     the weekday card: below a level an owner could act on, there is no result
-     here to report. */
-  if (before < 10) return null
-  const pct = Math.round(((after - before) / before) * 100)
-  if (Math.abs(pct) < 10) return null // noise, not a result
-  return { before: Math.round(before), after: Math.round(after), pct, days: Math.min(pre.length, post.length) }
-}
-
-function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false, series = [], noun = '' }: { list: StageCampaign[] | null; /** campaign id → its pin number on the trend above */ pins?: Record<string, number>; lit?: number | null; onLight?: (n: number | null) => void; /** render inside another card (the trend), no card of its own */ bare?: boolean; /** the same daily series the chart above draws, for the before/after read */ series?: Array<{ date: string; value: number }>; noun?: string }) {
+function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: { list: StageCampaign[] | null; /** campaign id → its pin number on the trend above */ pins?: Record<string, number>; lit?: number | null; onLight?: (n: number | null) => void; /** render inside another card (the trend), no card of its own */ bare?: boolean; /** the same daily series the chart above draws, for the before/after read */ series?: Array<{ date: string; value: number }>; noun?: string }) {
   const A = useAccent()
   if (list === null) return null // stay quiet until the fetch lands
   const MAX = 5
@@ -1865,16 +1783,7 @@ function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false, se
                   <span style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: stateCol, marginTop: 1 }}><span style={{ width: 6, height: 6, borderRadius: 99, background: stateCol }} />{stateWord}{count > 1 ? ` · ${count} alike` : ''}{c.shippedAt && c.state !== 'production' ? ` · ${fmtPinDate(trendDayMs(c.shippedAt))}` : ''}</span>
-                    {(() => {
-                      const ba = beforeAfter(series, c.shippedAt ?? null)
-                      if (!ba) return null
-                      return (
-                        <span style={{ display: 'block', fontSize: 11.5, color: ba.pct > 0 ? TREND_GREEN : TREND_RED, marginTop: 3, fontWeight: 600 }}>
-                          {ba.before.toLocaleString()} → {ba.after.toLocaleString()} {noun ? noun.toLowerCase() + ' ' : ''}a day
-                          <span style={{ color: C.mute, fontWeight: 500 }}> · {ba.days} days either side</span>
-                        </span>
-                      )
-                    })()}
+                    {/* no before/after views line (owner 2026-09-12): a campaign's effect on views cannot be tracked reliably */}
                   </span>
                   <ChevronRight size={17} color={C.faint} style={{ flexShrink: 0 }} />
                 </Link>
