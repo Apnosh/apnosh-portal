@@ -1550,9 +1550,29 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
   const avgV = days.reduce((s, d) => s + d.v, 0) / n
   // the one-line read: the window's last stretch against its first (a week each, or a
   // third of a short window), so "trending up 12%" means something a person can check
-  const stretch = Math.max(DAY_MS * 2, Math.min(7 * DAY_MS, spanMs / 3))
-  const headA = trendMeanIn(dayMs, startMs, startMs + stretch), headB = trendMeanIn(dayMs, endMs - stretch, endMs + 1)
-  const trendPct = headA.n >= 2 && headB.n >= 2 && headA.mean > 0 ? Math.round(((headB.mean - headA.mean) / headA.mean) * 100) : null
+  /* THE TREND OF THIS PERIOD (owner 2026-09-13: "30 days, are you trending up or down and by
+     how much"). One straight line fitted through every reported day in the window (least
+     squares); the verdict is where that line ends against where it starts. It used to be the
+     last week's average against the first week's, which one viral day or one half-reported
+     day could flip on its own. Two honesty cuts: the last three days are left out (Google is
+     still filling them in), and days before the first real number are left out (they are
+     "not counted yet", not "quiet"). The fitted line is drawn, dashed, so the words match a
+     line the owner can see. */
+  const LAG_DAYS = 3
+  const fitFrom = Math.max(0, days.findIndex((d) => d.v > 0))
+  const fitTo = days.reduce((k, d, i) => (d.t <= endMs - LAG_DAYS * DAY_MS ? i : k), -1)
+  const fitIdx = fitTo - fitFrom + 1 >= 5 ? { a: fitFrom, b: fitTo } : null
+  const fit = (() => {
+    if (!fitIdx) return null
+    const ys = days.slice(fitIdx.a, fitIdx.b + 1).map((d) => d.v)
+    const n = ys.length, mx = (n - 1) / 2, my = ys.reduce((t, y) => t + y, 0) / n
+    let sxy = 0, sxx = 0
+    ys.forEach((y, i) => { sxy += (i - mx) * (y - my); sxx += (i - mx) * (i - mx) })
+    const slope = sxx > 0 ? sxy / sxx : 0
+    const start = my - slope * mx, end = my + slope * mx
+    return { start, end, mean: my }
+  })()
+  const trendPct = fit ? Math.round(((fit.end - fit.start) / Math.max(fit.start, fit.mean * 0.1, 1)) * 100) : null
   /* the line wears its STAGE's own colour (owner 2026-09-12: back to the original colours after a
      day in the up/down verdict colours); the trending words still say the direction */
   const trendCol = A.main
@@ -1708,6 +1728,10 @@ function CampaignTrend({ mv, list, reviews = [], chartRange = '30d', title = 'Tr
         {/* the trend: a 7-day rolling average */}
         <path d={area} fill={`url(#${gid})`} />
         <path d={line} fill="none" stroke={trendCol} strokeWidth={2.2} strokeLinejoin="round" strokeLinecap="round" />
+        {/* the period's trend: the fitted straight line the verdict above is read from */}
+        {fit && fitIdx && (
+          <line x1={xOf(fitIdx.a)} y1={Math.min(yBot, yAt(Math.max(0, fit.start)))} x2={xOf(fitIdx.b)} y2={Math.min(yBot, yAt(Math.max(0, fit.end)))} stroke={trendCol} strokeWidth={1.4} strokeOpacity={0.55} strokeDasharray="5 4" strokeLinecap="round" />
+        )}
         {/* Reviews, on the same axis and just under the plot: one tick each,
             red for one and two stars, amber for three, grey above. Below the
             line so they never compete with it, and never on top of the
