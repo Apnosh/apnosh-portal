@@ -1285,18 +1285,19 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
               <span style={{ fontSize: 10.5 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}
             </span>
           )}
+          {/* year-over-year, on the number's own line after the pill (owner 2026-09-12); it wraps
+              under when the row runs out of room. Shows only when we can honestly make the claim
+              (fresh data + a real prior-year number). */}
+          {fresh && summary.yoyPct != null && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 6, fontSize: 12, fontWeight: 600, color: summary.yoyPct > 0 ? TREND_GREEN : summary.yoyPct < 0 ? TREND_RED : C.mute, whiteSpace: 'nowrap' }}>
+              {summary.yoyPct > 0 ? <TrendingUp size={13} /> : summary.yoyPct < 0 ? <TrendingDown size={13} /> : <Minus size={13} />}
+              {summary.yoyPct > 999 ? `Far above ${summary.yoyLabel}` : summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
+            </span>
+          )}
         </div>
         {/* no dates under the number (owner 2026-09-12); a stale feed still says so here */}
         {total > 0 && !fresh && mv.lastDataDate && (
           <div style={{ fontSize: 12, color: C.mute, marginTop: 5, lineHeight: 1.4 }}>last update {relDate(mv.lastDataDate)}</div>
-        )}
-        {/* year-over-year: same window a year ago. Shows only when we can honestly
-            make the claim (fresh data + a real prior-year number). */}
-        {fresh && summary.yoyPct != null && (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 3, fontSize: 12, fontWeight: 600, color: summary.yoyPct > 0 ? C.greenDk : summary.yoyPct < 0 ? C.coral : C.mute }}>
-            {summary.yoyPct > 0 ? <TrendingUp size={14} /> : summary.yoyPct < 0 ? <TrendingDown size={14} /> : <Minus size={14} />}
-            {summary.yoyPct > 999 ? `Far above ${summary.yoyLabel}` : summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
-          </div>
         )}
       </div>
       {/* histogram — trend/shape only; the ONE number for this card is the
