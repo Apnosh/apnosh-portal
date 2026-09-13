@@ -14,10 +14,10 @@
  * Every price, turnaround and availability comes from the same modules the builder uses.
  */
 import { PROMISE_BY_CARD, promiseSentence, renderPromiseSentence } from '@/lib/promises/registry'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Check, Search, Sparkles, X, Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Eye, Lightbulb, MousePointerClick, DoorOpen, Repeat, Loader2, Compass, Image as ImageIcon, Store, Camera, Video, Mail, PenLine, Gift, Clock, Wrench, BarChart3, TrendingUp, Target } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Check, Search, Sparkles, X, Megaphone, Ticket, Tag, Moon, MapPin, Heart, Star, ShoppingCart, Users, Share2, Eye, Lightbulb, MousePointerClick, DoorOpen, Repeat, Loader2, Mic, Compass, Image as ImageIcon, Store, Camera, Video, Mail, PenLine, Gift, Clock, Wrench, BarChart3, TrendingUp, Target } from 'lucide-react'
 import MvpShell from '../mvp-shell'
 import TopRow from '../top-row'
 import { useClient } from '@/lib/client-context'
@@ -243,6 +243,12 @@ const CREATE_CSS = `
 .cr .say2 .ta::placeholder{color:#aeaeb2}
 .cr .say2 .foot{display:flex;align-items:center;gap:8px;margin-top:6px}
 .cr .say2 .hint{flex:1;font-size:12px;color:#aeaeb2}
+.cr .say2 .eg{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:2px;padding-bottom:2px}
+.cr .say2 .eg button{flex:none;font-size:12px;font-weight:600;padding:6px 10px;border-radius:99px;border:1px solid #e6e6ea;background:#fff;color:#6e6e73;cursor:pointer;font-family:inherit}
+.cr .say2 .mic{width:36px;height:36px;border-radius:18px;border:0;background:#f5f5f7;color:#1d1d1f;display:grid;place-items:center;cursor:pointer;flex:none}
+.cr .say2 .mic.on{background:#ec1528;color:#fff;animation:crmic 1.2s ease-in-out infinite}
+@keyframes crmic{0%,100%{box-shadow:0 0 0 0 rgba(236,21,40,.35)}50%{box-shadow:0 0 0 8px rgba(236,21,40,0)}}
+.cr .say2 .clr{flex:1;text-align:left;border:0;background:none;font-size:12.5px;font-weight:600;color:#aeaeb2;cursor:pointer;font-family:inherit;padding:0 4px}
 .cr .qgrid{display:grid;grid-template-rows:repeat(2,auto);grid-auto-flow:column;grid-auto-columns:64px;gap:10px 8px;overflow-x:auto;padding:2px 16px 6px;scrollbar-width:none}
 .cr .qt{width:64px;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:0;cursor:pointer;font-family:inherit}
 .cr .qt .ic{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;color:var(--c2);background:var(--t1)}
@@ -442,6 +448,41 @@ export default function CreatePage() {
   const [reading, setReading] = useState(false)
   const [read, setRead] = useState<Describe | null>(null)
   const askRef = useRef<HTMLTextAreaElement>(null)
+  /* SPEECH TO TEXT (owner 2026-09-13): the browser's own recogniser, where it has one (Chrome,
+     Safari on iPhone). Words land in the box as they are heard; the owner reads them and taps
+     Plan it. No audio leaves the page through us. The button is not drawn where the browser
+     cannot do it. */
+  type Recog = { lang: string; interimResults: boolean; continuous: boolean; start: () => void; stop: () => void; onresult: ((e: { resultIndex: number; results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null; onend: (() => void) | null; onerror: (() => void) | null }
+  const canHear = useSyncExternalStore(() => () => {}, () => { const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }; return !!(w.SpeechRecognition ?? w.webkitSpeechRecognition) }, () => false)
+  const [listening, setListening] = useState(false)
+  const recogRef = useRef<Recog | null>(null)
+  const heardRef = useRef('')
+  const hear = () => {
+    if (listening) { recogRef.current?.stop(); return }
+    const w = window as unknown as { SpeechRecognition?: new () => Recog; webkitSpeechRecognition?: new () => Recog }
+    const R = w.SpeechRecognition ?? w.webkitSpeechRecognition
+    if (!R) return
+    const r = new R()
+    r.lang = navigator.language || 'en-US'; r.interimResults = true; r.continuous = false
+    const base = ask.trim() ? ask.trimEnd() + ' ' : ''
+    heardRef.current = ''
+    r.onresult = (e) => {
+      let text = ''
+      for (let i = 0; i < e.results.length; i++) text += e.results[i][0].transcript
+      heardRef.current = text
+      setAsk(base + text)
+    }
+    r.onend = () => { setListening(false); recogRef.current = null; askRef.current?.focus() }
+    r.onerror = () => { setListening(false); recogRef.current = null }
+    recogRef.current = r
+    setListening(true)
+    r.start()
+  }
+  /* the box grows with the words, so a long ask is never scrolled inside a two-line slot */
+  const grow = (el: HTMLTextAreaElement | null) => { if (!el) return; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }
+  useEffect(() => { grow(askRef.current) }, [ask])
+  /* tap-to-fill starters: the three asks owners type most, in their own words */
+  const STARTERS = [T('Labor Day hours'), T('A video for the new dish'), T('More people in on Tuesdays'), T('More Google reviews'), T('Push catering')]
   const describe = async () => {
     const text = ask.trim(); if (!text || reading) return
     setReading(true); setRead(null)
@@ -464,9 +505,13 @@ export default function CreatePage() {
   const sayBox = (
     <div className="say"><div className="in say2">
       <div className="eyebrow"><Sparkles /><span className="aur">{T('Describe it')}</span></div>
-      <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} rows={2} placeholder={T('What do you want to do? A video for the new dish, Labor Day hours, more people in on Tuesdays…')} />
+      <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); describe() } }} rows={2} enterKeyHint="go" placeholder={listening ? T('Listening…') : T('What do you want to do? A video for the new dish, Labor Day hours, more people in on Tuesdays…')} />
+      {!ask.trim() && !listening && (
+        <div className="eg cc-scroll">{STARTERS.map((x) => <button key={x} type="button" onClick={() => { setAsk(x); askRef.current?.focus() }}>{x}</button>)}</div>
+      )}
       <div className="foot">
-        <span className="hint">{T('We read it and suggest a plan. You can change anything.')}</span>
+        {canHear && <button type="button" className={`mic${listening ? ' on' : ''}`} onClick={hear} aria-label={listening ? T('Stop listening') : T('Speak instead')} aria-pressed={listening}><Mic size={17} /></button>}
+        {ask.trim() && !reading ? <button type="button" className="clr" onClick={() => { setAsk(''); setRead(null); askRef.current?.focus() }}>{T('Clear')}</button> : <span style={{ flex: 1 }} />}
         <button type="button" className="btn" onClick={describe} disabled={!ask.trim() || reading} style={{ height: 36 }}>{reading ? <Loader2 size={15} className="mvp-spin" /> : <ArrowRight size={15} />}{reading ? T('Reading') : T('Plan it')}</button>
       </div>
         {read && (
