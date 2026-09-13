@@ -262,6 +262,23 @@ const CREATE_CSS = `
 .cr .door .da .btn{flex:1;height:40px}
 .cr .door .da .btn.ghost{background:#fff}
 .cr .pc.wide{width:280px}
+/* the one-glance card */
+.cr .pc2{flex:none;width:208px;border-radius:18px;background:#fff;border:0.5px solid #e6e6ea;box-shadow:0 1px 2px rgba(0,0,0,.03),0 6px 18px rgba(0,0,0,.05);padding:12px 12px 11px;text-align:left;cursor:pointer;font-family:inherit;color:#1d1d1f;display:flex;flex-direction:column;gap:7px;position:relative}
+.cr .pc2.wide{width:280px}
+.cr .pc2.dim{opacity:.62}
+.cr .pc2 .top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cr .pc2 .ic{width:38px;height:38px;border-radius:12px;background:var(--t1);color:var(--c2);display:grid;place-items:center;flex:none}
+.cr .pc2 .ic svg{width:20px;height:20px}
+.cr .pc2 .stage{font-style:normal;font-weight:700;font-size:9.5px;padding:3px 8px;border-radius:99px;background:var(--t1);color:var(--c2);display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex:none}
+.cr .pc2 .stage i{width:5px;height:5px;border-radius:99px;background:var(--c2)}
+.cr .pc2 .t{font-family:'Cal Sans','Inter',sans-serif;font-size:15px;line-height:1.2;font-weight:600;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:36px}
+.cr .pc2 .g{font-size:12px;color:#6e6e73;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:32px}
+.cr .pc2 .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:9px;border-top:0.5px solid #e6e6ea}
+.cr .pc2 .pr{font-size:13px;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cr .pc2 .pr b{font-weight:700;color:#1d1d1f}
+.cr .pc2 .pr span{color:#6e6e73;font-size:11.5px}
+.cr .pc2 .you{flex:none;font-size:10px;font-weight:700;padding:3px 7px;border-radius:99px;background:#f5f5f7;color:#6e6e73;white-space:nowrap;display:inline-flex;align-items:center;gap:3px}
+.cr .pc2 .you.done{background:#eaf7f3;color:#2e9a78}
 .cr .pc .pl{display:flex;align-items:center;gap:6px;margin-top:auto;padding-top:4px;font-size:12.5px}
 .cr .pc .pl b{font-weight:700;color:#1d1d1f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cr .pc .pl span{color:#aeaeb2;font-size:11.5px}
@@ -545,14 +562,29 @@ export default function CreatePage() {
   /* ── a picture card (the standard `.pc` card, wearing the card's goal hue and a stage tag) ──
      The tag is why the page exists: the owner reads which number this moves on every card, not
      only behind a stage tab. A done setup wears Done; a held card wears Coming soon and no price. */
+  /* THE CARD, READ IN ONE GLANCE (owner 2026-09-12: "more intuitive"). Four things, top to
+     bottom, each answering the question an owner actually has: WHAT is it (glyph + name), WHAT
+     DO I GET (the first concrete line of the card's own list, or the reason from their numbers),
+     WHAT DOES IT COST AND WHEN (price and the ready time on one line), and WHAT DO I DO (nothing,
+     approve, show up). The stage it moves rides top right. No gradient tile: the picture said
+     nothing the name did not. */
   const pc = (c: ShelfCard, wide?: boolean) => { const Icon = iconFor(c); const buy = isBuyable(c); const isDone = done.has(c.id); const why = whyNow(c)
+    const get = c.get.find((g) => g && !/^A plan you approve/i.test(g)) ?? c.plain
     return (
-      <button key={c.id} type="button" onClick={() => open(c)} className={`card pc press${buy ? '' : ' dim'}${wide ? ' wide' : ''}`} style={hv(c.goal)}>
-        <div className="tile"><span className="glass"><Icon /></span>{(!buy || isDone) && <span className="badge">{isDone ? <span className="pill-w"><Check strokeWidth={3} /> {T('Done')}</span> : <Coming />}</span>}</div>
-        <div className="body">
-          <div className="t">{c.title}</div>
-          <div className="s">{why ?? c.plain}</div>
-          <div className="pl">{buy ? <b>{priceWord(c.price)}</b> : <span>{T('Not on sale yet')}</span>}<em style={hv(STAGE_HUE[c.stage])}><i />{T(c.stage)}</em></div>
+      <button key={c.id} type="button" onClick={() => open(c)} className={`pc2 press${buy ? '' : ' dim'}${wide ? ' wide' : ''}`} style={hv(c.goal)}>
+        <div className="top">
+          <span className="ic"><Icon /></span>
+          <em className="stage" style={hv(STAGE_HUE[c.stage])}><i />{T(c.stage)}</em>
+        </div>
+        <div className="t">{c.title}</div>
+        <div className="g">{why ?? get}</div>
+        <div className="foot">
+          {buy
+            ? <span className="pr"><b>{priceWord(c.price)}</b><span> · {T(c.ready)}</span></span>
+            : <span className="pr"><span>{T('Coming soon')}</span></span>}
+          {isDone
+            ? <span className="you done"><Check size={10} strokeWidth={3} /> {T('Done')}</span>
+            : buy && <span className="you">{T('You')}: {T(c.you).toLowerCase()}</span>}
         </div>
       </button>
     )
