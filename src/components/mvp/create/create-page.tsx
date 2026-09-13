@@ -25,6 +25,7 @@ import { gradOf, hueOf, tint, type HueKey } from '../hues'
 import { Mark } from '../mark'
 import { GOALS, FILTERS, GUIDE_QS, SITUATION_GOAL, isBuyable, matchWord, searchCards, shelfCard, shelfCards, starterPicks, type FilterKey, type ShelfCard, type ShelfGoal, type ShelfStage } from '@/lib/campaigns/data/shelf'
 import { CHIP_ORDER, liveForChip, shelfForChip } from '@/lib/campaigns/data/chip-shelf'
+import { ACTION_GROUPS, actionBrief, bundleTotal, partPrice, priceLabel } from '@/lib/campaigns/data/action-shelf'
 import { notSellableReason } from '@/lib/campaigns/data/catalog-availability'
 import { REPLY_PROMISE_SENTENCE } from '@/lib/reply-promise'
 import { hrefFor, firstName, type OrderPerson } from '../people-row'
@@ -39,7 +40,9 @@ const GOAL_ICON: Record<ShelfGoal, typeof Megaphone> = { foryou: Sparkles, annou
 const STAGE_ICON: Record<ShelfStage, typeof Eye> = { Awareness: Eye, Interest: Lightbulb, Actions: MousePointerClick, Orders: DoorOpen, Retention: Repeat }
 const STAGE_HUE: Record<ShelfStage, HueKey> = { Awareness: 'mint', Interest: 'nights', Actions: 'newfaces', Orders: 'amber', Retention: 'brand' }
 const KIND_ICON: Record<string, typeof Store> = { design: ImageIcon, 'creative-graphic': ImageIcon, 'creative-social': Share2, 'creative-video': Video, 'creative-photos': Camera, 'creative-copy': PenLine, 'creative-email': Mail, 'creative-print': Ticket, 'creative-logo': Sparkles, 'creative-website': Store, 'creative-ads': Megaphone, 'creative-menu': Tag, 'creative-other': Wrench, story: ImageIcon, gpost: Store, dish: Camera, reel: Video, graphic: ImageIcon, edit: Video, earlyaccess: Mail, slowoffer: Tag, winback: Heart, promoevent: Ticket, launch: Tag, ticket: Ticket, creator: Users, catering: Users, reviewsplan: Star, giftcard: Gift, shoot: Camera, gbp: Store, listings: MapPin, socialprofiles: Share2, measure: BarChart3, emaildeliver: Mail, deliverymenu: ShoppingCart, friction: ShoppingCart, direct: ShoppingCart, website: Store, localseo: MapPin, pos: ShoppingCart, welcome: Mail, birthday: Gift, news: Mail, loyalty: Heart, nights: Moon, firstvisit: MapPin, regulars: Heart, reach: Megaphone, reviewsreply: Star, socialmgmt: Share2, gbpmgmt: Store }
-const iconFor = (c: ShelfCard) => KIND_ICON[c.id] ?? GOAL_ICON[c.goal]
+/* the Actions shelf's bundles and parts (action-shelf.ts) */
+const ACTION_ICON: Record<string, typeof Store> = { 'b-google': MapPin, 'b-site': Store, 'b-social': Share2, 'b-everywhere': Compass, 'b-answer': Mail, 'b-weekly': Megaphone, gmenu: Tag, gattrs: Lightbulb, gfindus: MapPin, gproducts: Gift, gpostbtn: MousePointerClick, sitemenu: Tag, sitereserve: Clock, sitecall: MousePointerClick, sitegift: Gift, sitefix: Wrench, onelink: Share2, igbuttons: MousePointerClick, pinned: PenLine, tapposts: MousePointerClick, linksticker: ImageIcon, yelpapple: Compass, appprofiles: ShoppingCart, callads: Target, retarget: Repeat, missedcall: Mail, textorder: Mail, dmhour: Mail, waitlist: Users }
+const iconFor = (c: ShelfCard) => KIND_ICON[c.id] ?? ACTION_ICON[c.id] ?? GOAL_ICON[c.goal]
 const YOU_ICON: Record<string, typeof Check> = { Nothing: Check, Approve: Eye, 'Show up': Users }
 
 
@@ -81,6 +84,7 @@ const CREATE_CSS = `
 .cr .sec .sub{font-size:13px;color:#6e6e73;margin-top:2px}
 .cr .sec .more{color:#aeaeb2;display:flex;align-items:center;padding-bottom:4px;background:none;border:0;cursor:pointer}
 .cr .shelf{display:flex;gap:12px;overflow-x:auto;padding:2px 16px 8px;scrollbar-width:none}
+.cr .grp{font-size:13px;font-weight:600;color:#6e6e73;padding:10px 16px 8px}
 .cr .facts{display:flex;gap:0;margin-top:2px}
 .cr .facts div{flex:1;min-width:0}
 .cr .facts div:first-child{flex:1.6}
@@ -345,6 +349,8 @@ export default function CreatePage() {
      For you, everything). The location, budget and sort chips were tried and cut the same day:
      the stage is the one filter an owner reaches for. */
   const [stage, setStage] = useState<ShelfStage | null>(null)
+  /** bundle id → the parts the owner has unticked on its sheet (everything is in until they say) */
+  const [dropped, setDropped] = useState<Record<string, string[]>>({})
   /** The people who are on this client's live orders, for the bottom door. Empty is a fine
    *  answer: the door then says Get help, which is a real place, and never invents a name. */
   const [people, setPeople] = useState<OrderPerson[]>([])
@@ -389,9 +395,22 @@ export default function CreatePage() {
   }, [signals, T])
 
   const open = (c: ShelfCard) => go({ name: 'product', id: c.id })
+  /** a bundle's parts that can be bought today, and the ones of those still ticked */
+  const bundlePick = (c: ShelfCard) => {
+    const parts = (c.parts ?? []).map((id) => cards[id]).filter((x): x is ShelfCard => !!x)
+    const pickable = parts.filter(isBuyable)
+    const drop = dropped[c.id] ?? []
+    const picked = pickable.filter((x) => !drop.includes(x.id))
+    return { parts, pickable, picked, total: bundleTotal(pickable.map((x) => x.id), picked.map((x) => x.id)) }
+  }
+  const plabel = (id: string) => { const pr = partPrice(id); return priceLabel(pr.oneTime, pr.perMonth) }
   const order = (c: ShelfCard) => {
     if (!isBuyable(c)) return
-    if (c.handoff.kind === 'request') router.push(`/dashboard/requests?type=${c.handoff.type}`)
+    if (c.handoff.kind === 'request') {
+      let what = c.handoff.what
+      if (c.parts) { const { picked } = bundlePick(c); if (picked.length === 0) return; what = actionBrief(c.title, picked.map((x) => ({ title: x.title, price: plabel(x.id) }))) }
+      router.push(`/dashboard/requests?type=${c.handoff.type}${what ? `&what=${encodeURIComponent(what)}` : ''}`)
+    }
     else if (c.handoff.kind === 'design') router.push('/dashboard/design/order')
     else router.push(`/dashboard/campaigns/new/build?template=${c.handoff.id}&view=build`)
   }
@@ -569,7 +588,7 @@ export default function CreatePage() {
      approve, show up). The stage it moves rides top right. No gradient tile: the picture said
      nothing the name did not. */
   const pc = (c: ShelfCard, wide?: boolean) => { const Icon = iconFor(c); const buy = isBuyable(c); const isDone = done.has(c.id); const why = whyNow(c)
-    const get = c.get.find((g) => g && !/^A plan you approve/i.test(g)) ?? c.plain
+    const get = c.parts ? T('{n} parts. Tick what you need, pay for those.', { n: c.parts.length }) : c.get.find((g) => g && !/^A plan you approve/i.test(g)) ?? c.plain
     return (
       <button key={c.id} type="button" onClick={() => open(c)} className={`pc2 press${buy ? '' : ' dim'}${wide ? ' wide' : ''}`} style={hv(c.goal)}>
         <div className="top">
@@ -599,7 +618,29 @@ export default function CreatePage() {
   const browse = () => {
     const all = Object.values(cards).filter(fits)
     const rec = sorted(liveIds.map((id) => cards[id]).filter((c): c is ShelfCard => !!c && fits(c) && isBuyable(c)))
-    const of = (f: (c: ShelfCard) => boolean) => sorted(all.filter(f))
+    /* a new single part (one that orders through the desk) shows on its own group shelf under
+       Actions, not on the For-you kind rails, or thirty cards would flood them */
+    const loose = (c: ShelfCard) => !!c.partOf && c.handoff.kind === 'request'
+    const of = (f: (c: ShelfCard) => boolean) => sorted(all.filter((c) => f(c) && !loose(c)))
+    if (stage === 'Actions') {
+      const bundles = sorted(all.filter((c) => !!c.parts))
+      return (
+        <>
+          {sayBox}
+          <div className="sec" style={{ paddingTop: 18, paddingBottom: 10 }}><div><h2>{T('Quick request')}</h2></div></div>
+          <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
+          {browseBlock}
+          {rail({ t: T('Recommended for you'), list: rec, hue: STAGE_HUE.Actions })}
+          {rail({ t: T('Campaigns'), s: T('Everything for one place, 15% under the parts'), list: bundles, hue: STAGE_HUE.Actions })}
+          <Sec t={T('One thing at a time')} s={T('Pick exactly what you need')} hue={STAGE_HUE.Actions} />
+          {ACTION_GROUPS.map((g) => { const list = sorted(all.filter((c) => c.group === g && !c.parts)); return list.length === 0 ? null : (
+            <div key={g}><div className="grp">{T(g)}</div><Shelf>{list.map((c) => pc(c))}</Shelf></div>
+          ) })}
+          {helpDoor}
+          <div style={{ height: 24 }} />
+        </>
+      )
+    }
     /* Five kinds of thing, not five stages: a creative is one piece made, a campaign is several
        against a date, a setup is something you have fixed once, a program runs every month, and
        people come in. They differ in what happens after the tap, which is what a category means. */
@@ -648,7 +689,7 @@ export default function CreatePage() {
             {hits.map((c) => { const Icon = iconFor(c); const mw = matchWord(c, q); const buy = isBuyable(c)
               return <button key={c.id} type="button" onClick={() => open(c)} className={`row press${buy ? '' : ' dim'}`} style={hv(c.goal)}>
                 <Mark hue={c.goal} size={34}><Icon size={18} /></Mark>
-                <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? T('Coming soon') : mw ? T('matches “{word}”', { word: mw }) : c.sub || c.plain}</span></span>
+                <span className="tx"><span className="t" style={{ display: 'block' }}>{c.title}</span><span className="s" style={{ display: 'block' }}>{!buy ? T('Coming soon') : mw ? T('matches “{word}”', { word: mw }) : c.partOf && cards[c.partOf] ? T('part of {b}', { b: cards[c.partOf].title }) : c.sub || c.plain}</span></span>
                 {/* No price on a held card, here either. The search row was the last place a
                     coming-soon card still carried one, which read as a thing you could buy. */}
                 <span className="r">{buy ? <><b>{priceWord(c.price)}</b><span>{c.ready}</span></> : <span>{T('Not on sale yet')}</span>}</span>
@@ -741,7 +782,40 @@ export default function CreatePage() {
         {!buy && <div style={{ margin: '12px 16px 0', padding: '10px 12px', borderRadius: 12, background: C.fill, fontSize: 12.5, color: C.mute, lineHeight: 1.4 }}>{notSellableReason(c.id)}</div>}
         {(() => { const ps = buy ? renderPromiseSentence(promiseSentence(PROMISE_BY_CARD[c.id] ?? []), T) : null; return ps ? <div className="pp-count" style={{ margin: '0 16px 4px', padding: '10px 12px', borderRadius: 12, background: 'rgba(46,154,120,.08)', fontSize: 12.5, color: '#1c6b52', lineHeight: 1.4 }}>{ps}</div> : null })()}
         <div className="pp-sec"><h2>{T('In plain words')}</h2><p>{c.plain}</p></div>
-        <div className="pp-sec"><h2>{T('What you get')}</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>
+        {c.parts ? (() => {
+          /* THE TICKABLE LIST (owner 2026-09-12): every part with its own price, all in until the
+             owner unticks one. The whole bundle is 15% under the parts; drop a part and it is the
+             plain sum of what is left. A part that cannot be bought yet is shown, dim, and not
+             counted. */
+          const { parts, picked, total } = bundlePick(c)
+          const drop = dropped[c.id] ?? []
+          const toggle = (id: string) => setDropped((d) => ({ ...d, [c.id]: drop.includes(id) ? drop.filter((x) => x !== id) : [...drop, id] }))
+          const shown = total.whole ? priceLabel(total.wholeOneTime, total.wholePerMonth) : priceLabel(total.oneTime, total.perMonth)
+          const full = priceLabel(total.oneTime, total.perMonth)
+          return (
+            <div className="pp-sec"><h2>{T('What you get')}</h2>
+              <div style={{ fontSize: 12.5, color: C.mute, marginBottom: 4 }}>{T('Tick what you need. Untick what you already have.')}</div>
+              {parts.map((p) => { const buy = isBuyable(p); const on = buy && !drop.includes(p.id); const I = iconFor(p)
+                return (
+                  <div key={p.id} className="row" style={{ ...hv(p.goal), padding: '7px 2px', opacity: buy ? 1 : 0.55 }}>
+                    <button type="button" aria-pressed={on} disabled={!buy} onClick={() => toggle(p.id)} className={`st${on ? ' done' : ''}`} style={{ cursor: buy ? 'pointer' : 'default', background: on ? undefined : '#fff', padding: 0 }}>{on && <Check size={13} strokeWidth={3} />}</button>
+                    <button type="button" onClick={() => open(p)} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, border: 'none', background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>
+                      <Mark hue={p.goal} size={30}><I size={16} /></Mark>
+                      <span className="tx"><span className="t" style={{ display: 'block', fontSize: 14 }}>{p.title}</span><span className="s" style={{ display: 'block' }}>{buy ? p.ready : T('Coming soon')}</span></span>
+                      <span className="r"><b style={{ fontSize: 13 }}>{buy ? plabel(p.id) : ''}</b></span>
+                      <ChevronRight size={15} color={C.faint} />
+                    </button>
+                  </div>
+                ) })}
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #e6e6ea' }}>
+                <span style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{total.whole ? T('Whole thing') : T('{n} of {m} picked', { n: picked.length, m: parts.filter(isBuyable).length })}</span>
+                <span style={{ textAlign: 'right' }}><b style={{ fontFamily: DISPLAY, fontSize: 17, color: C.ink }}>{picked.length ? shown : '–'}</b>{total.whole && full !== shown && <span style={{ display: 'block', fontSize: 11.5, color: C.mute }}>{T('{full} as parts', { full })}</span>}</span>
+              </div>
+            </div>
+          )
+        })() : <div className="pp-sec"><h2>{T('What you get')}</h2><ul className="get">{c.get.map((g) => <li key={g}><i><Check strokeWidth={3} /></i>{g}</li>)}</ul></div>}
+        {c.partOf && cards[c.partOf] && (() => { const b = cards[c.partOf]!; const I = iconFor(b)
+          return <div className="pp-sec"><button type="button" onClick={() => open(b)} className="row press" style={{ ...hv(b.goal), padding: '8px 2px' }}><Mark hue={b.goal} size={34}><I size={18} /></Mark><span className="tx"><span className="s" style={{ display: 'block' }}>{T('Also in')}</span><span className="t" style={{ display: 'block', fontWeight: 600, whiteSpace: 'normal' }}>{b.title}</span></span><span className="r"><b style={{ fontSize: 13 }}>{priceWord(b.price)}</b></span><ChevronRight size={15} color={C.faint} /></button></div> })()}
         <div className="pp-sec"><h2>{T('What happens after you order')}</h2>
           <ul className="tl">{TL.map(([d, t, you], i) => <li key={i}><i className={you ? 'you' : ''} /><span className="d">{d}</span><span className="t">{you ? <b>{t}</b> : t}</span></li>)}</ul>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: C.mute }}><YI size={14} color="#d99a1e" /> {T('Amber is you. Everything else is us.')}</div>
@@ -751,9 +825,9 @@ export default function CreatePage() {
         <div className="sticky"><div className="in">
           {/* No price and no Order on a card that cannot be bought. The bar says what it is
               waiting on and offers the one thing that is real: telling us you want it. */}
-          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? priceWord(c.price) : T('Not on sale yet')}<span>{buy ? `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}` : T('We will tell you the day it opens')}</span></div>
+          <div className="p" style={buy ? undefined : { fontSize: 15 }}>{buy ? (c.parts ? (() => { const { picked, total } = bundlePick(c); return picked.length ? (total.whole ? priceLabel(total.wholeOneTime, total.wholePerMonth) : priceLabel(total.oneTime, total.perMonth)) : '–' })() : priceWord(c.price)) : T('Not on sale yet')}<span>{buy ? (c.parts ? T('{n} parts picked · we reply with the plan in 2 days', { n: bundlePick(c).picked.length }) : c.handoff.kind === 'request' && c.handoff.what ? T('{cadence} · we reply with the plan in 2 days', { cadence: c.cadence }) : `${c.cadence} · ${T(c.you).toLowerCase()} · ${c.ready}`) : T('We will tell you the day it opens')}</span></div>
           {buy
-            ? <button type="button" className="btn hue" onClick={() => order(c)}>{T(c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : 'Order')} <ArrowRight size={15} /></button>
+            ? <button type="button" className="btn hue" onClick={() => order(c)} disabled={!!c.parts && bundlePick(c).picked.length === 0}>{T(c.handoff.kind === 'request' && c.price === 'Quote' ? 'Ask for a quote' : c.handoff.kind === 'request' && c.handoff.what ? 'Request' : 'Order')} <ArrowRight size={15} /></button>
             : <Link href={`/dashboard/messages?to=strategist&draft=${encodeURIComponent(`I want ${c.title} when it is ready.`)}`} className="btn ghost" style={{ textDecoration: 'none' }}>{T('Tell me when')}</Link>}
         </div></div>
       </div>

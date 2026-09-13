@@ -14,6 +14,7 @@ import { etaLabelFor } from './service-turnaround'
 import { REQUEST_TYPES } from '@/lib/requests/catalog'
 import { priceCreativeRequest, fmtCents } from '@/lib/requests/pricing'
 import { SETUP_CARDS } from '@/lib/campaigns/setup/cards'
+import { actionCards, bundleOfExisting, EXISTING_PARTS } from './action-shelf'
 
 export type ShelfGoal = 'foryou' | 'announce' | 'event' | 'deal' | 'nights' | 'newfaces' | 'regulars' | 'reviews' | 'online' | 'catering' | 'brand'
 export type ShelfKind = 'quick' | 'campaign' | 'setup' | 'program'
@@ -41,7 +42,11 @@ export interface ShelfCard {
   syn: string
   availability: CardAvailability
   /** the store's own sale id for the hand-off; creative-* cards open the Request Desk */
-  handoff: { kind: 'build'; id: string } | { kind: 'request'; type: string } | { kind: 'design' }
+  handoff: { kind: 'build'; id: string } | { kind: 'request'; type: string; /** the brief the desk opens with, already written */ what?: string } | { kind: 'design' }
+  /* the Actions shelf (action-shelf.ts): a bundle lists its parts; a part names its bundle and its group */
+  parts?: string[]
+  partOf?: string
+  group?: string
 }
 
 export const GOALS: { id: ShelfGoal; label: string; short: string }[] = [
@@ -192,6 +197,9 @@ function build(): Record<string, ShelfCard> {
       availability: avail, handoff: { kind: 'request', type: t.id },
     }
   }
+  /* the Actions shelf: bundles and the parts that are new; existing cards learn which bundle they sit in */
+  for (const [id, group] of Object.entries(EXISTING_PARTS)) if (out[id]) { out[id].group = group; out[id].partOf = bundleOfExisting(id) }
+  Object.assign(out, actionCards(out))
   return out
 }
 

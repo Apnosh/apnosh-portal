@@ -87,7 +87,15 @@ function MenuFrame({ frame }: { frame: NonNullable<TicketOption['frame']> }) {
 export default function CreativeFlow({ typeId, onBack, onDone, menu = [] }: { typeId: string; onBack: () => void; onDone?: () => void; menu?: { id: string; name: string }[] }) {
   const type = requestTypeById(typeId)
   const flow = flowFor(typeId)
-  const [answers, setAnswers] = useState<RequestAnswers>({})
+  /* A store card can arrive with its brief already written (/dashboard/requests?type=other&what=…,
+     the Actions shelf): the first answer is filled in, the owner reads it and adds to it. */
+  const [answers, setAnswers] = useState<RequestAnswers>(() => {
+    const seed: RequestAnswers = {}
+    if (typeof window === 'undefined') return seed
+    const what = new URLSearchParams(window.location.search).get('what')
+    if (what) seed.what = what.slice(0, 1800)
+    return seed
+  })
   const [dueISO, setDueISO] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
   const [step, setStep] = useState(0)
