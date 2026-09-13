@@ -1370,10 +1370,11 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
   const rows = STAGE_ORDER.map((st) => {
     const mv = byKey.get(resolveFocus(st.key).metric)
     const cs = computedStage(detail, STAGE_ORDER.findIndex((x) => x.key === st.key) + 1)
-    const locked = !mv || cs?.isEmpty === true
-    /* A stage nothing feeds still gets its line, flat at zero, and its graph below (owner
-       2026-09-12: "even if it's 0 the graphs should show"). The row says "not connected". */
-    const view = locked ? zeroView(st.key, mv) : mv
+    /* ONLY ORDERS LOCKS (owner 2026-09-12): it is the one stage with nothing to count until a
+       booking or ordering source is connected. Every other stage draws its real series, zero
+       and all; a stage with no series at all draws flat at zero. */
+    const locked = st.key === 'camein' && (!mv || cs?.isEmpty === true)
+    const view = locked ? zeroView(st.key, mv) : mv ?? zeroView(st.key)
     const sm = view && !locked ? bucketsFor(range, view, cStart, cEnd) : null
     const launches = (campaigns?.[st.key] ?? []).filter((c) => c.state !== 'production' && c.shippedAt && Date.now() - trendDayMs(c.shippedAt) <= days * DAY_MS).length
     return { st, mv: view, sm, launches, locked, cs, n: STAGE_ORDER.findIndex((x) => x.key === st.key) + 1 }
