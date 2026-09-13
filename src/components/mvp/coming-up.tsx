@@ -174,10 +174,11 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
        posts pushed the post rail and everything under it off the screen; on a rail
        ten of them cost one card's height. Order still matters: what went wrong,
        then what is next, then what the team is holding. */
-    const rows: Array<{ id: string; when: string; text: string; platforms: string[]; media: string | null; bad?: boolean; team?: boolean }> = [
-      ...data.failed.map((p) => ({ id: p.id, when: p.failure ?? 'It did not publish', text: p.content || 'A post', platforms: p.platforms, media: p.mediaUrl, bad: true })),
+    const rows: Array<{ id: string; when: string; text: string; platforms: string[]; media: string | null; bad?: boolean; team?: boolean; ready?: boolean }> = [
+      /* short words on the chip: it shares a row with the network marks and must never truncate */
+      ...data.failed.map((p) => ({ id: p.id, when: 'Did not publish', text: p.content || 'A post', platforms: p.platforms, media: p.mediaUrl, bad: true })),
       ...data.waiting.map((p) => ({ id: p.id, when: whenWords(p.scheduledFor), text: p.content || 'A post', platforms: p.platforms, media: p.mediaUrl })),
-      ...data.withTeam.map((d) => ({ id: d.id, when: d.status === 'approved' ? 'Written, ready to go' : 'Your team is writing it', text: d.idea, platforms: d.platforms, media: null, team: true })),
+      ...data.withTeam.map((d) => ({ id: d.id, when: d.status === 'approved' ? 'Ready to go' : 'Being written', text: d.idea, platforms: d.platforms, media: null, team: true, ready: d.status === 'approved' })),
     ]
     const shown = rows.slice(0, 10)
     return (
@@ -197,7 +198,7 @@ export default function ComingUp({ clientId, onCount, nudge = true, compact = fa
                time, mint when the team has it ready, amber while they are writing. The words come
                under it with the picture beside them, and the networks ride the chip's row. */
             const tone = r.bad ? { ink: '#ec1528', bg: '#fde4e6', Icon: AlertCircle }
-              : r.team ? (r.when.startsWith('Written') ? { ink: C.greenDk, bg: tint('mint', .16), Icon: Check } : { ink: '#9a6b17', bg: '#faf1de', Icon: Users })
+              : r.team ? (r.ready ? { ink: C.greenDk, bg: tint('mint', .16), Icon: Check } : { ink: '#9a6b17', bg: '#faf1de', Icon: Users })
               : { ink: '#3b6fd4', bg: tint('nights', .16), Icon: Calendar }
             return (
               <Link key={r.id} href="/dashboard/insights/posts" style={{
