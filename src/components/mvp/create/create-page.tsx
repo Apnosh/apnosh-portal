@@ -243,8 +243,6 @@ const CREATE_CSS = `
 .cr .say2 .ta::placeholder{color:#aeaeb2}
 .cr .say2 .foot{display:flex;align-items:center;gap:8px;margin-top:6px}
 .cr .say2 .hint{flex:1;font-size:12px;color:#aeaeb2}
-.cr .say2 .eg{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-top:2px;padding-bottom:2px}
-.cr .say2 .eg button{flex:none;font-size:12px;font-weight:600;padding:6px 10px;border-radius:99px;border:1px solid #e6e6ea;background:#fff;color:#6e6e73;cursor:pointer;font-family:inherit}
 .cr .say2 .mic{width:36px;height:36px;border-radius:18px;border:0;background:#f5f5f7;color:#1d1d1f;display:grid;place-items:center;cursor:pointer;flex:none}
 .cr .say2 .mic.on{background:#ec1528;color:#fff;animation:crmic 1.2s ease-in-out infinite}
 @keyframes crmic{0%,100%{box-shadow:0 0 0 0 rgba(236,21,40,.35)}50%{box-shadow:0 0 0 8px rgba(236,21,40,0)}}
@@ -481,8 +479,6 @@ export default function CreatePage() {
   /* the box grows with the words, so a long ask is never scrolled inside a two-line slot */
   const grow = (el: HTMLTextAreaElement | null) => { if (!el) return; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px` }
   useEffect(() => { grow(askRef.current) }, [ask])
-  /* tap-to-fill starters: the three asks owners type most, in their own words */
-  const STARTERS = [T('Labor Day hours'), T('A video for the new dish'), T('More people in on Tuesdays'), T('More Google reviews'), T('Push catering')]
   const describe = async () => {
     const text = ask.trim(); if (!text || reading) return
     setReading(true); setRead(null)
@@ -506,9 +502,6 @@ export default function CreatePage() {
     <div className="say"><div className="in say2">
       <div className="eyebrow"><Sparkles /><span className="aur">{T('Describe it')}</span></div>
       <textarea ref={askRef} className="ta" value={ask} onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); describe() } }} rows={2} enterKeyHint="go" placeholder={listening ? T('Listening…') : T('What do you want to do? A video for the new dish, Labor Day hours, more people in on Tuesdays…')} />
-      {!ask.trim() && !listening && (
-        <div className="eg cc-scroll">{STARTERS.map((x) => <button key={x} type="button" onClick={() => { setAsk(x); askRef.current?.focus() }}>{x}</button>)}</div>
-      )}
       <div className="foot">
         {canHear && <button type="button" className={`mic${listening ? ' on' : ''}`} onClick={hear} aria-label={listening ? T('Stop listening') : T('Speak instead')} aria-pressed={listening}><Mic size={17} /></button>}
         {ask.trim() && !reading ? <button type="button" className="clr" onClick={() => { setAsk(''); setRead(null); askRef.current?.focus() }}>{T('Clear')}</button> : <span style={{ flex: 1 }} />}
