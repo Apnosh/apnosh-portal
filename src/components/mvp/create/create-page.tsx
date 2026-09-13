@@ -631,7 +631,7 @@ export default function CreatePage() {
           <div className="qgrid cc-scroll">{QUICK.map((x) => { const I = x.I; return <button key={x.t} type="button" className="qt press" onClick={() => quickGo(x)} style={hv(x.hue ?? ('card' in x.to ? cards[x.to.card]?.goal ?? 'mint' : 'mint'))}><span className="ic"><I /></span><span>{x.t}</span></button> })}</div>
           {browseBlock}
           {rail({ t: T('Recommended for you'), list: rec, hue: STAGE_HUE.Actions })}
-          {rail({ t: T('Campaigns'), s: T('Everything for one place, 15% under the parts'), list: bundles, hue: STAGE_HUE.Actions })}
+          {rail({ t: T('Campaigns'), list: bundles, hue: STAGE_HUE.Actions })}
           <Sec t={T('One thing at a time')} s={T('Pick exactly what you need')} hue={STAGE_HUE.Actions} />
           {ACTION_GROUPS.map((g) => { const list = sorted(all.filter((c) => c.group === g && !c.parts)); return list.length === 0 ? null : (
             <div key={g}><div className="grp">{T(g)}</div><Shelf>{list.map((c) => pc(c))}</Shelf></div>
