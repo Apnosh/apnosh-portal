@@ -1280,18 +1280,20 @@ function StageWithChart({ mv, label, cs, unit, breakdownTitle, clientId, stageNu
       <div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
           <span aria-label={label} style={{ fontFamily: DISPLAY, fontSize: 40, fontWeight: 500, lineHeight: 1, letterSpacing: '-.02em', color: C.ink }}>{shown.toLocaleString()}</span>
+          {/* beside the number: the pill, and the year-over-year line right UNDER the pill (owner
+              2026-09-12). The year line shows only when we can honestly make the claim (fresh
+              data + a real prior-year number). */}
           {total > 0 && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: ac, background: acbg, padding: '4px 10px', borderRadius: 99, marginBottom: 4 }}>
-              <span style={{ fontSize: 10.5 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}
-            </span>
-          )}
-          {/* year-over-year, on the number's own line after the pill (owner 2026-09-12); it wraps
-              under when the row runs out of room. Shows only when we can honestly make the claim
-              (fresh data + a real prior-year number). */}
-          {fresh && summary.yoyPct != null && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 6, fontSize: 12, fontWeight: 600, color: summary.yoyPct > 0 ? TREND_GREEN : summary.yoyPct < 0 ? TREND_RED : C.mute, whiteSpace: 'nowrap' }}>
-              {summary.yoyPct > 0 ? <TrendingUp size={13} /> : summary.yoyPct < 0 ? <TrendingDown size={13} /> : <Minus size={13} />}
-              {summary.yoyPct > 999 ? `Far above ${summary.yoyLabel}` : summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
+            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, marginBottom: 4, minWidth: 0 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, fontWeight: 600, color: ac, background: acbg, padding: '4px 10px', borderRadius: 99 }}>
+                <span style={{ fontSize: 10.5 }}>{dn ? '▼' : '▲'}</span>{deltaLabel(summary)}
+              </span>
+              {fresh && summary.yoyPct != null && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, paddingLeft: 2, fontSize: 12, fontWeight: 600, color: summary.yoyPct > 0 ? TREND_GREEN : summary.yoyPct < 0 ? TREND_RED : C.mute, whiteSpace: 'nowrap' }}>
+                  {summary.yoyPct > 0 ? <TrendingUp size={13} /> : summary.yoyPct < 0 ? <TrendingDown size={13} /> : <Minus size={13} />}
+                  {summary.yoyPct > 999 ? `Far above ${summary.yoyLabel}` : summary.yoyPct > 0 ? `Up ${summary.yoyPct}% ${summary.yoyLabel}` : summary.yoyPct < 0 ? `Down ${Math.abs(summary.yoyPct)}% ${summary.yoyLabel}` : `Even with last year`}
+                </span>
+              )}
             </span>
           )}
         </div>
