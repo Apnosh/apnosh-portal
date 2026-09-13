@@ -45,7 +45,7 @@ import { isProTier } from '@/lib/entitlements'
 import { ActionsChart, MetricCard, SourceCard, useChartRange, isFresh, relDate, deltaLabel, bucketsFor, type MetricView, type ChartRange } from './mvp-home'
 import { TopSegmented } from './top-row'
 import ProofDeck from './proof-deck'
-import { deriveStandouts, deriveRhythm } from '@/lib/insights/analyst-derive'
+import { deriveStandouts } from '@/lib/insights/analyst-derive'
 import { buildAwarenessFeed, buildInterestFeed, buildActionsFeed, stageFeedFrom, NOT_CONNECTED, type FeedInput, type StageFeed } from '@/lib/dashboard/insights-feed'
 import type { ComputedStage, StageSourceView, StageGroup } from '@/lib/insights/compute-stages'
 import { sourceActionVerb, SOURCE_BY_ID } from '@/lib/insights/source-registry'
@@ -1415,7 +1415,7 @@ function TrendsTab({ detail, campaigns, byKey, initial, clientId, reviews = [] }
         {cur.mv && !cur.locked
           ? <CampaignTrend mv={cur.mv} reviews={reviews} list={campaigns ? (campaigns[cur.st.key] ?? []) : null} chartRange={range} customStart={cStart} customEnd={cEnd} smooth={smooth} title={cur.st.label} onPins={onPins} litPin={lit} footer={<StageCampaigns list={campaigns ? (campaigns[cur.st.key] ?? []) : null} pins={pins} lit={lit} onLight={setLit} bare />} />
           : <div style={CARD}><div style={H2}>{cur.st.label}</div><div style={{ fontSize: 13, color: C.mute, marginTop: 6, lineHeight: 1.45 }}>Nothing to draw here yet. Connect the source that measures it and the trend appears.</div></div>}
-        {cur.mv && !cur.locked && <RhythmCard mv={cur.mv} />}
+        {cur.mv && !cur.locked && <RhythmCard mv={cur.mv} range={range} customStart={cStart} customEnd={cEnd} />}
         {cur.mv && !cur.locked && <HighlightsCard mv={cur.mv} days={days} label={cur.st.label} smooth={smooth} />}
       </AccentCtx.Provider>
     </div>
@@ -1844,62 +1844,54 @@ function StageCampaigns({ list, pins = {}, lit = null, onLight, bare = false }: 
 }
 
 /* ── Highlights: only the days that were abnormally high or low against their own week ── */
-/* ── Your week ──────────────────────────────────────────────────────────────
- * The weekday rhythm was already being computed -- deriveRhythm averages every
- * weekday over the last eight weeks and names the strongest and the weakest --
- * and the only thing that ever read it was the analyst's PROMPT. It was written
- * into a paragraph for a language model and never put on a screen, while three
- * owners in testing said the one thing they wanted to know was which nights are
- * dead. Same function, same series the chart above already draws, on the page.
+/* ── Daily average ──────────────────────────────────────────────────────────
+ * Seven bars, one per weekday: the average of that weekday's days INSIDE THE
+ * SAME WINDOW THE GRAPH ABOVE DRAWS. It used to be a fixed eight weeks with two
+ * sentences ("Wednesdays are your strongest") over it; the owner asked for the
+ * bars alone, over the picked range (2026-09-12).
  */
-function RhythmCard({ mv }: { mv: MetricView }) {
+function RhythmCard({ mv, range = '30d', customStart, customEnd }: { mv: MetricView; range?: ChartRange; customStart?: string; customEnd?: string }) {
   const A = useAccent()
-  const series = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0).map((d) => ({ date: d.date, value: d.value ?? 0 }))
-  const r = deriveRhythm(series)
-  if (!r) return null
-  const max = Math.max(1, ...r.byDay.map((d) => d.avg))
-  /* A weekday pattern is only worth showing when it is bigger than the noise.
-     One test account averages 2-4 views a day, where "Thursdays are strongest"
-     means one extra person looked on a Thursday. Require a day the owner could
-     act on: at least ten on the strongest day, and a strongest at least a
-     quarter above the weakest. Otherwise there is no rhythm here to report. */
-  const lows = r.byDay.map((d) => d.avg).filter((v) => v > 0)
-  const min = lows.length ? Math.min(...lows) : 0
-  if (max < 10 || min <= 0 || (max - min) / min < 0.25) return null
-  const flat = r.strongestDay === r.weakestDay
+  const series = (mv.daily ?? []).filter((d) => d && d.date && trendDayMs(d.date) > 0).map((d) => ({ t: trendDayMs(d.date), value: d.value ?? 0 }))
+  const isCustom = range === 'custom' && !!customStart && !!customEnd
+  const todayMs = trendDayMs(localYmd())
+  const endMs = isCustom ? trendDayMs(customEnd!) : todayMs
+  const spanDays = isCustom ? Math.max(1, Math.round((endMs - trendDayMs(customStart!)) / DAY_MS) + 1) : TREND_DAYS[(TREND_OF_RANGE[range] ?? 'month') as 'week' | 'month' | 'quarter' | 'year']
+  const startMs = endMs - (spanDays - 1) * DAY_MS
+  // zero days inside the window are unreported, not quiet: they would drag a weekday down
+  const win = series.filter((d) => d.t >= startMs && d.t <= endMs && d.value > 0)
+  if (win.length < 5) return null
+  const by = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }))
+  for (const d of win) { const k = new Date(d.t).getUTCDay(); by[k].sum += d.value; by[k].n++ }
+  const avg = by.map((x) => (x.n ? Math.round(x.sum / x.n) : 0))
+  const byDay = [1, 2, 3, 4, 5, 6, 0].map((k) => ({ day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][k], avg: avg[k] }))
+  const max = Math.max(...byDay.map((d) => d.avg))
+  if (max < 1) return null
+  const present = byDay.filter((d) => d.avg > 0)
+  const min = Math.min(...present.map((d) => d.avg))
+  const strongDay = byDay.find((d) => d.avg === max)?.day
+  const weakDay = present.length > 1 && min < max ? present.find((d) => d.avg === min)?.day : undefined
+  const when = isCustom ? `${fmtDay(startMs)} – ${fmtDay(endMs)}` : range === '1y' ? 'last year' : `last ${spanDays} days`
   return (
     <div style={LIST}>
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4, padding: '0 2px' }}>
-        <span style={H3}>Your week</span>
-        <span style={{ fontSize: 11.5, color: C.faint }}>average day, last 8 weeks</span>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10, padding: '0 2px' }}>
+        <span style={H3}>Daily average</span>
+        <span style={{ fontSize: 11.5, color: C.faint }}>{when}</span>
       </div>
-      {/* The chart directly above is already titled with the stage, so naming it
-          again here read as "strongest for awareness views". Two short sentences. */}
-      {!flat && (
-        <div style={{ fontSize: 13.5, color: C.ink, lineHeight: 1.45, padding: '2px 2px 10px' }}>
-          <b style={{ fontWeight: 600 }}>{r.strongestDay}s</b> are your strongest.{' '}
-          <b style={{ fontWeight: 600 }}>{r.weakestDay}s</b> are your quietest.
-        </div>
-      )}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 6, alignItems: 'end', padding: '0 2px' }}>
-        {r.byDay.map((d) => {
-          const strong = d.day === r.strongestDay.slice(0, 3)
-          const weak = !flat && d.day === r.weakestDay.slice(0, 3)
-          const col = strong ? A.main : weak ? C.coral : C.line
+        {byDay.map((d) => {
+          const strong = d.day === strongDay
+          const weak = d.day === weakDay
+          const col = strong ? A.main : weak ? TREND_RED : C.line
           return (
             <div key={d.day} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: strong ? A.main : weak ? C.coral : C.faint, fontVariantNumeric: 'tabular-nums' }}>{d.avg.toLocaleString()}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: strong ? A.main : weak ? TREND_RED : C.faint, fontVariantNumeric: 'tabular-nums' }}>{d.avg ? d.avg.toLocaleString() : '–'}</span>
               <span aria-hidden style={{ width: '100%', height: Math.max(3, Math.round((d.avg / max) * 54)), background: col, borderRadius: 5 }} />
-              <span style={{ fontSize: 11, fontWeight: strong || weak ? 700 : 500, color: strong ? A.main : weak ? C.coral : C.mute }}>{d.day}</span>
+              <span style={{ fontSize: 11, fontWeight: strong || weak ? 700 : 500, color: strong ? A.main : weak ? TREND_RED : C.mute }}>{d.day}</span>
             </div>
           )
         })}
       </div>
-      {r.weekendVsWeekdayPct != null && Math.abs(r.weekendVsWeekdayPct) >= 10 && (
-        <div style={{ fontSize: 12.5, color: C.mute, lineHeight: 1.45, padding: '10px 2px 0' }}>
-          Weekends run {Math.abs(r.weekendVsWeekdayPct)}% {r.weekendVsWeekdayPct > 0 ? 'above' : 'below'} your weekdays.
-        </div>
-      )}
     </div>
   )
 }
