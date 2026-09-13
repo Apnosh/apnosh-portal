@@ -91,7 +91,7 @@ export function bandFor(rate: number, key: string): HealthBand {
 // speaks the funnel's words, so a weak leg taps straight into what fixes it.
 const STAGE_LENS: Record<string, string> = { shown: 'aware', engaged: 'interest', moved: 'actions', camein: 'orders', back: 'back' }
 /* BRIGHT, the same red and green the Insights graph wears (owner 2026-09-11: match the two) */
-const HEALTH_RED: [number, number, number] = [255, 45, 58]
+const HEALTH_RED: [number, number, number] = [236, 21, 40]
 const HEALTH_GREEN: [number, number, number] = [31, 196, 122]
 // the 5-band health ramp: very low → very high = red → orange-red → yellow → light green → green.
 const BAND_RGB: Record<HealthBand, [number, number, number]> = {
@@ -1264,7 +1264,7 @@ export default function HomeFunnel({
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <Link href="/dashboard/inbox" aria-label={bellN ? T('Alerts ({n})', { n: bellN }) : T('Alerts')} style={{ position: 'relative', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.ink, textDecoration: 'none', background: theme === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(240,241,240,0.72)', backdropFilter: 'saturate(180%) blur(16px)', WebkitBackdropFilter: 'saturate(180%) blur(16px)', border: theme === 'dark' ? '1px solid rgba(255,255,255,0.10)' : '1px solid rgba(255,255,255,0.75)', boxShadow: theme === 'dark' ? 'none' : '0 1px 2px rgba(0,0,0,.04), 0 6px 18px rgba(0,0,0,.07)' }}>
               <Bell size={19} />
-              {bellNeeds > 0 && <span style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: '#ff2d3a', color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', border: '2px solid #fff' }}>{bellNeeds > 99 ? '99+' : bellNeeds}</span>}
+              {bellNeeds > 0 && <span style={{ position: 'absolute', top: -5, right: -6, minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: '#ec1528', color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', border: '2px solid #fff' }}>{bellNeeds > 99 ? '99+' : bellNeeds}</span>}
               {bellN > 0 && <span style={{ position: 'absolute', top: -5, ...(bellNeeds > 0 ? { left: -6 } : { right: -6 }), minWidth: 18, height: 18, padding: '0 5px', boxSizing: 'border-box', borderRadius: 99, background: C.green, color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', border: '2px solid #fff' }}>{bellN > 99 ? '99+' : bellN}</span>}
             </Link>
           </div>

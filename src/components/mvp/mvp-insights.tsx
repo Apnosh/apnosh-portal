@@ -433,7 +433,7 @@ const STAGE_EXPLAIN: Record<string, string> = {
    the one before, red when down, amber when even. The stage hue stays on the dots + sections. */
 /* BRIGHT, on purpose (owner 2026-09-11: "stand out more"): the graph, its range and its pill all
    wear these, a clear green up and a bright red down (owner: red, not orange), not the quieter kit greens and corals. */
-const TREND_GREEN = '#1fc47a', TREND_RED = '#ff2d3a', TREND_AMBER = '#f0a12b'
+const TREND_GREEN = '#1fc47a', TREND_RED = '#ec1528', TREND_AMBER = '#f0a12b'
 const TREND_GREEN_SOFT = '#e4f8ee', TREND_RED_SOFT = '#ffe6e8'
 /* THE VERDICT COLOURS (owner 2026-09-11): each stage has its own bright colour for UP, and every
    stage shares the bright red for DOWN. The graph's bars, its range button, the pill, the by-source
